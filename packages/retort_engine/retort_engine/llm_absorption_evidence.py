@@ -120,6 +120,9 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"review_pipeline_diff_replay_publishable_comments={pr_review.get('diff_pipeline_publishable_comment_count')}",
         f"review_pipeline_diff_replay_chunk_count={pr_review.get('diff_pipeline_chunk_count')}",
         f"review_pipeline_diff_replay_large_chunking={pr_review.get('diff_pipeline_large_chunking')}",
+        f"pr_review_core_large_diff_chunking={pr_review.get('core_large_diff_chunking')}",
+        f"pr_review_core_large_diff_chunk_count={pr_review.get('core_large_diff_chunk_count')}",
+        f"pr_review_core_large_diff_context_balancing={pr_review.get('core_large_diff_context_balancing')}",
     ]
 
 
@@ -194,6 +197,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"complex_pr_replay_total_comment_count={complex_pr_summary.get('total_comment_count', '')}",
         f"complex_pr_replay_total_reviewed_change_count={complex_pr_summary.get('total_reviewed_new_change_count', '')}",
         f"complex_pr_replay_truncated_pr_count={complex_pr_summary.get('truncated_pr_count', '')}",
+        f"complex_pr_replay_distinct_extension_count={complex_pr_summary.get('distinct_extension_count', '')}",
         f"review_pipeline_diff_replay_report_status={pipeline_replay_report.get('status', '')}",
         f"review_pipeline_diff_replay_report_depth_score={pipeline_replay_summary.get('diff_grouping_depth_score', '')}",
         f"review_pipeline_diff_replay_report_context_groups={pipeline_replay_summary.get('context_group_count', '')}",

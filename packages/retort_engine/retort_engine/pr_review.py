@@ -15,6 +15,9 @@ SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_k
 REVIEW_STAGES = ("group_related_files", "localize_changed_hunks", "classify_risk", "reflect_before_publish", "dispatch_employee_task")
 REVIEW_CONTEXTS = ("security", "tests", "ci_config", "config", "frontend", "runtime", "docs", "other")
 SEVERITIES = ("high", "medium", "low", "info")
+LARGE_DIFF_FILE_THRESHOLD = 8
+LARGE_DIFF_HUNK_THRESHOLD = 12
+LARGE_DIFF_CHAR_THRESHOLD = 30000
 
 
 def review_diff(
@@ -42,6 +45,7 @@ def review_diff(
     capabilities = [str(item.get("signal") or "") for item in ranked_capabilities()]
     context_bias = review_context_bias()
     context_groups = group_related_files_for_review(files)
+    large_diff_chunking = _large_diff_review_needed(files, diff_text)
     context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
     static_analysis = scan_static_analysis_findings(files)
     intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
@@ -65,7 +69,7 @@ def review_diff(
             candidate_comments.extend(hunk_comments)
     if intent_alignment.get("status") == "misaligned" and files:
         candidate_comments.append(_intent_alignment_comment(files, capabilities, context_by_file, intent_alignment))
-    comments = _rank_review_comments(candidate_comments, max_comments=max_comments)
+    comments = _rank_review_comments(candidate_comments, max_comments=max_comments, context_groups=context_groups, large_diff_chunking=large_diff_chunking)
     risk_counts = _risk_counts(comments)
     file_summaries = [
         _file_summary(
@@ -99,6 +103,9 @@ def review_diff(
         "intent_alignment": intent_alignment["summary"],
         "deep_review_pipeline": True,
         "comment_ranking_model": "severity_context_publishability_v1",
+        "large_diff_chunking": large_diff_chunking,
+        "large_diff_chunk_count": len(context_groups) if large_diff_chunking else (1 if files else 0),
+        "large_diff_context_balancing": large_diff_chunking,
         "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
         "ready_for_employee_tasking": bool(files and comments),
         "incremental": bool(incremental.get("enabled")),
@@ -338,7 +345,13 @@ def _comment(
     return payload
 
 
-def _rank_review_comments(comments: list[dict[str, Any]], *, max_comments: int) -> list[dict[str, Any]]:
+def _rank_review_comments(
+    comments: list[dict[str, Any]],
+    *,
+    max_comments: int,
+    context_groups: list[dict[str, Any]] | None = None,
+    large_diff_chunking: bool = False,
+) -> list[dict[str, Any]]:
     deduped: list[dict[str, Any]] = []
     seen: set[tuple[str, int, str, str]] = set()
     for index, comment in enumerate(comments):
@@ -358,11 +371,41 @@ def _rank_review_comments(comments: list[dict[str, Any]], *, max_comments: int) 
         scored["rank_reason"] = _rank_reason(scored)
         deduped.append(scored)
     ordered = sorted(deduped, key=lambda item: (-int(item["rank_score"]), int(item["_original_order"])))
-    selected = ordered[: max(1, max_comments)]
+    selected = (
+        _context_balanced_comment_selection(ordered, context_groups or [], max_comments=max_comments)
+        if large_diff_chunking and context_groups
+        else ordered[: max(1, max_comments)]
+    )
     for position, comment in enumerate(selected, start=1):
         comment["rank_position"] = position
         comment.pop("_original_order", None)
     return selected
+
+
+def _context_balanced_comment_selection(ordered: list[dict[str, Any]], context_groups: list[dict[str, Any]], *, max_comments: int) -> list[dict[str, Any]]:
+    limit = max(1, max_comments)
+    selected_indexes: list[int] = []
+    context_order = [str(group.get("context") or "") for group in context_groups if group.get("context")]
+    for context in context_order:
+        if len(selected_indexes) >= limit:
+            break
+        for index, comment in enumerate(ordered):
+            if index in selected_indexes:
+                continue
+            if str(comment.get("review_context") or "") == context:
+                selected_indexes.append(index)
+                break
+    for index, _comment in enumerate(ordered):
+        if len(selected_indexes) >= limit:
+            break
+        if index not in selected_indexes:
+            selected_indexes.append(index)
+    return [ordered[index] for index in selected_indexes]
+
+
+def _large_diff_review_needed(files: list[dict[str, Any]], diff_text: str) -> bool:
+    hunk_count = sum(len(item.get("hunks") or []) for item in files)
+    return len(files) > LARGE_DIFF_FILE_THRESHOLD or hunk_count > LARGE_DIFF_HUNK_THRESHOLD or len(diff_text) > LARGE_DIFF_CHAR_THRESHOLD
 
 
 def _comment_rank_score(comment: dict[str, Any]) -> int:

@@ -164,6 +164,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     diff_pipeline_publishable_comment_count = 0
     diff_pipeline_chunk_count = 0
     diff_pipeline_large_chunking = False
+    core_large_diff_chunking = False
+    core_large_diff_chunk_count = 0
+    core_large_diff_context_balancing = False
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
@@ -210,6 +213,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             diff_pipeline_publishable_comment_count = int(diff_pipeline_summary.get("publishable_comment_count") or 0)
             diff_pipeline_chunk_count = int(diff_pipeline_summary.get("chunk_count") or 0)
             diff_pipeline_large_chunking = bool(diff_pipeline_summary.get("large_diff_chunking"))
+            large_review = review_diff(_audit_large_diff_sample(), max_comments=4)
+            large_review_summary = large_review.get("summary") if isinstance(large_review.get("summary"), dict) else {}
+            core_large_diff_chunking = bool(large_review_summary.get("large_diff_chunking"))
+            core_large_diff_chunk_count = int(large_review_summary.get("large_diff_chunk_count") or 0)
+            core_large_diff_context_balancing = bool(large_review_summary.get("large_diff_context_balancing"))
         except Exception:
             sample_comment_count = 0
     return {
@@ -242,6 +250,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "diff_pipeline_publishable_comment_count": diff_pipeline_publishable_comment_count,
         "diff_pipeline_chunk_count": diff_pipeline_chunk_count,
         "diff_pipeline_large_chunking": diff_pipeline_large_chunking,
+        "core_large_diff_chunking": core_large_diff_chunking,
+        "core_large_diff_chunk_count": core_large_diff_chunk_count,
+        "core_large_diff_context_balancing": core_large_diff_context_balancing,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
@@ -286,6 +297,21 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             if exists
         ],
     }
+
+
+def _audit_large_diff_sample() -> str:
+    rows = [
+        ("app/auth.py", 'API_TOKEN = "live-secret-value"'),
+        ("tests/test_auth.py", "# TODO: assert auth behavior"),
+        (".github/workflows/ci.yml", 'DEPLOY_TOKEN: "live-secret-value"'),
+        ("settings/runtime.yaml", 'SERVICE_TOKEN: "live-secret-value"'),
+        ("app/runtime_1.py", "# TODO: runtime follow-up 1"),
+        ("app/runtime_2.py", "# TODO: runtime follow-up 2"),
+        ("app/runtime_3.py", "# TODO: runtime follow-up 3"),
+        ("app/runtime_4.py", "# TODO: runtime follow-up 4"),
+        ("docs/release.md", "# TODO: document release"),
+    ]
+    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
 
 
 def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
