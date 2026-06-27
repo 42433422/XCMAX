@@ -747,6 +747,7 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     project = tmp_path / "own"
     external = tmp_path / "external"
     (project / "retort_engine").mkdir(parents=True)
+    external.mkdir()
     (project / "retort_engine" / "__init__.py").write_text("", encoding="utf-8")
     (external / "internal").mkdir(parents=True)
     (external / "internal" / "review.ts").write_text("review pipeline changed files diff hunk patch set benchmark provider plugin", encoding="utf-8")
@@ -792,6 +793,46 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     assert worker_review["status"] == "reviewed"
     assert worker_review["file_count"] >= 1
     assert Path(worker_review["artifact"]).is_file()
+
+
+def test_real_absorption_defaults_feedback_loop_to_project_retort_paths(tmp_path: Path) -> None:
+    project = tmp_path / "own"
+    external = tmp_path / "external"
+    (project / "retort_engine").mkdir(parents=True)
+    external.mkdir()
+    (project / "retort_engine" / "__init__.py").write_text("", encoding="utf-8")
+    (external / "review.md").write_text("review pipeline changed files benchmark context static analysis\n", encoding="utf-8")
+
+    result = apply_real_absorption(
+        {
+            "own_project": str(project),
+            "external_path": str(external),
+            "source": "unit-default-feedback-source",
+            "tasks": [
+                {
+                    "task_id": "retort-absorb-feedback",
+                    "title": "Feedback closure",
+                    "dimension": "feedback_loop_closure",
+                    "priority": "P1",
+                }
+            ],
+            "python": sys.executable,
+        }
+    )
+
+    queue = project / ".retort" / "employee_queue.jsonl"
+    history = project / ".retort" / "retort_history.sqlite"
+    employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
+
+    assert result["status"] == "applied"
+    assert result["queue_records_written"] == 1
+    assert queue.is_file()
+    assert history.is_file()
+    assert employee_result["runtime_evidence"]["queue_path"] == str(queue)
+    assert employee_result["runtime_evidence"]["history_store"] == str(history)
+    assert result["feedback_audit"]["closed"] is True
+    assert result["feedback_audit"]["result_tasks_have_queue_records"] is True
+    assert result["feedback_audit"]["history_matches_employee_results"] is True
 
 
 def test_paibi_parallel_review_dispatches_independent_subtasks(tmp_path: Path, monkeypatch) -> None:
