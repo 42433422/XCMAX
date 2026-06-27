@@ -239,3 +239,17 @@ def test_cursor_agent_command_has_no_extra_agent_subcommand():
     # 旧 cursor 二进制仍保留 agent 子命令（兼容）。
     legacy = _cursor_cli_command("/usr/local/bin/cursor", "hi", Path("/tmp/o"), "/tmp")
     assert legacy[1] == "agent"
+
+
+def test_trae_cli_uses_headless_agent_command():
+    """Trae 企业版用 trae-cli 无头 agent：trae-cli --print --output-format stream-json --yolo <prompt>。"""
+    from pathlib import Path
+
+    from app.application.super_employee_service import TRAE_PROFILE, _trae_cli_command
+
+    assert TRAE_PROFILE.cli_binary == "trae-cli"
+    assert TRAE_PROFILE.cli_stream_json is True
+    cmd = _trae_cli_command("/x/trae-cli", "做个任务", Path("/tmp/o"), "/tmp")
+    assert cmd[0].endswith("trae-cli")
+    assert "--print" in cmd and "stream-json" in cmd and "--yolo" in cmd
+    assert cmd[-1] == "做个任务"  # prompt 在末位，不会被前面的变长参数吞掉

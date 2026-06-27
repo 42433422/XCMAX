@@ -175,6 +175,22 @@ def _cursor_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str)
     return cmd
 
 
+def _trae_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
+    # Trae 企业版 trae-cli 无头 agent（与 cursor-agent 同族）：
+    # ``trae-cli --print --output-format stream-json [-y] <prompt>``。
+    # -y/--yolo 绕过工具权限确认，让它能在 cwd 内真改文件（对应 cursor 的 --force）。
+    cmd = [cli_path, "--print", "--output-format", "stream-json"]
+    yolo = (
+        (os.environ.get("DEVFLEET_TRAE_YOLO") or os.environ.get("XCMAX_TRAE_YOLO") or "1")
+        .strip()
+        .lower()
+    )
+    if yolo not in {"0", "false", "off", "disabled"}:
+        cmd.append("--yolo")
+    cmd.append(prompt)
+    return cmd
+
+
 def _claude_cli_command(cli_path: str, prompt: str, output_path: Path, cwd: str) -> list[str]:
     # Claude Code 无头模式（print）。stream-json：工作时持续吐事件(工具调用/文本)，
     # 作为"还在干活"的心跳，配合 idle-timeout 实现"只要在工作就不超时"。
@@ -298,17 +314,17 @@ TRAE_PROFILE = SuperEmployeeToolProfile(
     direct_kind="trae_direct",
     env_super_prefix="XCMAX_TRAE_SUPER_EMPLOYEE",
     env_tool_prefix="XCMAX_TRAE",
-    cli_binary="trae-cn",
+    cli_binary="trae-cli",
     cli_extra_candidates=(
-        "/Applications/Trae CN.app/Contents/Resources/app/bin/trae-cn",
-        "/Applications/Trae.app/Contents/Resources/app/bin/trae",
-        os.path.expanduser("~/.local/bin/trae-cn"),
-        "/opt/homebrew/bin/trae-cn",
-        "/usr/local/bin/trae-cn",
+        os.path.expanduser("~/.local/bin/trae-cli"),
+        os.path.expanduser("~/.local/bin/trae-agent"),
+        os.path.expanduser("~/.local/bin/traecli"),
+        "/opt/homebrew/bin/trae-cli",
+        "/usr/local/bin/trae-cli",
     ),
     cli_reads_output_file=False,
-    cli_stream_json=False,
-    cli_command_builder=_cursor_cli_command,
+    cli_stream_json=True,
+    cli_command_builder=_trae_cli_command,
     avatar_key="trae",
     avatar_path="/brand/trae-app-icon.png",
 )
