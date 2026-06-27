@@ -13,7 +13,7 @@
     "blocked_task_count": 0,
     "ready_component_count": 13,
     "ready_task_count": 11,
-    "source_count": 6,
+    "source_count": 7,
     "task_count": 11
   },
   "tasks": [
@@ -36,7 +36,7 @@
         "wire_automation_surface_runtime_gate",
         "prove_automation_surface_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -59,7 +59,7 @@
         "wire_benchmark_eval_runtime_gate",
         "prove_benchmark_eval_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_review_quality_benchmark.py",
         "tests/test_absorbed_capabilities.py"
@@ -83,7 +83,7 @@
         "wire_command_contract_runtime_gate",
         "prove_command_contract_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_contracts_feedback.py",
         "tests/test_retort_engine.py"
@@ -107,7 +107,7 @@
         "wire_context_localization_runtime_gate",
         "prove_context_localization_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_review_context_bias.py",
         "tests/test_pr_review.py"
@@ -131,7 +131,7 @@
         "wire_evaluation_loop_runtime_gate",
         "prove_evaluation_loop_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_absorbed_capabilities.py",
         "tests/test_review_quality_benchmark.py"
@@ -155,7 +155,7 @@
         "wire_model_adapter_runtime_gate",
         "prove_model_adapter_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -178,7 +178,7 @@
         "wire_provider_boundary_runtime_gate",
         "prove_provider_boundary_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -201,7 +201,7 @@
         "wire_regression_oracle_runtime_gate",
         "prove_regression_oracle_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_absorbed_capabilities.py",
         "tests/test_architecture_refactor.py"
@@ -225,7 +225,7 @@
         "wire_review_pipeline_runtime_gate",
         "prove_review_pipeline_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_review_pipeline.py",
         "tests/test_pr_review.py"
@@ -250,7 +250,7 @@
         "wire_safety_policy_runtime_gate",
         "prove_safety_policy_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
@@ -275,7 +275,7 @@
         "wire_workflow_ci_runtime_gate",
         "prove_workflow_ci_with_tests"
       ],
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
