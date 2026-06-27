@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.models import ProjectAssessment
+from retort_engine.ui_features import blackhole_ui_detected
 
 SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", "dist", "build", ".ruff_cache", ".pytest_cache", "playwright-report"}
 SOURCE_SUFFIXES = {".py", ".ts", ".tsx", ".js", ".jsx", ".vue", ".kt", ".swift", ".java", ".html", ".css"}
@@ -218,7 +219,7 @@ def _retort_feature_flags(project_path: Path) -> dict[str, bool]:
         "real_github_absorption_case": bool(re.search(r"run_absorption\([\s\S]{0,800}?github_url\s*=\s*['\"]https://github\.com/(?!owner/repo)", all_code_text)),
         "employee_runtime_adapter": any(marker in text for marker in ("employee_runtime", "agent_loop", "workflow_scheduler", "RetortEmployeeRuntimeAdapter")),
         "product_surface": any(marker in text for marker in ("FastAPI", "APIRouter", "uvicorn", "RetortService", "RetortUIServer")),
-        "blackhole_ui": "blackhole" in frontend_text.lower() and "accretion" in frontend_text.lower() and "canvas" in frontend_text.lower(),
+        "blackhole_ui": blackhole_ui_detected(project_path),
         "folder_project_picker": "ownProjectFolder" in frontend_text and "externalProjectFolder" in frontend_text,
         "branch_workflow": "begin_absorption_branch" in text and "branch_workflow" in text,
         "merge_after_absorption": "merge_absorption_branch" in text and "merge_after" in text,

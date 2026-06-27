@@ -55,13 +55,11 @@ const statusText = {
   merged: "已合并",
   converged: "已收敛",
   blocked: "已阻断",
-  max_rounds: "达到轮次上限",
   awaiting_execution_evidence: "等待执行证据",
   internalized_by_self_evolution: "已由反问内化",
   closed_loop_verified: "闭环证据已验证",
   closed_loop_evidence_required_before_scores_can_pass: "缺少闭环证据，不能通过高分门槛",
   all_scores_strictly_above_threshold: "全部分数已超过阈值",
-  max_rounds_reached_before_all_scores_passed: "达到轮次上限但仍有分数未通过",
   ready: "就绪",
   saturated: "已饱和",
   not_saturated: "未饱和",
@@ -827,7 +825,7 @@ async function evolve() {
   beginProgress("反问 LLM 深评", DEEP_REVIEW_WAIT_SECONDS);
   pushEvent("开始反问深评", "无限反问评分弱项");
   try {
-    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, max_rounds: 8, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
+    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
     llm(r.final_assessment?.llm_review || r.llm_review, r.final_assessment?.llm_review_status, r.final_assessment);
     assertDeepAssessment(r.final_assessment);
     scores(r.final_assessment.scores);

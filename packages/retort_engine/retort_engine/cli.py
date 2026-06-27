@@ -33,7 +33,6 @@ def main(argv: list[str] | None = None) -> int:
     evolve = sub.add_parser("self-evolve")
     evolve.add_argument("--project", default=".")
     evolve.add_argument("--run-local-gates", action="store_true")
-    evolve.add_argument("--max-rounds", type=int, default=8)
     evolve.add_argument("--use-llm", action="store_true")
     evolve.add_argument("--wait-llm-sec", type=float, default=240)
     evolve.add_argument("--json", action="store_true")
@@ -175,7 +174,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_scores("Retort assessment", result["scores"]))
         return 0
     if args.command == "self-evolve":
-        result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "max_rounds": args.max_rounds, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
+        result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

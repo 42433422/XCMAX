@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from retort_engine.core import RetortSelfEvolutionRunner, RetortService, absorb, assess_project, record_closed_loop_proof
+from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
+from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -32,15 +33,17 @@ def test_self_evolution_stays_blocked_without_closed_loop_proof(tmp_path: Path) 
     project.mkdir()
     (project / "README.md").write_text("# project\n", encoding="utf-8")
 
-    result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project))
+    result = RetortSelfEvolutionRunner().run(str(project))
     assert result["status"] == "blocked"
     assert result["stop_reason"] == "llm_deep_review_required"
+    assert result["round_policy"] == "single_paibi_llm_deep_review"
     assert result["final_assessment"]["scores"] == []
     assert result["final_assessment"]["metadata"]["score_authority"] == "paibi_llm_prompt_only"
 
 
 def test_blackhole_ui_assets_exist() -> None:
     root = RetortUIServer().static_root
+    structure = blackhole_ui_structure(root.parents[1])
     assert "blackhole" in (root / "app.js").read_text(encoding="utf-8").lower()
     assert "ownProjectFolder" in (root / "index.html").read_text(encoding="utf-8")
     assert "externalProjectFolder" in (root / "index.html").read_text(encoding="utf-8")
@@ -53,6 +56,9 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "llmReviewBtn" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmParallelBtn" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmStatusBtn" in (root / "index.html").read_text(encoding="utf-8")
+    assert blackhole_ui_detected(root.parents[1]) is True
+    assert structure["missing_ids"] == []
+    assert structure["missing_functions"] == []
 
 
 def test_branch_absorption_blocks_dirty_and_creates_clean_branch(tmp_path: Path) -> None:
@@ -158,7 +164,7 @@ def test_real_executor_features_can_converge_after_closed_loop_proof(tmp_path: P
         },
     )
 
-    result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project), run_local_gates=True)
+    result = RetortSelfEvolutionRunner().run(str(project), run_local_gates=True)
     assert result["status"] == "blocked"
     assert result["stop_reason"] == "llm_deep_review_required"
     assert result["final_assessment"]["scores"] == []
@@ -193,7 +199,7 @@ def test_absorption_collects_evidence_then_requires_llm_reassessment(tmp_path: P
     assert result["absorption_visual"]["external"]["score"] is None
     assert result["own_assessment"]["scores"] == []
 
-    evolved = RetortSelfEvolutionRunner(max_rounds=3).run(str(own))
+    evolved = RetortSelfEvolutionRunner().run(str(own))
 
     assert evolved["status"] == "blocked"
     assert evolved["stop_reason"] == "llm_deep_review_required"
@@ -292,17 +298,83 @@ def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) ->
     assert result["absorption_visual"]["external"]["file_count"] == 1
 
 
-def test_record_closed_loop_proof_is_required_for_verified_state(tmp_path: Path) -> None:
+def test_extract_json_from_stdout_prefers_last_complete_candidate() -> None:
+    incomplete = {"status": "applied", "changed_files": ["a.py"]}
+    complete_one = {
+        "status": "applied",
+        "project": "one",
+        "summary": "first",
+        "changed_files": ["a.py"],
+        "gates": [{"ok": True}],
+        "gates_passed": True,
+        "review_report_path": "one.json",
+        "employee_results_path": "one-result.json",
+    }
+    complete_two = {**complete_one, "project": "two", "summary": "last"}
+
+    parsed = _extract_json_from_stdout(f"debug {json.dumps(incomplete)}\n{json.dumps(complete_one)}\nnoise\n{json.dumps(complete_two)}")
+
+    assert parsed["project"] == "two"
+    assert parsed["summary"] == "last"
+
+
+def test_extract_json_from_stdout_rejects_incomplete_candidates() -> None:
+    parsed = _extract_json_from_stdout('{"status":"applied","changed_files":[]}')
+
+    assert parsed == {}
+
+
+def test_llm_disabled_semantics_are_consistent(tmp_path: Path) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    assessment = {"metadata": {}}
+
+    review = _maybe_request_llm_review({}, project, "assess", "", "", [], [])
+    attached = _attach_llm_scoring({}, assessment, project, "assess", "", "", [])
+
+    assert review["status"] == "disabled"
+    assert review["dispatch"]["status"] == "disabled"
+    assert review["score_source"] == "paibi_llm_disabled"
+    assert attached["llm_review"]["status"] == "disabled"
+    assert attached["metadata"]["score_source"] == "paibi_llm_disabled"
+
+    with pytest.raises(RuntimeError, match="PaiBi LLM scoring is required"):
+        _attach_llm_scoring({"require_deep_review": True}, {"metadata": {}}, project, "assess", "", "", [])
+
+
+def test_blocking_git_status_exempts_generated_absorption_outputs(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    own = repo / "packages" / "retort_engine"
+    generated = [
+        own / "retort_engine" / "absorbed_capabilities.py",
+        own / "tests" / "test_absorbed_capabilities.py",
+        own / "docs" / "retort_external_review_report.json",
+    ]
+    for path in generated:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# generated\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "add generated files")
+    for path in generated:
+        path.write_text(path.read_text(encoding="utf-8") + "# changed\n", encoding="utf-8")
+    (own / "docs" / "retort_new_gate.json").write_text("{}", encoding="utf-8")
+    (own / ".retort" / "absorption_state.json").parent.mkdir(parents=True, exist_ok=True)
+    (own / ".retort" / "absorption_state.json").write_text("{}", encoding="utf-8")
+
+    assert _blocking_git_status(repo, own) == ""
+
+    real_file = own / "retort_engine" / "real_behavior.py"
+    real_file.write_text("print('dirty')\n", encoding="utf-8")
+    assert "real_behavior.py" in _blocking_git_status(repo, own)
+
+
+def test_record_closed_loop_proof_rejects_unvalidated_manual_flags(tmp_path: Path) -> None:
     own = tmp_path / "own"
     own.mkdir()
     (own / "README.md").write_text("# Own\n", encoding="utf-8")
-    absorb({"own_project": str(own), "external_path": str(tmp_path)})
 
-    partial = record_closed_loop_proof(str(own), {"branch_diff_verified": True})
-    assert partial["status"] == "awaiting_execution_evidence"
-    assert partial["closed_loop_proof"]["verified"] is False
-
-    full = record_closed_loop_proof(
+    result = record_closed_loop_proof(
         str(own),
         {
             "branch_diff_verified": True,
@@ -313,8 +385,52 @@ def test_record_closed_loop_proof_is_required_for_verified_state(tmp_path: Path)
             "evidence": ["unit proof"],
         },
     )
+
+    assert result["status"] == "awaiting_execution_evidence"
+    assert result["closed_loop_proof"]["verified"] is False
+    assert "post_absorption_tests_passed" in result["closed_loop_proof"]["missing"]
+    assert "merge_verified" in result["closed_loop_proof"]["missing"]
+    assert any("merge_cross_check=False" in item for item in result["closed_loop_proof"]["evidence"])
+    assert any("pytest_gate_cross_check=False" in item for item in result["closed_loop_proof"]["evidence"])
+
+
+def test_record_closed_loop_proof_cross_validates_merge_and_pytest_gate(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    init_repo(own)
+    tests = own / "tests"
+    tests.mkdir()
+    (tests / "test_ok.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+    run_dir = own / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(
+        json.dumps({"gates": [{"ok": True, "command": [sys.executable, "-m", "pytest", "tests", "-q"]}]}),
+        encoding="utf-8",
+    )
+    git(own, "checkout", "-b", "retort/absorb-proof")
+    (own / "absorbed.py").write_text("VALUE = 1\n", encoding="utf-8")
+    git(own, "add", ".")
+    git(own, "commit", "-m", "absorb")
+    git(own, "checkout", "main")
+    git(own, "merge", "--no-ff", "retort/absorb-proof", "-m", "Merge retort proof")
+    merge_commit = git(own, "rev-parse", "--short", "HEAD")
+
+    full = record_closed_loop_proof(
+        str(own),
+        {
+            "branch_diff_verified": True,
+            "employee_execution_verified": True,
+            "post_absorption_tests_passed": True,
+            "merge_verified": True,
+            "merge_commit": merge_commit,
+            "external_advantage_reassessed": True,
+            "evidence": ["unit proof"],
+        },
+    )
+
     assert full["status"] == "closed_loop_verified"
     assert full["closed_loop_proof"]["verified"] is True
+    assert any("merge_cross_check=True" in item for item in full["closed_loop_proof"]["evidence"])
+    assert any("pytest_gate_cross_check=True" in item for item in full["closed_loop_proof"]["evidence"])
 
 
 def test_paibi_llm_review_writes_outbox_when_disabled(tmp_path: Path, monkeypatch) -> None:
