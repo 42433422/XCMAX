@@ -102,6 +102,18 @@ def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
     assert gate["passed"] is True
 
 
+def test_absorption_quality_gate_forwards_code_graph_proof() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+        [{"ok": True, "command": ["pytest", "tests/test_codebase_graph.py"], "stdout_tail": "6 passed"}],
+        minimum_behavior_tests=1,
+        code_graph_proof={"passed": False},
+    )
+
+    assert gate["passed"] is False
+    assert "code_graph_focus_not_proved" in gate["missing"]
+
+
 def test_review_strategy_for_source_file_uses_absorbed_capabilities() -> None:
     strategy = review_strategy_for_file("src/review.ts")
     assert strategy["strategy"] in {"diff_hunk_review", "semantic_review"}
