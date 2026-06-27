@@ -137,6 +137,8 @@ def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     assert "排比 Para/Codex" in prompt
     assert "不得超过 82" in prompt
     assert "严格 JSON" in prompt
+    assert "规则评分已经转成" in prompt
+    assert '"scores"' in prompt
 
 
 def test_service_llm_review_uses_paibi_provider(tmp_path: Path, monkeypatch) -> None:
@@ -176,4 +178,37 @@ def test_service_llm_review_status_parses_paibi_logs(monkeypatch) -> None:
 
     assert result["status"] == "completed"
     assert result["json_result"]["score_suggestion"] == 81
+    assert result["scores"][0]["dimension"] == "calibrated_overall"
     assert result["subtasks"][0]["status"] == "completed"
+
+
+def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+
+    def fake_request(**kwargs) -> dict[str, object]:
+        return {"provider": "paibi", "enabled": True, "status": "accepted", "dispatch": {"task_id": "task-llm"}}
+
+    def fake_wait(task_id: str, *, timeout_sec: float, interval_sec: float = 5.0) -> dict[str, object]:
+        return {
+            "provider": "paibi",
+            "task_id": task_id,
+            "status": "completed",
+            "json_result": {"level": "usable", "score_suggestion": 79},
+            "scores": [
+                {"dimension": "calibrated_overall", "value": 79, "reason": "LLM saw missing closed-loop proof.", "evidence": ["no closed-loop proof"]},
+                {"dimension": "employee_execution_integration", "value": 70, "reason": "No employee execution proof.", "evidence": []},
+            ],
+        }
+
+    monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
+    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
+
+    result = RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1})
+
+    scores = {item["dimension"]: item["value"] for item in result["scores"]}
+    assert result["metadata"]["score_source"] == "paibi_llm"
+    assert result["metadata"]["fallback_rule_scores"]
+    assert scores["calibrated_overall"] == 79
+    assert scores["employee_execution_integration"] == 70
