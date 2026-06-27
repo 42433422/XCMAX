@@ -15,6 +15,7 @@ from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
+from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import run_ui_server
 
@@ -126,6 +127,11 @@ def main(argv: list[str] | None = None) -> int:
     task_report.add_argument("--project", default=".")
     task_report.add_argument("--output", default="")
     task_report.add_argument("--json", action="store_true")
+    task_dispatch = sub.add_parser("task-dispatch-plan")
+    task_dispatch.add_argument("--project", default=".")
+    task_dispatch.add_argument("--enqueue", action="store_true")
+    task_dispatch.add_argument("--output", default="")
+    task_dispatch.add_argument("--json", action="store_true")
     quality_benchmark = sub.add_parser("quality-benchmark-report")
     quality_benchmark.add_argument("--project", default=".")
     quality_benchmark.add_argument("--sample-count", type=int, default=30)
@@ -296,6 +302,20 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort task prioritization status: {result['status']}")
             print(f"Prioritized dimensions: {result['summary']['prioritized_dimension_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "task-dispatch-plan":
+        result = build_task_dispatch_plan(args.project, enqueue=args.enqueue)
+        if args.output:
+            output = Path(args.output)
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort task dispatch plan status: {result['status']}")
+            print(f"Dispatch tasks: {result['summary']['dispatch_task_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
