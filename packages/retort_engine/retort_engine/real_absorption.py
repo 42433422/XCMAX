@@ -19,6 +19,7 @@ from retort_engine.review_pipeline import build_absorption_review_report
 
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
+CAPABILITY_MODEL_SIGNALS = {"review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface"}
 
 
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
@@ -47,12 +48,11 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     frontend_visual_test_path = _frontend_visual_test_target(root)
     log_path = root / "docs" / "retort_absorption_log.md"
     report_path = root / "docs" / "retort_external_review_report.json"
+    writes_capability_model = _should_absorb_capability_model(external_profile)
     writes_frontend_visual = _should_absorb_frontend_visual(external_profile)
     tracked_paths = [
         absorption_quality_path,
         module_path,
-        capability_path,
-        capability_test_path,
         review_context_bias_path,
         review_context_bias_test_path,
         architecture_memory_path,
@@ -60,6 +60,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         log_path,
         report_path,
     ]
+    if writes_capability_model:
+        tracked_paths.extend([capability_path, capability_test_path])
     if writes_frontend_visual:
         tracked_paths.extend([frontend_app_path, frontend_visual_test_path])
     before = _snapshot(tracked_paths)
@@ -67,10 +69,11 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     _write_absorption_quality_helper(absorption_quality_path)
     module_path.parent.mkdir(parents=True, exist_ok=True)
     module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
-    capability_path.parent.mkdir(parents=True, exist_ok=True)
-    capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
-    capability_test_path.parent.mkdir(parents=True, exist_ok=True)
-    capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
+    if writes_capability_model:
+        capability_path.parent.mkdir(parents=True, exist_ok=True)
+        capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
+        capability_test_path.parent.mkdir(parents=True, exist_ok=True)
+        capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
     writes_review_context_bias = _should_absorb_review_context_bias(external_profile)
     if writes_review_context_bias:
         review_context_bias_path.parent.mkdir(parents=True, exist_ok=True)
@@ -88,9 +91,21 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     gates = [
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(absorption_quality_path)], root, timeout=60),
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60),
-        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
-        _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
     ]
+    if writes_capability_model:
+        gates.extend(
+            [
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
+            ]
+        )
+    elif capability_path.is_file() and capability_test_path.is_file():
+        gates.extend(
+            [
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
+            ]
+        )
     if writes_review_context_bias:
         gates.extend(
             [
@@ -144,8 +159,9 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["run_id"] = run_id
     result["external_profile"] = external_profile
     result["semantic_review"] = semantic_review
-    result["capability_module_path"] = str(capability_path)
-    result["capability_test_path"] = str(capability_test_path)
+    result["capability_module_path"] = str(capability_path) if writes_capability_model else ""
+    result["capability_test_path"] = str(capability_test_path) if writes_capability_model else ""
+    result["capability_model_preserved"] = not writes_capability_model
     result["architecture_memory_path"] = str(architecture_memory_path)
     result["architecture_memory_summary"] = architecture_memory.get("summary") or {}
     result["core_refactor_plan_path"] = str(core_refactor_plan_path)
@@ -287,6 +303,11 @@ def absorbed_external_patterns() -> dict[str, Any]:
 def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
     signals = set(profile.get("signals") or [])
     return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review"})
+
+
+def _should_absorb_capability_model(profile: dict[str, Any]) -> bool:
+    signals = set(profile.get("signals") or [])
+    return bool(signals & CAPABILITY_MODEL_SIGNALS)
 
 
 def _should_absorb_frontend_visual(profile: dict[str, Any]) -> bool:
