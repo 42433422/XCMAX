@@ -78,6 +78,7 @@ def main(argv: list[str] | None = None) -> int:
     proof.add_argument("--json", action="store_true")
     review = sub.add_parser("review-diff")
     review.add_argument("--diff-file", required=True)
+    review.add_argument("--previous-diff-file", default="")
     review.add_argument("--max-comments", type=int, default=20)
     review.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
@@ -129,13 +130,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "review-diff":
         with open(args.diff_file, encoding="utf-8") as handle:
-            result = review_diff(handle.read(), max_comments=args.max_comments)
+            diff_text = handle.read()
+        previous_diff_text = ""
+        if args.previous_diff_file:
+            with open(args.previous_diff_file, encoding="utf-8") as handle:
+                previous_diff_text = handle.read()
+        result = review_diff(diff_text, max_comments=args.max_comments, previous_diff_text=previous_diff_text)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort diff review status: {result['status']}")
             print(f"Comments: {result['summary']['comment_count']}")
-        return 0 if result["status"] == "reviewed" else 1
+            print(f"Skipped existing changes: {result['summary']['skipped_existing_change_count']}")
+        return 0 if result["status"] in {"reviewed", "no_new_changes"} else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0

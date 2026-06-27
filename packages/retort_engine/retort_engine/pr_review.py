@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -10,9 +11,21 @@ from retort_engine.absorbed_capabilities import ranked_capabilities, review_stra
 SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_key")
 
 
-def review_diff(diff_text: str, *, max_comments: int = 20) -> dict[str, Any]:
+def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: str = "") -> dict[str, Any]:
     """Review a unified diff with absorbed external review capabilities."""
-    files = parse_unified_diff(diff_text)
+    raw_files = parse_unified_diff(diff_text)
+    previous_files = parse_unified_diff(previous_diff_text) if previous_diff_text.strip() else []
+    files, incremental = _filter_incremental_files(raw_files, previous_files) if previous_files else (
+        raw_files,
+        {
+            "enabled": False,
+            "previous_diff_supplied": False,
+            "previous_added_change_count": 0,
+            "current_added_change_count": _added_change_count(raw_files),
+            "skipped_existing_change_count": 0,
+            "reviewed_new_change_count": _added_change_count(raw_files),
+        },
+    )
     capabilities = [str(item.get("signal") or "") for item in ranked_capabilities()]
     comments: list[dict[str, Any]] = []
     task_groups: dict[str, dict[str, Any]] = {}
@@ -38,13 +51,18 @@ def review_diff(diff_text: str, *, max_comments: int = 20) -> dict[str, Any]:
         "comment_count": len(comments),
         "capabilities": capabilities[:5],
         "ready_for_employee_tasking": bool(files and comments),
+        "incremental": bool(incremental.get("enabled")),
+        "skipped_existing_change_count": int(incremental.get("skipped_existing_change_count") or 0),
+        "reviewed_new_change_count": int(incremental.get("reviewed_new_change_count") or 0),
     }
+    status = "reviewed" if files else ("no_new_changes" if raw_files and previous_files else "empty_diff")
     return {
-        "status": "reviewed" if files else "empty_diff",
+        "status": status,
         "summary": summary,
         "files": files,
         "comments": comments,
         "task_groups": [{"strategy": key, **value} for key, value in sorted(task_groups.items())],
+        "incremental": incremental,
     }
 
 
@@ -128,3 +146,60 @@ def _path_from_diff_header(header: str) -> str:
 
 def _remaining(max_comments: int, comments: list[dict[str, Any]]) -> bool:
     return len(comments) < max(1, max_comments)
+
+
+def _filter_incremental_files(files: list[dict[str, Any]], previous_files: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    previous_counts = Counter(_added_change_keys(previous_files))
+    skipped = 0
+    reviewed = 0
+    filtered: list[dict[str, Any]] = []
+    for file_review in files:
+        file_path = str(file_review.get("path") or "")
+        kept_hunks: list[dict[str, Any]] = []
+        for hunk in file_review.get("hunks") or []:
+            kept_changes: list[dict[str, Any]] = []
+            hunk_has_new_addition = False
+            for change in hunk.get("changes") or []:
+                if change.get("type") != "add":
+                    kept_changes.append(change)
+                    continue
+                key = _added_change_key(file_path, change)
+                if previous_counts[key] > 0:
+                    previous_counts[key] -= 1
+                    skipped += 1
+                    continue
+                reviewed += 1
+                hunk_has_new_addition = True
+                kept_changes.append(change)
+            if hunk_has_new_addition:
+                kept_hunks.append({**hunk, "changes": kept_changes})
+        if kept_hunks:
+            filtered.append({**file_review, "hunks": kept_hunks})
+    return filtered, {
+        "enabled": True,
+        "previous_diff_supplied": True,
+        "previous_added_change_count": _added_change_count(previous_files),
+        "current_added_change_count": _added_change_count(files),
+        "skipped_existing_change_count": skipped,
+        "reviewed_new_change_count": reviewed,
+    }
+
+
+def _added_change_keys(files: list[dict[str, Any]]) -> list[str]:
+    keys: list[str] = []
+    for file_review in files:
+        file_path = str(file_review.get("path") or "")
+        for hunk in file_review.get("hunks") or []:
+            for change in hunk.get("changes") or []:
+                if change.get("type") == "add":
+                    keys.append(_added_change_key(file_path, change))
+    return keys
+
+
+def _added_change_count(files: list[dict[str, Any]]) -> int:
+    return len(_added_change_keys(files))
+
+
+def _added_change_key(file_path: str, change: dict[str, Any]) -> str:
+    text = re.sub(r"\s+", " ", str(change.get("text") or "").strip())
+    return f"{file_path}\0{text}"

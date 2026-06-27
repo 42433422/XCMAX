@@ -84,6 +84,9 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "api_contract_schemas": "RETORT_CONTRACT_SCHEMAS" in text and "validate_contract" in text,
         "feedback_audit": "audit_feedback_closure" in text and "history_result_count" in text,
         "diff_hunk_review": "diff hunk" in text.lower() and "patch set" in text.lower(),
+        "pr_review_runtime": "review_diff" in text and "parse_unified_diff" in text and "review-diff" in text,
+        "pr_review_api": "/api/review-diff" in text and "pr_review_result" in text,
+        "incremental_pr_review": "previous_diff_text" in text and "skipped_existing_change_count" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -713,7 +716,22 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append(f"behavior_test_function_count={behavior_test_count}")
     evidence.append(f"generated_evidence_file_count={len(audit.get('generated_evidence_files') or [])}")
     evidence.append(f"employee_execution_mode={audit.get('employee_execution_mode', '')}")
+    worker_review = audit.get("employee_worker_review") if isinstance(audit.get("employee_worker_review"), dict) else {}
+    evidence.append(f"employee_worker_review_status={worker_review.get('status', '')}")
+    evidence.append(f"employee_worker_review_file_count={worker_review.get('file_count', '')}")
+    evidence.append(f"employee_worker_review_comment_count={worker_review.get('comment_count', '')}")
+    evidence.append(f"employee_worker_review_artifact_exists={worker_review.get('artifact_exists', False)}")
     evidence.append(f"external_project_count={audit.get('external_project_count', '')}")
+    pr_review = _pr_review_runtime_evidence(project)
+    evidence.append(f"pr_review_runtime={pr_review.get('runtime')}")
+    evidence.append(f"pr_review_cli={pr_review.get('cli')}")
+    evidence.append(f"pr_review_api={pr_review.get('api')}")
+    evidence.append(f"pr_review_contract={pr_review.get('contract')}")
+    evidence.append(f"pr_review_test_function_count={pr_review.get('test_function_count')}")
+    evidence.append(f"pr_review_sample_comment_count={pr_review.get('sample_comment_count')}")
+    evidence.append(f"pr_review_incremental={pr_review.get('incremental')}")
+    evidence.append(f"pr_review_incremental_skipped_count={pr_review.get('incremental_skipped_count')}")
+    evidence.append(f"pr_review_incremental_new_count={pr_review.get('incremental_new_count')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -740,6 +758,9 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         except (OSError, json.JSONDecodeError):
             payload = {}
         evidence.append(f"employee_result_count={len(payload.get('results') or [])}; execution_mode={payload.get('execution_mode', '')}")
+        runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
+        review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
+        evidence.append(f"employee_runtime_worker_review={review.get('status', '')}; comments={review.get('comment_count', '')}; artifact={review.get('artifact', '')}")
     return evidence
 
 
@@ -796,8 +817,16 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
             behavior_source_files.append(rel)
         else:
             other_files.append(rel)
+    pr_review = _pr_review_runtime_evidence(root)
+    for rel in pr_review.get("behavior_source_files") or []:
+        if rel not in behavior_source_files:
+            behavior_source_files.append(str(rel))
+    for rel in pr_review.get("behavior_test_files") or []:
+        if rel not in behavior_test_files:
+            behavior_test_files.append(str(rel))
     external_project_count = _absorption_external_project_count(root)
     employee_mode = _latest_employee_execution_mode(root)
+    employee_worker_review = _latest_employee_worker_review(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
     if generated_only:
         score = 82.0
@@ -817,7 +846,7 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         reason = "latest_absorption_has_no_clear_behavior_code_change"
     if external_project_count < 3:
         cap = min(cap, 88.0 if not generated_only else cap)
-    employee_cap = 88.0 if employee_mode in {"", "retort_apply_absorption_cli"} else 96.0
+    employee_cap = 88.0 if employee_mode in {"", "retort_apply_absorption_cli"} else (97.0 if employee_worker_review.get("status") == "reviewed" else 96.0)
     return {
         "score": score,
         "overall_cap": cap,
@@ -831,6 +860,49 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         "generated_only": generated_only,
         "external_project_count": external_project_count,
         "employee_execution_mode": employee_mode,
+        "employee_worker_review": employee_worker_review,
+        "pr_review_runtime": pr_review,
+    }
+
+
+def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
+    source = root / "retort_engine" / "pr_review.py"
+    test = root / "tests" / "test_pr_review.py"
+    cli = root / "retort_engine" / "cli.py"
+    ui_server = root / "retort_engine" / "ui_server.py"
+    contracts = root / "retort_engine" / "contracts.py"
+    source_text = _read(source)
+    test_text = _read(test)
+    sample_comment_count = 0
+    incremental = False
+    incremental_skipped_count = 0
+    incremental_new_count = 0
+    if source.is_file():
+        try:
+            from retort_engine.pr_review import review_diff
+
+            result = review_diff("diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    token = \"secret\"\n")
+            sample_comment_count = len(result.get("comments") or [])
+            previous_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    # TODO: old issue\n"
+            current_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = \"secret\"\n"
+            incremental_result = review_diff(current_diff, previous_diff_text=previous_diff)
+            incremental = bool((incremental_result.get("incremental") or {}).get("enabled"))
+            incremental_skipped_count = int((incremental_result.get("summary") or {}).get("skipped_existing_change_count") or 0)
+            incremental_new_count = int((incremental_result.get("summary") or {}).get("reviewed_new_change_count") or 0)
+        except Exception:
+            sample_comment_count = 0
+    return {
+        "runtime": source.is_file() and "parse_unified_diff" in source_text and "task_groups" in source_text,
+        "cli": "review-diff" in _read(cli),
+        "api": "/api/review-diff" in _read(ui_server),
+        "contract": "pr_review_result" in _read(contracts),
+        "test_function_count": len(re.findall(r"^\s*def\s+test_", test_text, re.M)),
+        "sample_comment_count": sample_comment_count,
+        "incremental": incremental,
+        "incremental_skipped_count": incremental_skipped_count,
+        "incremental_new_count": incremental_new_count,
+        "behavior_source_files": ["retort_engine/pr_review.py"] if source.is_file() else [],
+        "behavior_test_files": ["tests/test_pr_review.py"] if test.is_file() else [],
     }
 
 
@@ -859,6 +931,29 @@ def _latest_employee_execution_mode(root: Path) -> str:
         if mode:
             return mode
     return ""
+
+
+def _latest_employee_worker_review(root: Path) -> dict[str, Any]:
+    result_dir = root / ".retort" / "employee_results"
+    results = sorted(result_dir.glob("*.json")) if result_dir.is_dir() else []
+    for path in reversed(results):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
+        review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
+        if review:
+            artifact_text = str(review.get("artifact") or "")
+            return {
+                "status": str(review.get("status") or ""),
+                "comment_count": int(review.get("comment_count") or 0),
+                "file_count": int(review.get("file_count") or 0),
+                "task_group_count": int(review.get("task_group_count") or 0),
+                "artifact": artifact_text,
+                "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
+            }
+    return {}
 
 
 def _absorption_external_project_count(root: Path) -> int:
