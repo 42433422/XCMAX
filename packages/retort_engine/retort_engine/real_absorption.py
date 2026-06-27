@@ -10,6 +10,7 @@ from typing import Any
 
 from retort_engine.history import RetortHistoryStore
 from retort_engine.models import EmployeeTaskResult
+from retort_engine.review_pipeline import build_absorption_review_report
 
 
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
@@ -38,7 +39,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
-    report_path.write_text(json.dumps(_review_report(run_id, source, external_path, tasks, external_profile, semantic_review), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    report_path.write_text(json.dumps(_review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review), ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     changed_files = _changed_files(before, [module_path, log_path, report_path])
     gates = [_run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60)]
     if payload.get("run_local_gates"):
@@ -193,7 +194,8 @@ def _code_profile(root: Path) -> dict[str, int]:
     return profile
 
 
-def _review_report(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], semantic_review: dict[str, Any]) -> dict[str, Any]:
+def _review_report(root: Path, run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], semantic_review: dict[str, Any]) -> dict[str, Any]:
+    pipeline_report = build_absorption_review_report(root, external_path, tasks)
     return {
         "run_id": run_id,
         "source": source,
@@ -203,6 +205,7 @@ def _review_report(run_id: str, source: str, external_path: Path, tasks: list[di
         "absorbed_signals": profile.get("signals", []),
         "signal_evidence": profile.get("signal_evidence", {}),
         "semantic_review": semantic_review,
+        "review_pipeline": pipeline_report,
         "tasks": tasks,
         "replay": {"command": f"retort absorb --own-project <main-project> --external-path {external_path} --run-local-gates --branch-workflow --merge-after"},
     }
