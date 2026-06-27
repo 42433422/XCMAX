@@ -21,7 +21,7 @@
     },
     "automation_surface": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "automation_surface",
       "evidence_files": [
         ".config/binstaller.yml",
@@ -37,10 +37,10 @@
         "README.it.md",
         "README.ja.md"
       ],
-      "gate_pass_count": 29,
-      "gate_pass_rate": 0.935,
+      "gate_pass_count": 30,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 31,
+      "run_count": 32,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -72,9 +72,10 @@
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01"
+        "20260627222436-02cbea1e01",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 29,
+      "source_count": 30,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -104,12 +105,13 @@
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "benchmark_eval": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 13,
       "component": "benchmark_eval",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -125,10 +127,10 @@
         "__tests__/reviewer.test.ts",
         "action/encoder.json"
       ],
-      "gate_pass_count": 27,
-      "gate_pass_rate": 0.931,
+      "gate_pass_count": 28,
+      "gate_pass_rate": 0.933,
       "ready_for_deep_refactor": true,
-      "run_count": 29,
+      "run_count": 30,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -158,9 +160,10 @@
         "20260627213722-6cc7a9e742",
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 27,
+      "source_count": 28,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -188,15 +191,17 @@
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "codebase_graph": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 10,
+      "code_graph_proof_count": 11,
       "component": "codebase_graph",
       "evidence_files": [
         ".pre-commit-config.yaml",
+        "AGENTS.md",
         "CHANGELOG.md",
         "README.md",
         "action/encoder.json",
@@ -206,13 +211,12 @@
         "docs/module-finder-archive/mf_35.py",
         "frontend/package-lock.json",
         "lib/graph.js",
-        "lm_eval/tasks/_yaml_loader.py",
-        "lm_eval/tasks/mmlu/flan_cot_fewshot/_cot_prompts.json"
+        "lm_eval/tasks/_yaml_loader.py"
       ],
-      "gate_pass_count": 10,
+      "gate_pass_count": 11,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 10,
+      "run_count": 11,
       "run_ids": [
         "20260627204837-5df07f797f",
         "20260627205735-8afcde3e86",
@@ -223,9 +227,10 @@
         "20260627212946-168c95fefd",
         "20260627213722-6cc7a9e742",
         "20260627220056-7db1f7d16a",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 10,
+      "source_count": 11,
       "sources": [
         "https://github.com/EleutherAI/lm-evaluation-harness",
         "https://github.com/PyCQA/bandit",
@@ -236,12 +241,13 @@
         "https://github.com/pahen/madge",
         "https://github.com/semgrep/semgrep",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "command_contract": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "command_contract",
       "evidence_files": [
         ".config/binstaller.yml",
@@ -257,10 +263,10 @@
         "README.it.md",
         "README.ja.md"
       ],
-      "gate_pass_count": 29,
-      "gate_pass_rate": 0.935,
+      "gate_pass_count": 30,
+      "gate_pass_rate": 0.938,
       "ready_for_deep_refactor": true,
-      "run_count": 31,
+      "run_count": 32,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -292,9 +298,10 @@
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01"
+        "20260627222436-02cbea1e01",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 29,
+      "source_count": 30,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -324,7 +331,8 @@
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "context_budgeting": {
@@ -359,7 +367,7 @@
     },
     "context_localization": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "context_localization",
       "evidence_files": [
         ".goreleaser.yml",
@@ -375,10 +383,10 @@
         "README.zh-TW.md",
         "README_swebench.md"
       ],
-      "gate_pass_count": 27,
-      "gate_pass_rate": 0.9,
+      "gate_pass_count": 28,
+      "gate_pass_rate": 0.903,
       "ready_for_deep_refactor": true,
-      "run_count": 30,
+      "run_count": 31,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -409,9 +417,10 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 27,
+      "source_count": 28,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -439,7 +448,8 @@
         "https://github.com/reviewdog/reviewdog",
         "https://github.com/semgrep/semgrep",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "context_packaging": {
@@ -474,7 +484,7 @@
     },
     "context_partitioning": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 10,
+      "code_graph_proof_count": 11,
       "component": "context_partitioning",
       "evidence_files": [
         ".github/CONTRIBUTING.md",
@@ -490,10 +500,10 @@
         "docs/ARCHITECTURE.md",
         "docs/cli.md"
       ],
-      "gate_pass_count": 16,
-      "gate_pass_rate": 0.941,
+      "gate_pass_count": 17,
+      "gate_pass_rate": 0.944,
       "ready_for_deep_refactor": true,
-      "run_count": 17,
+      "run_count": 18,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
@@ -511,9 +521,10 @@
         "20260627214507-0dc2a6fa81",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 15,
+      "source_count": 16,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -529,12 +540,13 @@
         "https://github.com/qodo-ai/pr-agent",
         "https://github.com/reviewdog/reviewdog",
         "https://github.com/sunerpy/codegraph-rust",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "diff_hunk_review": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
+      "code_graph_proof_count": 7,
       "component": "diff_hunk_review",
       "evidence_files": [
         ".github/CONTRIBUTING.md",
@@ -550,10 +562,10 @@
         "benchmarks/hybridgym_issuelocalize/eval_infer.py",
         "cli/src/semgrep/test.py"
       ],
-      "gate_pass_count": 15,
-      "gate_pass_rate": 0.882,
+      "gate_pass_count": 16,
+      "gate_pass_rate": 0.889,
       "ready_for_deep_refactor": true,
-      "run_count": 17,
+      "run_count": 18,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627171646-762694f28f",
@@ -571,9 +583,10 @@
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
         "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81"
+        "20260627214507-0dc2a6fa81",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 15,
+      "source_count": 16,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -589,12 +602,13 @@
         "https://github.com/reviewdog/reviewdog",
         "https://github.com/semgrep/semgrep",
         "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "diff_locality": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 10,
+      "code_graph_proof_count": 11,
       "component": "diff_locality",
       "evidence_files": [
         ".github/CONTRIBUTING.md",
@@ -610,10 +624,10 @@
         "docs/ARCHITECTURE.md",
         "docs/cli.md"
       ],
-      "gate_pass_count": 16,
-      "gate_pass_rate": 0.941,
+      "gate_pass_count": 17,
+      "gate_pass_rate": 0.944,
       "ready_for_deep_refactor": true,
-      "run_count": 17,
+      "run_count": 18,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
@@ -631,9 +645,10 @@
         "20260627214507-0dc2a6fa81",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 15,
+      "source_count": 16,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -649,7 +664,8 @@
         "https://github.com/qodo-ai/pr-agent",
         "https://github.com/reviewdog/reviewdog",
         "https://github.com/sunerpy/codegraph-rust",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "edit_planning_loop": {
@@ -671,7 +687,7 @@
     },
     "evaluation_loop": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 11,
+      "code_graph_proof_count": 12,
       "component": "evaluation_loop",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -687,10 +703,10 @@
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py"
       ],
-      "gate_pass_count": 26,
-      "gate_pass_rate": 0.929,
+      "gate_pass_count": 27,
+      "gate_pass_rate": 0.931,
       "ready_for_deep_refactor": true,
-      "run_count": 28,
+      "run_count": 29,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -719,9 +735,10 @@
         "20260627213722-6cc7a9e742",
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 26,
+      "source_count": 27,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -748,12 +765,13 @@
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "file_grouping": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 13,
       "component": "file_grouping",
       "evidence_files": [
         ".claude/plugins/repomix-explorer/agents/explorer.md",
@@ -769,10 +787,10 @@
         "AGENTS.md",
         "CONTRIBUTING.md"
       ],
-      "gate_pass_count": 20,
-      "gate_pass_rate": 0.909,
+      "gate_pass_count": 21,
+      "gate_pass_rate": 0.913,
       "ready_for_deep_refactor": true,
-      "run_count": 22,
+      "run_count": 23,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -795,9 +813,10 @@
         "20260627214507-0dc2a6fa81",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 20,
+      "source_count": 21,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -818,12 +837,13 @@
         "https://github.com/semgrep/semgrep",
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "impact_tracing": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
+      "code_graph_proof_count": 7,
       "component": "impact_tracing",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -833,32 +853,34 @@
         "CONTRIBUTING.md",
         "README.md",
         "apps/dashboard/README.md",
+        "docker/mosaico/README.md",
+        "docker/mosaico/docker-compose.pr-agent.yml",
         "metrics.md",
         "packages/context-engine/src/layers/related-files.ts",
-        "packages/llm-core/src/prompts.ts",
-        "packages/rules-engine/src/parsers/python.ts",
-        "src/reviewer.py"
+        "packages/llm-core/src/prompts.ts"
       ],
-      "gate_pass_count": 6,
+      "gate_pass_count": 7,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 6,
+      "run_count": 7,
       "run_ids": [
         "20260627212518-4985a95789",
         "20260627212946-168c95fefd",
         "20260627213722-6cc7a9e742",
         "20260627214507-0dc2a6fa81",
         "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01"
+        "20260627222436-02cbea1e01",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 6,
+      "source_count": 7,
       "sources": [
         "https://github.com/AndreaBonn/ai-pr-reviewer",
         "https://github.com/Review-scope/ReviewScope",
         "https://github.com/aryanbrite/openrabbit",
         "https://github.com/hevinbryant/ai-pr-reviewer",
         "https://github.com/semgrep/semgrep",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "issue_reproduction_loop": {
@@ -880,7 +902,7 @@
     },
     "model_adapter": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "model_adapter",
       "evidence_files": [
         ".github/FUNDING.YML",
@@ -896,10 +918,10 @@
         "README.zh-TW.md",
         "README_swebench.md"
       ],
-      "gate_pass_count": 30,
-      "gate_pass_rate": 0.882,
+      "gate_pass_count": 31,
+      "gate_pass_rate": 0.886,
       "ready_for_deep_refactor": true,
-      "run_count": 34,
+      "run_count": 35,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -934,9 +956,10 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 31,
+      "source_count": 32,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -968,7 +991,8 @@
         "https://github.com/semgrep/semgrep",
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "patch_attempt_loop": {
@@ -990,7 +1014,7 @@
     },
     "provider_boundary": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 14,
+      "code_graph_proof_count": 15,
       "component": "provider_boundary",
       "evidence_files": [
         ".github/FUNDING.YML",
@@ -1006,10 +1030,10 @@
         "README.zh-TW.md",
         "README_swebench.md"
       ],
-      "gate_pass_count": 30,
-      "gate_pass_rate": 0.882,
+      "gate_pass_count": 31,
+      "gate_pass_rate": 0.886,
       "ready_for_deep_refactor": true,
-      "run_count": 34,
+      "run_count": 35,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1044,9 +1068,10 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 31,
+      "source_count": 32,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1078,12 +1103,13 @@
         "https://github.com/semgrep/semgrep",
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "regression_oracle": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 11,
+      "code_graph_proof_count": 12,
       "component": "regression_oracle",
       "evidence_files": [
         ".pre-commit-config.yaml",
@@ -1099,10 +1125,10 @@
         "__tests__/reviewer.test.ts",
         "agentless/test/run_reproduction_tests.py"
       ],
-      "gate_pass_count": 26,
-      "gate_pass_rate": 0.929,
+      "gate_pass_count": 27,
+      "gate_pass_rate": 0.931,
       "ready_for_deep_refactor": true,
-      "run_count": 28,
+      "run_count": 29,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -1131,9 +1157,10 @@
         "20260627213722-6cc7a9e742",
         "20260627214507-0dc2a6fa81",
         "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
       ],
-      "source_count": 26,
+      "source_count": 27,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/AndreaBonn/ai-pr-reviewer",
@@ -1160,7 +1187,8 @@
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     },
     "repo_map_context": {
@@ -1197,7 +1225,7 @@
     },
     "review_pipeline": {
       "architecture_depth_score": 100,
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "review_pipeline",
       "evidence_files": [
         ".devcontainer/devcontainer.json",
@@ -1212,370 +1240,6 @@
         "CODE_OF_CONDUCT.md",
         "CONTRIBUTING.md",
         "HISTORY.md"
-      ],
-      "gate_pass_count": 30,
-      "gate_pass_rate": 0.882,
-      "ready_for_deep_refactor": true,
-      "run_count": 34,
-      "run_ids": [
-        "20260627171538-da950c021d",
-        "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f",
-        "20260627172352-6e1352f61e",
-        "20260627172432-c09c7479ad",
-        "20260627172525-c3d6b79c6a",
-        "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1",
-        "20260627173253-72548897e8",
-        "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e",
-        "20260627185357-29365e9367",
-        "20260627191156-142d39dda9",
-        "20260627192206-0723009b1b",
-        "20260627192522-0723009b1b",
-        "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd",
-        "20260627195932-112b065375",
-        "20260627204837-5df07f797f",
-        "20260627205735-8afcde3e86",
-        "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6",
-        "20260627210337-356907943f",
-        "20260627211605-408a94776e",
-        "20260627211902-816c3b78e7",
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
-      ],
-      "source_count": 31,
-      "sources": [
-        "/private/tmp/retort-depth-source-zULAcN",
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/EleutherAI/lm-evaluation-harness",
-        "https://github.com/HypothesisWorks/hypothesis",
-        "https://github.com/OpenHands/benchmarks",
-        "https://github.com/OpenHands/software-agent-sdk",
-        "https://github.com/PyCQA/bandit",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/SWE-agent/SWE-agent",
-        "https://github.com/Sourish-19/ai-pr-reviewer",
-        "https://github.com/TNG/ArchUnit",
-        "https://github.com/aider-ai/aider",
-        "https://github.com/anc95/ChatGPT-CodeReview",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/bobbyroe/threejs-earth",
-        "https://github.com/continuedev/continue",
-        "https://github.com/dgreenheck/threejs-procedural-planets",
-        "https://github.com/hevinbryant/ai-pr-reviewer",
-        "https://github.com/jaygaha/local-ai-pr-reviewer",
-        "https://github.com/kamilstanuch/codebase-digest",
-        "https://github.com/mopemope/pr-ai-review-bot",
-        "https://github.com/nedbat/coveragepy",
-        "https://github.com/openautocoder/agentless",
-        "https://github.com/pahen/madge",
-        "https://github.com/qodo-ai/pr-agent",
-        "https://github.com/reviewdog/reviewdog",
-        "https://github.com/seddonym/import-linter",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "risk_rule_engine": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
-      "component": "risk_rule_engine",
-      "evidence_files": [
-        ".github/SECURITY.md",
-        "AGENTS.md",
-        "CHANGELOG.md",
-        "README.md",
-        "Readme.md",
-        "SECURITY.md",
-        "apps/dashboard/src/app/page.tsx",
-        "docs/ARCHITECTURE.md",
-        "docs/USER_GUIDE.md",
-        "frontend/src/components/ServicesSection.tsx",
-        "packages/context-engine/src/layers.ts",
-        "src/reviewer.ts"
-      ],
-      "gate_pass_count": 6,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": true,
-      "run_count": 6,
-      "run_ids": [
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
-      ],
-      "source_count": 6,
-      "sources": [
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/Sourish-19/ai-pr-reviewer",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "safety_policy": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 15,
-      "component": "safety_policy",
-      "evidence_files": [
-        ".github/CODE_OF_CONDUCT.md",
-        ".github/codeql/codeql-config.yml",
-        ".github/workflows/release.yml",
-        ".github/workflows/static.yml",
-        ".goreleaser-nightly.yml",
-        ".goreleaser.yml",
-        ".licensed.yml",
-        ".pre-commit-hooks.yaml",
-        ".readthedocs.yaml",
-        "AGENTS.md",
-        "BUILD_DEPENDENCIES.md",
-        "CHANGELOG.md"
-      ],
-      "gate_pass_count": 31,
-      "gate_pass_rate": 0.939,
-      "ready_for_deep_refactor": true,
-      "run_count": 33,
-      "run_ids": [
-        "20260627171538-da950c021d",
-        "20260627171611-61b3c3e350",
-        "20260627171646-762694f28f",
-        "20260627172352-6e1352f61e",
-        "20260627172432-c09c7479ad",
-        "20260627172525-c3d6b79c6a",
-        "20260627173018-28c1843a1a",
-        "20260627173057-8f77226be1",
-        "20260627173253-72548897e8",
-        "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b",
-        "20260627183621-6e1352f61e",
-        "20260627185357-29365e9367",
-        "20260627191156-142d39dda9",
-        "20260627193421-af1df6ee7c",
-        "20260627194531-f1634167bd",
-        "20260627195002-b40d2378d6",
-        "20260627195932-112b065375",
-        "20260627204837-5df07f797f",
-        "20260627205735-8afcde3e86",
-        "20260627205851-4436ac66e6",
-        "20260627210037-4436ac66e6",
-        "20260627210337-356907943f",
-        "20260627211605-408a94776e",
-        "20260627211902-816c3b78e7",
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
-      ],
-      "source_count": 31,
-      "sources": [
-        "/private/tmp/retort-depth-source-zULAcN",
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/EleutherAI/lm-evaluation-harness",
-        "https://github.com/HypothesisWorks/hypothesis",
-        "https://github.com/OpenHands/benchmarks",
-        "https://github.com/OpenHands/software-agent-sdk",
-        "https://github.com/PyCQA/bandit",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/SWE-agent/SWE-agent",
-        "https://github.com/Sourish-19/ai-pr-reviewer",
-        "https://github.com/TNG/ArchUnit",
-        "https://github.com/aider-ai/aider",
-        "https://github.com/anc95/ChatGPT-CodeReview",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/continuedev/continue",
-        "https://github.com/dgreenheck/threejs-procedural-planets",
-        "https://github.com/hevinbryant/ai-pr-reviewer",
-        "https://github.com/jaygaha/local-ai-pr-reviewer",
-        "https://github.com/kamilstanuch/codebase-digest",
-        "https://github.com/mopemope/pr-ai-review-bot",
-        "https://github.com/nedbat/coveragepy",
-        "https://github.com/openautocoder/agentless",
-        "https://github.com/pahen/madge",
-        "https://github.com/qodo-ai/pr-agent",
-        "https://github.com/reviewdog/reviewdog",
-        "https://github.com/seddonym/import-linter",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/sunerpy/codegraph-rust",
-        "https://github.com/swe-bench/SWE-bench",
-        "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "sandbox_execution_harness": {
-      "architecture_depth_score": 65,
-      "code_graph_proof_count": 0,
-      "component": "sandbox_execution_harness",
-      "evidence_files": [],
-      "gate_pass_count": 2,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": false,
-      "run_count": 2,
-      "run_ids": [
-        "20260627171611-61b3c3e350",
-        "20260627191156-142d39dda9"
-      ],
-      "source_count": 2,
-      "sources": [
-        "https://github.com/OpenHands/benchmarks",
-        "https://github.com/OpenHands/software-agent-sdk"
-      ]
-    },
-    "semantic_index": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
-      "component": "semantic_index",
-      "evidence_files": [
-        ".pre-commit-config.yaml",
-        "AGENTS.md",
-        "CHANGELOG.md",
-        "CLAUDE.md",
-        "CONTRIBUTING.md",
-        "README.md",
-        "apps/dashboard/README.md",
-        "metrics.md",
-        "package-lock.json",
-        "packages/context-engine/src/layers/related-files.ts",
-        "packages/llm-core/src/prompts.ts",
-        "packages/rules-engine/src/parsers/python.ts"
-      ],
-      "gate_pass_count": 6,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": true,
-      "run_count": 6,
-      "run_ids": [
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627221413-310a494b4a",
-        "20260627222436-02cbea1e01"
-      ],
-      "source_count": 6,
-      "sources": [
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/hevinbryant/ai-pr-reviewer",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "static_analysis": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
-      "component": "static_analysis",
-      "evidence_files": [
-        ".github/SECURITY.md",
-        "AGENTS.md",
-        "CHANGELOG.md",
-        "README.md",
-        "Readme.md",
-        "SECURITY.md",
-        "docs/ARCHITECTURE.md",
-        "docs/USER_GUIDE.md",
-        "frontend/src/components/ServicesSection.tsx",
-        "metrics.md",
-        "packages/context-engine/src/layers.ts",
-        "packages/llm-core/src/prompts.ts"
-      ],
-      "gate_pass_count": 6,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": true,
-      "run_count": 6,
-      "run_ids": [
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
-      ],
-      "source_count": 6,
-      "sources": [
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/Sourish-19/ai-pr-reviewer",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "static_analysis_gate": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 6,
-      "component": "static_analysis_gate",
-      "evidence_files": [
-        ".github/SECURITY.md",
-        "AGENTS.md",
-        "CHANGELOG.md",
-        "README.md",
-        "Readme.md",
-        "SECURITY.md",
-        "apps/dashboard/src/app/page.tsx",
-        "docs/ARCHITECTURE.md",
-        "docs/USER_GUIDE.md",
-        "frontend/src/components/ServicesSection.tsx",
-        "packages/context-engine/src/layers.ts",
-        "src/reviewer.ts"
-      ],
-      "gate_pass_count": 6,
-      "gate_pass_rate": 1.0,
-      "ready_for_deep_refactor": true,
-      "run_count": 6,
-      "run_ids": [
-        "20260627212518-4985a95789",
-        "20260627212946-168c95fefd",
-        "20260627213722-6cc7a9e742",
-        "20260627214507-0dc2a6fa81",
-        "20260627220056-7db1f7d16a",
-        "20260627221413-310a494b4a"
-      ],
-      "source_count": 6,
-      "sources": [
-        "https://github.com/AndreaBonn/ai-pr-reviewer",
-        "https://github.com/Review-scope/ReviewScope",
-        "https://github.com/Sourish-19/ai-pr-reviewer",
-        "https://github.com/aryanbrite/openrabbit",
-        "https://github.com/semgrep/semgrep",
-        "https://github.com/yamadashy/repomix"
-      ]
-    },
-    "workflow_ci": {
-      "architecture_depth_score": 100,
-      "code_graph_proof_count": 15,
-      "component": "workflow_ci",
-      "evidence_files": [
-        ".github/workflows/static.yml",
-        ".goreleaser-nightly.yml",
-        ".oxlintrc.json",
-        ".pinact.yaml",
-        ".pre-commit-config.yaml",
-        ".pre-commit-hooks.yaml",
-        ".prettierrc.yml",
-        ".readthedocs.yaml",
-        ".reviewdog.yml",
-        "AGENTS.md",
-        "BUILD_DEPENDENCIES.md",
-        "CHANGELOG.md"
       ],
       "gate_pass_count": 31,
       "gate_pass_rate": 0.886,
@@ -1600,7 +1264,6 @@
         "20260627192522-0723009b1b",
         "20260627193421-af1df6ee7c",
         "20260627194531-f1634167bd",
-        "20260627195002-b40d2378d6",
         "20260627195932-112b065375",
         "20260627204837-5df07f797f",
         "20260627205735-8afcde3e86",
@@ -1616,7 +1279,8 @@
         "20260627220056-7db1f7d16a",
         "20260627221413-310a494b4a",
         "20260627222436-02cbea1e01",
-        "20260627224409-8893c01ae8"
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
       ],
       "source_count": 32,
       "sources": [
@@ -1648,10 +1312,388 @@
         "https://github.com/reviewdog/reviewdog",
         "https://github.com/seddonym/import-linter",
         "https://github.com/semgrep/semgrep",
+        "https://github.com/swe-bench/SWE-bench",
+        "https://github.com/thebjorn/pydeps",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "risk_rule_engine": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 7,
+      "component": "risk_rule_engine",
+      "evidence_files": [
+        ".github/SECURITY.md",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.md",
+        "Readme.md",
+        "SECURITY.md",
+        "apps/dashboard/src/app/page.tsx",
+        "docs/ARCHITECTURE.md",
+        "docs/USER_GUIDE.md",
+        "docs/docs/tools/review.md",
+        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+        "frontend/src/components/ServicesSection.tsx"
+      ],
+      "gate_pass_count": 7,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 7,
+      "run_ids": [
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627220056-7db1f7d16a",
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 7,
+      "sources": [
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/semgrep/semgrep",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "safety_policy": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 16,
+      "component": "safety_policy",
+      "evidence_files": [
+        ".github/CODE_OF_CONDUCT.md",
+        ".github/codeql/codeql-config.yml",
+        ".github/workflows/release.yml",
+        ".github/workflows/static.yml",
+        ".goreleaser-nightly.yml",
+        ".goreleaser.yml",
+        ".licensed.yml",
+        ".pre-commit-hooks.yaml",
+        ".readthedocs.yaml",
+        "AGENTS.md",
+        "BUILD_DEPENDENCIES.md",
+        "CHANGELOG.md"
+      ],
+      "gate_pass_count": 32,
+      "gate_pass_rate": 0.941,
+      "ready_for_deep_refactor": true,
+      "run_count": 34,
+      "run_ids": [
+        "20260627171538-da950c021d",
+        "20260627171611-61b3c3e350",
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e",
+        "20260627172432-c09c7479ad",
+        "20260627172525-c3d6b79c6a",
+        "20260627173018-28c1843a1a",
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f",
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367",
+        "20260627191156-142d39dda9",
+        "20260627193421-af1df6ee7c",
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6",
+        "20260627195932-112b065375",
+        "20260627204837-5df07f797f",
+        "20260627205735-8afcde3e86",
+        "20260627205851-4436ac66e6",
+        "20260627210037-4436ac66e6",
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e",
+        "20260627211902-816c3b78e7",
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627220056-7db1f7d16a",
+        "20260627221413-310a494b4a",
+        "20260627222436-02cbea1e01",
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 32,
+      "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
+        "https://github.com/HypothesisWorks/hypothesis",
+        "https://github.com/OpenHands/benchmarks",
+        "https://github.com/OpenHands/software-agent-sdk",
+        "https://github.com/PyCQA/bandit",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/TNG/ArchUnit",
+        "https://github.com/aider-ai/aider",
+        "https://github.com/anc95/ChatGPT-CodeReview",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
+        "https://github.com/hevinbryant/ai-pr-reviewer",
+        "https://github.com/jaygaha/local-ai-pr-reviewer",
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/mopemope/pr-ai-review-bot",
+        "https://github.com/nedbat/coveragepy",
+        "https://github.com/openautocoder/agentless",
+        "https://github.com/pahen/madge",
+        "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/reviewdog/reviewdog",
+        "https://github.com/seddonym/import-linter",
+        "https://github.com/semgrep/semgrep",
         "https://github.com/sunerpy/codegraph-rust",
         "https://github.com/swe-bench/SWE-bench",
         "https://github.com/thebjorn/pydeps",
-        "https://github.com/yamadashy/repomix"
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "sandbox_execution_harness": {
+      "architecture_depth_score": 65,
+      "code_graph_proof_count": 0,
+      "component": "sandbox_execution_harness",
+      "evidence_files": [],
+      "gate_pass_count": 2,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": false,
+      "run_count": 2,
+      "run_ids": [
+        "20260627171611-61b3c3e350",
+        "20260627191156-142d39dda9"
+      ],
+      "source_count": 2,
+      "sources": [
+        "https://github.com/OpenHands/benchmarks",
+        "https://github.com/OpenHands/software-agent-sdk"
+      ]
+    },
+    "semantic_index": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 7,
+      "component": "semantic_index",
+      "evidence_files": [
+        ".pre-commit-config.yaml",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "CLAUDE.md",
+        "CONTRIBUTING.md",
+        "README.md",
+        "apps/dashboard/README.md",
+        "docker/mosaico/README.md",
+        "docker/mosaico/docker-compose.pr-agent.yml",
+        "metrics.md",
+        "package-lock.json",
+        "packages/context-engine/src/layers/related-files.ts"
+      ],
+      "gate_pass_count": 7,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 7,
+      "run_ids": [
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627221413-310a494b4a",
+        "20260627222436-02cbea1e01",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 7,
+      "sources": [
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/hevinbryant/ai-pr-reviewer",
+        "https://github.com/semgrep/semgrep",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "static_analysis": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 7,
+      "component": "static_analysis",
+      "evidence_files": [
+        ".github/SECURITY.md",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.md",
+        "Readme.md",
+        "SECURITY.md",
+        "docs/ARCHITECTURE.md",
+        "docs/USER_GUIDE.md",
+        "docs/docs/tools/review.md",
+        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+        "frontend/src/components/ServicesSection.tsx",
+        "metrics.md"
+      ],
+      "gate_pass_count": 7,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 7,
+      "run_ids": [
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627220056-7db1f7d16a",
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 7,
+      "sources": [
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/semgrep/semgrep",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "static_analysis_gate": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 7,
+      "component": "static_analysis_gate",
+      "evidence_files": [
+        ".github/SECURITY.md",
+        "AGENTS.md",
+        "CHANGELOG.md",
+        "README.md",
+        "Readme.md",
+        "SECURITY.md",
+        "apps/dashboard/src/app/page.tsx",
+        "docs/ARCHITECTURE.md",
+        "docs/USER_GUIDE.md",
+        "docs/docs/tools/review.md",
+        "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+        "frontend/src/components/ServicesSection.tsx"
+      ],
+      "gate_pass_count": 7,
+      "gate_pass_rate": 1.0,
+      "ready_for_deep_refactor": true,
+      "run_count": 7,
+      "run_ids": [
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627220056-7db1f7d16a",
+        "20260627221413-310a494b4a",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 7,
+      "sources": [
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/semgrep/semgrep",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+      ]
+    },
+    "workflow_ci": {
+      "architecture_depth_score": 100,
+      "code_graph_proof_count": 16,
+      "component": "workflow_ci",
+      "evidence_files": [
+        ".github/workflows/static.yml",
+        ".goreleaser-nightly.yml",
+        ".oxlintrc.json",
+        ".pinact.yaml",
+        ".pre-commit-config.yaml",
+        ".pre-commit-hooks.yaml",
+        ".prettierrc.yml",
+        ".readthedocs.yaml",
+        ".reviewdog.yml",
+        "AGENTS.md",
+        "BUILD_DEPENDENCIES.md",
+        "CHANGELOG.md"
+      ],
+      "gate_pass_count": 32,
+      "gate_pass_rate": 0.889,
+      "ready_for_deep_refactor": true,
+      "run_count": 36,
+      "run_ids": [
+        "20260627171538-da950c021d",
+        "20260627171611-61b3c3e350",
+        "20260627171646-762694f28f",
+        "20260627172352-6e1352f61e",
+        "20260627172432-c09c7479ad",
+        "20260627172525-c3d6b79c6a",
+        "20260627173018-28c1843a1a",
+        "20260627173057-8f77226be1",
+        "20260627173253-72548897e8",
+        "20260627182658-daf3bca93f",
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e",
+        "20260627185357-29365e9367",
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b",
+        "20260627193421-af1df6ee7c",
+        "20260627194531-f1634167bd",
+        "20260627195002-b40d2378d6",
+        "20260627195932-112b065375",
+        "20260627204837-5df07f797f",
+        "20260627205735-8afcde3e86",
+        "20260627205851-4436ac66e6",
+        "20260627210037-4436ac66e6",
+        "20260627210337-356907943f",
+        "20260627211605-408a94776e",
+        "20260627211902-816c3b78e7",
+        "20260627212518-4985a95789",
+        "20260627212946-168c95fefd",
+        "20260627213722-6cc7a9e742",
+        "20260627214507-0dc2a6fa81",
+        "20260627220056-7db1f7d16a",
+        "20260627221413-310a494b4a",
+        "20260627222436-02cbea1e01",
+        "20260627224409-8893c01ae8",
+        "20260627235555-f62954c70a"
+      ],
+      "source_count": 33,
+      "sources": [
+        "/private/tmp/retort-depth-source-zULAcN",
+        "https://github.com/AndreaBonn/ai-pr-reviewer",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
+        "https://github.com/HypothesisWorks/hypothesis",
+        "https://github.com/OpenHands/benchmarks",
+        "https://github.com/OpenHands/software-agent-sdk",
+        "https://github.com/PyCQA/bandit",
+        "https://github.com/Review-scope/ReviewScope",
+        "https://github.com/SWE-agent/SWE-agent",
+        "https://github.com/Sourish-19/ai-pr-reviewer",
+        "https://github.com/TNG/ArchUnit",
+        "https://github.com/aider-ai/aider",
+        "https://github.com/anc95/ChatGPT-CodeReview",
+        "https://github.com/aryanbrite/openrabbit",
+        "https://github.com/bobbyroe/threejs-earth",
+        "https://github.com/continuedev/continue",
+        "https://github.com/dgreenheck/threejs-procedural-planets",
+        "https://github.com/hevinbryant/ai-pr-reviewer",
+        "https://github.com/jaygaha/local-ai-pr-reviewer",
+        "https://github.com/kamilstanuch/codebase-digest",
+        "https://github.com/mopemope/pr-ai-review-bot",
+        "https://github.com/nedbat/coveragepy",
+        "https://github.com/openautocoder/agentless",
+        "https://github.com/pahen/madge",
+        "https://github.com/qodo-ai/pr-agent",
+        "https://github.com/reviewdog/reviewdog",
+        "https://github.com/seddonym/import-linter",
+        "https://github.com/semgrep/semgrep",
+        "https://github.com/sunerpy/codegraph-rust",
+        "https://github.com/swe-bench/SWE-bench",
+        "https://github.com/thebjorn/pydeps",
+        "https://github.com/yamadashy/repomix",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
       ]
     }
   },
@@ -1666,9 +1708,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.886,
+      "gate_pass_rate": 0.889,
       "priority": "P0",
-      "supporting_source_count": 32,
+      "supporting_source_count": 33,
       "task_id": "retort-architecture-workflow-ci",
       "title": "Implement cumulative architecture pattern: workflow_ci"
     },
@@ -1682,9 +1724,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.882,
+      "gate_pass_rate": 0.886,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -1698,9 +1740,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.882,
+      "gate_pass_rate": 0.886,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -1714,9 +1756,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.882,
+      "gate_pass_rate": 0.886,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
     },
@@ -1730,9 +1772,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.939,
+      "gate_pass_rate": 0.941,
       "priority": "P0",
-      "supporting_source_count": 31,
+      "supporting_source_count": 32,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
     },
@@ -1746,9 +1788,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.935,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 29,
+      "supporting_source_count": 30,
       "task_id": "retort-architecture-automation-surface",
       "title": "Implement cumulative architecture pattern: automation_surface"
     },
@@ -1762,11 +1804,43 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.935,
+      "gate_pass_rate": 0.938,
       "priority": "P0",
-      "supporting_source_count": 29,
+      "supporting_source_count": 30,
       "task_id": "retort-architecture-command-contract",
       "title": "Implement cumulative architecture pattern: command_contract"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.933,
+      "priority": "P0",
+      "supporting_source_count": 28,
+      "task_id": "retort-architecture-benchmark-eval",
+      "title": "Implement cumulative architecture pattern: benchmark_eval"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.903,
+      "priority": "P0",
+      "supporting_source_count": 28,
+      "task_id": "retort-architecture-context-localization",
+      "title": "Implement cumulative architecture pattern: context_localization"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -1781,38 +1855,6 @@
       "gate_pass_rate": 0.931,
       "priority": "P0",
       "supporting_source_count": 27,
-      "task_id": "retort-architecture-benchmark-eval",
-      "title": "Implement cumulative architecture pattern: benchmark_eval"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.9,
-      "priority": "P0",
-      "supporting_source_count": 27,
-      "task_id": "retort-architecture-context-localization",
-      "title": "Implement cumulative architecture pattern: context_localization"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 0.929,
-      "priority": "P0",
-      "supporting_source_count": 26,
       "task_id": "retort-architecture-evaluation-loop",
       "title": "Implement cumulative architecture pattern: evaluation_loop"
     },
@@ -1826,9 +1868,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.929,
+      "gate_pass_rate": 0.931,
       "priority": "P0",
-      "supporting_source_count": 26,
+      "supporting_source_count": 27,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
     },
@@ -1842,9 +1884,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.909,
+      "gate_pass_rate": 0.913,
       "priority": "P0",
-      "supporting_source_count": 20,
+      "supporting_source_count": 21,
       "task_id": "retort-architecture-file-grouping",
       "title": "Implement cumulative architecture pattern: file_grouping"
     },
@@ -1858,9 +1900,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.941,
+      "gate_pass_rate": 0.944,
       "priority": "P0",
-      "supporting_source_count": 15,
+      "supporting_source_count": 16,
       "task_id": "retort-architecture-context-partitioning",
       "title": "Implement cumulative architecture pattern: context_partitioning"
     },
@@ -1874,9 +1916,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.882,
+      "gate_pass_rate": 0.889,
       "priority": "P0",
-      "supporting_source_count": 15,
+      "supporting_source_count": 16,
       "task_id": "retort-architecture-diff-hunk-review",
       "title": "Implement cumulative architecture pattern: diff_hunk_review"
     },
@@ -1890,9 +1932,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 0.941,
+      "gate_pass_rate": 0.944,
       "priority": "P0",
-      "supporting_source_count": 15,
+      "supporting_source_count": 16,
       "task_id": "retort-architecture-diff-locality",
       "title": "Implement cumulative architecture pattern: diff_locality"
     },
@@ -1908,7 +1950,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 10,
+      "supporting_source_count": 11,
       "task_id": "retort-architecture-codebase-graph",
       "title": "Implement cumulative architecture pattern: codebase_graph"
     },
@@ -1924,7 +1966,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-impact-tracing",
       "title": "Implement cumulative architecture pattern: impact_tracing"
     },
@@ -1940,7 +1982,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-risk-rule-engine",
       "title": "Implement cumulative architecture pattern: risk_rule_engine"
     },
@@ -1956,7 +1998,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-semantic-index",
       "title": "Implement cumulative architecture pattern: semantic_index"
     },
@@ -1972,7 +2014,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-static-analysis",
       "title": "Implement cumulative architecture pattern: static_analysis"
     },
@@ -1988,7 +2030,7 @@
       ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
-      "supporting_source_count": 6,
+      "supporting_source_count": 7,
       "task_id": "retort-architecture-static-analysis-gate",
       "title": "Implement cumulative architecture pattern: static_analysis_gate"
     },
@@ -10704,12 +10746,459 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_review_policy.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_review_policy.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py"
+      ],
+      "code_graph_proof": {
+        "changed_behavior_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_review_policy.py",
+          "retort_engine/review_context_bias.py"
+        ],
+        "changed_focus_files": [
+          "retort_engine/absorbed_capabilities.py"
+        ],
+        "changed_hotspots": [],
+        "dependency_impact": {
+          "changed_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/review_context_bias.py"
+          ],
+          "direct_dependencies": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/absorption_quality.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_review_policy.py": [],
+            "retort_engine/review_context_bias.py": []
+          },
+          "direct_dependents": {
+            "retort_engine/absorbed_capabilities.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_capabilities.py"
+            ],
+            "retort_engine/absorbed_external_patterns.py": [],
+            "retort_engine/absorbed_review_policy.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_absorbed_review_policy.py"
+            ],
+            "retort_engine/review_context_bias.py": [
+              "retort_engine/pr_review.py",
+              "tests/test_review_context_bias.py"
+            ]
+          },
+          "impacted_files": [
+            "retort_engine/absorbed_capabilities.py",
+            "retort_engine/absorbed_external_patterns.py",
+            "retort_engine/absorbed_review_policy.py",
+            "retort_engine/absorption_quality.py",
+            "retort_engine/pr_review.py",
+            "retort_engine/review_context_bias.py",
+            "tests/test_absorbed_capabilities.py",
+            "tests/test_absorbed_review_policy.py",
+            "tests/test_review_context_bias.py"
+          ],
+          "touched_cycles": []
+        },
+        "evidence": {
+          "max_files": 400,
+          "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+          "run_id": "20260627235555-f62954c70a",
+          "scope": "per_real_absorption_run",
+          "style": "deterministic_post_absorption_code_graph"
+        },
+        "focus_files": [
+          "retort_engine/absorbed_capabilities.py",
+          "retort_engine/capability_audit.py",
+          "retort_engine/codebase_graph.py",
+          "retort_engine/llm_absorption_evidence.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/review_pipeline.py",
+          "tests/test_pr_review.py",
+          "tests/test_real_absorption_helpers.py",
+          "tests/test_review_pipeline.py"
+        ],
+        "hotspot_files": [
+          "retort_engine/capability_audit.py",
+          "retort_engine/cli.py",
+          "retort_engine/core.py",
+          "retort_engine/evaluators.py",
+          "retort_engine/pr_review.py",
+          "retort_engine/real_absorption.py",
+          "retort_engine/review_pipeline.py",
+          "retort_engine/service.py",
+          "tests/test_real_absorption_helpers.py",
+          "tests/test_retort_engine.py",
+          "tests/test_runtime_integrations.py"
+        ],
+        "passed": true,
+        "per_run_required": true,
+        "run_id": "20260627235555-f62954c70a",
+        "status": "proved",
+        "summary": {
+          "changed_behavior_file_count": 4,
+          "changed_file_count": 9,
+          "changed_focus_file_count": 1,
+          "changed_hotspot_count": 0,
+          "dependency_cycle_touch_count": 0,
+          "dependency_impact_file_count": 9,
+          "graph_status": "ready"
+        }
+      },
+      "code_graph_proved": true,
+      "components": [
+        {
+          "component": "context_localization",
+          "depth_score": 75,
+          "evidence_files": [
+            ".pr_agent.toml",
+            ".pre-commit-config.yaml",
+            "AGENTS.md",
+            "README.md",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pr_agent/config_loader.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts.toml",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml"
+          ],
+          "signals": [
+            "codebase_graph",
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 67,
+          "evidence_files": [
+            ".pr_agent.toml",
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.md",
+            "README.md",
+            "action.yaml",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "pyproject.toml",
+            "setup.py"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "static_analysis_gate",
+          "depth_score": 58,
+          "evidence_files": [
+            "SECURITY.md",
+            "docs/docs/tools/review.md",
+            "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+            "tests/unittest/test_extra_config_url.py",
+            "tests/unittest/test_load_yaml.py"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "static_analysis",
+          "depth_score": 58,
+          "evidence_files": [
+            "SECURITY.md",
+            "docs/docs/tools/review.md",
+            "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+            "tests/unittest/test_extra_config_url.py",
+            "tests/unittest/test_load_yaml.py"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "semantic_index",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "docker/mosaico/README.md",
+            "docker/mosaico/docker-compose.pr-agent.yml",
+            "pr_agent/settings/pr_help_docs_headings_prompts.toml"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "risk_rule_engine",
+          "depth_score": 58,
+          "evidence_files": [
+            "SECURITY.md",
+            "docs/docs/tools/review.md",
+            "docs/docs/usage-guide/EXAMPLE_BEST_PRACTICE.md",
+            "tests/unittest/test_extra_config_url.py",
+            "tests/unittest/test_load_yaml.py"
+          ],
+          "signals": [
+            "static_analysis"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "impact_tracing",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "docker/mosaico/README.md",
+            "docker/mosaico/docker-compose.pr-agent.yml",
+            "pr_agent/settings/pr_help_docs_headings_prompts.toml"
+          ],
+          "signals": [
+            "semantic_index"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/settings/pr_custom_labels.toml",
+            "pr_agent/settings/pr_information_from_user_prompts.toml",
+            "pr_agent/settings/pr_line_questions_prompts.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "codebase_graph",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pre-commit-config.yaml",
+            "AGENTS.md",
+            "pr_agent/config_loader.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts.toml",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml"
+          ],
+          "signals": [
+            "codebase_graph"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/gitea_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T23:56:13Z",
+      "external_file_count": 284,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+      "gate_count": 10,
+      "gates_passed": true,
+      "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
+      "run_id": "20260627235555-f62954c70a",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "codebase_graph",
+        "plugin_surface",
+        "multi_provider",
+        "safety_policy",
+        "static_analysis",
+        "semantic_index",
+        "atmosphere_shader",
+        "procedural_surface",
+        "cloud_texture_layer",
+        "elevation_bump_map",
+        "specular_ocean"
+      ],
+      "source": "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 29,
-    "gate_passed_run_count": 31,
+    "gate_passed_run_count": 32,
     "ready_component_count": 24,
     "ready_components": [
       "workflow_ci",
@@ -10722,7 +11211,7 @@
       "repo_map_context"
     ],
     "repeated_component_count": 26,
-    "run_count": 35,
-    "source_count": 32
+    "run_count": 36,
+    "source_count": 33
   }
 }

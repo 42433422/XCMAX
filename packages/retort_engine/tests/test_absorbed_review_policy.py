@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from retort_engine.absorbed_review_policy import absorbed_review_policy, policy_context_rank_weight, policy_context_rank_weights, policy_summary
 
+EXPECTED_ABSORPTION_SOURCE = 'packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent'
 
-def test_default_absorbed_review_policy_is_safe_noop() -> None:
+
+def test_absorbed_review_policy_changes_ranking_weights() -> None:
     policy = absorbed_review_policy()
     weights = policy_context_rank_weights()
 
-    assert policy["enabled"] is False
-    assert policy_summary()["weighted_context_count"] == 0
-    assert policy_summary()["max_context_weight"] == 0
-    assert all(value == 0 for value in weights.values())
-    assert policy_context_rank_weight("runtime") == 0
+    assert policy["enabled"] is True
+    assert policy["source"] == EXPECTED_ABSORPTION_SOURCE
+    assert policy_summary()["weighted_context_count"] >= 3
+    assert policy_summary()["max_context_weight"] >= 15
+    assert max(weights.values()) >= 15
+    assert policy_context_rank_weight("runtime") >= 15
