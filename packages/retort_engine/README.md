@@ -60,9 +60,19 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli publ
   --output packages/retort_engine/docs/retort_pr_publish_dry_run.json \
   --json
 
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli publish-pr-sandbox \
+  --dry-run-file packages/retort_engine/docs/retort_pr_publish_dry_run.json \
+  --output packages/retort_engine/docs/retort_pr_publish_sandbox.json \
+  --json
+
 PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli cross-project-replay \
   --project packages/retort_engine \
   --output packages/retort_engine/docs/retort_cross_project_replay.json \
+  --json
+
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli task-prioritization-report \
+  --project packages/retort_engine \
+  --output packages/retort_engine/docs/retort_task_prioritization_report.json \
   --json
 ```
 
