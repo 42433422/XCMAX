@@ -342,8 +342,7 @@ def test_review_diff_employee_feedback_changes_ranking_across_core_dimensions() 
 
 def test_review_diff_product_feedback_prioritizes_frontend_without_security_override() -> None:
     diff = (
-        _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior")
-        + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+        _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
         + _single_add_diff("ui/App.tsx", "# TODO: prove user flow")
         + _single_add_diff("docs/ops.md", "# TODO: document operator path")
     )
