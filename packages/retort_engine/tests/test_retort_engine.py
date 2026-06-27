@@ -172,6 +172,8 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     report = json.loads(Path(execution["review_report_path"]).read_text(encoding="utf-8"))
     assert report["absorbed_signals"]
     assert report["semantic_review"]["external"]["source_files"] >= 1
+    assert report["review_pipeline"]["pipeline_stages"]
+    assert report["review_pipeline"]["benchmark"]["minimum_expected_behavior_tests"] >= 3
     proof = result["absorption_state"]["closed_loop_proof"]["flags"]
     assert proof["branch_diff_verified"] is True
     assert proof["employee_execution_verified"] is True
