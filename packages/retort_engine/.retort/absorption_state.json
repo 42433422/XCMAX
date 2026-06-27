@@ -1,27 +1,28 @@
 {
-  "active": true,
+  "active": false,
   "closed_loop_proof": {
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "retort_cli_status=applied",
-      "duration_sec=12.168",
-      "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py",
-      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  12 + |  .../docs/retort_architecture_memory.json           | 201 +++++-- |  .../docs/retort_core_refactor_plan.json            | 186 +++--- |  .../docs/retort_external_review_report.json        | 628 ++++----------------- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../retort_engine/retort_engine/frontend/app.js    |  47 +- |  6 files changed, 386 insertions(+), 690 deletions(-)",
-      "gates_passed=True",
-      "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
-      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627185357-29365e9367.json",
-      "commit=",
-      "merge_commit=",
-      "rollback_rehearsal=False",
-      "feedback_audit_closed=True",
-      "history_result_count=48",
-      "queue_records_written=4",
-      "result_tasks_have_queue_records=True"
+      "merge_commit=b84a53a87",
+      "evidence_commit=0fd263d16",
+      "source=https://github.com/dgreenheck/threejs-procedural-planets",
+      "gates=188-passed-plus-ruff",
+      "merge_cross_check=True; merge_commit=b84a53a87",
+      "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
-    "merge_verified": false,
-    "post_absorption_tests_passed": true
+    "merge_verified": true,
+    "post_absorption_tests_passed": true,
+    "validation": {
+      "evidence": [
+        "merge_cross_check=True; merge_commit=b84a53a87",
+        "pytest_gate_cross_check=True"
+      ],
+      "merge_commit": "b84a53a87",
+      "merge_commit_verified": true,
+      "pytest_gates_verified": true
+    }
   },
   "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/dgreenheck/threejs-procedural-planets",
   "pending_dimensions": [
@@ -30,7 +31,7 @@
     "product_operability"
   ],
   "source": "https://github.com/dgreenheck/threejs-procedural-planets",
-  "status": "execution_applied_awaiting_merge",
+  "status": "closed_loop_verified",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
