@@ -1,113 +1,47 @@
 {
   "absorbed_signals": [
     "review_pipeline",
-    "benchmarking",
-    "plugin_surface",
     "multi_provider",
+    "planet_frontend",
     "atmosphere_shader",
     "procedural_surface",
-    "webgl_scene"
+    "webgl_scene",
+    "day_night_textures",
+    "cloud_texture_layer",
+    "fresnel_atmosphere",
+    "elevation_bump_map",
+    "specular_ocean"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/bobbyroe/threejs-earth",
   "external_snapshot": {
-    "file_count": 490,
-    "git_revision": "4e5469e0caaf54d1ad827d18b524bdfb79d58430",
+    "file_count": 24,
+    "git_revision": "be941eec8a97e12aed470b88f99da79bf8e60276",
     "suffix_counts": {
-      ".agent-layer": 1,
-      ".agent-layer-commit0": 1,
-      ".evaluator": 1,
-      ".example": 1,
-      ".gaia": 1,
-      ".j2": 16,
-      ".json": 3,
-      ".kfb": 1,
-      ".krb": 1,
-      ".lock": 1,
-      ".md": 54,
-      ".py": 317,
-      ".sh": 48,
-      ".swebench-deps": 2,
-      ".toml": 1,
-      ".txt": 10,
-      ".yaml": 2,
-      ".yml": 15,
-      "<none>": 14
+      ".html": 1,
+      ".jpg": 13,
+      ".js": 5,
+      ".md": 1,
+      ".png": 2,
+      "<none>": 2
     }
   },
-  "generated_at": "2026-06-27T19:11:56Z",
+  "generated_at": "2026-06-27T19:25:22Z",
   "license_review": {
     "detected_license": "MIT License",
     "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/OpenHands/benchmarks --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/bobbyroe/threejs-earth --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 4,
-      "minimum_expected_behavior_tests": 8,
-      "prioritized_component_count": 4,
-      "task_dimension_count": 4
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 3,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 3
     },
-    "component_gaps": [
-      {
-        "component": "benchmark_eval",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 8301,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md"
-        ]
-      },
-      {
-        "component": "workflow_ci",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 3037,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 840,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          ".llm_config/example.json",
-          "tests/test_llm_config.py"
-        ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 118,
-        "own_files": 12,
-        "representative_external_files": [
-          "tests/test_llm_config.py",
-          "tests/test_swebench_eval_infer.py",
-          "tests/test_acp.py",
-          "tests/test_programbench.py",
-          "legacy/gorilla/ast_eval_hf.py"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -115,24 +49,8 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            ".llm_config/example.json",
-            "tests/test_llm_config.py"
-          ],
-          "status": "closed_until_similarity_saturation"
-        },
-        {
-          "component": "plugin_surface",
-          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
-          "reason": "early_phase_retort_self_deepening_only",
-          "source_files": [
-            "tests/test_async_evaluation.py",
-            "tests/test_acp.py",
-            "legacy/gorilla/run_infer.py",
-            "legacy/lca_ci_build_repair/run_infer.py",
-            "legacy/lca_ci_build_repair/eval_infer.py"
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -153,33 +71,6 @@
           "title": "Deepen review_pipeline"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-safety-policy",
-          "title": "Deepen safety_policy"
-        },
-        {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -191,20 +82,6 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
-        },
-        {
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "dimension": "feedback_loop_closure",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-benchmark-eval",
-          "title": "Deepen benchmark_eval"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -234,93 +111,20 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 65,
-          "own_marker_hits": 2207,
+          "external_marker_hits": 6,
+          "own_marker_hits": 2221,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "tests/test_iterative_resume.py",
-            "tests/test_acp.py",
-            "legacy/lca_ci_build_repair/run_infer.py",
-            "legacy/EDA/README.md",
-            "legacy/swe_perf/run_infer.py"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 3,
-          "own_marker_hits": 30,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "legacy/testgeneval/test_filter.py",
-            "benchmarks/hybridgym_issuelocalize/README.md",
-            "benchmarks/hybridgym_issuelocalize/eval_infer.py"
-          ]
-        },
-        {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 118,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 541,
-          "own_marker_hits": 423,
-          "priority": "P0",
-          "similarity_score": 96,
-          "source_files": [
-            "tests/test_llm_config.py",
-            "tests/test_swebench_eval_infer.py",
-            "tests/test_acp.py",
-            "tests/test_programbench.py",
-            "legacy/gorilla/ast_eval_hf.py"
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 3037,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -339,53 +143,14 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 6470,
-          "own_marker_hits": 3433,
+          "external_marker_hits": 7,
+          "own_marker_hits": 3489,
           "priority": "P0",
-          "similarity_score": 92,
+          "similarity_score": 100,
           "source_files": [
-            "pyrightconfig.json",
-            "pyproject.toml",
-            "sitecustomize.py",
-            "README.md",
-            "CONTRIBUTING.md"
-          ]
-        },
-        {
-          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "component": "benchmark_eval",
-          "depth_gap": 8301,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-            "dimension": "feedback_loop_closure",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "precision or false-positive benchmark counters"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-benchmark-eval",
-            "title": "Deepen benchmark_eval"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "external_marker_hits": 8982,
-          "own_marker_hits": 681,
-          "priority": "P0",
-          "similarity_score": 86,
-          "source_files": [
-            "pyrightconfig.json",
-            "pyproject.toml",
-            "sitecustomize.py",
-            "README.md",
-            "CONTRIBUTING.md"
+            "src/getStarfield.js",
+            "src/getLayer.js",
+            "src/getFresnelMat.js"
           ]
         }
       ],
@@ -393,152 +158,49 @@
       "marketplace_candidates_enabled": false,
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
-        "deferred_breadth_component_count": 2,
-        "focused_component_count": 5,
+        "deferred_breadth_component_count": 1,
+        "focused_component_count": 2,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
         "minimum_focused_component_count": 3,
-        "passed": true,
-        "rejected_breadth_component_count": 2
+        "passed": false,
+        "rejected_breadth_component_count": 1
       },
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 1237,
+          "external_marker_hits": 13,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "README.md",
-            "CONTRIBUTING.md",
-            "AGENTS.md",
-            ".llm_config/example.json",
-            "tests/test_llm_config.py"
-          ]
-        },
-        {
-          "component": "plugin_surface",
-          "external_marker_hits": 178,
-          "reason": "breadth_only_for_current_phase",
-          "source_files": [
-            "tests/test_async_evaluation.py",
-            "tests/test_acp.py",
-            "legacy/gorilla/run_infer.py",
-            "legacy/lca_ci_build_repair/run_infer.py",
-            "legacy/lca_ci_build_repair/eval_infer.py"
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
           ]
         }
       ]
     },
     "external_file_groups": {
-      "benchmark_eval": {
-        "files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          ".llm_config/example.json",
-          "tests/test_llm_config.py",
-          "tests/test_skillsbench_eval_infer.py",
-          "tests/test_swebench_apptainer_mount_dir.py",
-          "tests/test_async_evaluation.py",
-          "tests/test_version.py"
-        ],
-        "marker_hits": 8982
-      },
-      "diff_hunk_review": {
-        "files": [
-          "legacy/testgeneval/test_filter.py",
-          "benchmarks/hybridgym_issuelocalize/README.md",
-          "benchmarks/hybridgym_issuelocalize/eval_infer.py"
-        ],
-        "marker_hits": 3
-      },
-      "plugin_surface": {
-        "files": [
-          "tests/test_async_evaluation.py",
-          "tests/test_acp.py",
-          "legacy/gorilla/run_infer.py",
-          "legacy/lca_ci_build_repair/run_infer.py",
-          "legacy/lca_ci_build_repair/eval_infer.py",
-          "legacy/EDA/run_infer.py",
-          "legacy/swe_perf/run_infer.py",
-          "legacy/swe_perf/resource/swt_bench_constants.py",
-          "legacy/humanevalfix/run_infer.py",
-          "legacy/mint/run_infer.py",
-          "legacy/mint/utils.py",
-          "legacy/the_agent_company/run_infer.py"
-        ],
-        "marker_hits": 178
-      },
       "provider_surface": {
         "files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          ".llm_config/example.json",
-          "tests/test_llm_config.py",
-          "tests/test_swebench_apptainer_mount_dir.py",
-          "tests/test_async_evaluation.py",
-          "tests/test_skillsbench_run_infer.py",
-          "tests/test_swebench_eval_infer.py",
-          "tests/test_swebench_apptainer_build.py",
-          "tests/test_terminalbench.py",
-          "tests/test_metrics.py"
+          "src/getEarthMat.js",
+          "src/getFresnelMat.js"
         ],
-        "marker_hits": 1237
+        "marker_hits": 13
       },
       "review_pipeline": {
         "files": [
-          "tests/test_iterative_resume.py",
-          "tests/test_acp.py",
-          "legacy/lca_ci_build_repair/run_infer.py",
-          "legacy/EDA/README.md",
-          "legacy/swe_perf/run_infer.py",
-          "legacy/swe_perf/README.md",
-          "legacy/humanevalfix/README.md",
-          "legacy/mint/README.md",
-          "legacy/scienceagentbench/run_infer.py",
-          "legacy/scienceagentbench/README.md",
-          "legacy/aider_bench/README.md",
-          "legacy/agent_bench/README.md"
+          "src/getEarthMat.js",
+          "src/getFresnelMat.js"
         ],
-        "marker_hits": 65
-      },
-      "safety_policy": {
-        "files": [
-          "tests/test_llm_config.py",
-          "tests/test_swebench_eval_infer.py",
-          "tests/test_acp.py",
-          "tests/test_programbench.py",
-          "legacy/gorilla/ast_eval_hf.py",
-          "legacy/gorilla/run_infer.py",
-          "legacy/gorilla/ast_eval_th.py",
-          "legacy/gorilla/ast_eval_tf.py",
-          "legacy/lca_ci_build_repair/run_infer.py",
-          "legacy/lca_ci_build_repair/eval_infer.py",
-          "legacy/EDA/run_infer.py",
-          "legacy/swe_perf/run_infer.py"
-        ],
-        "marker_hits": 541
+        "marker_hits": 6
       },
       "workflow_ci": {
         "files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          "tests/test_llm_config.py",
-          "tests/test_skillsbench_eval_infer.py",
-          "tests/test_swebench_apptainer_mount_dir.py",
-          "tests/test_async_evaluation.py",
-          "tests/test_version.py",
-          "tests/test_skillsbench_run_infer.py"
+          "src/getStarfield.js",
+          "src/getLayer.js",
+          "src/getFresnelMat.js"
         ],
-        "marker_hits": 6470
+        "marker_hits": 7
       }
     },
     "own_file_groups": {
@@ -557,7 +219,7 @@
           "retort_engine/architecture_memory.py",
           "retort_engine/review_context_bias.py"
         ],
-        "marker_hits": 681
+        "marker_hits": 697
       },
       "diff_hunk_review": {
         "files": [
@@ -582,14 +244,14 @@
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
           "retort_engine/external_sources.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_external_sources.py",
-          "tests/test_review_pipeline.py"
+          "tests/test_review_pipeline.py",
+          "tests/test_real_absorption_helpers.py"
         ],
-        "marker_hits": 75
+        "marker_hits": 72
       },
       "plugin_surface": {
         "files": [
@@ -600,13 +262,13 @@
           "retort_engine/project_assessment.py",
           "retort_engine/core.py",
           "retort_engine/architecture_memory.py",
-          "retort_engine/review_context_bias.py",
           "retort_engine/paibi_prompting.py",
           "retort_engine/absorption_quality.py",
           "retort_engine/external_sources.py",
-          "retort_engine/devour_session.py"
+          "retort_engine/devour_session.py",
+          "retort_engine/absorbed_capabilities.py"
         ],
-        "marker_hits": 571
+        "marker_hits": 569
       },
       "provider_surface": {
         "files": [
@@ -623,7 +285,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/core.py"
         ],
-        "marker_hits": 397
+        "marker_hits": 399
       },
       "review_pipeline": {
         "files": [
@@ -640,7 +302,7 @@
           "retort_engine/complex_pr_replay.py",
           "retort_engine/employee_scheduler_stress.py"
         ],
-        "marker_hits": 2207
+        "marker_hits": 2221
       },
       "safety_policy": {
         "files": [
@@ -657,7 +319,7 @@
           "retort_engine/project_assessment.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 423
+        "marker_hits": 396
       },
       "workflow_ci": {
         "files": [
@@ -674,7 +336,7 @@
           "retort_engine/pr_publish.py",
           "retort_engine/llm_absorption_evidence.py"
         ],
-        "marker_hits": 3433
+        "marker_hits": 3489
       }
     },
     "pipeline_stages": [
@@ -686,136 +348,84 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
-        "component": "benchmark_eval",
-        "priority": "P0",
-        "source_files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
-        "priority": "P0",
-        "source_files": [
-          "pyrightconfig.json",
-          "pyproject.toml",
-          "sitecustomize.py",
-          "README.md",
-          "CONTRIBUTING.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "CONTRIBUTING.md",
-          "AGENTS.md",
-          ".llm_config/example.json",
-          "tests/test_llm_config.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "tests/test_llm_config.py",
-          "tests/test_swebench_eval_infer.py",
-          "tests/test_acp.py",
-          "tests/test_programbench.py",
-          "legacy/gorilla/ast_eval_hf.py"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260627191156-142d39dda9",
+  "run_id": "20260627192522-0723009b1b",
   "semantic_review": {
     "external": {
-      "classes": 387,
-      "cli_markers": 2,
-      "functions": 2045,
-      "source_files": 392,
-      "test_markers": 913,
-      "workflow_markers": 286
+      "classes": 0,
+      "cli_markers": 0,
+      "functions": 10,
+      "source_files": 7,
+      "test_markers": 0,
+      "workflow_markers": 0
     },
-    "gaps": [
-      {
-        "external_advantage": 337,
-        "metric": "classes"
-      },
-      {
-        "external_advantage": 1093,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 281,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 569,
-        "metric": "test_markers"
-      }
-    ],
+    "gaps": [],
     "own": {
       "classes": 50,
       "cli_markers": 29,
-      "functions": 952,
+      "functions": 960,
       "source_files": 111,
-      "test_markers": 344,
-      "workflow_markers": 2949
+      "test_markers": 350,
+      "workflow_markers": 2978
     }
   },
   "signal_evidence": {
     "atmosphere_shader": [
+      "index.js",
       "README.md",
-      "legacy/the_agent_company/browsing.py",
-      "legacy/agent_bench/README.md",
-      "benchmarks/multiswebench/README.md",
-      "benchmarks/swebenchmultilingual/README.md"
+      "src/getStarfield.js",
+      "src/getEarthMat.js",
+      "src/getFresnelMat.js"
     ],
-    "benchmarking": [
-      "pyrightconfig.json",
-      "pyproject.toml",
-      "sitecustomize.py",
+    "cloud_texture_layer": [
       "README.md",
-      "CONTRIBUTING.md"
+      "src/getEarthMat.js"
+    ],
+    "day_night_textures": [
+      "README.md",
+      "src/getEarthMat.js"
+    ],
+    "elevation_bump_map": [
+      "README.md"
+    ],
+    "fresnel_atmosphere": [
+      "index.js",
+      "README.md",
+      "src/getFresnelMat.js"
     ],
     "multi_provider": [
-      "README.md",
-      "CONTRIBUTING.md",
-      "AGENTS.md",
-      ".llm_config/example.json",
-      "tests/test_llm_config.py"
+      "src/getEarthMat.js",
+      "src/getFresnelMat.js"
     ],
-    "plugin_surface": [
-      "pyproject.toml",
-      "README.md",
-      "CONTRIBUTING.md",
-      "AGENTS.md",
-      "tests/test_harbor_compat.py"
+    "planet_frontend": [
+      "index.js",
+      "README.md"
     ],
     "procedural_surface": [
-      "tests/test_swtbench_grading_patches.py"
+      "index.js",
+      "README.md",
+      "src/getStarfield.js",
+      "src/getLayer.js",
+      "src/getEarthMat.js"
     ],
     "review_pipeline": [
-      "legacy/swe_perf/run_infer.py",
-      "benchmarks/hybridgym_issuelocalize/README.md",
-      "benchmarks/hybridgym_issuelocalize/eval_infer.py"
+      "src/getEarthMat.js",
+      "src/getFresnelMat.js"
+    ],
+    "specular_ocean": [
+      "README.md",
+      "src/getEarthMat.js",
+      "src/getFresnelMat.js"
     ],
     "webgl_scene": [
-      "tests/test_programbench.py"
+      "index.js",
+      "README.md",
+      "src/getEarthMat.js",
+      "src/getFresnelMat.js"
     ]
   },
-  "source": "https://github.com/OpenHands/benchmarks",
+  "source": "https://github.com/bobbyroe/threejs-earth",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -823,7 +433,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/OpenHands/benchmarks."
+      "why": "Compare implementation patterns from https://github.com/bobbyroe/threejs-earth."
     },
     {
       "dimension": "product_operability",
@@ -831,7 +441,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/OpenHands/benchmarks."
+      "why": "Extract usable UX improvements from https://github.com/bobbyroe/threejs-earth."
     },
     {
       "dimension": "operational_readiness",
@@ -839,7 +449,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/OpenHands/benchmarks."
+      "why": "Adapt CI and release checks from https://github.com/bobbyroe/threejs-earth."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -848,22 +458,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "feedback_loop_closure",
-      "owner_hint": "test-qa-runner",
-      "priority": "P2",
-      "task_id": "retort-absorb-benchmarking",
-      "title": "Add absorption quality benchmark counters",
-      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
-    },
-    {
-      "dimension": "product_operability",
-      "owner_hint": "market-frontend-dev",
-      "priority": "P2",
-      "task_id": "retort-absorb-plugin-surface",
-      "title": "Expose Retort absorption through plugin friendly commands",
-      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
     },
     {
       "dimension": "product_operability",
