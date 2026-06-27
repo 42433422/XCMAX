@@ -26,6 +26,7 @@ from retort_engine.review_quality_benchmark import build_review_quality_benchmar
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
 
 
 @dataclass(frozen=True)
@@ -79,7 +80,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         lint_ok = _run([_python(), "-m", "ruff", "check", "."], root)
         test_ok = _run([_python(), "-m", "pytest", "tests", "-q"], root) if (root / "tests").is_dir() else False
     features = {
-        "blackhole_ui": "blackhole" in text.lower() and "accretion" in text.lower() and "canvas" in text.lower(),
+        "blackhole_ui": blackhole_ui_detected(root),
         "folder_project_picker": "ownProjectFolder" in text and "externalProjectFolder" in text,
         "github_or_folder_source": "github_url" in text and "external_path" in text,
         "branch_workflow": "begin_absorption_branch" in text and "merge_absorption_branch" in text,
@@ -133,6 +134,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "absorption_state": state,
         "closed_loop_proof": proof,
         "capability_absorption_audit": capability_audit,
+        "blackhole_ui_structure": blackhole_ui_structure(root),
         "score_authority": "paibi_llm_prompt_only",
         "local_scores_removed": True,
     }
@@ -152,9 +154,8 @@ def _project_files(root: Path, skip_parts: set[str]) -> list[Path]:
 
 
 class RetortSelfEvolutionRunner:
-    def __init__(self, *, threshold: float = 90.0, max_rounds: int | None = 8) -> None:
+    def __init__(self, *, threshold: float = 90.0) -> None:
         self.threshold = threshold
-        self.max_rounds = max_rounds
 
     def run(self, project: str, *, run_local_gates: bool = False) -> dict[str, Any]:
         root = Path(project).expanduser().resolve()
@@ -173,6 +174,7 @@ class RetortSelfEvolutionRunner:
             "final_assessment": assessment.to_dict(),
             "rounds": [{"round_index": 1, "passed": False, "assessment": assessment.to_dict(), "tasks": [task]}],
             "tasks": [task],
+            "round_policy": "single_paibi_llm_deep_review",
         }
 
 
@@ -355,6 +357,7 @@ class RetortService:
             "final_assessment": base,
             "rounds": [{"round_index": 1, "passed": False, "assessment": base, "tasks": []}],
             "tasks": [],
+            "round_policy": "single_paibi_llm_deep_review",
         }
         result["final_assessment"] = _attach_llm_scoring(llm_payload, base, project_path, "self_evolve", "", "", [])
         scores = [Score(str(score.get("dimension") or ""), float(score.get("value") or 0), str(score.get("reason") or "")) for score in result["final_assessment"].get("scores", []) if isinstance(score, dict)]
@@ -559,7 +562,7 @@ def _extract_json_from_stdout(stdout: str) -> dict[str, Any]:
         parsed = json.loads(stdout.strip())
     except json.JSONDecodeError:
         parsed = None
-    if isinstance(parsed, dict):
+    if isinstance(parsed, dict) and _is_complete_absorption_stdout_json(parsed):
         return parsed
     decoder = json.JSONDecoder()
     candidates: list[dict[str, Any]] = []
@@ -570,15 +573,23 @@ def _extract_json_from_stdout(stdout: str) -> dict[str, Any]:
             value, _ = decoder.raw_decode(stdout[index:])
         except json.JSONDecodeError:
             continue
-        if isinstance(value, dict):
+        if isinstance(value, dict) and _is_complete_absorption_stdout_json(value):
             candidates.append(value)
-    for value in candidates:
-        if {"status", "project", "summary", "changed_files", "gates_passed"}.issubset(value):
-            return value
-    for value in candidates:
-        if {"status", "changed_files"}.issubset(value):
-            return value
-    return candidates[0] if candidates else {}
+    return candidates[-1] if candidates else {}
+
+
+def _is_complete_absorption_stdout_json(value: dict[str, Any]) -> bool:
+    required = {
+        "status",
+        "project",
+        "summary",
+        "changed_files",
+        "gates",
+        "gates_passed",
+        "review_report_path",
+        "employee_results_path",
+    }
+    return required.issubset(value) and isinstance(value.get("changed_files"), list) and isinstance(value.get("gates"), list)
 
 
 def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: dict[str, Any]) -> None:
@@ -925,13 +936,17 @@ def _assessment_file_count(assessment: dict[str, Any]) -> int:
 def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     state = _load_absorption_state(root)
+    validation = _closed_loop_cross_validation(root, payload)
+    evidence = [str(item) for item in payload.get("evidence") or []]
+    evidence.extend(validation["evidence"])
     proof = {
         "branch_diff_verified": bool(payload.get("branch_diff_verified")),
         "employee_execution_verified": bool(payload.get("employee_execution_verified")),
-        "post_absorption_tests_passed": bool(payload.get("post_absorption_tests_passed")),
-        "merge_verified": bool(payload.get("merge_verified")),
+        "post_absorption_tests_passed": bool(payload.get("post_absorption_tests_passed")) and bool(validation["pytest_gates_verified"]),
+        "merge_verified": bool(payload.get("merge_verified")) and bool(validation["merge_commit_verified"]),
         "external_advantage_reassessed": bool(payload.get("external_advantage_reassessed")),
-        "evidence": [str(item) for item in payload.get("evidence") or []],
+        "evidence": evidence,
+        "validation": validation,
     }
     state["closed_loop_proof"] = proof
     if all(value for key, value in proof.items() if key != "evidence"):
@@ -944,12 +959,94 @@ def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str,
     return _public_absorption_state(root)
 
 
+def _closed_loop_cross_validation(root: Path, payload: dict[str, Any]) -> dict[str, Any]:
+    merge_commit = _proof_merge_commit(root, payload)
+    merge_verified = _is_merge_commit(root, merge_commit) if merge_commit else False
+    pytest_verified = _proof_pytest_gates_verified(root, payload)
+    return {
+        "merge_commit": merge_commit,
+        "merge_commit_verified": merge_verified,
+        "pytest_gates_verified": pytest_verified,
+        "evidence": [
+            f"merge_cross_check={merge_verified}; merge_commit={merge_commit}",
+            f"pytest_gate_cross_check={pytest_verified}",
+        ],
+    }
+
+
+def _proof_merge_commit(root: Path, payload: dict[str, Any]) -> str:
+    explicit = str(payload.get("merge_commit") or "").strip()
+    if explicit:
+        return explicit
+    evidence_commit = _evidence_value(payload.get("evidence") or [], "merge_commit")
+    if evidence_commit:
+        return evidence_commit
+    if not payload.get("merge_verified"):
+        return ""
+    git_root = _git_root(root)
+    if git_root is None:
+        return ""
+    try:
+        return _git(git_root, "rev-parse", "--short", "HEAD").strip()
+    except RuntimeError:
+        return ""
+
+
+def _is_merge_commit(root: Path, commit: str) -> bool:
+    git_root = _git_root(root)
+    if git_root is None or not commit:
+        return False
+    try:
+        parents = _git(git_root, "show", "--no-patch", "--format=%P", commit).strip().split()
+    except RuntimeError:
+        return False
+    return len(parents) >= 2
+
+
+def _proof_pytest_gates_verified(root: Path, payload: dict[str, Any]) -> bool:
+    if _gates_have_passing_pytest(payload.get("gates") or []):
+        return True
+    latest = _latest_absorption_run(root)
+    if _gates_have_passing_pytest(latest.get("gates") or []):
+        return True
+    command = payload.get("pytest_command") or payload.get("test_command")
+    if isinstance(command, str) and command.strip():
+        return _run(command.split(), root)
+    if isinstance(command, list) and all(isinstance(item, str) for item in command):
+        return _run(command, root)
+    return False
+
+
+def _gates_have_passing_pytest(gates: Any) -> bool:
+    if not isinstance(gates, list):
+        return False
+    for gate in gates:
+        if not isinstance(gate, dict) or not gate.get("ok"):
+            continue
+        command = " ".join(str(part) for part in gate.get("command") or [])
+        if "pytest" in command:
+            return True
+    return False
+
+
+def _evidence_value(evidence: Any, key: str) -> str:
+    for item in evidence if isinstance(evidence, list) else []:
+        text = str(item)
+        if text.startswith(f"{key}="):
+            return text.split("=", 1)[1].strip()
+    return ""
+
+
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
     require_deep = bool(payload.get("require_deep_review") or payload.get("require_llm_scores"))
-    if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
+    if not _llm_enabled(payload):
         metadata = assessment.setdefault("metadata", {})
-        metadata["score_source"] = "llm_required"
-        raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
+        disabled = _llm_disabled_review(require_deep=require_deep)
+        assessment["llm_review"] = disabled
+        metadata["score_source"] = disabled["score_source"]
+        if require_deep:
+            raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
+        return assessment
     metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
     external_source, external_path = _llm_external_reference(metadata, external_source, external_path)
     evidence = list(assessment.get("evidence", []))
@@ -1172,11 +1269,26 @@ def _maybe_request_llm_review(
     evidence: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
-        return {"enabled": False, "provider": "paibi"}
+    if not _llm_enabled(payload):
+        return _llm_disabled_review(require_deep=bool(payload.get("require_deep_review") or payload.get("require_llm_scores")))
     review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks, evidence=evidence or [], metadata=metadata or {}, record=False)
     review["enabled"] = True
     return review
+
+
+def _llm_enabled(payload: dict[str, Any]) -> bool:
+    return bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review"))
+
+
+def _llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:
+    return {
+        "enabled": False,
+        "provider": "paibi",
+        "status": "disabled",
+        "score_source": "paibi_llm_required" if require_deep else "paibi_llm_disabled",
+        "reason": "llm_deep_review_required" if require_deep else "llm_not_requested",
+        "dispatch": {"status": "disabled"},
+    }
 
 
 GENERATED_ABSORPTION_NAMES = {
@@ -1632,7 +1744,7 @@ def _blocking_git_status(root: Path, project: Path) -> str:
         path = line[3:].strip().strip('"')
         if " -> " in path:
             path = path.split(" -> ", 1)[1].strip().strip('"')
-        if any(path == prefix.removesuffix("/") or path.startswith(prefix) for prefix in prefixes):
+        if _is_exempt_git_status_path(path, prefixes):
             continue
         blocking.append(line)
     return "\n".join(blocking)
@@ -1653,6 +1765,27 @@ def _runtime_status_prefixes(root: Path, project: Path) -> tuple[str, ...]:
         return (".retort/",)
     rel_text = "" if str(rel) == "." else str(rel).rstrip("/") + "/"
     return (f"{rel_text}.retort/",)
+
+
+def _is_exempt_git_status_path(path: str, prefixes: tuple[str, ...]) -> bool:
+    normalized = path.replace("\\", "/")
+    if any(normalized == prefix.removesuffix("/") or normalized.startswith(prefix) for prefix in prefixes):
+        return True
+    project_prefix = _project_prefix_from_runtime_prefixes(prefixes)
+    if project_prefix and not normalized.startswith(project_prefix):
+        return False
+    project_rel = normalized[len(project_prefix) :] if project_prefix else normalized
+    rel_path = Path(project_rel)
+    if rel_path.name in GENERATED_ABSORPTION_NAMES:
+        return True
+    return len(rel_path.parts) >= 2 and rel_path.parts[0] == "docs" and rel_path.name.startswith("retort_") and rel_path.suffix == ".json"
+
+
+def _project_prefix_from_runtime_prefixes(prefixes: tuple[str, ...]) -> str:
+    for prefix in prefixes:
+        if prefix.endswith(".retort/"):
+            return prefix[: -len(".retort/")]
+    return ""
 
 
 def _tracking_state(path: Path) -> str:
