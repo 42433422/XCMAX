@@ -12,6 +12,7 @@ const state = {
   absorption: null,
   absorbedProjects: {count: 0, sources: [], latestSource: "", updatedAt: 0},
   absorbedProjectHits: [],
+  absorbedProjectHitDatasetAt: 0,
   selectedAbsorbedProject: null,
   events: [],
   progress: {timer: 0, active: false, started: 0, duration: 0, percent: 0, phase: "evidence", title: "等待深评"}
@@ -1398,6 +1399,17 @@ function drawAbsorbedProjectLights(scene, r, t, dpr) {
     y: light.y,
     hitRadius: light.hitRadius,
   }));
+  if (performance.now() - state.absorbedProjectHitDatasetAt > 120) {
+    canvas.dataset.absorbedProjectHitMap = JSON.stringify(state.absorbedProjectHits.map(hit => ({
+      i: hit.index,
+      s: hit.source,
+      n: hit.name,
+      x: Math.round(hit.x),
+      y: Math.round(hit.y),
+      r: Math.round(hit.hitRadius),
+    })));
+    state.absorbedProjectHitDatasetAt = performance.now();
+  }
   if (!count) return;
   const appear = absorbed.updatedAt ? ease(clamp((performance.now() - absorbed.updatedAt) / 1200, 0, 1)) : 1;
   ctx.save();

@@ -27,7 +27,9 @@ def test_absorbed_project_light_points_are_clickable() -> None:
     text = app.read_text(encoding="utf-8")
 
     assert "absorbedProjectHits: []" in text
+    assert "absorbedProjectHitDatasetAt: 0" in text
     assert "selectedAbsorbedProject: null" in text
+    assert "canvas.dataset.absorbedProjectHitMap = JSON.stringify" in text
     assert "function nearestAbsorbedProjectHit" in text
     assert "function selectAbsorbedProject" in text
     assert 'canvas.dataset.selectedAbsorbedProject = hit.source' in text
