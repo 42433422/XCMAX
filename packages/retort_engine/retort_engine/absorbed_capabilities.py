@@ -12,7 +12,7 @@ import json
 from typing import Any
 
 
-ABSORBED_CAPABILITY_STATE: dict[str, Any] = json.loads('{\n  "benchmark": {\n    "component_gap_count": 1,\n    "minimum_expected_behavior_tests": 5,\n    "prioritized_component_count": 1,\n    "task_dimension_count": 4\n  },\n  "component_gaps": [\n    {\n      "component": "plugin_surface",\n      "external_files": 4,\n      "file_gap": -8,\n      "marker_gap": 15,\n      "own_files": 12,\n      "representative_external_files": [\n        "package-lock.json",\n        "package.json",\n        ".eslintrc.js",\n        ".devcontainer/devcontainer.json"\n      ]\n    }\n  ],\n  "external_path": "/Users/a4243342/.codex/worktrees/retort-90/XCMAX/packages/retort_engine/.retort/cache/github/go1com/openai-review",\n  "prioritized_absorptions": [\n    {\n      "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",\n      "component": "plugin_surface",\n      "priority": "P1",\n      "source_files": [\n        "package-lock.json",\n        "package.json",\n        ".eslintrc.js",\n        ".devcontainer/devcontainer.json"\n      ]\n    }\n  ],\n  "run_id": "20260627090545-93f1f5971d",\n  "signal_evidence": {\n    "multi_provider": [\n      "README.md",\n      "package-lock.json",\n      "package.json",\n      "action.yml",\n      "src/azure-openai.ts"\n    ],\n    "plugin_surface": [\n      "package-lock.json",\n      "package.json",\n      ".eslintrc.js",\n      "src/main.ts",\n      "src/azure-openai.ts"\n    ],\n    "review_pipeline": [\n      "README.md",\n      "src/main.ts",\n      "src/helpers/comments.ts",\n      "src/helpers/reviewers.ts"\n    ]\n  },\n  "signals": [\n    "review_pipeline",\n    "plugin_surface",\n    "multi_provider"\n  ],\n  "source": "https://github.com/go1com/openai-review",\n  "tasks": [\n    {\n      "dimension": "comparative_analysis_depth",\n      "priority": "P1",\n      "task_id": "retort-absorb-depth",\n      "title": "Absorb stronger implementation depth",\n      "why": "Compare implementation patterns from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "product_operability",\n      "priority": "P1",\n      "task_id": "retort-absorb-ux",\n      "title": "Absorb better user experience",\n      "why": "Extract usable UX improvements from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "operational_readiness",\n      "priority": "P2",\n      "task_id": "retort-absorb-ops",\n      "title": "Absorb better operational gates",\n      "why": "Adapt CI and release checks from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "comparative_analysis_depth",\n      "priority": "P1",\n      "task_id": "retort-absorb-review-pipeline",\n      "title": "Adopt deterministic review pipeline stages",\n      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."\n    },\n    {\n      "dimension": "feedback_loop_closure",\n      "priority": "P2",\n      "task_id": "retort-absorb-benchmarking",\n      "title": "Add absorption quality benchmark counters",\n      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."\n    },\n    {\n      "dimension": "product_operability",\n      "priority": "P2",\n      "task_id": "retort-absorb-plugin-surface",\n      "title": "Expose Retort absorption through plugin friendly commands",\n      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."\n    }\n  ]\n}')
+ABSORBED_CAPABILITY_STATE: dict[str, Any] = json.loads('{\n  "benchmark": {\n    "component_gap_count": 1,\n    "minimum_expected_behavior_tests": 5,\n    "prioritized_component_count": 1,\n    "task_dimension_count": 4\n  },\n  "component_gaps": [\n    {\n      "component": "plugin_surface",\n      "external_files": 4,\n      "file_gap": -8,\n      "marker_gap": 1,\n      "own_files": 12,\n      "representative_external_files": [\n        "package-lock.json",\n        "package.json",\n        ".eslintrc.js",\n        ".devcontainer/devcontainer.json"\n      ]\n    }\n  ],\n  "external_path": "/Users/a4243342/.codex/worktrees/retort-90/XCMAX/packages/retort_engine/.retort/cache/github/go1com/openai-review",\n  "prioritized_absorptions": [\n    {\n      "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",\n      "component": "plugin_surface",\n      "priority": "P1",\n      "source_files": [\n        "package-lock.json",\n        "package.json",\n        ".eslintrc.js",\n        ".devcontainer/devcontainer.json"\n      ]\n    }\n  ],\n  "run_id": "20260627091408-93f1f5971d",\n  "signal_evidence": {\n    "multi_provider": [\n      "README.md",\n      "package-lock.json",\n      "package.json",\n      "action.yml",\n      "src/azure-openai.ts"\n    ],\n    "plugin_surface": [\n      "package-lock.json",\n      "package.json",\n      ".eslintrc.js",\n      "src/main.ts",\n      "src/azure-openai.ts"\n    ],\n    "review_pipeline": [\n      "README.md",\n      "src/main.ts",\n      "src/helpers/comments.ts",\n      "src/helpers/reviewers.ts"\n    ]\n  },\n  "signals": [\n    "review_pipeline",\n    "plugin_surface",\n    "multi_provider"\n  ],\n  "source": "https://github.com/go1com/openai-review",\n  "tasks": [\n    {\n      "dimension": "comparative_analysis_depth",\n      "priority": "P1",\n      "task_id": "retort-absorb-depth",\n      "title": "Absorb stronger implementation depth",\n      "why": "Compare implementation patterns from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "product_operability",\n      "priority": "P1",\n      "task_id": "retort-absorb-ux",\n      "title": "Absorb better user experience",\n      "why": "Extract usable UX improvements from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "operational_readiness",\n      "priority": "P2",\n      "task_id": "retort-absorb-ops",\n      "title": "Absorb better operational gates",\n      "why": "Adapt CI and release checks from https://github.com/go1com/openai-review."\n    },\n    {\n      "dimension": "comparative_analysis_depth",\n      "priority": "P1",\n      "task_id": "retort-absorb-review-pipeline",\n      "title": "Adopt deterministic review pipeline stages",\n      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."\n    },\n    {\n      "dimension": "feedback_loop_closure",\n      "priority": "P2",\n      "task_id": "retort-absorb-benchmarking",\n      "title": "Add absorption quality benchmark counters",\n      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."\n    },\n    {\n      "dimension": "product_operability",\n      "priority": "P2",\n      "task_id": "retort-absorb-plugin-surface",\n      "title": "Expose Retort absorption through plugin friendly commands",\n      "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."\n    }\n  ]\n}')
 
 SIGNAL_WEIGHTS = {
     "review_pipeline": 24,
@@ -73,3 +73,48 @@ def explain_missing_absorption_evidence(changed_files: list[str], gates: list[di
     elif progress["passed_gates"] != progress["gate_count"]:
         missing.append("post_absorption_gate_failed")
     return missing
+
+
+def advantage_diff_map(changed_files: list[str]) -> list[dict[str, Any]]:
+    """Map external advantages to concrete project-local behavior diffs."""
+    plan = absorbed_capability_plan()
+    rows: list[dict[str, Any]] = []
+    for capability in plan.get("ranked_capabilities") or []:
+        signal = str(capability.get("signal") or "")
+        matched = [path for path in changed_files if signal.replace("_", "-") in path or "absorbed_capabilities" in path or "test_absorbed_capabilities" in path]
+        rows.append({"signal": signal, "weight": capability.get("weight", 0), "changed_files": matched, "has_behavior_diff": bool(matched)})
+    return rows
+
+
+def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]], *, minimum_behavior_tests: int | None = None) -> dict[str, Any]:
+    """Turn weak absorption evidence into a blocking product gate."""
+    plan = absorbed_capability_plan()
+    minimum = int(minimum_behavior_tests or plan.get("minimum_behavior_tests") or 3)
+    missing = explain_missing_absorption_evidence(changed_files, gates)
+    test_gate = next((gate for gate in gates if "test_absorbed_capabilities.py" in " ".join(str(part) for part in gate.get("command") or [])), {})
+    stdout = str(test_gate.get("stdout_tail") or "")
+    passed_count = 0
+    for token in stdout.split():
+        if token.isdigit():
+            passed_count = max(passed_count, int(token))
+    if passed_count < minimum:
+        missing.append("insufficient_behavior_test_count")
+    return {"passed": not missing, "missing": missing, "minimum_behavior_tests": minimum, "observed_behavior_tests": passed_count}
+
+
+def review_strategy_for_file(path: str) -> dict[str, Any]:
+    """Pick a review strategy from absorbed external signals and file shape."""
+    suffix = path.rsplit(".", 1)[-1].lower() if "." in path else ""
+    capabilities = [item["signal"] for item in ranked_capabilities()]
+    strategy = "semantic_review"
+    if suffix in {"ts", "tsx", "js", "jsx", "go", "py"} and "diff_hunk_review" in capabilities:
+        strategy = "diff_hunk_review"
+    elif suffix in {"md", "json", "yml", "yaml"}:
+        strategy = "policy_and_contract_review"
+    return {"path": path, "strategy": strategy, "capabilities": capabilities[:5]}
+
+
+def multi_project_reproduction_index(sources: list[str]) -> dict[str, Any]:
+    """Score whether the same absorption behavior has been reproduced across projects."""
+    unique = sorted({source for source in sources if source})
+    return {"unique_source_count": len(unique), "ready_for_product_score": len(unique) >= 3, "sources": unique[:5]}
