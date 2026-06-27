@@ -7,16 +7,16 @@ from typing import Any
 
 
 EXTRACTED_BOUNDARY_MODULES = {
-    "automation_surface": ("retort_engine/service.py", "retort_engine/ui_server.py", "retort_engine/cli.py"),
+    "automation_surface": ("retort_engine/project_assessment.py", "retort_engine/service.py", "retort_engine/ui_server.py", "retort_engine/cli.py"),
     "benchmark_eval": ("retort_engine/review_quality_benchmark.py", "retort_engine/absorption_quality.py"),
     "command_contract": ("retort_engine/contracts.py", "retort_engine/absorption_workflow.py"),
     "evaluation_loop": ("retort_engine/absorption_quality.py", "retort_engine/review_quality_benchmark.py"),
     "model_adapter": ("retort_engine/paibi_llm.py", "retort_engine/paibi_prompting.py", "retort_engine/prompts.py"),
     "provider_boundary": ("retort_engine/paibi_llm.py", "retort_engine/service.py"),
-    "regression_oracle": ("retort_engine/absorption_quality.py", "retort_engine/architecture_refactor.py"),
-    "review_pipeline": ("retort_engine/review_pipeline.py", "retort_engine/pr_review.py"),
-    "safety_policy": ("retort_engine/license_gate.py", "retort_engine/git_status.py", "retort_engine/proof.py"),
-    "workflow_ci": ("retort_engine/absorption_workflow.py", "retort_engine/proof.py", "retort_engine/git_status.py"),
+    "regression_oracle": ("retort_engine/capability_audit.py", "retort_engine/absorption_quality.py", "retort_engine/architecture_refactor.py"),
+    "review_pipeline": ("retort_engine/devour_session.py", "retort_engine/review_pipeline.py", "retort_engine/pr_review.py"),
+    "safety_policy": ("retort_engine/capability_audit.py", "retort_engine/license_gate.py", "retort_engine/git_status.py", "retort_engine/proof.py"),
+    "workflow_ci": ("retort_engine/capability_audit.py", "retort_engine/absorption_workflow.py", "retort_engine/proof.py", "retort_engine/git_status.py"),
     "context_localization": ("retort_engine/review_context_bias.py", "retort_engine/pr_review.py"),
 }
 
