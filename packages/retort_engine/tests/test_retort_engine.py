@@ -250,6 +250,34 @@ def test_assessment_ignores_retort_runtime_dirty_state(tmp_path: Path) -> None:
     assert assessment.metadata["git_tracking_state"] == "tracked_clean"
 
 
+def test_capability_audit_does_not_count_registry_snapshot_as_core_behavior(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    changed_files = [
+        project / "retort_engine" / "absorbed_capabilities.py",
+        project / "tests" / "test_absorbed_capabilities.py",
+        project / "docs" / "retort_absorption_log.md",
+        project / "docs" / "retort_external_review_report.json",
+    ]
+    for path in changed_files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# generated\n", encoding="utf-8")
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(json.dumps({"source": "https://github.com/example/reviewer", "changed_files": [str(path) for path in changed_files]}, ensure_ascii=False), encoding="utf-8")
+
+    audit = assess_project(str(project)).metadata["capability_absorption_audit"]
+
+    assert audit["generated_only"] is True
+    assert audit["score"] == 76.0
+    assert audit["overall_cap"] == 82.0
+    assert audit["reason"] == "latest_absorption_changed_only_reports_logs_or_capability_registry"
+    assert audit["behavior_source_files"] == []
+    assert audit["behavior_test_files"] == []
+    assert "retort_engine/absorbed_capabilities.py" in audit["generated_evidence_files"]
+    assert "tests/test_absorbed_capabilities.py" in audit["generated_evidence_files"]
+
+
 def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = own / ".retort" / "cache" / "github" / "owner" / "repo"
