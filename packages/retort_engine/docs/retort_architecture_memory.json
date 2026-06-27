@@ -33,10 +33,10 @@
         "aider/io.py",
         "ci/trigger_action.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -48,7 +48,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -82,10 +83,10 @@
         "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml",
         "config/coding_challenge.yaml"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -97,7 +98,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -131,10 +133,10 @@
         "aider/io.py",
         "ci/trigger_action.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -146,7 +148,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -180,10 +183,10 @@
         "core/util/sanitization.ts",
         "docker/mosaico/pr-agent-solution-agent.json"
       ],
-      "gate_pass_count": 10,
+      "gate_pass_count": 11,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 10,
+      "run_count": 11,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -194,7 +197,8 @@
         "20260627173018-28c1843a1a",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 10,
       "sources": [
@@ -227,16 +231,17 @@
         "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
         "pr_agent/settings/pr_reviewer_prompts.toml"
       ],
-      "gate_pass_count": 5,
+      "gate_pass_count": 6,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 5,
+      "run_count": 6,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 5,
       "sources": [
@@ -264,10 +269,10 @@
         "examples/01_standalone_sdk/45_parallel_tool_execution.py",
         "examples/02_remote_agent_server/12_settings_and_secrets_api.py"
       ],
-      "gate_pass_count": 8,
+      "gate_pass_count": 9,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 8,
+      "run_count": 9,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627171646-762694f28f",
@@ -276,7 +281,8 @@
         "20260627173018-28c1843a1a",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 8,
       "sources": [
@@ -307,16 +313,17 @@
         "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
         "pr_agent/settings/pr_reviewer_prompts.toml"
       ],
-      "gate_pass_count": 5,
+      "gate_pass_count": 6,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 5,
+      "run_count": 6,
       "run_ids": [
         "20260627171611-61b3c3e350",
         "20260627172352-6e1352f61e",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 5,
       "sources": [
@@ -360,10 +367,10 @@
         "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml",
         "config/coding_challenge.yaml"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -375,7 +382,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -409,10 +417,10 @@
         "aider/website/docs/usage.md",
         "core/indexing/CodebaseIndexer.test.ts"
       ],
-      "gate_pass_count": 7,
+      "gate_pass_count": 8,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 7,
+      "run_count": 8,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -420,7 +428,8 @@
         "20260627172525-c3d6b79c6a",
         "20260627173057-8f77226be1",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 7,
       "sources": [
@@ -466,10 +475,10 @@
         "benchmark/benchmark.py",
         "benchmark/over_time.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -481,7 +490,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -531,10 +541,10 @@
         "benchmark/benchmark.py",
         "benchmark/over_time.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -546,7 +556,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -580,10 +591,10 @@
         "config/benchmarks/250526_anthropic_filemap_simple_review_sbl.yaml",
         "config/coding_challenge.yaml"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -595,7 +606,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -645,10 +657,10 @@
         "action.yml",
         "aider/coders/base_coder.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -660,7 +672,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -694,10 +707,10 @@
         "__main__.py",
         "aider/io.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -709,7 +722,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -759,10 +773,10 @@
         "ci/trigger_action.py",
         "ci/update_rtfd.py"
       ],
-      "gate_pass_count": 11,
+      "gate_pass_count": 12,
       "gate_pass_rate": 1.0,
       "ready_for_deep_refactor": true,
-      "run_count": 11,
+      "run_count": 12,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -774,7 +788,8 @@
         "20260627173057-8f77226be1",
         "20260627173253-72548897e8",
         "20260627182658-daf3bca93f",
-        "20260627183417-fe4938a18b"
+        "20260627183417-fe4938a18b",
+        "20260627183621-6e1352f61e"
       ],
       "source_count": 11,
       "sources": [
@@ -3408,12 +3423,259 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json"
+      ],
+      "components": [
+        {
+          "component": "review_pipeline",
+          "depth_score": 67,
+          "evidence_files": [
+            ".pr_agent.toml",
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "CONTRIBUTING.md",
+            "README.md",
+            "action.yaml",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "workflow_ci",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "pyproject.toml",
+            "setup.py"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "safety_policy",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CODE_OF_CONDUCT.md",
+            "README.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "safety_policy"
+          ]
+        },
+        {
+          "component": "regression_oracle",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "CHANGELOG.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "evaluation_loop",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmarking"
+          ]
+        },
+        {
+          "component": "diff_hunk_review",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/settings/pr_custom_labels.toml",
+            "pr_agent/settings/pr_information_from_user_prompts.toml",
+            "pr_agent/settings/pr_line_questions_prompts.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "diff_hunk_review"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 58,
+          "evidence_files": [
+            ".pr_agent.toml",
+            "AGENTS.md",
+            "README.md",
+            "docker/mosaico/pr-agent-solution-agent.json",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "command_contract",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "benchmark_eval",
+          "depth_score": 58,
+          "evidence_files": [
+            "CHANGELOG.md",
+            "pr_agent/algo/token_handler.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_reflect_prompts.toml",
+            "pr_agent/settings/pr_evaluate_prompt_response.toml",
+            "pr_agent/tools/pr_help_message.py"
+          ],
+          "signals": [
+            "benchmark_eval"
+          ]
+        },
+        {
+          "component": "automation_surface",
+          "depth_score": 58,
+          "evidence_files": [
+            "AGENTS.md",
+            "README.md",
+            "RELEASE_NOTES.md",
+            "SECURITY.md",
+            "pyproject.toml"
+          ],
+          "signals": [
+            "plugin_surface"
+          ]
+        },
+        {
+          "component": "file_grouping",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/gitea_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "diff_locality",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        },
+        {
+          "component": "context_partitioning",
+          "depth_score": 55,
+          "evidence_files": [
+            "pr_agent/git_providers/gerrit_provider.py",
+            "pr_agent/git_providers/local_git_provider.py",
+            "pr_agent/settings/code_suggestions/pr_code_suggestions_prompts_not_decoupled.toml",
+            "pr_agent/settings/pr_reviewer_prompts.toml"
+          ],
+          "signals": [
+            "file_grouping"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T18:36:33Z",
+      "external_file_count": 284,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+      "gate_count": 7,
+      "gates_passed": true,
+      "git_revision": "bd09b6cf89c6d6f3d16b159fa7603fa0e7768cf2",
+      "run_id": "20260627183621-6e1352f61e",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider"
+      ],
+      "source": "https://github.com/qodo-ai/pr-agent",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "external_ingestion",
+        "feedback_loop_closure",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
   "summary": {
     "component_count": 21,
-    "gate_passed_run_count": 11,
+    "gate_passed_run_count": 12,
     "ready_component_count": 15,
     "ready_components": [
       "workflow_ci",
@@ -3426,7 +3688,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 15,
-    "run_count": 11,
+    "run_count": 12,
     "source_count": 11
   }
 }
