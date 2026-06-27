@@ -115,6 +115,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     live_probe_source = root / "retort_engine" / "pr_live_probe.py"
     replay_source = root / "retort_engine" / "comparative_replay.py"
     complex_pr_source = root / "retort_engine" / "complex_pr_replay.py"
+    pipeline_source = root / "retort_engine" / "review_pipeline.py"
     task_source = root / "retort_engine" / "task_prioritization.py"
     dispatch_source = root / "retort_engine" / "task_dispatch_plan.py"
     benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
@@ -125,6 +126,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     live_probe_test = root / "tests" / "test_pr_live_probe.py"
     replay_test = root / "tests" / "test_comparative_replay.py"
     complex_pr_test = root / "tests" / "test_complex_pr_replay.py"
+    pipeline_test = root / "tests" / "test_review_pipeline.py"
     task_test = root / "tests" / "test_task_prioritization.py"
     dispatch_test = root / "tests" / "test_task_dispatch_plan.py"
     benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
@@ -150,9 +152,15 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     benchmark_sample_count = 0
     benchmark_baseline_score = 0
     benchmark_publishable_comment_count = 0
+    diff_pipeline_status = ""
+    diff_pipeline_depth_score = 0
+    diff_pipeline_context_group_count = 0
+    diff_pipeline_task_group_count = 0
+    diff_pipeline_publishable_comment_count = 0
     if source.is_file():
         try:
             from retort_engine.pr_review import review_diff
+            from retort_engine.review_pipeline import build_diff_pipeline_replay
             from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 
             result = review_diff("diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    token = \"secret\"\n")
@@ -173,6 +181,19 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             benchmark_baseline_score = int(benchmark_summary.get("baseline_aggregate_score") or 0)
             benchmark_delta = int(benchmark_summary.get("post_absorption_score_delta") or 0)
             benchmark_publishable_comment_count = int(benchmark_summary.get("publishable_comment_count") or 0)
+            diff_pipeline = build_diff_pipeline_replay(
+                "diff --git a/app/auth.py b/app/auth.py\n--- a/app/auth.py\n+++ b/app/auth.py\n@@ -1 +1,3 @@\n def login():\n+    token = \"secret\"\n+    return True\n"
+                "diff --git a/tests/test_auth.py b/tests/test_auth.py\n--- a/tests/test_auth.py\n+++ b/tests/test_auth.py\n@@ -1 +1,2 @@\n def test_login():\n+    assert True\n"
+                "diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -1 +1,2 @@\n name: ci\n+on: [push]\n",
+                issue_context="Fix login token handling",
+                max_comments=10,
+            )
+            diff_pipeline_summary = diff_pipeline.get("summary") if isinstance(diff_pipeline.get("summary"), dict) else {}
+            diff_pipeline_status = str(diff_pipeline.get("status") or "")
+            diff_pipeline_depth_score = int(diff_pipeline_summary.get("diff_grouping_depth_score") or 0)
+            diff_pipeline_context_group_count = int(diff_pipeline_summary.get("context_group_count") or 0)
+            diff_pipeline_task_group_count = int(diff_pipeline_summary.get("task_group_count") or 0)
+            diff_pipeline_publishable_comment_count = int(diff_pipeline_summary.get("publishable_comment_count") or 0)
         except Exception:
             sample_comment_count = 0
     return {
@@ -193,6 +214,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "benchmark_baseline_aggregate_score": benchmark_baseline_score,
         "benchmark_post_absorption_delta": benchmark_delta,
         "benchmark_publishable_comment_count": benchmark_publishable_comment_count,
+        "diff_pipeline_status": diff_pipeline_status,
+        "diff_pipeline_depth_score": diff_pipeline_depth_score,
+        "diff_pipeline_context_group_count": diff_pipeline_context_group_count,
+        "diff_pipeline_task_group_count": diff_pipeline_task_group_count,
+        "diff_pipeline_publishable_comment_count": diff_pipeline_publishable_comment_count,
         "dry_run_runtime": dry_source.is_file() and "review_pr_url" in dry_source_text and "pr_diff_url" in dry_source_text,
         "dry_run_cli": "review-pr" in read_text(cli),
         "dry_run_api": "/api/review-pr" in read_text(ui_server),
@@ -211,6 +237,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_live_probe.py", live_probe_source.is_file()),
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
                 ("retort_engine/complex_pr_replay.py", complex_pr_source.is_file()),
+                ("retort_engine/review_pipeline.py", pipeline_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
                 ("retort_engine/task_dispatch_plan.py", dispatch_source.is_file()),
                 ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
@@ -227,6 +254,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_live_probe.py", live_probe_test.is_file()),
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
                 ("tests/test_complex_pr_replay.py", complex_pr_test.is_file()),
+                ("tests/test_review_pipeline.py", pipeline_test.is_file()),
                 ("tests/test_task_prioritization.py", task_test.is_file()),
                 ("tests/test_task_dispatch_plan.py", dispatch_test.is_file()),
                 ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),

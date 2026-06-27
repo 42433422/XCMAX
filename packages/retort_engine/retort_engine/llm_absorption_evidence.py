@@ -108,6 +108,11 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_benchmark_aggregate_score={pr_review.get('benchmark_aggregate_score')}",
         f"pr_review_benchmark_post_absorption_delta={pr_review.get('benchmark_post_absorption_delta')}",
         f"pr_review_benchmark_publishable_comment_count={pr_review.get('benchmark_publishable_comment_count')}",
+        f"review_pipeline_diff_replay_status={pr_review.get('diff_pipeline_status')}",
+        f"review_pipeline_diff_replay_depth_score={pr_review.get('diff_pipeline_depth_score')}",
+        f"review_pipeline_diff_replay_context_groups={pr_review.get('diff_pipeline_context_group_count')}",
+        f"review_pipeline_diff_replay_task_groups={pr_review.get('diff_pipeline_task_group_count')}",
+        f"review_pipeline_diff_replay_publishable_comments={pr_review.get('diff_pipeline_publishable_comment_count')}",
     ]
 
 
@@ -123,6 +128,8 @@ def _report_evidence(project: Path) -> list[str]:
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
     complex_pr_report = read_json(project / "docs" / "retort_complex_pr_replay.json")
     complex_pr_summary = complex_pr_report.get("summary") if isinstance(complex_pr_report.get("summary"), dict) else {}
+    pipeline_replay_report = read_json(project / "docs" / "retort_review_pipeline_diff_replay.json")
+    pipeline_replay_summary = pipeline_replay_report.get("summary") if isinstance(pipeline_replay_report.get("summary"), dict) else {}
     task_report = read_json(project / "docs" / "retort_task_prioritization_report.json")
     task_summary = task_report.get("summary") if isinstance(task_report.get("summary"), dict) else {}
     dispatch_report = read_json(project / "docs" / "retort_employee_task_dispatch_plan.json")
@@ -161,11 +168,17 @@ def _report_evidence(project: Path) -> list[str]:
         f"complex_pr_replay_total_comment_count={complex_pr_summary.get('total_comment_count', '')}",
         f"complex_pr_replay_total_reviewed_change_count={complex_pr_summary.get('total_reviewed_new_change_count', '')}",
         f"complex_pr_replay_truncated_pr_count={complex_pr_summary.get('truncated_pr_count', '')}",
+        f"review_pipeline_diff_replay_report_status={pipeline_replay_report.get('status', '')}",
+        f"review_pipeline_diff_replay_report_depth_score={pipeline_replay_summary.get('diff_grouping_depth_score', '')}",
+        f"review_pipeline_diff_replay_report_context_groups={pipeline_replay_summary.get('context_group_count', '')}",
+        f"review_pipeline_diff_replay_report_task_groups={pipeline_replay_summary.get('task_group_count', '')}",
         f"task_prioritization_status={task_report.get('status', '')}",
         f"task_prioritization_queued_count={task_summary.get('queued_task_count', '')}",
         f"task_prioritization_completed_count={task_summary.get('completed_result_count', '')}",
         f"task_prioritization_dimension_count={task_summary.get('prioritized_dimension_count', '')}",
         f"task_prioritization_ready_employee_task_count={task_summary.get('ready_employee_task_count', '')}",
+        f"task_prioritization_feedback_driven_count={task_summary.get('feedback_driven_priority_count', '')}",
+        f"task_prioritization_employee_feedback_applied={task_summary.get('employee_feedback_applied', '')}",
         f"task_prioritization_all_tasks_have_acceptance={task_summary.get('all_tasks_have_acceptance', '')}",
         f"task_dispatch_plan_status={dispatch_report.get('status', '')}",
         f"task_dispatch_plan_source_llm_task_count={dispatch_summary.get('source_llm_task_count', '')}",

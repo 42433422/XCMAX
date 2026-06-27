@@ -1,0 +1,153 @@
+{
+  "comments": [
+    {
+      "file": "app/auth.py",
+      "line": 2,
+      "publishable": true,
+      "review_context": "security",
+      "review_stage": "classify_risk",
+      "severity": "high"
+    },
+    {
+      "file": ".github/workflows/ci.yml",
+      "line": 2,
+      "publishable": true,
+      "review_context": "ci_config",
+      "review_stage": "reflect_before_publish",
+      "severity": "info"
+    },
+    {
+      "file": "tests/test_auth.py",
+      "line": 2,
+      "publishable": true,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info"
+    }
+  ],
+  "context_groups": [
+    {
+      "added_change_count": 2,
+      "context": "security",
+      "file_count": 1,
+      "files": [
+        "app/auth.py"
+      ],
+      "hunk_count": 1,
+      "review_focus": "secrets_permissions_and_auth_edges"
+    },
+    {
+      "added_change_count": 1,
+      "context": "tests",
+      "file_count": 1,
+      "files": [
+        "tests/test_auth.py"
+      ],
+      "hunk_count": 1,
+      "review_focus": "behavior_proof_and_regression_scope"
+    },
+    {
+      "added_change_count": 1,
+      "context": "ci_config",
+      "file_count": 1,
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "hunk_count": 1,
+      "review_focus": "repeatable_gates_and_release_safety"
+    }
+  ],
+  "evidence": {
+    "core_behavior": "diff_grouping_to_publishable_review_and_employee_tasking",
+    "issue_context_supplied": false,
+    "previous_diff_supplied": false,
+    "source": "retort_engine.pr_review.review_diff"
+  },
+  "pipeline_stages": [
+    "parse_unified_diff",
+    "group_related_files",
+    "map_diff_hunk_context",
+    "rank_publishable_comments",
+    "dispatch_employee_task"
+  ],
+  "status": "ready",
+  "summary": {
+    "absorbed_context_signal_strength": 80,
+    "comment_count": 3,
+    "context_group_count": 3,
+    "diff_grouping_depth_score": 94,
+    "file_count": 3,
+    "hunk_count": 3,
+    "publishable_comment_count": 3,
+    "ready_for_employee_tasking": true,
+    "task_group_count": 3
+  },
+  "task_groups": [
+    {
+      "comment_count": 1,
+      "context": "security",
+      "files": [
+        "app/auth.py"
+      ],
+      "publishable_comment_count": 1,
+      "risk_counts": {
+        "high": 1,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "semantic_review"
+    },
+    {
+      "comment_count": 1,
+      "context": "tests",
+      "files": [
+        "tests/test_auth.py"
+      ],
+      "publishable_comment_count": 1,
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "semantic_review"
+    },
+    {
+      "comment_count": 1,
+      "context": "ci_config",
+      "files": [
+        ".github/workflows/ci.yml"
+      ],
+      "publishable_comment_count": 1,
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "policy_and_contract_review"
+    }
+  ]
+}
