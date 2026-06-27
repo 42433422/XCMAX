@@ -68,7 +68,7 @@ def request_paibi_llm_review(
         metadata=metadata or {},
     )
     client = PaibiLLMClient()
-    result = client.dispatch(prompt=prompt, project=root, title=f"反问 Retort {mode} LLM 评审")
+    result = client.dispatch(prompt=prompt, project=root, title=f"[report-only] 反问 Retort {mode} LLM 评分")
     payload = {
         "provider": "paibi",
         "mode": mode,
@@ -112,7 +112,11 @@ def build_retort_paibi_prompt(
     metadata_json = json.dumps(metadata or {}, ensure_ascii=False, indent=2, sort_keys=True)[:5000]
     own = _project_digest(project)
     external_digest = _project_digest(Path(external_path)) if external_path and Path(external_path).is_dir() else "external project not materialized"
-    return f"""你是排比 Para/Codex 调度器里的 Retort LLM 评审员。
+    return f"""MODSTORE_REPORT_ONLY=1
+report_only=true
+[report-only]
+
+你是排比 Para/Codex 调度器里的 Retort LLM 评审员。
 
 目标：你负责给反问 Retort 直接评分。确定性代码只负责采集证据；最终分数由你按下面提示词裁决。
 
@@ -174,6 +178,8 @@ def build_retort_paibi_prompt(
 }}
 
 要求：
+- 这是只读评分任务，不要修改任何文件。
+- 直接在最终输出里打印严格 JSON，不要 markdown 代码块。
 - 不允许因为已有按钮、关键词或 UI 就给 90+。
 - 没有 branch diff、员工执行结果、post-absorption tests、merge、外部优势复评五类证据时，总分建议不得超过 82。
 - 重点评估深度，不评估广度。
@@ -205,6 +211,7 @@ class PaibiLLMClient:
                 "branch": os.environ.get("RETORT_PAIBI_BRANCH") or "main",
                 "subtask_title": title[:120],
                 "max_attempts": 3,
+                "report_only": True,
             }
             task_body = self._request("POST", "/api/tasks", token=token, json_body=body)
             task = task_body.get("task") if isinstance(task_body.get("task"), dict) else {}
