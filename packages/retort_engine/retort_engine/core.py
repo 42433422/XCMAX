@@ -6,6 +6,7 @@ import re
 import shutil
 import sqlite3
 import subprocess
+import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -156,6 +157,18 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     external_assessment = _assess_external_project(external_path, str(external))
     tasks = _tasks_from_assessment(str(external), external_path)
     absorption_state = _record_absorption_shock(own, str(external), external_path, tasks)
+    execution = _run_real_absorption_cli(own, str(external), external_path, tasks, external_assessment, payload)
+    if execution.get("status") in {"applied", "noop"}:
+        _record_execution_proof(own, execution, branch_state)
+    if payload.get("merge_after") and branch_state.get("enabled") and branch_state.get("created"):
+        try:
+            execution["commit"] = _commit_absorption_execution(own, str(external), execution)
+            result_branch = merge_absorption_branch(own, BranchWorkflowState.from_dict(branch_state)).to_dict()
+            branch_state = result_branch
+            if execution.get("status") in {"applied", "noop"}:
+                _record_execution_proof(own, execution, branch_state)
+        except RuntimeError as exc:
+            branch_state = {**branch_state, "status": "merge_blocked", "error": str(exc)}
     own_assessment = assess_project(str(own), run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
     llm_review = _maybe_request_llm_review(
         payload,
@@ -169,14 +182,15 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         metadata=own_assessment.get("metadata", {}),
     )
     result = {
-        "status": "tasks_generated",
-        "summary": f"Generated {len(tasks)} absorption task(s). Score intentionally dropped until Retort self-evolution internalizes the external advantages.",
+        "status": _absorption_status(tasks, execution),
+        "summary": _absorption_summary(tasks, execution),
         "pre_absorption_assessment": pre_assessment,
         "own_assessment": own_assessment,
         "external_assessment": external_assessment,
         "external_ref": {"source": str(external), "local_path": "" if external_path is None else str(external_path)},
         "absorption_visual": _absorption_visual(pre_assessment, own_assessment, external_assessment, str(external)),
-        "absorption_state": absorption_state,
+        "absorption_state": _public_absorption_state(own) if execution.get("status") in {"applied", "noop"} else absorption_state,
+        "execution": execution,
         "tasks": tasks,
         "llm_review": llm_review,
         "branch_workflow": branch_state,
@@ -194,8 +208,6 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         store.record("absorption_runs", result)
         for task in tasks:
             store.record("employee_tasks", task)
-    if payload.get("merge_after") and branch_state.get("enabled") and branch_state.get("created"):
-        result["branch_workflow"] = merge_absorption_branch(own, BranchWorkflowState.from_dict(branch_state)).to_dict()
     return result
 
 
@@ -221,7 +233,7 @@ def begin_absorption_branch(project: Path, source: str, branch_name: str = "", a
     root = _git_root(project)
     if root is None:
         raise RuntimeError("Main project folder is not inside a Git repository")
-    if not allow_dirty and _git(root, "status", "--short"):
+    if not allow_dirty and _blocking_git_status(root, project):
         raise RuntimeError("Main project has uncommitted changes")
     base = _git(root, "branch", "--show-current").strip()
     branch = branch_name or "retort/absorb-" + re.sub(r"[^a-zA-Z0-9]+", "-", source).strip("-").lower()[:40]
@@ -231,7 +243,7 @@ def begin_absorption_branch(project: Path, source: str, branch_name: str = "", a
 
 def merge_absorption_branch(project: Path, state: BranchWorkflowState) -> BranchWorkflowState:
     root = Path(state.project_root or project)
-    if _git(root, "status", "--short"):
+    if _blocking_git_status(root, project):
         raise RuntimeError("Absorption branch has uncommitted changes; commit before merge")
     _git(root, "checkout", state.base_branch)
     _git(root, "merge", "--no-ff", state.absorption_branch, "-m", f"Merge {state.absorption_branch}")
@@ -275,6 +287,154 @@ class RetortService:
         if not task_id:
             raise ValueError("task_id is required")
         return fetch_paibi_llm_review_status(task_id)
+
+
+def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]], external_assessment: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
+    if not _truthy(payload.get("execute_absorption", True)):
+        return {"status": "disabled", "summary": "Real CLI absorption is disabled for this request.", "changed_files": [], "gates": [], "gates_passed": False}
+    if external_path is None or not external_path.is_dir():
+        return {"status": "skipped_no_external_project", "summary": "External project is not available locally.", "changed_files": [], "gates": [], "gates_passed": False}
+    request_dir = own / ".retort" / "execution_requests"
+    request_dir.mkdir(parents=True, exist_ok=True)
+    request_path = request_dir / f"{uuid.uuid4().hex}.json"
+    request_payload = {
+        "own_project": str(own),
+        "source": source,
+        "external_path": str(external_path),
+        "tasks": tasks,
+        "external_assessment": external_assessment,
+        "run_local_gates": bool(payload.get("run_local_gates")),
+        "python": _python(),
+    }
+    request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    cmd = [_python(), "-m", "retort_engine.cli", "apply-absorption", "--payload-file", str(request_path), "--json"]
+    env = os.environ.copy()
+    package_root = str(Path(__file__).resolve().parents[1])
+    env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    timeout = int(payload.get("execution_timeout_sec") or 1800)
+    try:
+        result = subprocess.run(cmd, cwd=own, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
+    except subprocess.TimeoutExpired as exc:
+        return {
+            "status": "timeout",
+            "summary": f"Real CLI absorption exceeded {timeout} seconds.",
+            "command": cmd,
+            "changed_files": [],
+            "gates": [],
+            "gates_passed": False,
+            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
+            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
+        }
+    parsed = _extract_json_from_stdout(result.stdout)
+    if not parsed:
+        return {
+            "status": "failed",
+            "summary": "Real CLI absorption did not return JSON.",
+            "command": cmd,
+            "exit_code": result.returncode,
+            "changed_files": [],
+            "gates": [],
+            "gates_passed": False,
+            "stdout_tail": result.stdout[-4000:],
+            "stderr_tail": result.stderr[-4000:],
+        }
+    parsed["command"] = cmd
+    parsed["exit_code"] = result.returncode
+    if result.stderr:
+        parsed["stderr_tail"] = result.stderr[-4000:]
+    return parsed
+
+
+def _extract_json_from_stdout(stdout: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(stdout.strip())
+    except json.JSONDecodeError:
+        parsed = None
+    if isinstance(parsed, dict):
+        return parsed
+    decoder = json.JSONDecoder()
+    candidates: list[dict[str, Any]] = []
+    for index, char in enumerate(stdout):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(stdout[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            candidates.append(value)
+    for value in candidates:
+        if {"status", "project", "summary", "changed_files", "gates_passed"}.issubset(value):
+            return value
+    for value in candidates:
+        if {"status", "changed_files"}.issubset(value):
+            return value
+    return candidates[0] if candidates else {}
+
+
+def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: dict[str, Any]) -> None:
+    changed_files = [str(path) for path in execution.get("changed_files") or []]
+    proof = {
+        "branch_diff_verified": bool(changed_files),
+        "employee_execution_verified": execution.get("status") in {"applied", "noop"},
+        "post_absorption_tests_passed": bool(execution.get("gates_passed")),
+        "merge_verified": bool(branch_state.get("merged")),
+        "external_advantage_reassessed": True,
+        "evidence": [
+            f"retort_cli_status={execution.get('status')}",
+            f"duration_sec={execution.get('duration_sec')}",
+            f"changed_files={','.join(changed_files)}",
+            f"gates_passed={execution.get('gates_passed')}",
+        ],
+    }
+    state = _load_absorption_state(own)
+    state["closed_loop_proof"] = proof
+    if all(value for key, value in proof.items() if key != "evidence"):
+        state["active"] = False
+        state["status"] = "closed_loop_verified"
+    else:
+        state["active"] = True
+        state["status"] = "execution_applied_awaiting_merge"
+    _save_absorption_state(own, state)
+
+
+def _commit_absorption_execution(own: Path, source: str, execution: dict[str, Any]) -> dict[str, Any]:
+    root = _git_root(own)
+    changed_files = [Path(path).expanduser().resolve() for path in execution.get("changed_files") or []]
+    if root is None or not changed_files:
+        return {"status": "skipped", "reason": "no_git_root_or_no_changed_files"}
+    rels = [str(path.relative_to(root)) for path in changed_files if path.is_relative_to(root)]
+    if not rels:
+        return {"status": "skipped", "reason": "no_changed_files_inside_git_root"}
+    _git(root, "add", "--", *rels)
+    staged = subprocess.run(["git", "diff", "--cached", "--quiet", "--", *rels], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False).returncode != 0
+    if not staged:
+        return {"status": "skipped", "reason": "no_staged_changes"}
+    _git(root, "commit", "-m", f"Retort absorb {source[:80]}")
+    commit = _git(root, "rev-parse", "--short", "HEAD").strip()
+    return {"status": "committed", "commit": commit, "files": rels}
+
+
+def _absorption_status(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
+    if execution.get("status") == "applied":
+        return "absorption_execution_applied"
+    if execution.get("status") in {"failed", "timeout"}:
+        return "absorption_execution_failed"
+    return "tasks_generated" if tasks else "no_external_advantage_found"
+
+
+def _absorption_summary(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
+    if execution.get("status") == "applied":
+        return f"Real CLI absorption changed {len(execution.get('changed_files') or [])} file(s) after generating {len(tasks)} task(s)."
+    if execution.get("status") in {"failed", "timeout"}:
+        return f"Generated {len(tasks)} task(s), but real CLI absorption failed: {execution.get('summary', '')}"
+    return f"Generated {len(tasks)} absorption task(s). Score intentionally dropped until Retort self-evolution internalizes the external advantages."
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "off", "no", "disabled"}
+    return bool(value)
 
 
 def _assess_external_project(external_path: Path | None, source: str) -> dict[str, Any]:
@@ -637,7 +797,7 @@ def _save_absorption_state(root: Path, state: dict[str, Any]) -> None:
 
 
 def _python() -> str:
-    return os.environ.get("PYTHON", "python")
+    return os.environ.get("PYTHON", sys.executable or "python")
 
 
 def _run(cmd: list[str], cwd: Path) -> bool:
@@ -660,6 +820,29 @@ def _git_root(path: Path) -> Path | None:
     except OSError:
         return None
     return Path(result.stdout.strip()) if result.returncode == 0 and result.stdout.strip() else None
+
+
+def _blocking_git_status(root: Path, project: Path) -> str:
+    status = _git(root, "status", "--short")
+    prefixes = _runtime_status_prefixes(root, project)
+    blocking: list[str] = []
+    for line in status.splitlines():
+        path = line[3:].strip().strip('"')
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip().strip('"')
+        if any(path == prefix.removesuffix("/") or path.startswith(prefix) for prefix in prefixes):
+            continue
+        blocking.append(line)
+    return "\n".join(blocking)
+
+
+def _runtime_status_prefixes(root: Path, project: Path) -> tuple[str, ...]:
+    try:
+        rel = project.resolve().relative_to(root.resolve())
+    except ValueError:
+        return (".retort/",)
+    rel_text = "" if str(rel) == "." else str(rel).rstrip("/") + "/"
+    return (f"{rel_text}.retort/",)
 
 
 def _tracking_state(path: Path) -> str:

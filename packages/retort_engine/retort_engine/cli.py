@@ -5,6 +5,7 @@ import json
 import sys
 
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, absorb, assess_project, record_closed_loop_proof
+from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import run_ui_server
 
 
@@ -38,7 +39,12 @@ def main(argv: list[str] | None = None) -> int:
     absorb_cmd.add_argument("--allow-dirty-branch", action="store_true")
     absorb_cmd.add_argument("--refresh", action="store_true")
     absorb_cmd.add_argument("--use-llm", action="store_true")
+    absorb_cmd.add_argument("--no-execute-absorption", action="store_true")
+    absorb_cmd.add_argument("--execution-timeout-sec", type=int, default=1800)
     absorb_cmd.add_argument("--json", action="store_true")
+    apply_absorb = sub.add_parser("apply-absorption")
+    apply_absorb.add_argument("--payload-file", required=True)
+    apply_absorb.add_argument("--json", action="store_true")
     llm = sub.add_parser("llm-review")
     llm.add_argument("--project", default=".")
     llm.add_argument("--mode", default="manual")
@@ -82,9 +88,15 @@ def main(argv: list[str] | None = None) -> int:
             print(_format_scores("Final scores", result["final_assessment"]["scores"]))
         return 0 if result["status"] == "converged" else 1
     if args.command == "absorb":
-        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm})
+        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort absorption status: {result['status']}")
         return 0
+    if args.command == "apply-absorption":
+        with open(args.payload_file, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        result = apply_real_absorption(payload)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort apply absorption status: {result['status']}")
+        return 0 if result["status"] in {"applied", "noop"} and result.get("gates_passed") else 1
     if args.command == "llm-review":
         result = RetortService().llm_review({"project": args.project, "mode": args.mode, "github_url": args.github, "external_path": args.external_path, "run_local_gates": args.run_local_gates})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort LLM review status: {result['status']}")
