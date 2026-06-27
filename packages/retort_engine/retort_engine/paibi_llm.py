@@ -63,6 +63,7 @@ def request_paibi_llm_review(
     tasks: list[dict[str, Any]] | None = None,
     evidence: list[str] | None = None,
     metadata: dict[str, Any] | None = None,
+    record: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     prompt = build_retort_paibi_prompt(
@@ -84,8 +85,29 @@ def request_paibi_llm_review(
         "dispatch": result,
         "status": result.get("status", "unknown"),
     }
-    _record_llm_review(root, payload)
+    if record:
+        _record_llm_review(root, payload)
     return payload
+
+
+def record_paibi_llm_deep_result(*, project: str | Path, mode: str, review: dict[str, Any], status: dict[str, Any]) -> None:
+    if not status.get("scores"):
+        return
+    root = Path(project).expanduser().resolve()
+    dispatch = review.get("dispatch") if isinstance(review.get("dispatch"), dict) else {}
+    _record_llm_review(
+        root,
+        {
+            "provider": "paibi",
+            "mode": mode,
+            "record_type": "deep_score",
+            "status": status.get("status", "completed"),
+            "task_id": status.get("task_id") or dispatch.get("task_id"),
+            "scores": status.get("scores", []),
+            "json_result": status.get("json_result") or {},
+            "dispatch": dispatch,
+        },
+    )
 
 
 DEFAULT_PARALLEL_PANELS = (
@@ -118,6 +140,7 @@ def request_paibi_parallel_review(
     metadata: dict[str, Any] | None = None,
     panels: list[dict[str, Any]] | None = None,
     max_parallel: int = 3,
+    record: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     selected = list(panels or DEFAULT_PARALLEL_PANELS)[: max(1, min(8, int(max_parallel or 3)))]
@@ -154,7 +177,8 @@ def request_paibi_parallel_review(
         "panels": [{"panel_id": item["panel_id"], "title": item["title"]} for item in prompts],
         "dispatch": dispatch,
     }
-    _record_llm_review(root, payload)
+    if record:
+        _record_llm_review(root, payload)
     return payload
 
 
@@ -252,7 +276,7 @@ report_only=true
 评分提示词：
 {RETORT_LLM_SCORING_RUBRIC}
 
-本地规则分：故意不提供，避免锚定。你只能按证据、diff、本提示词评分。
+本地不提供任何分数，避免锚定。你只能按证据、diff、本提示词评分。
 
 当前 Retort 任务：
 {task_lines}

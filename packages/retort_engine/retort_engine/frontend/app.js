@@ -1,7 +1,24 @@
 const $ = id => document.getElementById(id);
 const canvas = $("blackholeCanvas");
 const ctx = canvas.getContext("2d");
-const state = {mode: "github", running: false, tasks: [], llmTaskId: "", llmParallel: false, absorption: null, events: []};
+const state = {
+  mode: "github",
+  running: false,
+  tasks: [],
+  llmTaskId: "",
+  llmParallel: false,
+  absorption: null,
+  events: [],
+  progress: {timer: 0, active: false, started: 0, duration: 0, percent: 0, phase: "evidence", title: "等待深评"}
+};
+const DEEP_REVIEW_WAIT_SECONDS = 240;
+const progressPlan = [
+  {key: "evidence", title: "证据采集", detail: "读取项目与门禁证据"},
+  {key: "dispatch", title: "派发排比", detail: "等待排比 LLM 接收任务"},
+  {key: "reasoning", title: "深度推理", detail: "等待排比 LLM 对证据打分"},
+  {key: "scoring", title: "校准评分", detail: "要求返回结构化分数"},
+  {key: "record", title: "保留记录", detail: "只保存完成的深评结果"}
+];
 
 const dimensionText = {
   product_level: "项目水平",
@@ -77,6 +94,103 @@ function setRunning(running, text) {
   }
 }
 
+function formatDuration(seconds) {
+  const safe = Math.max(0, Math.floor(Number(seconds) || 0));
+  const minutes = Math.floor(safe / 60);
+  const rest = safe % 60;
+  return minutes ? `${minutes}:${String(rest).padStart(2, "0")}` : `${rest}s`;
+}
+
+function stopProgressTimer() {
+  if (!state.progress.timer) return;
+  clearInterval(state.progress.timer);
+  state.progress.timer = 0;
+}
+
+function progressPhase(ratio) {
+  if (ratio < .12) return "evidence";
+  if (ratio < .24) return "dispatch";
+  if (ratio < .78) return "reasoning";
+  if (ratio < .94) return "scoring";
+  return "record";
+}
+
+function progressMeta(key) {
+  return progressPlan.find(item => item.key === key) || progressPlan[0];
+}
+
+function renderProgress(percent, title, phaseKey, elapsed, detail, mode) {
+  const root = $("deepProgress");
+  if (!root) return;
+  const safePercent = clamp(Number(percent) || 0, 0, 100);
+  root.className = `deep-progress ${mode}`;
+  root.style.setProperty("--progress", `${safePercent}%`);
+  $("progressTitle").textContent = title;
+  $("progressPercent").textContent = mode === "running" ? `估算 ${Math.round(safePercent)}%` : mode === "fail" ? "未完成" : `${Math.round(safePercent)}%`;
+  $("progressElapsed").textContent = `耗时 ${formatDuration(elapsed)}`;
+  $("progressEta").textContent = detail;
+  const phaseIndex = Math.max(0, progressPlan.findIndex(item => item.key === phaseKey));
+  document.querySelectorAll("#progressSteps span").forEach((step, index) => {
+    step.className = "";
+    if (mode === "done") step.classList.add("done");
+    else if (mode !== "idle" && index < phaseIndex) step.classList.add("done");
+    else if (mode !== "idle" && index === phaseIndex) step.classList.add("active");
+  });
+}
+
+function updateProgress() {
+  if (!state.progress.active) return;
+  const elapsed = (performance.now() - state.progress.started) / 1000;
+  const duration = Math.max(10, Number(state.progress.duration) || DEEP_REVIEW_WAIT_SECONDS);
+  const ratio = clamp(elapsed / duration, 0, 1);
+  const phaseKey = progressPhase(ratio);
+  const phase = progressMeta(phaseKey);
+  const estimated = clamp(4 + ease(clamp(ratio, 0, .96)) * 88, 4, 92);
+  state.progress.percent = estimated;
+  state.progress.phase = phaseKey;
+  const remaining = Math.max(0, duration - elapsed);
+  const detail = remaining > 0 ? `${phase.detail} · 剩余上限 ${formatDuration(remaining)}` : `${phase.detail} · 等待排比返回`;
+  renderProgress(estimated, `${state.progress.title} · ${phase.title}`, phaseKey, elapsed, detail, "running");
+}
+
+function beginProgress(title, seconds = DEEP_REVIEW_WAIT_SECONDS) {
+  stopProgressTimer();
+  state.progress.active = true;
+  state.progress.started = performance.now();
+  state.progress.duration = Math.max(10, Number(seconds) || DEEP_REVIEW_WAIT_SECONDS);
+  state.progress.percent = 4;
+  state.progress.phase = "evidence";
+  state.progress.title = title;
+  renderProgress(4, `${title} · 证据采集`, "evidence", 0, "读取项目与门禁证据", "running");
+  state.progress.timer = setInterval(updateProgress, 250);
+}
+
+function completeProgress(title = "深评完成") {
+  const elapsed = state.progress.started ? (performance.now() - state.progress.started) / 1000 : 0;
+  stopProgressTimer();
+  state.progress.active = false;
+  state.progress.percent = 100;
+  state.progress.phase = "record";
+  renderProgress(100, title, "record", elapsed, "排比 LLM 深评已返回，记录已保留", "done");
+}
+
+function failProgress(message) {
+  const elapsed = state.progress.started ? (performance.now() - state.progress.started) / 1000 : 0;
+  const percent = state.progress.percent || 0;
+  const phase = state.progress.phase || "evidence";
+  stopProgressTimer();
+  state.progress.active = false;
+  renderProgress(percent, "深评阻断", phase, elapsed, `未完成，不保留评分：${message}`, "fail");
+}
+
+function resetProgress() {
+  stopProgressTimer();
+  state.progress.active = false;
+  state.progress.percent = 0;
+  state.progress.phase = "evidence";
+  renderProgress(0, "等待深评", "evidence", 0, "点击深评后开始", "idle");
+}
+
 function pushEvent(title, detail = "", level = "info") {
   state.events.unshift({title, detail, level, at: new Date().toLocaleTimeString("zh-CN", {hour12: false})});
   state.events = state.events.slice(0, 8);
@@ -117,7 +231,9 @@ function body() {
     branch_workflow: $("branchWorkflow").checked,
     merge_after: $("mergeAfter").checked,
     run_local_gates: $("runGates").checked,
-    use_llm: $("useLlm").checked,
+    use_llm: true,
+    wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS,
+    require_deep_review: true,
     execute_absorption: true,
     execution_timeout_sec: 1800,
     employee_queue: `${own}/.retort/employee_queue.jsonl`,
@@ -142,6 +258,16 @@ function scoreValue(assessment, fallback) {
     if (item) return Number(item.value);
   }
   return fallback;
+}
+
+function scoreSource(assessment) {
+  return String(assessment?.metadata?.score_source || "");
+}
+
+function assertDeepAssessment(assessment) {
+  if (scoreSource(assessment) === "paibi_llm") return;
+  const status = assessment?.llm_review_status?.status || assessment?.llm_review?.dispatch?.status || assessment?.llm_review?.status || "未完成";
+  throw new Error(`排比 LLM 深评${status}，本次评分不保留`);
 }
 
 function fileCountFrom(assessment) {
@@ -311,14 +437,24 @@ function tasks(list) {
   }
 }
 
-function llm(review) {
+function llm(review, status = null, assessment = null) {
   if (!review || review.enabled === false) {
-    $("llmState").textContent = "排比 LLM 未启用";
+    $("llmState").textContent = "排比 LLM 深评未完成，本次不保留评分";
     return;
   }
   const d = review.dispatch || review;
   if (d.task_id) state.llmTaskId = d.task_id;
   state.llmParallel = Boolean(review.parallel);
+  if (scoreSource(assessment) === "paibi_llm") {
+    const taskId = assessment?.metadata?.llm_task_id || status?.task_id || d.task_id || "";
+    const level = status?.json_result?.level ? ` · ${status.json_result.level}` : "";
+    $("llmState").textContent = `排比 LLM 深评完成${taskId ? `：${taskId}` : ""}${level}`;
+    return;
+  }
+  if (status?.status) {
+    $("llmState").textContent = `排比 LLM ${status.status}，未返回深评分；本次不保留评分`;
+    return;
+  }
   const prefix = state.llmParallel ? `已派发并发排比 ${d.subtask_count || review.panels?.length || 0} 个面板` : "已派发排比任务";
   $("llmState").textContent = d.status === "accepted" ? `${prefix}：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
   pushEvent("排比任务", d.task_id || d.reason || d.status || "已记录", d.status === "accepted" ? "ok" : "warn");
@@ -354,19 +490,23 @@ function executionState(execution) {
 }
 
 async function assess() {
-  setRunning(true, "评估中");
-  pushEvent("开始评估", shortPath($("ownProjectFolder").value.trim()));
+  setRunning(true, "排比 LLM 深评中");
+  beginProgress("排比 LLM 深评", DEEP_REVIEW_WAIT_SECONDS);
+  pushEvent("开始深评", shortPath($("ownProjectFolder").value.trim()));
   try {
-    const r = await api("/api/assess", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: $("useLlm").checked});
+    const r = await api("/api/assess", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
+    llm(r.llm_review, r.llm_review_status, r);
+    assertDeepAssessment(r);
     scores(r.scores);
     capabilityAudit(r);
-    llm(r.llm_review);
-    $("statusText").textContent = "已评估";
-    pushEvent("评估完成", `核心分 ${Math.round(scoreValue(r, 0))}`, "ok");
+    completeProgress("深评完成");
+    $("statusText").textContent = "深评完成";
+    pushEvent("深评完成", `排比 LLM 核心分 ${Math.round(scoreValue(r, 0))}`, "ok");
   } catch (e) {
+    failProgress(e.message);
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
-    pushEvent("评估失败", e.message, "bad");
+    pushEvent("深评失败", e.message, "bad");
   } finally {
     setRunning(false);
   }
@@ -402,21 +542,25 @@ async function absorb() {
 }
 
 async function evolve() {
-  setRunning(true, "反问中");
-  pushEvent("开始反问", "无限反问评分弱项");
+  setRunning(true, "排比 LLM 反问深评中");
+  beginProgress("反问 LLM 深评", DEEP_REVIEW_WAIT_SECONDS);
+  pushEvent("开始反问深评", "无限反问评分弱项");
   try {
-    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, max_rounds: 8, use_llm: $("useLlm").checked});
+    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, max_rounds: 8, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
+    llm(r.final_assessment?.llm_review || r.llm_review, r.final_assessment?.llm_review_status, r.final_assessment);
+    assertDeepAssessment(r.final_assessment);
     scores(r.final_assessment.scores);
     capabilityAudit(r.final_assessment);
     tasks(r.tasks || []);
-    llm(r.final_assessment?.llm_review || r.llm_review);
+    completeProgress("反问深评完成");
     $("branchState").textContent = `${labelOf(r.status)}：${labelOf(r.stop_reason)}`;
     $("statusText").textContent = "已反问";
-    pushEvent("反问完成", `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`, r.status === "converged" ? "ok" : "warn");
+    pushEvent("反问深评完成", `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`, r.status === "converged" ? "ok" : "warn");
   } catch (e) {
+    failProgress(e.message);
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
-    pushEvent("反问失败", e.message, "bad");
+    pushEvent("反问深评失败", e.message, "bad");
   } finally {
     setRunning(false);
   }
@@ -736,6 +880,7 @@ async function loadDefaultProject() {
   }
 }
 
+resetProgress();
 externalScores(null);
 loadDefaultProject();
 draw();

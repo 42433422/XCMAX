@@ -2,21 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
+from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.absorption import run_absorption
-from retort_engine.evaluators import StaticProjectEvaluator
 from retort_engine.feedback import feedback_ingest
-from retort_engine.self_evolution import RetortSelfEvolutionRunner
 
 
 class RetortService:
+    def __init__(self) -> None:
+        self.llm_service = LLMRetortService()
+
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return StaticProjectEvaluator().evaluate(_state_from_payload(payload)).to_dict()
+        return self.llm_service.assess(payload)
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
-        threshold = float(payload.get("threshold") or 90.0)
-        max_rounds_raw = payload.get("max_rounds", 8)
-        max_rounds = None if max_rounds_raw in (None, 0, "0") else int(max_rounds_raw)
-        return RetortSelfEvolutionRunner(StaticProjectEvaluator(), threshold=threshold, max_rounds=max_rounds).run(_state_from_payload(payload)).to_dict()
+        return self.llm_service.self_evolve(payload)
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_absorption(
@@ -67,15 +66,3 @@ def create_app() -> Any:
         return service.absorb(payload)
 
     return app
-
-
-def _state_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    project = payload.get("project_path") or payload.get("project") or "."
-    context_policy = str(payload.get("context_policy") or "isolated")
-    state: dict[str, Any] = {"project_path": str(project), "context_policy": context_policy, "run_local_gates": bool(payload.get("run_local_gates"))}
-    if context_policy == "provided":
-        state["prompt"] = str(payload.get("prompt") or "")
-        state["allow_dirty"] = bool(payload.get("allow_dirty"))
-        if "gate_results" in payload:
-            state["gate_results"] = payload["gate_results"]
-    return state

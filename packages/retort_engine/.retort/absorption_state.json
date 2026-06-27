@@ -1,28 +1,38 @@
 {
   "active": true,
-  "external_path": "/private/tmp/retort-planet-demo",
-  "penalties": {
-    "absorption_tasking": 6.0,
-    "calibrated_overall": 8.0,
-    "comparative_analysis_depth": 8.0,
-    "external_ingestion": 6.0,
-    "feedback_loop_closure": 4.0,
-    "product_level": 4.0,
-    "product_operability": 4.0,
-    "retort_product_maturity": 7.0
+  "closed_loop_proof": {
+    "branch_diff_verified": true,
+    "employee_execution_verified": true,
+    "evidence": [
+      "retort_cli_status=applied",
+      "duration_sec=6.107",
+      "changed_files=/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py,/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_external_review_report.json",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  43 ++++ |  .../docs/retort_external_review_report.json        | 233 ++++++++++++++------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  5 files changed, 204 insertions(+), 78 deletions(-)",
+      "gates_passed=True",
+      "review_report=/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/docs/retort_external_review_report.json",
+      "employee_results=/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/employee_results/20260627124115-4307b75ba4.json",
+      "commit=",
+      "merge_commit=",
+      "rollback_rehearsal=False",
+      "feedback_audit_closed=True",
+      "history_result_count=19",
+      "queue_records_written=7",
+      "result_tasks_have_queue_records=True"
+    ],
+    "external_advantage_reassessed": true,
+    "merge_verified": false,
+    "post_absorption_tests_passed": true
   },
+  "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/sourcefuse/ai-pr-reviewer",
   "pending_dimensions": [
-    "absorption_tasking",
-    "calibrated_overall",
     "comparative_analysis_depth",
     "external_ingestion",
     "feedback_loop_closure",
-    "product_level",
-    "product_operability",
-    "retort_product_maturity"
+    "operational_readiness",
+    "product_operability"
   ],
-  "source": "/tmp/retort-planet-demo",
-  "status": "pending_self_evolution",
+  "source": "https://github.com/sourcefuse/ai-pr-reviewer",
+  "status": "execution_applied_awaiting_merge",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -30,7 +40,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from /tmp/retort-planet-demo."
+      "why": "Compare implementation patterns from https://github.com/sourcefuse/ai-pr-reviewer."
     },
     {
       "dimension": "product_operability",
@@ -38,7 +48,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from /tmp/retort-planet-demo."
+      "why": "Extract usable UX improvements from https://github.com/sourcefuse/ai-pr-reviewer."
     },
     {
       "dimension": "operational_readiness",
@@ -46,7 +56,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from /tmp/retort-planet-demo."
+      "why": "Adapt CI and release checks from https://github.com/sourcefuse/ai-pr-reviewer."
     },
     {
       "dimension": "comparative_analysis_depth",

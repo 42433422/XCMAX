@@ -5,7 +5,7 @@ from pathlib import Path
 from retort_engine.absorption import run_absorption
 from retort_engine.models import ExternalProjectRef
 from retort_engine.sources import parse_github_url, resolve_external_project
-from tests.test_static_evaluator import create_focused_tool_package, create_incomplete_package
+from tests.test_evidence_evaluator import create_focused_tool_package, create_incomplete_package
 
 
 def test_parse_github_url_owner_repo_and_tree_ref() -> None:

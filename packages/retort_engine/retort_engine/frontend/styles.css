@@ -1,1 +1,466 @@
-*{box-sizing:border-box}body{margin:0;background:#05070b;color:#f4f7fb;font:14px/1.4 system-ui,sans-serif;overflow:hidden}.shell{display:grid;grid-template-columns:minmax(260px,300px) minmax(420px,1fr) minmax(320px,380px);gap:16px;height:100vh;padding:16px}.rail{background:rgba(12,17,24,.9);border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:16px;display:flex;flex-direction:column;gap:12px;overflow:auto}h1{font-size:22px;margin:0 0 8px}h2{font-size:14px;margin:0 0 10px}label{display:grid;gap:7px;color:#9aa8b7;font-size:12px}input,button{min-height:40px;border-radius:8px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:#f4f7fb;padding:0 12px}button{font-weight:700;cursor:pointer}button:disabled{opacity:.48;cursor:wait}.primary{background:linear-gradient(135deg,#f4b860,#67d4ff);color:#071018;border:0}.mode,.checks{display:grid;grid-template-columns:1fr 1fr;gap:8px}.checks{grid-template-columns:repeat(2,1fr)}.checks label{display:flex;align-items:center;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:0 8px}.checks input{min-height:auto}.active{background:rgba(103,212,255,.22)}.stage{position:relative;border:1px solid rgba(120,190,255,.18);border-radius:8px;overflow:hidden;background:radial-gradient(circle at 55% 47%,#111a2b 0,#05070d 52%,#020306 100%);box-shadow:inset 0 0 90px rgba(23,96,142,.26),0 18px 52px rgba(0,0,0,.36)}.stage:before{content:"";position:absolute;inset:0;background:linear-gradient(120deg,rgba(255,255,255,.06),rgba(255,255,255,0) 22%,rgba(255,184,82,.05) 54%,rgba(78,226,138,.05));pointer-events:none}.stage:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025) 0,rgba(255,255,255,.025) 1px,transparent 1px,transparent 4px);mix-blend-mode:screen;opacity:.2;pointer-events:none}canvas{display:block;width:100%;height:100%}.readout{position:absolute;left:22px;bottom:22px;display:grid;gap:0;text-shadow:0 0 18px #000;padding:10px 13px;border:1px solid rgba(255,255,255,.16);border-radius:8px;background:rgba(3,7,12,.58);backdrop-filter:blur(8px)}.readout strong{font-size:42px;line-height:1}.readout small,.readout span{color:#aebdca}.timeline{position:absolute;right:18px;top:18px;width:min(360px,42%);display:grid;gap:7px;pointer-events:none}.event{display:grid;grid-template-columns:58px 90px 1fr;gap:8px;align-items:center;padding:8px 10px;border:1px solid rgba(255,255,255,.14);border-radius:8px;background:rgba(3,7,12,.62);backdrop-filter:blur(8px)}.event span,.event em{color:#aebdca;font-size:12px;font-style:normal;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.event b{font-size:12px}.event.ok{border-color:rgba(78,226,138,.36)}.event.warn{border-color:rgba(244,184,96,.42)}.event.bad{border-color:rgba(255,107,107,.48)}article{border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:14px;background:rgba(255,255,255,.04)}.row{display:grid;grid-template-columns:1fr 48px;gap:8px;margin:8px 0}.meter{grid-column:1/-1;height:6px;border-radius:99px;background:rgba(255,255,255,.1);overflow:hidden}.meter i{display:block;height:100%;width:var(--w);background:linear-gradient(90deg,#ff6b6b,#f4b860,#4ee28a)}.task{border:1px solid rgba(255,255,255,.13);border-radius:8px;padding:10px;margin:8px 0}.evidence{display:grid;gap:8px;color:#dbeafe}.kv{display:grid;grid-template-columns:88px minmax(0,1fr);gap:8px;align-items:start}.kv span,.empty,.mini{color:#9aa8b7;font-size:12px}.kv b{font-size:12px;word-break:break-word}.filelist,.gates{display:flex;flex-wrap:wrap;gap:6px}.filelist code,.gates span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border:1px solid rgba(255,255,255,.12);border-radius:7px;padding:5px 7px;background:rgba(255,255,255,.05);font:12px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace}.gates .ok{border-color:rgba(78,226,138,.42);color:#9af2bc}.gates .bad{border-color:rgba(255,107,107,.5);color:#ffb0b0}.mini{border-top:1px solid rgba(255,255,255,.1);margin-top:10px;padding-top:9px}.hidden{display:none}@media(max-width:980px){body{overflow:auto}.shell{height:auto;grid-template-columns:1fr}.stage{min-height:460px}.readout{left:16px;bottom:16px}.timeline{position:absolute;left:16px;right:16px;top:16px;width:auto}.event{grid-template-columns:54px 82px 1fr}}
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #05070b;
+  color: #f4f7fb;
+  font: 14px/1.4 system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(420px, 1fr) minmax(320px, 380px);
+  gap: 16px;
+  height: 100vh;
+  padding: 16px;
+}
+
+.rail {
+  background: rgba(12, 17, 24, .9);
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+h2 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #9aa8b7;
+  font-size: 12px;
+}
+
+input,
+button {
+  min-height: 40px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  background: rgba(255, 255, 255, .07);
+  color: #f4f7fb;
+  padding: 0 12px;
+}
+
+button {
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: .48;
+  cursor: wait;
+}
+
+.primary {
+  background: linear-gradient(135deg, #f4b860, #67d4ff);
+  color: #071018;
+  border: 0;
+}
+
+.mode,
+.checks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.checks {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.checks label {
+  display: flex;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  padding: 0 8px;
+}
+
+.checks input {
+  min-height: auto;
+}
+
+.active {
+  background: rgba(103, 212, 255, .22);
+}
+
+.stage {
+  position: relative;
+  border: 1px solid rgba(120, 190, 255, .18);
+  border-radius: 8px;
+  overflow: hidden;
+  background: radial-gradient(circle at 55% 47%, #111a2b 0, #05070d 52%, #020306 100%);
+  box-shadow: inset 0 0 90px rgba(23, 96, 142, .26), 0 18px 52px rgba(0, 0, 0, .36);
+}
+
+.stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, 0) 22%, rgba(255, 184, 82, .05) 54%, rgba(78, 226, 138, .05));
+  pointer-events: none;
+}
+
+.stage::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, .025) 0, rgba(255, 255, 255, .025) 1px, transparent 1px, transparent 4px);
+  mix-blend-mode: screen;
+  opacity: .2;
+  pointer-events: none;
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.readout {
+  position: absolute;
+  left: 22px;
+  bottom: 22px;
+  width: min(430px, calc(100% - 44px));
+  display: grid;
+  gap: 2px;
+  text-shadow: 0 0 18px #000;
+  padding: 12px 13px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 8px;
+  background: rgba(3, 7, 12, .68);
+  backdrop-filter: blur(10px);
+  z-index: 2;
+}
+
+.readout > strong {
+  font-size: 40px;
+  line-height: 1;
+}
+
+.readout small,
+.readout > span {
+  color: #aebdca;
+}
+
+.deep-progress {
+  --progress: 0%;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 10px;
+}
+
+.progress-head,
+.progress-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.progress-head b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.progress-head strong {
+  flex: 0 0 auto;
+  color: #d9f7ff;
+  font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.progress-track {
+  height: 10px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, .08);
+  box-shadow: inset 0 0 18px rgba(0, 0, 0, .46);
+}
+
+.progress-track i {
+  position: relative;
+  display: block;
+  width: var(--progress);
+  min-width: 0;
+  max-width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #67d4ff, #f4b860 58%, #4ee28a);
+  box-shadow: 0 0 14px rgba(103, 212, 255, .38);
+  transition: width .28s ease;
+}
+
+.progress-track i::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .52), transparent);
+  transform: translateX(-100%);
+}
+
+.deep-progress.running .progress-track i::after {
+  animation: progress-sweep 1.25s linear infinite;
+}
+
+.progress-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.progress-steps span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  padding: 4px 5px;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 7px;
+  color: #7f8d9d;
+  background: rgba(255, 255, 255, .04);
+  font-size: 11px;
+}
+
+.progress-steps span.done {
+  color: #a7f3d0;
+  border-color: rgba(78, 226, 138, .36);
+}
+
+.progress-steps span.active {
+  color: #ffffff;
+  border-color: rgba(244, 184, 96, .5);
+  background: rgba(244, 184, 96, .12);
+}
+
+.progress-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9aa8b7;
+  font-size: 11px;
+}
+
+.deep-progress.idle {
+  opacity: .72;
+}
+
+.deep-progress.done .progress-track i {
+  background: linear-gradient(90deg, #67d4ff, #4ee28a);
+}
+
+.deep-progress.fail .progress-track i {
+  background: linear-gradient(90deg, #ff6b6b, #f4b860);
+}
+
+.timeline {
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  width: min(360px, 42%);
+  display: grid;
+  gap: 7px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.event {
+  display: grid;
+  grid-template-columns: 58px 90px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: rgba(3, 7, 12, .62);
+  backdrop-filter: blur(8px);
+}
+
+.event span,
+.event em {
+  color: #aebdca;
+  font-size: 12px;
+  font-style: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event b {
+  font-size: 12px;
+}
+
+.event.ok {
+  border-color: rgba(78, 226, 138, .36);
+}
+
+.event.warn {
+  border-color: rgba(244, 184, 96, .42);
+}
+
+.event.bad {
+  border-color: rgba(255, 107, 107, .48);
+}
+
+article {
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, .04);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 48px;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.meter {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .1);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  width: var(--w);
+  background: linear-gradient(90deg, #ff6b6b, #f4b860, #4ee28a);
+}
+
+.task {
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 8px;
+  padding: 10px;
+  margin: 8px 0;
+}
+
+.evidence {
+  display: grid;
+  gap: 8px;
+  color: #dbeafe;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.kv span,
+.empty,
+.mini {
+  color: #9aa8b7;
+  font-size: 12px;
+}
+
+.kv b {
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.filelist,
+.gates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.filelist code,
+.gates span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid rgba(255, 255, 255, .12);
+  border-radius: 7px;
+  padding: 5px 7px;
+  background: rgba(255, 255, 255, .05);
+  font: 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.gates .ok {
+  border-color: rgba(78, 226, 138, .42);
+  color: #9af2bc;
+}
+
+.gates .bad {
+  border-color: rgba(255, 107, 107, .5);
+  color: #ffb0b0;
+}
+
+.mini {
+  border-top: 1px solid rgba(255, 255, 255, .1);
+  margin-top: 10px;
+  padding-top: 9px;
+}
+
+.hidden {
+  display: none;
+}
+
+@keyframes progress-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (max-width: 980px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    height: auto;
+    grid-template-columns: 1fr;
+  }
+
+  .stage {
+    min-height: 520px;
+  }
+
+  .readout {
+    left: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: auto;
+  }
+
+  .timeline {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: 16px;
+    width: auto;
+  }
+
+  .event {
+    grid-template-columns: 54px 82px 1fr;
+  }
+}

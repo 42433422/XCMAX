@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 from retort_engine.absorption import run_absorption
-from tests.test_static_evaluator import create_focused_tool_package, create_incomplete_package, write_file
+from tests.test_evidence_evaluator import create_focused_tool_package, create_incomplete_package, write_file
 
 
 def git(cwd: Path, *args: str) -> str:

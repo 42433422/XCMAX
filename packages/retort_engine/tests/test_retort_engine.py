@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, absorb, assess_project, record_closed_loop_proof
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
 from retort_engine.real_absorption import apply_real_absorption
@@ -31,10 +33,10 @@ def test_self_evolution_stays_blocked_without_closed_loop_proof(tmp_path: Path) 
     (project / "README.md").write_text("# project\n", encoding="utf-8")
 
     result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project))
-    scores = {s["dimension"]: s["value"] for s in result["final_assessment"]["scores"]}
     assert result["status"] == "blocked"
-    assert scores["calibrated_overall"] <= 82
-    assert scores["employee_execution_integration"] < 90
+    assert result["stop_reason"] == "llm_deep_review_required"
+    assert result["final_assessment"]["scores"] == []
+    assert result["final_assessment"]["metadata"]["score_authority"] == "paibi_llm_prompt_only"
 
 
 def test_blackhole_ui_assets_exist() -> None:
@@ -42,7 +44,12 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "blackhole" in (root / "app.js").read_text(encoding="utf-8").lower()
     assert "ownProjectFolder" in (root / "index.html").read_text(encoding="utf-8")
     assert "externalProjectFolder" in (root / "index.html").read_text(encoding="utf-8")
-    assert "useLlm" in (root / "index.html").read_text(encoding="utf-8")
+    assert 'id="useLlm" type="checkbox" checked disabled' in (root / "index.html").read_text(encoding="utf-8")
+    assert "wait_llm_sec" in (root / "app.js").read_text(encoding="utf-8")
+    assert "require_deep_review" in (root / "app.js").read_text(encoding="utf-8")
+    assert "beginProgress" in (root / "app.js").read_text(encoding="utf-8")
+    assert "deepProgress" in (root / "index.html").read_text(encoding="utf-8")
+    assert "progressFill" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmReviewBtn" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmParallelBtn" in (root / "index.html").read_text(encoding="utf-8")
     assert "llmStatusBtn" in (root / "index.html").read_text(encoding="utf-8")
@@ -86,9 +93,9 @@ def test_assessment_cannot_exceed_90_without_closed_loop_proof(tmp_path: Path) -
     (project / "README.md").write_text("# project\n", encoding="utf-8")
 
     assessment = assess_project(str(project))
-    scores = assessment.score_map()
-    assert not assessment.all_scores_over(90)
-    assert scores["calibrated_overall"] <= 82
+    assert assessment.scores == ()
+    assert assessment.metadata["score_authority"] == "paibi_llm_prompt_only"
+    assert assessment.metadata["local_scores_removed"] is True
 
 
 def test_real_executor_features_can_converge_after_closed_loop_proof(tmp_path: Path) -> None:
@@ -152,13 +159,12 @@ def test_real_executor_features_can_converge_after_closed_loop_proof(tmp_path: P
     )
 
     result = RetortSelfEvolutionRunner(max_rounds=3).run(str(project), run_local_gates=True)
-    scores = {s["dimension"]: s["value"] for s in result["final_assessment"]["scores"]}
-    assert result["status"] == "converged"
-    assert scores["architecture_depth"] > 90
-    assert scores["employee_execution_integration"] > 90
+    assert result["status"] == "blocked"
+    assert result["stop_reason"] == "llm_deep_review_required"
+    assert result["final_assessment"]["scores"] == []
 
 
-def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Path) -> None:
+def test_absorption_collects_evidence_then_requires_llm_reassessment(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
     own.mkdir()
@@ -169,27 +175,23 @@ def test_absorption_shock_drops_score_then_self_evolution_recovers(tmp_path: Pat
         encoding="utf-8",
     )
 
-    before = assess_project(str(own))
     result = absorb({"own_project": str(own), "external_path": str(external)})
-    after_scores = {score["dimension"]: score["value"] for score in result["own_assessment"]["scores"]}
-    before_scores = before.score_map()
 
     assert result["absorption_state"]["active"] is True
+    assert result["absorption_state"]["status"] in {"pending_llm_reassessment", "execution_applied_awaiting_merge"}
     assert result["external_assessment"]["project"] == str(external.resolve())
-    assert result["external_assessment"]["scores"]
+    assert result["external_assessment"]["scores"] == []
     assert result["absorption_visual"]["external"]["file_count"] == 1
-    assert result["absorption_visual"]["external"]["score"] is not None
-    assert result["absorption_visual"]["own"]["pre_score"] == before_scores["calibrated_overall"]
-    assert after_scores["calibrated_overall"] < before_scores["calibrated_overall"]
-    assert after_scores["calibrated_overall"] <= 90
+    assert result["absorption_visual"]["external"]["score"] is None
+    assert result["own_assessment"]["scores"] == []
 
     evolved = RetortSelfEvolutionRunner(max_rounds=3).run(str(own))
-    final_scores = {score["dimension"]: score["value"] for score in evolved["final_assessment"]["scores"]}
 
     assert evolved["status"] == "blocked"
-    assert final_scores["calibrated_overall"] <= 82
+    assert evolved["stop_reason"] == "llm_deep_review_required"
+    assert evolved["final_assessment"]["scores"] == []
     assert evolved["final_assessment"]["metadata"]["absorption_state"]["active"] is True
-    assert evolved["final_assessment"]["metadata"]["absorption_state"]["status"] == "awaiting_execution_evidence"
+    assert evolved["final_assessment"]["metadata"]["absorption_state"]["status"] in {"pending_llm_reassessment", "execution_applied_awaiting_merge"}
 
 
 def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None:
@@ -292,6 +294,18 @@ def test_paibi_llm_review_writes_outbox_when_disabled(tmp_path: Path, monkeypatc
     assert (project / ".retort" / "paibi_llm_outbox.jsonl").is_file()
 
 
+def test_paibi_llm_review_can_skip_dispatch_record(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("RETORT_PAIBI_API_URL", "disabled")
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+
+    result = request_paibi_llm_review(project=str(project), mode="assess", scores=[{"dimension": "calibrated_overall", "value": 82}], tasks=[], record=False)
+
+    assert result["dispatch"]["status"] == "queued_outbox"
+    assert not (project / ".retort" / "llm_reviews.jsonl").exists()
+
+
 def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     project = tmp_path / "own"
     project.mkdir()
@@ -304,7 +318,7 @@ def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     assert "严格 JSON" in prompt
     assert "证据闭环" in prompt
     assert "能力吸收" in prompt
-    assert "本地规则分：故意不提供" in prompt
+    assert "本地不提供任何分数" in prompt
     assert "capability_absorption_score" in prompt
     assert "吸收 diff 只改报告/日志/absorbed_patterns 时" in prompt
     assert '"scores"' in prompt
@@ -525,10 +539,30 @@ def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, m
     monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
     monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
 
-    result = RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1})
+    result = RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1, "require_deep_review": True})
 
     scores = {item["dimension"]: item["value"] for item in result["scores"]}
+    records = (project / ".retort" / "llm_reviews.jsonl").read_text(encoding="utf-8")
     assert result["metadata"]["score_source"] == "paibi_llm"
-    assert "fallback_rule_scores" not in result["metadata"]
+    assert result["metadata"]["score_authority"] == "paibi_llm_prompt_only"
+    assert '"record_type": "deep_score"' in records
     assert scores["calibrated_overall"] == 79
     assert scores["employee_execution_integration"] == 70
+
+
+def test_service_assess_rejects_local_score_when_deep_review_required(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+
+    def fake_request(**kwargs) -> dict[str, object]:
+        return {"provider": "paibi", "enabled": True, "status": "accepted", "dispatch": {"task_id": "task-pending"}}
+
+    def fake_wait(task_id: str, *, timeout_sec: float, interval_sec: float = 5.0) -> dict[str, object]:
+        return {"provider": "paibi", "task_id": task_id, "status": "running"}
+
+    monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
+    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
+
+    with pytest.raises(RuntimeError, match="deep review did not complete"):
+        RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1, "require_deep_review": True})

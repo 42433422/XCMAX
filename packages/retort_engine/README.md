@@ -4,7 +4,7 @@ Retort is a blackhole-style external evolution engine.
 
 - Main project: local folder.
 - Absorption source: GitHub URL or local folder.
-- Workflow: assess overlap and depth, clone/read the external project, generate absorption tasks, run the real `retort apply-absorption` CLI to change project code, apply an absorption shock, then keep scores capped until full branch/test/merge proof is recorded.
+- Workflow: collect evidence, ask PaiBi LLM to score with the Retort prompt, clone/read the external project, generate absorption tasks, run the real `retort apply-absorption` CLI to change project code, then require another completed PaiBi LLM deep review before any score is shown.
 - UI: dependency-free local blackhole interface.
 
 Run:
@@ -35,7 +35,7 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli appl
   --json
 ```
 
-Retort does not treat self-questioning as completed absorption. Scores stay capped until all proof gates are recorded:
+Retort does not treat self-questioning as completed absorption. Local code no longer produces scores; all scores must come from a completed PaiBi LLM deep review using the Retort prompt:
 
 ```bash
 PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli record-proof \
