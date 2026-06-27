@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.history import RetortHistoryStore
+from retort_engine.license_gate import license_gate
 from retort_engine.models import EmployeeTaskResult
 from retort_engine.review_pipeline import build_absorption_review_report
 
@@ -202,6 +203,7 @@ def _review_report(root: Path, run_id: str, source: str, external_path: Path, ta
         "external_path": str(external_path),
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "external_snapshot": {"git_revision": profile.get("git_revision"), "file_count": profile.get("file_count"), "suffix_counts": profile.get("suffix_counts")},
+        "license_review": license_gate(external_path, enforce=True).to_dict(),
         "absorbed_signals": profile.get("signals", []),
         "signal_evidence": profile.get("signal_evidence", {}),
         "semantic_review": semantic_review,

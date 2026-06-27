@@ -174,6 +174,7 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert report["semantic_review"]["external"]["source_files"] >= 1
     assert report["review_pipeline"]["pipeline_stages"]
     assert report["review_pipeline"]["benchmark"]["minimum_expected_behavior_tests"] >= 3
+    assert report["license_review"]["status"] in {"passed", "blocked"}
     proof = result["absorption_state"]["closed_loop_proof"]["flags"]
     assert proof["branch_diff_verified"] is True
     assert proof["employee_execution_verified"] is True
