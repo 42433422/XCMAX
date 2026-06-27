@@ -20,7 +20,7 @@
       "<none>": 5
     }
   },
-  "generated_at": "2026-06-27T12:41:15Z",
+  "generated_at": "2026-06-27T13:10:26Z",
   "license_review": {
     "detected_license": "The MIT License (MIT)",
     "message": "Allowed license detected: The MIT License (MIT)",
@@ -41,7 +41,7 @@
         "component": "plugin_surface",
         "external_files": 6,
         "file_gap": -6,
-        "marker_gap": 100,
+        "marker_gap": 96,
         "own_files": 12,
         "representative_external_files": [
           "README.md",
@@ -55,7 +55,7 @@
         "component": "provider_surface",
         "external_files": 8,
         "file_gap": -4,
-        "marker_gap": 79,
+        "marker_gap": 78,
         "own_files": 12,
         "representative_external_files": [
           "README.md",
@@ -163,15 +163,15 @@
           "retort_engine/core.py",
           "retort_engine/prompts.py",
           "retort_engine/self_evolution.py",
+          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/evaluators.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
-          "tests/test_self_evolution.py",
-          "tests/test_evidence_evaluator.py"
+          "tests/test_self_evolution.py"
         ],
-        "marker_hits": 165
+        "marker_hits": 178
       },
       "diff_hunk_review": {
         "files": [
@@ -197,7 +197,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 36
+        "marker_hits": 37
       },
       "plugin_surface": {
         "files": [
@@ -214,7 +214,7 @@
           "docs/retort_absorption_log.md",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 122
+        "marker_hits": 126
       },
       "provider_surface": {
         "files": [
@@ -231,24 +231,24 @@
           "retort_engine/semantic_reviewer.py",
           "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 99
+        "marker_hits": 100
       },
       "review_pipeline": {
         "files": [
           "README.md",
           "retort_engine/absorption.py",
+          "retort_engine/service.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
+          "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/cli.py",
           "retort_engine/contracts.py",
           "retort_engine/ui_server.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
-          "retort_engine/real_absorption.py"
+          "retort_engine/absorbed_external_patterns.py"
         ],
-        "marker_hits": 455
+        "marker_hits": 653
       },
       "safety_policy": {
         "files": [
@@ -265,7 +265,7 @@
           "retort_engine/license_gate.py",
           "retort_engine/evaluators.py"
         ],
-        "marker_hits": 143
+        "marker_hits": 136
       },
       "workflow_ci": {
         "files": [
@@ -277,12 +277,12 @@
           "retort_engine/review_pipeline.py",
           "retort_engine/employee_runtime_worker.py",
           "retort_engine/paibi_llm.py",
+          "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/runtime_adapter.py",
-          "retort_engine/cli.py",
-          "retort_engine/contracts.py"
+          "retort_engine/cli.py"
         ],
-        "marker_hits": 1006
+        "marker_hits": 1024
       }
     },
     "pipeline_stages": [
@@ -321,7 +321,7 @@
       }
     ]
   },
-  "run_id": "20260627124115-4307b75ba4",
+  "run_id": "20260627131026-4307b75ba4",
   "semantic_review": {
     "external": {
       "classes": 17,
@@ -334,11 +334,11 @@
     "gaps": [],
     "own": {
       "classes": 46,
-      "cli_markers": 15,
-      "functions": 416,
-      "source_files": 44,
-      "test_markers": 134,
-      "workflow_markers": 642
+      "cli_markers": 16,
+      "functions": 445,
+      "source_files": 46,
+      "test_markers": 139,
+      "workflow_markers": 837
     }
   },
   "signal_evidence": {
