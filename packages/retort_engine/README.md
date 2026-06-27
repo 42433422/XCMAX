@@ -46,6 +46,16 @@ PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli revi
 
 When `--previous-diff-file` is supplied, Retort keeps only newly added changes for the current review and records how many old changes were skipped. This is the first executable PR loop absorbed from external code-review projects.
 
+Run a real public PR dry-run and keep the report:
+
+```bash
+PYTHONPATH=packages/retort_engine FHD/.venv/bin/python -m retort_engine.cli review-pr \
+  --url https://github.com/villesau/ai-codereviewer/pull/138 \
+  --max-bytes 2000000 \
+  --output packages/retort_engine/docs/retort_pr_dry_run_report.json \
+  --json
+```
+
 Retort does not treat self-questioning as completed absorption. Local code no longer produces scores; all scores must come from a completed PaiBi LLM deep review using the Retort prompt:
 
 ```bash
