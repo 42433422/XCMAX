@@ -12,7 +12,7 @@ from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
 from retort_engine.semantic_reviewer import semantic_compare
 from retort_engine.service import RetortService, create_app
 from retort_engine.ui_server import RetortUIServer
-from tests.test_static_evaluator import create_focused_tool_package, create_incomplete_package, write_file
+from tests.test_evidence_evaluator import create_focused_tool_package, create_incomplete_package, write_file
 
 
 def test_employee_runtime_adapter_dispatches_and_records(tmp_path: Path) -> None:
@@ -71,7 +71,9 @@ def test_product_service_and_blackhole_ui_surface(tmp_path: Path) -> None:
     project = tmp_path / "project"
     create_focused_tool_package(project)
     payload = RetortService().assess({"project": str(project), "context_policy": "provided", "gate_results": {"lint": True, "test": True}})
-    assert payload["scores"]
+    assert payload["scores"] == []
+    assert payload["metadata"]["score_source"] == "paibi_llm_pending"
+    assert payload["metadata"]["score_authority"] == "paibi_llm_prompt_only"
     assert create_app() is not None
     ui_root = RetortUIServer().static_root
     assert "blackhole" in (ui_root / "app.js").read_text(encoding="utf-8").lower()

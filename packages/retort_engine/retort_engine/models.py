@@ -130,17 +130,6 @@ class SelfEvolutionResult:
 
 
 @dataclass(frozen=True)
-class ScoreDelta:
-    dimension: str
-    own_score: float
-    external_score: float
-    delta: float
-
-    def to_dict(self) -> dict[str, Any]:
-        return {"dimension": self.dimension, "own_score": self.own_score, "external_score": self.external_score, "delta": self.delta}
-
-
-@dataclass(frozen=True)
 class ExternalProjectRef:
     source: str
     source_type: str
@@ -157,7 +146,6 @@ class AbsorptionResult:
     own_assessment: ProjectAssessment
     external_assessment: ProjectAssessment
     external_ref: ExternalProjectRef
-    score_deltas: tuple[ScoreDelta, ...]
     tasks: tuple[ImprovementTask, ...]
     summary: str
     safety_findings: tuple[str, ...] = ()
@@ -172,7 +160,6 @@ class AbsorptionResult:
             "external_ref": self.external_ref.to_dict(),
             "own_assessment": self.own_assessment.to_dict(),
             "external_assessment": self.external_assessment.to_dict(),
-            "score_deltas": [delta.to_dict() for delta in self.score_deltas],
             "tasks": [task.to_dict() for task in self.tasks],
             "safety_findings": list(self.safety_findings),
             "semantic_findings": list(self.semantic_findings),

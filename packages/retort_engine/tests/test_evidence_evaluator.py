@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.evaluators import StaticProjectEvaluator
+from retort_engine.evaluators import EvidenceProjectEvaluator
 
 
 def write_file(path: Path, text: str) -> None:
@@ -30,14 +30,16 @@ def create_incomplete_package(root: Path) -> None:
     write_file(root / "demo_tool" / "__init__.py", "")
 
 
-def test_focused_tool_package_can_pass_strict_gate(tmp_path: Path) -> None:
+def test_focused_tool_package_returns_evidence_without_scores(tmp_path: Path) -> None:
     create_focused_tool_package(tmp_path)
-    assessment = StaticProjectEvaluator().evaluate({"project_path": str(tmp_path), "context_policy": "provided", "allow_dirty": True, "gate_results": {"lint": True, "test": True}})
-    assert assessment.all_scores_over(90)
+    assessment = EvidenceProjectEvaluator().evaluate({"project_path": str(tmp_path), "context_policy": "provided", "allow_dirty": True, "gate_results": {"lint": True, "test": True}})
+    assert assessment.scores == ()
+    assert assessment.metadata["score_authority"] == "paibi_llm_prompt_only"
+    assert assessment.metadata["signals"]["gate_results"] == {"lint": True, "test": True}
 
 
 def test_isolated_mode_ignores_supplied_context(tmp_path: Path) -> None:
     create_incomplete_package(tmp_path)
-    assessment = StaticProjectEvaluator().evaluate({"project_path": str(tmp_path), "gate_results": {"lint": True, "test": True}, "allow_dirty": True, "prompt": "great"})
-    assert not assessment.all_scores_over(90)
+    assessment = EvidenceProjectEvaluator().evaluate({"project_path": str(tmp_path), "gate_results": {"lint": True, "test": True}, "allow_dirty": True, "prompt": "great"})
+    assert assessment.scores == ()
     assert assessment.metadata["signals"]["gate_results"] == {}

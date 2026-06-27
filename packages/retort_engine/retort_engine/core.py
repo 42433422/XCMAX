@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.contracts import contract_names
-from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
+from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 
 
 @dataclass(frozen=True)
@@ -84,16 +84,35 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "feedback_audit": "audit_feedback_closure" in text and "history_result_count" in text,
         "diff_hunk_review": "diff hunk" in text.lower() and "patch set" in text.lower(),
         "real_github_case": "https://github.com/openai/codex" in text,
-        "conservative_scoring": "calibrated_overall" in text and "not_automatic_100" in text,
     }
     tracked = _tracking_state(root)
     proof = _closed_loop_proof(root)
     capability_audit = _capability_absorption_audit(root)
-    capped = _evidence_based_scores(features, lint_ok=lint_ok, test_ok=test_ok, test_functions=test_functions, has_ci=_has_retort_ci(root), tracked=tracked, context_policy=context_policy, proof=proof, capability_audit=capability_audit)
-    capped, shock_evidence = _apply_absorption_shock(root, capped)
-    evidence = tuple([f"source_files={len(files)}", f"test_functions={test_functions}", f"git_tracking_state={tracked}", f"lint={lint_ok}", f"test={test_ok}", f"closed_loop_verified={proof['verified']}", f"closed_loop_missing={','.join(proof['missing'])}"] + shock_evidence + [f"{k}={v}" for k, v in features.items()])
-    metadata = {"features": features, "git_tracking_state": tracked, "absorption_state": _public_absorption_state(root), "closed_loop_proof": proof, "capability_absorption_audit": capability_audit}
-    return Assessment(str(root), tuple(Score(key, round(value, 1), _score_reason(key, proof)) for key, value in capped.items()), evidence, metadata)
+    state = _public_absorption_state(root)
+    evidence = tuple(
+        [
+            f"source_files={len(files)}",
+            f"test_functions={test_functions}",
+            f"git_tracking_state={tracked}",
+            f"lint={lint_ok}",
+            f"test={test_ok}",
+            f"closed_loop_verified={proof['verified']}",
+            f"closed_loop_missing={','.join(proof['missing'])}",
+            f"absorption_active={state.get('active')}",
+            f"absorption_status={state.get('status')}",
+        ]
+        + [f"{k}={v}" for k, v in features.items()]
+    )
+    metadata = {
+        "features": features,
+        "git_tracking_state": tracked,
+        "absorption_state": state,
+        "closed_loop_proof": proof,
+        "capability_absorption_audit": capability_audit,
+        "score_authority": "paibi_llm_prompt_only",
+        "local_scores_removed": True,
+    }
+    return Assessment(str(root), (), evidence, metadata)
 
 
 def _project_files(root: Path, skip_parts: set[str]) -> list[Path]:
@@ -115,29 +134,21 @@ class RetortSelfEvolutionRunner:
 
     def run(self, project: str, *, run_local_gates: bool = False) -> dict[str, Any]:
         root = Path(project).expanduser().resolve()
-        rounds: list[dict[str, Any]] = []
-        all_tasks: list[dict[str, str]] = []
-        max_rounds = self.max_rounds or 8
         assessment = assess_project(str(root), run_local_gates=run_local_gates)
-        weak = [score for score in assessment.scores if score.value <= self.threshold]
-        for round_index in range(1, max_rounds + 1):
-            tasks = [_task_for_weak_score(score, self.threshold, round_index) for score in weak]
-            all_tasks.extend(tasks)
-            rounds.append({"round_index": round_index, "passed": not weak, "assessment": assessment.to_dict(), "tasks": tasks})
-            if not weak:
-                break
-            advanced = _advance_absorption_state(root, [score.dimension for score in weak], round_index, tasks)
-            assessment = assess_project(str(root), run_local_gates=run_local_gates)
-            weak = [score for score in assessment.scores if score.value <= self.threshold]
-            if not advanced:
-                break
-        blocked_by_proof = bool(weak and _closed_loop_proof(root)["missing"])
+        task = {
+            "task_id": "retort-llm-required",
+            "title": "Run PaiBi LLM deep review before self-evolution",
+            "dimension": "llm_scoring",
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "acceptance": "A completed PaiBi LLM review returns dimension scores and questions.",
+        }
         return {
-            "status": "converged" if not weak else ("blocked" if blocked_by_proof else "max_rounds"),
-            "stop_reason": "all_scores_strictly_above_threshold" if not weak else ("closed_loop_evidence_required_before_scores_can_pass" if blocked_by_proof else "max_rounds_reached_before_all_scores_passed"),
+            "status": "blocked",
+            "stop_reason": "llm_deep_review_required",
             "final_assessment": assessment.to_dict(),
-            "rounds": rounds,
-            "tasks": all_tasks,
+            "rounds": [{"round_index": 1, "passed": False, "assessment": assessment.to_dict(), "tasks": [task]}],
+            "tasks": [task],
         }
 
 
@@ -288,15 +299,34 @@ class RetortService:
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
         assessment = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-        return _attach_llm_scoring(payload, assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
+        llm_payload = dict(payload)
+        llm_payload["use_llm"] = True
+        return _attach_llm_scoring(llm_payload, assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return absorb(payload)
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or ".")
-        result = RetortSelfEvolutionRunner(max_rounds=int(payload.get("max_rounds") or 8)).run(project, run_local_gates=bool(payload.get("run_local_gates")))
-        result["final_assessment"] = _attach_llm_scoring(payload, result.get("final_assessment", {}), Path(project).expanduser().resolve(), "self_evolve", "", "", result.get("tasks", []))
+        project_path = Path(project).expanduser().resolve()
+        base = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
+        llm_payload = dict(payload)
+        llm_payload["use_llm"] = True
+        result = {
+            "status": "blocked",
+            "stop_reason": "llm_deep_review_required",
+            "final_assessment": base,
+            "rounds": [{"round_index": 1, "passed": False, "assessment": base, "tasks": []}],
+            "tasks": [],
+        }
+        result["final_assessment"] = _attach_llm_scoring(llm_payload, base, project_path, "self_evolve", "", "", [])
+        scores = [Score(str(score.get("dimension") or ""), float(score.get("value") or 0), str(score.get("reason") or "")) for score in result["final_assessment"].get("scores", []) if isinstance(score, dict)]
+        weak = [score for score in scores if score.value <= float(payload.get("threshold") or 90.0)]
+        tasks = [_task_for_weak_score(score, float(payload.get("threshold") or 90.0), 1) for score in weak]
+        result["tasks"] = tasks
+        result["rounds"] = [{"round_index": 1, "passed": not weak and bool(scores), "assessment": result["final_assessment"], "tasks": tasks}]
+        result["status"] = "converged" if scores and not weak else "blocked"
+        result["stop_reason"] = "all_llm_scores_strictly_above_threshold" if scores and not weak else "llm_questions_generated_for_weak_scores"
         return result
 
     def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -514,7 +544,7 @@ def _absorption_summary(tasks: list[dict[str, str]], execution: dict[str, Any]) 
         return f"Real CLI absorption changed {len(execution.get('changed_files') or [])} file(s) after generating {len(tasks)} task(s)."
     if execution.get("status") in {"failed", "timeout"}:
         return f"Generated {len(tasks)} task(s), but real CLI absorption failed: {execution.get('summary', '')}"
-    return f"Generated {len(tasks)} absorption task(s). Score intentionally dropped until Retort self-evolution internalizes the external advantages."
+    return f"Generated {len(tasks)} absorption task(s). Retort now requires PaiBi LLM reassessment before any score is shown."
 
 
 def _truthy(value: Any) -> bool:
@@ -532,7 +562,7 @@ def _assess_external_project(external_path: Path | None, source: str) -> dict[st
             "metadata": {"score_source": "unavailable_external_project"},
         }
     assessment = assess_project(str(external_path), run_local_gates=False).to_dict()
-    assessment.setdefault("metadata", {})["score_source"] = "external_static_rules"
+    assessment.setdefault("metadata", {})["score_source"] = "external_evidence_only"
     return assessment
 
 
@@ -602,10 +632,11 @@ def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str,
 
 
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
+    require_deep = bool(payload.get("require_deep_review") or payload.get("require_llm_scores"))
     if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
         metadata = assessment.setdefault("metadata", {})
-        metadata["score_source"] = "local_fallback_rules"
-        return assessment
+        metadata["score_source"] = "llm_required"
+        raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
     metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
     external_source, external_path = _llm_external_reference(metadata, external_source, external_path)
     evidence = list(assessment.get("evidence", []))
@@ -623,7 +654,7 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
     )
     assessment["llm_review"] = review
     metadata = assessment.setdefault("metadata", {})
-    metadata["score_source"] = "local_fallback_pending_llm"
+    metadata["score_source"] = "paibi_llm_pending"
     wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
     task_id = str((review.get("dispatch") or {}).get("task_id") or "")
     status: dict[str, Any] = {}
@@ -637,6 +668,12 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
             assessment["scores"] = status["scores"]
             metadata["score_source"] = "paibi_llm"
             metadata["llm_task_id"] = status.get("task_id")
+            if require_deep:
+                record_paibi_llm_deep_result(project=project, mode=mode, review=review, status=status)
+    if require_deep and metadata.get("score_source") != "paibi_llm":
+        current = str((status or {}).get("status") or review.get("status") or (review.get("dispatch") or {}).get("status") or "not_completed")
+        metadata["score_source"] = "paibi_llm_required_not_completed"
+        raise RuntimeError(f"PaiBi LLM deep review did not complete with scores; current status: {current}")
     return assessment
 
 
@@ -716,7 +753,7 @@ def _maybe_request_llm_review(
 ) -> dict[str, Any]:
     if not bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review")):
         return {"enabled": False, "provider": "paibi"}
-    review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks, evidence=evidence or [], metadata=metadata or {})
+    review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks, evidence=evidence or [], metadata=metadata or {}, record=False)
     review["enabled"] = True
     return review
 
@@ -850,80 +887,6 @@ def _is_behavior_test_file(rel: str) -> bool:
     return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
 
 
-def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok: bool, test_functions: int, has_ci: bool, tracked: str, context_policy: str, proof: dict[str, Any], capability_audit: dict[str, Any]) -> dict[str, float]:
-    verified = bool(proof["verified"])
-    capability_score = float(capability_audit.get("score") or 0.0)
-    evidence_loop_score = _evidence_loop_score(proof, lint_ok=lint_ok, test_ok=test_ok)
-    employee_runtime_cap = float(capability_audit.get("employee_execution_cap") or 100.0)
-    scores = {
-        "product_level": 72 + 3 * features["blackhole_ui"] + 3 * features["service_api"] + 2 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * test_ok + 12 * verified,
-        "architecture_depth": 78 + 3 * features["branch_workflow"] + 3 * features["self_evolution"] + 2 * features["license_gate"] + 2 * features["employee_queue"] + 2 * features["real_absorption_cli"] + 2 * features["component_review_pipeline"] + 2 * test_ok,
-        "test_gate_evidence": 70 + min(8, test_functions * 0.4) + 8 * test_ok + 6 * lint_ok + 3 * has_ci,
-        "api_contract_quality": 76 + 4 * features["service_api"] + 3 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 2 * features["folder_project_picker"] + 3 * features["api_contract_schemas"] + 8 * verified,
-        "operational_readiness": 72 + 6 * lint_ok + 6 * test_ok + 4 * has_ci + 2 * features["branch_workflow"] + 8 * verified,
-        "evolution_readiness": 68 + 5 * features["self_evolution"] + 4 * features["real_github_case"] + 4 * features["employee_queue"] + 14 * verified,
-        "external_ingestion": 70 + 5 * features["github_or_folder_source"] + 4 * features["folder_project_picker"] + 4 * features["real_github_case"] + 10 * verified,
-        "comparative_analysis_depth": 68 + 4 * features["real_github_case"] + 4 * features["github_or_folder_source"] + 4 * features["branch_workflow"] + 4 * features["component_review_pipeline"] + 3 * features["diff_hunk_review"] + 12 * verified,
-        "absorption_tasking": 72 + 5 * features["employee_queue"] + 4 * features["github_or_folder_source"] + 3 * features["branch_workflow"] + 3 * features["component_review_pipeline"] + 9 * verified,
-        "employee_execution_integration": 66 + 6 * features["employee_queue"] + 16 * verified + 5 * (features["real_absorption_cli"] and verified) + 4 * (features["execution_proof_recorder"] and verified),
-        "feedback_loop_closure": 68 + 5 * features["self_evolution"] + 4 * features["employee_queue"] + 4 * features["feedback_audit"] + 15 * verified,
-        "product_operability": 74 + 4 * features["blackhole_ui"] + 4 * features["service_api"] + 3 * features["folder_project_picker"] + 3 * features["branch_workflow"] + 8 * verified,
-        "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * features["license_boundary_tests"] + 3 * (context_policy == "isolated") + 6 * verified,
-        "branch_absorption_workflow": 74 + 5 * features["branch_workflow"] + 4 * features["folder_project_picker"] + 3 * features["blackhole_ui"] + 8 * verified,
-        "retort_product_maturity": 72 + 3 * features["blackhole_ui"] + 3 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * features["service_api"] + 2 * test_ok + 2 * lint_ok + 12 * verified - 3 * (tracked == "untracked"),
-        "evidence_loop_score": evidence_loop_score,
-        "capability_absorption_score": capability_score,
-    }
-    if not verified:
-        caps = {
-            "product_level": 84,
-            "architecture_depth": 88,
-            "api_contract_quality": 88,
-            "operational_readiness": 88,
-            "evolution_readiness": 82,
-            "external_ingestion": 86,
-            "comparative_analysis_depth": 82,
-            "absorption_tasking": 84,
-            "employee_execution_integration": 78,
-            "feedback_loop_closure": 82,
-            "product_operability": 86,
-            "safety_license_gate": 86,
-            "branch_absorption_workflow": 86,
-            "retort_product_maturity": 84,
-        }
-        scores = {dimension: min(float(value), float(caps.get(dimension, value))) for dimension, value in scores.items()}
-    else:
-        scores = {dimension: min(96.0, float(value)) for dimension, value in scores.items()}
-        capability_cap = float(capability_audit.get("overall_cap") or 96.0)
-        scores["product_level"] = min(scores["product_level"], capability_cap)
-        scores["comparative_analysis_depth"] = min(scores["comparative_analysis_depth"], capability_cap)
-        scores["retort_product_maturity"] = min(scores["retort_product_maturity"], capability_cap)
-        scores["employee_execution_integration"] = min(scores["employee_execution_integration"], employee_runtime_cap)
-    scores["calibrated_overall"] = _calibrated_overall(scores, verified, capability_audit)
-    return scores
-
-
-def _evidence_loop_score(proof: dict[str, Any], *, lint_ok: bool, test_ok: bool) -> float:
-    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
-    true_count = sum(1 for value in flags.values() if value)
-    return min(96.0, 50.0 + true_count * 8.0 + 3.0 * lint_ok + 3.0 * test_ok)
-
-
-def _calibrated_overall(scores: dict[str, float], verified: bool, capability_audit: dict[str, Any]) -> float:
-    dimensions = [dimension for dimension in scores if dimension not in {"calibrated_overall", "evidence_loop_score"}]
-    average = sum(scores[dimension] for dimension in dimensions) / max(1, len(dimensions))
-    capability_cap = float(capability_audit.get("overall_cap") or (94.0 if verified else 82.0))
-    return round(min(94.0 if verified else 82.0, capability_cap, average), 1)
-
-
-def _score_reason(dimension: str, proof: dict[str, Any]) -> str:
-    if proof["verified"]:
-        return "Closed-loop proof is present: branch diff, employee execution, post-absorption gates, merge evidence, and external reassessment are recorded."
-    if dimension in {"calibrated_overall", "product_level", "retort_product_maturity", "employee_execution_integration", "feedback_loop_closure"}:
-        return "Human-calibrated score cap: Retort cannot score above product level until real absorption diff, employee execution, post-absorption tests, merge proof, and external reassessment evidence exist."
-    return "Evidence-based Retort score. Feature existence is counted, but unproven closed-loop execution is capped."
-
-
 def _tasks_from_assessment(source: str, external_path: Path | None = None) -> list[dict[str, str]]:
     profile = _external_project_profile(external_path) if external_path else {}
     tasks = [
@@ -1001,39 +964,16 @@ def _external_project_profile(path: Path | None) -> dict[str, bool]:
 
 def _record_absorption_shock(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
     task_dimensions = {task["dimension"] for task in tasks}
-    penalties = {
-        "product_level": 4.0,
-        "external_ingestion": 6.0,
-        "comparative_analysis_depth": 8.0,
-        "absorption_tasking": 6.0,
-        "feedback_loop_closure": 4.0 if "feedback_loop_closure" in task_dimensions else 2.0,
-        "product_operability": 4.0 if "product_operability" in task_dimensions else 2.0,
-        "retort_product_maturity": 7.0,
-        "calibrated_overall": 8.0,
-    }
     state = {
         "active": True,
-        "status": "pending_self_evolution",
+        "status": "pending_llm_reassessment",
         "source": source,
         "external_path": "" if external_path is None else str(external_path),
-        "pending_dimensions": sorted(penalties),
-        "penalties": penalties,
+        "pending_dimensions": sorted(task_dimensions),
         "tasks": tasks,
     }
     _save_absorption_state(own, state)
     return _public_absorption_state(own)
-
-
-def _apply_absorption_shock(root: Path, scores: dict[str, float]) -> tuple[dict[str, float], list[str]]:
-    state = _load_absorption_state(root)
-    if not state.get("active"):
-        return scores, ["absorption_shock_active=False"]
-    penalties = state.get("penalties") or {}
-    adjusted = dict(scores)
-    for dimension, penalty in penalties.items():
-        if dimension in adjusted:
-            adjusted[dimension] = max(0.0, adjusted[dimension] - float(penalty))
-    return adjusted, ["absorption_shock_active=True", f"absorption_source={state.get('source', '')}", f"absorption_pending_dimensions={','.join(state.get('pending_dimensions') or [])}"]
 
 
 def _advance_absorption_state(root: Path, weak_dimensions: list[str], round_index: int, tasks: list[dict[str, str]]) -> bool:
