@@ -438,7 +438,8 @@ class RetortService:
             run_local_gates=bool(payload.get("run_local_gates", True)),
             branch_workflow=bool(payload.get("branch_workflow", True)),
             merge_after=bool(payload.get("merge_after", True)),
-            allow_dirty_branch=bool(payload.get("allow_dirty_branch", True)),
+            allow_dirty_branch=bool(payload.get("allow_dirty_branch", False)),
+            use_llm=bool(payload.get("use_llm", False)),
             dry_run=bool(payload.get("dry_run")),
         )
 

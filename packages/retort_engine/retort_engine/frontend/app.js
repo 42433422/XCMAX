@@ -63,9 +63,12 @@ const statusText = {
   closed_loop_evidence_required_before_scores_can_pass: "缺少闭环证据，不能通过高分门槛",
   all_scores_strictly_above_threshold: "全部分数已超过阈值",
   ready: "就绪",
+  search_failed: "搜索失败",
+  no_candidates: "无候选",
   saturated: "已饱和",
   not_saturated: "未饱和",
   needs_attention: "需要处理",
+  absorption_failed: "吸收失败",
   final_deep_review_scored: "最终深评已评分",
   absorbed_awaiting_final_llm_score: "已吸收，等待最终 LLM 评分",
   pre_review_ready: "吞噬前评估就绪",
@@ -913,7 +916,7 @@ async function similarLoop() {
   setRunning(true, "连续吸收同类项目");
   pushEvent("连续吸收", "按雷达排序吸收 3 个同类项目", "info");
   try {
-    const r = await api("/api/similar-project-loop", {project: $("ownProjectFolder").value.trim(), limit: 3, min_score: 55, run_local_gates: $("runGates").checked, branch_workflow: $("branchWorkflow").checked, merge_after: $("mergeAfter").checked, allow_dirty_branch: true});
+    const r = await api("/api/similar-project-loop", {project: $("ownProjectFolder").value.trim(), limit: 3, min_score: 55, run_local_gates: $("runGates").checked, branch_workflow: $("branchWorkflow").checked, merge_after: $("mergeAfter").checked, allow_dirty_branch: false, use_llm: false});
     renderLoop(r);
     renderSaturation(r.saturation);
     $("statusText").textContent = labelOf(r.status);
