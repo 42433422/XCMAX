@@ -12,6 +12,7 @@ from typing import Any
 
 from retort_engine.architecture_memory import build_architecture_record, update_architecture_memory
 from retort_engine.architecture_refactor import build_core_refactor_plan, write_core_refactor_plan
+from retort_engine.codebase_graph import build_absorption_focus_map, code_graph_absorption_proof
 from retort_engine.feedback_audit import audit_feedback_closure
 from retort_engine.license_gate import license_gate
 from retort_engine.review_pipeline import build_absorption_review_report
@@ -19,7 +20,7 @@ from retort_engine.review_pipeline import build_absorption_review_report
 
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
-CAPABILITY_MODEL_SIGNALS = {"review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface"}
+CAPABILITY_MODEL_SIGNALS = {"review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface", "codebase_graph"}
 VISUAL_FRONTEND_SIGNALS = {
     "planet_frontend",
     "atmosphere_shader",
@@ -48,6 +49,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     run_id = _run_id(source)
     external_profile = _external_profile(external_path)
     semantic_review = _semantic_review(root, external_path)
+    pre_absorption_focus = build_absorption_focus_map(root, external_path, tasks=tasks, signals=list(external_profile.get("signals") or []))
     absorption_quality_path = _absorption_quality_target(root)
     module_path = _implementation_target(root)
     capability_path = _capability_target(root)
@@ -77,7 +79,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     if writes_frontend_visual:
         tracked_paths.extend([frontend_app_path, frontend_visual_test_path])
     before = _snapshot(tracked_paths)
-    review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review)
+    review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review, pre_absorption_focus)
     _write_absorption_quality_helper(absorption_quality_path)
     module_path.parent.mkdir(parents=True, exist_ok=True)
     module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
@@ -130,6 +132,9 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     changed_files = _changed_files(before, tracked_paths)
+    code_graph_proof = code_graph_absorption_proof(root, changed_files, pre_absorption_focus)
+    review_report["code_graph_proof"] = code_graph_proof
+    report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     architecture_record = build_architecture_record(
         run_id=run_id,
         source=source,
@@ -139,6 +144,7 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         tasks=tasks,
         changed_files=changed_files,
         gates=gates,
+        code_graph_proof=code_graph_proof,
     )
     architecture_memory = update_architecture_memory(architecture_memory_path, architecture_record)
     gates.append(_run_command([_python(payload), "-c", "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')", str(architecture_memory_path)], root, timeout=60))
@@ -171,6 +177,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["run_id"] = run_id
     result["external_profile"] = external_profile
     result["semantic_review"] = semantic_review
+    result["pre_absorption_focus"] = pre_absorption_focus
+    result["code_graph_proof"] = code_graph_proof
     result["capability_module_path"] = str(capability_path) if writes_capability_model else ""
     result["capability_test_path"] = str(capability_test_path) if writes_capability_model else ""
     result["capability_model_preserved"] = not writes_capability_model
@@ -572,6 +580,7 @@ def _capability_module_content(run_id: str, source: str, external_path: Path, ta
         "component_gaps": list((review_report.get("review_pipeline") or {}).get("component_gaps") or [])[:12],
         "prioritized_absorptions": list((review_report.get("review_pipeline") or {}).get("prioritized_absorptions") or [])[:12],
         "depth_absorption_workflow": dict((review_report.get("review_pipeline") or {}).get("depth_absorption_workflow") or {}),
+        "pre_absorption_focus": dict(review_report.get("pre_absorption_focus") or {}),
         "benchmark": dict((review_report.get("review_pipeline") or {}).get("benchmark") or {}),
         "tasks": [
             {
@@ -613,6 +622,7 @@ SIGNAL_WEIGHTS = {{
     "file_grouping": 20,
     "diff_hunk_review": 18,
     "benchmarking": 16,
+    "codebase_graph": 18,
     "plugin_surface": 12,
     "multi_provider": 10,
 }}
@@ -882,6 +892,7 @@ def _external_profile(root: Path) -> dict[str, Any]:
                 "review_pipeline": ("code review", "review pipeline", "reviewer", "reflection", "localization"),
                 "file_grouping": ("file group", "group files", "changed files", "diff hunk", "patch set"),
                 "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
+                "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
                 "plugin_surface": ("plugin", "cli", "github action", "codex"),
                 "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
                 "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
@@ -903,6 +914,7 @@ def _external_profile(root: Path) -> dict[str, Any]:
         "review_pipeline": ("code review", "review pipeline", "reviewer", "reflection", "localization"),
         "file_grouping": ("file group", "group files", "changed files", "diff hunk", "patch set"),
         "benchmarking": ("benchmark", "precision", "recall", "eval", "evaluation"),
+        "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports"),
         "plugin_surface": ("plugin", "cli", "github action", "codex"),
         "multi_provider": ("provider", "model", "openai", "anthropic", "ollama"),
         "planet_frontend": ("planet", "spheregeometry", "procedural planet", "terrain", "cloud layer"),
@@ -945,7 +957,16 @@ def _code_profile(root: Path) -> dict[str, int]:
     return profile
 
 
-def _review_report(root: Path, run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], semantic_review: dict[str, Any]) -> dict[str, Any]:
+def _review_report(
+    root: Path,
+    run_id: str,
+    source: str,
+    external_path: Path,
+    tasks: list[dict[str, Any]],
+    profile: dict[str, Any],
+    semantic_review: dict[str, Any],
+    pre_absorption_focus: dict[str, Any],
+) -> dict[str, Any]:
     pipeline_report = build_absorption_review_report(root, external_path, tasks)
     return {
         "run_id": run_id,
@@ -957,6 +978,7 @@ def _review_report(root: Path, run_id: str, source: str, external_path: Path, ta
         "absorbed_signals": profile.get("signals", []),
         "signal_evidence": profile.get("signal_evidence", {}),
         "semantic_review": semantic_review,
+        "pre_absorption_focus": pre_absorption_focus,
         "review_pipeline": pipeline_report,
         "tasks": tasks,
         "replay": {"command": f"retort absorb --own-project <main-project> --external-path {external_path} --run-local-gates --branch-workflow --merge-after"},

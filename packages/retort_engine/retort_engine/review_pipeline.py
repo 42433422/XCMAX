@@ -24,8 +24,9 @@ COMPONENT_MARKERS = {
     "plugin_surface": ("plugin", "extension", "github action", "codex", "vsix"),
     "safety_policy": ("license", "security", "policy", "permission", "sandbox"),
     "workflow_ci": ("workflow", "pipeline", "ci", "gate", "test"),
+    "codebase_graph": ("code graph", "codebase graph", "dependency graph", "call graph", "symbol graph", "imports", "hotspot"),
 }
-DEPTH_FOCUS_COMPONENTS = ("review_pipeline", "diff_hunk_review", "file_grouping", "benchmark_eval", "safety_policy", "workflow_ci")
+DEPTH_FOCUS_COMPONENTS = ("review_pipeline", "diff_hunk_review", "file_grouping", "benchmark_eval", "safety_policy", "workflow_ci", "codebase_graph")
 BREADTH_ONLY_COMPONENTS = {"provider_surface", "plugin_surface"}
 MARKETPLACE_CANDIDATES_ENABLED = False
 DIMENSION_COMPONENTS = {
@@ -34,6 +35,7 @@ DIMENSION_COMPONENTS = {
     "feedback_loop_closure": {"benchmark_eval", "workflow_ci"},
     "operational_readiness": {"workflow_ci", "safety_policy"},
     "product_operability": {"review_pipeline"},
+    "architecture_depth": {"codebase_graph", "workflow_ci", "safety_policy"},
 }
 
 
@@ -226,6 +228,7 @@ def _absorption_goal(component: str) -> str:
         "benchmark_eval": "measure whether absorbed review behavior improves precision instead of just increasing comments",
         "safety_policy": "keep license, secret, permission, and rollback checks in the absorption path",
         "workflow_ci": "prove absorption with repeatable local gates and replay commands",
+        "codebase_graph": "locate architecture hotspots and dependency impact before deciding what to absorb",
     }
     return goals.get(component, "deepen the overlapping implementation behavior")
 
@@ -248,7 +251,7 @@ def _employee_task_for_component(component: str) -> dict[str, Any]:
         "task_id": f"retort-depth-{component.replace('_', '-')}",
         "title": f"Deepen {component}",
         "dimension": _dimension_for_component(component),
-        "priority": "P0" if component in {"review_pipeline", "diff_hunk_review", "file_grouping"} else "P1",
+        "priority": "P0" if component in {"review_pipeline", "diff_hunk_review", "file_grouping", "codebase_graph"} else "P1",
         "acceptance": _acceptance_for_component(component),
         "evidence_required": _evidence_for_component(component),
         "owner_hint": "fhd-core-maintainer",
@@ -288,7 +291,7 @@ def _marketplace_employee_type(component: str) -> str:
 
 
 def _dimension_for_component(component: str) -> str:
-    if component in {"review_pipeline", "diff_hunk_review", "file_grouping"}:
+    if component in {"review_pipeline", "diff_hunk_review", "file_grouping", "codebase_graph"}:
         return "comparative_analysis_depth"
     if component == "benchmark_eval":
         return "feedback_loop_closure"

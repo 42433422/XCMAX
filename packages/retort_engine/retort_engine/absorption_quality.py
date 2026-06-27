@@ -20,6 +20,7 @@ SIGNAL_BEHAVIOR_HINTS = {
     "diff_hunk_review": ("pr_review", "diff_hunk", "hunk", "review_diff"),
     "benchmarking": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
     "benchmark_eval": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
+    "codebase_graph": ("codebase_graph", "graph", "dependency", "hotspot", "architecture"),
     "plugin_surface": ("cli", "api", "plugin", "server"),
     "multi_provider": ("provider", "llm", "paibi", "model"),
     "safety_policy": ("license_gate", "safety", "secret", "policy"),
@@ -85,6 +86,7 @@ def absorption_quality_gate(
     minimum_behavior_tests: int,
     depth_gate: dict[str, Any] | None = None,
     ranked_capabilities: list[dict[str, Any]] | None = None,
+    code_graph_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Block report-only absorption even when generated registry tests pass."""
     progress = capability_progress_from_execution(changed_files, gates)
@@ -97,6 +99,8 @@ def absorption_quality_gate(
     mapped = advantage_diff_map(changed_files, ranked_capabilities or [])
     if mapped and not any(row["has_behavior_diff"] for row in mapped):
         missing.append("missing_advantage_to_behavior_mapping")
+    if code_graph_proof is not None and not code_graph_proof.get("passed"):
+        missing.append("code_graph_focus_not_proved")
     return {
         "passed": not missing,
         "missing": sorted(set(missing)),
@@ -104,6 +108,7 @@ def absorption_quality_gate(
         "observed_behavior_tests": observed_tests,
         "progress": progress,
         "advantage_diff_map": mapped,
+        "code_graph_proof": code_graph_proof or {},
     }
 
 
