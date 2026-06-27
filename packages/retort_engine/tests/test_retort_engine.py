@@ -58,6 +58,25 @@ def test_branch_absorption_blocks_dirty_and_creates_clean_branch(tmp_path: Path)
     assert git(own, "branch", "--show-current") == "retort/absorb-test"
 
 
+def test_branch_absorption_ignores_dirty_files_outside_selected_project(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    own = repo / "packages" / "retort"
+    external = tmp_path / "external"
+    own.mkdir(parents=True)
+    external.mkdir()
+    (own / "README.md").write_text("# Retort\n", encoding="utf-8")
+    (external / "README.md").write_text("code review benchmark plugin\n", encoding="utf-8")
+    git(repo, "add", ".")
+    git(repo, "commit", "-m", "add retort")
+    (repo / "unrelated.txt").write_text("dirty\n", encoding="utf-8")
+
+    result = absorb({"own_project": str(own), "external_path": str(external), "branch_workflow": True, "absorption_branch": "retort/absorb-subproject", "execute_absorption": False})
+
+    assert result["branch_workflow"]["created"] is True
+    assert git(repo, "branch", "--show-current") == "retort/absorb-subproject"
+
+
 def test_assessment_cannot_exceed_90_without_closed_loop_proof(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
