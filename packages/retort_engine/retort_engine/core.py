@@ -15,10 +15,12 @@ from typing import Any
 
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.contracts import contract_names
+from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 
 
@@ -96,6 +98,8 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
+        "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
+        "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -364,6 +368,16 @@ class RetortService:
 
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_task_prioritization_report(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def review_quality_benchmark(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_review_quality_benchmark(str(payload.get("project") or payload.get("project_path") or "."), sample_count=int(payload.get("sample_count") or 30))
+
+    def employee_scheduler_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_employee_scheduler_stress(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
+            tasks_per_round=int(payload.get("tasks_per_round") or 3),
+        )
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
@@ -792,6 +806,27 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"task_prioritization_dimension_count={task_summary.get('prioritized_dimension_count', '')}")
     evidence.append(f"task_prioritization_ready_employee_task_count={task_summary.get('ready_employee_task_count', '')}")
     evidence.append(f"task_prioritization_all_tasks_have_acceptance={task_summary.get('all_tasks_have_acceptance', '')}")
+    benchmark_report = _read_json(project / "docs" / "retort_review_quality_benchmark.json")
+    benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
+    evidence.append(f"review_quality_benchmark_status={benchmark_report.get('status', '')}")
+    evidence.append(f"review_quality_benchmark_sample_count={benchmark_summary.get('sample_count', '')}")
+    evidence.append(f"review_quality_benchmark_expected_conclusions={benchmark_summary.get('curated_expected_conclusion_count', '')}")
+    evidence.append(f"review_quality_benchmark_pass_rate={benchmark_summary.get('pass_rate', '')}")
+    evidence.append(f"review_quality_benchmark_missed_count={benchmark_summary.get('missed_finding_count', '')}")
+    evidence.append(f"review_quality_benchmark_false_positive_count={benchmark_summary.get('false_positive_count', '')}")
+    evidence.append(f"review_quality_benchmark_incremental_verified={benchmark_summary.get('incremental_skip_verified_count', '')}")
+    stress_report = _read_json(project / "docs" / "retort_employee_scheduler_stress.json")
+    stress_summary = stress_report.get("summary") if isinstance(stress_report.get("summary"), dict) else {}
+    evidence.append(f"employee_scheduler_stress_status={stress_report.get('status', '')}")
+    evidence.append(f"employee_scheduler_stress_round_count={stress_summary.get('round_count', '')}")
+    evidence.append(f"employee_scheduler_stress_process_invocation_count={stress_summary.get('process_invocation_count', '')}")
+    evidence.append(f"employee_scheduler_stress_queued_task_count={stress_summary.get('queued_task_count', '')}")
+    evidence.append(f"employee_scheduler_stress_completed_result_count={stress_summary.get('completed_result_count', '')}")
+    evidence.append(f"employee_scheduler_stress_history_result_count={stress_summary.get('history_task_result_count', '')}")
+    evidence.append(f"employee_scheduler_stress_missing_result_count={stress_summary.get('missing_result_count', '')}")
+    evidence.append(f"employee_scheduler_stress_failed_process_count={stress_summary.get('failed_process_count', '')}")
+    evidence.append(f"employee_scheduler_stress_consistent={stress_summary.get('queue_result_history_consistent', '')}")
+    evidence.append(f"employee_scheduler_stress_independent_process={stress_summary.get('independent_process_verified', '')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -931,11 +966,15 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     publish_source = root / "retort_engine" / "pr_publish.py"
     replay_source = root / "retort_engine" / "comparative_replay.py"
     task_source = root / "retort_engine" / "task_prioritization.py"
+    benchmark_source = root / "retort_engine" / "review_quality_benchmark.py"
+    stress_source = root / "retort_engine" / "employee_scheduler_stress.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
     replay_test = root / "tests" / "test_comparative_replay.py"
     task_test = root / "tests" / "test_task_prioritization.py"
+    benchmark_test = root / "tests" / "test_review_quality_benchmark.py"
+    stress_test = root / "tests" / "test_employee_scheduler_stress.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -990,6 +1029,8 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_publish.py", publish_source.is_file()),
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
                 ("retort_engine/task_prioritization.py", task_source.is_file()),
+                ("retort_engine/review_quality_benchmark.py", benchmark_source.is_file()),
+                ("retort_engine/employee_scheduler_stress.py", stress_source.is_file()),
             )
             if exists
         ],
@@ -1001,6 +1042,8 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_publish.py", publish_test.is_file()),
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
                 ("tests/test_task_prioritization.py", task_test.is_file()),
+                ("tests/test_review_quality_benchmark.py", benchmark_test.is_file()),
+                ("tests/test_employee_scheduler_stress.py", stress_test.is_file()),
             )
             if exists
         ],

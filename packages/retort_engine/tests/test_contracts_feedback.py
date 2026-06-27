@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 from retort_engine.contracts import contract_names, validate_contract
@@ -17,6 +18,8 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "pr_publish_sandbox_result" in contract_names()
     assert "cross_project_replay_result" in contract_names()
     assert "task_prioritization_result" in contract_names()
+    assert "review_quality_benchmark_result" in contract_names()
+    assert "employee_scheduler_stress_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
     review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": [], "incremental": {}})
     dry_run_valid = validate_contract("pr_dry_run_result", {"status": "reviewed", "pr_url": "u", "diff_url": "d", "summary": {}, "review": {}})
@@ -24,6 +27,8 @@ def test_contract_schemas_validate_required_outputs() -> None:
     sandbox_valid = validate_contract("pr_publish_sandbox_result", {"status": "sandbox_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": []})
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
+    benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
+    stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
     assert valid["valid"] is True
@@ -33,6 +38,8 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert sandbox_valid["valid"] is True
     assert replay_valid["valid"] is True
     assert task_valid["valid"] is True
+    assert benchmark_valid["valid"] is True
+    assert stress_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
 
@@ -52,3 +59,25 @@ def test_feedback_audit_closes_queue_result_history_loop(tmp_path: Path) -> None
     assert audit["closed"] is True
     assert audit["result_tasks_have_queue_records"] is True
     assert audit["history_matches_employee_results"] is True
+
+
+def test_history_store_migrates_legacy_payload_tables(tmp_path: Path) -> None:
+    history = tmp_path / "legacy.sqlite"
+    with sqlite3.connect(history) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE absorption_runs (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
+            CREATE TABLE employee_tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
+            CREATE TABLE task_results (id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL);
+            """
+        )
+
+    store = RetortHistoryStore(history)
+    store.record_task_result(EmployeeTaskResult("legacy-task", "completed", "migrated"))
+
+    with sqlite3.connect(history) as conn:
+        employee_cols = {row[1] for row in conn.execute("PRAGMA table_info(employee_tasks)").fetchall()}
+        result_cols = {row[1] for row in conn.execute("PRAGMA table_info(task_results)").fetchall()}
+
+    assert {"created_at", "queue_id", "task_id", "owner_hint", "status", "payload_json"} <= employee_cols
+    assert {"created_at", "task_id", "status", "payload_json"} <= result_cols

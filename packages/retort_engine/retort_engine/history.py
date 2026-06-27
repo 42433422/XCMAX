@@ -30,6 +30,10 @@ class RetortHistoryStore:
         return tuple(json.loads(row[0]) for row in rows)
 
     def _insert(self, table: str, values: dict[str, Any]) -> int:
+        with sqlite3.connect(self.path) as conn:
+            table_columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if "payload" in table_columns and "payload" not in values:
+            values = {**values, "payload": values.get("payload_json", values)}
         columns = list(values)
         placeholders = ",".join("?" for _ in columns)
         payload = [json.dumps(value, ensure_ascii=False, sort_keys=True) if isinstance(value, (dict, list)) else value for value in values.values()]
@@ -46,7 +50,46 @@ class RetortHistoryStore:
                 CREATE TABLE IF NOT EXISTS task_results (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, task_id TEXT NOT NULL, status TEXT NOT NULL, payload_json TEXT NOT NULL);
                 """
             )
+            _ensure_columns(
+                conn,
+                "absorption_runs",
+                {
+                    "created_at": "TEXT NOT NULL DEFAULT ''",
+                    "status": "TEXT NOT NULL DEFAULT ''",
+                    "source": "TEXT NOT NULL DEFAULT ''",
+                    "payload_json": "TEXT NOT NULL DEFAULT '{}'",
+                },
+            )
+            _ensure_columns(
+                conn,
+                "employee_tasks",
+                {
+                    "created_at": "TEXT NOT NULL DEFAULT ''",
+                    "queue_id": "TEXT NOT NULL DEFAULT ''",
+                    "task_id": "TEXT NOT NULL DEFAULT ''",
+                    "owner_hint": "TEXT NOT NULL DEFAULT ''",
+                    "status": "TEXT NOT NULL DEFAULT ''",
+                    "payload_json": "TEXT NOT NULL DEFAULT '{}'",
+                },
+            )
+            _ensure_columns(
+                conn,
+                "task_results",
+                {
+                    "created_at": "TEXT NOT NULL DEFAULT ''",
+                    "task_id": "TEXT NOT NULL DEFAULT ''",
+                    "status": "TEXT NOT NULL DEFAULT ''",
+                    "payload_json": "TEXT NOT NULL DEFAULT '{}'",
+                },
+            )
 
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, columns: dict[str, str]) -> None:
+    existing = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    for column, ddl in columns.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
