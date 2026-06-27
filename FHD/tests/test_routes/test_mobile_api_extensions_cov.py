@@ -579,8 +579,8 @@ class TestAdminEmployeeItems:
         assert [i["id"] for i in result] == ["emp3"]
         assert apply_mock.call_args.args[1] is None
 
-    def test_blank_employee_id_skipped_and_sorted(self, m):
-        """rows with no id are skipped; remaining items sorted by id ascending."""
+    def test_blank_employee_id_skipped_and_preserves_order(self, m):
+        """rows with no id are skipped; remaining items keep roster/registry order (no sort)."""
         rows = [
             {"id": "zeta", "name": "Z"},
             {"id": "", "name": "Ghost"},  # no id → skipped entirely
@@ -602,7 +602,9 @@ class TestAdminEmployeeItems:
             ),
         ):
             result = m._admin_employee_items(market_profiles=None)
-        assert [i["id"] for i in result] == ["alpha", "zeta"]
+        # main no longer sorts by id: ids that don't intersect the real roster fall through
+        # the compatibility branch and are emitted in input order, blank id skipped.
+        assert [i["id"] for i in result] == ["zeta", "alpha"]
 
 
 # ============================================================
@@ -671,8 +673,8 @@ class TestUpsertAdminDutyModItem:
 
 class TestMobilePairingIssue:
     @pytest.mark.asyncio
-    async def test_relay_present_with_relay_code(self, m):
-        """branch [751,754]: relay present AND relay_code non-empty."""
+    async def test_relay_present_injects_account_auth_metadata(self, m):
+        """relay present → relay/relay_id/relay_base_url/relay_binding_mode merged."""
         payload = {"nonce": "n1", "host": "192.168.1.1", "port": 5000}
         relay = {
             "relay_id": "r1",
@@ -697,26 +699,25 @@ class TestMobilePairingIssue:
         assert result["code"] == 200
         assert result["success"] is True
         data = result["data"]
-        # relay present + non-empty pairing_code → shortCode/code echo the relay code,
-        # and relay metadata is merged into the payload.
+        # main now merges the relay record + account_auth binding mode into the payload.
+        # The old shortCode/code/qr_json(lan_fallback)/deep_link branching was removed.
         assert data["relay"] == relay
         assert data["relay_id"] == "r1"
         assert data["relay_base_url"] == "https://relay.example"
-        assert data["shortCode"] == "CODE99"
-        assert data["code"] == "CODE99"
-        # qr_json is replaced by the relay's qr_json with the LAN payload nested as fallback.
-        assert data["qr_json"]["a"] == 1
-        assert "lan_fallback" in data["qr_json"]
-        assert data["deep_link"].startswith("xcagi://relay-pairing?")
-        assert "code=CODE99" in data["deep_link"]
+        assert data["relay_binding_mode"] == "account_auth"
+        # the enriched LAN nonce is preserved unchanged.
+        assert data["nonce"] == "n1"
+        assert "shortCode" not in data
+        assert "code" not in data
+        assert "deep_link" not in data
 
     @pytest.mark.asyncio
-    async def test_relay_present_without_relay_code(self, m):
-        """branch [751,754] not taken: relay present but pairing_code empty."""
+    async def test_relay_metadata_merge_is_unconditional(self, m):
+        """relay merge ignores pairing_code: empty pairing_code still injects metadata."""
         payload = {"nonce": "n2", "host": "192.168.1.1", "port": 5000}
         relay = {
             "relay_id": "r2",
-            "pairing_code": "",  # empty
+            "pairing_code": "",  # empty — no longer affects the merge
             "relay_base_url": "https://relay.example",
             "qr_json": {},
         }
@@ -735,12 +736,13 @@ class TestMobilePairingIssue:
         ):
             result = await m.mobile_pairing_issue(body=body, request=request)
         data = result["data"]
-        # relay present but pairing_code empty → relay metadata merged but NO shortCode/code.
+        # same metadata is injected regardless of pairing_code; still no shortCode/code.
         assert data["relay"] == relay
         assert data["relay_id"] == "r2"
+        assert data["relay_base_url"] == "https://relay.example"
+        assert data["relay_binding_mode"] == "account_auth"
         assert "shortCode" not in data
         assert "code" not in data
-        assert "lan_fallback" in data["qr_json"]
 
     @pytest.mark.asyncio
     async def test_relay_absent(self, m):

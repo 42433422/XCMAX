@@ -968,6 +968,9 @@ class TestRegisterDesktopRelay:
         cfg_file = tmp_path / "relay.json"
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
         monkeypatch.setenv("XCAGI_RELAY_BASE_URL", "https://reg.example.com")
+        # device_id is now a stable identity (get_stable_device_id), not host:port.
+        # XCAGI_DEVICE_ID is the explicit override so the value is deterministic here.
+        monkeypatch.setenv("XCAGI_DEVICE_ID", "stable-device-xyz")
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.return_value = None
@@ -990,6 +993,8 @@ class TestRegisterDesktopRelay:
         assert caps["port"] == 9999
         assert caps["codex"] is True
         assert caps["claude"] is True
+        assert caps["cursor"] is True
         assert caps["desktop"] is True
-        # device_id includes the port for uniqueness.
-        assert body["device_id"].endswith(":9999")
+        # host/port now live only in capabilities; the device_id is a stable
+        # identity that survives port changes (here pinned via the override env).
+        assert body["device_id"] == "stable-device-xyz"

@@ -771,6 +771,7 @@ class TestAiGroupMessages:
             text="hi",
             sender_name="Boss",
             mentions=["e1"],
+            dispatch=False,
         )
 
     def test_post_message_non_list_mentions_becomes_none(self, client):

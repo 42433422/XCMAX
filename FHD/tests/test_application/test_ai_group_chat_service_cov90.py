@@ -192,9 +192,11 @@ async def test_ai_reply_completion_exception_returns_fallback(tmp_path: Path):
     )
     gid = svc.list_groups(user_id=1)[0]["id"]
     svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
-    result = await svc.post_message(user_id=1, group_id=gid, text="进展如何")
+    # main 现默认仅小C助理接话；显式 @点名小销 才让其成为唯一响应者并走 _ai_reply。
+    result = await svc.post_message(user_id=1, group_id=gid, text="进展如何", mentions=["e1"])
     ai = [m for m in result["messages"] if m["role"] == "ai"]
     assert len(ai) == 1
+    assert ai[0]["sender_name"] == "小销"
     assert "小销 暂时无法回应" in ai[0]["body"]
     assert "llm down" in ai[0]["body"]
 
@@ -212,7 +214,7 @@ async def test_ai_reply_failed_response_with_error_field(tmp_path: Path):
     )
     gid = svc.list_groups(user_id=1)[0]["id"]
     svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
-    result = await svc.post_message(user_id=1, group_id=gid, text="hi")
+    result = await svc.post_message(user_id=1, group_id=gid, text="hi", mentions=["e1"])
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     assert "小销 暂时无法回应：配额不足" in ai["body"]
 
@@ -230,7 +232,7 @@ async def test_ai_reply_non_dict_response_returns_fallback(tmp_path: Path):
     )
     gid = svc.list_groups(user_id=1)[0]["id"]
     svc.add_member(user_id=1, group_id=gid, member={"employee_id": "e1", "name": "小销"})
-    result = await svc.post_message(user_id=1, group_id=gid, text="hi")
+    result = await svc.post_message(user_id=1, group_id=gid, text="hi", mentions=["e1"])
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     # 无 error 字段 → 仅"暂时无法回应"
     assert ai["body"] == "（小销 暂时无法回应）"
@@ -274,7 +276,10 @@ async def test_super_employee_reply_success(tmp_path: Path, monkeypatch):
         group_id=gid,
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
-    result = await svc.post_message(user_id=7, group_id=gid, text="帮我看看")
+    # main 默认仅小C助理接话；显式 @点名超级员工才走 _super_employee_reply invoke 通道。
+    result = await svc.post_message(
+        user_id=7, group_id=gid, text="帮我看看", mentions=["codex-super-employee"]
+    )
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     assert ai["body"] == "Codex 已答复"
     # 群聊场景强制 mode=chat
@@ -294,7 +299,9 @@ async def test_super_employee_reply_claude_branch(tmp_path: Path, monkeypatch):
         group_id=gid,
         member={"employee_id": "claude-super-employee", "name": "超级员工-Claude"},
     )
-    result = await svc.post_message(user_id=1, group_id=gid, text="hi")
+    result = await svc.post_message(
+        user_id=1, group_id=gid, text="hi", mentions=["claude-super-employee"]
+    )
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     assert ai["body"] == "Claude 已答复"
 
@@ -311,7 +318,9 @@ async def test_super_employee_reply_empty_body_fallback(tmp_path: Path, monkeypa
         group_id=gid,
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
-    result = await svc.post_message(user_id=1, group_id=gid, text="hi")
+    result = await svc.post_message(
+        user_id=1, group_id=gid, text="hi", mentions=["codex-super-employee"]
+    )
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     assert ai["body"] == "（超级员工-Codex 暂时无法回应）"
 
@@ -328,7 +337,9 @@ async def test_super_employee_reply_exception_fallback(tmp_path: Path, monkeypat
         group_id=gid,
         member={"employee_id": "codex-super-employee", "name": "超级员工-Codex"},
     )
-    result = await svc.post_message(user_id=1, group_id=gid, text="hi")
+    result = await svc.post_message(
+        user_id=1, group_id=gid, text="hi", mentions=["codex-super-employee"]
+    )
     ai = [m for m in result["messages"] if m["role"] == "ai"][0]
     assert "超级员工-Codex 暂时无法回应：device offline" in ai["body"]
 
@@ -443,29 +454,39 @@ def test_append_super_employees_import_failure_is_silent(monkeypatch):
 
 
 def test_duty_loader_uses_registry_records(monkeypatch):
+    """main 现为部门编制驱动：成员归属与 department_key 来自部门 subzone 的 ids，
+    duty_employee_records 仅按 id 补充展示元数据（名称/摘要/头像）。"""
     fake = types.ModuleType("app.mod_sdk.duty_roster")
-    fake.load_departments = lambda: {}
+    # 部门编制是 SSOT：emp1∈ops_acquisition、emp2∈prod_web；ids 里的空串被过滤。
+    fake.load_departments = lambda: {
+        "ops_acquisition": {"subzones": {"z1": {"ids": ["emp1", ""]}}},
+        "prod_web": {"subzones": {"z2": {"ids": ["emp2"]}}},
+    }
+    # registry 记录仅补名称/摘要/头像，按 id（或 pkg_id）匹配；自身 department_key 字段被忽略。
     fake.load_duty_employee_records = lambda: [
         {
             "id": "emp1",
             "name": "员工一",
-            "department_key": "ops_acquisition",
+            "department_key": "should_be_ignored",
             "mod_id": "m1",
             "panel_summary": "摘要一",
             "avatar": "a.png",
         },
-        {"id": "", "name": "空ID跳过"},  # eid 为空 → continue
-        {"pkg_id": "emp2", "label": "员工二"},  # 用 pkg_id + 无 dept_key
+        {"id": "", "name": "空ID跳过"},  # eid 为空 → 不进 records_by_id
+        {"pkg_id": "emp2", "label": "员工二"},  # 用 pkg_id 匹配 + label 作名称
     ]
-    fake.primary_department_for_pkg = lambda eid: "prod_web" if eid == "emp2" else ""
+    fake.primary_department_for_pkg = lambda eid: ""
     monkeypatch.setitem(sys.modules, "app.mod_sdk.duty_roster", fake)
     out = svc_mod._default_duty_employee_loader()
     by_id = {e["employee_id"]: e for e in out}
+    # department_key 来自部门编制，不再取记录自带字段
     assert by_id["emp1"]["department_key"] == "ops_acquisition"
+    assert by_id["emp1"]["name"] == "员工一"
     assert by_id["emp1"]["summary"] == "摘要一"
-    # emp2 无 department_key → 走 primary_department_for_pkg
+    # emp2 经 pkg_id 匹配记录，department_key 来自 prod_web 编制
     assert by_id["emp2"]["department_key"] == "prod_web"
-    assert "" not in by_id  # 空 ID 被跳过
+    assert by_id["emp2"]["name"] == "员工二"
+    assert "" not in by_id  # 空 ID 不会成为部门成员
     # 超级员工被追加
     assert "codex-super-employee" in by_id
 

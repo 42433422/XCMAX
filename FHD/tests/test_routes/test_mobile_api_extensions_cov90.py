@@ -196,7 +196,14 @@ class TestAiGroupMessagesSuccess:
 class TestAiGroupPost:
     @pytest.mark.asyncio
     async def test_success(self, m):
-        body = SimpleNamespace(message="hi", sender_name="我", mentions=[])
+        body = SimpleNamespace(
+            message="hi",
+            sender_name="我",
+            mentions=[],
+            dispatch=True,
+            branch_context="",
+            context={},
+        )
         with _gate_ok(), _uid(), _mode(), patch.object(m, "AiGroupChatService") as svc:
             svc.return_value.post_message = AsyncMock(return_value={"replies": ["ok"]})
             result = await m.mobile_ai_group_post(
@@ -207,20 +214,29 @@ class TestAiGroupPost:
         assert kwargs["user_id"] == 5
         assert kwargs["group_id"] == "g1"
         assert kwargs["text"] == "hi"
+        # main now forwards the dispatch flag (bool-coerced) into post_message
+        assert kwargs["dispatch"] is True
 
     @pytest.mark.asyncio
     async def test_sender_name_default(self, m):
-        body = SimpleNamespace(message="hi", sender_name=None, mentions=["e1"])
+        body = SimpleNamespace(
+            message="hi", sender_name=None, mentions=["e1"], dispatch=False, context={}
+        )
         with _gate_ok(), _uid(), _mode(), patch.object(m, "AiGroupChatService") as svc:
             svc.return_value.post_message = AsyncMock(return_value={"ok": True})
             await m.mobile_ai_group_post(
                 request=MagicMock(), group_id="g1", body=body, user=_user()
             )
-        assert svc.return_value.post_message.call_args.kwargs["sender_name"] == "我"
+        kwargs = svc.return_value.post_message.call_args.kwargs
+        assert kwargs["sender_name"] == "我"
+        # falsy dispatch coerces to False rather than raising
+        assert kwargs["dispatch"] is False
 
     @pytest.mark.asyncio
     async def test_value_error(self, m):
-        body = SimpleNamespace(message="", sender_name=None, mentions=[])
+        body = SimpleNamespace(
+            message="", sender_name=None, mentions=[], dispatch=False, context={}
+        )
         with _gate_ok(), _uid(), _mode(), patch.object(m, "AiGroupChatService") as svc:
             svc.return_value.post_message = AsyncMock(side_effect=ValueError("空消息"))
             result = await m.mobile_ai_group_post(
@@ -230,7 +246,9 @@ class TestAiGroupPost:
 
     @pytest.mark.asyncio
     async def test_recoverable_error(self, m):
-        body = SimpleNamespace(message="hi", sender_name=None, mentions=[])
+        body = SimpleNamespace(
+            message="hi", sender_name=None, mentions=[], dispatch=False, context={}
+        )
         with _gate_ok(), _uid(), _mode(), patch.object(m, "AiGroupChatService") as svc:
             svc.return_value.post_message = AsyncMock(side_effect=RuntimeError("llm down"))
             result = await m.mobile_ai_group_post(
@@ -425,21 +443,38 @@ class TestConversationStateRoutes:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("route,method", _CONV_ROUTES)
-    async def test_missing_service_module_returns_500(self, m, route, method):
-        """SUSPECTED BUG: the route imports
-        ``app.application.conversation_state_service.ConversationStateService``
-        but that module does not exist in the codebase. The resulting
-        ModuleNotFoundError (an ImportError, in RECOVERABLE_ERRORS) is caught
-        and surfaced as a 500. We assert the *actual* behavior, not the
-        unreachable success path.
+    async def test_service_success_returns_state(self, m, route, method):
+        """main now ships ``app.application.conversation_state_service`` (the
+        previously-missing module), so the route reaches the success path and
+        returns ``format_mobile_response(data=<service result>)``.
+
+        We patch ``ConversationStateService`` at its source module (the route
+        imports it lazily from there) to keep the test offline/deterministic and
+        assert the route forwards uid + conversation_id and wraps the result.
         """
-        result = await getattr(m, route)(conversation_id="c1", user=_user(uid=11))
-        assert result.status_code == 500
+        sentinel = {"conversation_id": "c1", "state": method}
+        with patch("app.application.conversation_state_service.ConversationStateService") as svc:
+            getattr(svc.return_value, method).return_value = sentinel
+            result = await getattr(m, route)(conversation_id="c1", user=_user(uid=11))
+        # success path -> plain mobile-response dict, not a JSONResponse
+        assert result["code"] == 200
+        assert result["success"] is True
+        assert result["data"] == sentinel
+        getattr(svc.return_value, method).assert_called_once_with(user_id=11, conversation_id="c1")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("route,method", _CONV_ROUTES)
+    async def test_service_recoverable_error_returns_500(self, m, route, method):
+        """A recoverable service failure is caught and surfaced as a 500."""
         import json
 
+        with patch("app.application.conversation_state_service.ConversationStateService") as svc:
+            getattr(svc.return_value, method).side_effect = RuntimeError("store")
+            result = await getattr(m, route)(conversation_id="c1", user=_user(uid=11))
+        assert result.status_code == 500
         payload = json.loads(result.body)
         assert payload["success"] is False
-        assert "conversation_state_service" in payload["message"]
+        assert payload["message"] == "store"
 
 
 # ============================================================

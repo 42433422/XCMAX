@@ -364,8 +364,13 @@ def _make_call_ai_svc():
 
 class TestCallAiBranches:
     @pytest.mark.asyncio
-    async def test_persona_path_builds_system_prompt_and_truncates_history(self):
-        """persona_service present -> build_prompt_from_message; >10 history truncated."""
+    async def test_persona_path_builds_system_prompt_and_passes_full_history(self):
+        """persona_service present -> build_prompt_from_message; full history forwarded.
+
+        main 不再在此处截断到最后 10 条:历史全量 extend 进 messages,由
+        ContextWindowManager 在 call_llm_api 内按 token 预算统一裁剪。本测试 mock 了
+        call_llm_api,因此 15 条历史应原样全部出现。
+        """
         svc = _make_call_ai_svc()
         persona = MagicMock()
         persona.build_prompt_from_message = AsyncMock(
@@ -410,11 +415,12 @@ class TestCallAiBranches:
 
         msgs = captured["messages"]
         assert msgs[0] == {"role": "system", "content": "SYSTEM-FROM-PERSONA"}
-        # only last 10 of history + final user message
+        # 全量历史 + 末尾 user 消息(裁剪交给 ContextWindowManager,此处被 mock 不触发)
         assert msgs[-1] == {"role": "user", "content": "你好"}
         history_msgs = msgs[1:-1]
-        assert len(history_msgs) == 10
-        assert history_msgs[0]["content"] == "m5"
+        assert len(history_msgs) == 15
+        assert history_msgs[0]["content"] == "m0"
+        assert history_msgs[-1]["content"] == "m14"
 
         # trace present -> model/provider come from trace
         assert result["action"] == "ai_response"
