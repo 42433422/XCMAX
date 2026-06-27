@@ -18,4 +18,10 @@ def test_review_quality_benchmark_runs_curated_golden_set(tmp_path: Path) -> Non
     assert result["summary"]["false_positive_count"] == 0
     assert result["summary"]["negative_blocker_false_positive_count"] == 0
     assert result["summary"]["incremental_skip_verified_count"] == 5
+    assert result["summary"]["aggregate_score"] == 100
+    assert result["summary"]["macro_category_pass_rate"] == 1.0
+    assert result["evidence"]["aggregation"] == "lm_eval_style_task_category_macro_average"
+    assert result["category_summary"]["secret_detection"]["recall"] == 1.0
+    assert result["category_summary"]["incremental_review_detection"]["incremental_skip_verified_count"] == 5
+    assert result["category_summary"]["fake_fixture_key_no_blocker"]["false_positive_count"] == 0
     assert validate_contract("review_quality_benchmark_result", result)["valid"] is True

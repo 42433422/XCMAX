@@ -5,12 +5,12 @@
     "employee_execution_verified": true,
     "evidence": [
       "retort_cli_status=applied",
-      "duration_sec=21.387",
+      "duration_sec=20.282",
       "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
-      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  12 + |  .../docs/retort_architecture_memory.json           | 398 ++++++++++--- |  .../docs/retort_core_refactor_plan.json            | 138 ++--- |  .../docs/retort_external_review_report.json        | 623 +++++++-------------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  7 files changed, 594 insertions(+), 583 deletions(-)",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |   14 + |  .../docs/retort_architecture_memory.json           |  559 ++++++++--- |  .../docs/retort_core_refactor_plan.json            |  312 +++--- |  .../docs/retort_external_review_report.json        | 1023 +++++++++++++++----- |  .../retort_engine/absorbed_capabilities.py         |    2 +- |  .../retort_engine/absorbed_external_patterns.py    |    2 +- |  .../tests/test_absorbed_capabilities.py            |    2 +- |  7 files changed, 1390 insertions(+), 524 deletions(-)",
       "gates_passed=True",
       "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
-      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627210337-356907943f.json",
+      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627211605-408a94776e.json",
       "commit=",
       "merge_commit=",
       "rollback_rehearsal=False",
@@ -26,13 +26,14 @@
     "merge_verified": false,
     "post_absorption_tests_passed": true
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/pahen/madge",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/EleutherAI/lm-evaluation-harness",
   "pending_dimensions": [
     "comparative_analysis_depth",
+    "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/pahen/madge",
+  "source": "https://github.com/EleutherAI/lm-evaluation-harness",
   "status": "execution_applied_awaiting_merge",
   "tasks": [
     {
@@ -41,7 +42,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/pahen/madge."
+      "why": "Compare implementation patterns from https://github.com/EleutherAI/lm-evaluation-harness."
     },
     {
       "dimension": "product_operability",
@@ -49,7 +50,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/pahen/madge."
+      "why": "Extract usable UX improvements from https://github.com/EleutherAI/lm-evaluation-harness."
     },
     {
       "dimension": "operational_readiness",
@@ -57,7 +58,15 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/pahen/madge."
+      "why": "Adapt CI and release checks from https://github.com/EleutherAI/lm-evaluation-harness."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
@@ -66,6 +75,14 @@
       "task_id": "retort-absorb-plugin-surface",
       "title": "Expose Retort absorption through plugin friendly commands",
       "why": "External project exposes plugin or CLI surfaces; Retort should keep blackhole UI and automation APIs aligned."
+    },
+    {
+      "dimension": "product_operability",
+      "owner_hint": "market-frontend-dev",
+      "priority": "P1",
+      "task_id": "retort-absorb-planet-visual",
+      "title": "Absorb better blackhole planet visual system",
+      "why": "External project has planet, atmosphere, procedural surface, or WebGL scene signals; Retort should make the absorbed project planet look richer without copying assets."
     }
   ]
 }
