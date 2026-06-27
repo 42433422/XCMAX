@@ -713,11 +713,17 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     assert str(project / "retort_engine" / "absorbed_capabilities.py") in result["changed_files"]
     assert str(project / "tests" / "test_absorbed_capabilities.py") in result["changed_files"]
     assert str(project / "docs" / "retort_architecture_memory.json") in result["changed_files"]
+    assert str(project / "docs" / "retort_core_refactor_plan.json") in result["changed_files"]
     assert Path(result["architecture_memory_path"]).is_file()
     assert result["architecture_memory_summary"]["source_count"] == 1
+    assert Path(result["core_refactor_plan_path"]).is_file()
+    assert result["core_refactor_plan_summary"]["task_count"] == 0
     memory = json.loads(Path(result["architecture_memory_path"]).read_text(encoding="utf-8"))
+    refactor_plan = json.loads(Path(result["core_refactor_plan_path"]).read_text(encoding="utf-8"))
     assert memory["runs"][0]["source"] == "unit-source"
     assert memory["component_index"]
+    assert refactor_plan["gate"]["passed"] is True
+    assert refactor_plan["gate"]["status"] == "not_ready"
     assert str(project / "retort_engine" / "review_context_bias.py") in result["changed_files"]
     assert str(project / "tests" / "test_review_context_bias.py") in result["changed_files"]
     assert Path(result["review_context_bias_path"]).is_file()
