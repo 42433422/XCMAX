@@ -14,6 +14,7 @@ class RetortUIServer:
     def __init__(self) -> None:
         self.service = RetortService()
         self.static_root = Path(__file__).with_name("frontend")
+        self.default_project = Path(__file__).resolve().parents[1]
 
     def handler(self) -> type[BaseHTTPRequestHandler]:
         outer = self
@@ -23,6 +24,9 @@ class RetortUIServer:
                 parsed = urlparse(self.path)
                 if parsed.path == "/api/health":
                     self._json({"status": "ok"})
+                    return
+                if parsed.path == "/api/default-project":
+                    self._json({"project": str(outer.default_project)})
                     return
                 target = outer.static_root / ("index.html" if parsed.path in {"", "/"} else parsed.path.lstrip("/"))
                 if not target.is_file():
