@@ -1,5 +1,5 @@
 {
-  "active": true,
+  "active": false,
   "closed_loop_proof": {
     "branch_diff_verified": true,
     "employee_execution_verified": true,
@@ -17,10 +17,16 @@
       "feedback_audit_closed=True",
       "history_result_count=19",
       "queue_records_written=7",
-      "result_tasks_have_queue_records=True"
+      "result_tasks_have_queue_records=True",
+      "merge_commit=9dae65f76f5cf452299f87dc70072aa7ec12eeee",
+      "merge_parent_base=5a0fd0d5ae7e216ad8a33992c72d6809fde72f7c",
+      "merge_parent_absorption=c29d117fdede0bcf173338145c34e716bbadfc46",
+      "merge_message=Merge retort/absorb-20260627",
+      "rollback_rehearsal=True",
+      "rollback_command=git revert -m 1 9dae65f76f5cf452299f87dc70072aa7ec12eeee"
     ],
     "external_advantage_reassessed": true,
-    "merge_verified": false,
+    "merge_verified": true,
     "post_absorption_tests_passed": true
   },
   "external_path": "/Users/a4243342/.codex/worktrees/retort-live/XCMAX/packages/retort_engine/.retort/cache/github/sourcefuse/ai-pr-reviewer",
@@ -32,7 +38,7 @@
     "product_operability"
   ],
   "source": "https://github.com/sourcefuse/ai-pr-reviewer",
-  "status": "execution_applied_awaiting_merge",
+  "status": "closed_loop_verified",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
