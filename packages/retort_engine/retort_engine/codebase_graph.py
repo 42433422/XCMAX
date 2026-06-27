@@ -23,6 +23,7 @@ def build_codebase_graph(project: str | Path, *, include_tests: bool = False, ma
     """Build a deterministic source graph for architecture and absorption targeting."""
     root = Path(project).resolve()
     files = _source_files(root, include_tests=include_tests, max_files=max_files)
+    module_index = _module_index(root, files)
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
     parse_errors: list[dict[str, str]] = []
@@ -37,12 +38,16 @@ def build_codebase_graph(project: str | Path, *, include_tests: bool = False, ma
         file_symbols = _symbols_for_file(rel, tree)
         nodes.extend(file_symbols["nodes"])
         edges.extend(file_symbols["edges"])
+    edges = _dedupe_edges([*edges, *_local_dependency_edges(module_index, edges)])
+    dependency_cycles = _dependency_cycles(edges)
     hotspots = _hotspots(nodes, edges)
     summary = {
         "file_count": len(files),
         "node_count": len(nodes),
         "edge_count": len(edges),
         "import_edge_count": sum(1 for edge in edges if edge["kind"] == "imports"),
+        "local_dependency_edge_count": sum(1 for edge in edges if edge["kind"] == "depends_on"),
+        "dependency_cycle_count": len(dependency_cycles),
         "define_edge_count": sum(1 for edge in edges if edge["kind"] == "defines"),
         "call_edge_count": sum(1 for edge in edges if edge["kind"] == "calls"),
         "hotspot_count": len(hotspots),
@@ -56,6 +61,7 @@ def build_codebase_graph(project: str | Path, *, include_tests: bool = False, ma
         "nodes": nodes,
         "edges": edges,
         "hotspots": hotspots,
+        "dependency_cycles": dependency_cycles,
         "evidence": {
             "style": "deterministic_codebase_graph",
             "source": "codegraph_absorption",
@@ -112,6 +118,7 @@ def code_graph_absorption_proof(project: str | Path, changed_files: list[str], p
     behavior_changed = [path for path in changed if _is_behavior_change(path)]
     changed_hotspots = sorted(path for path in behavior_changed if path in hotspot_files)
     changed_focus_files = sorted(path for path in behavior_changed if path in focus_files)
+    dependency_impact = _dependency_impact(graph, behavior_changed)
     proof_ready = bool(behavior_changed and (changed_hotspots or changed_focus_files))
     return {
         "passed": proof_ready,
@@ -119,12 +126,15 @@ def code_graph_absorption_proof(project: str | Path, changed_files: list[str], p
         "changed_behavior_files": behavior_changed,
         "changed_hotspots": changed_hotspots,
         "changed_focus_files": changed_focus_files,
+        "dependency_impact": dependency_impact,
         "hotspot_files": sorted(hotspot_files)[:24],
         "focus_files": sorted(focus_files)[:24],
         "summary": {
             "changed_behavior_file_count": len(behavior_changed),
             "changed_hotspot_count": len(changed_hotspots),
             "changed_focus_file_count": len(changed_focus_files),
+            "dependency_impact_file_count": len(dependency_impact["impacted_files"]),
+            "dependency_cycle_touch_count": len(dependency_impact["touched_cycles"]),
             "graph_status": graph["status"],
         },
         "evidence": {
@@ -241,6 +251,125 @@ def _is_behavior_change(path: str) -> bool:
 
 def _node_path(node_id: str) -> str:
     return node_id.split(":", 1)[0]
+
+
+def _module_index(root: Path, files: list[Path]) -> dict[str, str]:
+    candidates: dict[str, list[str]] = {}
+    for path in files:
+        rel = path.relative_to(root).as_posix()
+        parts = list(path.relative_to(root).with_suffix("").parts)
+        if path.name == "__init__.py":
+            parts = parts[:-1]
+        if not parts:
+            continue
+        module = ".".join(parts)
+        names = {module, parts[-1]}
+        for index in range(1, len(parts)):
+            names.add(".".join(parts[index:]))
+        for name in names:
+            candidates.setdefault(name, []).append(rel)
+    return {name: rows[0] for name, rows in candidates.items() if len(set(rows)) == 1}
+
+
+def _local_dependency_edges(module_index: dict[str, str], edges: list[dict[str, Any]]) -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for edge in edges:
+        if edge.get("kind") != "imports":
+            continue
+        source = _node_path(str(edge.get("from") or ""))
+        if not source.endswith(DEFAULT_SUFFIXES):
+            continue
+        target = _resolve_local_module(module_index, str(edge.get("to") or ""))
+        if target and target != source:
+            rows.append({"from": source, "to": target, "kind": "depends_on"})
+    return rows
+
+
+def _resolve_local_module(module_index: dict[str, str], imported: str) -> str:
+    normalized = imported.strip(".")
+    if not normalized:
+        return ""
+    parts = normalized.split(".")
+    for size in range(len(parts), 0, -1):
+        candidate = ".".join(parts[:size])
+        if candidate in module_index:
+            return module_index[candidate]
+    return ""
+
+
+def _dependency_cycles(edges: list[dict[str, Any]], *, limit: int = 10) -> list[list[str]]:
+    graph: dict[str, list[str]] = {}
+    for edge in edges:
+        if edge.get("kind") != "depends_on":
+            continue
+        source = str(edge.get("from") or "")
+        target = str(edge.get("to") or "")
+        if source and target:
+            graph.setdefault(source, []).append(target)
+    for source, targets in graph.items():
+        graph[source] = sorted(set(targets))
+
+    cycles: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+
+    def visit(start: str, node: str, path: list[str]) -> None:
+        if len(cycles) >= limit:
+            return
+        for target in graph.get(node, []):
+            if target == start:
+                cycle = _canonical_cycle([*path, start])
+                key = tuple(cycle)
+                if key not in seen:
+                    seen.add(key)
+                    cycles.append(cycle)
+            elif target not in path and target >= start:
+                visit(start, target, [*path, target])
+
+    for start in sorted(graph):
+        visit(start, start, [start])
+        if len(cycles) >= limit:
+            break
+    return sorted(cycles, key=lambda row: (len(row), row))[:limit]
+
+
+def _canonical_cycle(cycle: list[str]) -> list[str]:
+    core = cycle[:-1] if len(cycle) > 1 and cycle[0] == cycle[-1] else cycle
+    if not core:
+        return []
+    rotations = [core[index:] + core[:index] for index in range(len(core))]
+    best = min(rotations)
+    return [*best, best[0]]
+
+
+def _dependency_impact(graph: dict[str, Any], changed_files: list[str], *, limit: int = 24) -> dict[str, Any]:
+    changed = {path for path in changed_files if path.endswith(DEFAULT_SUFFIXES)}
+    dependencies: dict[str, set[str]] = {}
+    dependents: dict[str, set[str]] = {}
+    for edge in graph.get("edges") or []:
+        if not isinstance(edge, dict) or edge.get("kind") != "depends_on":
+            continue
+        source = str(edge.get("from") or "")
+        target = str(edge.get("to") or "")
+        if not source or not target:
+            continue
+        dependencies.setdefault(source, set()).add(target)
+        dependents.setdefault(target, set()).add(source)
+    impacted = set(changed)
+    for path in changed:
+        impacted.update(dependencies.get(path, set()))
+        impacted.update(dependents.get(path, set()))
+    touched_cycles = [
+        cycle
+        for cycle in graph.get("dependency_cycles") or []
+        if isinstance(cycle, list) and any(str(item) in changed for item in cycle)
+    ]
+    return {
+        "changed_files": sorted(changed),
+        "impacted_files": sorted(impacted)[:limit],
+        "direct_dependencies": {path: sorted(dependencies.get(path, set())) for path in sorted(changed)},
+        "direct_dependents": {path: sorted(dependents.get(path, set())) for path in sorted(changed)},
+        "touched_cycles": touched_cycles[:limit],
+    }
 
 
 def _symbols_for_file(rel: str, tree: ast.AST) -> dict[str, list[dict[str, Any]]]:

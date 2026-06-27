@@ -74,6 +74,25 @@ def test_codebase_graph_reports_parse_errors_without_crashing(tmp_path: Path) ->
     assert graph["evidence"]["parse_errors"][0]["path"] == "broken.py"
 
 
+def test_codebase_graph_resolves_local_dependencies_and_cycles(tmp_path: Path) -> None:
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "__init__.py").write_text("", encoding="utf-8")
+    (package / "a.py").write_text("from pkg import b\n\ndef run():\n    return b.run()\n", encoding="utf-8")
+    (package / "b.py").write_text("from pkg import c\n\ndef run():\n    return c.run()\n", encoding="utf-8")
+    (package / "c.py").write_text("import pkg.a\n\ndef run():\n    return pkg.a.run()\n", encoding="utf-8")
+
+    graph = build_codebase_graph(tmp_path)
+
+    dependency_edges = {(edge["from"], edge["to"]) for edge in graph["edges"] if edge["kind"] == "depends_on"}
+    assert ("pkg/a.py", "pkg/b.py") in dependency_edges
+    assert ("pkg/b.py", "pkg/c.py") in dependency_edges
+    assert ("pkg/c.py", "pkg/a.py") in dependency_edges
+    assert graph["summary"]["local_dependency_edge_count"] == 3
+    assert graph["summary"]["dependency_cycle_count"] == 1
+    assert graph["dependency_cycles"] == [["pkg/a.py", "pkg/b.py", "pkg/c.py", "pkg/a.py"]]
+
+
 def test_absorption_focus_map_ranks_matching_graph_files(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
@@ -121,3 +140,28 @@ def test_code_graph_absorption_proof_requires_focus_or_hotspot_hit(tmp_path: Pat
     assert proof["passed"] is True
     assert proof["changed_focus_files"] == ["retort_engine/codebase_graph.py"]
     assert missed["passed"] is False
+
+
+def test_code_graph_absorption_proof_reports_dependency_impact(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    package = project / "pkg"
+    package.mkdir(parents=True)
+    a_file = package / "a.py"
+    b_file = package / "b.py"
+    c_file = package / "c.py"
+    a_file.write_text("from pkg import b\n\ndef run():\n    return b.run()\n", encoding="utf-8")
+    b_file.write_text("from pkg import c\n\ndef run():\n    return c.run()\n", encoding="utf-8")
+    c_file.write_text("import pkg.a\n\ndef run():\n    return pkg.a.run()\n", encoding="utf-8")
+
+    proof = code_graph_absorption_proof(
+        project,
+        [str(b_file)],
+        {"own_focus_files": ["pkg/b.py"]},
+    )
+
+    assert proof["passed"] is True
+    assert proof["summary"]["dependency_impact_file_count"] == 3
+    assert proof["summary"]["dependency_cycle_touch_count"] == 1
+    assert proof["dependency_impact"]["direct_dependencies"] == {"pkg/b.py": ["pkg/c.py"]}
+    assert proof["dependency_impact"]["direct_dependents"] == {"pkg/b.py": ["pkg/a.py"]}
+    assert proof["dependency_impact"]["touched_cycles"] == [["pkg/a.py", "pkg/b.py", "pkg/c.py", "pkg/a.py"]]
