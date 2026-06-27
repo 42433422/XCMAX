@@ -210,6 +210,45 @@ def test_review_context_bias_generation_is_executable(tmp_path: Path) -> None:
     assert module.context_signal_strength() == 60
 
 
+def test_review_context_bias_generation_merges_previous_absorptions(tmp_path: Path) -> None:
+    previous_content = real._review_context_bias_content(
+        "run-old",
+        "https://github.com/example/old-reviewer",
+        tmp_path / "old",
+        {
+            "signals": ["review_pipeline", "file_grouping", "safety_policy", "semantic_index"],
+            "signal_evidence": {
+                "review_pipeline": ["README.md"],
+                "semantic_index": ["src/index.py"],
+            },
+        },
+    )
+    previous_path = tmp_path / "review_context_bias.py"
+    write(previous_path, previous_content)
+
+    content = real._review_context_bias_content(
+        "run-new",
+        "https://github.com/example/local-reviewer",
+        tmp_path / "new",
+        {
+            "signals": ["review_pipeline", "file_grouping"],
+            "signal_evidence": {"file_grouping": ["reviewer.py"]},
+        },
+        existing=real._existing_review_context_bias(previous_path),
+    )
+    write(previous_path, content)
+    module = load_module(previous_path, "generated_merged_review_context_bias")
+    bias = module.review_context_bias()
+
+    assert bias["source"] == "https://github.com/example/local-reviewer"
+    assert bias["sources"] == ["https://github.com/example/old-reviewer", "https://github.com/example/local-reviewer"]
+    assert bias["run_ids"] == ["run-old", "run-new"]
+    assert {"review_pipeline", "file_grouping", "safety_policy", "semantic_index"} <= set(bias["signals"])
+    assert bias["signal_evidence"]["review_pipeline"] == ["README.md"]
+    assert bias["signal_evidence"]["file_grouping"] == ["reviewer.py"]
+    assert module.context_signal_strength() >= 80
+
+
 def test_review_context_bias_is_only_written_for_context_signals() -> None:
     assert real._should_absorb_review_context_bias({"signals": ["benchmarking"]}) is False
     assert real._should_absorb_review_context_bias({"signals": ["plugin_surface"]}) is False
