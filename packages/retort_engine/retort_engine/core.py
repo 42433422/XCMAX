@@ -17,8 +17,9 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.contracts import contract_names
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
-from retort_engine.pr_publish import build_publish_dry_run
+from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.task_prioritization import build_task_prioritization_report
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,9 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "incremental_pr_review": "previous_diff_text" in text and "skipped_existing_change_count" in text,
         "pr_dry_run": "review-pr" in text and "review_pr_url" in text and "/api/review-pr" in text,
         "pr_publish_dry_run": "publish-pr-dry-run" in text and "build_publish_dry_run" in text and "/api/publish-pr-dry-run" in text,
+        "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
+        "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -353,8 +356,14 @@ class RetortService:
     def publish_pr_dry_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_publish_dry_run(str(payload.get("review_file") or payload.get("review_report") or ""), max_comments=int(payload.get("max_comments") or 50))
 
+    def publish_pr_sandbox(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_publish_sandbox(str(payload.get("dry_run_file") or payload.get("publish_dry_run") or ""))
+
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_task_prioritization_report(str(payload.get("project") or payload.get("project_path") or "."))
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
@@ -763,6 +772,11 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"pr_publish_dry_run_comment_count={publish_summary.get('would_post_comment_count', '')}")
     evidence.append(f"pr_publish_dry_run_permission={publish_summary.get('permission_required', '')}")
     evidence.append(f"pr_publish_dry_run_rollback={(publish_report.get('rollback') or {}).get('strategy', '') if isinstance(publish_report.get('rollback'), dict) else ''}")
+    sandbox_report = _read_json(project / "docs" / "retort_pr_publish_sandbox.json")
+    sandbox_summary = sandbox_report.get("summary") if isinstance(sandbox_report.get("summary"), dict) else {}
+    evidence.append(f"pr_publish_sandbox_status={sandbox_report.get('status', '')}")
+    evidence.append(f"pr_publish_sandbox_created_count={sandbox_summary.get('created_comment_count', '')}")
+    evidence.append(f"pr_publish_sandbox_rollback_verified={sandbox_summary.get('rollback_verified', '')}")
     replay_report = _read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -770,6 +784,12 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}")
     evidence.append(f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}")
     evidence.append(f"cross_project_replay_passed_checks={sum(1 for item in replay_checks if item.get('passed'))}/{len(replay_checks)}")
+    task_report = _read_json(project / "docs" / "retort_task_prioritization_report.json")
+    task_summary = task_report.get("summary") if isinstance(task_report.get("summary"), dict) else {}
+    evidence.append(f"task_prioritization_status={task_report.get('status', '')}")
+    evidence.append(f"task_prioritization_queued_count={task_summary.get('queued_task_count', '')}")
+    evidence.append(f"task_prioritization_completed_count={task_summary.get('completed_result_count', '')}")
+    evidence.append(f"task_prioritization_dimension_count={task_summary.get('prioritized_dimension_count', '')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -908,10 +928,12 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     dry_source = root / "retort_engine" / "pr_dry_run.py"
     publish_source = root / "retort_engine" / "pr_publish.py"
     replay_source = root / "retort_engine" / "comparative_replay.py"
+    task_source = root / "retort_engine" / "task_prioritization.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
     replay_test = root / "tests" / "test_comparative_replay.py"
+    task_test = root / "tests" / "test_task_prioritization.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -965,6 +987,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_dry_run.py", dry_source.is_file()),
                 ("retort_engine/pr_publish.py", publish_source.is_file()),
                 ("retort_engine/comparative_replay.py", replay_source.is_file()),
+                ("retort_engine/task_prioritization.py", task_source.is_file()),
             )
             if exists
         ],
@@ -975,6 +998,7 @@ def _pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_dry_run.py", dry_test.is_file()),
                 ("tests/test_pr_publish.py", publish_test.is_file()),
                 ("tests/test_comparative_replay.py", replay_test.is_file()),
+                ("tests/test_task_prioritization.py", task_test.is_file()),
             )
             if exists
         ],

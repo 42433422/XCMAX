@@ -35,6 +35,28 @@ def build_publish_dry_run(review_report_path: str | Path, *, max_comments: int =
     }
 
 
+def run_publish_sandbox(publish_dry_run_path: str | Path) -> dict[str, Any]:
+    dry_run_path = Path(publish_dry_run_path)
+    dry_run = json.loads(dry_run_path.read_text(encoding="utf-8"))
+    comments = [item for item in dry_run.get("comments") or [] if isinstance(item, dict)]
+    idempotency_key = str((dry_run.get("summary") or {}).get("idempotency_key") or "")
+    created = [_sandbox_receipt(str(dry_run.get("pr_url") or ""), idempotency_key, comment) for comment in comments]
+    rolled_back = [{**item, "deleted": True} for item in created]
+    return {
+        "status": "sandbox_rolled_back",
+        "pr_url": str(dry_run.get("pr_url") or ""),
+        "source_dry_run": str(dry_run_path),
+        "summary": {
+            "created_comment_count": len(created),
+            "rolled_back_comment_count": len(rolled_back),
+            "rollback_verified": len(created) == len(rolled_back),
+            "idempotency_key": idempotency_key,
+        },
+        "created_receipts": created,
+        "rollback_receipts": rolled_back,
+    }
+
+
 def _publish_comment(comment: dict[str, Any]) -> dict[str, Any]:
     return {
         "path": str(comment.get("file") or ""),
@@ -49,3 +71,14 @@ def _publish_comment(comment: dict[str, Any]) -> dict[str, Any]:
 def _idempotency_key(pr_url: str, comments: list[dict[str, Any]]) -> str:
     payload = json.dumps({"pr_url": pr_url, "comments": comments}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _sandbox_receipt(pr_url: str, idempotency_key: str, comment: dict[str, Any]) -> dict[str, Any]:
+    payload = json.dumps({"pr_url": pr_url, "key": idempotency_key, "comment": comment}, ensure_ascii=False, sort_keys=True)
+    return {
+        "comment_id": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12],
+        "path": str(comment.get("path") or ""),
+        "line": int(comment.get("line") or 1),
+        "idempotency_key": idempotency_key,
+        "created": True,
+    }
