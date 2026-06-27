@@ -13,10 +13,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.absorption_workflow import absorption_status as _workflow_absorption_status
+from retort_engine.absorption_workflow import absorption_summary as _workflow_absorption_summary
+from retort_engine.absorption_workflow import block_merge_after_failed_gates as _workflow_block_merge_after_failed_gates
+from retort_engine.absorption_workflow import commit_absorption_execution as _workflow_commit_absorption_execution
+from retort_engine.absorption_workflow import extract_json_from_stdout as _workflow_extract_json_from_stdout
+from retort_engine.absorption_workflow import is_complete_absorption_stdout_json as _workflow_is_complete_absorption_stdout_json
+from retort_engine.absorption_workflow import run_real_absorption_cli as _workflow_run_real_absorption_cli
+from retort_engine.absorption_workflow import truthy as _workflow_truthy
 from retort_engine.branching import BranchWorkflowState, begin_absorption_branch, merge_absorption_branch
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
+from retort_engine.core_refactor_execution import verify_core_refactor_execution
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 from retort_engine.git_status import blocking_git_status as _blocking_git_status
@@ -119,6 +128,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
     tracked = _tracking_state(root)
     proof = _closed_loop_proof(root)
     capability_audit = _capability_absorption_audit(root)
+    refactor_execution = verify_core_refactor_execution(root)
     state = _public_absorption_state(root)
     evidence = tuple(
         [
@@ -131,6 +141,8 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
             f"closed_loop_missing={','.join(proof['missing'])}",
             f"absorption_active={state.get('active')}",
             f"absorption_status={state.get('status')}",
+            f"core_refactor_execution_status={refactor_execution.get('status')}",
+            f"core_refactor_implemented_tasks={refactor_execution.get('implemented_task_count')}/{refactor_execution.get('task_count')}",
         ]
         + [f"{k}={v}" for k, v in features.items()]
     )
@@ -140,6 +152,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "absorption_state": state,
         "closed_loop_proof": proof,
         "capability_absorption_audit": capability_audit,
+        "core_refactor_execution": refactor_execution,
         "blackhole_ui_structure": blackhole_ui_structure(root),
         "score_authority": "paibi_llm_prompt_only",
         "local_scores_removed": True,
@@ -472,96 +485,24 @@ class RetortService:
 
 
 def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]], external_assessment: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    if not _truthy(payload.get("execute_absorption", True)):
-        return {"status": "disabled", "summary": "Real CLI absorption is disabled for this request.", "changed_files": [], "gates": [], "gates_passed": False}
-    if external_path is None or not external_path.is_dir():
-        return {"status": "skipped_no_external_project", "summary": "External project is not available locally.", "changed_files": [], "gates": [], "gates_passed": False}
-    request_dir = own / ".retort" / "execution_requests"
-    request_dir.mkdir(parents=True, exist_ok=True)
-    request_path = request_dir / f"{uuid.uuid4().hex}.json"
-    request_payload = {
-        "own_project": str(own),
-        "source": source,
-        "external_path": str(external_path),
-        "tasks": tasks,
-        "external_assessment": external_assessment,
-        "run_local_gates": bool(payload.get("run_local_gates")),
-        "employee_queue": str(payload.get("employee_queue") or ""),
-        "history_store": str(payload.get("history_store") or ""),
-        "python": _python(),
-    }
-    request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    cmd = [_python(), "-m", "retort_engine.cli", "apply-absorption", "--payload-file", str(request_path), "--json"]
-    env = os.environ.copy()
-    package_root = str(Path(__file__).resolve().parents[1])
-    env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
-    timeout = int(payload.get("execution_timeout_sec") or 1800)
-    try:
-        result = subprocess.run(cmd, cwd=own, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=timeout, check=False)
-    except subprocess.TimeoutExpired as exc:
-        return {
-            "status": "timeout",
-            "summary": f"Real CLI absorption exceeded {timeout} seconds.",
-            "command": cmd,
-            "changed_files": [],
-            "gates": [],
-            "gates_passed": False,
-            "stdout_tail": (exc.stdout or "")[-4000:] if isinstance(exc.stdout, str) else "",
-            "stderr_tail": (exc.stderr or "")[-4000:] if isinstance(exc.stderr, str) else "",
-        }
-    parsed = _extract_json_from_stdout(result.stdout)
-    if not parsed:
-        return {
-            "status": "failed",
-            "summary": "Real CLI absorption did not return JSON.",
-            "command": cmd,
-            "exit_code": result.returncode,
-            "changed_files": [],
-            "gates": [],
-            "gates_passed": False,
-            "stdout_tail": result.stdout[-4000:],
-            "stderr_tail": result.stderr[-4000:],
-        }
-    parsed["command"] = cmd
-    parsed["exit_code"] = result.returncode
-    if result.stderr:
-        parsed["stderr_tail"] = result.stderr[-4000:]
-    return parsed
+    return _workflow_run_real_absorption_cli(
+        own,
+        source,
+        external_path,
+        tasks,
+        external_assessment,
+        payload,
+        resolve_python=_python,
+        package_root=Path(__file__).resolve().parents[1],
+    )
 
 
 def _extract_json_from_stdout(stdout: str) -> dict[str, Any]:
-    try:
-        parsed = json.loads(stdout.strip())
-    except json.JSONDecodeError:
-        parsed = None
-    if isinstance(parsed, dict) and _is_complete_absorption_stdout_json(parsed):
-        return parsed
-    decoder = json.JSONDecoder()
-    candidates: list[dict[str, Any]] = []
-    for index, char in enumerate(stdout):
-        if char != "{":
-            continue
-        try:
-            value, _ = decoder.raw_decode(stdout[index:])
-        except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict) and _is_complete_absorption_stdout_json(value):
-            candidates.append(value)
-    return candidates[-1] if candidates else {}
+    return _workflow_extract_json_from_stdout(stdout)
 
 
 def _is_complete_absorption_stdout_json(value: dict[str, Any]) -> bool:
-    required = {
-        "status",
-        "project",
-        "summary",
-        "changed_files",
-        "gates",
-        "gates_passed",
-        "review_report_path",
-        "employee_results_path",
-    }
-    return required.issubset(value) and isinstance(value.get("changed_files"), list) and isinstance(value.get("gates"), list)
+    return _workflow_is_complete_absorption_stdout_json(value)
 
 
 def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: dict[str, Any]) -> None:
@@ -569,38 +510,11 @@ def _record_execution_proof(own: Path, execution: dict[str, Any], branch_state: 
 
 
 def _commit_absorption_execution(own: Path, source: str, execution: dict[str, Any]) -> dict[str, Any]:
-    root = _git_root(own)
-    changed_files = [Path(path).expanduser().resolve() for path in execution.get("changed_files") or []]
-    if root is None or not changed_files:
-        return {"status": "skipped", "reason": "no_git_root_or_no_changed_files"}
-    rels = [str(path.relative_to(root)) for path in changed_files if path.is_relative_to(root)]
-    if not rels:
-        return {"status": "skipped", "reason": "no_changed_files_inside_git_root"}
-    _git(root, "add", "--", *rels)
-    staged = subprocess.run(["git", "diff", "--cached", "--quiet", "--", *rels], cwd=root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False).returncode != 0
-    if not staged:
-        return {"status": "skipped", "reason": "no_staged_changes"}
-    _git(root, "commit", "-m", f"Retort absorb {source[:80]}")
-    commit = _git(root, "rev-parse", "--short", "HEAD").strip()
-    return {"status": "committed", "commit": commit, "files": rels}
+    return _workflow_commit_absorption_execution(own, source, execution, git_root=_git_root, git_command=_git)
 
 
 def _block_merge_after_failed_gates(own: Path, branch_state: dict[str, Any]) -> dict[str, Any]:
-    root = _git_root(own)
-    updated = {
-        **branch_state,
-        "merged": False,
-        "status": "merge_blocked_by_gates",
-        "error": "Absorption gates failed; refusing to merge absorption branch into the main project.",
-    }
-    base = str(branch_state.get("base_branch") or "")
-    if root is None or not base:
-        return updated
-    try:
-        _git(root, "checkout", base)
-        return {**updated, "returned_to_base_branch": True}
-    except RuntimeError as exc:
-        return {**updated, "returned_to_base_branch": False, "return_error": str(exc)}
+    return _workflow_block_merge_after_failed_gates(own, branch_state, git_root=_git_root, git_command=_git)
 
 
 def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
@@ -608,25 +522,15 @@ def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
 
 
 def _absorption_status(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
-    if execution.get("status") == "applied":
-        return "absorption_execution_applied"
-    if execution.get("status") in {"failed", "timeout"}:
-        return "absorption_execution_failed"
-    return "tasks_generated" if tasks else "no_external_advantage_found"
+    return _workflow_absorption_status(tasks, execution)
 
 
 def _absorption_summary(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
-    if execution.get("status") == "applied":
-        return f"Real CLI absorption changed {len(execution.get('changed_files') or [])} file(s) after generating {len(tasks)} task(s)."
-    if execution.get("status") in {"failed", "timeout"}:
-        return f"Generated {len(tasks)} task(s), but real CLI absorption failed: {execution.get('summary', '')}"
-    return f"Generated {len(tasks)} absorption task(s). Retort now requires PaiBi LLM reassessment before any score is shown."
+    return _workflow_absorption_summary(tasks, execution)
 
 
 def _truthy(value: Any) -> bool:
-    if isinstance(value, str):
-        return value.strip().lower() not in {"0", "false", "off", "no", "disabled"}
-    return bool(value)
+    return _workflow_truthy(value)
 
 
 def _assess_external_project(external_path: Path | None, source: str) -> dict[str, Any]:
@@ -976,6 +880,7 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append("closed_loop_five_proofs_verified=True")
     evidence.append(f"contract_schema_count={len(contract_names())}")
     audit = _capability_absorption_audit(project)
+    refactor_execution = verify_core_refactor_execution(project)
     evidence.append(f"capability_absorption_local_score_removed={audit.get('local_score_removed', True)}")
     evidence.append(f"capability_absorption_status={audit.get('status')}")
     evidence.append(f"capability_absorption_risk_level={audit.get('risk_level')}")
@@ -996,6 +901,9 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"employee_worker_review_comment_count={worker_review.get('comment_count', '')}")
     evidence.append(f"employee_worker_review_artifact_exists={worker_review.get('artifact_exists', False)}")
     evidence.append(f"external_project_count={audit.get('external_project_count', '')}")
+    evidence.append(f"core_refactor_execution_status={refactor_execution.get('status')}")
+    evidence.append(f"core_refactor_implemented_tasks={refactor_execution.get('implemented_task_count')}/{refactor_execution.get('task_count')}")
+    evidence.append(f"core_refactor_missing_count={len(refactor_execution.get('missing') or [])}")
     pr_review = _pr_review_runtime_evidence(project)
     evidence.append(f"pr_review_runtime={pr_review.get('runtime')}")
     evidence.append(f"pr_review_cli={pr_review.get('cli')}")
@@ -1502,21 +1410,23 @@ def _code_line_count(path: Path) -> int:
 
 def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
     core = root / "retort_engine" / "core.py"
+    workflow = root / "retort_engine" / "absorption_workflow.py"
     loop = root / "retort_engine" / "similar_project_loop.py"
     paibi = root / "retort_engine" / "paibi_llm.py"
+    prompting = root / "retort_engine" / "paibi_prompting.py"
     evolution = root / "retort_engine" / "self_evolution.py"
     proof = root / "retort_engine" / "proof.py"
-    if not any(path.is_file() for path in (core, loop, paibi, evolution, proof)):
+    if not any(path.is_file() for path in (core, workflow, loop, paibi, prompting, evolution, proof)):
         return {"checks": [], "failed": []}
-    core_text = _read(core)
+    workflow_text = _read(workflow)
     loop_text = _read(loop)
-    paibi_text = _read(paibi)
+    prompting_text = _read(prompting)
     evolution_text = _read(evolution)
     proof_text = _read(proof)
     checks = [
         {
             "name": "strict_absorption_stdout_json",
-            "passed": "_is_complete_absorption_stdout_json" in core_text and "required.issubset" in core_text and "candidates[-1]" in core_text,
+            "passed": "is_complete_absorption_stdout_json" in workflow_text and "required.issubset" in workflow_text and "candidates[-1]" in workflow_text,
         },
         {
             "name": "closed_loop_cross_validation",
@@ -1548,7 +1458,7 @@ def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
         },
         {
             "name": "prompt_says_local_audit_has_no_score",
-            "passed": "能力吸收审计只提供风险信号" in paibi_text and "不得把本地能力吸收审计当作参考分" in paibi_text,
+            "passed": "能力吸收审计只提供风险信号" in prompting_text and "不得把本地能力吸收审计当作参考分" in prompting_text,
         },
     ]
     failed = [str(item["name"]) for item in checks if not item["passed"]]
