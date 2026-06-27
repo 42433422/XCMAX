@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
     pr_review = pr_review_runtime_evidence(root)
     support_behavior_source_files = [str(rel) for rel in pr_review.get("behavior_source_files") or []]
     support_behavior_test_files = [str(rel) for rel in pr_review.get("behavior_test_files") or []]
+    post_hardening = post_absorption_hardening_files(root)
     employee_mode = latest_employee_execution_mode(root)
     employee_worker_review = latest_employee_worker_review(root)
     generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
@@ -72,7 +74,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         blockers.append("latest_absorption_report_or_registry_only")
     if behavior_source_files and not behavior_test_files:
         blockers.append("latest_behavior_change_missing_tests")
-    if not behavior_source_files:
+    if not behavior_source_files and not post_hardening["behavior_source_files"]:
         blockers.append("latest_absorption_missing_core_behavior_diff")
     if health["source_line_count"] and health["test_to_source_ratio"] < MIN_TEST_TO_SOURCE_RATIO:
         blockers.append("low_test_to_source_ratio")
@@ -92,6 +94,7 @@ def capability_absorption_audit(root: Path) -> dict[str, Any]:
         "behavior_test_files": behavior_test_files,
         "support_behavior_source_files": support_behavior_source_files,
         "support_behavior_test_files": support_behavior_test_files,
+        "post_absorption_hardening": post_hardening,
         "generated_evidence_files": generated_evidence_files,
         "other_files": other_files,
         "generated_only": generated_only,
@@ -223,6 +226,50 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             if exists
         ],
     }
+
+
+def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
+    merge_commit = latest_absorption_merge_commit(root)
+    if not merge_commit:
+        return {"merge_commit": "", "behavior_source_files": [], "behavior_test_files": [], "file_count": 0}
+    git_root = root.parents[1] if root.name == "retort_engine" and root.parent.name == "packages" else root
+    pathspec = ["packages/retort_engine/retort_engine", "packages/retort_engine/tests"] if git_root != root else ["retort_engine", "tests"]
+    result = subprocess.run(
+        ["git", "diff", "--name-only", f"{merge_commit}..HEAD", "--", *pathspec],
+        cwd=git_root,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return {"merge_commit": merge_commit, "behavior_source_files": [], "behavior_test_files": [], "file_count": 0, "error": result.stderr[-400:]}
+    rels = [_project_rel_from_git_path(root, line.strip()) for line in result.stdout.splitlines() if line.strip()]
+    behavior_source = sorted({rel for rel in rels if Path(rel).suffix.lower() in BEHAVIOR_SUFFIXES and not is_behavior_test_file(rel) and not is_generated_absorption_file(rel)})
+    behavior_tests = sorted({rel for rel in rels if is_behavior_test_file(rel)})
+    return {
+        "merge_commit": merge_commit,
+        "behavior_source_files": behavior_source,
+        "behavior_test_files": behavior_tests,
+        "file_count": len([rel for rel in rels if rel]),
+    }
+
+
+def latest_absorption_merge_commit(root: Path) -> str:
+    state = read_json(root / ".retort" / "absorption_state.json")
+    proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
+    for item in proof.get("evidence") or []:
+        text = str(item)
+        if text.startswith("merge_commit="):
+            return text.split("=", 1)[1].strip()
+    return ""
+
+
+def _project_rel_from_git_path(root: Path, path: str) -> str:
+    prefix = "packages/retort_engine/"
+    if root.name == "retort_engine" and root.parent.name == "packages" and path.startswith(prefix):
+        return path.removeprefix(prefix)
+    return path
 
 
 def latest_absorption_run(root: Path) -> dict[str, Any]:
