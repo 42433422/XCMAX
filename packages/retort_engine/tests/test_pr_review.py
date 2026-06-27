@@ -257,6 +257,21 @@ def test_review_diff_balances_contexts_for_large_diffs() -> None:
     assert all(comment["publishable"] is True for comment in result["comments"])
 
 
+def test_review_diff_employee_feedback_changes_next_ranking() -> None:
+    diff = _single_add_diff("app/runtime.py", "# TODO: finish runtime behavior") + _single_add_diff("tests/test_runtime.py", "# TODO: assert runtime behavior")
+
+    before = review_diff(diff, max_comments=1)
+    after = review_diff(diff, max_comments=1, employee_feedback=[{"dimension": "test_gate_evidence", "status": "failed"}])
+
+    assert before["comments"][0]["review_context"] == "runtime"
+    assert before["summary"]["employee_feedback_ranked"] is False
+    assert after["comments"][0]["review_context"] == "tests"
+    assert after["comments"][0]["feedback_rank_weight"] >= 100
+    assert "feedback=" in after["comments"][0]["rank_reason"]
+    assert after["summary"]["employee_feedback_ranked"] is True
+    assert after["summary"]["employee_feedback_context_weights"]["tests"] >= 100
+
+
 def test_review_context_helpers_classify_common_project_files() -> None:
     assert review_context_for_file("app/auth.py") == "security"
     assert review_context_for_file("tests/test_auth.py") == "tests"

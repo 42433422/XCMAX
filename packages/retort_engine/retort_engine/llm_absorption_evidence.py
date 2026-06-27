@@ -123,6 +123,8 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_core_large_diff_chunking={pr_review.get('core_large_diff_chunking')}",
         f"pr_review_core_large_diff_chunk_count={pr_review.get('core_large_diff_chunk_count')}",
         f"pr_review_core_large_diff_context_balancing={pr_review.get('core_large_diff_context_balancing')}",
+        f"pr_review_employee_feedback_changes_ranking={pr_review.get('employee_feedback_changes_ranking')}",
+        f"pr_review_employee_feedback_rank_context={pr_review.get('employee_feedback_rank_context')}",
     ]
 
 
