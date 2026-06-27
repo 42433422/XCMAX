@@ -32,28 +32,47 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     run_id = _run_id(source)
     external_profile = _external_profile(external_path)
     semantic_review = _semantic_review(root, external_path)
+    absorption_quality_path = _absorption_quality_target(root)
     module_path = _implementation_target(root)
     capability_path = _capability_target(root)
     capability_test_path = _capability_test_target(root)
+    review_context_bias_path = _review_context_bias_target(root)
+    review_context_bias_test_path = _review_context_bias_test_target(root)
     log_path = root / "docs" / "retort_absorption_log.md"
     report_path = root / "docs" / "retort_external_review_report.json"
-    before = _snapshot([module_path, capability_path, capability_test_path, log_path, report_path])
+    tracked_paths = [absorption_quality_path, module_path, capability_path, capability_test_path, review_context_bias_path, review_context_bias_test_path, log_path, report_path]
+    before = _snapshot(tracked_paths)
     review_report = _review_report(root, run_id, source, external_path, tasks, external_profile, semantic_review)
+    _write_absorption_quality_helper(absorption_quality_path)
     module_path.parent.mkdir(parents=True, exist_ok=True)
     module_path.write_text(_module_content(run_id, source, external_path, tasks, external_profile), encoding="utf-8")
     capability_path.parent.mkdir(parents=True, exist_ok=True)
     capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
     capability_test_path.parent.mkdir(parents=True, exist_ok=True)
     capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
+    writes_review_context_bias = _should_absorb_review_context_bias(external_profile)
+    if writes_review_context_bias:
+        review_context_bias_path.parent.mkdir(parents=True, exist_ok=True)
+        review_context_bias_path.write_text(_review_context_bias_content(run_id, source, external_path, external_profile), encoding="utf-8")
+        review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
+        review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
     report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    changed_files = _changed_files(before, [module_path, capability_path, capability_test_path, log_path, report_path])
+    changed_files = _changed_files(before, tracked_paths)
     gates = [
+        _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(absorption_quality_path)], root, timeout=60),
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60),
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(capability_path)], root, timeout=60),
         _run_command([_python(payload), "-m", "pytest", str(capability_test_path.relative_to(root)), "-q"], root, timeout=120),
     ]
+    if writes_review_context_bias:
+        gates.extend(
+            [
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(review_context_bias_path)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(review_context_bias_test_path.relative_to(root)), "-q"], root, timeout=120),
+            ]
+        )
     if payload.get("run_local_gates"):
         gates.extend(_local_gate_commands(root, payload))
     diff_summary = _git_diff_summary(root, changed_files)
@@ -72,6 +91,8 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     result["semantic_review"] = semantic_review
     result["capability_module_path"] = str(capability_path)
     result["capability_test_path"] = str(capability_test_path)
+    result["review_context_bias_path"] = str(review_context_bias_path) if writes_review_context_bias else ""
+    result["review_context_bias_test_path"] = str(review_context_bias_test_path) if writes_review_context_bias else ""
     result["review_report_path"] = str(report_path)
     result["reproducibility"] = {"command": f"retort absorb --own-project {root} --external-path {external_path} --run-local-gates --branch-workflow --merge-after"}
     result["queue_records_written"] = _write_execution_queue_records(str(payload.get("employee_queue") or ""), run_id, source, tasks)
@@ -92,6 +113,24 @@ def _implementation_target(root: Path) -> Path:
     return root / "retort_absorbed_patterns.py"
 
 
+def _absorption_quality_target(root: Path) -> Path:
+    retort_package = root / "retort_engine"
+    if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
+        return retort_package / "absorption_quality.py"
+    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    if len(packages) == 1:
+        return packages[0] / "absorption_quality.py"
+    return root / "absorption_quality.py"
+
+
+def _write_absorption_quality_helper(target: Path) -> None:
+    source = Path(__file__).with_name("absorption_quality.py").resolve()
+    if target.resolve() == source:
+        return
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(_read(source), encoding="utf-8")
+
+
 def _capability_target(root: Path) -> Path:
     retort_package = root / "retort_engine"
     if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
@@ -104,6 +143,20 @@ def _capability_target(root: Path) -> Path:
 
 def _capability_test_target(root: Path) -> Path:
     return root / "tests" / "test_absorbed_capabilities.py"
+
+
+def _review_context_bias_target(root: Path) -> Path:
+    retort_package = root / "retort_engine"
+    if retort_package.is_dir() and (retort_package / "__init__.py").is_file():
+        return retort_package / "review_context_bias.py"
+    packages = [path for path in root.iterdir() if path.is_dir() and (path / "__init__.py").is_file() and not path.name.startswith(".") and path.name != "tests"]
+    if len(packages) == 1:
+        return packages[0] / "review_context_bias.py"
+    return root / "review_context_bias.py"
+
+
+def _review_context_bias_test_target(root: Path) -> Path:
+    return root / "tests" / "test_review_context_bias.py"
 
 
 def _capability_import_name(root: Path, capability_path: Path) -> str:
@@ -154,6 +207,89 @@ def absorbed_external_patterns() -> dict[str, Any]:
 '''
 
 
+def _should_absorb_review_context_bias(profile: dict[str, Any]) -> bool:
+    signals = set(profile.get("signals") or [])
+    return bool(signals & {"review_pipeline", "file_grouping", "diff_hunk_review"})
+
+
+def _review_context_bias_content(run_id: str, source: str, external_path: Path, profile: dict[str, Any]) -> str:
+    signals = list(profile.get("signals") or [])
+    signal_evidence = dict(profile.get("signal_evidence") or {})
+    focus = _context_focus_from_signals(signals)
+    payload = {
+        "run_id": run_id,
+        "enabled": bool(signals),
+        "source": source,
+        "external_path": str(external_path),
+        "signals": signals,
+        "signal_evidence": signal_evidence,
+        "context_focus": focus,
+        "reason": "absorbed external file grouping and review pipeline signals",
+    }
+    payload_text = repr(json.dumps(payload, ensure_ascii=True, indent=2, sort_keys=True))
+    return f'''from __future__ import annotations
+
+import json
+from typing import Any
+
+
+REVIEW_CONTEXT_BIAS: dict[str, Any] = json.loads({payload_text})
+
+
+def review_context_bias() -> dict[str, Any]:
+    """Return the absorbed context grouping profile used by PR review."""
+    return dict(REVIEW_CONTEXT_BIAS)
+
+
+def file_grouping_enabled() -> bool:
+    """Tell PR review whether absorbed external evidence supports context grouping."""
+    signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
+    return bool(REVIEW_CONTEXT_BIAS.get("enabled")) and bool(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review"}})
+
+
+def context_signal_strength() -> int:
+    """Score how much absorbed evidence should influence review grouping."""
+    signals = set(REVIEW_CONTEXT_BIAS.get("signals") or [])
+    return min(100, 20 * len(signals & {{"file_grouping", "review_pipeline", "diff_hunk_review", "benchmarking", "safety_policy"}}))
+'''
+
+
+def _review_context_bias_test_content(import_name: str, source: str) -> str:
+    source_text = repr(source)
+    return f'''from __future__ import annotations
+
+from {import_name} import context_signal_strength, file_grouping_enabled, review_context_bias
+
+EXPECTED_ABSORPTION_SOURCE = {source_text}
+
+
+def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
+    bias = review_context_bias()
+
+    assert bias["enabled"] is True
+    assert bias["source"] == EXPECTED_ABSORPTION_SOURCE
+    assert set(bias["signals"]) & {{"file_grouping", "review_pipeline", "diff_hunk_review"}}
+    assert file_grouping_enabled() is True
+    assert context_signal_strength() >= 20
+'''
+
+
+def _context_focus_from_signals(signals: list[str]) -> list[str]:
+    focus: list[str] = []
+    if "safety_policy" in signals:
+        focus.append("security")
+    if "file_grouping" in signals or "review_pipeline" in signals:
+        focus.extend(["runtime", "tests", "ci_config"])
+    if "benchmarking" in signals:
+        focus.append("tests")
+    if "plugin_surface" in signals:
+        focus.append("config")
+    if "multi_provider" in signals:
+        focus.append("config")
+    focus.append("docs")
+    return list(dict.fromkeys(focus))
+
+
 def _capability_module_content(run_id: str, source: str, external_path: Path, tasks: list[dict[str, Any]], profile: dict[str, Any], review_report: dict[str, Any]) -> str:
     capability_payload = {
         "run_id": run_id,
@@ -189,6 +325,13 @@ from __future__ import annotations
 
 import json
 from typing import Any
+
+from retort_engine.absorption_quality import (
+    absorption_quality_gate as _absorption_quality_gate,
+    advantage_diff_map as _advantage_diff_map,
+    capability_progress_from_execution as _capability_progress_from_execution,
+    explain_missing_absorption_evidence as _explain_missing_absorption_evidence,
+)
 
 
 ABSORBED_CAPABILITY_STATE: dict[str, Any] = json.loads({payload_text})
@@ -259,63 +402,30 @@ def ranked_capabilities() -> list[dict[str, Any]]:
 
 def capability_progress_from_execution(changed_files: list[str], gates: list[dict[str, Any]]) -> dict[str, Any]:
     """Measure whether an absorption changed behavior and proved it with tests."""
-    source_files = [path for path in changed_files if path.endswith((".py", ".js", ".ts", ".tsx", ".jsx", ".go")) and "/tests/" not in path and not path.endswith("absorbed_external_patterns.py")]
-    test_files = [path for path in changed_files if "/tests/" in path or path.rsplit("/", 1)[-1].startswith("test_")]
-    gate_count = len(gates)
-    passed_gates = sum(1 for gate in gates if bool(gate.get("ok")))
-    ready = bool(source_files and test_files and gate_count and passed_gates == gate_count)
-    return {{
-        "behavior_source_files": source_files,
-        "behavior_test_files": test_files,
-        "gate_count": gate_count,
-        "passed_gates": passed_gates,
-        "ready_for_90": ready,
-    }}
+    return _capability_progress_from_execution(changed_files, gates)
 
 
 def explain_missing_absorption_evidence(changed_files: list[str], gates: list[dict[str, Any]]) -> list[str]:
     """Explain why a run should not be allowed to score as real absorption."""
-    progress = capability_progress_from_execution(changed_files, gates)
-    missing: list[str] = []
-    if not progress["behavior_source_files"]:
-        missing.append("missing_behavior_source_diff")
-    if not progress["behavior_test_files"]:
-        missing.append("missing_behavior_test_diff")
-    if not progress["gate_count"]:
-        missing.append("missing_post_absorption_gate")
-    elif progress["passed_gates"] != progress["gate_count"]:
-        missing.append("post_absorption_gate_failed")
-    return missing
+    return _explain_missing_absorption_evidence(changed_files, gates)
 
 
 def advantage_diff_map(changed_files: list[str]) -> list[dict[str, Any]]:
     """Map external advantages to concrete project-local behavior diffs."""
-    plan = absorbed_capability_plan()
-    rows: list[dict[str, Any]] = []
-    for capability in plan.get("ranked_capabilities") or []:
-        signal = str(capability.get("signal") or "")
-        matched = [path for path in changed_files if signal.replace("_", "-") in path or "absorbed_capabilities" in path or "test_absorbed_capabilities" in path]
-        rows.append({{"signal": signal, "weight": capability.get("weight", 0), "changed_files": matched, "has_behavior_diff": bool(matched)}})
-    return rows
+    return _advantage_diff_map(changed_files, ranked_capabilities())
 
 
 def absorption_quality_gate(changed_files: list[str], gates: list[dict[str, Any]], *, minimum_behavior_tests: int | None = None) -> dict[str, Any]:
     """Turn weak absorption evidence into a blocking product gate."""
     plan = absorbed_capability_plan()
     minimum = int(minimum_behavior_tests or plan.get("minimum_behavior_tests") or 3)
-    missing = explain_missing_absorption_evidence(changed_files, gates)
-    depth_gate = (depth_absorption_plan().get("quality_gate") or {{}})
-    if depth_gate and not depth_gate.get("passed"):
-        missing.append("depth_absorption_gate_failed")
-    test_gate = next((gate for gate in gates if "test_absorbed_capabilities.py" in " ".join(str(part) for part in gate.get("command") or [])), {{}})
-    stdout = str(test_gate.get("stdout_tail") or "")
-    passed_count = 0
-    for token in stdout.split():
-        if token.isdigit():
-            passed_count = max(passed_count, int(token))
-    if passed_count < minimum:
-        missing.append("insufficient_behavior_test_count")
-    return {{"passed": not missing, "missing": missing, "minimum_behavior_tests": minimum, "observed_behavior_tests": passed_count}}
+    return _absorption_quality_gate(
+        changed_files,
+        gates,
+        minimum_behavior_tests=minimum,
+        depth_gate=depth_absorption_plan().get("quality_gate") or {{}},
+        ranked_capabilities=ranked_capabilities(),
+    )
 
 
 def review_strategy_for_file(path: str) -> dict[str, Any]:
@@ -376,10 +486,24 @@ def test_breadth_candidates_stay_closed_until_similarity_saturation() -> None:
 
 def test_capability_progress_requires_behavior_code_tests_and_gates() -> None:
     progress = capability_progress_from_execution(
-        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        ["retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
         [{{"ok": True}}, {{"ok": True}}],
     )
     assert progress["ready_for_90"] is True
+    assert progress["behavior_source_files"] == ["retort_engine/review_context_bias.py"]
+    assert progress["behavior_test_files"] == ["tests/test_review_context_bias.py"]
+
+
+def test_capability_progress_rejects_registry_only_absorption() -> None:
+    progress = capability_progress_from_execution(
+        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
+        [{{"ok": True}}, {{"ok": True}}],
+    )
+
+    assert progress["ready_for_90"] is False
+    assert progress["behavior_source_files"] == []
+    assert progress["behavior_test_files"] == []
+    assert progress["generated_evidence_files"] == ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"]
 
 
 def test_missing_absorption_evidence_blocks_report_only_runs() -> None:
@@ -389,15 +513,21 @@ def test_missing_absorption_evidence_blocks_report_only_runs() -> None:
 
 
 def test_advantage_diff_map_points_to_behavior_files() -> None:
-    rows = advantage_diff_map(["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"])
+    rows = advantage_diff_map(["retort_engine/pr_review.py", "tests/test_pr_review.py"])
     assert rows
     assert any(row["has_behavior_diff"] for row in rows)
 
 
+def test_advantage_diff_map_ignores_registry_files() -> None:
+    rows = advantage_diff_map(["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"])
+    assert rows
+    assert not any(row["has_behavior_diff"] for row in rows)
+
+
 def test_absorption_quality_gate_blocks_too_few_behavior_tests() -> None:
     gate = absorption_quality_gate(
-        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
-        [{{"ok": True, "command": ["pytest", "tests/test_absorbed_capabilities.py"], "stdout_tail": "3 passed"}}],
+        ["retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
+        [{{"ok": True, "command": ["pytest", "tests/test_review_context_bias.py"], "stdout_tail": "3 passed"}}],
         minimum_behavior_tests=5,
     )
     assert gate["passed"] is False
@@ -406,9 +536,12 @@ def test_absorption_quality_gate_blocks_too_few_behavior_tests() -> None:
 
 def test_absorption_quality_gate_passes_with_behavior_depth() -> None:
     gate = absorption_quality_gate(
-        ["retort_engine/absorbed_capabilities.py", "tests/test_absorbed_capabilities.py"],
-        [{{"ok": True, "command": ["pytest", "tests/test_absorbed_capabilities.py"], "stdout_tail": "8 passed"}}],
-        minimum_behavior_tests=5,
+        ["retort_engine/pr_review.py", "tests/test_pr_review.py", "retort_engine/review_context_bias.py", "tests/test_review_context_bias.py"],
+        [
+            {{"ok": True, "command": ["pytest", "tests/test_pr_review.py"], "stdout_tail": "8 passed"}},
+            {{"ok": True, "command": ["pytest", "tests/test_review_context_bias.py"], "stdout_tail": "1 passed"}},
+        ],
+        minimum_behavior_tests=1,
     )
     assert gate["passed"] is True
 

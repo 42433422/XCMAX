@@ -6,10 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
+from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
 
 
 SECRET_MARKERS = ("api_key", "apikey", "secret", "password", "token", "private_key")
 REVIEW_STAGES = ("group_related_files", "localize_changed_hunks", "classify_risk", "reflect_before_publish", "dispatch_employee_task")
+REVIEW_CONTEXTS = ("security", "tests", "ci_config", "config", "frontend", "runtime", "docs", "other")
 SEVERITIES = ("high", "medium", "low", "info")
 
 
@@ -29,6 +31,9 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         },
     )
     capabilities = [str(item.get("signal") or "") for item in ranked_capabilities()]
+    context_bias = review_context_bias()
+    context_groups = group_related_files_for_review(files)
+    context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
     comments: list[dict[str, Any]] = []
     task_groups: dict[str, dict[str, Any]] = {}
     file_summaries: list[dict[str, Any]] = []
@@ -37,14 +42,25 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
     for file_review in files:
         file_path = str(file_review["path"])
         strategy = review_strategy_for_file(file_path)
-        group = task_groups.setdefault(str(strategy["strategy"]), {"files": [], "comment_count": 0, "stages": list(REVIEW_STAGES), "risk_counts": {severity: 0 for severity in SEVERITIES}})
+        review_context = context_by_file.get(file_path, review_context_for_file(file_path))
+        group = task_groups.setdefault(
+            review_context,
+            {
+                "context": review_context,
+                "strategy": str(strategy["strategy"]),
+                "files": [],
+                "comment_count": 0,
+                "stages": list(REVIEW_STAGES),
+                "risk_counts": {severity: 0 for severity in SEVERITIES},
+            },
+        )
         group["files"].append(file_path)
         file_comments_before = len(comments)
         for hunk in file_review["hunks"]:
             hunk_count += 1
-            hunk_comments = _review_hunk(file_path, hunk, strategy, capabilities)
+            hunk_comments = _review_hunk(file_path, hunk, strategy, capabilities, review_context)
             if not hunk_comments and _remaining(max_comments, comments):
-                hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities)]
+                hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]
             for comment in hunk_comments:
                 if not _remaining(max_comments, comments):
                     break
@@ -55,7 +71,7 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
                     group["risk_counts"][severity] = int(group["risk_counts"][severity]) + 1
                 group["comment_count"] = int(group["comment_count"]) + 1
         file_comments = comments[file_comments_before:]
-        file_summaries.append(_file_summary(file_path, strategy, file_review, file_comments))
+        file_summaries.append(_file_summary(file_path, strategy, file_review, file_comments, review_context))
     summary = {
         "file_count": len(files),
         "hunk_count": hunk_count,
@@ -63,6 +79,11 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         "capabilities": capabilities[:5],
         "stage_count": len(REVIEW_STAGES),
         "file_summary_count": len(file_summaries),
+        "review_context_group_count": len(context_groups),
+        "primary_review_contexts": [str(group["context"]) for group in context_groups[:5]],
+        "absorbed_file_grouping": file_grouping_enabled(),
+        "absorbed_context_signal_strength": context_signal_strength(),
+        "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
         "deep_review_pipeline": True,
         "ready_for_employee_tasking": bool(files and comments),
@@ -77,7 +98,8 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         "files": files,
         "file_summaries": file_summaries,
         "comments": comments,
-        "task_groups": [{"strategy": key, **value} for key, value in sorted(task_groups.items())],
+        "context_groups": context_groups,
+        "task_groups": [{"context": key, **value} for key, value in sorted(task_groups.items())],
         "incremental": incremental,
     }
 
@@ -117,7 +139,47 @@ def parse_unified_diff(diff_text: str) -> list[dict[str, Any]]:
     return [item for item in files if item["hunks"]]
 
 
-def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str]) -> list[dict[str, Any]]:
+def review_context_for_file(path: str) -> str:
+    """Classify a changed file into the review context absorbed from external projects."""
+    normalized = path.replace("\\", "/").lower()
+    name = normalized.rsplit("/", 1)[-1]
+    suffix = Path(name).suffix
+    if normalized.startswith(".github/workflows/") or "/workflows/" in normalized or name in {"dockerfile", "docker-compose.yml", "docker-compose.yaml"}:
+        return "ci_config"
+    if normalized.startswith("tests/") or "/tests/" in normalized or name.startswith("test_") or name.endswith((".spec.ts", ".spec.tsx", ".test.ts", ".test.tsx")):
+        return "tests"
+    if normalized.startswith("docs/") or suffix in {".md", ".rst"}:
+        return "docs"
+    if "auth" in normalized or "security" in normalized or any(marker in normalized for marker in SECRET_MARKERS):
+        return "security"
+    if suffix in {".json", ".toml", ".yml", ".yaml", ".ini", ".env"}:
+        return "config"
+    if suffix in {".tsx", ".jsx", ".css", ".html"} or "/frontend/" in normalized or "/ui/" in normalized:
+        return "frontend"
+    if suffix in {".py", ".go", ".ts", ".js", ".java", ".rs"}:
+        return "runtime"
+    return "other"
+
+
+def group_related_files_for_review(files: list[dict[str, Any]] | list[str]) -> list[dict[str, Any]]:
+    """Group changed files before deep review so reasoning stays focused."""
+    buckets: dict[str, dict[str, Any]] = {}
+    for item in files:
+        file_path = str(item.get("path") if isinstance(item, dict) else item)
+        if not file_path:
+            continue
+        context = review_context_for_file(file_path)
+        bucket = buckets.setdefault(context, {"context": context, "files": [], "file_count": 0, "hunk_count": 0, "added_change_count": 0, "review_focus": _review_focus_for_context(context)})
+        bucket["files"].append(file_path)
+        bucket["file_count"] = int(bucket["file_count"]) + 1
+        if isinstance(item, dict):
+            hunks = list(item.get("hunks") or [])
+            bucket["hunk_count"] = int(bucket["hunk_count"]) + len(hunks)
+            bucket["added_change_count"] = int(bucket["added_change_count"]) + sum(1 for hunk in hunks for change in hunk.get("changes") or [] if change.get("type") == "add")
+    return sorted(buckets.values(), key=lambda group: (REVIEW_CONTEXTS.index(str(group["context"])) if group["context"] in REVIEW_CONTEXTS else 99, str(group["context"])))
+
+
+def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> list[dict[str, Any]]:
     comments: list[dict[str, Any]] = []
     for change in hunk.get("changes") or []:
         if change.get("type") != "add":
@@ -126,20 +188,20 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         lowered = text.lower()
         line = int(change.get("line") or 0)
         if _looks_like_secret_leak(text, lowered):
-            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk"))
+            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", review_context))
         elif "todo" in lowered or "fixme" in lowered:
-            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish"))
+            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish", review_context))
         elif Path(file_path).suffix == ".py" and "print(" in lowered:
-            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks"))
+            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks", review_context))
         elif len(text) > 120:
-            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks"))
+            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks", review_context))
     return comments
 
 
-def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str]) -> dict[str, Any]:
+def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> dict[str, Any]:
     first_add = next((change for change in hunk.get("changes") or [] if change.get("type") == "add"), {})
     line = int(first_add.get("line") or 1)
-    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish")
+    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish", review_context)
 
 
 def _looks_like_secret_leak(text: str, lowered: str) -> bool:
@@ -167,30 +229,44 @@ def _looks_like_secret_leak(text: str, lowered: str) -> bool:
     return bool(assignment or authorization)
 
 
-def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str], stage: str) -> dict[str, Any]:
+def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str], stage: str, review_context: str) -> dict[str, Any]:
     return {
         "file": file_path,
         "line": line,
         "severity": severity,
         "message": message,
         "strategy": strategy.get("strategy", "semantic_review"),
+        "review_context": review_context,
         "capability": (capabilities or ["review_pipeline"])[0],
         "review_stage": stage,
         "employee_actionable": severity in {"high", "medium"},
     }
 
 
-def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]]) -> dict[str, Any]:
+def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]], review_context: str) -> dict[str, Any]:
     severity_counts = {severity: sum(1 for item in comments if item.get("severity") == severity) for severity in SEVERITIES}
     return {
         "file": file_path,
         "strategy": strategy.get("strategy", "semantic_review"),
+        "review_context": review_context,
         "hunk_count": len(file_review.get("hunks") or []),
         "comment_count": len(comments),
         "risk_counts": severity_counts,
         "stages": [{"name": stage, "status": "completed"} for stage in REVIEW_STAGES],
         "ready_for_employee_task": bool(severity_counts["high"] or severity_counts["medium"]),
     }
+
+
+def _review_focus_for_context(context: str) -> str:
+    return {
+        "security": "secrets_permissions_and_auth_edges",
+        "tests": "behavior_proof_and_regression_scope",
+        "ci_config": "repeatable_gates_and_release_safety",
+        "config": "runtime_contract_and_environment_drift",
+        "frontend": "user_flow_and_state_surface",
+        "runtime": "core_execution_path",
+        "docs": "operator_evidence_and_task_clarity",
+    }.get(context, "general_review")
 
 
 def _path_from_diff_header(header: str) -> str:

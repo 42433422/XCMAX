@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.pr_review import parse_unified_diff, review_diff
+from retort_engine.pr_review import group_related_files_for_review, parse_unified_diff, review_context_for_file, review_diff
 
 
 SAMPLE_DIFF = """diff --git a/app.py b/app.py
@@ -53,11 +53,16 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["task_groups"]
     assert result["summary"]["deep_review_pipeline"] is True
     assert result["summary"]["stage_count"] >= 5
+    assert result["summary"]["review_context_group_count"] == 1
+    assert result["summary"]["absorbed_file_grouping"] is True
     assert result["summary"]["risk_counts"]["high"] >= 1
     assert result["file_summaries"][0]["stages"]
+    assert result["file_summaries"][0]["review_context"] == "runtime"
     assert result["comments"][0]["review_stage"]
+    assert result["comments"][0]["review_context"] == "runtime"
     assert result["comments"][0]["employee_actionable"] is True
     assert result["task_groups"][0]["risk_counts"]
+    assert result["context_groups"][0]["review_focus"] == "core_execution_path"
     assert result["incremental"]["enabled"] is False
     assert validate_contract("pr_review_result", result)["valid"] is True
 
@@ -91,6 +96,56 @@ def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:
     high_comments = [item for item in result["comments"] if item["severity"] == "high"]
     assert len(high_comments) == 1
     assert high_comments[0]["line"] == 5
+
+
+def test_review_diff_groups_related_files_by_review_context() -> None:
+    diff = """diff --git a/app/auth.py b/app/auth.py
+--- a/app/auth.py
++++ b/app/auth.py
+@@ -1,2 +1,3 @@
+ def login():
++    api_key = "live-secret-value"
+     return True
+diff --git a/tests/test_auth.py b/tests/test_auth.py
+--- a/tests/test_auth.py
++++ b/tests/test_auth.py
+@@ -1,2 +1,3 @@
+ def test_login():
++    assert True
+     pass
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1,2 +1,3 @@
+ name: ci
++on: [push]
+ jobs: {}
+diff --git a/docs/review.md b/docs/review.md
+--- a/docs/review.md
++++ b/docs/review.md
+@@ -1,2 +1,3 @@
+ # Review
++Deep absorption evidence
+"""
+
+    result = review_diff(diff)
+    contexts = {group["context"] for group in result["context_groups"]}
+
+    assert {"security", "tests", "ci_config", "docs"}.issubset(contexts)
+    assert result["summary"]["review_context_group_count"] >= 4
+    assert result["summary"]["absorbed_context_signal_strength"] >= 40
+    assert any(comment["review_context"] == "security" for comment in result["comments"])
+    assert any(group["review_focus"] == "repeatable_gates_and_release_safety" for group in result["context_groups"])
+    assert validate_contract("pr_review_result", result)["valid"] is True
+
+
+def test_review_context_helpers_classify_common_project_files() -> None:
+    assert review_context_for_file("app/auth.py") == "security"
+    assert review_context_for_file("tests/test_auth.py") == "tests"
+    assert review_context_for_file(".github/workflows/ci.yml") == "ci_config"
+    assert review_context_for_file("docs/review.md") == "docs"
+    groups = group_related_files_for_review(["app/auth.py", "tests/test_auth.py"])
+    assert [group["context"] for group in groups] == ["security", "tests"]
 
 
 def test_parse_unified_diff_keeps_new_line_numbers() -> None:
