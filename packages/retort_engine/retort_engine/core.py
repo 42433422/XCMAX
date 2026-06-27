@@ -88,10 +88,11 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
     }
     tracked = _tracking_state(root)
     proof = _closed_loop_proof(root)
-    capped = _evidence_based_scores(features, lint_ok=lint_ok, test_ok=test_ok, test_functions=test_functions, has_ci=_has_retort_ci(root), tracked=tracked, context_policy=context_policy, proof=proof)
+    capability_audit = _capability_absorption_audit(root)
+    capped = _evidence_based_scores(features, lint_ok=lint_ok, test_ok=test_ok, test_functions=test_functions, has_ci=_has_retort_ci(root), tracked=tracked, context_policy=context_policy, proof=proof, capability_audit=capability_audit)
     capped, shock_evidence = _apply_absorption_shock(root, capped)
     evidence = tuple([f"source_files={len(files)}", f"test_functions={test_functions}", f"git_tracking_state={tracked}", f"lint={lint_ok}", f"test={test_ok}", f"closed_loop_verified={proof['verified']}", f"closed_loop_missing={','.join(proof['missing'])}"] + shock_evidence + [f"{k}={v}" for k, v in features.items()])
-    metadata = {"features": features, "git_tracking_state": tracked, "absorption_state": _public_absorption_state(root), "closed_loop_proof": proof}
+    metadata = {"features": features, "git_tracking_state": tracked, "absorption_state": _public_absorption_state(root), "closed_loop_proof": proof, "capability_absorption_audit": capability_audit}
     return Assessment(str(root), tuple(Score(key, round(value, 1), _score_reason(key, proof)) for key, value in capped.items()), evidence, metadata)
 
 
@@ -585,7 +586,7 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
         mode,
         external_source,
         external_path,
-        assessment.get("scores", []),
+        [],
         tasks,
         evidence=evidence,
         metadata=metadata,
@@ -593,7 +594,6 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
     assessment["llm_review"] = review
     metadata = assessment.setdefault("metadata", {})
     metadata["score_source"] = "local_fallback_pending_llm"
-    metadata["fallback_rule_scores"] = list(assessment.get("scores", []))
     wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
     task_id = str((review.get("dispatch") or {}).get("task_id") or "")
     status: dict[str, Any] = {}
@@ -630,6 +630,15 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     if proof.get("verified"):
         evidence.append("closed_loop_five_proofs_verified=True")
     evidence.append(f"contract_schema_count={len(contract_names())}")
+    audit = _capability_absorption_audit(project)
+    evidence.append(f"capability_absorption_score={audit.get('score')}")
+    evidence.append(f"capability_absorption_cap={audit.get('overall_cap')}")
+    evidence.append(f"capability_absorption_reason={audit.get('reason')}")
+    evidence.append(f"behavior_source_file_count={len(audit.get('behavior_source_files') or [])}")
+    evidence.append(f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}")
+    evidence.append(f"generated_evidence_file_count={len(audit.get('generated_evidence_files') or [])}")
+    evidence.append(f"employee_execution_mode={audit.get('employee_execution_mode', '')}")
+    evidence.append(f"external_project_count={audit.get('external_project_count', '')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -678,8 +687,140 @@ def _maybe_request_llm_review(
     return review
 
 
-def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok: bool, test_functions: int, has_ci: bool, tracked: str, context_policy: str, proof: dict[str, Any]) -> dict[str, float]:
+GENERATED_ABSORPTION_NAMES = {"retort_absorption_log.md", "retort_external_review_report.json", "absorbed_external_patterns.py", "retort_absorbed_patterns.py"}
+BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
+
+
+def _capability_absorption_audit(root: Path) -> dict[str, Any]:
+    latest = _latest_absorption_run(root)
+    if not latest:
+        return {
+            "score": 50.0,
+            "overall_cap": 82.0,
+            "employee_execution_cap": 78.0,
+            "reason": "no_real_absorption_run",
+            "changed_files": [],
+            "behavior_source_files": [],
+            "behavior_test_files": [],
+            "generated_evidence_files": [],
+            "external_project_count": 0,
+        }
+    changed_files = [str(item) for item in latest.get("changed_files") or []]
+    behavior_source_files: list[str] = []
+    behavior_test_files: list[str] = []
+    generated_evidence_files: list[str] = []
+    other_files: list[str] = []
+    for item in changed_files:
+        path = Path(item)
+        rel = _project_relative(root, path)
+        if _is_generated_absorption_file(rel):
+            generated_evidence_files.append(rel)
+        elif _is_behavior_test_file(rel):
+            behavior_test_files.append(rel)
+        elif path.suffix.lower() in BEHAVIOR_SUFFIXES:
+            behavior_source_files.append(rel)
+        else:
+            other_files.append(rel)
+    external_project_count = _absorption_external_project_count(root)
+    employee_mode = _latest_employee_execution_mode(root)
+    generated_only = bool(changed_files) and not behavior_source_files and not behavior_test_files
+    if generated_only:
+        score = 82.0
+        cap = 84.0
+        reason = "latest_absorption_changed_only_reports_logs_or_pattern_snapshot"
+    elif behavior_source_files and behavior_test_files:
+        score = 94.0
+        cap = 96.0
+        reason = "latest_absorption_changed_behavior_code_and_tests"
+    elif behavior_source_files:
+        score = 88.0
+        cap = 89.0
+        reason = "latest_absorption_changed_behavior_code_without_behavior_tests"
+    else:
+        score = 84.0
+        cap = 86.0
+        reason = "latest_absorption_has_no_clear_behavior_code_change"
+    if external_project_count < 3:
+        cap = min(cap, 88.0 if not generated_only else cap)
+    employee_cap = 88.0 if employee_mode in {"", "retort_apply_absorption_cli"} else 96.0
+    return {
+        "score": score,
+        "overall_cap": cap,
+        "employee_execution_cap": employee_cap,
+        "reason": reason,
+        "changed_files": changed_files,
+        "behavior_source_files": behavior_source_files,
+        "behavior_test_files": behavior_test_files,
+        "generated_evidence_files": generated_evidence_files,
+        "other_files": other_files,
+        "generated_only": generated_only,
+        "external_project_count": external_project_count,
+        "employee_execution_mode": employee_mode,
+    }
+
+
+def _latest_absorption_run(root: Path) -> dict[str, Any]:
+    run_dir = root / ".retort" / "real_absorption_runs"
+    runs = sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []
+    for path in reversed(runs):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _latest_employee_execution_mode(root: Path) -> str:
+    result_dir = root / ".retort" / "employee_results"
+    results = sorted(result_dir.glob("*.json")) if result_dir.is_dir() else []
+    for path in reversed(results):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        mode = str(payload.get("execution_mode") or "")
+        if mode:
+            return mode
+    return ""
+
+
+def _absorption_external_project_count(root: Path) -> int:
+    sources: set[str] = set()
+    run_dir = root / ".retort" / "real_absorption_runs"
+    for path in sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        source = str(payload.get("source") or "").strip()
+        if source:
+            sources.add(source)
+    return len(sources)
+
+
+def _project_relative(root: Path, path: Path) -> str:
+    try:
+        return str(path.expanduser().resolve().relative_to(root.expanduser().resolve()))
+    except (OSError, ValueError):
+        return str(path)
+
+
+def _is_generated_absorption_file(rel: str) -> bool:
+    return Path(rel).name in GENERATED_ABSORPTION_NAMES or rel.startswith(".retort/")
+
+
+def _is_behavior_test_file(rel: str) -> bool:
+    path = Path(rel)
+    return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
+
+
+def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok: bool, test_functions: int, has_ci: bool, tracked: str, context_policy: str, proof: dict[str, Any], capability_audit: dict[str, Any]) -> dict[str, float]:
     verified = bool(proof["verified"])
+    capability_score = float(capability_audit.get("score") or 0.0)
+    evidence_loop_score = _evidence_loop_score(proof, lint_ok=lint_ok, test_ok=test_ok)
+    employee_runtime_cap = float(capability_audit.get("employee_execution_cap") or 100.0)
     scores = {
         "product_level": 72 + 3 * features["blackhole_ui"] + 3 * features["service_api"] + 2 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * test_ok + 12 * verified,
         "architecture_depth": 78 + 3 * features["branch_workflow"] + 3 * features["self_evolution"] + 2 * features["license_gate"] + 2 * features["employee_queue"] + 2 * features["real_absorption_cli"] + 2 * features["component_review_pipeline"] + 2 * test_ok,
@@ -696,6 +837,8 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
         "safety_license_gate": 76 + 6 * features["license_gate"] + 3 * features["license_boundary_tests"] + 3 * (context_policy == "isolated") + 6 * verified,
         "branch_absorption_workflow": 74 + 5 * features["branch_workflow"] + 4 * features["folder_project_picker"] + 3 * features["blackhole_ui"] + 8 * verified,
         "retort_product_maturity": 72 + 3 * features["blackhole_ui"] + 3 * features["branch_workflow"] + 2 * features["github_or_folder_source"] + 2 * features["service_api"] + 2 * test_ok + 2 * lint_ok + 12 * verified - 3 * (tracked == "untracked"),
+        "evidence_loop_score": evidence_loop_score,
+        "capability_absorption_score": capability_score,
     }
     if not verified:
         caps = {
@@ -717,14 +860,26 @@ def _evidence_based_scores(features: dict[str, bool], *, lint_ok: bool, test_ok:
         scores = {dimension: min(float(value), float(caps.get(dimension, value))) for dimension, value in scores.items()}
     else:
         scores = {dimension: min(96.0, float(value)) for dimension, value in scores.items()}
-    scores["calibrated_overall"] = _calibrated_overall(scores, verified)
+        capability_cap = float(capability_audit.get("overall_cap") or 96.0)
+        scores["product_level"] = min(scores["product_level"], capability_cap)
+        scores["comparative_analysis_depth"] = min(scores["comparative_analysis_depth"], capability_cap)
+        scores["retort_product_maturity"] = min(scores["retort_product_maturity"], capability_cap)
+        scores["employee_execution_integration"] = min(scores["employee_execution_integration"], employee_runtime_cap)
+    scores["calibrated_overall"] = _calibrated_overall(scores, verified, capability_audit)
     return scores
 
 
-def _calibrated_overall(scores: dict[str, float], verified: bool) -> float:
-    dimensions = [dimension for dimension in scores if dimension != "calibrated_overall"]
+def _evidence_loop_score(proof: dict[str, Any], *, lint_ok: bool, test_ok: bool) -> float:
+    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
+    true_count = sum(1 for value in flags.values() if value)
+    return min(96.0, 50.0 + true_count * 8.0 + 3.0 * lint_ok + 3.0 * test_ok)
+
+
+def _calibrated_overall(scores: dict[str, float], verified: bool, capability_audit: dict[str, Any]) -> float:
+    dimensions = [dimension for dimension in scores if dimension not in {"calibrated_overall", "evidence_loop_score"}]
     average = sum(scores[dimension] for dimension in dimensions) / max(1, len(dimensions))
-    return round(min(94.0 if verified else 82.0, average), 1)
+    capability_cap = float(capability_audit.get("overall_cap") or (94.0 if verified else 82.0))
+    return round(min(94.0 if verified else 82.0, capability_cap, average), 1)
 
 
 def _score_reason(dimension: str, proof: dict[str, Any]) -> str:
