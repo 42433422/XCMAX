@@ -68,3 +68,23 @@ def test_architecture_memory_marks_three_source_components_ready(tmp_path: Path)
     assert memory["component_index"]["review_pipeline"]["ready_for_deep_refactor"] is True
     assert "review_pipeline" in memory["summary"]["ready_components"]
     assert any(task["priority"] == "P0" for task in memory["deep_architecture_tasks"])
+
+
+def test_architecture_memory_counts_code_graph_proof(tmp_path: Path) -> None:
+    path = tmp_path / "retort_architecture_memory.json"
+    record = build_architecture_record(
+        run_id="run-codegraph",
+        source="https://github.com/example/codegraph",
+        external_path=tmp_path / "external",
+        profile={"file_count": 20, "signals": ["codebase_graph"], "signal_evidence": {"codebase_graph": ["src/graph.py"]}},
+        review_report={"review_pipeline": {"depth_absorption_workflow": {"focused_components": [{"component": "codebase_graph", "source_files": ["src/graph.py"]}]}}},
+        tasks=[{"dimension": "architecture_depth"}],
+        changed_files=["retort_engine/codebase_graph.py", "tests/test_codebase_graph.py"],
+        gates=[{"ok": True}],
+        code_graph_proof={"passed": True, "changed_focus_files": ["retort_engine/codebase_graph.py"]},
+    )
+
+    memory = update_architecture_memory(path, record)
+
+    assert memory["component_index"]["codebase_graph"]["code_graph_proof_count"] == 1
+    assert memory["component_index"]["codebase_graph"]["architecture_depth_score"] >= 50
