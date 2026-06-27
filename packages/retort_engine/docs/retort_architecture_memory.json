@@ -192,9 +192,9 @@
         "benchmarks/hybridgym_issuelocalize/eval_infer.py"
       ],
       "gate_pass_count": 12,
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.857,
       "ready_for_deep_refactor": true,
-      "run_count": 12,
+      "run_count": 14,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -207,9 +207,11 @@
         "20260627182658-daf3bca93f",
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
-        "20260627191156-142d39dda9"
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b"
       ],
-      "source_count": 11,
+      "source_count": 12,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -218,6 +220,7 @@
         "https://github.com/SWE-agent/SWE-agent",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/bobbyroe/threejs-earth",
         "https://github.com/continuedev/continue",
         "https://github.com/kamilstanuch/codebase-digest",
         "https://github.com/mopemope/pr-ai-review-bot",
@@ -490,9 +493,9 @@
         "benchmark/benchmark.py"
       ],
       "gate_pass_count": 14,
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "ready_for_deep_refactor": true,
-      "run_count": 14,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -507,9 +510,11 @@
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
         "20260627185357-29365e9367",
-        "20260627191156-142d39dda9"
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b"
       ],
-      "source_count": 13,
+      "source_count": 14,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -518,6 +523,7 @@
         "https://github.com/SWE-agent/SWE-agent",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/bobbyroe/threejs-earth",
         "https://github.com/continuedev/continue",
         "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -560,9 +566,9 @@
         "benchmark/benchmark.py"
       ],
       "gate_pass_count": 14,
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "ready_for_deep_refactor": true,
-      "run_count": 14,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -577,9 +583,11 @@
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
         "20260627185357-29365e9367",
-        "20260627191156-142d39dda9"
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b"
       ],
-      "source_count": 13,
+      "source_count": 14,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -588,6 +596,7 @@
         "https://github.com/SWE-agent/SWE-agent",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/bobbyroe/threejs-earth",
         "https://github.com/continuedev/continue",
         "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -682,9 +691,9 @@
         "aider/coders/base_coder.py"
       ],
       "gate_pass_count": 14,
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "ready_for_deep_refactor": true,
-      "run_count": 14,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -699,9 +708,11 @@
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
         "20260627185357-29365e9367",
-        "20260627191156-142d39dda9"
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b"
       ],
-      "source_count": 13,
+      "source_count": 14,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -710,6 +721,7 @@
         "https://github.com/SWE-agent/SWE-agent",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/bobbyroe/threejs-earth",
         "https://github.com/continuedev/continue",
         "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -808,9 +820,9 @@
         "ci/trigger_action.py"
       ],
       "gate_pass_count": 14,
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "ready_for_deep_refactor": true,
-      "run_count": 14,
+      "run_count": 16,
       "run_ids": [
         "20260627171538-da950c021d",
         "20260627171611-61b3c3e350",
@@ -825,9 +837,11 @@
         "20260627183417-fe4938a18b",
         "20260627183621-6e1352f61e",
         "20260627185357-29365e9367",
-        "20260627191156-142d39dda9"
+        "20260627191156-142d39dda9",
+        "20260627192206-0723009b1b",
+        "20260627192522-0723009b1b"
       ],
-      "source_count": 13,
+      "source_count": 14,
       "sources": [
         "/private/tmp/retort-depth-source-zULAcN",
         "https://github.com/HypothesisWorks/hypothesis",
@@ -836,6 +850,7 @@
         "https://github.com/SWE-agent/SWE-agent",
         "https://github.com/TNG/ArchUnit",
         "https://github.com/aider-ai/aider",
+        "https://github.com/bobbyroe/threejs-earth",
         "https://github.com/continuedev/continue",
         "https://github.com/dgreenheck/threejs-procedural-planets",
         "https://github.com/kamilstanuch/codebase-digest",
@@ -856,9 +871,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "priority": "P0",
-      "supporting_source_count": 13,
+      "supporting_source_count": 14,
       "task_id": "retort-architecture-model-adapter",
       "title": "Implement cumulative architecture pattern: model_adapter"
     },
@@ -872,9 +887,9 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "priority": "P0",
-      "supporting_source_count": 13,
+      "supporting_source_count": 14,
       "task_id": "retort-architecture-provider-boundary",
       "title": "Implement cumulative architecture pattern: provider_boundary"
     },
@@ -888,11 +903,27 @@
         "merge commit",
         "rollback rehearsal"
       ],
-      "gate_pass_rate": 1.0,
+      "gate_pass_rate": 0.875,
       "priority": "P0",
-      "supporting_source_count": 13,
+      "supporting_source_count": 14,
       "task_id": "retort-architecture-review-pipeline",
       "title": "Implement cumulative architecture pattern: review_pipeline"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
+      "gate_pass_rate": 0.875,
+      "priority": "P0",
+      "supporting_source_count": 14,
+      "task_id": "retort-architecture-workflow-ci",
+      "title": "Implement cumulative architecture pattern: workflow_ci"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -909,22 +940,6 @@
       "supporting_source_count": 13,
       "task_id": "retort-architecture-safety-policy",
       "title": "Implement cumulative architecture pattern: safety_policy"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 13,
-      "task_id": "retort-architecture-workflow-ci",
-      "title": "Implement cumulative architecture pattern: workflow_ci"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -984,6 +999,22 @@
         "merge commit",
         "rollback rehearsal"
       ],
+      "gate_pass_rate": 0.857,
+      "priority": "P0",
+      "supporting_source_count": 12,
+      "task_id": "retort-architecture-context-localization",
+      "title": "Implement cumulative architecture pattern: context_localization"
+    },
+    {
+      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
+      "dimension": "architecture_depth",
+      "evidence_required": [
+        "source diff",
+        "behavior test",
+        "passing gates",
+        "merge commit",
+        "rollback rehearsal"
+      ],
       "gate_pass_rate": 1.0,
       "priority": "P0",
       "supporting_source_count": 12,
@@ -1005,22 +1036,6 @@
       "supporting_source_count": 12,
       "task_id": "retort-architecture-regression-oracle",
       "title": "Implement cumulative architecture pattern: regression_oracle"
-    },
-    {
-      "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
-      "dimension": "architecture_depth",
-      "evidence_required": [
-        "source diff",
-        "behavior test",
-        "passing gates",
-        "merge commit",
-        "rollback rehearsal"
-      ],
-      "gate_pass_rate": 1.0,
-      "priority": "P0",
-      "supporting_source_count": 11,
-      "task_id": "retort-architecture-context-localization",
-      "title": "Implement cumulative architecture pattern: context_localization"
     },
     {
       "acceptance": "Behavior source, behavior tests, merge proof, and rollback proof all reference this architecture component.",
@@ -4049,6 +4064,199 @@
         "operational_readiness",
         "product_operability"
       ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 52,
+          "evidence_files": [
+            "src/getFresnelMat.js",
+            "src/getLayer.js",
+            "src/getStarfield.js"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T19:22:22Z",
+      "external_file_count": 24,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/bobbyroe/threejs-earth",
+      "gate_count": 8,
+      "gates_passed": false,
+      "git_revision": "be941eec8a97e12aed470b88f99da79bf8e60276",
+      "run_id": "20260627192206-0723009b1b",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "multi_provider",
+        "planet_frontend",
+        "atmosphere_shader",
+        "procedural_surface",
+        "webgl_scene",
+        "day_night_textures",
+        "cloud_texture_layer",
+        "fresnel_atmosphere",
+        "elevation_bump_map",
+        "specular_ocean"
+      ],
+      "source": "https://github.com/bobbyroe/threejs-earth",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "operational_readiness",
+        "product_operability"
+      ]
+    },
+    {
+      "behavior_changed": true,
+      "changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js"
+      ],
+      "components": [
+        {
+          "component": "workflow_ci",
+          "depth_score": 52,
+          "evidence_files": [
+            "src/getFresnelMat.js",
+            "src/getLayer.js",
+            "src/getStarfield.js"
+          ],
+          "signals": [
+            "workflow_ci"
+          ]
+        },
+        {
+          "component": "review_pipeline",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        },
+        {
+          "component": "provider_boundary",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "model_adapter",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "multi_provider"
+          ]
+        },
+        {
+          "component": "context_localization",
+          "depth_score": 49,
+          "evidence_files": [
+            "src/getEarthMat.js",
+            "src/getFresnelMat.js"
+          ],
+          "signals": [
+            "review_pipeline"
+          ]
+        }
+      ],
+      "created_at": "2026-06-27T19:25:38Z",
+      "external_file_count": 24,
+      "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/bobbyroe/threejs-earth",
+      "gate_count": 6,
+      "gates_passed": false,
+      "git_revision": "be941eec8a97e12aed470b88f99da79bf8e60276",
+      "run_id": "20260627192522-0723009b1b",
+      "schema_version": 1,
+      "signals": [
+        "review_pipeline",
+        "multi_provider",
+        "planet_frontend",
+        "atmosphere_shader",
+        "procedural_surface",
+        "webgl_scene",
+        "day_night_textures",
+        "cloud_texture_layer",
+        "fresnel_atmosphere",
+        "elevation_bump_map",
+        "specular_ocean"
+      ],
+      "source": "https://github.com/bobbyroe/threejs-earth",
+      "task_dimensions": [
+        "comparative_analysis_depth",
+        "operational_readiness",
+        "product_operability"
+      ]
     }
   ],
   "schema_version": 1,
@@ -4067,7 +4275,7 @@
       "evaluation_loop"
     ],
     "repeated_component_count": 17,
-    "run_count": 14,
-    "source_count": 13
+    "run_count": 16,
+    "source_count": 14
   }
 }
