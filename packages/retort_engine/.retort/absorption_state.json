@@ -5,17 +5,17 @@
     "employee_execution_verified": true,
     "evidence": [
       "retort_cli_status=applied",
-      "duration_sec=10.483",
+      "duration_sec=11.971",
       "changed_files=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
-      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  15 + |  .../docs/retort_architecture_memory.json           | 383 +++++++++++++++---- |  .../docs/retort_core_refactor_plan.json            |  24 +- |  .../docs/retort_external_review_report.json        | 424 +++++++++++---------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../retort_engine/review_context_bias.py           |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  .../tests/test_review_context_bias.py              |   2 +- |  9 files changed, 565 insertions(+), 291 deletions(-)",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  15 + |  .../docs/retort_architecture_memory.json           | 503 ++++++++++++++++----- |  .../docs/retort_core_refactor_plan.json            |  24 +- |  .../docs/retort_external_review_report.json        | 400 +++++++++++----- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../retort_engine/review_context_bias.py           |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  .../tests/test_review_context_bias.py              |   2 +- |  9 files changed, 706 insertions(+), 246 deletions(-)",
       "gates_passed=True",
       "review_report=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
-      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627182658-daf3bca93f.json",
-      "commit=fde999b65",
-      "merge_commit=caa9e48d0",
+      "employee_results=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627183417-fe4938a18b.json",
+      "commit=6005e0320",
+      "merge_commit=43383b792",
       "rollback_rehearsal=True",
       "feedback_audit_closed=True",
-      "history_result_count=26",
+      "history_result_count=33",
       "queue_records_written=7",
       "result_tasks_have_queue_records=True"
     ],
@@ -23,7 +23,7 @@
     "merge_verified": true,
     "post_absorption_tests_passed": true
   },
-  "external_path": "/private/tmp/retort-depth-source-zULAcN",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
   "pending_dimensions": [
     "comparative_analysis_depth",
     "external_ingestion",
@@ -31,7 +31,7 @@
     "operational_readiness",
     "product_operability"
   ],
-  "source": "/private/tmp/retort-depth-source-zULAcN",
+  "source": "https://github.com/mopemope/pr-ai-review-bot",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -40,7 +40,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from /private/tmp/retort-depth-source-zULAcN."
+      "why": "Compare implementation patterns from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "product_operability",
@@ -48,7 +48,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from /private/tmp/retort-depth-source-zULAcN."
+      "why": "Extract usable UX improvements from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "operational_readiness",
@@ -56,7 +56,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from /private/tmp/retort-depth-source-zULAcN."
+      "why": "Adapt CI and release checks from https://github.com/mopemope/pr-ai-review-bot."
     },
     {
       "dimension": "comparative_analysis_depth",
