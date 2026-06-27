@@ -102,6 +102,33 @@ def test_external_profile_detects_planet_frontend_visual_signals(tmp_path: Path)
     assert real._should_absorb_frontend_visual(profile) is True
 
 
+def test_external_profile_detects_high_fidelity_earth_visual_signals(tmp_path: Path) -> None:
+    external = tmp_path / "external"
+    write(
+        external / "src" / "getEarthMat.js",
+        "dayTexture nightTexture cloudsTexture daymap nightmap earth-clouds specular reflection roughness sunOrientation\n",
+    )
+    write(
+        external / "src" / "getFresnelMat.js",
+        "fresnel reflectionFactor AdditiveBlending atmosphere glowMesh shader\n",
+    )
+    write(external / "README.md", "day + night textures, bump elevation, clouds, and Fresnel atmosphere glow\n")
+
+    profile = real._external_profile(external)
+
+    assert set(profile["signals"]) >= {
+        "day_night_textures",
+        "cloud_texture_layer",
+        "fresnel_atmosphere",
+        "elevation_bump_map",
+        "specular_ocean",
+    }
+    assert "src/getEarthMat.js" in profile["signal_evidence"]["day_night_textures"]
+    assert "src/getEarthMat.js" in profile["signal_evidence"]["cloud_texture_layer"]
+    assert "src/getFresnelMat.js" in profile["signal_evidence"]["fresnel_atmosphere"]
+    assert real._should_absorb_frontend_visual(profile) is True
+
+
 def test_semantic_review_reports_external_advantages(tmp_path: Path) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
@@ -252,6 +279,44 @@ function projectPlanet() {
     assert payload["layers"]["translucent_clouds"] is True
     assert payload["license_boundary"] == "visual principles only; no external source or texture copied"
     assert result["ok"] is True, result["stderr_tail"] + result["stdout_tail"]
+
+
+def test_frontend_visual_profile_enables_high_fidelity_earth_layers(tmp_path: Path) -> None:
+    app = tmp_path / "retort_engine" / "frontend" / "app.js"
+    write(
+        app,
+        """
+const ABSORBED_PLANET_VISUAL_PROFILE = {
+  source: "",
+  enabled: false,
+  palette: {rim: "#8ff3ff"},
+  layers: {atmospheric_rim: true}
+};
+function planetVisualProfile() { return ABSORBED_PLANET_VISUAL_PROFILE; }
+function projectPlanet() {
+  const layers = planetVisualProfile().layers;
+  if (layers.day_night_terminator) {}
+  if (layers.cloud_shadow_layer) {}
+  if (layers.fresnel_glow) {}
+  if (layers.ocean_specular) {}
+  if (layers.city_lights) {}
+  return "day_night_terminator fresnel_glow city_lights";
+}
+""",
+    )
+    profile = {"signals": ["planet_frontend", "day_night_textures", "cloud_texture_layer", "fresnel_atmosphere", "elevation_bump_map", "specular_ocean"]}
+
+    real._write_frontend_visual_profile(app, "run-earth", "https://github.com/example/earth", tmp_path / "external", profile)
+
+    payload = json.loads(app.read_text(encoding="utf-8").split("const ABSORBED_PLANET_VISUAL_PROFILE = ", 1)[1].split(";\nfunction", 1)[0])
+    assert set(payload["absorbed_signals"]) >= {"day_night_textures", "cloud_texture_layer", "fresnel_atmosphere", "elevation_bump_map", "specular_ocean"}
+    assert payload["layers"]["day_night_terminator"] is True
+    assert payload["layers"]["cloud_shadow_layer"] is True
+    assert payload["layers"]["fresnel_glow"] is True
+    assert payload["layers"]["terrain_relief"] is True
+    assert payload["layers"]["ocean_specular"] is True
+    assert payload["layers"]["city_lights"] is True
+    assert payload["palette"]["city"] == "#ffd36a"
 
 
 def test_visual_absorption_preserves_core_capability_model(tmp_path: Path) -> None:
