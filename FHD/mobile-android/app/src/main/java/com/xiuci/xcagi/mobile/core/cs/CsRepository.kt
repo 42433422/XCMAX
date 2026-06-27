@@ -2,6 +2,8 @@ package com.xiuci.xcagi.mobile.core.cs
 
 import com.xiuci.xcagi.mobile.core.network.FhdApi
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
+import com.xiuci.xcagi.mobile.model.AdminCsInboxItemDto
+import com.xiuci.xcagi.mobile.model.AdminCsMessageItemDto
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageItemDto
 import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
@@ -27,6 +29,13 @@ class CsRepository @Inject constructor(
 
     private val _csInfo = MutableStateFlow<CsInfoDto?>(null)
     val csInfo: StateFlow<CsInfoDto?> = _csInfo
+
+    // ── 管理端客服收件箱(运营者)──
+    private val _adminInbox = MutableStateFlow<List<AdminCsInboxItemDto>>(emptyList())
+    val adminInbox: StateFlow<List<AdminCsInboxItemDto>> = _adminInbox
+
+    private val _adminMessages = MutableStateFlow<List<AdminCsMessageItemDto>>(emptyList())
+    val adminMessages: StateFlow<List<AdminCsMessageItemDto>> = _adminMessages
 
     private var fhdApi: FhdApi? = null
     private var cachedBase: String? = null
@@ -110,5 +119,29 @@ class CsRepository @Inject constructor(
     /** 删除一条客服消息（长按菜单「删除」）：按对象相等从当前列表移除。 */
     fun removeMessage(msg: CsMessageItemDto) {
         _messages.value = _messages.value.filterNot { it == msg }
+    }
+
+    // ── 管理端客服收件箱(运营者)──
+
+    suspend fun loadAdminInbox(): Result<Unit> = runCatching {
+        val resp = api().getAdminCsInbox()
+        if (!resp.success) throw Exception(resp.message.ifBlank { "加载客服收件箱失败" })
+        _adminInbox.value = resp.data?.conversations ?: emptyList()
+    }
+
+    suspend fun loadAdminMessages(conversationId: Int): Result<Unit> = runCatching {
+        val resp = api().getAdminCsMessages(conversationId)
+        if (!resp.success) throw Exception(resp.message.ifBlank { "加载客服消息失败" })
+        _adminMessages.value = resp.data?.messages ?: emptyList()
+    }
+
+    suspend fun replyAdmin(conversationId: Int, body: String): Result<Unit> = runCatching {
+        val resp = api().replyAdminCs(conversationId, mapOf("body" to body))
+        if (!resp.success) throw Exception(resp.message.ifBlank { "回复失败" })
+        loadAdminMessages(conversationId)
+    }
+
+    fun clearAdminMessages() {
+        _adminMessages.value = emptyList()
     }
 }

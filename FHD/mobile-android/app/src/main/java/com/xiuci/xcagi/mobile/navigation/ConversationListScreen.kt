@@ -134,6 +134,14 @@ fun ConversationListScreen(
         vm.loadConversations(isEnterprise)
         vm.loadAiGroups()
     }
+    // 账号生态自动同步:进列表若没拉到生态员工,自动 force 同步一次(不再要用户手点「账号生态待同步」)。
+    var ecosystemAutoSynced by remember(isEnterprise) { mutableStateOf(false) }
+    LaunchedEffect(isEnterprise, hasEcosystemEmployees) {
+        if (isEnterprise && !hasEcosystemEmployees && !ecosystemAutoSynced) {
+            ecosystemAutoSynced = true
+            vm.loadConversations(isEnterprise, force = true)
+        }
+    }
     val filteredGroups =
             remember(searchQuery, aiGroups) {
                 if (searchQuery.isBlank()) aiGroups
@@ -276,9 +284,6 @@ fun ConversationListScreen(
                         }
                     }
 
-                    if (!hasEcosystemEmployees && searchQuery.isBlank() && selectedFilter == ConversationFilter.ALL) {
-                        item { EcosystemSyncHint(onRefresh = { vm.loadConversations(isEnterprise, force = true) }) }
-                    }
 
                     if (filteredGroups.isEmpty() && filtered.isEmpty()) {
                         item {

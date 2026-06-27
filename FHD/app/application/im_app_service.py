@@ -301,11 +301,77 @@ class ImApplicationService:
         member_ids = self._member_user_ids(conversation_id)
         message = self._message_dict(msg, self._display_name(sender_user_id))
         updated_at_ms = self._record_im_message_change(message, actor=str(sender_user_id))
+        try:
+            self._maybe_push_cs_message(conversation_id, sender_user_id, text, member_ids)
+        except RECOVERABLE_ERRORS:
+            logger.debug("cs push skipped", exc_info=True)
         return {
             "message": message,
             "member_user_ids": member_ids,
             "updated_at_ms": updated_at_ms,
         }
+
+    def _query_admin_user_ids(self) -> list[int]:
+        rows = self._db.execute(
+            select(User.id).where(
+                User.is_active.is_(True),
+                User.role.in_(["admin", "super_admin", "owner"]),
+            )
+        ).all()
+        return [int(r[0]) for r in rows]
+
+    def _maybe_push_cs_message(
+        self, conversation_id: int, sender_user_id: int, text: str, member_ids: list[int]
+    ) -> None:
+        """专属客服会话消息推送:客户发→推所有运营者(admin);客服回→推客户。
+
+        CS 端点直接调 send_message(绕过会做推送的 im_send_message 路由),故在此统一补推。
+        非客服会话(enterprise-cs 不在会话成员里)直接跳过,不影响普通 IM。
+        """
+        cs_id = self.enterprise_cs_user_id()
+        if cs_id is None or int(cs_id) not in [int(m) for m in member_ids]:
+            return
+        try:
+            from app.services.mobile_push import notify_user
+        except ImportError:
+            return
+        preview = (text or "").strip()[:120]
+        if int(sender_user_id) == int(cs_id):
+            # 运营者以企业专属客服身份回复 → 推给客户
+            customer_id = self._direct_peer_id(conversation_id, int(cs_id))
+            if customer_id:
+                try:
+                    notify_user(
+                        int(customer_id),
+                        "专属客服回复",
+                        preview,
+                        {
+                            "type": "cs_reply",
+                            "conversation_id": str(conversation_id),
+                            "route": "cs_chat",
+                        },
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("cs reply push failed", exc_info=True)
+        else:
+            # 客户发消息 → 推给所有运营者(admin),进管理端「客户客服」收件箱
+            sender_name = self._display_name(sender_user_id)
+            for admin_id in self._query_admin_user_ids():
+                if int(admin_id) == int(sender_user_id):
+                    continue
+                try:
+                    notify_user(
+                        int(admin_id),
+                        f"客户咨询 · {sender_name}",
+                        preview,
+                        {
+                            "type": "cs_inbox",
+                            "conversation_id": str(conversation_id),
+                            "route": "admin_cs_console",
+                        },
+                    )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("cs inbox push failed", exc_info=True)
 
     def mark_read(self, conversation_id: int, user_id: int, last_message_id: int) -> dict[str, Any]:
         member = self._get_member(conversation_id, user_id)
@@ -374,6 +440,68 @@ class ImApplicationService:
             )
         ).all()
         return [int(r[0]) for r in rows]
+
+    # ── 运营者(管理端)客服收件箱:企业客户↔企业专属客服 ──
+
+    def enterprise_cs_user_id(self) -> int | None:
+        cs = self._ensure_enterprise_dedicated_cs_user()
+        return int(cs.id) if cs is not None else None
+
+    def list_cs_inbox(self) -> list[dict[str, Any]]:
+        """运营者客服收件箱:所有「企业客户↔企业专属客服」会话(含手机端/桌面端,同一张 IM 表)。"""
+        cs_id = self.enterprise_cs_user_id()
+        if cs_id is None:
+            return []
+        conv_ids = [
+            int(r[0])
+            for r in self._db.execute(
+                select(ImConversationMember.conversation_id).where(
+                    ImConversationMember.user_id == cs_id
+                )
+            ).all()
+        ]
+        if not conv_ids:
+            return []
+        rows = (
+            self._db.execute(
+                select(ImConversation)
+                .where(ImConversation.id.in_(conv_ids), ImConversation.is_direct.is_(True))
+                .order_by(desc(ImConversation.last_message_at))
+            )
+            .scalars()
+            .all()
+        )
+        out: list[dict[str, Any]] = []
+        for conv in rows:
+            customer_id = self._direct_peer_id(int(conv.id), cs_id)
+            if not customer_id:
+                continue
+            out.append(
+                {
+                    "id": int(conv.id),
+                    "customer_user_id": int(customer_id),
+                    "customer_name": self._display_name(int(customer_id)),
+                    "last_message_at": conv.last_message_at.isoformat()
+                    if conv.last_message_at
+                    else "",
+                    "unread_count": self._count_unread(int(conv.id), cs_id),
+                }
+            )
+        return out
+
+    def cs_inbox_messages(self, conversation_id: int) -> list[dict[str, Any]]:
+        """运营者读某客服会话历史(以 enterprise-cs 成员身份)。"""
+        cs_id = self.enterprise_cs_user_id()
+        if cs_id is None:
+            return []
+        return self.list_messages(conversation_id, cs_id, limit=100)
+
+    def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
+        """运营者以「企业专属客服」身份回复客户。"""
+        cs_id = self.enterprise_cs_user_id()
+        if cs_id is None:
+            raise ValueError("客服通道不可用")
+        return self.send_message(conversation_id, cs_id, body)
 
     @staticmethod
     def _message_dict(m: ImMessage, sender_name: str | None = None) -> dict[str, Any]:

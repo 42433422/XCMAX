@@ -315,10 +315,10 @@
           <div
             v-for="m in messages"
             :key="m.id"
-            :class="['im-bubble-row', m.sender_user_id === localUserId ? 'mine' : 'theirs']"
+            :class="['im-bubble-row', isMyMessage(m) ? 'mine' : 'theirs']"
           >
             <div class="im-bubble">
-              <span v-if="m.sender_user_id !== localUserId" class="im-sender">
+              <span v-if="!isMyMessage(m)" class="im-sender">
                 {{ m.sender_display_name || ('用户' + m.sender_user_id) }}
               </span>
               <p>{{ m.body }}</p>
@@ -387,11 +387,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import {
   createDirectConversation,
+  fetchCsInbox,
+  fetchCsInboxMessages,
   fetchImContacts,
   fetchImConversations,
   fetchImMessages,
   imWebSocketUrl,
   markImRead,
+  replyCsInbox,
   sendImMessage,
   type ImContact,
   type ImConversationSummary,
@@ -606,6 +609,15 @@ const activeTitle = computed(() => {
   const conv = conversations.value.find((c) => c.id === activeConversationId.value);
   return conv?.title || '会话';
 });
+
+/** 气泡我方/对方判定:CS 收件箱会话里运营者以「企业专属客服」身份,非客户发的即我方。 */
+function isMyMessage(m: ImMessage): boolean {
+  const conv = conversations.value.find((c) => c.id === activeConversationId.value);
+  if (conv?.is_cs_inbox) {
+    return m.sender_user_id !== conv.customer_user_id;
+  }
+  return m.sender_user_id === localUserId.value;
+}
 
 const visibleConversations = computed(() =>
   conversations.value.filter(
@@ -1554,7 +1566,20 @@ async function loadConversations(): Promise<void> {
   if (!localUserId.value) return;
   busy.value = true;
   try {
-    conversations.value = await fetchImConversations();
+    const regular = await fetchImConversations();
+    if (isAdminCustomerServiceConsole.value) {
+      // 运营者:把「企业客户→专属客服」收件箱会话并进侧栏(置顶),按 id 去重。
+      let inbox: ImConversationSummary[] = [];
+      try {
+        inbox = await fetchCsInbox();
+      } catch (e) {
+        console.warn('加载客服收件箱失败', e);
+      }
+      const seen = new Set(regular.map((c) => c.id));
+      conversations.value = [...inbox.filter((c) => !seen.has(c.id)), ...regular];
+    } else {
+      conversations.value = regular;
+    }
     imApiReachable.value = true;
     if (window.xcagiDesktop?.setBadge) {
       const total = conversations.value.reduce((sum, c) => sum + (c.unread_count || 0), 0);
@@ -1577,13 +1602,19 @@ async function selectConversation(id: number): Promise<void> {
   activeConversationId.value = id;
   busy.value = true;
   try {
-    messages.value = await fetchImMessages(id, { limit: 50 });
-    hasMoreHistory.value = messages.value.length >= 50;
+    const conv = conversations.value.find((c) => c.id === id);
+    const isCs = Boolean(conv?.is_cs_inbox);
+    messages.value = isCs
+      ? await fetchCsInboxMessages(id)
+      : await fetchImMessages(id, { limit: 50 });
+    hasMoreHistory.value = !isCs && messages.value.length >= 50;
     await nextTick();
     scrollToBottom();
-    const last = messages.value[messages.value.length - 1];
-    if (last) {
-      await markImRead(id, last.id);
+    if (!isCs) {
+      const last = messages.value[messages.value.length - 1];
+      if (last) {
+        await markImRead(id, last.id);
+      }
     }
     await loadConversations();
   } catch (error) {
@@ -1673,9 +1704,11 @@ async function onSend(): Promise<void> {
   const id = activeConversationId.value;
   const text = draft.value.trim();
   if (!id || !text || !localUserId.value) return;
+  const conv = conversations.value.find((c) => c.id === id);
+  const isCs = Boolean(conv?.is_cs_inbox);
   busy.value = true;
   try {
-    const msg = await sendImMessage(id, text);
+    const msg = isCs ? await replyCsInbox(id, text) : await sendImMessage(id, text);
     messages.value.push(msg);
     draft.value = '';
     playOutgoing();
