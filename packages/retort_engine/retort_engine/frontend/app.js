@@ -61,7 +61,11 @@ const statusText = {
   closed_loop_verified: "闭环证据已验证",
   closed_loop_evidence_required_before_scores_can_pass: "缺少闭环证据，不能通过高分门槛",
   all_scores_strictly_above_threshold: "全部分数已超过阈值",
-  max_rounds_reached_before_all_scores_passed: "达到轮次上限但仍有分数未通过"
+  max_rounds_reached_before_all_scores_passed: "达到轮次上限但仍有分数未通过",
+  ready: "就绪",
+  saturated: "已饱和",
+  not_saturated: "未饱和",
+  needs_attention: "需要处理"
 };
 const taskText = {
   "Absorb stronger implementation depth": "吸收更强实现深度",
@@ -88,7 +92,7 @@ const titleOf = v => {
 function setRunning(running, text) {
   state.running = running;
   if (text) $("statusText").textContent = text;
-  for (const id of ["assessBtn", "absorbBtn", "evolveBtn", "llmReviewBtn", "llmParallelBtn", "llmStatusBtn"]) {
+  for (const id of ["assessBtn", "absorbBtn", "evolveBtn", "llmReviewBtn", "llmParallelBtn", "llmStatusBtn", "radarBtn", "loopBtn", "saturationBtn"]) {
     const el = $(id);
     if (el) el.disabled = running;
   }
@@ -437,6 +441,66 @@ function tasks(list) {
   }
 }
 
+function renderKV(target, rows) {
+  target.textContent = "";
+  for (const [k, v] of rows) {
+    const row = document.createElement("div");
+    row.className = "kv";
+    row.append(Object.assign(document.createElement("span"), {textContent: k}), Object.assign(document.createElement("b"), {textContent: String(v)}));
+    target.appendChild(row);
+  }
+}
+
+function renderCandidateTasks(candidates) {
+  $("taskList").innerHTML = "";
+  for (const item of candidates) {
+    const el = document.createElement("div");
+    el.className = "task";
+    el.innerHTML = `<b>${item.full_name || sourceName(item.url)}</b><div>同类深度 ${item.similarity_depth_score || 0} · ${item.reason || ""}</div>`;
+    $("taskList").appendChild(el);
+  }
+}
+
+function renderRadar(result) {
+  renderKV($("evidenceState"), [
+    ["候选项目", result.summary?.candidate_count || 0],
+    ["可吸收同类", result.summary?.accepted_count || 0],
+    ["已吃过", result.summary?.already_absorbed_count || 0],
+    ["最低同类分", result.summary?.min_score || 0],
+  ]);
+  renderCandidateTasks(result.candidates || []);
+}
+
+function renderLoop(result) {
+  renderKV($("evidenceState"), [
+    ["选择项目", result.summary?.selected_count || 0],
+    ["完成项目", result.summary?.completed_count || 0],
+    ["门禁通过", result.summary?.gates_passed_count || 0],
+    ["剩余候选", result.summary?.remaining_candidate_count || 0],
+  ]);
+  const rows = (result.runs || []).map(run => ({
+    full_name: run.candidate?.full_name || sourceName(run.candidate?.url),
+    similarity_depth_score: run.candidate?.similarity_depth_score || 0,
+    reason: `${labelOf(run.status)} · ${run.gates_passed ? "门禁通过" : "待验证"}`
+  }));
+  renderCandidateTasks(rows);
+}
+
+function renderSaturation(result) {
+  renderKV($("evidenceState"), [
+    ["状态", labelOf(result.status)],
+    ["吸收次数", result.summary?.absorption_run_count || 0],
+    ["近轮绿灯", result.summary?.recent_gate_green_count || 0],
+    ["无新增深度", result.summary?.consecutive_no_new_core_depth_count || 0],
+    ["剩余候选", result.summary?.remaining_candidate_count || 0],
+  ]);
+  renderCandidateTasks((result.recent_runs || []).map(run => ({
+    full_name: sourceName(run.source),
+    similarity_depth_score: run.new_core_signal_count,
+    reason: `${run.gates_passed ? "门禁通过" : "门禁未过"} · 新深度 ${run.new_core_signal_count}`
+  })));
+}
+
 function llm(review, status = null, assessment = null) {
   if (!review || review.enabled === false) {
     $("llmState").textContent = "排比 LLM 深评未完成，本次不保留评分";
@@ -561,6 +625,61 @@ async function evolve() {
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
     pushEvent("反问深评失败", e.message, "bad");
+  } finally {
+    setRunning(false);
+  }
+}
+
+async function similarRadar() {
+  setRunning(true, "同类雷达扫描中");
+  pushEvent("同类雷达", "扫描 GitHub PR reviewer 项目", "info");
+  try {
+    const r = await api("/api/similar-project-radar", {project: $("ownProjectFolder").value.trim(), query: "AI PR reviewer", limit: 10, min_score: 55});
+    renderRadar(r);
+    $("statusText").textContent = labelOf(r.status);
+    $("branchState").textContent = `同类候选 ${r.summary?.accepted_count || 0} 个`;
+    pushEvent("同类雷达完成", `候选 ${r.summary?.accepted_count || 0} 个`, "ok");
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("同类雷达失败", e.message, "bad");
+  } finally {
+    setRunning(false);
+  }
+}
+
+async function similarLoop() {
+  setRunning(true, "连续吸收同类项目");
+  pushEvent("连续吸收", "按雷达排序吸收 3 个同类项目", "info");
+  try {
+    const r = await api("/api/similar-project-loop", {project: $("ownProjectFolder").value.trim(), limit: 3, min_score: 55, run_local_gates: $("runGates").checked, branch_workflow: $("branchWorkflow").checked, merge_after: $("mergeAfter").checked, allow_dirty_branch: true});
+    renderLoop(r);
+    renderSaturation(r.saturation);
+    $("statusText").textContent = labelOf(r.status);
+    $("branchState").textContent = `${labelOf(r.saturation?.status)} · 完成 ${r.summary?.completed_count || 0}`;
+    pushEvent("连续吸收完成", `完成 ${r.summary?.completed_count || 0} 个 · ${labelOf(r.saturation?.status)}`, r.status === "ready" ? "ok" : "warn");
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("连续吸收失败", e.message, "bad");
+  } finally {
+    setRunning(false);
+  }
+}
+
+async function saturationReport() {
+  setRunning(true, "饱和判定中");
+  pushEvent("饱和判定", "检查最近同类吸收是否还产生核心深度", "info");
+  try {
+    const r = await api("/api/absorption-saturation", {project: $("ownProjectFolder").value.trim(), recent_limit: 3});
+    renderSaturation(r);
+    $("statusText").textContent = labelOf(r.status);
+    $("branchState").textContent = `${labelOf(r.status)} · 无新增深度 ${r.summary?.consecutive_no_new_core_depth_count || 0}`;
+    pushEvent("饱和判定完成", labelOf(r.status), r.status === "saturated" ? "ok" : "warn");
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("饱和判定失败", e.message, "bad");
   } finally {
     setRunning(false);
   }
@@ -869,6 +988,9 @@ $("evolveBtn").onclick = evolve;
 $("llmReviewBtn").onclick = llmReview;
 $("llmParallelBtn").onclick = llmParallelReview;
 $("llmStatusBtn").onclick = llmStatus;
+$("radarBtn").onclick = similarRadar;
+$("loopBtn").onclick = similarLoop;
+$("saturationBtn").onclick = saturationReport;
 
 async function loadDefaultProject() {
   try {

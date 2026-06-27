@@ -72,6 +72,12 @@ class RetortUIServer:
                         self._json(outer.service.review_quality_benchmark(payload))
                     elif self.path == "/api/employee-scheduler-stress":
                         self._json(outer.service.employee_scheduler_stress(payload))
+                    elif self.path == "/api/similar-project-radar":
+                        self._json(outer.service.similar_project_radar(payload))
+                    elif self.path == "/api/similar-project-loop":
+                        self._json(outer.service.similar_project_loop(payload))
+                    elif self.path == "/api/absorption-saturation":
+                        self._json(outer.service.absorption_saturation_report(payload))
                     elif self.path == "/api/llm-review":
                         self._json(outer.service.llm_review(payload))
                     elif self.path == "/api/llm-review-status":
