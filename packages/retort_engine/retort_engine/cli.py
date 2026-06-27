@@ -9,6 +9,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
@@ -104,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
     publish_sandbox.add_argument("--dry-run-file", required=True)
     publish_sandbox.add_argument("--output", default="")
     publish_sandbox.add_argument("--json", action="store_true")
+    live_probe = sub.add_parser("publish-pr-live-probe")
+    live_probe.add_argument("--pr-url", required=True)
+    live_probe.add_argument("--body", default="")
+    live_probe.add_argument("--output", default="")
+    live_probe.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
@@ -231,6 +237,17 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "sandbox_rolled_back" else 1
+    if args.command == "publish-pr-live-probe":
+        output = args.output or "retort_pr_live_publish_probe.json"
+        result = write_live_pr_comment_probe(args.pr_url, output, body=args.body)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR live publish probe status: {result['status']}")
+            print(f"Created: {result['summary']['created_comment_count']}")
+            print(f"Rolled back: {result['summary']['rolled_back_comment_count']}")
+            print(f"Output: {output}")
+        return 0 if result["status"] == "live_rolled_back" else 1
     if args.command == "cross-project-replay":
         result = build_cross_project_replay(args.project)
         if args.output:
