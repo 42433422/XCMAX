@@ -50,72 +50,41 @@ def review_diff(
         for finding in static_analysis.get("findings") or []
         if isinstance(finding, dict)
     }
-    comments: list[dict[str, Any]] = []
-    task_groups: dict[str, dict[str, Any]] = {}
-    file_summaries: list[dict[str, Any]] = []
-    risk_counts = {severity: 0 for severity in SEVERITIES}
+    candidate_comments: list[dict[str, Any]] = []
     hunk_count = 0
     for file_review in files:
         file_path = str(file_review["path"])
         strategy = review_strategy_for_file(file_path)
         review_context = context_by_file.get(file_path, review_context_for_file(file_path))
-        group = task_groups.setdefault(
-            review_context,
-            {
-                "context": review_context,
-                "strategy": str(strategy["strategy"]),
-                "files": [],
-                "comment_count": 0,
-                "stages": list(REVIEW_STAGES),
-                "risk_counts": {severity: 0 for severity in SEVERITIES},
-            },
-        )
-        group["files"].append(file_path)
-        file_comments_before = len(comments)
         for hunk in file_review["hunks"]:
             hunk_count += 1
             hunk_comments = _static_analysis_comments(file_path, hunk, strategy, capabilities, review_context, static_findings_by_location)
             hunk_comments.extend(_review_hunk(file_path, hunk, strategy, capabilities, review_context))
-            if not hunk_comments and _remaining(max_comments, comments):
+            if not hunk_comments:
                 hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]
-            for comment in hunk_comments:
-                if not _remaining(max_comments, comments):
-                    break
-                comments.append(comment)
-                severity = str(comment.get("severity") or "info")
-                if severity in risk_counts:
-                    risk_counts[severity] += 1
-                    group["risk_counts"][severity] = int(group["risk_counts"][severity]) + 1
-                group["comment_count"] = int(group["comment_count"]) + 1
-        file_comments = comments[file_comments_before:]
-        file_summaries.append(_file_summary(file_path, strategy, file_review, file_comments, review_context))
-    if intent_alignment.get("status") == "misaligned" and files and _remaining(max_comments, comments):
-        comment = _intent_alignment_comment(files, capabilities, context_by_file, intent_alignment)
-        comments.append(comment)
-        severity = str(comment.get("severity") or "info")
-        review_context = str(comment.get("review_context") or "other")
-        if severity in risk_counts:
-            risk_counts[severity] += 1
-        group = task_groups.setdefault(
-            review_context,
-            {
-                "context": review_context,
-                "strategy": str(review_strategy_for_file(str(comment.get("file") or "")).get("strategy")),
-                "files": [str(comment.get("file") or "")],
-                "comment_count": 0,
-                "stages": list(REVIEW_STAGES),
-                "risk_counts": {item: 0 for item in SEVERITIES},
-            },
+            candidate_comments.extend(hunk_comments)
+    if intent_alignment.get("status") == "misaligned" and files:
+        candidate_comments.append(_intent_alignment_comment(files, capabilities, context_by_file, intent_alignment))
+    comments = _rank_review_comments(candidate_comments, max_comments=max_comments)
+    risk_counts = _risk_counts(comments)
+    file_summaries = [
+        _file_summary(
+            str(file_review["path"]),
+            review_strategy_for_file(str(file_review["path"])),
+            file_review,
+            [comment for comment in comments if comment.get("file") == file_review["path"]],
+            context_by_file.get(str(file_review["path"]), review_context_for_file(str(file_review["path"]))),
         )
-        if str(comment.get("file") or "") not in group["files"]:
-            group["files"].append(str(comment.get("file") or ""))
-        group["comment_count"] = int(group["comment_count"]) + 1
-        if severity in group["risk_counts"]:
-            group["risk_counts"][severity] = int(group["risk_counts"][severity]) + 1
+        for file_review in files
+    ]
+    task_groups = _build_task_groups(files, comments, context_by_file)
     summary = {
         "file_count": len(files),
         "hunk_count": hunk_count,
         "comment_count": len(comments),
+        "candidate_comment_count": len(candidate_comments),
+        "suppressed_comment_count": max(0, len(candidate_comments) - len(comments)),
+        "publishable_comment_count": sum(1 for comment in comments if comment.get("publishable")),
         "capabilities": capabilities[:5],
         "stage_count": len(REVIEW_STAGES),
         "file_summary_count": len(file_summaries),
@@ -128,6 +97,8 @@ def review_diff(
         "static_analysis": static_analysis["summary"],
         "intent_alignment": intent_alignment["summary"],
         "deep_review_pipeline": True,
+        "comment_ranking_model": "severity_context_publishability_v1",
+        "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
         "ready_for_employee_tasking": bool(files and comments),
         "incremental": bool(incremental.get("enabled")),
         "skipped_existing_change_count": int(incremental.get("skipped_existing_change_count") or 0),
@@ -141,7 +112,7 @@ def review_diff(
         "file_summaries": file_summaries,
         "comments": comments,
         "context_groups": context_groups,
-        "task_groups": [{"context": key, **value} for key, value in sorted(task_groups.items())],
+        "task_groups": task_groups,
         "incremental": incremental,
         "intent_alignment": intent_alignment,
     }
@@ -231,13 +202,13 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         lowered = text.lower()
         line = int(change.get("line") or 0)
         if _looks_like_secret_leak(text, lowered):
-            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", review_context))
+            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", review_context, hunk=hunk, line_text=text))
         elif "todo" in lowered or "fixme" in lowered:
-            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish", review_context))
+            comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish", review_context, hunk=hunk, line_text=text))
         elif Path(file_path).suffix == ".py" and "print(" in lowered:
-            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks", review_context))
+            comments.append(_comment(file_path, line, "low", "新增 print 调试输出需要换成结构化结果或日志门禁，避免产品路径噪声。", strategy, capabilities, "localize_changed_hunks", review_context, hunk=hunk, line_text=text))
         elif len(text) > 120:
-            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks", review_context))
+            comments.append(_comment(file_path, line, "low", "新增行过长，建议拆分为可审阅的局部表达式。", strategy, capabilities, "localize_changed_hunks", review_context, hunk=hunk, line_text=text))
     return comments
 
 
@@ -267,6 +238,8 @@ def _static_analysis_comments(
                 ["static_analysis", *capabilities],
                 "classify_risk",
                 review_context,
+                hunk=hunk,
+                line_text=str(change.get("text") or ""),
             )
         )
     return comments
@@ -295,13 +268,15 @@ def _intent_alignment_comment(
         ["intent_alignment", *capabilities],
         "reflect_before_publish",
         context_by_file.get(file_path, review_context_for_file(file_path)),
+        hunk=first_hunk,
+        line_text=str(first_add.get("text") or ""),
     )
 
 
 def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> dict[str, Any]:
     first_add = next((change for change in hunk.get("changes") or [] if change.get("type") == "add"), {})
     line = int(first_add.get("line") or 1)
-    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish", review_context)
+    return _comment(file_path, line, "info", "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。", strategy, capabilities, "reflect_before_publish", review_context, hunk=hunk, line_text=str(first_add.get("text") or ""))
 
 
 def _looks_like_secret_leak(text: str, lowered: str) -> bool:
@@ -329,8 +304,21 @@ def _looks_like_secret_leak(text: str, lowered: str) -> bool:
     return bool(assignment or authorization)
 
 
-def _comment(file_path: str, line: int, severity: str, message: str, strategy: dict[str, Any], capabilities: list[str], stage: str, review_context: str) -> dict[str, Any]:
-    return {
+def _comment(
+    file_path: str,
+    line: int,
+    severity: str,
+    message: str,
+    strategy: dict[str, Any],
+    capabilities: list[str],
+    stage: str,
+    review_context: str,
+    *,
+    hunk: dict[str, Any] | None = None,
+    line_text: str = "",
+) -> dict[str, Any]:
+    publishable = bool(file_path and line > 0)
+    payload = {
         "file": file_path,
         "line": line,
         "severity": severity,
@@ -340,7 +328,116 @@ def _comment(file_path: str, line: int, severity: str, message: str, strategy: d
         "capability": (capabilities or ["review_pipeline"])[0],
         "review_stage": stage,
         "employee_actionable": severity in {"high", "medium"},
+        "publishable": publishable,
+        "comment_anchor": {"path": file_path, "line": line, "side": "RIGHT"} if publishable else {"path": file_path, "side": "FILE"},
+        "publish_payload": {"path": file_path, "line": line, "side": "RIGHT", "body": message} if publishable else {"path": file_path, "body": message},
+        "hunk_header": str((hunk or {}).get("header") or ""),
+        "line_text_excerpt": line_text[:160],
     }
+    return payload
+
+
+def _rank_review_comments(comments: list[dict[str, Any]], *, max_comments: int) -> list[dict[str, Any]]:
+    deduped: list[dict[str, Any]] = []
+    seen: set[tuple[str, int, str, str]] = set()
+    for index, comment in enumerate(comments):
+        key = (
+            str(comment.get("file") or ""),
+            int(comment.get("line") or 0),
+            str(comment.get("severity") or ""),
+            str(comment.get("message") or "")[:80],
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        scored = dict(comment)
+        scored["_original_order"] = index
+        scored["rank_score"] = _comment_rank_score(scored)
+        scored["rank_reason"] = _rank_reason(scored)
+        deduped.append(scored)
+    ordered = sorted(deduped, key=lambda item: (-int(item["rank_score"]), int(item["_original_order"])))
+    selected = ordered[: max(1, max_comments)]
+    for position, comment in enumerate(selected, start=1):
+        comment["rank_position"] = position
+        comment.pop("_original_order", None)
+    return selected
+
+
+def _comment_rank_score(comment: dict[str, Any]) -> int:
+    severity_weight = {"high": 400, "medium": 300, "low": 200, "info": 100}.get(str(comment.get("severity") or ""), 0)
+    context_weight = {
+        "security": 80,
+        "ci_config": 60,
+        "runtime": 55,
+        "tests": 45,
+        "config": 40,
+        "frontend": 35,
+        "docs": 20,
+        "other": 10,
+    }.get(str(comment.get("review_context") or "other"), 10)
+    capability_weight = {"static_analysis": 45, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    action_weight = 20 if comment.get("employee_actionable") else 0
+    publish_weight = 5 if comment.get("publishable") else -20
+    return severity_weight + context_weight + capability_weight + action_weight + publish_weight
+
+
+def _rank_reason(comment: dict[str, Any]) -> str:
+    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}"
+
+
+def _risk_counts(comments: list[dict[str, Any]]) -> dict[str, int]:
+    return {severity: sum(1 for comment in comments if comment.get("severity") == severity) for severity in SEVERITIES}
+
+
+def _build_task_groups(files: list[dict[str, Any]], comments: list[dict[str, Any]], context_by_file: dict[str, str]) -> list[dict[str, Any]]:
+    buckets: dict[str, dict[str, Any]] = {}
+    for file_review in files:
+        file_path = str(file_review.get("path") or "")
+        if not file_path:
+            continue
+        context = context_by_file.get(file_path, review_context_for_file(file_path))
+        strategy = review_strategy_for_file(file_path)
+        bucket = buckets.setdefault(
+            context,
+            {
+                "context": context,
+                "strategy": str(strategy["strategy"]),
+                "files": [],
+                "comment_count": 0,
+                "publishable_comment_count": 0,
+                "stages": list(REVIEW_STAGES),
+                "risk_counts": {severity: 0 for severity in SEVERITIES},
+            },
+        )
+        if file_path not in bucket["files"]:
+            bucket["files"].append(file_path)
+    for comment in comments:
+        context = str(comment.get("review_context") or "other")
+        file_path = str(comment.get("file") or "")
+        strategy = review_strategy_for_file(file_path)
+        bucket = buckets.setdefault(
+            context,
+            {
+                "context": context,
+                "strategy": str(strategy["strategy"]),
+                "files": [],
+                "comment_count": 0,
+                "publishable_comment_count": 0,
+                "stages": list(REVIEW_STAGES),
+                "risk_counts": {severity: 0 for severity in SEVERITIES},
+            },
+        )
+        if file_path and file_path not in bucket["files"]:
+            bucket["files"].append(file_path)
+        bucket["comment_count"] = int(bucket["comment_count"]) + 1
+        bucket["publishable_comment_count"] = int(bucket["publishable_comment_count"]) + (1 if comment.get("publishable") else 0)
+        severity = str(comment.get("severity") or "info")
+        if severity in bucket["risk_counts"]:
+            bucket["risk_counts"][severity] = int(bucket["risk_counts"][severity]) + 1
+    return sorted(
+        [{"context": key, **value} for key, value in buckets.items()],
+        key=lambda group: (REVIEW_CONTEXTS.index(str(group["context"])) if group["context"] in REVIEW_CONTEXTS else 99, str(group["context"])),
+    )
 
 
 def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]], review_context: str) -> dict[str, Any]:

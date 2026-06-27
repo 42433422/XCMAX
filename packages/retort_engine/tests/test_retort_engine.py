@@ -281,7 +281,10 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert "code_graph_proof" in execution
     assert report["review_pipeline"]["pipeline_stages"]
     assert report["review_pipeline"]["benchmark"]["minimum_expected_behavior_tests"] >= 3
-    assert report["license_review"]["status"] in {"passed", "blocked"}
+    assert report["license_review"]["status"] in {"passed", "blocked", "isolated"}
+    assert report["license_review"]["source_code_copy_allowed"] is False
+    assert report["license_review"]["pattern_absorption_allowed"] is True
+    assert report["license_review"]["isolation_policy"] == "no_license_detected_source_copy_blocked_patterns_only"
     assert execution["feedback_audit"]["closed"] is True
     assert execution["feedback_audit"]["result_tasks_have_queue_records"] is True
     proof = result["absorption_state"]["closed_loop_proof"]["flags"]

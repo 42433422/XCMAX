@@ -45,7 +45,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "external_snapshot": {"git_revision": "abc123"},
                 "absorbed_signals": ["pipeline", "benchmark"],
                 "semantic_review": {"gaps": [{"name": "one"}]},
-                "license_review": {"status": "passed", "detected_license": "MIT"},
+                "license_review": {"status": "passed", "detected_license": "MIT", "source_code_copy_allowed": True, "pattern_absorption_allowed": True, "isolation_policy": "license_gate_standard"},
                 "review_pipeline": {
                     "component_gaps": [{"component": "core"}],
                     "prioritized_absorptions": [{"task": "split"}],
@@ -79,6 +79,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "behavior_test_function_count=1" in evidence
     assert "external_snapshot_revision=abc123" in evidence
     assert "semantic_gap_count=1" in evidence
+    assert "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard" in evidence
     assert "component_gap_count=1" in evidence
     assert "employee_result_count=1; execution_mode=employee_runtime_worker" in evidence
     assert "employee_runtime_worker_review=reviewed; comments=2; artifact=review.json" in evidence
