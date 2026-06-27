@@ -56,7 +56,13 @@ class RetortService:
 
     def review_diff(self, payload: dict[str, Any]) -> dict[str, Any]:
         previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")
-        return review_diff(str(payload.get("diff") or ""), max_comments=int(payload.get("max_comments") or 20), previous_diff_text=previous_diff)
+        return review_diff(
+            str(payload.get("diff") or ""),
+            max_comments=int(payload.get("max_comments") or 20),
+            previous_diff_text=previous_diff,
+            issue_context=str(payload.get("issue_context") or ""),
+            pr_body=str(payload.get("pr_body") or ""),
+        )
 
     def review_pr(self, payload: dict[str, Any]) -> dict[str, Any]:
         previous_diff = str(payload.get("previous_diff") or payload.get("previous_diff_text") or "")

@@ -289,6 +289,19 @@ def test_frontend_visual_absorption_requires_frontend_visual_evidence() -> None:
     assert real._should_absorb_frontend_visual(planet_profile) is True
 
 
+def test_frontend_visual_absorption_rejects_incidental_dashboard_visual_terms() -> None:
+    profile = {
+        "signals": ["review_pipeline", "atmosphere_shader", "procedural_surface", "elevation_bump_map"],
+        "signal_evidence": {
+            "atmosphere_shader": ["apps/dashboard/src/app/layout.tsx", "apps/dashboard/src/app/privacy/page.tsx"],
+            "procedural_surface": ["packages/rules-engine/src/rules/reliability.ts"],
+            "elevation_bump_map": ["apps/worker/src/jobs/review.ts"],
+        },
+    }
+
+    assert real._should_absorb_frontend_visual(profile) is False
+
+
 def test_frontend_visual_profile_rewrite_and_generated_test_are_executable(tmp_path: Path) -> None:
     app = tmp_path / "retort_engine" / "frontend" / "app.js"
     write(

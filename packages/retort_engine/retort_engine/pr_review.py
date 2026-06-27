@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
+from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
 
@@ -16,7 +17,14 @@ REVIEW_CONTEXTS = ("security", "tests", "ci_config", "config", "frontend", "runt
 SEVERITIES = ("high", "medium", "low", "info")
 
 
-def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: str = "") -> dict[str, Any]:
+def review_diff(
+    diff_text: str,
+    *,
+    max_comments: int = 20,
+    previous_diff_text: str = "",
+    issue_context: str = "",
+    pr_body: str = "",
+) -> dict[str, Any]:
     """Review a unified diff with absorbed external review capabilities."""
     raw_files = parse_unified_diff(diff_text)
     previous_files = parse_unified_diff(previous_diff_text) if previous_diff_text.strip() else []
@@ -36,6 +44,7 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
     context_groups = group_related_files_for_review(files)
     context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
     static_analysis = scan_static_analysis_findings(files)
+    intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
     static_findings_by_location = {
         (str(finding.get("file") or ""), int(finding.get("line") or 0)): finding
         for finding in static_analysis.get("findings") or []
@@ -80,6 +89,29 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
                 group["comment_count"] = int(group["comment_count"]) + 1
         file_comments = comments[file_comments_before:]
         file_summaries.append(_file_summary(file_path, strategy, file_review, file_comments, review_context))
+    if intent_alignment.get("status") == "misaligned" and files and _remaining(max_comments, comments):
+        comment = _intent_alignment_comment(files, capabilities, context_by_file, intent_alignment)
+        comments.append(comment)
+        severity = str(comment.get("severity") or "info")
+        review_context = str(comment.get("review_context") or "other")
+        if severity in risk_counts:
+            risk_counts[severity] += 1
+        group = task_groups.setdefault(
+            review_context,
+            {
+                "context": review_context,
+                "strategy": str(review_strategy_for_file(str(comment.get("file") or "")).get("strategy")),
+                "files": [str(comment.get("file") or "")],
+                "comment_count": 0,
+                "stages": list(REVIEW_STAGES),
+                "risk_counts": {item: 0 for item in SEVERITIES},
+            },
+        )
+        if str(comment.get("file") or "") not in group["files"]:
+            group["files"].append(str(comment.get("file") or ""))
+        group["comment_count"] = int(group["comment_count"]) + 1
+        if severity in group["risk_counts"]:
+            group["risk_counts"][severity] = int(group["risk_counts"][severity]) + 1
     summary = {
         "file_count": len(files),
         "hunk_count": hunk_count,
@@ -94,6 +126,7 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
         "static_analysis": static_analysis["summary"],
+        "intent_alignment": intent_alignment["summary"],
         "deep_review_pipeline": True,
         "ready_for_employee_tasking": bool(files and comments),
         "incremental": bool(incremental.get("enabled")),
@@ -110,6 +143,7 @@ def review_diff(diff_text: str, *, max_comments: int = 20, previous_diff_text: s
         "context_groups": context_groups,
         "task_groups": [{"context": key, **value} for key, value in sorted(task_groups.items())],
         "incremental": incremental,
+        "intent_alignment": intent_alignment,
     }
 
 
@@ -236,6 +270,32 @@ def _static_analysis_comments(
             )
         )
     return comments
+
+
+def _intent_alignment_comment(
+    files: list[dict[str, Any]],
+    capabilities: list[str],
+    context_by_file: dict[str, str],
+    intent_alignment: dict[str, Any],
+) -> dict[str, Any]:
+    first_file = files[0]
+    file_path = str(first_file.get("path") or "")
+    first_hunk = next(iter(first_file.get("hunks") or []), {})
+    first_add = next((change for change in first_hunk.get("changes") or [] if change.get("type") == "add"), {})
+    missing = ", ".join(str(item) for item in intent_alignment.get("missing_keywords", [])[:5])
+    message = "PR 变更与 issue/目标上下文缺少关键词重合，需要先证明变更方向相关。"
+    if missing:
+        message += f" 未覆盖关键词：{missing}。"
+    return _comment(
+        file_path,
+        int(first_add.get("line") or 1),
+        "medium",
+        message,
+        review_strategy_for_file(file_path),
+        ["intent_alignment", *capabilities],
+        "reflect_before_publish",
+        context_by_file.get(file_path, review_context_for_file(file_path)),
+    )
 
 
 def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> dict[str, Any]:

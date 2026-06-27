@@ -12,7 +12,7 @@
     "semantic_index",
     "atmosphere_shader",
     "procedural_surface",
-    "cloud_texture_layer"
+    "elevation_bump_map"
   ],
   "code_graph_proof": {
     "changed_behavior_files": [
@@ -62,18 +62,18 @@
     "evidence": {
       "max_files": 400,
       "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
-      "run_id": "20260627212946-168c95fefd",
+      "run_id": "20260627213722-6cc7a9e742",
       "scope": "per_real_absorption_run",
       "style": "deterministic_post_absorption_code_graph"
     },
     "focus_files": [
       "retort_engine/absorbed_capabilities.py",
+      "retort_engine/cli.py",
       "retort_engine/codebase_graph.py",
       "retort_engine/core.py",
       "retort_engine/pr_review.py",
       "retort_engine/real_absorption.py",
       "retort_engine/review_pipeline.py",
-      "tests/test_absorption_quality.py",
       "tests/test_real_absorption_helpers.py",
       "tests/test_retort_engine.py",
       "tests/test_review_pipeline.py"
@@ -93,11 +93,11 @@
     ],
     "passed": true,
     "per_run_required": true,
-    "run_id": "20260627212946-168c95fefd",
+    "run_id": "20260627213722-6cc7a9e742",
     "status": "proved",
     "summary": {
       "changed_behavior_file_count": 3,
-      "changed_file_count": 7,
+      "changed_file_count": 9,
       "changed_focus_file_count": 1,
       "changed_hotspot_count": 0,
       "dependency_cycle_touch_count": 0,
@@ -105,39 +105,42 @@
       "graph_status": "ready"
     }
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
   "external_snapshot": {
-    "file_count": 1132,
-    "git_revision": "5f94efc87852dce44731ca9461e2e38847006375",
+    "file_count": 199,
+    "git_revision": "d4edee7d96605383a5696bd8dfc15341fe5eede5",
     "suffix_counts": {
       ".cjs": 1,
-      ".css": 2,
-      ".json": 42,
+      ".css": 1,
+      ".example": 4,
+      ".ico": 1,
+      ".jpeg": 2,
+      ".json": 24,
       ".lock": 1,
-      ".md": 412,
-      ".mdc": 1,
+      ".md": 6,
       ".mjs": 2,
-      ".nix": 1,
-      ".png": 12,
-      ".svg": 2,
-      ".toml": 1,
-      ".ts": 77,
-      ".txt": 1,
-      ".vue": 19,
-      ".yaml": 5,
+      ".png": 2,
+      ".ps1": 1,
+      ".sh": 1,
+      ".sql": 1,
+      ".svg": 8,
+      ".ts": 92,
+      ".tsx": 36,
+      ".txt": 2,
+      ".xml": 1,
       ".yml": 3,
-      "<none>": 18
+      "<none>": 10
     }
   },
-  "generated_at": "2026-06-27T21:29:48Z",
+  "generated_at": "2026-06-27T21:37:24Z",
   "license_review": {
-    "detected_license": "Copyright 2024 Kazuki Yamada",
-    "message": "license-incompatible risk: Copyright 2024 Kazuki Yamada",
+    "detected_license": "",
+    "message": "license-incompatible risk: no LICENSE file detected",
     "status": "blocked"
   },
   "pre_absorption_focus": {
     "evidence": {
-      "external_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix",
+      "external_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
       "max_files": 400,
       "own_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
       "style": "deterministic_pre_absorption_code_graph"
@@ -200,21 +203,21 @@
         "term_hits": 388
       },
       {
+        "graph_degree": 0,
+        "path": "retort_engine/absorbed_capabilities.py",
+        "score": 3490,
+        "term_hits": 349
+      },
+      {
         "graph_degree": 39,
         "path": "retort_engine/pr_review.py",
         "score": 3209,
         "term_hits": 317
       },
       {
-        "graph_degree": 0,
-        "path": "retort_engine/absorbed_capabilities.py",
-        "score": 3110,
-        "term_hits": 311
-      },
-      {
-        "graph_degree": 35,
+        "graph_degree": 36,
         "path": "retort_engine/codebase_graph.py",
-        "score": 2955,
+        "score": 2956,
         "term_hits": 292
       },
       {
@@ -236,43 +239,43 @@
         "term_hits": 237
       },
       {
+        "graph_degree": 166,
+        "path": "retort_engine/core.py",
+        "score": 2296,
+        "term_hits": 213
+      },
+      {
         "graph_degree": 69,
         "path": "tests/test_retort_engine.py",
         "score": 2259,
         "term_hits": 219
       },
       {
-        "graph_degree": 164,
-        "path": "retort_engine/core.py",
-        "score": 2224,
-        "term_hits": 206
-      },
-      {
-        "graph_degree": 0,
-        "path": "tests/test_absorption_quality.py",
-        "score": 1720,
-        "term_hits": 172
+        "graph_degree": 47,
+        "path": "retort_engine/cli.py",
+        "score": 1757,
+        "term_hits": 171
       }
     ],
     "own_focus_files": [
       "retort_engine/real_absorption.py",
-      "retort_engine/pr_review.py",
       "retort_engine/absorbed_capabilities.py",
+      "retort_engine/pr_review.py",
       "retort_engine/codebase_graph.py",
       "tests/test_real_absorption_helpers.py",
       "tests/test_review_pipeline.py",
       "retort_engine/review_pipeline.py",
-      "tests/test_retort_engine.py",
       "retort_engine/core.py",
-      "tests/test_absorption_quality.py"
+      "tests/test_retort_engine.py",
+      "retort_engine/cli.py"
     ],
     "own_hotspots": [
       {
-        "degree": 164,
+        "degree": 166,
         "id": "retort_engine/core.py",
         "incoming": 6,
         "kind": "file",
-        "outgoing": 158,
+        "outgoing": 160,
         "path": "retort_engine/core.py"
       },
       {
@@ -300,12 +303,20 @@
         "path": "retort_engine/real_absorption.py"
       },
       {
-        "degree": 45,
+        "degree": 47,
         "id": "retort_engine/cli.py",
         "incoming": 0,
         "kind": "file",
-        "outgoing": 45,
+        "outgoing": 47,
         "path": "retort_engine/cli.py"
+      },
+      {
+        "degree": 40,
+        "id": "retort_engine/service.py",
+        "incoming": 1,
+        "kind": "file",
+        "outgoing": 39,
+        "path": "retort_engine/service.py"
       },
       {
         "degree": 39,
@@ -314,14 +325,6 @@
         "kind": "file",
         "outgoing": 31,
         "path": "retort_engine/pr_review.py"
-      },
-      {
-        "degree": 38,
-        "id": "retort_engine/service.py",
-        "incoming": 1,
-        "kind": "file",
-        "outgoing": 37,
-        "path": "retort_engine/service.py"
       },
       {
         "degree": 38,
@@ -340,17 +343,17 @@
         "path": "retort_engine/evaluators.py"
       },
       {
-        "degree": 36,
+        "degree": 37,
         "id": "tests/test_runtime_integrations.py",
         "incoming": 0,
         "kind": "file",
-        "outgoing": 36,
+        "outgoing": 37,
         "path": "tests/test_runtime_integrations.py"
       },
       {
-        "degree": 35,
+        "degree": 36,
         "id": "retort_engine/codebase_graph.py",
-        "incoming": 9,
+        "incoming": 10,
         "kind": "file",
         "outgoing": 26,
         "path": "retort_engine/codebase_graph.py"
@@ -365,127 +368,71 @@
       }
     ],
     "own_summary": {
-      "call_edge_count": 1415,
-      "define_edge_count": 760,
+      "call_edge_count": 1434,
+      "define_edge_count": 771,
       "dependency_cycle_count": 0,
-      "edge_count": 3173,
-      "file_count": 107,
+      "edge_count": 3219,
+      "file_count": 109,
       "hotspot_count": 12,
-      "import_edge_count": 800,
+      "import_edge_count": 811,
       "include_tests": true,
-      "local_dependency_edge_count": 198,
-      "node_count": 867,
+      "local_dependency_edge_count": 203,
+      "node_count": 880,
       "parse_error_count": 0
     },
     "status": "empty"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 7,
-      "minimum_expected_behavior_tests": 11,
-      "prioritized_component_count": 7,
-      "task_dimension_count": 4
+      "component_gap_count": 3,
+      "minimum_expected_behavior_tests": 8,
+      "prioritized_component_count": 3,
+      "task_dimension_count": 5
     },
     "component_gaps": [
-      {
-        "component": "workflow_ci",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 4326,
-        "own_files": 12,
-        "representative_external_files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          ".oxlintrc.json",
-          ".pinact.yaml",
-          "llms-install.md"
-        ]
-      },
       {
         "component": "safety_policy",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 2888,
+        "marker_gap": 440,
         "own_files": 12,
         "representative_external_files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
-          "package-lock.json"
-        ]
-      },
-      {
-        "component": "plugin_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 1061,
-        "own_files": 12,
-        "representative_external_files": [
-          "typos.toml",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
-          "package-lock.json"
-        ]
-      },
-      {
-        "component": "semantic_index",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 893,
-        "own_files": 12,
-        "representative_external_files": [
+          "ReviewScope.md",
+          "tsconfig.base.json",
           "README.md",
           "package-lock.json",
-          "AGENTS.md",
-          "CLAUDE.md",
-          "website/server/package-lock.json"
+          "package.json"
         ]
       },
       {
-        "component": "diff_hunk_review",
+        "component": "provider_surface",
         "external_files": 12,
-        "file_gap": 1,
-        "marker_gap": 59,
-        "own_files": 11,
+        "file_gap": 0,
+        "marker_gap": 204,
+        "own_files": 12,
         "representative_external_files": [
-          "website/client/src/en/guide/comment-removal.md",
-          "website/client/src/tr/guide/comment-removal.md",
-          "tests/core/treeSitter/parseFile.go.test.ts",
-          "tests/core/treeSitter/parseFile.python.test.ts",
-          "tests/core/treeSitter/parseFile.ruby.test.ts"
-        ]
-      },
-      {
-        "component": "context_packaging",
-        "external_files": 9,
-        "file_gap": 5,
-        "marker_gap": -11,
-        "own_files": 4,
-        "representative_external_files": [
+          "ReviewScope.md",
+          "docker-compose.dev.yml",
           "README.md",
-          "website/client/src/hi/guide/faq.md",
-          "website/client/src/en/index.md",
-          "website/client/src/en/guide/faq.md",
-          "website/client/src/en/guide/index.md"
+          "package-lock.json",
+          "docs/USER_GUIDE.md"
         ]
       },
       {
         "component": "static_analysis",
-        "external_files": 12,
-        "file_gap": 3,
-        "marker_gap": -37,
-        "own_files": 9,
+        "external_files": 11,
+        "file_gap": 6,
+        "marker_gap": -9,
+        "own_files": 5,
         "representative_external_files": [
           "README.md",
-          "SECURITY.md",
-          "website/server/src/domains/pack/processZipFile.ts",
-          "website/server/src/domains/pack/utils/fileUtils.ts",
-          "website/client/src/en/guide/claude-code-plugins.md"
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/context-engine/src/layers.ts",
+          "packages/llm-core/src/prompts.ts"
         ]
       }
     ],
@@ -496,11 +443,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
+            "ReviewScope.md",
+            "docker-compose.dev.yml",
             "README.md",
             "package-lock.json",
-            "package.json",
-            "website/server/package-lock.json",
-            "website/client/package-lock.json"
+            "docs/USER_GUIDE.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -509,11 +456,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "typos.toml",
-            "repomix-instruction.md",
-            "llms-install.md",
-            "README.md",
-            "package-lock.json"
+            "package-lock.json",
+            "package.json",
+            "packages/rules-engine/src/parsers/javascript.ts",
+            "apps/dashboard/tsconfig.json",
+            "apps/worker/src/lib/github.ts"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -547,6 +494,20 @@
           "title": "Deepen file_grouping"
         },
         {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
+        },
+        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -574,20 +535,6 @@
           "title": "Deepen workflow_ci"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -599,20 +546,6 @@
           "priority": "P1",
           "task_id": "retort-depth-safety-policy",
           "title": "Deepen safety_policy"
-        },
-        {
-          "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
-          "dimension": "product_operability",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "machine-readable findings"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-semantic-index",
-          "title": "Deepen semantic_index"
         },
         {
           "acceptance": "Retort has executable, tested codebase_graph behavior in the absorption or PR-review path.",
@@ -654,6 +587,20 @@
           "priority": "P0",
           "task_id": "retort-depth-context-packaging",
           "title": "Deepen context_packaging"
+        },
+        {
+          "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
+          "dimension": "product_operability",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "machine-readable findings"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-semantic-index",
+          "title": "Deepen semantic_index"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -683,16 +630,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 452,
-          "own_marker_hits": 2595,
+          "external_marker_hits": 1090,
+          "own_marker_hits": 2711,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "llms-install.md",
+            "ReviewScope.md",
+            "tsconfig.base.json",
+            "docker-compose.dev.yml",
             "README.md",
-            "package-lock.json",
-            "package.json"
+            "package-lock.json"
           ]
         },
         {
@@ -718,16 +665,49 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 8,
+          "external_marker_hits": 6,
           "own_marker_hits": 78,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "website/client/src/en/guide/command-line-options.md",
-            ".claude/plugins/repomix-explorer/agents/explorer.md",
-            ".github/releases/v1.x/v1.14.1.md",
-            "src/cli/cliRun.ts"
+            "docs/ARCHITECTURE.md",
+            "packages/rules-engine/src/rules/reviewscope.ts",
+            "packages/context-engine/src/layers.ts",
+            "packages/context-engine/src/layers/related-files.ts",
+            "packages/llm-core/src/prompts.ts"
+          ]
+        },
+        {
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 1,
+          "own_marker_hits": 31,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "apps/worker/src/lib/validation.ts"
           ]
         },
         {
@@ -755,23 +735,23 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 169,
-          "own_marker_hits": 1062,
+          "external_marker_hits": 52,
+          "own_marker_hits": 1065,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "repomix-instruction.md",
-            "llms-install.md",
             "README.md",
-            "website/server/src/domains/pack/remoteRepo.ts",
-            "website/server/src/actions/packRequestSchema.ts"
+            "docs/USER_GUIDE.md",
+            "docs/ARCHITECTURE.md",
+            "packages/rules-engine/src/rules/ai-sanity.ts",
+            "packages/llm-core/src/prompts.ts"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 4326,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -790,60 +770,23 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 9189,
-          "own_marker_hits": 4863,
+          "external_marker_hits": 1164,
+          "own_marker_hits": 4924,
           "priority": "P0",
-          "similarity_score": 92,
+          "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "repomix-instruction.md",
-            ".oxlintrc.json",
-            ".pinact.yaml",
-            "llms-install.md"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 59,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 90,
-          "own_marker_hits": 31,
-          "priority": "P0",
-          "similarity_score": 90,
-          "source_files": [
-            "website/client/src/en/guide/comment-removal.md",
-            "website/client/src/tr/guide/comment-removal.md",
-            "tests/core/treeSitter/parseFile.go.test.ts",
-            "tests/core/treeSitter/parseFile.python.test.ts",
-            "tests/core/treeSitter/parseFile.ruby.test.ts"
+            "tsconfig.base.json",
+            "docker-compose.dev.yml",
+            "README.md",
+            "package-lock.json",
+            "package.json"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 2888,
+          "depth_gap": 440,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -862,53 +805,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3416,
-          "own_marker_hits": 528,
+          "external_marker_hits": 981,
+          "own_marker_hits": 541,
           "priority": "P0",
-          "similarity_score": 87,
+          "similarity_score": 93,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "repomix-instruction.md",
-            "llms-install.md",
-            "README.md",
-            "package-lock.json"
-          ]
-        },
-        {
-          "absorption_goal": "resolve symbols, definitions, and references before deciding impact and absorption priority",
-          "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
-          "component": "semantic_index",
-          "depth_gap": 893,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
-            "dimension": "product_operability",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "machine-readable findings"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-semantic-index",
-            "title": "Deepen semantic_index"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "machine-readable findings"
-          ],
-          "external_marker_hits": 974,
-          "own_marker_hits": 81,
-          "priority": "P0",
-          "similarity_score": 61,
-          "source_files": [
+            "ReviewScope.md",
+            "tsconfig.base.json",
             "README.md",
             "package-lock.json",
-            "AGENTS.md",
-            "CLAUDE.md",
-            "website/server/package-lock.json"
+            "package.json"
           ]
         },
         {
@@ -934,16 +840,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 55,
-          "own_marker_hits": 211,
+          "external_marker_hits": 66,
+          "own_marker_hits": 214,
           "priority": "P1",
           "similarity_score": 75,
           "source_files": [
-            "biome.json",
-            "website/.claude/skills/website-maintainer/SKILL.md",
-            "website/server/tests/packEventSchema.test.ts",
-            "website/client/tsconfig.node.json",
-            "website/client/package-lock.json"
+            "tsconfig.base.json",
+            "package-lock.json",
+            "packages/context-engine/src/layers.ts",
+            "packages/context-engine/src/layers/related-files.ts",
+            "apps/dashboard/src/app/page.tsx"
           ]
         },
         {
@@ -971,16 +877,16 @@
             "gate output",
             "machine-readable findings"
           ],
-          "external_marker_hits": 18,
-          "own_marker_hits": 55,
+          "external_marker_hits": 24,
+          "own_marker_hits": 33,
           "priority": "P1",
           "similarity_score": 75,
           "source_files": [
             "README.md",
-            "SECURITY.md",
-            "website/server/src/domains/pack/processZipFile.ts",
-            "website/server/src/domains/pack/utils/fileUtils.ts",
-            "website/client/src/en/guide/claude-code-plugins.md"
+            "docs/USER_GUIDE.md",
+            "docs/ARCHITECTURE.md",
+            "packages/context-engine/src/layers.ts",
+            "packages/llm-core/src/prompts.ts"
           ]
         },
         {
@@ -1008,16 +914,50 @@
             "gate output",
             "bounded context manifest"
           ],
-          "external_marker_hits": 16,
-          "own_marker_hits": 27,
+          "external_marker_hits": 3,
+          "own_marker_hits": 32,
           "priority": "P1",
           "similarity_score": 75,
           "source_files": [
-            "README.md",
-            "website/client/src/hi/guide/faq.md",
-            "website/client/src/en/index.md",
-            "website/client/src/en/guide/faq.md",
-            "website/client/src/en/guide/index.md"
+            "packages/llm-core/src/prompts.ts",
+            "apps/dashboard/src/app/page.tsx"
+          ]
+        },
+        {
+          "absorption_goal": "resolve symbols, definitions, and references before deciding impact and absorption priority",
+          "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
+          "component": "semantic_index",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested semantic_index behavior in the absorption or PR-review path.",
+            "dimension": "product_operability",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "machine-readable findings"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-semantic-index",
+            "title": "Deepen semantic_index"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "machine-readable findings"
+          ],
+          "external_marker_hits": 54,
+          "own_marker_hits": 85,
+          "priority": "P1",
+          "similarity_score": 75,
+          "source_files": [
+            "tsconfig.json",
+            "packages/rules-engine/src/parsers/python.ts",
+            "packages/context-engine/src/layers/related-files.ts",
+            "packages/llm-core/src/prompts.ts",
+            "apps/dashboard/README.md"
           ]
         }
       ],
@@ -1037,26 +977,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 478,
+          "external_marker_hits": 685,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
+            "ReviewScope.md",
+            "docker-compose.dev.yml",
             "README.md",
             "package-lock.json",
-            "package.json",
-            "website/server/package-lock.json",
-            "website/client/package-lock.json"
+            "docs/USER_GUIDE.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 1753,
+          "external_marker_hits": 77,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "typos.toml",
-            "repomix-instruction.md",
-            "llms-install.md",
-            "README.md",
-            "package-lock.json"
+            "package-lock.json",
+            "package.json",
+            "packages/rules-engine/src/parsers/javascript.ts",
+            "apps/dashboard/tsconfig.json",
+            "apps/worker/src/lib/github.ts"
           ]
         }
       ]
@@ -1064,197 +1004,171 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "repomix-instruction.md",
-          "llms-install.md",
           "README.md",
-          "website/server/src/domains/pack/remoteRepo.ts",
-          "website/server/src/actions/packRequestSchema.ts",
-          "website/client/package-lock.json",
-          "website/client/composables/usePackRequest.ts",
-          "website/client/components/utils/validation.ts",
-          "website/client/components/utils/cliCommand.ts",
-          "website/client/src/it/guide/output.md",
-          "website/client/src/de/guide/prompt-examples.md",
-          "website/client/src/es/guide/prompt-examples.md"
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/rules-engine/src/rules/ai-sanity.ts",
+          "packages/llm-core/src/prompts.ts",
+          "packages/llm-core/src/index.ts",
+          "apps/dashboard/src/app/page.tsx",
+          "apps/dashboard/src/app/settings/[id]/config/actions.ts",
+          "apps/dashboard/src/app/admin/actions.ts",
+          "apps/dashboard/src/app/docs/page.tsx",
+          "apps/dashboard/src/app/pricing/pricing-client.tsx",
+          "apps/worker/src/lib/validation.ts"
         ],
-        "marker_hits": 169
+        "marker_hits": 52
       },
       "codebase_graph": {
         "files": [
-          "biome.json",
-          "website/.claude/skills/website-maintainer/SKILL.md",
-          "website/server/tests/packEventSchema.test.ts",
-          "website/client/tsconfig.node.json",
-          "website/client/package-lock.json",
-          "website/client/src/vi/guide/code-compress.md",
-          "website/client/src/vi/guide/faq.md",
-          "website/client/src/ja/guide/code-compress.md",
-          "website/client/src/ru/guide/code-compress.md",
-          "website/client/src/ru/guide/faq.md",
-          "website/client/src/zh-cn/guide/code-compress.md",
-          "website/client/src/zh-tw/guide/code-compress.md"
+          "tsconfig.base.json",
+          "package-lock.json",
+          "packages/context-engine/src/layers.ts",
+          "packages/context-engine/src/layers/related-files.ts",
+          "apps/dashboard/src/app/page.tsx",
+          "apps/api/src/lib/quota.ts",
+          "apps/worker/src/lib/ai-review.ts",
+          "apps/worker/src/lib/imports.ts"
         ],
-        "marker_hits": 55
+        "marker_hits": 66
       },
       "context_packaging": {
         "files": [
-          "README.md",
-          "website/client/src/hi/guide/faq.md",
-          "website/client/src/en/index.md",
-          "website/client/src/en/guide/faq.md",
-          "website/client/src/en/guide/index.md",
-          "website/client/src/en/guide/configuration.md",
-          "website/client/src/en/guide/use-cases.md",
-          "tests/mcp/tools/mcpToolRuntime.test.ts",
-          ".agents/clawhub/SKILL.md"
+          "packages/llm-core/src/prompts.ts",
+          "apps/dashboard/src/app/page.tsx"
         ],
-        "marker_hits": 16
+        "marker_hits": 3
       },
       "diff_hunk_review": {
         "files": [
-          "website/client/src/en/guide/comment-removal.md",
-          "website/client/src/tr/guide/comment-removal.md",
-          "tests/core/treeSitter/parseFile.go.test.ts",
-          "tests/core/treeSitter/parseFile.python.test.ts",
-          "tests/core/treeSitter/parseFile.ruby.test.ts",
-          "tests/core/treeSitter/parseFile.javascript.test.ts",
-          "tests/core/treeSitter/parseFile.css.test.ts",
-          "tests/core/treeSitter/parseFile.comments.test.ts",
-          "tests/core/file/fileManipulate.test.ts",
-          ".agents/agents/reviewer-conventions.md",
-          ".agents/commands/code/codex-review-loop.md",
-          ".agents/commands/code/review-loop.md"
+          "apps/worker/src/lib/validation.ts"
         ],
-        "marker_hits": 90
+        "marker_hits": 1
       },
       "file_grouping": {
         "files": [
-          "README.md",
-          "website/client/src/en/guide/command-line-options.md",
-          ".claude/plugins/repomix-explorer/agents/explorer.md",
-          ".github/releases/v1.x/v1.14.1.md",
-          "src/cli/cliRun.ts"
+          "docs/ARCHITECTURE.md",
+          "packages/rules-engine/src/rules/reviewscope.ts",
+          "packages/context-engine/src/layers.ts",
+          "packages/context-engine/src/layers/related-files.ts",
+          "packages/llm-core/src/prompts.ts",
+          "apps/dashboard/src/app/page.tsx"
         ],
-        "marker_hits": 8
+        "marker_hits": 6
       },
       "plugin_surface": {
         "files": [
-          "typos.toml",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
           "package-lock.json",
-          "AGENTS.md",
-          "CLAUDE.md",
-          "website/server/package-lock.json",
-          "website/server/package.json",
-          "website/server/src/domains/pack/processZipFile.ts",
-          "website/server/src/domains/pack/utils/fileUtils.ts",
-          "website/client/package-lock.json"
+          "package.json",
+          "packages/rules-engine/src/parsers/javascript.ts",
+          "apps/dashboard/tsconfig.json",
+          "apps/worker/src/lib/github.ts",
+          "apps/worker/src/lib/parser.ts",
+          "apps/worker/src/lib/complexity.ts",
+          "apps/worker/src/lib/review-lifecycle.ts"
         ],
-        "marker_hits": 1753
+        "marker_hits": 77
       },
       "provider_surface": {
         "files": [
+          "ReviewScope.md",
+          "docker-compose.dev.yml",
           "README.md",
           "package-lock.json",
-          "package.json",
-          "website/server/package-lock.json",
-          "website/client/package-lock.json",
-          "website/client/.vitepress/config/configShard.ts",
-          "website/client/src/vi/index.md",
-          "website/client/src/vi/guide/command-line-options.md",
-          "website/client/src/vi/guide/output.md",
-          "website/client/src/vi/guide/faq.md",
-          "website/client/src/vi/guide/mcp-server.md",
-          "website/client/src/vi/guide/agent-skills-generation.md"
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/rules-engine/src/config.ts",
+          "packages/rules-engine/src/rules/safety.ts",
+          "packages/security/src/masking.ts",
+          "packages/context-engine/src/assembler.ts",
+          "packages/context-engine/src/layers/web-context.ts",
+          "packages/context-engine/src/rag/indexer.ts"
         ],
-        "marker_hits": 478
+        "marker_hits": 685
       },
       "review_pipeline": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "llms-install.md",
+          "ReviewScope.md",
+          "tsconfig.base.json",
+          "docker-compose.dev.yml",
           "README.md",
           "package-lock.json",
           "package.json",
-          "AGENTS.md",
-          ".coderabbit.yaml",
-          "CLAUDE.md",
-          "website/server/package-lock.json",
-          "website/server/package.json",
-          "website/server/src/middlewares/turnstile.ts",
-          "website/client/package-lock.json"
+          "CONTRIBUTING.md",
+          "docker-compose.prod.yml",
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/rules-engine/package.json",
+          "packages/rules-engine/src/index.ts"
         ],
-        "marker_hits": 452
+        "marker_hits": 1090
       },
       "safety_policy": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
-          "package-lock.json",
-          "package.json",
-          "repomix.config.json",
-          "AGENTS.md",
-          "CLAUDE.md",
-          "SECURITY.md",
-          "website/server/package-lock.json",
-          "website/server/src/domains/pack/remoteRepo.ts"
-        ],
-        "marker_hits": 3416
-      },
-      "semantic_index": {
-        "files": [
-          "README.md",
-          "package-lock.json",
-          "AGENTS.md",
-          "CLAUDE.md",
-          "website/server/package-lock.json",
-          "website/server/monitoring/README.md",
-          "website/server/src/utils/errorHandler.ts",
-          "website/server/src/utils/logger.ts",
-          "website/server/src/actions/packEventSchema.ts",
-          "website/client/package-lock.json",
-          "website/client/composables/usePackRequest.ts",
-          "website/client/.vitepress/config/configShard.ts"
-        ],
-        "marker_hits": 974
-      },
-      "static_analysis": {
-        "files": [
-          "README.md",
-          "SECURITY.md",
-          "website/server/src/domains/pack/processZipFile.ts",
-          "website/server/src/domains/pack/utils/fileUtils.ts",
-          "website/client/src/en/guide/claude-code-plugins.md",
-          "website/client/src/en/guide/use-cases.md",
-          "website/client/src/en/guide/security.md",
-          "tests/core/security/securityScanSpec.test.ts",
-          "tests/core/packager/multiRootSpec.test.ts",
-          ".agents/agents/reviewer-security.md",
-          ".agents/agents/reviewer-test-coverage.md",
-          ".agents/agents/reviewer-holistic.md"
-        ],
-        "marker_hits": 18
-      },
-      "workflow_ci": {
-        "files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          ".oxlintrc.json",
-          ".pinact.yaml",
-          "llms-install.md",
+          "ReviewScope.md",
+          "tsconfig.base.json",
           "README.md",
           "package-lock.json",
           "package.json",
           "CONTRIBUTING.md",
           "tsconfig.json",
-          "repomix.config.json",
-          "AGENTS.md"
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/security/package.json",
+          "packages/context-engine/src/layers.ts",
+          "packages/context-engine/src/layers/web-context.ts"
         ],
-        "marker_hits": 9189
+        "marker_hits": 981
+      },
+      "semantic_index": {
+        "files": [
+          "tsconfig.json",
+          "packages/rules-engine/src/parsers/python.ts",
+          "packages/context-engine/src/layers/related-files.ts",
+          "packages/llm-core/src/prompts.ts",
+          "apps/dashboard/README.md",
+          "apps/dashboard/src/app/page.tsx",
+          "apps/dashboard/src/app/support/page.tsx",
+          "apps/dashboard/src/app/pricing/pricing-client.tsx",
+          "apps/api/src/db/schema.ts",
+          "apps/api/src/webhooks/dodo.ts",
+          "apps/worker/src/lib/issue.ts",
+          "apps/worker/src/lib/imports.ts"
+        ],
+        "marker_hits": 54
+      },
+      "static_analysis": {
+        "files": [
+          "README.md",
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/context-engine/src/layers.ts",
+          "packages/llm-core/src/prompts.ts",
+          "apps/dashboard/src/app/page.tsx",
+          "apps/dashboard/src/app/docs/page.tsx",
+          "apps/dashboard/src/app/signin/page.tsx",
+          "apps/dashboard/src/lib/db.ts",
+          "apps/worker/src/lib/review-lifecycle.ts",
+          "apps/worker/src/jobs/review.ts"
+        ],
+        "marker_hits": 24
+      },
+      "workflow_ci": {
+        "files": [
+          "tsconfig.base.json",
+          "docker-compose.dev.yml",
+          "README.md",
+          "package-lock.json",
+          "package.json",
+          "CONTRIBUTING.md",
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/rules-engine/package.json",
+          "packages/rules-engine/src/index.ts",
+          "packages/rules-engine/src/parsers/tree-sitter-utils.ts",
+          "packages/rules-engine/src/parsers/javascript.ts"
+        ],
+        "marker_hits": 1164
       }
     },
     "own_file_groups": {
@@ -1267,19 +1181,20 @@
           "retort_engine/core_refactor_execution.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/capability_audit.py",
+          "retort_engine/context_packager.py",
           "retort_engine/swe_bench_oracle.py",
           "retort_engine/static_analysis_gate.py",
           "retort_engine/llm_absorption_evidence.py",
-          "retort_engine/architecture_refactor.py",
-          "retort_engine/project_assessment.py"
+          "retort_engine/architecture_refactor.py"
         ],
-        "marker_hits": 1062
+        "marker_hits": 1065
       },
       "codebase_graph": {
         "files": [
           "retort_engine/architecture_contracts.py",
           "retort_engine/similar_project_loop.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/context_packager.py",
           "retort_engine/architecture_refactor.py",
           "retort_engine/absorption_quality.py",
           "retort_engine/codebase_graph.py",
@@ -1287,19 +1202,22 @@
           "retort_engine/evolution_map.py",
           "retort_engine/real_absorption_run_proof.py",
           "retort_engine/contracts.py",
-          "retort_engine/proof.py",
-          "retort_engine/absorbed_capabilities.py"
+          "retort_engine/proof.py"
         ],
-        "marker_hits": 211
+        "marker_hits": 214
       },
       "context_packaging": {
         "files": [
           "retort_engine/similar_project_loop.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/context_packager.py",
+          "retort_engine/cli.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
-          "tests/test_real_absorption_helpers.py"
+          "tests/test_real_absorption_helpers.py",
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 27
+        "marker_hits": 32
       },
       "diff_hunk_review": {
         "files": [
@@ -1349,7 +1267,7 @@
           "retort_engine/external_sources.py",
           "retort_engine/devour_session.py"
         ],
-        "marker_hits": 692
+        "marker_hits": 720
       },
       "provider_surface": {
         "files": [
@@ -1378,12 +1296,12 @@
           "retort_engine/core_refactor_execution.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/capability_audit.py",
+          "retort_engine/context_packager.py",
           "retort_engine/pr_publish.py",
           "retort_engine/static_analysis_gate.py",
-          "retort_engine/llm_absorption_evidence.py",
-          "retort_engine/complex_pr_replay.py"
+          "retort_engine/llm_absorption_evidence.py"
         ],
-        "marker_hits": 2595
+        "marker_hits": 2711
       },
       "safety_policy": {
         "files": [
@@ -1393,14 +1311,14 @@
           "retort_engine/similar_project_loop.py",
           "retort_engine/core_refactor_execution.py",
           "retort_engine/review_pipeline.py",
+          "retort_engine/context_packager.py",
           "retort_engine/pr_publish.py",
           "retort_engine/static_analysis_gate.py",
           "retort_engine/llm_absorption_evidence.py",
           "retort_engine/pr_live_probe.py",
-          "retort_engine/architecture_refactor.py",
-          "retort_engine/project_assessment.py"
+          "retort_engine/architecture_refactor.py"
         ],
-        "marker_hits": 528
+        "marker_hits": 541
       },
       "semantic_index": {
         "files": [
@@ -1417,21 +1335,17 @@
           "tests/test_frontend_visual_absorption.py",
           "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 81
+        "marker_hits": 85
       },
       "static_analysis": {
         "files": [
           "retort_engine/similar_project_loop.py",
           "retort_engine/review_pipeline.py",
-          "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "tests/test_real_absorption_helpers.py",
-          "docs/retort_external_review_report.json",
           "docs/retort_architecture_memory.json"
         ],
-        "marker_hits": 55
+        "marker_hits": 33
       },
       "workflow_ci": {
         "files": [
@@ -1446,9 +1360,9 @@
           "retort_engine/models.py",
           "retort_engine/review_pipeline.py",
           "retort_engine/capability_audit.py",
-          "retort_engine/swe_bench_oracle.py"
+          "retort_engine/context_packager.py"
         ],
-        "marker_hits": 4863
+        "marker_hits": 4924
       }
     },
     "pipeline_stages": [
@@ -1462,75 +1376,27 @@
     ],
     "prioritized_absorptions": [
       {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
-        "priority": "P0",
-        "source_files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          ".oxlintrc.json",
-          ".pinact.yaml",
-          "llms-install.md"
-        ]
-      },
-      {
         "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
         "component": "safety_policy",
         "priority": "P0",
         "source_files": [
-          "CODE_OF_CONDUCT.md",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
-          "package-lock.json"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
-        "component": "plugin_surface",
-        "priority": "P0",
-        "source_files": [
-          "typos.toml",
-          "repomix-instruction.md",
-          "llms-install.md",
-          "README.md",
-          "package-lock.json"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested semantic_index behavior, not only a recorded signal.",
-        "component": "semantic_index",
-        "priority": "P0",
-        "source_files": [
+          "ReviewScope.md",
+          "tsconfig.base.json",
           "README.md",
           "package-lock.json",
-          "AGENTS.md",
-          "CLAUDE.md",
-          "website/server/package-lock.json"
+          "package.json"
         ]
       },
       {
-        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
-        "component": "diff_hunk_review",
+        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
+        "component": "provider_surface",
         "priority": "P0",
         "source_files": [
-          "website/client/src/en/guide/comment-removal.md",
-          "website/client/src/tr/guide/comment-removal.md",
-          "tests/core/treeSitter/parseFile.go.test.ts",
-          "tests/core/treeSitter/parseFile.python.test.ts",
-          "tests/core/treeSitter/parseFile.ruby.test.ts"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested context_packaging behavior, not only a recorded signal.",
-        "component": "context_packaging",
-        "priority": "P1",
-        "source_files": [
+          "ReviewScope.md",
+          "docker-compose.dev.yml",
           "README.md",
-          "website/client/src/hi/guide/faq.md",
-          "website/client/src/en/index.md",
-          "website/client/src/en/guide/faq.md",
-          "website/client/src/en/guide/index.md"
+          "package-lock.json",
+          "docs/USER_GUIDE.md"
         ]
       },
       {
@@ -1539,133 +1405,127 @@
         "priority": "P1",
         "source_files": [
           "README.md",
-          "SECURITY.md",
-          "website/server/src/domains/pack/processZipFile.ts",
-          "website/server/src/domains/pack/utils/fileUtils.ts",
-          "website/client/src/en/guide/claude-code-plugins.md"
+          "docs/USER_GUIDE.md",
+          "docs/ARCHITECTURE.md",
+          "packages/context-engine/src/layers.ts",
+          "packages/llm-core/src/prompts.ts"
         ]
       }
     ]
   },
-  "run_id": "20260627212946-168c95fefd",
+  "run_id": "20260627213722-6cc7a9e742",
   "semantic_review": {
     "external": {
-      "classes": 521,
-      "cli_markers": 14,
-      "functions": 457,
-      "source_files": 730,
-      "test_markers": 992,
-      "workflow_markers": 672
+      "classes": 167,
+      "cli_markers": 0,
+      "functions": 184,
+      "source_files": 162,
+      "test_markers": 78,
+      "workflow_markers": 1073
     },
     "gaps": [
       {
-        "external_advantage": 471,
+        "external_advantage": 117,
         "metric": "classes"
       },
       {
-        "external_advantage": 603,
+        "external_advantage": 33,
         "metric": "source_files"
-      },
-      {
-        "external_advantage": 581,
-        "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 50,
-      "cli_markers": 31,
-      "functions": 1117,
-      "source_files": 127,
-      "test_markers": 411,
-      "workflow_markers": 3456
+      "cli_markers": 32,
+      "functions": 1136,
+      "source_files": 129,
+      "test_markers": 415,
+      "workflow_markers": 3601
     }
   },
   "signal_evidence": {
     "atmosphere_shader": [
-      "website/compose.bundle.yml",
-      "website/server/cloudbuild.yaml",
-      "website/server/package.json",
-      "website/server/tests/turnstile.test.ts",
-      "website/server/monitoring/README.md"
+      "ReviewScope.md",
+      "apps/dashboard/src/app/layout.tsx",
+      "apps/dashboard/src/app/privacy/page.tsx"
     ],
     "benchmarking": [
-      "repomix-instruction.md",
-      "llms-install.md",
       "README.md",
-      "website/server/src/domains/pack/remoteRepo.ts",
-      "website/server/src/actions/packRequestSchema.ts"
-    ],
-    "cloud_texture_layer": [
-      "website/server/cloudbuild.yaml"
+      "docs/USER_GUIDE.md",
+      "docs/ARCHITECTURE.md",
+      "packages/rules-engine/src/rules/ai-sanity.ts",
+      "packages/llm-core/src/prompts.ts"
     ],
     "codebase_graph": [
-      "biome.json",
-      "website/.claude/skills/website-maintainer/SKILL.md",
-      "website/server/tests/packEventSchema.test.ts",
-      "website/client/tsconfig.node.json",
-      "website/client/package-lock.json"
+      "tsconfig.base.json",
+      "package-lock.json",
+      "packages/context-engine/src/layers.ts",
+      "packages/context-engine/src/layers/related-files.ts",
+      "apps/dashboard/src/app/page.tsx"
     ],
     "context_packaging": [
-      "website/client/src/hi/guide/faq.md",
-      "website/client/src/en/index.md",
-      "website/client/src/en/guide/faq.md",
-      "website/client/src/en/guide/index.md",
-      "website/client/src/en/guide/configuration.md"
+      "packages/llm-core/src/prompts.ts",
+      "apps/dashboard/src/app/page.tsx"
+    ],
+    "elevation_bump_map": [
+      "apps/worker/src/jobs/review.ts"
     ],
     "file_grouping": [
-      "website/client/src/en/guide/command-line-options.md"
+      "docs/ARCHITECTURE.md",
+      "packages/rules-engine/src/rules/reviewscope.ts",
+      "packages/context-engine/src/layers.ts",
+      "apps/worker/src/lib/validation.ts"
     ],
     "multi_provider": [
+      "ReviewScope.md",
+      "docker-compose.dev.yml",
+      "README.md",
+      "docs/USER_GUIDE.md",
+      "docs/ARCHITECTURE.md"
+    ],
+    "plugin_surface": [
+      "docker-compose.dev.yml",
       "README.md",
       "package-lock.json",
       "package.json",
-      "website/server/package-lock.json",
-      "website/client/package-lock.json"
+      "docs/USER_GUIDE.md"
     ],
-    "plugin_surface": [
-      "typos.toml",
-      "repomix-instruction.md",
-      "llms-install.md",
+    "procedural_surface": [
+      "packages/rules-engine/src/rules/reliability.ts",
+      "packages/llm-core/src/prompts.ts",
+      "apps/dashboard/src/app/layout.tsx",
+      "apps/dashboard/src/app/page.tsx",
+      "apps/dashboard/src/app/pricing/pricing-client.tsx"
+    ],
+    "review_pipeline": [
+      "ReviewScope.md",
+      "README.md",
+      "docs/USER_GUIDE.md",
+      "docs/ARCHITECTURE.md",
+      "packages/context-engine/src/layers/system-guardrails.ts"
+    ],
+    "safety_policy": [
+      "ReviewScope.md",
+      "tsconfig.base.json",
+      "docker-compose.dev.yml",
       "README.md",
       "package-lock.json"
     ],
-    "procedural_surface": [
-      "website/client/src/hi/guide/comment-removal.md",
-      "website/client/src/id/guide/configuration.md",
-      "website/client/src/id/guide/comment-removal.md",
-      "website/client/src/en/guide/configuration.md",
-      "website/client/src/en/guide/comment-removal.md"
-    ],
-    "review_pipeline": [
-      "README.md",
-      "website/client/src/vi/index.md",
-      "website/client/src/vi/guide/prompt-examples.md",
-      "website/client/src/vi/guide/github-actions.md",
-      "website/client/src/vi/guide/use-cases.md"
-    ],
-    "safety_policy": [
-      ".secretlintrc.json",
-      "CODE_OF_CONDUCT.md",
-      "repomix-instruction.md",
-      "llms-install.md",
-      "README.md"
-    ],
     "semantic_index": [
-      "AGENTS.md",
-      "CLAUDE.md",
-      "website/server/monitoring/README.md",
-      "website/server/src/utils/errorHandler.ts",
-      "website/server/src/utils/logger.ts"
+      "tsconfig.json",
+      "packages/rules-engine/src/parsers/python.ts",
+      "packages/context-engine/src/layers/related-files.ts",
+      "packages/llm-core/src/prompts.ts",
+      "apps/dashboard/README.md"
     ],
     "static_analysis": [
-      "SECURITY.md",
-      "website/server/src/domains/pack/processZipFile.ts",
-      "website/server/src/domains/pack/utils/fileUtils.ts",
-      "website/client/src/en/guide/claude-code-plugins.md",
-      "website/client/src/en/guide/use-cases.md"
+      "README.md",
+      "docs/USER_GUIDE.md",
+      "docs/ARCHITECTURE.md",
+      "packages/context-engine/src/layers.ts",
+      "apps/dashboard/src/app/page.tsx"
     ]
   },
-  "source": "https://github.com/yamadashy/repomix",
+  "source": "https://github.com/Review-scope/ReviewScope",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -1673,7 +1533,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/yamadashy/repomix."
+      "why": "Compare implementation patterns from https://github.com/Review-scope/ReviewScope."
     },
     {
       "dimension": "product_operability",
@@ -1681,7 +1541,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/yamadashy/repomix."
+      "why": "Extract usable UX improvements from https://github.com/Review-scope/ReviewScope."
     },
     {
       "dimension": "operational_readiness",
@@ -1689,7 +1549,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/yamadashy/repomix."
+      "why": "Adapt CI and release checks from https://github.com/Review-scope/ReviewScope."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -1698,6 +1558,14 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",

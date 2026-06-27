@@ -1,0 +1,807 @@
+{
+  "architecture_memory_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json",
+  "architecture_memory_summary": {
+    "component_count": 29,
+    "gate_passed_run_count": 26,
+    "ready_component_count": 22,
+    "ready_components": [
+      "workflow_ci",
+      "static_analysis_gate",
+      "static_analysis",
+      "semantic_index",
+      "safety_policy",
+      "risk_rule_engine",
+      "review_pipeline",
+      "repo_map_context"
+    ],
+    "repeated_component_count": 26,
+    "run_count": 30,
+    "source_count": 27
+  },
+  "capability_model_preserved": false,
+  "capability_module_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+  "capability_test_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+  "changed_files": [
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_log.md",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_absorbed_capabilities.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py"
+  ],
+  "code_graph_proof": {
+    "changed_behavior_files": [
+      "retort_engine/absorbed_capabilities.py",
+      "retort_engine/absorbed_external_patterns.py",
+      "retort_engine/review_context_bias.py"
+    ],
+    "changed_focus_files": [
+      "retort_engine/absorbed_capabilities.py"
+    ],
+    "changed_hotspots": [],
+    "dependency_impact": {
+      "changed_files": [
+        "retort_engine/absorbed_capabilities.py",
+        "retort_engine/absorbed_external_patterns.py",
+        "retort_engine/review_context_bias.py"
+      ],
+      "direct_dependencies": {
+        "retort_engine/absorbed_capabilities.py": [
+          "retort_engine/absorption_quality.py"
+        ],
+        "retort_engine/absorbed_external_patterns.py": [],
+        "retort_engine/review_context_bias.py": []
+      },
+      "direct_dependents": {
+        "retort_engine/absorbed_capabilities.py": [
+          "retort_engine/pr_review.py",
+          "tests/test_absorbed_capabilities.py"
+        ],
+        "retort_engine/absorbed_external_patterns.py": [],
+        "retort_engine/review_context_bias.py": [
+          "retort_engine/pr_review.py",
+          "tests/test_review_context_bias.py"
+        ]
+      },
+      "impacted_files": [
+        "retort_engine/absorbed_capabilities.py",
+        "retort_engine/absorbed_external_patterns.py",
+        "retort_engine/absorption_quality.py",
+        "retort_engine/pr_review.py",
+        "retort_engine/review_context_bias.py",
+        "tests/test_absorbed_capabilities.py",
+        "tests/test_review_context_bias.py"
+      ],
+      "touched_cycles": []
+    },
+    "evidence": {
+      "max_files": 400,
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "run_id": "20260627213722-6cc7a9e742",
+      "scope": "per_real_absorption_run",
+      "style": "deterministic_post_absorption_code_graph"
+    },
+    "focus_files": [
+      "retort_engine/absorbed_capabilities.py",
+      "retort_engine/cli.py",
+      "retort_engine/codebase_graph.py",
+      "retort_engine/core.py",
+      "retort_engine/pr_review.py",
+      "retort_engine/real_absorption.py",
+      "retort_engine/review_pipeline.py",
+      "tests/test_real_absorption_helpers.py",
+      "tests/test_retort_engine.py",
+      "tests/test_review_pipeline.py"
+    ],
+    "hotspot_files": [
+      "retort_engine/cli.py",
+      "retort_engine/codebase_graph.py",
+      "retort_engine/core.py",
+      "retort_engine/evaluators.py",
+      "retort_engine/paibi_llm.py",
+      "retort_engine/pr_review.py",
+      "retort_engine/real_absorption.py",
+      "retort_engine/service.py",
+      "tests/test_real_absorption_helpers.py",
+      "tests/test_retort_engine.py",
+      "tests/test_runtime_integrations.py"
+    ],
+    "passed": true,
+    "per_run_required": true,
+    "run_id": "20260627213722-6cc7a9e742",
+    "status": "proved",
+    "summary": {
+      "changed_behavior_file_count": 3,
+      "changed_file_count": 9,
+      "changed_focus_file_count": 1,
+      "changed_hotspot_count": 0,
+      "dependency_cycle_touch_count": 0,
+      "dependency_impact_file_count": 7,
+      "graph_status": "ready"
+    }
+  },
+  "commands": [
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorption_quality.py"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_absorbed_capabilities.py",
+      "-q"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_review_context_bias.py",
+      "-q"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests/test_frontend_visual_absorption.py",
+      "-q"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-m",
+      "pytest",
+      "tests",
+      "-q"
+    ],
+    [
+      "retort",
+      "verify-per-run-code-graph-proof",
+      "20260627213722-6cc7a9e742"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json"
+    ],
+    [
+      "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+      "-c",
+      "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('gate', {}).get('passed')",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json"
+    ]
+  ],
+  "core_refactor_plan_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json",
+  "core_refactor_plan_summary": {
+    "blocked_task_count": 0,
+    "code_graph_hotspot_task_count": 8,
+    "ready_component_count": 22,
+    "ready_task_count": 12,
+    "source_count": 27,
+    "task_count": 12
+  },
+  "duration_sec": 17.098,
+  "employee_results_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260627213722-6cc7a9e742.json",
+  "external_profile": {
+    "file_count": 199,
+    "git_revision": "d4edee7d96605383a5696bd8dfc15341fe5eede5",
+    "signal_evidence": {
+      "atmosphere_shader": [
+        "ReviewScope.md",
+        "apps/dashboard/src/app/layout.tsx",
+        "apps/dashboard/src/app/privacy/page.tsx"
+      ],
+      "benchmarking": [
+        "README.md",
+        "docs/USER_GUIDE.md",
+        "docs/ARCHITECTURE.md",
+        "packages/rules-engine/src/rules/ai-sanity.ts",
+        "packages/llm-core/src/prompts.ts"
+      ],
+      "codebase_graph": [
+        "tsconfig.base.json",
+        "package-lock.json",
+        "packages/context-engine/src/layers.ts",
+        "packages/context-engine/src/layers/related-files.ts",
+        "apps/dashboard/src/app/page.tsx"
+      ],
+      "context_packaging": [
+        "packages/llm-core/src/prompts.ts",
+        "apps/dashboard/src/app/page.tsx"
+      ],
+      "elevation_bump_map": [
+        "apps/worker/src/jobs/review.ts"
+      ],
+      "file_grouping": [
+        "docs/ARCHITECTURE.md",
+        "packages/rules-engine/src/rules/reviewscope.ts",
+        "packages/context-engine/src/layers.ts",
+        "apps/worker/src/lib/validation.ts"
+      ],
+      "multi_provider": [
+        "ReviewScope.md",
+        "docker-compose.dev.yml",
+        "README.md",
+        "docs/USER_GUIDE.md",
+        "docs/ARCHITECTURE.md"
+      ],
+      "plugin_surface": [
+        "docker-compose.dev.yml",
+        "README.md",
+        "package-lock.json",
+        "package.json",
+        "docs/USER_GUIDE.md"
+      ],
+      "procedural_surface": [
+        "packages/rules-engine/src/rules/reliability.ts",
+        "packages/llm-core/src/prompts.ts",
+        "apps/dashboard/src/app/layout.tsx",
+        "apps/dashboard/src/app/page.tsx",
+        "apps/dashboard/src/app/pricing/pricing-client.tsx"
+      ],
+      "review_pipeline": [
+        "ReviewScope.md",
+        "README.md",
+        "docs/USER_GUIDE.md",
+        "docs/ARCHITECTURE.md",
+        "packages/context-engine/src/layers/system-guardrails.ts"
+      ],
+      "safety_policy": [
+        "ReviewScope.md",
+        "tsconfig.base.json",
+        "docker-compose.dev.yml",
+        "README.md",
+        "package-lock.json"
+      ],
+      "semantic_index": [
+        "tsconfig.json",
+        "packages/rules-engine/src/parsers/python.ts",
+        "packages/context-engine/src/layers/related-files.ts",
+        "packages/llm-core/src/prompts.ts",
+        "apps/dashboard/README.md"
+      ],
+      "static_analysis": [
+        "README.md",
+        "docs/USER_GUIDE.md",
+        "docs/ARCHITECTURE.md",
+        "packages/context-engine/src/layers.ts",
+        "apps/dashboard/src/app/page.tsx"
+      ]
+    },
+    "signals": [
+      "review_pipeline",
+      "file_grouping",
+      "benchmarking",
+      "codebase_graph",
+      "plugin_surface",
+      "multi_provider",
+      "safety_policy",
+      "static_analysis",
+      "context_packaging",
+      "semantic_index",
+      "atmosphere_shader",
+      "procedural_surface",
+      "elevation_bump_map"
+    ],
+    "suffix_counts": {
+      ".cjs": 1,
+      ".css": 1,
+      ".example": 4,
+      ".ico": 1,
+      ".jpeg": 2,
+      ".json": 24,
+      ".lock": 1,
+      ".md": 6,
+      ".mjs": 2,
+      ".png": 2,
+      ".ps1": 1,
+      ".sh": 1,
+      ".sql": 1,
+      ".svg": 8,
+      ".ts": 92,
+      ".tsx": 36,
+      ".txt": 2,
+      ".xml": 1,
+      ".yml": 3,
+      "<none>": 10
+    }
+  },
+  "feedback_audit": {
+    "closed": false,
+    "employee_result_count": 132,
+    "history_matches_employee_results": false,
+    "history_result_count": 0,
+    "queued_task_count": 0,
+    "result_tasks_have_queue_records": false
+  },
+  "finished_at": "2026-06-27T21:37:39Z",
+  "frontend_visual_absorption_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/frontend/app.js",
+  "frontend_visual_absorption_test_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_frontend_visual_absorption.py",
+  "gates": [
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorption_quality.py"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.024,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_external_patterns.py"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.021,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/absorbed_capabilities.py"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.022,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_absorbed_capabilities.py",
+        "-q"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.215,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": "..............                                                           [100%]\n14 passed in 0.07s\n"
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.021,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_review_context_bias.py",
+        "-q"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.202,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ".                                                                        [100%]\n1 passed in 0.06s\n"
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_frontend_visual_absorption.py",
+        "-q"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.203,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": "..                                                                       [100%]\n2 passed in 0.06s\n"
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests",
+        "-q"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 13.164,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": "........................................................................ [ 29%]\n........................................................................ [ 59%]\n........................................................................ [ 89%]\n.........................                                                [100%]\n241 passed in 12.96s\n"
+    },
+    {
+      "command": [
+        "retort",
+        "verify-per-run-code-graph-proof",
+        "20260627213722-6cc7a9e742"
+      ],
+      "cwd": "",
+      "duration_sec": 0.0,
+      "exit_code": 0,
+      "ok": true,
+      "proof_passed": true,
+      "proof_status": "proved",
+      "stderr_tail": "",
+      "stdout_tail": "per-run code graph proof generated"
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('summary')",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_architecture_memory.json"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.022,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-c",
+        "import json,pathlib,sys; data=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')); assert data.get('gate', {}).get('passed')",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_core_refactor_plan.json"
+      ],
+      "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "duration_sec": 0.02,
+      "exit_code": 0,
+      "ok": true,
+      "stderr_tail": "",
+      "stdout_tail": ""
+    }
+  ],
+  "gates_passed": true,
+  "git_diff_summary": [
+    " .../retort_engine/docs/retort_absorption_log.md    |   16 +",
+    " .../docs/retort_architecture_memory.json           | 1051 ++++++++++++++-----",
+    " .../docs/retort_core_refactor_plan.json            |  114 +-",
+    " .../docs/retort_external_review_report.json        | 1096 +++++++++-----------",
+    " .../retort_engine/absorbed_capabilities.py         |    2 +-",
+    " .../retort_engine/absorbed_external_patterns.py    |    2 +-",
+    " .../retort_engine/retort_engine/frontend/app.js    |   40 +-",
+    " .../retort_engine/review_context_bias.py           |    2 +-",
+    " .../tests/test_absorbed_capabilities.py            |    2 +-",
+    " .../tests/test_frontend_visual_absorption.py       |    2 +-",
+    " .../tests/test_review_context_bias.py              |    2 +-",
+    " 11 files changed, 1386 insertions(+), 943 deletions(-)"
+  ],
+  "pre_absorption_focus": {
+    "evidence": {
+      "external_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
+      "max_files": 400,
+      "own_project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "style": "deterministic_pre_absorption_code_graph"
+    },
+    "external_focus": [],
+    "external_focus_files": [],
+    "external_hotspots": [],
+    "external_summary": {
+      "call_edge_count": 0,
+      "define_edge_count": 0,
+      "dependency_cycle_count": 0,
+      "edge_count": 0,
+      "file_count": 0,
+      "hotspot_count": 0,
+      "import_edge_count": 0,
+      "include_tests": true,
+      "local_dependency_edge_count": 0,
+      "node_count": 0,
+      "parse_error_count": 0
+    },
+    "focus_terms": [
+      "review",
+      "pipeline",
+      "comment",
+      "localization",
+      "reflection",
+      "group",
+      "context",
+      "related",
+      "changed",
+      "files",
+      "benchmark",
+      "eval",
+      "precision",
+      "oracle",
+      "regression",
+      "codebase",
+      "graph",
+      "dependency",
+      "import",
+      "call",
+      "hotspot",
+      "architecture",
+      "plugin_surface",
+      "plugin surface",
+      "multi_provider",
+      "multi provider",
+      "license",
+      "policy",
+      "permission",
+      "rollback",
+      "secret",
+      "static_analysis"
+    ],
+    "own_focus": [
+      {
+        "graph_degree": 49,
+        "path": "retort_engine/real_absorption.py",
+        "score": 3929,
+        "term_hits": 388
+      },
+      {
+        "graph_degree": 0,
+        "path": "retort_engine/absorbed_capabilities.py",
+        "score": 3490,
+        "term_hits": 349
+      },
+      {
+        "graph_degree": 39,
+        "path": "retort_engine/pr_review.py",
+        "score": 3209,
+        "term_hits": 317
+      },
+      {
+        "graph_degree": 36,
+        "path": "retort_engine/codebase_graph.py",
+        "score": 2956,
+        "term_hits": 292
+      },
+      {
+        "graph_degree": 38,
+        "path": "tests/test_real_absorption_helpers.py",
+        "score": 2748,
+        "term_hits": 271
+      },
+      {
+        "graph_degree": 0,
+        "path": "tests/test_review_pipeline.py",
+        "score": 2530,
+        "term_hits": 253
+      },
+      {
+        "graph_degree": 0,
+        "path": "retort_engine/review_pipeline.py",
+        "score": 2370,
+        "term_hits": 237
+      },
+      {
+        "graph_degree": 166,
+        "path": "retort_engine/core.py",
+        "score": 2296,
+        "term_hits": 213
+      },
+      {
+        "graph_degree": 69,
+        "path": "tests/test_retort_engine.py",
+        "score": 2259,
+        "term_hits": 219
+      },
+      {
+        "graph_degree": 47,
+        "path": "retort_engine/cli.py",
+        "score": 1757,
+        "term_hits": 171
+      }
+    ],
+    "own_focus_files": [
+      "retort_engine/real_absorption.py",
+      "retort_engine/absorbed_capabilities.py",
+      "retort_engine/pr_review.py",
+      "retort_engine/codebase_graph.py",
+      "tests/test_real_absorption_helpers.py",
+      "tests/test_review_pipeline.py",
+      "retort_engine/review_pipeline.py",
+      "retort_engine/core.py",
+      "tests/test_retort_engine.py",
+      "retort_engine/cli.py"
+    ],
+    "own_hotspots": [
+      {
+        "degree": 166,
+        "id": "retort_engine/core.py",
+        "incoming": 6,
+        "kind": "file",
+        "outgoing": 160,
+        "path": "retort_engine/core.py"
+      },
+      {
+        "degree": 83,
+        "id": "retort_engine/real_absorption.py",
+        "incoming": 4,
+        "kind": "file",
+        "outgoing": 79,
+        "path": "retort_engine/real_absorption.py"
+      },
+      {
+        "degree": 69,
+        "id": "tests/test_retort_engine.py",
+        "incoming": 0,
+        "kind": "file",
+        "outgoing": 69,
+        "path": "tests/test_retort_engine.py"
+      },
+      {
+        "degree": 49,
+        "id": "retort_engine/real_absorption.py:apply_real_absorption",
+        "incoming": 1,
+        "kind": "function",
+        "outgoing": 48,
+        "path": "retort_engine/real_absorption.py"
+      },
+      {
+        "degree": 47,
+        "id": "retort_engine/cli.py",
+        "incoming": 0,
+        "kind": "file",
+        "outgoing": 47,
+        "path": "retort_engine/cli.py"
+      },
+      {
+        "degree": 40,
+        "id": "retort_engine/service.py",
+        "incoming": 1,
+        "kind": "file",
+        "outgoing": 39,
+        "path": "retort_engine/service.py"
+      },
+      {
+        "degree": 39,
+        "id": "retort_engine/pr_review.py",
+        "incoming": 8,
+        "kind": "file",
+        "outgoing": 31,
+        "path": "retort_engine/pr_review.py"
+      },
+      {
+        "degree": 38,
+        "id": "tests/test_real_absorption_helpers.py",
+        "incoming": 0,
+        "kind": "file",
+        "outgoing": 38,
+        "path": "tests/test_real_absorption_helpers.py"
+      },
+      {
+        "degree": 37,
+        "id": "retort_engine/evaluators.py",
+        "incoming": 2,
+        "kind": "file",
+        "outgoing": 35,
+        "path": "retort_engine/evaluators.py"
+      },
+      {
+        "degree": 37,
+        "id": "tests/test_runtime_integrations.py",
+        "incoming": 0,
+        "kind": "file",
+        "outgoing": 37,
+        "path": "tests/test_runtime_integrations.py"
+      },
+      {
+        "degree": 36,
+        "id": "retort_engine/codebase_graph.py",
+        "incoming": 10,
+        "kind": "file",
+        "outgoing": 26,
+        "path": "retort_engine/codebase_graph.py"
+      },
+      {
+        "degree": 34,
+        "id": "retort_engine/paibi_llm.py",
+        "incoming": 2,
+        "kind": "file",
+        "outgoing": 32,
+        "path": "retort_engine/paibi_llm.py"
+      }
+    ],
+    "own_summary": {
+      "call_edge_count": 1434,
+      "define_edge_count": 771,
+      "dependency_cycle_count": 0,
+      "edge_count": 3219,
+      "file_count": 109,
+      "hotspot_count": 12,
+      "import_edge_count": 811,
+      "include_tests": true,
+      "local_dependency_edge_count": 203,
+      "node_count": 880,
+      "parse_error_count": 0
+    },
+    "status": "empty"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "queue_records_written": 0,
+  "reproducibility": {
+    "command": "retort absorb --own-project /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine --external-path /Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope --run-local-gates --branch-workflow --merge-after"
+  },
+  "review_context_bias_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/review_context_bias.py",
+  "review_context_bias_test_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_review_context_bias.py",
+  "review_report_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_review_report.json",
+  "run_id": "20260627213722-6cc7a9e742",
+  "run_record_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627213722-6cc7a9e742.json",
+  "run_recorded_at": "2026-06-27T21:37:39Z",
+  "semantic_review": {
+    "external": {
+      "classes": 167,
+      "cli_markers": 0,
+      "functions": 184,
+      "source_files": 162,
+      "test_markers": 78,
+      "workflow_markers": 1073
+    },
+    "gaps": [
+      {
+        "external_advantage": 117,
+        "metric": "classes"
+      },
+      {
+        "external_advantage": 33,
+        "metric": "source_files"
+      }
+    ],
+    "own": {
+      "classes": 50,
+      "cli_markers": 32,
+      "functions": 1136,
+      "source_files": 129,
+      "test_markers": 415,
+      "workflow_markers": 3601
+    }
+  },
+  "source": "https://github.com/Review-scope/ReviewScope",
+  "status": "applied",
+  "summary": "CLI absorption applied project-local code and evidence artifacts."
+}
