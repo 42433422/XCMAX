@@ -1430,9 +1430,14 @@ class SuperEmployeeService:
         """
         if not cmd:
             return cmd
-        if self._grant.is_factory or getattr(self, "_relay_cli_trusted", False):
-            return self._elevate_factory_cmd(cmd)
-        if self._p.cli_binary != "claude":
+        # 工厂域 / 中继工单(操作者自己派工，force_cli_direct)/ 非 claude 工具 → 不收紧工具面。
+        # 中继工单是操作者本人在自己机器上派给本机 CLI 的活，等同工厂域信任：放开全权限，
+        # 否则 --disallowedTools 这种变长参数会把末位的 prompt 也吞掉(Claude 报权限拒绝)。
+        if (
+            self._grant.is_factory
+            or getattr(self, "_relay_cli_trusted", False)
+            or self._p.cli_binary != "claude"
+        ):
             return cmd
         out: list[str] = []
         i = 0
