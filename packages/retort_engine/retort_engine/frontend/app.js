@@ -216,7 +216,8 @@ function renderRows(target, list, limit = 6) {
 
 function scores(list) {
   const rows = renderRows($("scoreGrid"), list);
-  $("coreScore").textContent = rows[0] ? Math.round(rows[0].value) : "--";
+  const overall = (list || []).find(item => item.dimension === "calibrated_overall");
+  $("coreScore").textContent = overall ? Math.round(overall.value) : (rows[0] ? Math.round(rows[0].value) : "--");
 }
 
 function capabilityAudit(assessment) {
@@ -258,7 +259,7 @@ function externalScores(assessment, visual) {
   const grid = $("externalScoreGrid");
   if (!grid) return;
   if (!assessment?.scores?.length) {
-    grid.innerHTML = "<div class=\"empty\">等待外部项目评分</div>";
+    grid.innerHTML = "<div class=\"empty\">未运行</div>";
     return;
   }
   renderRows(grid, assessment.scores, 4);
