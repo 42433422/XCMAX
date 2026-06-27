@@ -1143,6 +1143,7 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   const layers = profile.layers || {};
   const pulse = .5 + .5 * Math.sin(t * 2.1);
   const shear = Math.sin(t * .7) * .08;
+  const hiFiEarth = layers.day_night_terminator || layers.fresnel_glow || layers.cloud_shadow_layer || layers.ocean_specular;
 
   if (layers.atmospheric_rim) {
     ctx.save();
@@ -1184,10 +1185,10 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   ctx.translate(x, y);
   ctx.rotate(-.18 + shear);
   const core = ctx.createRadialGradient(-radius * .38, -radius * .42, radius * .05, 0, 0, radius);
-  core.addColorStop(0, rgbaHex(palette.highland, alpha));
-  core.addColorStop(.17, rgbaHex(palette.shallow, .94 * alpha));
-  core.addColorStop(.48, rgbaHex(palette.ocean, .98 * alpha));
-  core.addColorStop(.82, rgbaHex(palette.night, alpha));
+  core.addColorStop(0, rgbaHex(hiFiEarth ? palette.sun : palette.highland, alpha));
+  core.addColorStop(.18, rgbaHex(hiFiEarth ? palette.shallow : palette.shallow, .94 * alpha));
+  core.addColorStop(.46, rgbaHex(palette.ocean, .98 * alpha));
+  core.addColorStop(.78, rgbaHex(palette.night, alpha));
   core.addColorStop(1, "rgba(1,3,7,1)");
   ctx.shadowColor = rgbaHex(palette.rim, .46 * alpha);
   ctx.shadowBlur = (18 + pulse * 12) * dpr * alpha;
@@ -1211,14 +1212,21 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(a * .36);
-      const land = ctx.createRadialGradient(-rw * .2, -rh * .3, 0, 0, 0, rw);
-      land.addColorStop(0, rgbaHex(palette.highland, .42 * alpha));
-      land.addColorStop(.44, rgbaHex(palette.land, .34 * alpha));
+      const land = ctx.createRadialGradient(-rw * .25, -rh * .4, 0, 0, 0, rw);
+      land.addColorStop(0, rgbaHex(palette.highland, (hiFiEarth ? .56 : .42) * alpha));
+      land.addColorStop(.38, rgbaHex(palette.land, (hiFiEarth ? .48 : .34) * alpha));
       land.addColorStop(1, rgbaHex(palette.land, 0));
       ctx.fillStyle = land;
       ctx.beginPath();
       ctx.ellipse(0, 0, rw, rh, Math.sin(i) * .7, 0, Math.PI * 2);
       ctx.fill();
+      if (layers.terrain_relief) {
+        ctx.strokeStyle = rgbaHex(palette.highland, .16 * alpha);
+        ctx.lineWidth = .7 * dpr;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rw * .58, rh * .48, Math.sin(i) * .7, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
     ctx.globalCompositeOperation = "lighter";
@@ -1238,14 +1246,46 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
     ctx.stroke();
   }
   if (layers.translucent_clouds) {
-    for (let i = 0; i < 10; i++) {
+    const cloudRows = layers.cloud_shadow_layer ? 16 : 10;
+    for (let i = 0; i < cloudRows; i++) {
       const yy = -radius * .55 + i * radius * .12 + Math.sin(t * .9 + i * .8) * radius * .018;
       ctx.beginPath();
-      ctx.moveTo(-radius * .98, yy);
-      ctx.bezierCurveTo(-radius * .42, yy - radius * .07, radius * .08, yy + radius * .08, radius * .98, yy - radius * .02);
-      ctx.strokeStyle = rgbaHex(palette.cloud, (.045 + (i % 3) * .014) * alpha);
-      ctx.lineWidth = (1.6 + (i % 4) * .22) * dpr;
+      ctx.moveTo(-radius * 1.02, yy);
+      ctx.bezierCurveTo(-radius * .46, yy - radius * .085, radius * .1, yy + radius * .085, radius * 1.02, yy - radius * .025);
+      ctx.strokeStyle = rgbaHex(palette.cloud, ((layers.cloud_shadow_layer ? .06 : .045) + (i % 3) * .016) * alpha);
+      ctx.lineWidth = (1.5 + (i % 4) * .26) * dpr;
       ctx.stroke();
+      if (layers.cloud_shadow_layer && i % 2 === 0) {
+        ctx.beginPath();
+        ctx.moveTo(-radius * .88, yy + radius * .025);
+        ctx.bezierCurveTo(-radius * .24, yy + radius * .09, radius * .35, yy - radius * .02, radius * .86, yy + radius * .045);
+        ctx.strokeStyle = "rgba(2,8,20,.15)";
+        ctx.lineWidth = (1 + (i % 3) * .18) * dpr;
+        ctx.stroke();
+      }
+    }
+  }
+  if (layers.ocean_specular) {
+    const shine = ctx.createRadialGradient(-radius * .24, -radius * .34, 0, -radius * .08, -radius * .2, radius * .64);
+    shine.addColorStop(0, rgbaHex(palette.sun, .28 * alpha));
+    shine.addColorStop(.38, rgbaHex(palette.rim, .14 * alpha));
+    shine.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = shine;
+    ctx.beginPath();
+    ctx.ellipse(-radius * .16, -radius * .18, radius * .46, radius * .2, -.35, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (layers.city_lights) {
+    ctx.globalCompositeOperation = "lighter";
+    for (let i = 0; i < 34; i++) {
+      const a = i * 2.19 + Math.sin(i) * .4;
+      const px = radius * (.14 + (i % 7) * .075) * Math.cos(a);
+      const py = radius * (.12 + (i % 6) * .055) * Math.sin(a * 1.24);
+      if (px < -radius * .2 || px > radius * .82 || py < -radius * .64 || py > radius * .64) continue;
+      ctx.beginPath();
+      ctx.fillStyle = rgbaHex(palette.city, (.1 + (i % 4) * .06) * alpha);
+      ctx.arc(px, py, (.55 + (i % 3) * .18) * dpr, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
   for (let i = 0; i < 7; i++) {
@@ -1259,11 +1299,11 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   }
   if (layers.terminator_shadow) {
     ctx.globalCompositeOperation = "multiply";
-    const night = ctx.createLinearGradient(-radius * .25, -radius, radius * 1.05, radius);
+    const night = ctx.createLinearGradient(-radius * .45, -radius, radius * 1.08, radius);
     night.addColorStop(0, "rgba(255,255,255,.98)");
-    night.addColorStop(.48, "rgba(180,190,200,.82)");
-    night.addColorStop(.7, "rgba(45,55,75,.72)");
-    night.addColorStop(1, "rgba(4,8,16,.94)");
+    night.addColorStop(layers.day_night_terminator ? .36 : .48, "rgba(180,190,200,.82)");
+    night.addColorStop(layers.day_night_terminator ? .56 : .7, "rgba(45,55,75,.72)");
+    night.addColorStop(1, "rgba(2,7,18,.98)");
     ctx.fillStyle = night;
     ctx.fillRect(-radius * 1.05, -radius, radius * 2.1, radius * 2);
     ctx.globalCompositeOperation = "lighter";
@@ -1271,6 +1311,16 @@ function projectPlanet(x, y, radius, t, dpr, alpha) {
   ctx.restore();
 
   ctx.globalCompositeOperation = "lighter";
+  if (layers.fresnel_glow) {
+    const fresnel = ctx.createRadialGradient(-radius * .12, -radius * .18, radius * .7, 0, 0, radius * 1.42);
+    fresnel.addColorStop(.45, "rgba(0,0,0,0)");
+    fresnel.addColorStop(.7, rgbaHex(palette.rim, .2 * alpha));
+    fresnel.addColorStop(1, rgbaHex(palette.rim, .64 * alpha));
+    ctx.fillStyle = fresnel;
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 1.32, 0, Math.PI * 2);
+    ctx.fill();
+  }
   ctx.beginPath();
   ctx.strokeStyle = rgbaHex(palette.ring, .64 * alpha);
   ctx.lineWidth = 2.2 * dpr;
