@@ -53,9 +53,18 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "beginProgress" in (root / "app.js").read_text(encoding="utf-8")
     assert "deepProgress" in (root / "index.html").read_text(encoding="utf-8")
     assert "progressFill" in (root / "index.html").read_text(encoding="utf-8")
-    assert "llmReviewBtn" in (root / "index.html").read_text(encoding="utf-8")
-    assert "llmParallelBtn" in (root / "index.html").read_text(encoding="utf-8")
-    assert "llmStatusBtn" in (root / "index.html").read_text(encoding="utf-8")
+    index_text = (root / "index.html").read_text(encoding="utf-8")
+    app_text = (root / "app.js").read_text(encoding="utf-8")
+    assert "llmReviewBtn" not in index_text
+    assert "llmParallelBtn" not in index_text
+    assert "llmStatusBtn" not in index_text
+    assert "function llmReview" not in app_text
+    assert "function llmParallelReview" not in app_text
+    assert "function llmStatus" not in app_text
+    assert "function syncLlmStatus" in app_text
+    assert "排比 LLM 自动同步" in app_text
+    assert "use_llm: true" in app_text
+    assert "require_deep_review: true" in app_text
     assert blackhole_ui_detected(root.parents[1]) is True
     assert structure["missing_ids"] == []
     assert structure["missing_functions"] == []

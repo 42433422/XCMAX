@@ -7,6 +7,8 @@ const state = {
   tasks: [],
   llmTaskId: "",
   llmParallel: false,
+  llmSyncTimer: 0,
+  llmSyncAttempts: 0,
   absorption: null,
   events: [],
   progress: {timer: 0, active: false, started: 0, duration: 0, percent: 0, phase: "evidence", title: "等待深评"}
@@ -119,7 +121,7 @@ const titleOf = v => {
 function setRunning(running, text) {
   state.running = running;
   if (text) $("statusText").textContent = text;
-  for (const id of ["assessBtn", "absorbBtn", "evolveBtn", "llmReviewBtn", "llmParallelBtn", "llmStatusBtn", "radarBtn", "loopBtn", "saturationBtn"]) {
+  for (const id of ["assessBtn", "absorbBtn", "evolveBtn", "radarBtn", "loopBtn", "saturationBtn"]) {
     const el = $(id);
     if (el) el.disabled = running;
   }
@@ -711,13 +713,21 @@ function renderSaturation(result) {
 
 function llm(review, status = null, assessment = null) {
   if (!review || review.enabled === false) {
+    clearLlmSync();
     $("llmState").textContent = "排比 LLM 深评未完成，本次不保留评分";
     return;
   }
   const d = review.dispatch || review;
-  if (d.task_id) state.llmTaskId = d.task_id;
+  if (d.task_id) {
+    if (d.task_id !== state.llmTaskId) {
+      clearLlmSync();
+      state.llmSyncAttempts = 0;
+    }
+    state.llmTaskId = d.task_id;
+  }
   state.llmParallel = Boolean(review.parallel);
   if (scoreSource(assessment) === "paibi_llm") {
+    clearLlmSync();
     const taskId = assessment?.metadata?.llm_task_id || status?.task_id || d.task_id || "";
     const level = status?.json_result?.level ? ` · ${status.json_result.level}` : "";
     $("llmState").textContent = `排比 LLM 深评完成${taskId ? `：${taskId}` : ""}${level}`;
@@ -730,6 +740,42 @@ function llm(review, status = null, assessment = null) {
   const prefix = state.llmParallel ? `已派发并发排比 ${d.subtask_count || review.panels?.length || 0} 个面板` : "已派发排比任务";
   $("llmState").textContent = d.status === "accepted" ? `${prefix}：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
   pushEvent("排比任务", d.task_id || d.reason || d.status || "已记录", d.status === "accepted" ? "ok" : "warn");
+  if (d.status === "accepted" && d.task_id) scheduleLlmSync(3000);
+}
+
+function clearLlmSync() {
+  if (state.llmSyncTimer) clearTimeout(state.llmSyncTimer);
+  state.llmSyncTimer = 0;
+}
+
+function scheduleLlmSync(delay = 10000) {
+  if (!state.llmTaskId || state.llmSyncAttempts >= 6) return;
+  clearLlmSync();
+  state.llmSyncTimer = setTimeout(syncLlmStatus, delay);
+}
+
+async function syncLlmStatus() {
+  const taskId = state.llmTaskId;
+  if (!taskId) return;
+  state.llmSyncTimer = 0;
+  state.llmSyncAttempts += 1;
+  try {
+    const r = await api(state.llmParallel ? "/api/llm-review-group-status" : "/api/llm-review-status", {task_id: taskId});
+    if (taskId !== state.llmTaskId) return;
+    renderLlmSyncStatus(r);
+    const completed = r.status === "completed" || Boolean(r.json_result) || Boolean(r.scores?.length);
+    if (!completed) scheduleLlmSync(10000);
+  } catch (e) {
+    $("llmState").textContent = `排比 LLM 自动同步失败：${e.message}`;
+  }
+}
+
+function renderLlmSyncStatus(r) {
+  const json = r.json_result ? ` · JSON ${r.json_result.level || "已返回"}` : "";
+  const blockers = r.unblock_tasks?.length ? ` · 解阻 ${r.unblock_tasks.length}` : "";
+  const subtasks = r.subtasks?.length ? ` · 子任务 ${r.subtasks.map(s => s.status).join("/")}` : "";
+  $("llmState").textContent = `排比 LLM 自动同步：${r.status || "unknown"}${subtasks}${json}${blockers}`;
+  pushEvent("排比同步", `${r.status || "unknown"}${blockers}`, r.unblock_tasks?.length ? "warn" : "ok");
 }
 
 function executionState(execution) {
@@ -895,62 +941,6 @@ async function saturationReport() {
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
     pushEvent("饱和判定失败", e.message, "bad");
-  } finally {
-    setRunning(false);
-  }
-}
-
-async function llmReview() {
-  setRunning(true, "排比评审中");
-  pushEvent("请求排比评审", "单评审员");
-  try {
-    const payload = body();
-    const r = await api("/api/llm-review", {project: payload.project, mode: "manual", github_url: payload.github_url || "", external_path: payload.external_path || "", run_local_gates: payload.run_local_gates});
-    llm(r);
-    $("statusText").textContent = "已请求排比评审";
-  } catch (e) {
-    $("statusText").textContent = "已阻断";
-    $("llmState").textContent = `错误：${e.message}`;
-    pushEvent("排比失败", e.message, "bad");
-  } finally {
-    setRunning(false);
-  }
-}
-
-async function llmParallelReview() {
-  setRunning(true, "并发排比中");
-  pushEvent("请求并发排比", "证据/能力/阻塞三面板");
-  try {
-    const payload = body();
-    const r = await api("/api/llm-review-parallel", {project: payload.project, mode: "parallel_assess", github_url: payload.github_url || "", external_path: payload.external_path || "", run_local_gates: payload.run_local_gates, max_parallel: 3});
-    llm(r);
-    $("statusText").textContent = "已请求并发排比";
-  } catch (e) {
-    $("statusText").textContent = "已阻断";
-    $("llmState").textContent = `错误：${e.message}`;
-    pushEvent("并发排比失败", e.message, "bad");
-  } finally {
-    setRunning(false);
-  }
-}
-
-async function llmStatus() {
-  if (!state.llmTaskId) {
-    $("llmState").textContent = "没有可同步的排比任务";
-    return;
-  }
-  setRunning(true, "同步排比中");
-  try {
-    const r = await api(state.llmParallel ? "/api/llm-review-group-status" : "/api/llm-review-status", {task_id: state.llmTaskId});
-    const json = r.json_result ? ` · JSON ${r.json_result.level || "已返回"}` : "";
-    const blockers = r.unblock_tasks?.length ? ` · 解阻 ${r.unblock_tasks.length}` : "";
-    $("llmState").textContent = `排比任务 ${r.status || "unknown"} · 子任务 ${r.subtasks?.map(s => s.status).join("/") || "无"}${json}${blockers}`;
-    $("statusText").textContent = "已同步排比";
-    pushEvent("排比同步", `${r.status || "unknown"}${blockers}`, r.unblock_tasks?.length ? "warn" : "ok");
-  } catch (e) {
-    $("statusText").textContent = "已阻断";
-    $("llmState").textContent = `错误：${e.message}`;
-    pushEvent("同步失败", e.message, "bad");
   } finally {
     setRunning(false);
   }
@@ -1264,9 +1254,6 @@ $("sourceFolder").onclick = () => setMode("folder");
 $("assessBtn").onclick = assess;
 $("absorbBtn").onclick = absorb;
 $("evolveBtn").onclick = evolve;
-$("llmReviewBtn").onclick = llmReview;
-$("llmParallelBtn").onclick = llmParallelReview;
-$("llmStatusBtn").onclick = llmStatus;
 $("radarBtn").onclick = similarRadar;
 $("loopBtn").onclick = similarLoop;
 $("saturationBtn").onclick = saturationReport;
