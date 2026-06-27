@@ -1,0 +1,17 @@
+name: retort-engine
+on:
+  pull_request:
+    paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+  push:
+    paths: ["packages/retort_engine/**", ".github/workflows/retort-engine.yml"]
+jobs:
+  retort_engine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install pytest ruff
+      - run: python -m ruff check packages/retort_engine
+      - run: PYTHONPATH=packages/retort_engine python -m pytest packages/retort_engine/tests -q
