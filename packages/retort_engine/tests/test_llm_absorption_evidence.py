@@ -112,15 +112,36 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "case_count": 2,
-                    "patch_generated_count": 2,
-                    "patch_applied_count": 2,
-                    "gate_passed_count": 1,
+                    "case_count": 3,
+                    "patch_generated_count": 3,
+                    "patch_applied_count": 3,
+                    "gate_passed_count": 2,
                     "rollback_verified_count": 1,
                     "success_case_verified": True,
                     "failure_case_rolled_back": True,
+                    "multi_file_case_verified": True,
+                    "multi_file_changed_file_count": 2,
+                    "secondary_review_status": "reviewed",
+                    "successful_repairs_re_reviewed": True,
                 },
                 "cases": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_quality_gate_bundle.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "all_gates_passed": True,
+                    "lint_passed": True,
+                    "pytest_passed": True,
+                    "contract_passed": True,
+                    "single_command_surface": True,
+                },
+                "gates": [],
                 "evidence": {},
             }
         ),
@@ -167,6 +188,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "absorption_source=https://github.com/owner/repo" in evidence
     assert f"external_materialized_path={external}; exists=True" in evidence
     assert "closed_loop_five_proofs_verified=True" in evidence
+    assert "latest_absorption_source=https://github.com/owner/repo" in evidence
     assert "capability_absorption_local_score_removed=True" in evidence
     assert not any(item.startswith("capability_absorption_score=") for item in evidence)
     assert not any(item.startswith("capability_absorption_cap=") for item in evidence)
@@ -181,6 +203,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_patch_closure_status=ready" in evidence
     assert "employee_patch_closure_success_case_verified=True" in evidence
     assert "employee_patch_closure_failure_case_rolled_back=True" in evidence
+    assert "employee_patch_closure_multi_file_case_verified=True" in evidence
+    assert "employee_patch_closure_successful_repairs_re_reviewed=True" in evidence
+    assert "quality_gate_bundle_status=ready" in evidence
+    assert "quality_gate_bundle_all_passed=True" in evidence
+    assert "quality_gate_bundle_contract=True" in evidence
     assert "review_adjudication_calibration_status=ready" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence

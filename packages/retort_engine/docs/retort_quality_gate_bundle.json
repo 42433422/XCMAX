@@ -1,0 +1,72 @@
+{
+  "evidence": {
+    "failure_names": [],
+    "gate_names": [
+      "lint",
+      "pytest",
+      "contract"
+    ],
+    "python": "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+    "runner": "retort_quality_gate_bundle"
+  },
+  "gates": [
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "ruff",
+        "check",
+        "."
+      ],
+      "kind": "subprocess",
+      "name": "lint",
+      "ok": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "All checks passed!\n"
+    },
+    {
+      "command": [
+        "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests",
+        "-q"
+      ],
+      "kind": "subprocess",
+      "name": "pytest",
+      "ok": true,
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "........................................................................ [ 20%]\n........................................................................ [ 41%]\n........................................................................ [ 62%]\n........................................................................ [ 83%]\n.......................................................                  [100%]\n343 passed in 14.23s\n"
+    },
+    {
+      "command": [
+        "retort",
+        "contract-sanity"
+      ],
+      "failed": [],
+      "kind": "in_process",
+      "name": "contract",
+      "ok": true,
+      "returncode": 0,
+      "schema_count": 23,
+      "stderr_tail": "",
+      "stdout_tail": "validated 23 Retort contracts"
+    }
+  ],
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_gates_passed": true,
+    "command_name": "quality-gates",
+    "contract_passed": true,
+    "contract_schema_count": 23,
+    "duration_sec": 14.445,
+    "gate_count": 3,
+    "lint_passed": true,
+    "passed_count": 3,
+    "pytest_passed": true,
+    "single_command_surface": true
+  }
+}

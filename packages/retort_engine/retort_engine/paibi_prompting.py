@@ -96,10 +96,11 @@ def build_retort_paibi_prompt(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     task_lines = "\n".join(f"- {item.get('task_id')}: {item.get('title')} [{item.get('dimension')}]" for item in tasks or []) or "- no tasks supplied"
-    evidence_lines = "\n".join(f"- {item}" for item in evidence or []) or "- no evidence supplied"
+    critical_evidence_lines = "\n".join(f"- {item}" for item in prioritized_evidence(evidence or [])) or "- no critical evidence supplied"
+    evidence_lines = "\n".join(f"- {item}" for item in (evidence or [])[:140]) or "- no evidence supplied"
     scoring_audit_json = json.dumps(scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True)[:5000]
-    own = project_digest(project)
-    external_digest = project_digest(Path(external_path)) if external_path and Path(external_path).is_dir() else "external project not materialized"
+    own = project_digest(project, snippet_limit=8, snippet_chars=600)
+    external_digest = project_digest(Path(external_path), snippet_limit=2, snippet_chars=500) if external_path and Path(external_path).is_dir() else "external project not materialized"
     return f"""MODSTORE_REPORT_ONLY=1
 report_only=true
 [report-only]
@@ -120,6 +121,9 @@ report_only=true
 
 当前 Retort 任务：
 {task_lines}
+
+关键证据（优先裁决，若与摘要冲突以这里为准）：
+{critical_evidence_lines}
 
 本地证据：
 {evidence_lines}
@@ -179,7 +183,7 @@ report_only=true
 """
 
 
-def project_digest(root: Path) -> str:
+def project_digest(root: Path, *, snippet_limit: int = 18, snippet_chars: int = 900) -> str:
     if not root.is_dir():
         return "project folder not found"
     files = []
@@ -194,14 +198,44 @@ def project_digest(root: Path) -> str:
     snippets: list[str] = []
     for path in files[:400]:
         suffix_counts[path.suffix.lower() or "<none>"] = suffix_counts.get(path.suffix.lower() or "<none>", 0) + 1
-        if len(snippets) >= 18 or path.suffix.lower() not in SOURCE_SUFFIXES or path.name in GENERATED_EVIDENCE_FILES:
+        if len(snippets) >= snippet_limit or path.suffix.lower() not in SOURCE_SUFFIXES or path.name in GENERATED_EVIDENCE_FILES:
             continue
         text = _read(path)
         if not text.strip():
             continue
         rel = path.relative_to(root)
-        snippets.append(f"## {rel}\n{_compact(text)[:900]}")
+        snippets.append(f"## {rel}\n{_compact(text)[:snippet_chars]}")
     return json.dumps({"file_count": len(files), "suffix_counts": suffix_counts, "snippets": snippets}, ensure_ascii=False, indent=2)
+
+
+def prioritized_evidence(evidence: list[str]) -> list[str]:
+    prefixes = (
+        "absorption_source=",
+        "latest_absorption_",
+        "closed_loop_five_proofs_verified=",
+        "gates_passed=",
+        "commit=",
+        "merge_commit=",
+        "rollback_rehearsal=",
+        "code_graph_proof_passed=",
+        "feedback_audit_closed=",
+        "capability_absorption_",
+        "behavior_source_file_count=",
+        "behavior_test_file_count=",
+        "test_to_source_ratio=",
+        "post_absorption_hardening_",
+        "quality_gate_bundle_",
+        "employee_execution_mode=",
+        "employee_runtime_worker_review=",
+        "employee_runtime_patch_closure=",
+        "employee_patch_closure_",
+        "review_adjudication_",
+        "pr_live_publish_probe_status=",
+        "pr_low_permission_probe_status=",
+        "pr_low_permission_probe_real_network=",
+    )
+    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes)]
+    return selected[:80]
 
 
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:

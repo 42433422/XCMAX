@@ -22,6 +22,7 @@ def llm_absorption_evidence(project: Path) -> list[str]:
         evidence.append(f"external_materialized_path={state.get('external_path')}; exists={external_path.is_dir()}")
     if proof.get("verified"):
         evidence.append("closed_loop_five_proofs_verified=True")
+    evidence.extend(_latest_run_evidence(project))
     evidence.append(f"contract_schema_count={len(contract_names())}")
 
     audit = capability_absorption_audit(project)
@@ -156,7 +157,15 @@ def _report_evidence(project: Path) -> list[str]:
     stress_summary = stress_report.get("summary") if isinstance(stress_report.get("summary"), dict) else {}
     patch_report = read_json(project / "docs" / "retort_employee_patch_closure.json")
     patch_summary = patch_report.get("summary") if isinstance(patch_report.get("summary"), dict) else {}
+    quality_report = read_json(project / "docs" / "retort_quality_gate_bundle.json")
+    quality_summary = quality_report.get("summary") if isinstance(quality_report.get("summary"), dict) else {}
     return [
+        f"quality_gate_bundle_status={quality_report.get('status', '')}",
+        f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
+        f"quality_gate_bundle_lint={quality_summary.get('lint_passed', '')}",
+        f"quality_gate_bundle_pytest={quality_summary.get('pytest_passed', '')}",
+        f"quality_gate_bundle_contract={quality_summary.get('contract_passed', '')}",
+        f"quality_gate_bundle_single_command={quality_summary.get('single_command_surface', '')}",
         f"pr_publish_dry_run_status={publish_report.get('status', '')}",
         f"pr_publish_dry_run_comment_count={publish_summary.get('would_post_comment_count', '')}",
         f"pr_publish_dry_run_permission={publish_summary.get('permission_required', '')}",
@@ -268,6 +277,10 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_patch_closure_rollback_verified_count={patch_summary.get('rollback_verified_count', '')}",
         f"employee_patch_closure_success_case_verified={patch_summary.get('success_case_verified', '')}",
         f"employee_patch_closure_failure_case_rolled_back={patch_summary.get('failure_case_rolled_back', '')}",
+        f"employee_patch_closure_multi_file_case_verified={patch_summary.get('multi_file_case_verified', '')}",
+        f"employee_patch_closure_multi_file_changed_file_count={patch_summary.get('multi_file_changed_file_count', '')}",
+        f"employee_patch_closure_secondary_review_status={patch_summary.get('secondary_review_status', '')}",
+        f"employee_patch_closure_successful_repairs_re_reviewed={patch_summary.get('successful_repairs_re_reviewed', '')}",
     ]
 
 
@@ -306,6 +319,26 @@ def _employee_result_evidence(project: Path) -> list[str]:
         f"employee_runtime_worker_review={review.get('status', '')}; comments={review.get('comment_count', '')}; artifact={review.get('artifact', '')}",
         f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
+
+
+def _latest_run_evidence(project: Path) -> list[str]:
+    run_dir = project / ".retort" / "real_absorption_runs"
+    runs = sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []
+    for path in reversed(runs):
+        payload = read_json(path)
+        if payload:
+            changed_files = [str(item) for item in payload.get("changed_files") or []]
+            source_files = [item for item in changed_files if "/retort_engine/" in item and "/tests/" not in item]
+            test_files = [item for item in changed_files if "/tests/" in item]
+            return [
+                f"latest_absorption_run_id={payload.get('run_id', path.stem)}",
+                f"latest_absorption_source={payload.get('source', '')}",
+                f"latest_absorption_gates_passed={payload.get('gates_passed', '')}",
+                f"latest_absorption_changed_file_count={len(changed_files)}",
+                f"latest_absorption_behavior_source_count={len(source_files)}",
+                f"latest_absorption_behavior_test_count={len(test_files)}",
+            ]
+    return []
 
 
 def read_text(path: Path) -> str:

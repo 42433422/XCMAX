@@ -27,6 +27,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "architecture_contract_result" in contract_names()
     assert "employee_scheduler_stress_result" in contract_names()
     assert "employee_patch_closure_result" in contract_names()
+    assert "quality_gate_bundle_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
     review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": [], "incremental": {}})
     dry_run_valid = validate_contract("pr_dry_run_result", {"status": "reviewed", "pr_url": "u", "diff_url": "d", "summary": {}, "review": {}})
@@ -44,6 +45,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     architecture_contract_valid = validate_contract("architecture_contract_result", {"status": "passed", "project": "p", "summary": {}, "contracts": [], "violations": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     patch_closure_valid = validate_contract("employee_patch_closure_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    quality_gate_valid = validate_contract("quality_gate_bundle_result", {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
     assert valid["valid"] is True
@@ -63,6 +65,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert architecture_contract_valid["valid"] is True
     assert stress_valid["valid"] is True
     assert patch_closure_valid["valid"] is True
+    assert quality_gate_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]
 
