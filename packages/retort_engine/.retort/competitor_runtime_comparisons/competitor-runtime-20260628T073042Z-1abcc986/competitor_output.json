@@ -1,0 +1,69 @@
+{
+  "status": "parsed",
+  "hunk_count": 2,
+  "added_line_count": 4,
+  "hunks": [
+    {
+      "from": {
+        "filename": "src/main.ts",
+        "startLine": 2,
+        "lineCount": 6,
+        "content": [
+          "   getBooleanInput,",
+          "   getInput,",
+          "   getMultilineInput,",
+          "   info,",
+          "   setFailed,",
+          " } from \"@actions/core\";"
+        ]
+      },
+      "to": {
+        "filename": "src/main.ts",
+        "startLine": 2,
+        "lineCount": 7,
+        "content": [
+          "2    getBooleanInput,",
+          "3    getInput,",
+          "4    getMultilineInput,",
+          "5 +  debug,",
+          "6    info,",
+          "7    setFailed,",
+          "8  } from \"@actions/core\";"
+        ]
+      }
+    },
+    {
+      "from": {
+        "filename": "src/main.ts",
+        "startLine": 79,
+        "lineCount": 7,
+        "content": [
+          "         info(JSON.stringify(modifiedFile, null, 2));",
+          "       }",
+          "     });",
+          "   } catch (error) {",
+          "     // Fail the workflow run if an error occurs",
+          "     if (error instanceof Error {",
+          ""
+        ]
+      },
+      "to": {
+        "filename": "src/main.ts",
+        "startLine": 80,
+        "lineCount": 10,
+        "content": [
+          "80          info(JSON.stringify(modifiedFile, null, 2));",
+          "81        }",
+          "82      });",
+          "83 +",
+          "84 +    info(\"done\");",
+          "85    } catch (error) {",
+          "86 +    debug(\"error\");",
+          "87      // Fail the workflow run if an error occurs",
+          "88      if (error instanceof Error {",
+          "89 "
+        ]
+      }
+    }
+  ]
+}

@@ -20,6 +20,9 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["frontend_operation_replay_ready"] is True
     assert result["summary"]["per_run_code_graph_proved"] is True
     assert result["summary"]["external_advantage_ci_ready"] is True
+    assert result["summary"]["external_process_adjudication_ready"] is True
+    assert result["summary"]["upstream_pr_ci_ready"] is True
+    assert result["summary"]["competitor_runtime_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
     assert Path(result["summary"]["manifest_path"]).is_file()
@@ -172,7 +175,22 @@ def _write_docs(root: Path) -> None:
             },
             "cases": [],
         },
+        "retort_external_process_adjudication.json": {
+            "status": "ready",
+            "summary": {"external_all_cases_accepted": True, "script_imports_retort_engine": False},
+            "cases": [],
+        },
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True}, "runs": []},
+        "retort_upstream_pr_ci_probe.json": {
+            "status": "ready",
+            "summary": {"merged": True, "all_check_runs_successful": True},
+            "check_runs": [],
+        },
+        "retort_competitor_runtime_comparison.json": {
+            "status": "ready",
+            "summary": {"side_by_side_output_materialized": True},
+            "competitor_output": {},
+        },
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
             "summary": {"all_before_failed_after_passed": True, "cross_language_absorption_verified": True},

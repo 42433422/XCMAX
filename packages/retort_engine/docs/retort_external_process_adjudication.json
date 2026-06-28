@@ -1,0 +1,72 @@
+{
+  "artifacts": {
+    "input": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_process_adjudications/external-process-adjudication-20260628T073003Z-a4d95157/adjudicator_input.json",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_process_adjudications/external-process-adjudication-20260628T073003Z-a4d95157",
+    "output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_process_adjudications/external-process-adjudication-20260628T073003Z-a4d95157/adjudicator_output.json",
+    "script": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_process_adjudications/external-process-adjudication-20260628T073003Z-a4d95157/independent_adjudicator.py"
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "case_id": "pr-agent-secret-context",
+      "external_delta": 80,
+      "source_project": "qodo-ai/pr-agent"
+    },
+    {
+      "accepted": true,
+      "case_id": "reviewdog-workflow-token",
+      "external_delta": 80,
+      "source_project": "reviewdog/reviewdog"
+    },
+    {
+      "accepted": true,
+      "case_id": "swe-bench-oracle-placeholder",
+      "external_delta": 80,
+      "source_project": "swe-bench/SWE-bench"
+    },
+    {
+      "accepted": true,
+      "case_id": "import-linter-contract-bypass",
+      "external_delta": 80,
+      "source_project": "seddonym/import-linter"
+    },
+    {
+      "accepted": true,
+      "case_id": "repomix-context-package-clean",
+      "external_delta": 80,
+      "source_project": "yamadashy/repomix"
+    },
+    {
+      "accepted": true,
+      "case_id": "mopemope-typescript-diff-review",
+      "external_delta": 80,
+      "source_project": "mopemope/pr-ai-review-bot"
+    }
+  ],
+  "evidence": {
+    "acceptance": "non_retort_engine_process_recomputes_delta_at_or_above_80",
+    "boundary": "generated_script_under_retort_dotdir_imports_no_retort_engine_modules",
+    "style": "out_of_package_subprocess_adjudicator"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "case_count": 6,
+    "duration_sec": 0.037,
+    "external_accepted_case_count": 6,
+    "external_adjudicated_case_count": 6,
+    "external_all_cases_accepted": true,
+    "external_delta_floor": 80,
+    "external_delta_floor_met": true,
+    "external_minimum_delta": 80,
+    "external_process_pid_boundary": true,
+    "external_process_returncode": 0,
+    "external_process_stderr_tail": "",
+    "external_process_stdout_tail": "",
+    "input_sha256": "8e6249f193db7c4b59e71246ad4a4f380e386de40ce271d99c1fca5c348579ab",
+    "min_case_count": 6,
+    "output_sha256": "1cfd36429002ce3a4c7e4ba43ca836b890085b6defef70949ced738a2949fa53",
+    "score_fields_consumed": false,
+    "script_imports_retort_engine": false
+  }
+}

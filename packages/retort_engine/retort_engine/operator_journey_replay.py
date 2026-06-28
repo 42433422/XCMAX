@@ -43,6 +43,9 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "architecture_contract_ready": bool((live_probes.get("architecture_contracts") or {}).get("ready")),
         "codebase_graph_ready": bool((live_probes.get("codebase_graph") or {}).get("ready")),
         "external_advantage_ci_ready": _report_ready(root, "retort_external_advantage_ci_regression.json"),
+        "external_process_adjudication_ready": _report_ready(root, "retort_external_process_adjudication.json"),
+        "upstream_pr_ci_ready": _report_ready(root, "retort_upstream_pr_ci_probe.json"),
+        "competitor_runtime_ready": _report_ready(root, "retort_competitor_runtime_comparison.json"),
         "contract_stability_ready": _report_ready(root, "retort_contract_stability_stress.json"),
         "cross_domain_end_to_end_ready": _report_ready(root, "retort_cross_domain_end_to_end.json"),
         "manifest_path": str(manifest_path),
@@ -95,6 +98,9 @@ def _journey_stages(
     readonly_probe = artifact_by_name.get("pr_readonly_degradation_probe", {})
     low_permission_probe = artifact_by_name.get("pr_low_permission_probe", {})
     external_ci = artifact_by_name.get("external_advantage_ci_regression", {})
+    external_process = artifact_by_name.get("external_process_adjudication", {})
+    upstream_ci = artifact_by_name.get("upstream_pr_ci_probe", {})
+    competitor_runtime = artifact_by_name.get("competitor_runtime_comparison", {})
     contract_stability = artifact_by_name.get("contract_stability_stress", {})
     cross_domain_e2e = artifact_by_name.get("cross_domain_end_to_end", {})
     return [
@@ -170,6 +176,16 @@ def _journey_stages(
             ],
         ),
         _stage(
+            "external_independence_probe",
+            "外部独立性证明",
+            external_process.get("exists") is True and upstream_ci.get("exists") is True and competitor_runtime.get("exists") is True,
+            [
+                f"external_process_sha={external_process.get('sha256', '')}",
+                f"upstream_pr_ci_sha={upstream_ci.get('sha256', '')}",
+                f"competitor_runtime_sha={competitor_runtime.get('sha256', '')}",
+            ],
+        ),
+        _stage(
             "sustained_depth_gates",
             "持续深度门禁",
             external_ci.get("exists") is True and contract_stability.get("exists") is True and cross_domain_e2e.get("exists") is True,
@@ -209,7 +225,10 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("review_quality_benchmark", docs / "retort_review_quality_benchmark.json", "source_report", ("status", "summary", "samples")),
         ("external_advantage_matrix", docs / "retort_external_advantage_matrix.json", "source_report", ("status", "summary", "matrix")),
         ("external_advantage_ci_regression", docs / "retort_external_advantage_ci_regression.json", "source_report", ("status", "summary", "cases")),
+        ("external_process_adjudication", docs / "retort_external_process_adjudication.json", "source_report", ("status", "summary", "cases")),
         ("external_advantage_repeat", docs / "retort_external_advantage_repeat.json", "source_report", ("status", "summary", "runs")),
+        ("upstream_pr_ci_probe", docs / "retort_upstream_pr_ci_probe.json", "source_report", ("status", "summary", "check_runs")),
+        ("competitor_runtime_comparison", docs / "retort_competitor_runtime_comparison.json", "source_report", ("status", "summary", "competitor_output")),
         ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_absorption_replay", docs / "retort_cross_domain_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_end_to_end", docs / "retort_cross_domain_end_to_end.json", "source_report", ("status", "summary", "stages")),
@@ -345,7 +364,10 @@ def _release_inputs_ready(root: Path) -> bool:
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     external_ci = _read_json(docs / "retort_external_advantage_ci_regression.json")
+    external_process = _read_json(docs / "retort_external_process_adjudication.json")
     external_repeat = _read_json(docs / "retort_external_advantage_repeat.json")
+    upstream_ci = _read_json(docs / "retort_upstream_pr_ci_probe.json")
+    competitor_runtime = _read_json(docs / "retort_competitor_runtime_comparison.json")
     heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(docs / "retort_cross_domain_absorption_replay.json")
     cross_domain_e2e = _read_json(docs / "retort_cross_domain_end_to_end.json")
@@ -370,9 +392,17 @@ def _release_inputs_ready(root: Path) -> bool:
         and external_ci.get("status") == "ready"
         and external_ci.get("summary", {}).get("all_cases_have_ci_acceptance") is True
         and int(external_ci.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 80
+        and external_process.get("status") == "ready"
+        and external_process.get("summary", {}).get("external_all_cases_accepted") is True
+        and external_process.get("summary", {}).get("script_imports_retort_engine") is False
         and external_repeat.get("status") == "ready"
         and external_repeat.get("summary", {}).get("stable_case_set") is True
         and external_repeat.get("summary", {}).get("stable_score_delta") is True
+        and upstream_ci.get("status") == "ready"
+        and upstream_ci.get("summary", {}).get("merged") is True
+        and upstream_ci.get("summary", {}).get("all_check_runs_successful") is True
+        and competitor_runtime.get("status") == "ready"
+        and competitor_runtime.get("summary", {}).get("side_by_side_output_materialized") is True
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True
