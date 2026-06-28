@@ -458,26 +458,52 @@ class RetortService:
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
         payload = apply_default_llm_policy(payload)
+        threshold = float(payload.get("threshold") or payload.get("target_score") or 90.0)
+        max_rounds = _optional_positive_int(payload.get("max_rounds"), 8)
         project = str(payload.get("project") or ".")
         project_path = Path(project).expanduser().resolve()
         base = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-        result = {
-            "status": "blocked",
-            "stop_reason": "llm_deep_review_required",
-            "final_assessment": base,
-            "rounds": [{"round_index": 1, "passed": False, "assessment": base, "tasks": []}],
-            "tasks": [],
-            "round_policy": "single_paibi_llm_deep_review",
+        final_assessment = _attach_llm_scoring(dict(payload), base, project_path, "self_evolve", "", "", [])
+        scores = _scores_from_assessment(final_assessment)
+        weak = [score for score in scores if score.value <= threshold]
+        tasks = _self_evolution_tasks(final_assessment, weak, threshold, 1)
+        passed = bool(scores) and not weak
+        status, stop_reason = _self_evolution_stop_status(final_assessment, scores, weak)
+        record_path = _record_self_evolution_round(
+            project_path,
+            {
+                "round_index": 1,
+                "threshold": threshold,
+                "passed": passed,
+                "status": status,
+                "stop_reason": stop_reason,
+                "scores": [score.to_dict() for score in scores],
+                "weak_dimensions": [score.dimension for score in weak],
+                "tasks": tasks,
+                "llm_task_id": final_assessment.get("metadata", {}).get("llm_task_id", "") if isinstance(final_assessment.get("metadata"), dict) else "",
+            },
+        )
+        return {
+            "status": status,
+            "stop_reason": stop_reason,
+            "final_assessment": final_assessment,
+            "rounds": [{"round_index": 1, "passed": passed, "assessment": final_assessment, "tasks": tasks, "weak_dimensions": [score.dimension for score in weak]}],
+            "tasks": tasks,
+            "round_policy": "paibi_llm_until_threshold_then_execute",
+            "threshold": threshold,
+            "target_score": threshold,
+            "max_rounds": max_rounds,
+            "rounds_completed": 1,
+            "all_scores_over_threshold": passed,
+            "record_path": str(record_path),
+            "completion_gate": {
+                "requires_llm_scores": True,
+                "requires_all_scores_strictly_over_threshold": True,
+                "requires_real_execution_before_next_round": bool(weak),
+                "can_continue_without_new_execution": False if weak else passed,
+            },
+            "next_action": _self_evolution_next_action(status),
         }
-        result["final_assessment"] = _attach_llm_scoring(dict(payload), base, project_path, "self_evolve", "", "", [])
-        scores = [Score(str(score.get("dimension") or ""), float(score.get("value") or 0), str(score.get("reason") or "")) for score in result["final_assessment"].get("scores", []) if isinstance(score, dict)]
-        weak = [score for score in scores if score.value <= float(payload.get("threshold") or 90.0)]
-        tasks = [_task_for_weak_score(score, float(payload.get("threshold") or 90.0), 1) for score in weak]
-        result["tasks"] = tasks
-        result["rounds"] = [{"round_index": 1, "passed": not weak and bool(scores), "assessment": result["final_assessment"], "tasks": tasks}]
-        result["status"] = "converged" if scores and not weak else "blocked"
-        result["stop_reason"] = "all_llm_scores_strictly_above_threshold" if scores and not weak else "llm_questions_generated_for_weak_scores"
-        return result
 
     def record_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
         return record_closed_loop_proof(str(payload.get("project") or "."), payload)
@@ -1624,6 +1650,102 @@ def _task_for_weak_score(score: Score, threshold: float, round_index: int) -> di
         "priority": "P1" if threshold - score.value >= 5 else "P2",
         "acceptance": f"Reassessment shows {score.dimension} > {threshold:.0f}; current score is {score.value:.1f}.",
     }
+
+
+def _optional_positive_int(value: Any, default: int | None) -> int | None:
+    if value is None or str(value).strip() in {"", "none", "None"}:
+        return default
+    parsed = int(value)
+    if parsed < 1:
+        raise ValueError("max_rounds must be >= 1")
+    return parsed
+
+
+def _scores_from_assessment(assessment: dict[str, Any]) -> list[Score]:
+    scores: list[Score] = []
+    for row in assessment.get("scores") or []:
+        if not isinstance(row, dict):
+            continue
+        dimension = str(row.get("dimension") or "").strip()
+        if not dimension:
+            continue
+        try:
+            value = float(row.get("value") or 0)
+        except (TypeError, ValueError):
+            value = 0.0
+        scores.append(Score(dimension, value, str(row.get("reason") or "")))
+    return scores
+
+
+def _self_evolution_tasks(assessment: dict[str, Any], weak: list[Score], threshold: float, round_index: int) -> list[dict[str, str]]:
+    status = assessment.get("llm_review_status") if isinstance(assessment.get("llm_review_status"), dict) else {}
+    result = status.get("json_result") if isinstance(status.get("json_result"), dict) else {}
+    llm_tasks = [item for item in result.get("employee_tasks") or [] if isinstance(item, dict)]
+    tasks: list[dict[str, str]] = []
+    for index, item in enumerate(llm_tasks, start=1):
+        title = str(item.get("title") or f"Execute Retort self-evolution task {index}")
+        tasks.append(
+            {
+                "task_id": str(item.get("task_id") or f"retort-r{round_index:02d}-llm-{index:02d}"),
+                "title": title,
+                "dimension": str(item.get("dimension") or _dimension_from_task_title(title, weak)),
+                "owner_hint": str(item.get("owner_hint") or "fhd-core-maintainer"),
+                "priority": str(item.get("priority") or "P1"),
+                "why": str(item.get("why") or "PaiBi LLM marked this as required before the 90+ self-evolution gate."),
+                "action": str(item.get("action") or title),
+                "acceptance": str(item.get("acceptance") or f"After real code/test changes, reassessment shows all scores > {threshold:.0f}."),
+                "evidence_required": str(item.get("evidence_required") or "code diff, test output, next PaiBi score"),
+            }
+        )
+    if tasks:
+        return tasks
+    return [_task_for_weak_score(score, threshold, round_index) for score in weak]
+
+
+def _dimension_from_task_title(title: str, weak: list[Score]) -> str:
+    lowered = title.lower()
+    for score in weak:
+        if score.dimension.lower() in lowered:
+            return score.dimension
+    return weak[0].dimension if weak else "retort_product_maturity"
+
+
+def _self_evolution_stop_status(assessment: dict[str, Any], scores: list[Score], weak: list[Score]) -> tuple[str, str]:
+    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
+    if scores and not weak:
+        return "converged", "all_llm_scores_strictly_above_threshold"
+    if scores:
+        return "needs_execution", "scores_below_threshold_require_real_changes"
+    decision = str(metadata.get("llm_decision") or "")
+    if decision in {"awaiting_scores", "queued_outbox_no_scores"}:
+        return "awaiting_llm_score", decision
+    if decision == "blocked_llm_disabled":
+        return "blocked", "llm_deep_review_required"
+    if decision == "blocked_without_scores":
+        return "blocked", "paibi_llm_blocked_without_scores"
+    return "awaiting_llm_score", decision or "llm_scores_not_ready"
+
+
+def _self_evolution_next_action(status: str) -> str:
+    if status == "converged":
+        return "停止：所有 PaiBi LLM 分数已严格超过目标分。"
+    if status == "awaiting_llm_score":
+        return "等待 PaiBi LLM 返回结构化分数后继续下一轮。"
+    if status == "needs_execution":
+        return "先执行本轮弱项任务并提交真实代码/测试证据，然后再次复评。"
+    return "解除阻断后重新发起反问进化。"
+
+
+def _record_self_evolution_round(root: Path, payload: dict[str, Any]) -> Path:
+    path = root / ".retort" / "self_evolution_rounds.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "created_at": _now_iso(),
+        **payload,
+    }
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    return path
 
 
 def _materialize_external_source(source: str, own_project: Path, refresh: bool = False) -> Path | None:
