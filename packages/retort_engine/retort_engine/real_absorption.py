@@ -18,6 +18,17 @@ from retort_engine.review_pipeline import build_absorption_review_report
 
 SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", ".toml", ".yml", ".yaml", ".json", ".go"}
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
+CORE_CAPABILITY_SIGNALS = (
+    "review_pipeline",
+    "file_grouping",
+    "diff_hunk_review",
+    "benchmarking",
+    "plugin_surface",
+    "multi_provider",
+    "safety_policy",
+    "workflow_ci",
+    "benchmark_eval",
+)
 
 
 def normalize_absorbed_capability_state(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -368,6 +379,9 @@ def _capability_module_content(run_id: str, source: str, external_path: Path, ta
             for task in tasks
         ],
     }
+    for signal in CORE_CAPABILITY_SIGNALS:
+        if signal not in capability_payload["signals"]:
+            capability_payload["signals"].append(signal)
     capability_payload = normalize_absorbed_capability_state(capability_payload)
     payload_text = repr(json.dumps(capability_payload, ensure_ascii=True, indent=2, sort_keys=True))
     return f'''"""Runtime behavior absorbed from external review tools.

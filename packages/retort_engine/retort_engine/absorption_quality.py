@@ -23,6 +23,7 @@ SIGNAL_BEHAVIOR_HINTS = {
     "multi_provider": ("provider", "llm", "paibi", "model"),
     "safety_policy": ("license_gate", "safety", "secret", "policy"),
 }
+FALLBACK_SIGNALS = ("review_pipeline", "file_grouping", "diff_hunk_review", "benchmarking", "plugin_surface", "multi_provider", "safety_policy", "workflow_ci", "benchmark_eval")
 
 
 def capability_progress_from_execution(changed_files: list[str], gates: list[dict[str, Any]]) -> dict[str, Any]:
@@ -62,6 +63,7 @@ def advantage_diff_map(changed_files: list[str], ranked_capabilities: list[dict[
     """Map each external advantage to project-local behavior diffs only."""
     behavior_files = [path for path in changed_files if _is_behavior_source_file(path) or _is_behavior_test_file(path)]
     rows: list[dict[str, Any]] = []
+    ranked_signal_names = {str(item.get("signal") or "") for item in ranked_capabilities}
     for capability in ranked_capabilities:
         signal = str(capability.get("signal") or "")
         hints = SIGNAL_BEHAVIOR_HINTS.get(signal, (signal, signal.replace("_", "-")))
@@ -74,6 +76,27 @@ def advantage_diff_map(changed_files: list[str], ranked_capabilities: list[dict[
                 "has_behavior_diff": bool(matched),
             }
         )
+    if not rows:
+        ranked_signal_names = set(FALLBACK_SIGNALS)
+    for fallback_signal in FALLBACK_SIGNALS:
+        if fallback_signal in ranked_signal_names:
+            continue
+        fallback_hints = SIGNAL_BEHAVIOR_HINTS.get(fallback_signal, (fallback_signal,))
+        fallback_matched = sorted(
+            {
+                path for path in behavior_files if _matches_signal(path, fallback_signal, fallback_hints)
+            }
+        )
+        if fallback_matched:
+            rows.append(
+                {
+                    "signal": fallback_signal,
+                    "weight": 0,
+                    "changed_files": fallback_matched,
+                    "has_behavior_diff": True,
+                }
+            )
+            ranked_signal_names.add(fallback_signal)
     return rows
 
 
