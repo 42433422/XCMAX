@@ -36,7 +36,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         case_name="negative_gate_rollback",
     )
     multi_file = run_multi_file_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
-    cases = [positive, negative, multi_file]
+    retry = run_retry_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
+    cases = [positive, negative, multi_file, retry]
     summary = {
         "run_id": suite_id,
         "case_count": len(cases),
@@ -51,6 +52,10 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "secondary_review_status": multi_file["summary"].get("secondary_review_status", ""),
         "secondary_review_comment_count": multi_file["summary"].get("secondary_review_comment_count", 0),
         "successful_repairs_re_reviewed": bool(multi_file["summary"].get("secondary_review_status") == "reviewed"),
+        "retry_case_verified": retry["status"] == "patch_verified_after_retry",
+        "retry_first_failure_rolled_back": bool(retry["summary"].get("first_failure_rolled_back")),
+        "retry_second_patch_passed": bool(retry["summary"].get("retry_gate_passed")),
+        "retry_secondary_review_status": retry["summary"].get("secondary_review_status", ""),
         "all_cases_have_patch_files": all(bool(case["evidence"].get("patch_path")) and Path(str(case["evidence"]["patch_path"])).is_file() for case in cases),
     }
     status = (
@@ -59,6 +64,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         and summary["failure_case_rolled_back"]
         and summary["multi_file_case_verified"]
         and summary["successful_repairs_re_reviewed"]
+        and summary["retry_case_verified"]
+        and summary["retry_first_failure_rolled_back"]
         and summary["all_cases_have_patch_files"]
         else "needs_attention"
     )
@@ -79,6 +86,74 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return result
+
+
+def run_retry_employee_patch_closure_case(project: str | Path, *, lab: str | Path, run_id: str = "") -> dict[str, Any]:
+    root = Path(project).expanduser().resolve()
+    case_id = run_id or _run_id("retry-employee-patch")
+    target = Path(lab).expanduser().resolve() / "retry_repair.py"
+    first = run_employee_patch_closure_case(
+        root,
+        target_file=target,
+        replacement="def retry_repair(:\n    return 'broken'\n",
+        expected_text="broken",
+        gate_commands=[[sys.executable, "-m", "py_compile", "{target_file}"]],
+        run_id=case_id,
+        case_name="retry_first_failure",
+    )
+    second = run_employee_patch_closure_case(
+        root,
+        target_file=target,
+        replacement="def retry_repair():\n    return 'verified-retry'\n",
+        expected_text="verified-retry",
+        gate_commands=[[sys.executable, "-m", "py_compile", "{target_file}"]],
+        run_id=case_id,
+        case_name="retry_second_success",
+    )
+    patch_text = Path(str(second["evidence"]["patch_path"])).read_text(encoding="utf-8")
+    secondary_review = review_diff(patch_text, issue_context="Retry failed employee patch after rollback and prove corrected behavior", max_comments=4)
+    status = "patch_verified_after_retry" if first["status"] == "patch_rolled_back" and second["status"] == "patch_verified" else "patch_retry_failed"
+    return {
+        "status": status,
+        "project": str(root),
+        "target": str(target),
+        "summary": {
+            "run_id": case_id,
+            "case_name": "retry_failure_then_success",
+            "patch_generated": bool(first["summary"]["patch_generated"] and second["summary"]["patch_generated"]),
+            "patch_applied": bool(second["summary"]["patch_applied"]),
+            "gates_passed": bool(second["summary"]["gates_passed"]),
+            "rollback_verified": bool(first["summary"]["rollback_verified"]),
+            "retained_change": bool(second["summary"]["retained_change"]),
+            "before_exists": bool(first["summary"]["before_exists"] or second["summary"]["before_exists"]),
+            "expected_text_present": bool(second["summary"]["expected_text_present"]),
+            "retry_count": 2,
+            "first_gate_failed": not bool(first["summary"]["gates_passed"]),
+            "first_failure_rolled_back": first["status"] == "patch_rolled_back",
+            "retry_gate_passed": bool(second["summary"]["gates_passed"]),
+            "secondary_review_status": secondary_review.get("status"),
+            "secondary_review_comment_count": (secondary_review.get("summary") or {}).get("comment_count", 0),
+        },
+        "gates": [*(first.get("gates") or []), *(second.get("gates") or [])],
+        "changed_files": list(second.get("changed_files") or []),
+        "attempted_changed_files": list(first.get("attempted_changed_files") or []) + list(second.get("attempted_changed_files") or []),
+        "rollback": {
+            "strategy": "rollback_failed_patch_then_apply_corrected_patch",
+            "performed": True,
+            "verified": first["status"] == "patch_rolled_back",
+        },
+        "secondary_review": {
+            "status": secondary_review.get("status"),
+            "summary": secondary_review.get("summary", {}),
+            "comment_count": len(secondary_review.get("comments") or []),
+        },
+        "evidence": {
+            "patch_path": str(second["evidence"]["patch_path"]),
+            "failed_patch_path": str(first["evidence"]["patch_path"]),
+            "target_exists_after": target.exists(),
+            "reviewed_after_patch": secondary_review.get("status") == "reviewed",
+        },
+    }
 
 
 def run_multi_file_employee_patch_closure_case(project: str | Path, *, lab: str | Path, run_id: str = "") -> dict[str, Any]:

@@ -112,17 +112,20 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "case_count": 3,
-                    "patch_generated_count": 3,
-                    "patch_applied_count": 3,
-                    "gate_passed_count": 2,
-                    "rollback_verified_count": 1,
+                    "case_count": 4,
+                    "patch_generated_count": 4,
+                    "patch_applied_count": 4,
+                    "gate_passed_count": 3,
+                    "rollback_verified_count": 2,
                     "success_case_verified": True,
                     "failure_case_rolled_back": True,
                     "multi_file_case_verified": True,
                     "multi_file_changed_file_count": 2,
                     "secondary_review_status": "reviewed",
                     "successful_repairs_re_reviewed": True,
+                    "retry_case_verified": True,
+                    "retry_first_failure_rolled_back": True,
+                    "retry_second_patch_passed": True,
                 },
                 "cases": [],
                 "evidence": {},
@@ -143,6 +146,27 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "gates": [],
                 "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_pr_readonly_degradation_probe.json").write_text(
+        json.dumps(
+            {
+                "status": "read_only_degraded",
+                "pr_url": "https://github.com/owner/repo/pull/7",
+                "summary": {
+                    "live_github_write": False,
+                    "degraded_without_write": True,
+                    "degradation_artifact_ready": True,
+                },
+                "evidence": {
+                    "real_network": True,
+                    "transport": "github_rest_readonly",
+                    "degradation": "dry_run_review_payload_only_no_comment_created",
+                },
+                "created_receipts": [],
+                "rollback_receipts": [],
             }
         ),
         encoding="utf-8",
@@ -205,6 +229,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_patch_closure_failure_case_rolled_back=True" in evidence
     assert "employee_patch_closure_multi_file_case_verified=True" in evidence
     assert "employee_patch_closure_successful_repairs_re_reviewed=True" in evidence
+    assert "employee_patch_closure_retry_case_verified=True" in evidence
     assert "quality_gate_bundle_status=ready" in evidence
     assert "quality_gate_bundle_all_passed=True" in evidence
     assert "quality_gate_bundle_contract=True" in evidence
@@ -225,6 +250,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_low_permission_probe_degraded_without_write=True" in evidence
     assert "pr_low_permission_probe_real_network=False" in evidence
     assert "pr_low_permission_probe_transport=injected_transport" in evidence
+    assert "pr_readonly_degradation_probe_status=read_only_degraded" in evidence
+    assert "pr_readonly_degradation_probe_real_network=True" in evidence
+    assert "pr_readonly_degradation_probe_artifact_ready=True" in evidence
 
 
 def test_llm_absorption_evidence_read_json_fails_closed(tmp_path: Path) -> None:

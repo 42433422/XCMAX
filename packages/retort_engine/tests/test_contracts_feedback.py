@@ -17,6 +17,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "pr_publish_dry_run_result" in contract_names()
     assert "pr_publish_sandbox_result" in contract_names()
     assert "pr_live_publish_probe_result" in contract_names()
+    assert "pr_readonly_degradation_probe_result" in contract_names()
     assert "cross_project_replay_result" in contract_names()
     assert "complex_pr_replay_result" in contract_names()
     assert "task_prioritization_result" in contract_names()
@@ -34,6 +35,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     publish_valid = validate_contract("pr_publish_dry_run_result", {"status": "dry_run_ready", "pr_url": "u", "summary": {}, "comments": [], "rollback": {}})
     sandbox_valid = validate_contract("pr_publish_sandbox_result", {"status": "sandbox_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": []})
     live_probe_valid = validate_contract("pr_live_publish_probe_result", {"status": "live_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": [], "evidence": {}})
+    readonly_probe_valid = validate_contract("pr_readonly_degradation_probe_result", {"status": "read_only_degraded", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": [], "evidence": {}})
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     complex_replay_valid = validate_contract("complex_pr_replay_result", {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "evidence": {}})
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
@@ -54,6 +56,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert publish_valid["valid"] is True
     assert sandbox_valid["valid"] is True
     assert live_probe_valid["valid"] is True
+    assert readonly_probe_valid["valid"] is True
     assert replay_valid["valid"] is True
     assert complex_replay_valid["valid"] is True
     assert task_valid["valid"] is True

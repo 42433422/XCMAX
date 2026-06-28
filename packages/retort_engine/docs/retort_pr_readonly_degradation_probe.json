@@ -1,0 +1,46 @@
+{
+  "created_receipts": [],
+  "evidence": {
+    "api": "GitHub REST public read-only",
+    "base_ref": "main",
+    "degradation": "dry_run_review_payload_only_no_comment_created",
+    "degradation_artifact": {
+      "kind": "publish_dry_run",
+      "next_step": "request_write_token_or_export_review_payload",
+      "target": "The-PR-Agent/pr-agent#2479"
+    },
+    "head_ref": "fix/azure-devops-url-encoded-spaces",
+    "real_network": true,
+    "required_permission": "issues:write or pull_requests:write",
+    "target_is_pull_request": true,
+    "token_redacted": true,
+    "transport": "github_rest_readonly",
+    "write_suppressed_reason": "no_token_read_only_probe"
+  },
+  "pr_url": "https://github.com/The-PR-Agent/pr-agent/pull/2479",
+  "rollback_receipts": [
+    {
+      "created": false,
+      "response": {
+        "reason": "read_only_probe_suppressed_write"
+      },
+      "status_code": 0
+    }
+  ],
+  "status": "read_only_degraded",
+  "summary": {
+    "created_comment_count": 0,
+    "degradation_artifact_ready": true,
+    "degraded_without_write": true,
+    "duration_sec": 1.954,
+    "live_github_write": false,
+    "permission_denied": true,
+    "pull_number": 2479,
+    "pull_status": 200,
+    "repo_status": 200,
+    "rollback_verified": true,
+    "rolled_back_comment_count": 0,
+    "target_repo": "The-PR-Agent/pr-agent",
+    "token_present": false
+  }
+}

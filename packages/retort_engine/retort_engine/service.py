@@ -14,7 +14,7 @@ from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
-from retort_engine.pr_live_probe import run_live_pr_comment_probe
+from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
@@ -91,6 +91,9 @@ class RetortService:
 
     def publish_pr_live_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_live_pr_comment_probe(str(payload.get("pr_url") or payload.get("url") or ""), body=str(payload.get("body") or ""))
+
+    def publish_pr_readonly_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_readonly_pr_degradation_probe(str(payload.get("pr_url") or payload.get("url") or ""))
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
@@ -208,6 +211,10 @@ def create_app() -> Any:
     @app.post("/publish-pr-live-probe")
     def publish_pr_live_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.publish_pr_live_probe(payload)
+
+    @app.post("/publish-pr-readonly-probe")
+    def publish_pr_readonly_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.publish_pr_readonly_probe(payload)
 
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

@@ -38,7 +38,7 @@
       "ok": true,
       "returncode": 0,
       "stderr_tail": "",
-      "stdout_tail": "........................................................................ [ 20%]\n........................................................................ [ 41%]\n........................................................................ [ 62%]\n........................................................................ [ 83%]\n.......................................................                  [100%]\n343 passed in 14.23s\n"
+      "stdout_tail": "........................................................................ [ 20%]\n........................................................................ [ 41%]\n........................................................................ [ 62%]\n........................................................................ [ 83%]\n.........................................................                [100%]\n345 passed in 16.42s\n"
     },
     {
       "command": [
@@ -50,9 +50,9 @@
       "name": "contract",
       "ok": true,
       "returncode": 0,
-      "schema_count": 23,
+      "schema_count": 24,
       "stderr_tail": "",
-      "stdout_tail": "validated 23 Retort contracts"
+      "stdout_tail": "validated 24 Retort contracts"
     }
   ],
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
@@ -61,8 +61,8 @@
     "all_gates_passed": true,
     "command_name": "quality-gates",
     "contract_passed": true,
-    "contract_schema_count": 23,
-    "duration_sec": 14.445,
+    "contract_schema_count": 24,
+    "duration_sec": 16.732,
     "gate_count": 3,
     "lint_passed": true,
     "passed_count": 3,
