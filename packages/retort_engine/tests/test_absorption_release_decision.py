@@ -14,7 +14,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 24
+    assert result["summary"]["ready_decision_count"] == 25
     assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["product_mainline_absorption_ready"] is True
@@ -25,6 +25,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     assert result["summary"]["external_advantage_repeat_ready"] is True
     assert result["summary"]["upstream_pr_ci_ready"] is True
     assert result["summary"]["competitor_runtime_ready"] is True
+    assert result["summary"]["competitor_blind_adjudication_ready"] is True
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -208,7 +209,17 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True, "total_case_evaluation_count": 12}},
         "retort_upstream_pr_ci_probe.json": {
             "status": "ready",
-            "summary": {"merged": True, "all_check_runs_successful": True, "check_run_count": 34},
+            "summary": {
+                "merged": True,
+                "all_check_runs_successful": True,
+                "check_run_count": 34,
+                "multi_repo_ci_generalization": True,
+                "distinct_repo_count": 3,
+                "ready_target_count": 3,
+                "target_count": 3,
+                "all_target_check_runs_successful": True,
+                "total_check_run_count": 71,
+            },
         },
         "retort_competitor_runtime_comparison.json": {
             "status": "ready",
@@ -222,6 +233,17 @@ def _write_decision_inputs(root: Path) -> None:
                 "all_live_upstream_sources_materialized": True,
                 "live_upstream_verified_count": 3,
                 "retort_exceeds_patch_parser_by_semantic_comments": True,
+            },
+        },
+        "retort_competitor_blind_adjudication.json": {
+            "status": "ready",
+            "summary": {
+                "all_competitors_blind_accepted": True,
+                "accepted_competitor_count": 3,
+                "competitor_count": 3,
+                "minimum_blind_delta": 56,
+                "script_imports_retort_engine": False,
+                "input_contains_score_fields": False,
             },
         },
         "retort_heterogeneous_absorption_replay.json": {

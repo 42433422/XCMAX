@@ -121,6 +121,15 @@
     },
     {
       "action": "allow",
+      "dimension": "comparative_analysis_depth",
+      "evidence": [
+        "competitor_blind_adjudication"
+      ],
+      "name": "prove_competitor_blind_adjudication",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "cross_language_absorption",
       "evidence": [
         "heterogeneous_absorption_replay"
@@ -238,6 +247,7 @@
       "retort_external_advantage_repeat.json",
       "retort_upstream_pr_ci_probe.json",
       "retort_competitor_runtime_comparison.json",
+      "retort_competitor_blind_adjudication.json",
       "retort_heterogeneous_absorption_replay.json",
       "retort_cross_domain_absorption_replay.json",
       "retort_cross_domain_end_to_end.json",
@@ -255,6 +265,11 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
+    "competitor_blind_adjudication_accepted": 3,
+    "competitor_blind_adjudication_competitors": 3,
+    "competitor_blind_adjudication_imports_retort": false,
+    "competitor_blind_adjudication_min_delta": 56,
+    "competitor_blind_adjudication_ready": true,
     "competitor_runtime_hunks": 2,
     "competitor_runtime_live_upstream_materialized": true,
     "competitor_runtime_live_upstream_projects": 3,
@@ -284,7 +299,7 @@
     "cross_domain_end_to_end_domains": 10,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_end_to_end_review_status": "reviewed",
-    "decision_count": 24,
+    "decision_count": 25,
     "employee_patch_ready": true,
     "employee_patch_stress_post_rollback_gates": 120,
     "employee_patch_stress_ready": true,
@@ -321,14 +336,19 @@
     "product_mainline_absorption_merge": true,
     "product_mainline_absorption_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 24,
+    "ready_decision_count": 25,
     "recovery_ready": true,
     "review_family_behavior_outputs": true,
     "review_family_behavior_python_cases": 1,
     "review_family_behavior_ready": true,
     "review_family_behavior_typescript_cases": 2,
     "upstream_pr_ci_all_successful": true,
-    "upstream_pr_ci_check_runs": 34,
-    "upstream_pr_ci_ready": true
+    "upstream_pr_ci_all_targets_successful": true,
+    "upstream_pr_ci_check_runs": 30,
+    "upstream_pr_ci_distinct_repos": 3,
+    "upstream_pr_ci_ready": true,
+    "upstream_pr_ci_ready_targets": 3,
+    "upstream_pr_ci_target_count": 3,
+    "upstream_pr_ci_total_check_runs": 71
   }
 }

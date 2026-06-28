@@ -1,0 +1,74 @@
+{
+  "artifacts": {
+    "input": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_input.json",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df",
+    "output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_output.json",
+    "script": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_adjudicator.py"
+  },
+  "cases": [
+    {
+      "accepted": true,
+      "blind_delta": 68,
+      "competitor_artifact_score": 52,
+      "kind": "node_patch_parser",
+      "label": "retort_wins",
+      "live_upstream_materialized": true,
+      "output_sha256": "569d8e1cd4f7b8a0316721bf1fe2d5142441355ac120a25723e688c4b0153b2d",
+      "project": "mopemope/pr-ai-review-bot",
+      "retort_artifact_score": 120
+    },
+    {
+      "accepted": true,
+      "blind_delta": 76,
+      "competitor_artifact_score": 44,
+      "kind": "python_review_signal_counter",
+      "label": "retort_wins",
+      "live_upstream_materialized": true,
+      "output_sha256": "9da1b493e93941d7abc635ae381fa80cc20b0bb4599cd8df4bf0e0961dcdfedb",
+      "project": "qodo-ai/pr-agent",
+      "retort_artifact_score": 120
+    },
+    {
+      "accepted": true,
+      "blind_delta": 56,
+      "competitor_artifact_score": 64,
+      "kind": "python_diff_diagnostic_mapper",
+      "label": "retort_wins",
+      "live_upstream_materialized": true,
+      "output_sha256": "e25cb75f124fe0c3e225da4394e65c51b11c562c162cccab18e292bb1aaee793",
+      "project": "reviewdog/reviewdog",
+      "retort_artifact_score": 120
+    }
+  ],
+  "evidence": {
+    "acceptance": "independent_process_labels_retort_wins_against_each_competitor_without_score_fields",
+    "boundary": "generated_subprocess_script_imports_no_retort_engine_modules",
+    "comparison_source": "retort_competitor_runtime_comparison_artifacts_not_summary_scores",
+    "human_reviewed": false,
+    "style": "out_of_package_blind_competitor_artifact_adjudication"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "accepted_competitor_count": 3,
+    "all_competitors_blind_accepted": true,
+    "average_blind_delta": 66.67,
+    "blind_delta_floor": 45,
+    "blind_delta_floor_met": true,
+    "comparison_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_competitor_runtime_comparison.json",
+    "comparison_status": "ready",
+    "competitor_count": 3,
+    "duration_sec": 0.023,
+    "external_process_returncode": 0,
+    "external_process_stderr_tail": "",
+    "external_process_stdout_tail": "",
+    "input_contains_score_fields": false,
+    "input_sha256": "fdefff51784366bcd03af8ce4dd636c3b402657e070d24fbe7ae597f2257fa68",
+    "min_competitors": 3,
+    "minimum_blind_delta": 56,
+    "output_contains_labels": true,
+    "output_sha256": "c90cf35e80c2427140162bea112743002a1a2b3e0dd3db656611ead11981edb6",
+    "script_imports_retort_engine": false,
+    "script_sha256": "948248f90a01da1f7d169184141b66007352a36a673337e7277d8ab5f68552a8"
+  }
+}
