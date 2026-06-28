@@ -1,6 +1,0 @@
-diff --git a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py
---- /dev/null
-+++ b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py
-@@ -0,0 +1,2 @@
-+def retry_repair(:
-+    return 'broken'

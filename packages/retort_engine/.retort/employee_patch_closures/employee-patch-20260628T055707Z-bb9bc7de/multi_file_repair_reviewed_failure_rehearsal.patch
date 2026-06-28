@@ -1,6 +1,0 @@
-diff --git a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py
---- /dev/null
-+++ b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py
-@@ -0,0 +1,2 @@
-+def rollback_rehearsal_multi_file_repair_reviewed(:
-+    return 'must-rollback'
