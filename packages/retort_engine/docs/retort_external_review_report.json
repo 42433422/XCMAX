@@ -1,174 +1,79 @@
 {
   "absorbed_signals": [
-    "review_pipeline",
-    "file_grouping",
     "benchmarking",
-    "plugin_surface",
-    "multi_provider"
+    "plugin_surface"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/existential-birds/daydream",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/ionelmc/pytest-benchmark",
   "external_snapshot": {
-    "file_count": 333,
-    "git_revision": "2420b94fe00acc0c69f97a486b0352202bec4216",
+    "file_count": 106,
+    "git_revision": "47d66c88b84b5b11cc78e465cfc655d0a02de740",
     "suffix_counts": {
-      ".diff": 5,
-      ".json": 17,
-      ".jsonl": 22,
-      ".lock": 1,
-      ".md": 26,
-      ".py": 235,
-      ".sh": 2,
-      ".toml": 1,
-      ".txt": 5,
-      ".yml": 10,
-      "<none>": 9
+      ".cfg": 1,
+      ".in": 1,
+      ".ini": 2,
+      ".ipynb": 1,
+      ".json": 30,
+      ".png": 5,
+      ".py": 32,
+      ".rst": 17,
+      ".svg": 1,
+      ".toml": 3,
+      ".txt": 3,
+      ".typed": 1,
+      ".yaml": 1,
+      ".yml": 3,
+      "<none>": 5
     }
   },
-  "generated_at": "2026-06-28T17:55:09Z",
+  "generated_at": "2026-06-28T17:57:32Z",
   "license_review": {
-    "detected_license": "Apache License",
-    "message": "Allowed license detected: Apache License",
+    "detected_license": "BSD 2-Clause License",
+    "message": "Allowed license detected: BSD 2-Clause License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/existential-birds/daydream --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/ionelmc/pytest-benchmark --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 4,
-      "minimum_expected_behavior_tests": 9,
-      "prioritized_component_count": 4,
-      "task_dimension_count": 5
+      "component_gap_count": 1,
+      "minimum_expected_behavior_tests": 5,
+      "prioritized_component_count": 1,
+      "task_dimension_count": 4
     },
     "component_gaps": [
       {
-        "component": "workflow_ci",
+        "component": "benchmark_eval",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 2856,
+        "marker_gap": 252,
         "own_files": 12,
         "representative_external_files": [
-          "CHANGELOG.md",
           "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 1737,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "bench/review-bot-compare/README.md"
-        ]
-      },
-      {
-        "component": "plugin_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 9,
-        "own_files": 12,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/README.md"
-        ]
-      },
-      {
-        "component": "diff_hunk_review",
-        "external_files": 12,
-        "file_gap": 5,
-        "marker_gap": 5,
-        "own_files": 7,
-        "representative_external_files": [
-          "CHANGELOG.md",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/harvest.py",
-          "bench/review-bot-compare/compare.py"
+          "tests/test_skip.py",
+          "tests/test_utils.py",
+          "tests/test_stats.py",
+          "tests/test_sample.py"
         ]
       }
     ],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
-          "component": "provider_surface",
-          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
-          "reason": "early_phase_retort_self_deepening_only",
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/test_replay.py",
-            "bench/review-bot-compare/README.md"
-          ],
-          "status": "closed_until_similarity_saturation"
-        },
-        {
           "component": "plugin_surface",
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
             "pyproject.toml",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/README.md"
+            "tests/test_utils.py",
+            "tests/test_elasticsearch_storage.py",
+            "tests/test_storage.py",
+            "tests/test_benchmark.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
       ],
       "employee_tasks": [
-        {
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-review-pipeline",
-          "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
-        },
-        {
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "dimension": "feedback_loop_closure",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-benchmark-eval",
-          "title": "Deepen benchmark_eval"
-        },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
@@ -183,20 +88,6 @@
           "title": "Deepen safety_policy"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -208,119 +99,24 @@
           "priority": "P1",
           "task_id": "retort-depth-workflow-ci",
           "title": "Deepen workflow_ci"
-        }
-      ],
-      "focus_mode": "similar_function_depth_only",
-      "focused_components": [
-        {
-          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "component": "review_pipeline",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-review-pipeline",
-            "title": "Deepen review_pipeline"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 3034,
-          "own_marker_hits": 3418,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CHANGELOG.md",
-            "pyproject.toml",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/test_replay.py"
-          ]
         },
         {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 42,
-          "own_marker_hits": 129,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CHANGELOG.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/test_replay.py",
-            "tests/conftest.py",
-            "tests/test_deep_orchestrator.py"
-          ]
-        },
-        {
-          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "component": "benchmark_eval",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-            "dimension": "feedback_loop_closure",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "precision or false-positive benchmark counters"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-benchmark-eval",
-            "title": "Deepen benchmark_eval"
-          },
+          "dimension": "feedback_loop_closure",
           "evidence_required": [
             "source diff",
             "behavior test",
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 674,
-          "own_marker_hits": 780,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "bench/review-bot-compare/README.md",
-            "bench/review-bot-compare/replay.py",
-            "bench/review-bot-compare/compare.py"
-          ]
-        },
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval"
+        }
+      ],
+      "focus_mode": "similar_function_depth_only",
+      "focused_components": [
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -344,60 +140,19 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 227,
-          "own_marker_hits": 349,
+          "external_marker_hits": 3,
+          "own_marker_hits": 323,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md",
-            "pyproject.toml",
-            "README.md",
-            "CLAUDE.md",
-            "tests/test_phases.py"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 5,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 26,
-          "own_marker_hits": 21,
-          "priority": "P0",
-          "similarity_score": 97,
-          "source_files": [
-            "CHANGELOG.md",
-            "bench/review-bot-compare/README.md",
-            "bench/review-bot-compare/replay.py",
-            "bench/review-bot-compare/harvest.py",
-            "bench/review-bot-compare/compare.py"
+            "pyproject.toml"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 2856,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -416,16 +171,53 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 6867,
-          "own_marker_hits": 4011,
+          "external_marker_hits": 2104,
+          "own_marker_hits": 4043,
           "priority": "P0",
-          "similarity_score": 93,
+          "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md",
+            ".pre-commit-config.yaml",
             "pyproject.toml",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/test_replay.py"
+            "ci/bootstrap.py",
+            "ci/templates/.github/workflows/github-actions.yml",
+            "tests/test_skip.py"
+          ]
+        },
+        {
+          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "component": "benchmark_eval",
+          "depth_gap": 252,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+            "dimension": "feedback_loop_closure",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "precision or false-positive benchmark counters"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-benchmark-eval",
+            "title": "Deepen benchmark_eval"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "precision or false-positive benchmark counters"
+          ],
+          "external_marker_hits": 1018,
+          "own_marker_hits": 766,
+          "priority": "P0",
+          "similarity_score": 96,
+          "source_files": [
+            "pyproject.toml",
+            "tests/test_skip.py",
+            "tests/test_utils.py",
+            "tests/test_stats.py",
+            "tests/test_sample.py"
           ]
         }
       ],
@@ -433,38 +225,26 @@
       "marketplace_candidates_enabled": false,
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
-        "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "deferred_breadth_component_count": 1,
+        "focused_component_count": 3,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
         "minimum_focused_component_count": 3,
         "passed": true,
-        "rejected_breadth_component_count": 2
+        "rejected_breadth_component_count": 1
       },
       "rejected_breadth_components": [
         {
-          "component": "provider_surface",
-          "external_marker_hits": 2087,
-          "reason": "breadth_only_for_current_phase",
-          "source_files": [
-            "CHANGELOG.md",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/test_replay.py",
-            "bench/review-bot-compare/README.md"
-          ]
-        },
-        {
           "component": "plugin_surface",
-          "external_marker_hits": 804,
+          "external_marker_hits": 42,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
             "pyproject.toml",
-            "README.md",
-            "CLAUDE.md",
-            "bench/review-bot-compare/README.md"
+            "tests/test_utils.py",
+            "tests/test_elasticsearch_storage.py",
+            "tests/test_storage.py",
+            "tests/test_benchmark.py"
           ]
         }
       ]
@@ -472,139 +252,60 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "CHANGELOG.md",
-          "README.md",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/compare.py",
-          "tests/test_analyzer.py",
-          "tests/test_benchmark_score.py",
-          "tests/test_archive_integration.py",
-          "tests/test_cli_main_integration.py",
-          "tests/test_deep_orchestrator.py",
-          "tests/test_ui.py",
-          "tests/test_benchmark_acquire.py"
+          "pyproject.toml",
+          "tests/test_skip.py",
+          "tests/test_utils.py",
+          "tests/test_stats.py",
+          "tests/test_sample.py",
+          "tests/test_elasticsearch_storage.py",
+          "tests/test_storage.py",
+          "tests/test_benchmark.py",
+          "tests/test_pedantic.py",
+          "tests/test_calibration.py",
+          "tests/test_normal.py",
+          "tests/test_with_testcase.py"
         ],
-        "marker_hits": 674
-      },
-      "diff_hunk_review": {
-        "files": [
-          "CHANGELOG.md",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/harvest.py",
-          "bench/review-bot-compare/compare.py",
-          "tests/test_deep_orchestrator.py",
-          "tests/test_deep_prompts.py",
-          "tests/harness/fake_gh.py",
-          "docs/self-hosted-bot-setup.md",
-          ".github/workflows/README.md",
-          "daydream/pr_review.py",
-          "daydream/phases.py"
-        ],
-        "marker_hits": 26
-      },
-      "file_grouping": {
-        "files": [
-          "CHANGELOG.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "tests/conftest.py",
-          "tests/test_deep_orchestrator.py",
-          "tests/test_worktree_cwd_grounding.py",
-          "tests/test_deep_pr_comment_integration.py",
-          "daydream/exploration_runner.py",
-          "daydream/runner.py",
-          "daydream/git_ops.py",
-          "daydream/tree_sitter_index.py",
-          "daydream/phases.py"
-        ],
-        "marker_hits": 42
+        "marker_hits": 1018
       },
       "plugin_surface": {
         "files": [
-          "CHANGELOG.md",
           "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/judge.py",
-          "tests/test_phases.py",
-          "tests/test_deep_merge.py",
-          "tests/test_cutover_ast.py",
-          "tests/test_git_ops.py",
-          "tests/test_read_only_enforcement.py"
+          "tests/test_utils.py",
+          "tests/test_elasticsearch_storage.py",
+          "tests/test_storage.py",
+          "tests/test_benchmark.py",
+          "tests/test_normal.py",
+          "tests/test_cli.py",
+          "docs/conf.py",
+          "src/pytest_benchmark/session.py",
+          "src/pytest_benchmark/logger.py",
+          "src/pytest_benchmark/cli.py",
+          "src/pytest_benchmark/plugin.py"
         ],
-        "marker_hits": 804
-      },
-      "provider_surface": {
-        "files": [
-          "CHANGELOG.md",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/judge.py",
-          "bench/review-bot-compare/compare.py",
-          "tests/test_phases.py",
-          "tests/test_deep_merge.py",
-          "tests/test_github_app_integration.py",
-          "tests/test_git_ops.py",
-          "tests/test_benchmark_score.py"
-        ],
-        "marker_hits": 2087
-      },
-      "review_pipeline": {
-        "files": [
-          "CHANGELOG.md",
-          "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/common.py",
-          "bench/review-bot-compare/harvest.py",
-          "bench/review-bot-compare/judge.py",
-          "bench/review-bot-compare/compare.py",
-          "tests/test_json_utils.py"
-        ],
-        "marker_hits": 3034
+        "marker_hits": 42
       },
       "safety_policy": {
         "files": [
-          "CHANGELOG.md",
-          "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "tests/test_phases.py",
-          "tests/test_read_only_enforcement.py",
-          "tests/test_workflow_templates.py",
-          "tests/test_findings.py",
-          "tests/test_backend_claude.py",
-          "tests/test_github_app.py",
-          "tests/test_codex_real_cli_contract.py",
-          "tests/test_trajectory.py"
+          "pyproject.toml"
         ],
-        "marker_hits": 227
+        "marker_hits": 3
       },
       "workflow_ci": {
         "files": [
-          "CHANGELOG.md",
+          ".pre-commit-config.yaml",
           "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/common.py",
-          "bench/review-bot-compare/harvest.py",
-          "bench/review-bot-compare/judge.py",
-          "bench/review-bot-compare/compare.py",
-          "tests/test_json_utils.py"
+          "ci/bootstrap.py",
+          "ci/templates/.github/workflows/github-actions.yml",
+          "tests/test_skip.py",
+          "tests/test_utils.py",
+          "tests/test_stats.py",
+          "tests/test_sample.py",
+          "tests/test_elasticsearch_storage.py",
+          "tests/test_storage.py",
+          "tests/test_benchmark.py",
+          "tests/test_pedantic.py"
         ],
-        "marker_hits": 6867
+        "marker_hits": 2104
       }
     },
     "own_file_groups": {
@@ -623,7 +324,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 780
+        "marker_hits": 766
       },
       "diff_hunk_review": {
         "files": [
@@ -652,7 +353,7 @@
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 129
+        "marker_hits": 130
       },
       "plugin_surface": {
         "files": [
@@ -669,7 +370,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 795
+        "marker_hits": 805
       },
       "provider_surface": {
         "files": [
@@ -686,7 +387,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 350
+        "marker_hits": 337
       },
       "review_pipeline": {
         "files": [
@@ -703,7 +404,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3418
+        "marker_hits": 3559
       },
       "safety_policy": {
         "files": [
@@ -720,7 +421,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 349
+        "marker_hits": 323
       },
       "workflow_ci": {
         "files": [
@@ -737,7 +438,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 4011
+        "marker_hits": 4043
       }
     },
     "pipeline_stages": [
@@ -751,130 +452,61 @@
     ],
     "prioritized_absorptions": [
       {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
+        "acceptance": "Retort has a tested benchmark_eval behavior, not only a recorded signal.",
+        "component": "benchmark_eval",
         "priority": "P0",
         "source_files": [
-          "CHANGELOG.md",
           "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "CHANGELOG.md",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/test_replay.py",
-          "bench/review-bot-compare/README.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
-        "component": "plugin_surface",
-        "priority": "P1",
-        "source_files": [
-          "CHANGELOG.md",
-          "pyproject.toml",
-          "README.md",
-          "CLAUDE.md",
-          "bench/review-bot-compare/README.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested diff_hunk_review behavior, not only a recorded signal.",
-        "component": "diff_hunk_review",
-        "priority": "P1",
-        "source_files": [
-          "CHANGELOG.md",
-          "bench/review-bot-compare/README.md",
-          "bench/review-bot-compare/replay.py",
-          "bench/review-bot-compare/harvest.py",
-          "bench/review-bot-compare/compare.py"
+          "tests/test_skip.py",
+          "tests/test_utils.py",
+          "tests/test_stats.py",
+          "tests/test_sample.py"
         ]
       }
     ]
   },
-  "run_id": "20260628175502-a237875a09",
+  "run_id": "20260628175727-73d4b9ea48",
   "semantic_review": {
     "external": {
-      "classes": 455,
-      "cli_markers": 0,
-      "functions": 3365,
-      "source_files": 289,
-      "test_markers": 2036,
-      "workflow_markers": 3354
+      "classes": 53,
+      "cli_markers": 1,
+      "functions": 486,
+      "source_files": 69,
+      "test_markers": 202,
+      "workflow_markers": 2
     },
     "gaps": [
       {
-        "external_advantage": 406,
+        "external_advantage": 4,
         "metric": "classes"
-      },
-      {
-        "external_advantage": 2594,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 136,
-        "metric": "source_files"
-      },
-      {
-        "external_advantage": 1811,
-        "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 153,
+      "source_files": 154,
       "test_markers": 225,
-      "workflow_markers": 4276
+      "workflow_markers": 4428
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "CHANGELOG.md",
-      "README.md",
-      "bench/review-bot-compare/README.md",
-      "bench/review-bot-compare/replay.py",
-      "bench/review-bot-compare/compare.py"
-    ],
-    "file_grouping": [
-      "CHANGELOG.md",
-      "bench/review-bot-compare/test_replay.py",
-      "tests/conftest.py",
-      "tests/test_worktree_cwd_grounding.py",
-      "tests/test_deep_pr_comment_integration.py"
-    ],
-    "multi_provider": [
-      "CHANGELOG.md",
-      "README.md",
-      "CLAUDE.md",
-      "bench/review-bot-compare/test_replay.py",
-      "bench/review-bot-compare/README.md"
+      "pyproject.toml",
+      "tests/test_skip.py",
+      "tests/test_utils.py",
+      "tests/test_stats.py",
+      "tests/test_sample.py"
     ],
     "plugin_surface": [
-      "CHANGELOG.md",
       "pyproject.toml",
-      "README.md",
-      "CLAUDE.md",
-      "bench/review-bot-compare/README.md"
-    ],
-    "review_pipeline": [
-      "CHANGELOG.md",
-      "pyproject.toml",
-      "README.md",
-      "CLAUDE.md",
-      "bench/review-bot-compare/replay.py"
+      "tests/test_utils.py",
+      "tests/test_elasticsearch_storage.py",
+      "tests/test_storage.py",
+      "tests/test_benchmark.py"
     ]
   },
-  "source": "https://github.com/existential-birds/daydream",
+  "source": "https://github.com/ionelmc/pytest-benchmark",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -882,7 +514,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/existential-birds/daydream."
+      "why": "Compare implementation patterns from https://github.com/ionelmc/pytest-benchmark."
     },
     {
       "dimension": "product_operability",
@@ -890,7 +522,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/existential-birds/daydream."
+      "why": "Extract usable UX improvements from https://github.com/ionelmc/pytest-benchmark."
     },
     {
       "dimension": "operational_readiness",
@@ -898,23 +530,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/existential-birds/daydream."
-    },
-    {
-      "dimension": "comparative_analysis_depth",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-review-pipeline",
-      "title": "Adopt deterministic review pipeline stages",
-      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+      "why": "Adapt CI and release checks from https://github.com/ionelmc/pytest-benchmark."
     },
     {
       "dimension": "feedback_loop_closure",
