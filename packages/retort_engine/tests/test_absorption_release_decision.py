@@ -14,7 +14,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 21
+    assert result["summary"]["ready_decision_count"] == 23
     assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
@@ -27,9 +27,11 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
+    assert result["summary"]["cross_domain_ci_regression_ready"] is True
     assert result["summary"]["contract_runtime_rehearsal_ready"] is True
     assert result["summary"]["contract_stability_stress_ready"] is True
     assert result["summary"]["employee_patch_stress_ready"] is True
+    assert result["summary"]["employee_scheduler_stress_ready"] is True
     assert result["summary"]["review_family_behavior_ready"] is True
     assert result["summary"]["external_merge_landing_ready"] is True
     assert result["summary"]["failure_rollback_ready"] is True
@@ -161,6 +163,15 @@ def _write_decision_inputs(root: Path) -> None:
                 "all_post_rollback_gates_passed": True,
             },
         },
+        "retort_employee_scheduler_stress.json": {
+            "status": "ready",
+            "summary": {
+                "unique_successful_process_id_count": 30,
+                "queued_task_count": 30,
+                "pid_isolation_verified": True,
+                "queue_result_history_consistent": True,
+            },
+        },
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}},
         "retort_external_advantage_matrix.json": {
             "status": "ready",
@@ -197,6 +208,8 @@ def _write_decision_inputs(root: Path) -> None:
                 "ready_competitor_project_count": 3,
                 "competitor_project_count": 3,
                 "all_external_processes_successful": True,
+                "all_live_upstream_sources_verified": True,
+                "live_upstream_verified_count": 3,
                 "retort_exceeds_patch_parser_by_semantic_comments": True,
             },
         },
@@ -220,6 +233,16 @@ def _write_decision_inputs(root: Path) -> None:
                 "all_stages_chained": True,
                 "all_stage_outputs_consumed": True,
                 "integrated_review_status": "reviewed",
+            },
+        },
+        "retort_cross_domain_ci_regression.json": {
+            "status": "ready",
+            "summary": {
+                "ready_round_count": 3,
+                "round_count": 3,
+                "all_output_assertions_passed": True,
+                "stable_domain_count": True,
+                "total_domain_replay_count": 30,
             },
         },
         "retort_contract_runtime_rehearsal.json": {

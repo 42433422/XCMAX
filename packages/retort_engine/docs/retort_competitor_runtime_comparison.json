@@ -1,14 +1,14 @@
 {
   "artifacts": {
-    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/competitor_outputs.json",
+    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/competitor_outputs.json",
     "external_runners": [
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope_patch_runtime.js",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo_pr_agent_runtime.py",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog_diff_runtime.py"
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/mopemope_patch_runtime.js",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/qodo_pr_agent_runtime.py",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/reviewdog_diff_runtime.py"
     ],
-    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/input.patch",
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc",
-    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/retort_output.json"
+    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/input.patch",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e",
+    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/retort_output.json"
   },
   "competitor_output": {
     "primary": {
@@ -88,6 +88,19 @@
         "external_process_stdout_tail": "",
         "finding_count": 0,
         "kind": "node_patch_parser",
+        "live_upstream": {
+          "default_branch": "main",
+          "download_url": "https://raw.githubusercontent.com/mopemope/pr-ai-review-bot/main/src/patchParser.ts",
+          "html_url": "https://github.com/mopemope/pr-ai-review-bot/blob/main/src/patchParser.ts",
+          "project": "mopemope/pr-ai-review-bot",
+          "repo_api_returncode": 0,
+          "requested": true,
+          "source": "src/patchParser.ts",
+          "source_api_returncode": 0,
+          "source_sha": "b6cf546ae5dcd0f98df9fb4776bc838a0185dc2a",
+          "stderr_tail": "",
+          "verified": true
+        },
         "output": {
           "added_line_count": 4,
           "hunk_count": 2,
@@ -157,11 +170,11 @@
           ],
           "status": "parsed"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope__pr-ai-review-bot_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/mopemope__pr-ai-review-bot_output.json",
         "project": "mopemope/pr-ai-review-bot",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope_patch_runtime.js",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/mopemope_patch_runtime.js",
         "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
         "source_exists": true,
         "source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093"
@@ -172,6 +185,19 @@
         "external_process_stdout_tail": "",
         "finding_count": 2,
         "kind": "python_review_signal_counter",
+        "live_upstream": {
+          "default_branch": "main",
+          "download_url": "https://raw.githubusercontent.com/The-PR-Agent/pr-agent/main/pr_agent/tools/pr_reviewer.py",
+          "html_url": "https://github.com/The-PR-Agent/pr-agent/blob/main/pr_agent/tools/pr_reviewer.py",
+          "project": "qodo-ai/pr-agent",
+          "repo_api_returncode": 0,
+          "requested": true,
+          "source": "pr_agent/tools/pr_reviewer.py",
+          "source_api_returncode": 0,
+          "source_sha": "c4917f3597865d5a677753ddc40b6fc75d2fdfb7",
+          "stderr_tail": "",
+          "verified": true
+        },
         "output": {
           "finding_count": 2,
           "findings": [
@@ -192,11 +218,11 @@
           ],
           "status": "review_signal_counted"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo-ai__pr-agent_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/qodo-ai__pr-agent_output.json",
         "project": "qodo-ai/pr-agent",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo_pr_agent_runtime.py",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/qodo_pr_agent_runtime.py",
         "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
         "source_exists": true,
         "source_sha256": "1fe7d662b6a41bad76e2bb183054a389a3b7a0850b92c2da0fccbe05edf1568d"
@@ -207,6 +233,19 @@
         "external_process_stdout_tail": "",
         "finding_count": 3,
         "kind": "python_diff_diagnostic_mapper",
+        "live_upstream": {
+          "default_branch": "master",
+          "download_url": "https://raw.githubusercontent.com/reviewdog/reviewdog/master/diff/parse.go",
+          "html_url": "https://github.com/reviewdog/reviewdog/blob/master/diff/parse.go",
+          "project": "reviewdog/reviewdog",
+          "repo_api_returncode": 0,
+          "requested": true,
+          "source": "diff/parse.go",
+          "source_api_returncode": 0,
+          "source_sha": "79b25c2ececc3f8ec2ba19c535091ddeb9dc0eba",
+          "stderr_tail": "",
+          "verified": true
+        },
         "output": {
           "diagnostics": [
             {
@@ -228,11 +267,11 @@
           "finding_count": 3,
           "status": "diagnostics_mapped"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog__reviewdog_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/reviewdog__reviewdog_output.json",
         "project": "reviewdog/reviewdog",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog_diff_runtime.py",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T081947Z-569ebb3e/reviewdog_diff_runtime.py",
         "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go",
         "source_exists": true,
         "source_sha256": "bce44c0d57e0993029214cabf0332eb70c136788a08ff87098b6834883caded0"
@@ -523,6 +562,7 @@
   "summary": {
     "all_competitor_sources_exist": true,
     "all_external_processes_successful": true,
+    "all_live_upstream_sources_verified": true,
     "competitor_added_line_count": 4,
     "competitor_finding_count": 5,
     "competitor_hunk_count": 2,
@@ -536,12 +576,20 @@
     "competitor_root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
     "competitor_source_exists": true,
     "competitor_source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093",
-    "duration_sec": 0.115,
+    "duration_sec": 9.431,
     "external_process_count": 3,
     "external_process_returncode": 0,
     "external_process_stderr_tail": "",
     "external_process_stdout_tail": "",
     "external_process_success_count": 3,
+    "live_upstream_probe_count": 3,
+    "live_upstream_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent",
+      "reviewdog/reviewdog"
+    ],
+    "live_upstream_requested": true,
+    "live_upstream_verified_count": 3,
     "multi_competitor_side_by_side": true,
     "ready_competitor_project_count": 3,
     "real_cached_project_count": 3,

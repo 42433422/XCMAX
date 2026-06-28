@@ -214,6 +214,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
             "artifacts": {},
             "evidence": {},
         },
+        "cross_domain_ci_regression_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}},
         "contract_runtime_rehearsal_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "contract_stability_stress_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}},
         "review_family_behavior_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},

@@ -142,6 +142,32 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_employee_scheduler_stress.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "round_count": 10,
+                    "workers_per_round": 3,
+                    "process_invocation_count": 30,
+                    "unique_process_id_count": 30,
+                    "unique_successful_process_id_count": 30,
+                    "pid_isolation_verified": True,
+                    "queued_task_count": 30,
+                    "completed_result_count": 30,
+                    "history_task_result_count": 30,
+                    "missing_result_count": 0,
+                    "failed_process_count": 0,
+                    "queue_result_history_consistent": True,
+                    "independent_process_verified": True,
+                    "concurrent_workers_verified": True,
+                },
+                "rounds": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_quality_gate_bundle.json").write_text(
         json.dumps(
             {
@@ -311,6 +337,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "external_process_count": 3,
                     "all_external_processes_successful": True,
                     "multi_competitor_side_by_side": True,
+                    "live_upstream_requested": True,
+                    "live_upstream_verified_count": 3,
+                    "live_upstream_probe_count": 3,
+                    "all_live_upstream_sources_verified": True,
                     "competitor_source_exists": True,
                     "competitor_source_sha256": "123",
                     "competitor_hunk_count": 2,
@@ -438,6 +468,25 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "runs": [],
                 "evidence": {"acceptance": ">100 concurrent workers across repeated rounds with zero state leaks"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_cross_domain_ci_regression.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "round_count": 3,
+                    "ready_round_count": 3,
+                    "minimum_linked_domain_count": 10,
+                    "total_domain_replay_count": 30,
+                    "stable_domain_count": True,
+                    "all_output_assertions_passed": True,
+                    "ci_command": "retort cross-domain-ci-regression --project <project> --rounds 3 --min-domains 10",
+                },
+                "runs": [],
+                "evidence": {},
             }
         ),
         encoding="utf-8",
@@ -571,6 +620,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "employee_patch_stress_ready": True,
                     "contract_stability_ready": True,
                     "cross_domain_end_to_end_ready": True,
+                    "cross_domain_ci_regression_ready": True,
                     "manifest_path": ".retort/operator_journey_replays/run.manifest.json",
                     "single_command_surface": True,
                 },
@@ -787,6 +837,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_runtime_comparison_ready_projects=3" in evidence
     assert "competitor_runtime_comparison_external_processes=3/3" in evidence
     assert "competitor_runtime_comparison_multi_side_by_side=True" in evidence
+    assert "competitor_runtime_comparison_live_upstream_verified=3/3" in evidence
+    assert "competitor_runtime_comparison_all_live_upstream_verified=True" in evidence
     assert "competitor_runtime_comparison_hunks=2" in evidence
     assert "competitor_runtime_comparison_retort_comments=4" in evidence
     assert "competitor_runtime_comparison_side_by_side=True" in evidence
@@ -804,6 +856,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "cross_domain_end_to_end_all_stages_chained=True" in evidence
     assert "cross_domain_end_to_end_all_outputs_consumed=True" in evidence
     assert "cross_domain_end_to_end_runtime=retort_engine.pr_review.review_diff" in evidence
+    assert "cross_domain_ci_regression_status=ready" in evidence
+    assert "cross_domain_ci_regression_rounds=3/3" in evidence
+    assert "cross_domain_ci_regression_total_domains=30" in evidence
+    assert "cross_domain_ci_regression_all_assertions=True" in evidence
     assert "contract_runtime_rehearsal_status=ready" in evidence
     assert "contract_runtime_rehearsal_ready_cases=3/3" in evidence
     assert "contract_runtime_rehearsal_violations_rejected=3" in evidence
@@ -825,6 +881,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_patch_stress_rollbacks=120" in evidence
     assert "employee_patch_stress_state_leaks=0" in evidence
     assert "employee_patch_stress_all_rollbacks=True" in evidence
+    assert "employee_scheduler_stress_unique_process_ids=30" in evidence
+    assert "employee_scheduler_stress_successful_process_ids=30" in evidence
+    assert "employee_scheduler_stress_pid_isolation_verified=True" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
     assert "review_family_behavior_replay_language_families=python,typescript" in evidence
@@ -889,6 +948,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_upstream_pr_ci_ready=True" in evidence
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
     assert "operator_journey_replay_employee_patch_stress_ready=True" in evidence
+    assert "operator_journey_replay_cross_domain_ci_regression_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence
 
 

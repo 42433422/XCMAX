@@ -18,6 +18,7 @@ from retort_engine.contract_stability_stress import build_contract_stability_str
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_ci_regression import build_cross_domain_ci_regression
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_patch_stress import build_employee_patch_stress
@@ -253,6 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     competitor_runtime = sub.add_parser("competitor-runtime-comparison")
     competitor_runtime.add_argument("--project", default=".")
     competitor_runtime.add_argument("--competitor-root", default="")
+    competitor_runtime.add_argument("--live-upstream", action="store_true")
     competitor_runtime.add_argument("--output", default="")
     competitor_runtime.add_argument("--json", action="store_true")
     heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
@@ -270,6 +272,12 @@ def main(argv: list[str] | None = None) -> int:
     cross_domain_e2e.add_argument("--min-domains", type=int, default=10)
     cross_domain_e2e.add_argument("--output", default="")
     cross_domain_e2e.add_argument("--json", action="store_true")
+    cross_domain_ci = sub.add_parser("cross-domain-ci-regression")
+    cross_domain_ci.add_argument("--project", default=".")
+    cross_domain_ci.add_argument("--rounds", type=int, default=3)
+    cross_domain_ci.add_argument("--min-domains", type=int, default=10)
+    cross_domain_ci.add_argument("--output", default="")
+    cross_domain_ci.add_argument("--json", action="store_true")
     contract_runtime = sub.add_parser("contract-runtime-rehearsal")
     contract_runtime.add_argument("--project", default=".")
     contract_runtime.add_argument("--concurrent-workers", type=int, default=120)
@@ -747,7 +755,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "competitor-runtime-comparison":
-        result = build_competitor_runtime_comparison(args.project, competitor_root=args.competitor_root, output=args.output)
+        result = build_competitor_runtime_comparison(args.project, competitor_root=args.competitor_root, live_upstream=args.live_upstream, output=args.output)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -785,6 +793,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort cross-domain end-to-end status: {result['status']}")
             print(f"Linked domains: {result['summary']['linked_domain_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "cross-domain-ci-regression":
+        result = build_cross_domain_ci_regression(args.project, rounds=args.rounds, min_domains=args.min_domains, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort cross-domain CI regression status: {result['status']}")
+            print(f"Ready rounds: {result['summary']['ready_round_count']}/{result['summary']['round_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

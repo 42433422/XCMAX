@@ -22,7 +22,7 @@
       "sha256": "3e233564781026388005173bcdf0adf21ab16166863e3f99988b5a4645443267"
     },
     {
-      "bytes": 3426,
+      "bytes": 3507,
       "exists": true,
       "kind": "source_report",
       "name": "quality_gate_bundle",
@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "38443d1e65aa1c74ade67c67e16cc1f9df616ac6324de4d016073d621a7798e9"
+      "sha256": "e417f99165239997faa3ae38e3cd6ce6f8c58cab6be39a6e813967823b800981"
     },
     {
       "bytes": 10384,
@@ -169,7 +169,7 @@
       "sha256": "a19d6614ba225169dc050ff3fdc49f3d1655f0b4200982ab5da6294f2a0786c8"
     },
     {
-      "bytes": 110796,
+      "bytes": 110376,
       "exists": true,
       "kind": "source_report",
       "name": "employee_scheduler_stress",
@@ -187,7 +187,7 @@
         "rounds"
       ],
       "required_fields_ready": true,
-      "sha256": "f73bc91007815a77e85c4bd0b450e4c8a929da020685e4a64bd2ca5d5a57bd3e"
+      "sha256": "d423016ec0ddd27600e85235cee08a746d5334dffe350dc10032e98aa1633e5a"
     },
     {
       "bytes": 3309,
@@ -400,7 +400,7 @@
       "sha256": "8113da2bba7a1036faea93396a24cd9aa3c8fa216cdbe8e33621b6d3d626b68b"
     },
     {
-      "bytes": 21751,
+      "bytes": 23843,
       "exists": true,
       "kind": "source_report",
       "name": "competitor_runtime_comparison",
@@ -418,7 +418,7 @@
         "competitor_output"
       ],
       "required_fields_ready": true,
-      "sha256": "1820c074cd5dff5306165d0ee8777cbde680f08ce92ad0a68e248cce7939398b"
+      "sha256": "b8320052857a34f8453c745ab5c363f35d7a8affffc10c8192329a0e0b71acd9"
     },
     {
       "bytes": 12576,
@@ -482,6 +482,27 @@
       ],
       "required_fields_ready": true,
       "sha256": "135d0731f79a6af108b7617d154b7fc6a0c0ba1f9bdf834f88a814a8a8e06285"
+    },
+    {
+      "bytes": 3329,
+      "exists": true,
+      "kind": "source_report",
+      "name": "cross_domain_ci_regression",
+      "path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_cross_domain_ci_regression.json",
+      "relative_path": "docs/retort_cross_domain_ci_regression.json",
+      "required_field_count": 3,
+      "required_fields": [
+        "status",
+        "summary",
+        "runs"
+      ],
+      "required_fields_present": [
+        "status",
+        "summary",
+        "runs"
+      ],
+      "required_fields_ready": true,
+      "sha256": "3afa13ba08407e7b7875fe4698d9ac6f98cbca1eb14ab48c298e4fdaed0d19bd"
     },
     {
       "bytes": 180546,
@@ -639,6 +660,7 @@
       "docs/retort_heterogeneous_absorption_replay.json",
       "docs/retort_cross_domain_absorption_replay.json",
       "docs/retort_cross_domain_end_to_end.json",
+      "docs/retort_cross_domain_ci_regression.json",
       "docs/retort_contract_runtime_rehearsal.json",
       "docs/retort_contract_stability_stress.json",
       "docs/retort_review_family_behavior_replay.json",
@@ -671,8 +693,8 @@
       "status": "ready"
     },
     "codebase_graph": {
-      "edge_count": 5625,
-      "file_count": 180,
+      "edge_count": 5680,
+      "file_count": 182,
       "hotspot_count": 12,
       "ready": true,
       "status": "ready"
@@ -688,7 +710,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T075356Z-6449e0e8.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T082007Z-cc5426ae.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -720,7 +742,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=38443d1e65aa1c74ade67c67e16cc1f9df616ac6324de4d016073d621a7798e9"
+        "quality_gate_sha=e417f99165239997faa3ae38e3cd6ce6f8c58cab6be39a6e813967823b800981"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -730,7 +752,7 @@
     {
       "evidence": [
         "employee_patch_sha=447cdac09ff7404c128072f02959bf71693e5a0d1cba7caf3a3bec66942e953e",
-        "scheduler_sha=f73bc91007815a77e85c4bd0b450e4c8a929da020685e4a64bd2ca5d5a57bd3e",
+        "scheduler_sha=d423016ec0ddd27600e85235cee08a746d5334dffe350dc10032e98aa1633e5a",
         "employee_results_path=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628053522-hardening-zz-aggregate.json"
       ],
       "name": "employee_long_chain",
@@ -785,7 +807,7 @@
       "evidence": [
         "external_process_sha=924645e5cfece4b3ab87605b405545681b931f274e87b475869ae1231244c6a5",
         "upstream_pr_ci_sha=8113da2bba7a1036faea93396a24cd9aa3c8fa216cdbe8e33621b6d3d626b68b",
-        "competitor_runtime_sha=1820c074cd5dff5306165d0ee8777cbde680f08ce92ad0a68e248cce7939398b"
+        "competitor_runtime_sha=b8320052857a34f8453c745ab5c363f35d7a8affffc10c8192329a0e0b71acd9"
       ],
       "name": "external_independence_probe",
       "ready": true,
@@ -796,7 +818,8 @@
       "evidence": [
         "external_advantage_ci_sha=47217cbaed72602cb98ce6a6c88c0b67069778af855473847ff8559efb3f9478",
         "contract_stability_sha=d72b42d1101446c1698b29badb63442f0acd19a4def91c599fff06f0f7f072be",
-        "cross_domain_end_to_end_sha=135d0731f79a6af108b7617d154b7fc6a0c0ba1f9bdf834f88a814a8a8e06285"
+        "cross_domain_end_to_end_sha=135d0731f79a6af108b7617d154b7fc6a0c0ba1f9bdf834f88a814a8a8e06285",
+        "cross_domain_ci_regression_sha=3afa13ba08407e7b7875fe4698d9ac6f98cbca1eb14ab48c298e4fdaed0d19bd"
       ],
       "name": "sustained_depth_gates",
       "ready": true,
@@ -817,28 +840,29 @@
   "status": "ready",
   "summary": {
     "architecture_contract_ready": true,
-    "artifact_count": 29,
+    "artifact_count": 30,
     "codebase_graph_ready": true,
     "competitor_runtime_ready": true,
     "contract_stability_ready": true,
+    "cross_domain_ci_regression_ready": true,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 2.257,
+    "duration_sec": 3.226,
     "employee_patch_stress_ready": true,
     "external_advantage_ci_ready": true,
     "external_process_adjudication_ready": true,
     "failed_stage_count": 0,
     "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
-    "hashed_artifact_count": 29,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T075356Z-6449e0e8.manifest.json",
+    "hashed_artifact_count": 30,
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T082007Z-cc5426ae.manifest.json",
     "per_run_code_graph_proved": true,
     "ready_stage_count": 11,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T075356Z-6449e0e8",
+    "run_id": "operator-journey-20260628T082007Z-cc5426ae",
     "single_command_surface": true,
-    "source_report_count": 28,
+    "source_report_count": 29,
     "stage_count": 11,
     "upstream_pr_ci_ready": true
   }

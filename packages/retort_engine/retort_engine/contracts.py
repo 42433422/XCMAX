@@ -36,6 +36,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "heterogeneous_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_end_to_end_result": ("status", "project", "summary", "stages", "review", "assertions", "artifacts", "evidence"),
+    "cross_domain_ci_regression_result": ("status", "project", "summary", "runs", "evidence"),
     "contract_runtime_rehearsal_result": ("status", "project", "summary", "cases", "evidence"),
     "contract_stability_stress_result": ("status", "project", "summary", "runs", "evidence"),
     "review_family_behavior_replay_result": ("status", "project", "summary", "cases", "evidence"),

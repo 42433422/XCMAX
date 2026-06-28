@@ -149,6 +149,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "upstream_pr_ci_probe": "upstream-pr-ci-probe" in text and "build_upstream_pr_ci_probe" in text,
         "competitor_runtime_comparison": "competitor-runtime-comparison" in text and "build_competitor_runtime_comparison" in text,
         "cross_domain_end_to_end": "cross-domain-end-to-end" in text and "build_cross_domain_end_to_end" in text,
+        "cross_domain_ci_regression": "cross-domain-ci-regression" in text and "build_cross_domain_ci_regression" in text,
         "contract_stability_stress": "contract-stability-stress" in text and "build_contract_stability_stress" in text,
         "review_adjudication_calibration": "review-adjudication-calibration" in text and "build_review_adjudication_calibration" in text,
         "review_calibration_policy": "calibration_context_rank_weight" in text and "calibration_policy_enabled" in text,
