@@ -5,50 +5,42 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/svetkis/ai-code-review-benchmark",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/rami-code-review/benchmarks",
   "external_snapshot": {
-    "file_count": 25,
-    "git_revision": "e19530eb430a560289f6651a48f39b199dad0978",
+    "file_count": 36,
+    "git_revision": "5a5dc2b2dc89622d56be929615cd18f17d04f35d",
     "suffix_counts": {
-      ".json": 2,
-      ".md": 6,
-      ".py": 9,
-      ".txt": 6,
+      ".cs": 1,
+      ".csv": 1,
+      ".go": 9,
+      ".java": 2,
+      ".js": 1,
+      ".md": 1,
+      ".mod": 1,
+      ".py": 8,
+      ".rs": 1,
+      ".ts": 6,
+      ".tsx": 3,
       "<none>": 2
     }
   },
-  "generated_at": "2026-06-28T13:33:17Z",
+  "generated_at": "2026-06-28T13:37:44Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
+    "detected_license": "Apache License",
+    "message": "Allowed license detected: Apache License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/svetkis/ai-code-review-benchmark --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/rami-code-review/benchmarks --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 1,
-      "minimum_expected_behavior_tests": 5,
-      "prioritized_component_count": 1,
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
       "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 221,
-        "own_files": 12,
-        "representative_external_files": [
-          "models.agentic.json",
-          "models.json",
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
-          "README.md"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -56,11 +48,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "models.agentic.json",
-            "models.json",
-            "compute_metrics.py",
-            "code_review_benchmark_agent.py",
-            "README.md"
+            "README.md",
+            "python/patterns.py",
+            "python/multifile/models.py",
+            "python/multifile/views.py",
+            "typescript/framework_patterns.ts"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -69,9 +61,8 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "models.json",
-            "README.md",
-            "llm_judge.py"
+            "typescript/patterns.ts",
+            "javascript/patterns.js"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -159,16 +150,15 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 153,
-          "own_marker_hits": 2220,
+          "external_marker_hits": 11,
+          "own_marker_hits": 2291,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "compute_metrics.py",
-            "code_review_benchmark_agent.py",
             "README.md",
-            "CONTRIBUTING.md",
-            "llm_judge.py"
+            "python/patterns.py",
+            "typescript/patterns.ts",
+            "javascript/patterns.js"
           ]
         },
         {
@@ -196,16 +186,16 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 139,
-          "own_marker_hits": 487,
+          "external_marker_hits": 66,
+          "own_marker_hits": 629,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "models.json",
-            "compute_metrics.py",
-            "code_review_benchmark_agent.py",
             "README.md",
-            "CONTRIBUTING.md"
+            "go/patterns.go",
+            "go/service.go",
+            "go/cve_patterns.go",
+            "go/async_patterns.go"
           ]
         },
         {
@@ -231,13 +221,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 5,
-          "own_marker_hits": 313,
+          "external_marker_hits": 25,
+          "own_marker_hits": 314,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "README.ru.md"
+            "go/patterns.go",
+            "go/service.go",
+            "go/cve_patterns.go",
+            "python/cve_patterns.py"
           ]
         },
         {
@@ -263,16 +256,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 226,
-          "own_marker_hits": 2443,
+          "external_marker_hits": 225,
+          "own_marker_hits": 2514,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "models.agentic.json",
-            "compute_metrics.py",
-            "code_review_benchmark_agent.py",
             "README.md",
-            "CONTRIBUTING.md"
+            "go/patterns.go",
+            "go/service.go",
+            "go/cve_patterns.go",
+            "go/async_patterns.go"
           ]
         }
       ],
@@ -292,24 +285,23 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 485,
+          "external_marker_hits": 10,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "models.agentic.json",
-            "models.json",
-            "compute_metrics.py",
-            "code_review_benchmark_agent.py",
-            "README.md"
+            "README.md",
+            "python/patterns.py",
+            "python/multifile/models.py",
+            "python/multifile/views.py",
+            "typescript/framework_patterns.ts"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 6,
+          "external_marker_hits": 2,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "models.json",
-            "README.md",
-            "llm_judge.py"
+            "typescript/patterns.ts",
+            "javascript/patterns.js"
           ]
         }
       ]
@@ -317,86 +309,78 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "models.json",
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
           "README.md",
-          "CONTRIBUTING.md",
-          "llm_judge.py",
-          "README.ru.md",
-          "code_review_benchmark.py",
-          "tests/test_agentic_schema.py",
-          ".claude/skills/run-review-benchmark/SKILL.md",
-          ".claude/skills/run-review-benchmark/examples/preflight.md",
-          "scripts/probe_tool_use.py"
+          "go/patterns.go",
+          "go/service.go",
+          "go/cve_patterns.go",
+          "go/async_patterns.go",
+          "go/database.go",
+          "go/design_patterns.go",
+          "python/cve_patterns.py",
+          "python/patterns.py",
+          "python/database.py",
+          "typescript/components.tsx",
+          "typescript/patterns.ts"
         ],
-        "marker_hits": 139
+        "marker_hits": 66
       },
       "plugin_surface": {
         "files": [
-          "models.json",
-          "README.md",
-          "llm_judge.py"
+          "typescript/patterns.ts",
+          "javascript/patterns.js"
         ],
-        "marker_hits": 6
+        "marker_hits": 2
       },
       "provider_surface": {
         "files": [
-          "models.agentic.json",
-          "models.json",
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
           "README.md",
-          "CONTRIBUTING.md",
-          "llm_judge.py",
-          "README.ru.md",
-          "aggregate_findings.py",
-          "code_review_benchmark.py",
-          "tests/test_agentic_schema.py",
-          ".claude/skills/run-review-benchmark/SKILL.md"
+          "python/patterns.py",
+          "python/multifile/models.py",
+          "python/multifile/views.py",
+          "typescript/framework_patterns.ts",
+          "typescript/patterns.ts"
         ],
-        "marker_hits": 485
+        "marker_hits": 10
       },
       "review_pipeline": {
         "files": [
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
           "README.md",
-          "CONTRIBUTING.md",
-          "llm_judge.py",
-          "README.ru.md",
-          "aggregate_findings.py",
-          "code_review_benchmark.py",
-          "tests/test_agentic_schema.py",
-          ".claude/skills/run-review-benchmark/SKILL.md",
-          ".claude/skills/run-review-benchmark/examples/preflight.md",
-          "scripts/probe_tool_use.py"
+          "python/patterns.py",
+          "typescript/patterns.ts",
+          "javascript/patterns.js"
         ],
-        "marker_hits": 153
+        "marker_hits": 11
       },
       "safety_policy": {
         "files": [
           "README.md",
-          "README.ru.md"
+          "go/patterns.go",
+          "go/service.go",
+          "go/cve_patterns.go",
+          "python/cve_patterns.py",
+          "python/patterns.py",
+          "typescript/patterns.ts",
+          "typescript/cve_patterns.ts",
+          "javascript/patterns.js"
         ],
-        "marker_hits": 5
+        "marker_hits": 25
       },
       "workflow_ci": {
         "files": [
-          "models.agentic.json",
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
           "README.md",
-          "CONTRIBUTING.md",
-          "llm_judge.py",
-          "README.ru.md",
-          "aggregate_findings.py",
-          "code_review_benchmark.py",
-          "tests/test_agentic_parse_compat.py",
-          "tests/test_agentic_schema.py",
-          ".claude/skills/run-review-benchmark/SKILL.md"
+          "go/patterns.go",
+          "go/service.go",
+          "go/cve_patterns.go",
+          "go/async_patterns.go",
+          "go/database.go",
+          "go/design_patterns.go",
+          "python/cve_patterns.py",
+          "python/patterns.py",
+          "python/database.py",
+          "python/test_quality.py",
+          "python/multifile/validators.py"
         ],
-        "marker_hits": 226
+        "marker_hits": 225
       }
     },
     "own_file_groups": {
@@ -415,7 +399,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 487
+        "marker_hits": 629
       },
       "diff_hunk_review": {
         "files": [
@@ -459,7 +443,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 633
+        "marker_hits": 641
       },
       "provider_surface": {
         "files": [
@@ -476,7 +460,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 264
+        "marker_hits": 316
       },
       "review_pipeline": {
         "files": [
@@ -493,7 +477,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 2220
+        "marker_hits": 2291
       },
       "safety_policy": {
         "files": [
@@ -510,7 +494,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 313
+        "marker_hits": 314
       },
       "workflow_ci": {
         "files": [
@@ -527,7 +511,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 2443
+        "marker_hits": 2514
       }
     },
     "pipeline_stages": [
@@ -539,72 +523,63 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "models.agentic.json",
-          "models.json",
-          "compute_metrics.py",
-          "code_review_benchmark_agent.py",
-          "README.md"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260628133314-0d152b093c",
+  "run_id": "20260628133741-d4aa91179a",
   "semantic_review": {
     "external": {
-      "classes": 11,
-      "cli_markers": 4,
-      "functions": 95,
-      "source_files": 17,
-      "test_markers": 50,
-      "workflow_markers": 152
+      "classes": 91,
+      "cli_markers": 0,
+      "functions": 705,
+      "source_files": 28,
+      "test_markers": 27,
+      "workflow_markers": 14
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 42,
+        "metric": "classes"
+      }
+    ],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 748,
-      "source_files": 91,
+      "source_files": 92,
       "test_markers": 215,
-      "workflow_markers": 2905
+      "workflow_markers": 2979
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "models.json",
-      "compute_metrics.py",
-      "code_review_benchmark_agent.py",
       "README.md",
-      "CONTRIBUTING.md"
+      "go/patterns.go",
+      "go/service.go",
+      "go/cve_patterns.go",
+      "go/async_patterns.go"
     ],
     "multi_provider": [
-      "models.agentic.json",
-      "models.json",
-      "compute_metrics.py",
-      "code_review_benchmark_agent.py",
-      "README.md"
+      "README.md",
+      "python/patterns.py",
+      "python/multifile/models.py",
+      "python/multifile/views.py",
+      "typescript/framework_patterns.ts"
     ],
     "plugin_surface": [
-      "models.json",
-      "code_review_benchmark_agent.py",
-      "README.md",
-      "llm_judge.py",
-      "aggregate_findings.py"
+      "go/design_patterns.go",
+      "python/patterns.py",
+      "typescript/nav.tsx",
+      "typescript/framework_patterns.ts",
+      "typescript/patterns.ts"
     ],
     "review_pipeline": [
-      "compute_metrics.py",
-      "code_review_benchmark_agent.py",
       "README.md",
-      "CONTRIBUTING.md",
-      "llm_judge.py"
+      "python/patterns.py",
+      "typescript/patterns.ts",
+      "javascript/patterns.js"
     ]
   },
-  "source": "https://github.com/svetkis/ai-code-review-benchmark",
+  "source": "https://github.com/rami-code-review/benchmarks",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -612,7 +587,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/svetkis/ai-code-review-benchmark."
+      "why": "Compare implementation patterns from https://github.com/rami-code-review/benchmarks."
     },
     {
       "dimension": "product_operability",
@@ -620,7 +595,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/svetkis/ai-code-review-benchmark."
+      "why": "Extract usable UX improvements from https://github.com/rami-code-review/benchmarks."
     },
     {
       "dimension": "operational_readiness",
@@ -628,7 +603,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/svetkis/ai-code-review-benchmark."
+      "why": "Adapt CI and release checks from https://github.com/rami-code-review/benchmarks."
     },
     {
       "dimension": "comparative_analysis_depth",
