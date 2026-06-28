@@ -16,6 +16,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_low_permission_pr_degradation_probe, write_readonly_pr_degradation_probe
 from retort_engine.pr_long_run_review import build_pr_long_run_review
@@ -157,6 +158,12 @@ def main(argv: list[str] | None = None) -> int:
     holdout_eval.add_argument("--max-bytes", type=int, default=400000)
     holdout_eval.add_argument("--output", default="")
     holdout_eval.add_argument("--json", action="store_true")
+    failure_rollback = sub.add_parser("pr-failure-rollback-replay")
+    failure_rollback.add_argument("--project", default=".")
+    failure_rollback.add_argument("--pr-url", action="append", default=[])
+    failure_rollback.add_argument("--min-cases", type=int, default=3)
+    failure_rollback.add_argument("--output", default="")
+    failure_rollback.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
@@ -470,6 +477,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort PR holdout blind eval status: {result['status']}")
             print(f"Accepted PRs: {result['summary']['accepted_pr_count']}/{result['summary']['target_pr_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "pr-failure-rollback-replay":
+        result = build_pr_failure_rollback_replay(
+            args.project,
+            pr_urls=args.pr_url or None,
+            min_cases=args.min_cases,
+            output=args.output,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR failure rollback status: {result['status']}")
+            print(f"Rolled back: {result['summary']['rollback_verified_count']}/{result['summary']['target_case_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

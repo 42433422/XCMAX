@@ -16,6 +16,7 @@ from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_low_permission_pr_degradation_probe, run_readonly_pr_degradation_probe
 from retort_engine.pr_long_run_review import build_pr_long_run_review
@@ -118,6 +119,14 @@ class RetortService:
             target_prs=int(payload.get("target_prs") or 20),
             max_comments=int(payload.get("max_comments") or 12),
             max_bytes=int(payload.get("max_bytes") or 400000),
+        )
+
+    def pr_failure_rollback_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
+        return build_pr_failure_rollback_replay(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            pr_urls=urls or None,
+            min_cases=int(payload.get("min_cases") or 3),
         )
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -270,6 +279,10 @@ def create_app() -> Any:
     @app.post("/pr-holdout-blind-eval")
     def pr_holdout_blind_eval_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.pr_holdout_blind_eval(payload)
+
+    @app.post("/pr-failure-rollback-replay")
+    def pr_failure_rollback_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.pr_failure_rollback_replay(payload)
 
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

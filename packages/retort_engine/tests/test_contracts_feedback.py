@@ -20,6 +20,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "pr_readonly_degradation_probe_result" in contract_names()
     assert "pr_long_run_review_result" in contract_names()
     assert "pr_holdout_blind_eval_result" in contract_names()
+    assert "pr_failure_rollback_replay_result" in contract_names()
     assert "cross_project_replay_result" in contract_names()
     assert "multi_project_absorption_replay_result" in contract_names()
     assert "absorption_continuity_probe_result" in contract_names()
@@ -44,6 +45,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     readonly_probe_valid = validate_contract("pr_readonly_degradation_probe_result", {"status": "read_only_degraded", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": [], "evidence": {}})
     long_run_valid = validate_contract("pr_long_run_review_result", {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "publish_safety_matrix": {}, "evidence": {}})
     holdout_valid = validate_contract("pr_holdout_blind_eval_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    failure_rollback_valid = validate_contract("pr_failure_rollback_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     multi_replay_valid = validate_contract("multi_project_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}})
     continuity_valid = validate_contract("absorption_continuity_probe_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}})
@@ -71,6 +73,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert readonly_probe_valid["valid"] is True
     assert long_run_valid["valid"] is True
     assert holdout_valid["valid"] is True
+    assert failure_rollback_valid["valid"] is True
     assert replay_valid["valid"] is True
     assert multi_replay_valid["valid"] is True
     assert continuity_valid["valid"] is True

@@ -241,6 +241,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_readonly_degradation_probe_",
         "pr_long_run_review_",
         "pr_holdout_blind_eval_",
+        "pr_failure_rollback_replay_",
         "multi_project_absorption_replay_",
         "absorption_continuity_",
     )

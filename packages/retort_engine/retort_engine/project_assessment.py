@@ -133,6 +133,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "pr_low_permission_probe": "publish-pr-low-permission-probe" in text and "run_low_permission_pr_degradation_probe" in text,
         "pr_long_run_review": "pr-long-run-review" in text and "build_pr_long_run_review" in text,
         "pr_holdout_blind_eval": "pr-holdout-blind-eval" in text and "build_pr_holdout_blind_eval" in text and "/api/pr-holdout-blind-eval" in text,
+        "pr_failure_rollback_replay": "pr-failure-rollback-replay" in text and "build_pr_failure_rollback_replay" in text and "/api/pr-failure-rollback-replay" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "multi_project_absorption_replay": "multi-project-absorption-replay" in text and "build_multi_project_absorption_replay" in text,
         "absorption_continuity_probe": "absorption-continuity-probe" in text and "build_absorption_continuity_probe" in text,

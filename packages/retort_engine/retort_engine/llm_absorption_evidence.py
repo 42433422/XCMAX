@@ -155,6 +155,8 @@ def _report_evidence(project: Path) -> list[str]:
     long_run_summary = long_run_report.get("summary") if isinstance(long_run_report.get("summary"), dict) else {}
     holdout_report = read_json(project / "docs" / "retort_pr_holdout_blind_eval.json")
     holdout_summary = holdout_report.get("summary") if isinstance(holdout_report.get("summary"), dict) else {}
+    failure_rollback_report = read_json(project / "docs" / "retort_pr_failure_rollback_replay.json")
+    failure_rollback_summary = failure_rollback_report.get("summary") if isinstance(failure_rollback_report.get("summary"), dict) else {}
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -249,6 +251,13 @@ def _report_evidence(project: Path) -> list[str]:
         f"pr_holdout_blind_eval_overlap_prior={holdout_summary.get('overlap_with_prior_long_run_count', '')}",
         f"pr_holdout_blind_eval_blind_prior={holdout_summary.get('blind_against_prior_reports', '')}",
         f"pr_holdout_blind_eval_holdout_labels={holdout_summary.get('holdout_label_count', '')}",
+        f"pr_failure_rollback_replay_status={failure_rollback_report.get('status', '')}",
+        f"pr_failure_rollback_replay_real_reviewed={failure_rollback_summary.get('real_pr_reviewed_count', '')}/{failure_rollback_summary.get('target_case_count', '')}",
+        f"pr_failure_rollback_replay_failed_gates={failure_rollback_summary.get('failed_gate_count', '')}",
+        f"pr_failure_rollback_replay_rolled_back={failure_rollback_summary.get('rollback_verified_count', '')}/{failure_rollback_summary.get('target_case_count', '')}",
+        f"pr_failure_rollback_replay_distinct_repos={failure_rollback_summary.get('distinct_repo_count', '')}",
+        f"pr_failure_rollback_replay_all_rolled_back={failure_rollback_summary.get('all_failures_rolled_back', '')}",
+        f"pr_failure_rollback_replay_uses_git_revert={failure_rollback_summary.get('uses_git_revert', '')}",
         f"cross_project_replay_status={replay_report.get('status', '')}",
         f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}",
         f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}",
@@ -371,6 +380,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_all_ready={release_summary.get('all_core_decisions_ready', '')}",
         f"absorption_release_decision_long_run_ready={release_summary.get('long_run_ready', '')}",
         f"absorption_release_decision_holdout_ready={release_summary.get('holdout_blind_eval_ready', '')}",
+        f"absorption_release_decision_failure_rollback_ready={release_summary.get('failure_rollback_ready', '')}",
         f"absorption_release_decision_recovery_ready={release_summary.get('recovery_ready', '')}",
     ]
 

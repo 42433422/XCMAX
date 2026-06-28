@@ -210,6 +210,25 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_pr_failure_rollback_replay.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "target_case_count": 3,
+                    "real_pr_reviewed_count": 3,
+                    "failed_gate_count": 3,
+                    "rollback_verified_count": 3,
+                    "distinct_repo_count": 3,
+                    "all_failures_rolled_back": True,
+                    "uses_git_revert": True,
+                },
+                "cases": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     result_dir = tmp_path / ".retort" / "employee_results"
     result_dir.mkdir(parents=True)
     (result_dir / "result.json").write_text(
@@ -265,6 +284,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_holdout_blind_eval_reviewed=20/20" in evidence
     assert "pr_holdout_blind_eval_accepted=20/20" in evidence
     assert "pr_holdout_blind_eval_blind_prior=True" in evidence
+    assert "pr_failure_rollback_replay_status=ready" in evidence
+    assert "pr_failure_rollback_replay_real_reviewed=3/3" in evidence
+    assert "pr_failure_rollback_replay_rolled_back=3/3" in evidence
+    assert "pr_failure_rollback_replay_uses_git_revert=True" in evidence
     assert "merge_cross_check=True" in evidence
     assert "pr_live_publish_probe_status=permission_denied_degraded" in evidence
     assert "pr_live_publish_probe_permission_denied=True" in evidence
