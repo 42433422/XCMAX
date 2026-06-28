@@ -331,6 +331,9 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "absorption_continuity_",
     )
     priority_prefixes = (
+        "employee_patch_stress_",
+        "operator_journey_replay_employee_patch_stress_",
+        "absorption_release_decision_employee_patch_stress_",
         "competitor_blind_adjudication_",
         "absorption_release_decision_competitor_blind_",
         "competitor_behavior_regression_",
@@ -345,7 +348,6 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "upstream_pr_ci_probe_",
         "competitor_runtime_comparison_",
         "product_mainline_absorption_",
-        "employee_patch_stress_",
         "employee_scheduler_stress_",
         "cross_domain_ci_regression_",
     )
