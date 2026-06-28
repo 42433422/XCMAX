@@ -5,6 +5,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,6 +94,15 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
     history_task_ids = _history_task_ids(history_path)
     missing_result_ids = sorted(set(expected_task_ids) - set(result_task_ids))
     missing_history_ids = sorted(set(expected_task_ids) - set(history_task_ids))
+    process_ids = [int(item["process"]["pid"]) for item in worker_runs if isinstance(item.get("process"), dict) and isinstance(item["process"].get("pid"), int) and int(item["process"]["pid"]) > 0]
+    successful_process_ids = [
+        int(item["process"]["pid"])
+        for item in worker_runs
+        if isinstance(item.get("process"), dict)
+        and _process_returncode(item["process"]) == 0
+        and isinstance(item["process"].get("pid"), int)
+        and int(item["process"]["pid"]) > 0
+    ]
     summary = {
         "run_id": run_id,
         "round_count": len(rounds),
@@ -102,12 +112,19 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
         "completed_result_count": len(set(result_task_ids) & set(expected_task_ids)),
         "history_task_result_count": len(set(history_task_ids) & set(expected_task_ids)),
         "process_invocation_count": process_invocation_count,
+        "process_id_count": len(process_ids),
+        "unique_process_id_count": len(set(process_ids)),
+        "successful_process_id_count": len(successful_process_ids),
+        "unique_successful_process_id_count": len(set(successful_process_ids)),
         "failed_process_count": failed_process_count,
         "missing_result_count": len(missing_result_ids),
         "missing_history_count": len(missing_history_ids),
         "unique_task_id_count": len(set(expected_task_ids)),
         "all_rounds_completed": all(item["round_completed"] for item in rounds),
         "independent_process_verified": process_invocation_count == len(worker_runs) and all("-c" in (item["process"].get("command") or []) for item in worker_runs),
+        "pid_isolation_verified": process_invocation_count == len(worker_runs)
+        and len(set(successful_process_ids)) == len(worker_runs)
+        and all(item["process"].get("pid", 0) > 0 for item in worker_runs),
         "concurrent_workers_verified": worker_count > 1 and process_invocation_count == len(worker_runs) and all(item["result_exists"] for item in worker_runs),
         "queue_result_history_consistent": not missing_result_ids and not missing_history_ids,
     }
@@ -117,6 +134,7 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
         and summary["queued_task_count"] >= 30
         and summary["failed_process_count"] == 0
         and summary["queue_result_history_consistent"]
+        and summary["pid_isolation_verified"]
         and (worker_count == 1 or summary["concurrent_workers_verified"])
         else "needs_more_evidence"
     )
@@ -133,6 +151,7 @@ def run_employee_scheduler_stress(project: str | Path, *, round_count: int = 10,
             "employee_results_dir": str(result_dir),
             "worker": "retort_engine.employee_runtime_worker",
             "launch_mode": "concurrent_popen" if worker_count > 1 else "single_process_per_round",
+            "process_ids": sorted(set(process_ids)),
         },
     }
 
@@ -187,7 +206,10 @@ def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
     processes = []
     for payload_path in payload_paths:
         command = _worker_command(package_root, payload_path)
-        processes.append({"payload_path": payload_path, "command": command, "process": subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)})
+        started_at = datetime.now(timezone.utc).isoformat()
+        started_monotonic = time.monotonic()
+        process = subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        processes.append({"payload_path": payload_path, "command": command, "process": process, "pid": process.pid, "started_at": started_at, "started_monotonic": started_monotonic})
     results = []
     for item in processes:
         process = item["process"]
@@ -198,18 +220,52 @@ def _run_workers(root: Path, payload_paths: list[Path]) -> list[dict[str, Any]]:
             process.kill()
             stdout, stderr = process.communicate()
             returncode = 124
-        results.append({"command": item["command"], "returncode": returncode, "stdout": (stdout or "")[-2000:], "stderr": (stderr or "")[-2000:]})
+        results.append(
+            {
+                "command": item["command"],
+                "pid": int(item.get("pid") or 0),
+                "started_at": str(item.get("started_at") or ""),
+                "ended_at": datetime.now(timezone.utc).isoformat(),
+                "duration_sec": round(time.monotonic() - float(item.get("started_monotonic") or time.monotonic()), 3),
+                "returncode": returncode,
+                "stdout": (stdout or "")[-2000:],
+                "stderr": (stderr or "")[-2000:],
+            }
+        )
     return results
 
 
 def _run_worker(root: Path, payload_path: Path) -> dict[str, Any]:
     package_root, env = _worker_runtime_env()
     command = _worker_command(package_root, payload_path)
+    started_at = datetime.now(timezone.utc).isoformat()
+    started_monotonic = time.monotonic()
     try:
-        completed = subprocess.run(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120, check=False)
+        process = subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        stdout, stderr = process.communicate(timeout=120)
     except subprocess.TimeoutExpired as exc:
-        return {"command": command, "returncode": 124, "stdout": exc.stdout or "", "stderr": exc.stderr or "timeout"}
-    return {"command": command, "returncode": completed.returncode, "stdout": completed.stdout[-2000:], "stderr": completed.stderr[-2000:]}
+        process.kill()
+        stdout, stderr = process.communicate()
+        return {
+            "command": command,
+            "pid": int(process.pid or 0),
+            "started_at": started_at,
+            "ended_at": datetime.now(timezone.utc).isoformat(),
+            "duration_sec": round(time.monotonic() - started_monotonic, 3),
+            "returncode": 124,
+            "stdout": (stdout or exc.stdout or "")[-2000:],
+            "stderr": (stderr or exc.stderr or "timeout")[-2000:],
+        }
+    return {
+        "command": command,
+        "pid": int(process.pid or 0),
+        "started_at": started_at,
+        "ended_at": datetime.now(timezone.utc).isoformat(),
+        "duration_sec": round(time.monotonic() - started_monotonic, 3),
+        "returncode": int(process.returncode),
+        "stdout": (stdout or "")[-2000:],
+        "stderr": (stderr or "")[-2000:],
+    }
 
 
 def _worker_runtime_env() -> tuple[str, dict[str, str]]:
@@ -222,6 +278,13 @@ def _worker_runtime_env() -> tuple[str, dict[str, str]]:
 def _worker_command(package_root: str, payload_path: Path) -> list[str]:
     worker_code = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.employee_runtime_worker import main; raise SystemExit(main())"
     return [sys.executable, "-c", worker_code, "--payload-file", str(payload_path)]
+
+
+def _process_returncode(process: dict[str, Any]) -> int:
+    try:
+        return int(process.get("returncode", 1))
+    except (TypeError, ValueError):
+        return 1
 
 
 def _stress_diff(round_index: int, worker_index: int = 1) -> str:

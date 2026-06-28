@@ -12,11 +12,24 @@ def build_multi_project_absorption_replay(project: str | Path, *, min_projects: 
     candidates = _latest_successful_runs_by_source(root)
     projects = [_project_replay(root, run) for run in candidates[: max(min_projects, 1)]]
     ready_projects = [project for project in projects if project["checks"]["ready"]]
+    selected_families = sorted({project["source_family"] for project in projects if project.get("source_family")})
+    historical_inventory = _historical_source_inventory(candidates)
     summary = {
         "external_project_count": len(projects),
         "ready_project_count": len(ready_projects),
         "min_project_count": min_projects,
         "distinct_source_count": len({project["source"] for project in projects}),
+        "source_family_count": len(selected_families),
+        "source_families": selected_families,
+        "non_ts_source_count": sum(1 for project in projects if project.get("source_family") != "typescript_pr_bot"),
+        "heterogeneous_absorption_verified": len(selected_families) >= min(3, max(1, min_projects)) and any(project.get("source_family") != "typescript_pr_bot" for project in projects),
+        "historical_successful_source_count": historical_inventory["successful_source_count"],
+        "historical_source_family_count": historical_inventory["source_family_count"],
+        "historical_non_ts_source_count": historical_inventory["non_ts_source_count"],
+        "historical_architecture_source_count": historical_inventory["architecture_source_count"],
+        "historical_benchmark_source_count": historical_inventory["benchmark_source_count"],
+        "historical_security_source_count": historical_inventory["security_source_count"],
+        "historical_heterogeneous_absorption_verified": historical_inventory["heterogeneous_absorption_verified"],
         "all_have_behavior_diff": all(project["checks"]["behavior_diff"] for project in projects) if projects else False,
         "all_have_behavior_tests": all(project["checks"]["behavior_tests"] for project in projects) if projects else False,
         "all_have_employee_results": all(project["checks"]["employee_results"] for project in projects) if projects else False,
@@ -24,7 +37,14 @@ def build_multi_project_absorption_replay(project: str | Path, *, min_projects: 
         "all_have_per_run_code_graph_proof": all(project["checks"]["per_run_code_graph_proof"] for project in projects) if projects else False,
         "latest_project_differs_from_previous": len(projects) >= 2 and projects[0]["source"] != projects[1]["source"],
     }
-    status = "ready" if summary["ready_project_count"] >= min_projects and summary["distinct_source_count"] >= min_projects else "needs_more_replay"
+    status = (
+        "ready"
+        if summary["ready_project_count"] >= min_projects
+        and summary["distinct_source_count"] >= min_projects
+        and summary["heterogeneous_absorption_verified"]
+        and (min_projects < 5 or summary["historical_heterogeneous_absorption_verified"])
+        else "needs_more_replay"
+    )
     result = {
         "status": status,
         "project": str(root),
@@ -33,7 +53,9 @@ def build_multi_project_absorption_replay(project: str | Path, *, min_projects: 
         "evidence": {
             "run_dir": str(root / ".retort" / "real_absorption_runs"),
             "source_order": [project["source"] for project in projects],
+            "source_family_order": [project["source_family"] for project in projects],
             "latest_run_id": projects[0]["run_id"] if projects else "",
+            "historical_source_families": historical_inventory["source_families"],
         },
     }
     if output:
@@ -89,6 +111,7 @@ def _project_replay(root: Path, run: dict[str, Any]) -> dict[str, Any]:
     return {
         "run_id": str(run.get("run_id") or Path(str(run.get("_run_file") or "")).stem),
         "source": str(run.get("source") or ""),
+        "source_family": _source_family(str(run.get("source") or "")),
         "run_file": str(run.get("_run_file") or ""),
         "changed_file_count": len(changed_files),
         "behavior_source_files": [_project_relative(root, item) for item in behavior_source_files],
@@ -99,6 +122,59 @@ def _project_replay(root: Path, run: dict[str, Any]) -> dict[str, Any]:
         "code_graph_proof_missing": proof_missing,
         "checks": checks,
     }
+
+
+def _historical_source_inventory(runs: list[dict[str, Any]]) -> dict[str, Any]:
+    sources = [str(run.get("source") or "") for run in runs if str(run.get("source") or "")]
+    families = [_source_family(source) for source in sources]
+    source_families = sorted({family for family in families if family})
+    architecture_families = {"architecture_governance", "architecture_graph", "rust_code_graph"}
+    benchmark_families = {"benchmark_harness", "agentic_benchmark"}
+    security_families = {"security_static_analysis"}
+    return {
+        "successful_source_count": len(sources),
+        "source_family_count": len(source_families),
+        "source_families": source_families,
+        "non_ts_source_count": sum(1 for family in families if family != "typescript_pr_bot"),
+        "architecture_source_count": sum(1 for family in families if family in architecture_families),
+        "benchmark_source_count": sum(1 for family in families if family in benchmark_families),
+        "security_source_count": sum(1 for family in families if family in security_families),
+        "heterogeneous_absorption_verified": len(source_families) >= 5
+        and any(family in architecture_families for family in families)
+        and any(family in benchmark_families for family in families)
+        and any(family in security_families for family in families)
+        and any(family == "python_pr_agent" for family in families)
+        and any(family == "typescript_pr_bot" for family in families),
+    }
+
+
+def _source_family(source: str) -> str:
+    normalized = source.lower()
+    if normalized.startswith("retort://post-absorption-hardening"):
+        return "post_absorption_hardening"
+    if "qodo-ai/pr-agent" in normalized:
+        return "python_pr_agent"
+    if any(marker in normalized for marker in ("mopemope/pr-ai-review-bot", "chatgpt-codereview", "ai-pr-reviewer", "local-ai-pr-reviewer")):
+        return "typescript_pr_bot"
+    if "reviewdog/reviewdog" in normalized:
+        return "go_ci_review_publisher"
+    if "swe-bench" in normalized or "lm-evaluation-harness" in normalized:
+        return "benchmark_harness"
+    if "agentless" in normalized:
+        return "agentic_benchmark"
+    if "import-linter" in normalized:
+        return "architecture_governance"
+    if "pydeps" in normalized or "madge" in normalized:
+        return "architecture_graph"
+    if "codegraph-rust" in normalized:
+        return "rust_code_graph"
+    if "bandit" in normalized or "semgrep" in normalized:
+        return "security_static_analysis"
+    if "repomix" in normalized:
+        return "context_packager"
+    if "reviewscope" in normalized or "openrabbit" in normalized:
+        return "review_reasoning"
+    return "other_external_project"
 
 
 def _is_behavior_source(root: Path, item: str) -> bool:

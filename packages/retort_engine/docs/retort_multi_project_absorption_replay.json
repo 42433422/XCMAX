@@ -1,17 +1,120 @@
 {
   "evidence": {
-    "latest_run_id": "20260628002727-95b76ebf47",
+    "historical_source_families": [
+      "agentic_benchmark",
+      "architecture_governance",
+      "architecture_graph",
+      "benchmark_harness",
+      "context_packager",
+      "go_ci_review_publisher",
+      "other_external_project",
+      "post_absorption_hardening",
+      "python_pr_agent",
+      "review_reasoning",
+      "rust_code_graph",
+      "security_static_analysis",
+      "typescript_pr_bot"
+    ],
+    "latest_run_id": "20260628034843-hardening",
     "run_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs",
+    "source_family_order": [
+      "post_absorption_hardening",
+      "typescript_pr_bot",
+      "python_pr_agent",
+      "typescript_pr_bot",
+      "typescript_pr_bot"
+    ],
     "source_order": [
+      "retort://post-absorption-hardening/2525bd4b6",
       "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
       "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
       "https://github.com/jaygaha/local-ai-pr-reviewer",
-      "https://github.com/hevinbryant/ai-pr-reviewer",
-      "https://github.com/AndreaBonn/ai-pr-reviewer"
+      "https://github.com/hevinbryant/ai-pr-reviewer"
     ]
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "projects": [
+    {
+      "behavior_source_files": [
+        "retort_engine/absorption_continuity_probe.py",
+        "retort_engine/absorption_hardening_run.py",
+        "retort_engine/absorption_release_decision.py",
+        "retort_engine/capability_audit.py",
+        "retort_engine/cli.py",
+        "retort_engine/contracts.py",
+        "retort_engine/core.py",
+        "retort_engine/cross_language_transfer.py",
+        "retort_engine/diff_extension_policy.py",
+        "retort_engine/employee_patch_closure.py",
+        "retort_engine/external_advantage_matrix.py",
+        "retort_engine/external_advantage_repeat.py",
+        "retort_engine/llm_absorption_evidence.py",
+        "retort_engine/multi_project_absorption_replay.py",
+        "retort_engine/operator_journey_replay.py",
+        "retort_engine/paibi_llm.py",
+        "retort_engine/paibi_prompting.py",
+        "retort_engine/pr_failure_rollback_replay.py",
+        "retort_engine/pr_holdout_blind_eval.py",
+        "retort_engine/pr_live_probe.py",
+        "retort_engine/pr_long_run_review.py",
+        "retort_engine/pr_publish.py",
+        "retort_engine/pr_review.py",
+        "retort_engine/production_recovery_drill.py",
+        "retort_engine/project_assessment.py",
+        "retort_engine/quality_gate_bundle.py",
+        "retort_engine/real_absorption.py",
+        "retort_engine/review_calibration_policy.py",
+        "retort_engine/service.py",
+        "retort_engine/ui_server.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_absorption_continuity_probe.py",
+        "tests/test_absorption_hardening_run.py",
+        "tests/test_absorption_release_decision.py",
+        "tests/test_behavior_matrix_density.py",
+        "tests/test_capability_audit.py",
+        "tests/test_contracts_feedback.py",
+        "tests/test_diff_extension_policy.py",
+        "tests/test_employee_patch_closure.py",
+        "tests/test_employee_scheduler_stress.py",
+        "tests/test_external_advantage_matrix.py",
+        "tests/test_external_advantage_repeat.py",
+        "tests/test_llm_absorption_evidence.py",
+        "tests/test_multi_project_absorption_replay.py",
+        "tests/test_operator_journey_replay.py",
+        "tests/test_paibi_prompting.py",
+        "tests/test_pr_failure_rollback_replay.py",
+        "tests/test_pr_holdout_blind_eval.py",
+        "tests/test_pr_live_probe.py",
+        "tests/test_pr_long_run_review.py",
+        "tests/test_pr_publish.py",
+        "tests/test_pr_review.py",
+        "tests/test_production_recovery_drill.py",
+        "tests/test_quality_gate_bundle.py",
+        "tests/test_real_absorption_helpers.py",
+        "tests/test_retort_engine.py",
+        "tests/test_review_calibration_policy.py",
+        "tests/test_review_context_bias.py"
+      ],
+      "changed_file_count": 73,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true,
+        "worker_review": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 5,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628034843-hardening.json",
+      "run_id": "20260628034843-hardening",
+      "source": "retort://post-absorption-hardening/2525bd4b6",
+      "source_family": "post_absorption_hardening",
+      "worker_review_status": "reviewed"
+    },
     {
       "behavior_source_files": [
         "retort_engine/review_context_bias.py",
@@ -38,6 +141,7 @@
       "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628002727-95b76ebf47.json",
       "run_id": "20260628002727-95b76ebf47",
       "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "source_family": "typescript_pr_bot",
       "worker_review_status": "reviewed"
     },
     {
@@ -66,6 +170,7 @@
       "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627235555-f62954c70a.json",
       "run_id": "20260627235555-f62954c70a",
       "source": "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+      "source_family": "python_pr_agent",
       "worker_review_status": "reviewed"
     },
     {
@@ -92,6 +197,7 @@
       "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627224409-8893c01ae8.json",
       "run_id": "20260627224409-8893c01ae8",
       "source": "https://github.com/jaygaha/local-ai-pr-reviewer",
+      "source_family": "typescript_pr_bot",
       "worker_review_status": "reviewed"
     },
     {
@@ -118,32 +224,7 @@
       "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627222436-02cbea1e01.json",
       "run_id": "20260627222436-02cbea1e01",
       "source": "https://github.com/hevinbryant/ai-pr-reviewer",
-      "worker_review_status": "reviewed"
-    },
-    {
-      "behavior_source_files": [
-        "retort_engine/review_context_bias.py"
-      ],
-      "behavior_test_files": [
-        "tests/test_review_context_bias.py",
-        "tests/test_absorbed_capabilities.py"
-      ],
-      "changed_file_count": 9,
-      "checks": {
-        "behavior_diff": true,
-        "behavior_tests": true,
-        "employee_results": true,
-        "gates_passed": true,
-        "per_run_code_graph_proof": true,
-        "ready": true,
-        "worker_review": true
-      },
-      "code_graph_proof_missing": [],
-      "code_graph_proof_status": "proved",
-      "employee_result_count": 7,
-      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627221413-310a494b4a.json",
-      "run_id": "20260627221413-310a494b4a",
-      "source": "https://github.com/AndreaBonn/ai-pr-reviewer",
+      "source_family": "typescript_pr_bot",
       "worker_review_status": "reviewed"
     }
   ],
@@ -156,8 +237,23 @@
     "all_have_per_run_code_graph_proof": true,
     "distinct_source_count": 5,
     "external_project_count": 5,
+    "heterogeneous_absorption_verified": true,
+    "historical_architecture_source_count": 4,
+    "historical_benchmark_source_count": 2,
+    "historical_heterogeneous_absorption_verified": true,
+    "historical_non_ts_source_count": 18,
+    "historical_security_source_count": 2,
+    "historical_source_family_count": 13,
+    "historical_successful_source_count": 25,
     "latest_project_differs_from_previous": true,
     "min_project_count": 5,
-    "ready_project_count": 5
+    "non_ts_source_count": 2,
+    "ready_project_count": 5,
+    "source_families": [
+      "post_absorption_hardening",
+      "python_pr_agent",
+      "typescript_pr_bot"
+    ],
+    "source_family_count": 3
   }
 }

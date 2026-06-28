@@ -50,10 +50,17 @@ def test_record_post_absorption_hardening_run_materializes_latest_behavior_diff(
     assert result["summary"]["worker_review_file_count"] >= 2
     assert result["summary"]["worker_review_comment_count"] >= 2
     assert result["summary"]["worker_review_task_group_count"] >= 2
+    assert result["summary"]["pid_isolation_verified"] is True
+    assert result["summary"]["unique_process_id_count"] == 2
+    assert result["summary"]["worker_process_trace_count"] == 2
     assert result["code_graph_proof"]["run_id"] == result["run_id"]
     employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
     assert employee_result["execution_mode"] == "employee_runtime_worker_multi_process"
     assert employee_result["runtime_evidence"]["multi_worker"]["verified"] is True
+    process_isolation = employee_result["runtime_evidence"]["multi_worker"]["process_isolation"]
+    assert process_isolation["pid_isolation_verified"] is True
+    assert process_isolation["unique_successful_process_id_count"] == 2
+    assert all(item["pid"] > 0 for item in process_isolation["traces"])
     assert Path(result["run_record_path"]).is_file()
     assert validate_contract("hardening_run_result", result)["valid"] is True
 
