@@ -17,11 +17,15 @@ def build_devour_session(
     branch_state: dict[str, Any],
     absorption_state: dict[str, Any],
     llm_review: dict[str, Any],
+    run_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    run_proof = run_proof if isinstance(run_proof, dict) else {}
     return {
         "status": _devour_session_status(execution, own_assessment),
+        "run_id": str(execution.get("run_id") or run_proof.get("run_id") or ""),
         "source": source,
         "stage_order": ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"],
+        "run_proof": _run_proof_summary(run_proof),
         "pre_dual_review": {
             "status": "ready",
             "context_policy": "isolated_before_absorption",
@@ -39,7 +43,7 @@ def build_devour_session(
             "branch": branch_state,
             "tasks": tasks,
         },
-        "improvement_proof": _improvement_proof(pre_assessment, own_assessment, execution, absorption_state),
+        "improvement_proof": _improvement_proof(pre_assessment, own_assessment, execution, absorption_state, run_proof),
         "final_self_review": _final_self_review(own_assessment, llm_review),
     }
 
@@ -186,7 +190,7 @@ def _overlap_comparison(source: str, external_path: Path | None, tasks: list[dic
     }
 
 
-def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], execution: dict[str, Any], absorption_state: dict[str, Any]) -> dict[str, Any]:
+def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], execution: dict[str, Any], absorption_state: dict[str, Any], run_proof: dict[str, Any] | None = None) -> dict[str, Any]:
     before_score = assessment_score(pre_assessment)
     after_score = assessment_score(own_assessment)
     changed_files = [str(item) for item in execution.get("changed_files") or []]
@@ -196,11 +200,31 @@ def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str,
     audit = (own_assessment.get("metadata") or {}).get("capability_absorption_audit") if isinstance(own_assessment.get("metadata"), dict) else {}
     if not isinstance(audit, dict):
         audit = {}
+    run_proof = run_proof if isinstance(run_proof, dict) else {}
+    proof_summary = _run_proof_summary(run_proof)
+    core_binding = proof_summary.get("core_change_binding") if isinstance(proof_summary.get("core_change_binding"), dict) else {}
+    graph_binding = proof_summary.get("code_graph_binding") if isinstance(proof_summary.get("code_graph_binding"), dict) else {}
+    test_binding = proof_summary.get("test_increment_binding") if isinstance(proof_summary.get("test_increment_binding"), dict) else {}
+    llm_binding = proof_summary.get("llm_final_verdict") if isinstance(proof_summary.get("llm_final_verdict"), dict) else {}
     return {
         "status": _improvement_proof_status(execution, flags),
+        "run_id": str(execution.get("run_id") or run_proof.get("run_id") or ""),
+        "run_proof_status": str(run_proof.get("status") or ""),
+        "run_proof_path": str(run_proof.get("path") or execution.get("run_proof_path") or ""),
         "before_score": before_score,
         "after_score": after_score,
         "score_delta": round(after_score - before_score, 1) if before_score is not None and after_score is not None else None,
+        "bound_score_delta": (proof_summary.get("score_binding") or {}).get("score_delta") if isinstance(proof_summary.get("score_binding"), dict) else None,
+        "core_behavior_change_ratio": core_binding.get("core_behavior_change_ratio"),
+        "core_behavior_file_count": core_binding.get("core_behavior_file_count"),
+        "code_graph_path": graph_binding.get("path"),
+        "code_graph_node_count": graph_binding.get("node_count"),
+        "code_graph_edge_count": graph_binding.get("edge_count"),
+        "test_increment_file_count": test_binding.get("test_file_count"),
+        "test_increment_line_count": test_binding.get("test_line_count"),
+        "latest_test_to_source_ratio": test_binding.get("latest_test_to_source_ratio"),
+        "llm_final_status": llm_binding.get("status"),
+        "llm_final_task_id": llm_binding.get("llm_task_id"),
         "changed_file_count": len(changed_files),
         "changed_files": changed_files,
         "gate_passed_count": sum(1 for gate in gates if gate.get("ok")),
@@ -219,6 +243,21 @@ def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str,
         "capability_absorption_blockers": [str(item) for item in audit.get("blockers") or []],
         "test_to_source_ratio": audit.get("test_to_source_ratio"),
         "reason": str(audit.get("reason") or ""),
+    }
+
+
+def _run_proof_summary(proof: dict[str, Any]) -> dict[str, Any]:
+    if not proof:
+        return {}
+    return {
+        "run_id": str(proof.get("run_id") or ""),
+        "status": str(proof.get("status") or ""),
+        "path": str(proof.get("path") or ""),
+        "score_binding": proof.get("score_binding") if isinstance(proof.get("score_binding"), dict) else {},
+        "core_change_binding": proof.get("core_change_binding") if isinstance(proof.get("core_change_binding"), dict) else {},
+        "code_graph_binding": proof.get("code_graph_binding") if isinstance(proof.get("code_graph_binding"), dict) else {},
+        "test_increment_binding": proof.get("test_increment_binding") if isinstance(proof.get("test_increment_binding"), dict) else {},
+        "llm_final_verdict": proof.get("llm_final_verdict") if isinstance(proof.get("llm_final_verdict"), dict) else {},
     }
 
 

@@ -44,6 +44,7 @@ from retort_engine.quality_metrics import test_code_health as _test_code_health
 from retort_engine.quality_policy import apply_default_llm_policy
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.run_proof import build_absorption_run_proof, write_absorption_run_proof
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -343,6 +344,24 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         evidence=own_assessment.get("evidence", []),
         metadata=own_assessment.get("metadata", {}),
     )
+    public_absorption_state = _public_absorption_state(own) if execution.get("status") in {"applied", "noop"} else absorption_state
+    run_proof: dict[str, Any] = {}
+    if execution.get("run_id"):
+        run_proof = build_absorption_run_proof(
+            root=own,
+            source=str(external),
+            external_path=external_path,
+            pre_assessment=pre_assessment,
+            external_assessment=external_assessment,
+            own_assessment=own_assessment,
+            tasks=tasks,
+            execution=execution,
+            branch_state=branch_state,
+            absorption_state=public_absorption_state,
+            llm_review=llm_review,
+        )
+        run_proof_path = write_absorption_run_proof(own, run_proof)
+        execution["run_proof_path"] = str(run_proof_path)
     devour_session = _build_devour_session(
         source=str(external),
         external_path=external_path,
@@ -352,8 +371,9 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         tasks=tasks,
         execution=execution,
         branch_state=branch_state,
-        absorption_state=_public_absorption_state(own) if execution.get("status") in {"applied", "noop"} else absorption_state,
+        absorption_state=public_absorption_state,
         llm_review=llm_review,
+        run_proof=run_proof,
     )
     result = {
         "status": _absorption_status(tasks, execution),
@@ -363,12 +383,13 @@ def absorb(payload: dict[str, Any]) -> dict[str, Any]:
         "external_assessment": external_assessment,
         "external_ref": {"source": str(external), "local_path": "" if external_path is None else str(external_path)},
         "absorption_visual": _absorption_visual(pre_assessment, own_assessment, external_assessment, str(external)),
-        "absorption_state": _public_absorption_state(own) if execution.get("status") in {"applied", "noop"} else absorption_state,
+        "absorption_state": public_absorption_state,
         "execution": execution,
         "tasks": tasks,
         "llm_review": llm_review,
         "branch_workflow": branch_state,
         "devour_session": devour_session,
+        "run_proof": run_proof,
     }
     queue = payload.get("employee_queue")
     if queue:
@@ -616,9 +637,10 @@ def _run_real_absorption_cli(own: Path, source: str, external_path: Path | None,
         "python": _python(),
     }
     request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    cmd = [_python(), "-m", "retort_engine.cli", "apply-absorption", "--payload-file", str(request_path), "--json"]
-    env = os.environ.copy()
     package_root = str(Path(__file__).resolve().parents[1])
+    runner = f"import sys; sys.path.insert(0, {package_root!r}); from retort_engine.cli import main; raise SystemExit(main())"
+    cmd = [_python(), "-c", runner, "apply-absorption", "--payload-file", str(request_path), "--json"]
+    env = os.environ.copy()
     env["PYTHONPATH"] = package_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     timeout = int(payload.get("execution_timeout_sec") or 1800)
     try:
