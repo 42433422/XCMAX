@@ -57,6 +57,8 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "codeGraphFocusPanel" in (root / "index.html").read_text(encoding="utf-8")
     assert "codeGraphProofPanel" in (root / "index.html").read_text(encoding="utf-8")
     assert "refactorPriorityPanel" in (root / "index.html").read_text(encoding="utf-8")
+    assert "liveRuntimePanel" in (root / "index.html").read_text(encoding="utf-8")
+    assert "upstreamCiPanel" in (root / "index.html").read_text(encoding="utf-8")
     index_text = (root / "index.html").read_text(encoding="utf-8")
     app_text = (root / "app.js").read_text(encoding="utf-8")
     style_text = (root / "styles.css").read_text(encoding="utf-8")
@@ -77,10 +79,18 @@ def test_blackhole_ui_assets_exist() -> None:
     assert "function renderCodeGraphFocusPanel" in app_text
     assert "function renderCodeGraphProofPanel" in app_text
     assert "function renderRefactorPriorityPanel" in app_text
+    assert "function renderLiveRuntimePanel" in app_text
+    assert "function renderUpstreamCiPanel" in app_text
+    assert "liveRuntimeBtn" in app_text
+    assert "upstreamCiBtn" in app_text
+    assert "force_live_refresh: true" in app_text
+    assert "cross_language_ci_generalization" in app_text
     assert "排比 LLM 自动同步" in app_text
     assert "use_llm: true" in app_text
     assert "require_deep_review: true" in app_text
     assert "/api/absorption-lights" in ui_server_text
+    assert "/api/competitor-runtime-comparison" in ui_server_text
+    assert "/api/upstream-pr-ci-probe" in ui_server_text
     assert "/api/codebase-graph-report" in ui_server_text
     assert "/api/evolution-map" in ui_server_text
     assert "/api/architecture-contract-report" in ui_server_text
@@ -98,6 +108,8 @@ def test_blackhole_ui_operation_replay_binds_operator_actions() -> None:
     assert replay["summary"]["absorbed_project_click_bound"] is True
     assert replay["summary"]["deep_review_button_bound"] is True
     assert replay["summary"]["absorption_button_bound"] is True
+    assert replay["summary"]["live_competitor_runtime_bound"] is True
+    assert replay["summary"]["cross_language_upstream_ci_bound"] is True
 
 
 def test_absorption_lights_returns_real_absorbed_project_sources(tmp_path: Path) -> None:

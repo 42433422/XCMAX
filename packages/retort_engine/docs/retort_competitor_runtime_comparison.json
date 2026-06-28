@@ -1,14 +1,14 @@
 {
   "artifacts": {
-    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/competitor_outputs.json",
+    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/competitor_outputs.json",
     "external_runners": [
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/mopemope_patch_runtime.js",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/qodo_pr_agent_runtime.py",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/reviewdog_diff_runtime.py"
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/mopemope_patch_runtime.js",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/qodo_pr_agent_runtime.py",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/reviewdog_diff_runtime.py"
     ],
-    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/input.patch",
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249",
-    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/retort_output.json"
+    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/input.patch",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6",
+    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/retort_output.json"
   },
   "competitor_output": {
     "primary": {
@@ -83,6 +83,7 @@
     "runtime_count": 3,
     "runtimes": [
       {
+        "cached_source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
         "external_process_returncode": 0,
         "external_process_stderr_tail": "",
         "external_process_stdout_tail": "",
@@ -94,7 +95,7 @@
           "html_url": "https://github.com/mopemope/pr-ai-review-bot/blob/main/src/patchParser.ts",
           "materialized": true,
           "materialized_git_blob_sha": "b6cf546ae5dcd0f98df9fb4776bc838a0185dc2a",
-          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/live_upstream/mopemope__pr-ai-review-bot/src/patchParser.ts",
+          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/mopemope__pr-ai-review-bot/src/patchParser.ts",
           "project": "mopemope/pr-ai-review-bot",
           "repo_api_returncode": 0,
           "requested": true,
@@ -173,16 +174,18 @@
           ],
           "status": "parsed"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/mopemope__pr-ai-review-bot_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/mopemope__pr-ai-review-bot_output.json",
         "project": "mopemope/pr-ai-review-bot",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/mopemope_patch_runtime.js",
-        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/mopemope_patch_runtime.js",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/mopemope__pr-ai-review-bot/src/patchParser.ts",
         "source_exists": true,
+        "source_mode": "live_materialized",
         "source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093"
       },
       {
+        "cached_source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
         "external_process_returncode": 0,
         "external_process_stderr_tail": "",
         "external_process_stdout_tail": "",
@@ -194,7 +197,7 @@
           "html_url": "https://github.com/The-PR-Agent/pr-agent/blob/main/pr_agent/tools/pr_reviewer.py",
           "materialized": true,
           "materialized_git_blob_sha": "c4917f3597865d5a677753ddc40b6fc75d2fdfb7",
-          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/live_upstream/qodo-ai__pr-agent/pr_agent/tools/pr_reviewer.py",
+          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/qodo-ai__pr-agent/pr_agent/tools/pr_reviewer.py",
           "project": "qodo-ai/pr-agent",
           "repo_api_returncode": 0,
           "requested": true,
@@ -224,16 +227,18 @@
           ],
           "status": "review_signal_counted"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/qodo-ai__pr-agent_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/qodo-ai__pr-agent_output.json",
         "project": "qodo-ai/pr-agent",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/qodo_pr_agent_runtime.py",
-        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/qodo_pr_agent_runtime.py",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/qodo-ai__pr-agent/pr_agent/tools/pr_reviewer.py",
         "source_exists": true,
+        "source_mode": "live_materialized",
         "source_sha256": "1fe7d662b6a41bad76e2bb183054a389a3b7a0850b92c2da0fccbe05edf1568d"
       },
       {
+        "cached_source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go",
         "external_process_returncode": 0,
         "external_process_stderr_tail": "",
         "external_process_stdout_tail": "",
@@ -245,7 +250,7 @@
           "html_url": "https://github.com/reviewdog/reviewdog/blob/master/diff/parse.go",
           "materialized": true,
           "materialized_git_blob_sha": "79b25c2ececc3f8ec2ba19c535091ddeb9dc0eba",
-          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/live_upstream/reviewdog__reviewdog/diff/parse.go",
+          "materialized_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/reviewdog__reviewdog/diff/parse.go",
           "project": "reviewdog/reviewdog",
           "repo_api_returncode": 0,
           "requested": true,
@@ -276,13 +281,14 @@
           "finding_count": 3,
           "status": "diagnostics_mapped"
         },
-        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/reviewdog__reviewdog_output.json",
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/reviewdog__reviewdog_output.json",
         "project": "reviewdog/reviewdog",
         "ready": true,
         "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog",
-        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T083504Z-95753249/reviewdog_diff_runtime.py",
-        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/reviewdog_diff_runtime.py",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/reviewdog__reviewdog/diff/parse.go",
         "source_exists": true,
+        "source_mode": "live_materialized",
         "source_sha256": "bce44c0d57e0993029214cabf0332eb70c136788a08ff87098b6834883caded0"
       }
     ],
@@ -290,17 +296,128 @@
   },
   "evidence": {
     "competitor_boundary": "external_node_and_python_processes_no_retort_engine_imports",
-    "competitor_sources": [
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
-      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go"
+    "competitor_source_modes": [
+      "live_materialized",
+      "live_materialized",
+      "live_materialized"
     ],
+    "competitor_sources": [
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/mopemope__pr-ai-review-bot/src/patchParser.ts",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/qodo-ai__pr-agent/pr_agent/tools/pr_reviewer.py",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T112045Z-402638b6/live_upstream/reviewdog__reviewdog/diff/parse.go"
+    ],
+    "diagnostic_bridge": "reviewdog_style_external_diagnostics_to_review_diff",
     "retort_runtime": "retort_engine.pr_review.review_diff",
-    "style": "multi_cached_competitor_runtime_side_by_side_output"
+    "style": "multi_live_or_cached_competitor_runtime_side_by_side_output"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "retort_output": {
     "comments": [
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "external_diagnostic_ingestion",
+        "comment_anchor": {
+          "line": 5,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "external_diagnostic_rank_weight": 90,
+        "external_diagnostic_rule_id": "python_diff_diagnostic_mapper:diagnostic",
+        "external_diagnostic_source": "reviewdog/reviewdog",
+        "feedback_rank_weight": 0,
+        "file": "src/main.ts",
+        "hunk_header": "@@ -2,6 +2,7 @@ import {",
+        "line": 5,
+        "line_text_excerpt": "  debug,",
+        "message": "debug, [python_diff_diagnostic_mapper:diagnostic]",
+        "publish_payload": {
+          "body": "debug, [python_diff_diagnostic_mapper:diagnostic]",
+          "line": 5,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 1,
+        "rank_reason": "medium:runtime:external_diagnostic_ingestion:bias=55:policy=45:calibration=35:feedback=0:semantic=0:external=90",
+        "rank_score": 720,
+        "review_context": "runtime",
+        "review_stage": "localize_changed_hunks",
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "external_diagnostic_ingestion",
+        "comment_anchor": {
+          "line": 84,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "external_diagnostic_rank_weight": 90,
+        "external_diagnostic_rule_id": "python_diff_diagnostic_mapper:diagnostic",
+        "external_diagnostic_source": "reviewdog/reviewdog",
+        "feedback_rank_weight": 0,
+        "file": "src/main.ts",
+        "hunk_header": "@@ -79,7 +80,10 @@ export async function run(): Promise<void> {",
+        "line": 84,
+        "line_text_excerpt": "    info(\"done\");",
+        "message": "info(\"done\"); [python_diff_diagnostic_mapper:diagnostic]",
+        "publish_payload": {
+          "body": "info(\"done\"); [python_diff_diagnostic_mapper:diagnostic]",
+          "line": 84,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 2,
+        "rank_reason": "medium:runtime:external_diagnostic_ingestion:bias=55:policy=45:calibration=35:feedback=0:semantic=0:external=90",
+        "rank_score": 720,
+        "review_context": "runtime",
+        "review_stage": "localize_changed_hunks",
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "external_diagnostic_ingestion",
+        "comment_anchor": {
+          "line": 86,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "external_diagnostic_rank_weight": 90,
+        "external_diagnostic_rule_id": "python_diff_diagnostic_mapper:diagnostic",
+        "external_diagnostic_source": "reviewdog/reviewdog",
+        "feedback_rank_weight": 0,
+        "file": "src/main.ts",
+        "hunk_header": "@@ -79,7 +80,10 @@ export async function run(): Promise<void> {",
+        "line": 86,
+        "line_text_excerpt": "    debug(\"error\");",
+        "message": "debug(\"error\"); [python_diff_diagnostic_mapper:diagnostic]",
+        "publish_payload": {
+          "body": "debug(\"error\"); [python_diff_diagnostic_mapper:diagnostic]",
+          "line": 86,
+          "path": "src/main.ts",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 3,
+        "rank_reason": "medium:runtime:external_diagnostic_ingestion:bias=55:policy=45:calibration=35:feedback=0:semantic=0:external=90",
+        "rank_score": 720,
+        "review_context": "runtime",
+        "review_stage": "localize_changed_hunks",
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
       {
         "absorbed_context_rank_weight": 55,
         "absorbed_policy_rank_weight": 45,
@@ -325,76 +442,12 @@
           "side": "RIGHT"
         },
         "publishable": true,
-        "rank_position": 1,
-        "rank_reason": "medium:runtime:intent_alignment:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
+        "rank_position": 4,
+        "rank_reason": "medium:runtime:intent_alignment:bias=55:policy=45:calibration=35:feedback=0:semantic=0:external=0",
         "rank_score": 545,
         "review_context": "runtime",
         "review_stage": "reflect_before_publish",
         "severity": "medium",
-        "strategy": "diff_hunk_review"
-      },
-      {
-        "absorbed_context_rank_weight": 55,
-        "absorbed_policy_rank_weight": 45,
-        "calibration_rank_weight": 35,
-        "capability": "review_pipeline",
-        "comment_anchor": {
-          "line": 5,
-          "path": "src/main.ts",
-          "side": "RIGHT"
-        },
-        "employee_actionable": false,
-        "feedback_rank_weight": 0,
-        "file": "src/main.ts",
-        "hunk_header": "@@ -2,6 +2,7 @@ import {",
-        "line": 5,
-        "line_text_excerpt": "  debug,",
-        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
-        "publish_payload": {
-          "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
-          "line": 5,
-          "path": "src/main.ts",
-          "side": "RIGHT"
-        },
-        "publishable": true,
-        "rank_position": 2,
-        "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
-        "rank_score": 295,
-        "review_context": "runtime",
-        "review_stage": "reflect_before_publish",
-        "severity": "info",
-        "strategy": "diff_hunk_review"
-      },
-      {
-        "absorbed_context_rank_weight": 55,
-        "absorbed_policy_rank_weight": 45,
-        "calibration_rank_weight": 35,
-        "capability": "review_pipeline",
-        "comment_anchor": {
-          "line": 83,
-          "path": "src/main.ts",
-          "side": "RIGHT"
-        },
-        "employee_actionable": false,
-        "feedback_rank_weight": 0,
-        "file": "src/main.ts",
-        "hunk_header": "@@ -79,7 +80,10 @@ export async function run(): Promise<void> {",
-        "line": 83,
-        "line_text_excerpt": "",
-        "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
-        "publish_payload": {
-          "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
-          "line": 83,
-          "path": "src/main.ts",
-          "side": "RIGHT"
-        },
-        "publishable": true,
-        "rank_position": 3,
-        "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
-        "rank_score": 295,
-        "review_context": "runtime",
-        "review_stage": "reflect_before_publish",
-        "severity": "info",
         "strategy": "diff_hunk_review"
       }
     ],
@@ -454,7 +507,7 @@
         "security": 35,
         "tests": 40
       },
-      "candidate_comment_count": 3,
+      "candidate_comment_count": 4,
       "capabilities": [
         "review_pipeline",
         "file_grouping",
@@ -462,21 +515,25 @@
         "diff_hunk_review",
         "semantic_index"
       ],
-      "comment_count": 3,
-      "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
+      "comment_count": 4,
+      "comment_ranking_model": "severity_context_transfer_publishability_v5_external_diagnostics",
       "core_review_score": {
         "cross_language_core_behavior_active": false,
         "cross_language_max_rank_score": 0,
         "cross_language_ranked_comment_count": 0,
         "cross_language_top_ranked": false,
+        "external_diagnostic_core_behavior_active": true,
+        "external_diagnostic_max_rank_score": 720,
+        "external_diagnostic_ranked_comment_count": 3,
+        "external_diagnostic_top_ranked": true,
         "hunk_semantic_core_behavior_active": false,
         "hunk_semantic_max_rank_score": 0,
         "hunk_semantic_ranked_comment_count": 0,
         "hunk_semantic_top_ranked": false,
-        "max_rank_score": 545,
-        "min_rank_score": 295,
-        "model": "severity_context_transfer_publishability_v4_hunk_semantics",
-        "ranked_comment_count": 3
+        "max_rank_score": 720,
+        "min_rank_score": 545,
+        "model": "severity_context_transfer_publishability_v5_external_diagnostics",
+        "ranked_comment_count": 4
       },
       "cross_language_transfer": {
         "cross_language_core_mapping": false,
@@ -517,6 +574,18 @@
         ],
         "unknown_extension_count": 0
       },
+      "external_diagnostic_ingestion": {
+        "accepted_count": 3,
+        "core_behavior_active": true,
+        "diff_line_anchor_enforced": true,
+        "dropped_count": 0,
+        "requested_count": 3,
+        "reviewdog_style_diagnostic_mapping": true,
+        "source_project_count": 1,
+        "source_projects": [
+          "reviewdog/reviewdog"
+        ]
+      },
       "file_count": 1,
       "file_summary_count": 1,
       "hunk_count": 2,
@@ -544,15 +613,15 @@
       "primary_review_contexts": [
         "runtime"
       ],
-      "publishable_comment_count": 3,
+      "publishable_comment_count": 4,
       "ready_for_employee_tasking": true,
       "review_context_group_count": 1,
       "reviewed_new_change_count": 4,
       "risk_counts": {
         "high": 0,
-        "info": 2,
+        "info": 0,
         "low": 0,
-        "medium": 1
+        "medium": 4
       },
       "skipped_existing_change_count": 0,
       "stage_count": 5,
@@ -573,6 +642,7 @@
     "all_external_processes_successful": true,
     "all_live_upstream_sources_materialized": true,
     "all_live_upstream_sources_verified": true,
+    "all_runtime_sources_from_live_refresh": true,
     "competitor_added_line_count": 4,
     "competitor_finding_count": 5,
     "competitor_hunk_count": 2,
@@ -585,13 +655,17 @@
     ],
     "competitor_root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
     "competitor_source_exists": true,
+    "competitor_source_mode": "live_materialized",
     "competitor_source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093",
-    "duration_sec": 8.317,
+    "duration_sec": 8.876,
+    "external_diagnostic_count": 3,
     "external_process_count": 3,
     "external_process_returncode": 0,
     "external_process_stderr_tail": "",
     "external_process_stdout_tail": "",
     "external_process_success_count": 3,
+    "force_live_refresh": true,
+    "live_refresh_used_count": 3,
     "live_upstream_materialized_count": 3,
     "live_upstream_probe_count": 3,
     "live_upstream_projects": [
@@ -604,10 +678,10 @@
     "multi_competitor_side_by_side": true,
     "ready_competitor_project_count": 3,
     "real_cached_project_count": 3,
-    "retort_comment_count": 3,
+    "retort_comment_count": 4,
     "retort_exceeds_all_competitors_by_semantic_comments": true,
     "retort_exceeds_patch_parser_by_semantic_comments": true,
-    "retort_publishable_comment_count": 3,
+    "retort_publishable_comment_count": 4,
     "retort_review_status": "reviewed",
     "retort_task_group_count": 1,
     "side_by_side_output_materialized": true

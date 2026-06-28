@@ -232,6 +232,7 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             competitor_root=str(payload.get("competitor_root") or ""),
             live_upstream=bool(payload.get("live_upstream")),
+            force_live_refresh=bool(payload.get("force_live_refresh")),
         )
 
     def competitor_blind_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:

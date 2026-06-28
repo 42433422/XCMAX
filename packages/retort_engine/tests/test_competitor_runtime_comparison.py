@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import subprocess
 import sys
@@ -21,8 +23,42 @@ def test_competitor_runtime_comparison_materializes_side_by_side_outputs(tmp_pat
     assert result["summary"]["ready_competitor_project_count"] == 3
     assert result["summary"]["multi_competitor_side_by_side"] is True
     assert result["summary"]["competitor_hunk_count"] >= 2
+    assert result["summary"]["external_diagnostic_count"] >= 1
+    assert result["retort_output"]["summary"]["external_diagnostic_ingestion"]["accepted_count"] >= 1
     assert result["summary"]["retort_review_status"] == "reviewed"
     assert result["summary"]["side_by_side_output_materialized"] is True
+    assert validate_contract("competitor_runtime_comparison_result", result)["valid"] is True
+
+
+def test_competitor_runtime_comparison_can_force_live_materialized_sources(tmp_path: Path, monkeypatch) -> None:
+    def fake_gh_api(endpoint: str) -> dict:
+        if endpoint.startswith("repos/") and "/contents/" not in endpoint:
+            return {"returncode": 0, "json": {"default_branch": "main"}, "stderr_tail": ""}
+        raw = f"live source for {endpoint}\n".encode("utf-8")
+        git_blob_sha = hashlib.sha1(f"blob {len(raw)}\0".encode("utf-8") + raw).hexdigest()
+        return {
+            "returncode": 0,
+            "json": {
+                "sha": git_blob_sha,
+                "content": base64.b64encode(raw).decode("ascii"),
+                "html_url": f"https://example.test/{endpoint}",
+                "download_url": f"https://example.test/{endpoint}/raw",
+            },
+            "stderr_tail": "",
+        }
+
+    monkeypatch.setattr("retort_engine.competitor_runtime_comparison._gh_api", fake_gh_api)
+
+    result = build_competitor_runtime_comparison(tmp_path, live_upstream=True, force_live_refresh=True, run_id="unit-live-refresh")
+
+    assert result["status"] == "ready"
+    assert result["summary"]["force_live_refresh"] is True
+    assert result["summary"]["all_runtime_sources_from_live_refresh"] is True
+    assert result["summary"]["live_refresh_used_count"] == result["summary"]["competitor_project_count"]
+    assert result["summary"]["all_live_upstream_sources_materialized"] is True
+    assert result["summary"]["external_diagnostic_count"] >= 1
+    assert result["retort_output"]["summary"]["core_review_score"]["external_diagnostic_core_behavior_active"] is True
+    assert {item["source_mode"] for item in result["competitor_output"]["runtimes"]} == {"live_materialized"}
     assert validate_contract("competitor_runtime_comparison_result", result)["valid"] is True
 
 
