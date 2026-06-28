@@ -4,6 +4,7 @@
     "gate_names": [
       "lint",
       "pytest",
+      "test_density",
       "contract"
     ],
     "python": "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
@@ -38,7 +39,26 @@
       "ok": true,
       "returncode": 0,
       "stderr_tail": "",
-      "stdout_tail": "........................................................................ [ 17%]\n........................................................................ [ 35%]\n........................................................................ [ 53%]\n........................................................................ [ 70%]\n........................................................................ [ 88%]\n...............................................                          [100%]\n407 passed in 19.20s\n"
+      "stdout_tail": "........................................................................ [ 17%]\n........................................................................ [ 34%]\n........................................................................ [ 52%]\n........................................................................ [ 69%]\n........................................................................ [ 87%]\n.....................................................                    [100%]\n413 passed in 18.60s\n"
+    },
+    {
+      "command": [
+        "retort",
+        "test-density"
+      ],
+      "floor": 0.4,
+      "kind": "in_process",
+      "missing_test_lines_to_target": 0,
+      "name": "test_density",
+      "ok": true,
+      "returncode": 0,
+      "source_line_count": 17147,
+      "stderr_tail": "",
+      "stdout_tail": "test_to_source_ratio=0.629; target=0.6; missing_test_lines_to_target=0",
+      "target": 0.6,
+      "target_met": true,
+      "test_line_count": 10785,
+      "test_to_source_ratio": 0.629
     },
     {
       "command": [
@@ -62,11 +82,19 @@
     "command_name": "quality-gates",
     "contract_passed": true,
     "contract_schema_count": 35,
-    "duration_sec": 19.526,
-    "gate_count": 3,
+    "duration_sec": 19.29,
+    "gate_count": 4,
     "lint_passed": true,
-    "passed_count": 3,
+    "passed_count": 4,
     "pytest_passed": true,
-    "single_command_surface": true
+    "single_command_surface": true,
+    "source_line_count": 17147,
+    "test_density_floor": 0.4,
+    "test_density_missing_lines_to_target": 0,
+    "test_density_passed": true,
+    "test_density_target": 0.6,
+    "test_density_target_met": true,
+    "test_line_count": 10785,
+    "test_to_source_ratio": 0.629
   }
 }

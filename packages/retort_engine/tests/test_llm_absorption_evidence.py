@@ -143,6 +143,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "pytest_passed": True,
                     "contract_passed": True,
                     "single_command_surface": True,
+                    "test_density_passed": True,
+                    "test_density_target_met": False,
+                    "test_to_source_ratio": 0.408,
+                    "test_density_target": 0.6,
+                    "test_density_missing_lines_to_target": 3276,
+                    "source_line_count": 17083,
+                    "test_line_count": 6974,
                 },
                 "gates": [],
                 "evidence": {},
@@ -288,7 +295,15 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "execution_mode": "employee_runtime_worker",
                 "results": [{"task_id": "one"}],
                 "runtime_evidence": {
-                    "worker_review": {"status": "reviewed", "comment_count": 2, "artifact": "review.json"},
+                    "worker_review": {
+                        "status": "reviewed",
+                        "comment_count": 60,
+                        "file_count": 45,
+                        "task_group_count": 15,
+                        "worker_review_count": 5,
+                        "artifact": "review.json",
+                    },
+                    "multi_worker": {"verified": True, "worker_count": 5, "independent_worker_count": 5, "result_path_count": 5},
                     "employee_patch_closure": {
                         "status": "ready",
                         "summary": {"success_case_verified": True, "failure_case_rolled_back": True},
@@ -317,7 +332,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard" in evidence
     assert "component_gap_count=1" in evidence
     assert "employee_result_count=1; execution_mode=employee_runtime_worker" in evidence
-    assert "employee_runtime_worker_review=reviewed; comments=2; artifact=review.json" in evidence
+    assert "employee_runtime_worker_review=reviewed; comments=60; artifact=review.json" in evidence
+    assert "employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5" in evidence
+    assert "employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5" in evidence
     assert "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True" in evidence
     assert "employee_patch_closure_status=ready" in evidence
     assert "employee_patch_closure_success_case_verified=True" in evidence
@@ -327,6 +344,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_patch_closure_retry_case_verified=True" in evidence
     assert "quality_gate_bundle_status=ready" in evidence
     assert "quality_gate_bundle_all_passed=True" in evidence
+    assert "quality_gate_bundle_test_density=True" in evidence
+    assert "quality_gate_bundle_test_to_source_ratio=0.408" in evidence
+    assert "quality_gate_bundle_test_density_target=0.6" in evidence
+    assert "quality_gate_bundle_test_density_target_met=False" in evidence
+    assert "quality_gate_bundle_test_density_missing_lines=3276" in evidence
+    assert "quality_gate_bundle_source_lines=17083" in evidence
+    assert "quality_gate_bundle_test_lines=6974" in evidence
     assert "quality_gate_bundle_contract=True" in evidence
     assert "review_adjudication_calibration_status=ready" in evidence
     assert "external_advantage_matrix_status=ready" in evidence

@@ -7,10 +7,13 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from retort_engine.capability_audit import code_health
 from retort_engine.contracts import contract_names, validate_contract
 
 
 GateRunner = Callable[[list[str], Path], dict[str, Any]]
+TEST_DENSITY_FLOOR = 0.4
+TEST_DENSITY_TARGET = 0.6
 
 
 def run_quality_gate_bundle(
@@ -27,15 +30,25 @@ def run_quality_gate_bundle(
     gates = [
         _command_gate("lint", [python, "-m", "ruff", "check", "."], root, command_runner),
         _command_gate("pytest", [python, "-m", "pytest", "tests", "-q"], root, command_runner),
+        _test_density_gate(root),
         _contract_gate(),
     ]
     passed = [gate for gate in gates if gate["ok"]]
+    density_gate = next((gate for gate in gates if gate["name"] == "test_density"), {})
     summary = {
         "gate_count": len(gates),
         "passed_count": len(passed),
         "all_gates_passed": len(passed) == len(gates),
         "lint_passed": _gate_ok(gates, "lint"),
         "pytest_passed": _gate_ok(gates, "pytest"),
+        "test_density_passed": _gate_ok(gates, "test_density"),
+        "test_density_target_met": bool(density_gate.get("target_met")),
+        "test_to_source_ratio": density_gate.get("test_to_source_ratio", 0.0),
+        "test_line_count": density_gate.get("test_line_count", 0),
+        "source_line_count": density_gate.get("source_line_count", 0),
+        "test_density_floor": TEST_DENSITY_FLOOR,
+        "test_density_target": TEST_DENSITY_TARGET,
+        "test_density_missing_lines_to_target": density_gate.get("missing_test_lines_to_target", 0),
         "contract_passed": _gate_ok(gates, "contract"),
         "contract_schema_count": len(contract_names()),
         "single_command_surface": True,
@@ -71,6 +84,33 @@ def _command_gate(name: str, command: list[str], root: Path, runner: GateRunner)
         "returncode": int(completed.get("returncode") or 0),
         "stdout_tail": str(completed.get("stdout") or "")[-2000:],
         "stderr_tail": str(completed.get("stderr") or "")[-2000:],
+    }
+
+
+def _test_density_gate(root: Path) -> dict[str, Any]:
+    health = code_health(root)
+    ratio = float(health.get("test_to_source_ratio") or 0.0)
+    source_lines = int(health.get("source_line_count") or 0)
+    test_lines = int(health.get("test_line_count") or 0)
+    target_lines = int(source_lines * TEST_DENSITY_TARGET + 0.999) if source_lines else 0
+    missing = max(0, target_lines - test_lines)
+    floor_passed = ratio >= TEST_DENSITY_FLOOR
+    target_met = ratio >= TEST_DENSITY_TARGET
+    return {
+        "name": "test_density",
+        "kind": "in_process",
+        "command": ["retort", "test-density"],
+        "ok": floor_passed,
+        "returncode": 0 if floor_passed else 1,
+        "test_to_source_ratio": ratio,
+        "source_line_count": source_lines,
+        "test_line_count": test_lines,
+        "floor": TEST_DENSITY_FLOOR,
+        "target": TEST_DENSITY_TARGET,
+        "target_met": target_met,
+        "missing_test_lines_to_target": missing,
+        "stdout_tail": f"test_to_source_ratio={ratio}; target={TEST_DENSITY_TARGET}; missing_test_lines_to_target={missing}",
+        "stderr_tail": "" if floor_passed else "test density below Retort floor",
     }
 
 

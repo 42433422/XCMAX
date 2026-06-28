@@ -57,6 +57,7 @@ def record_post_absorption_hardening_run(
     aggregate_payload = _read_json(employee_result_path)
     aggregate_results = aggregate_payload.get("results") if isinstance(aggregate_payload.get("results"), list) else []
     multi_worker = aggregate_payload.get("runtime_evidence", {}).get("multi_worker") if isinstance(aggregate_payload.get("runtime_evidence"), dict) else {}
+    worker_review = aggregate_payload.get("runtime_evidence", {}).get("worker_review") if isinstance(aggregate_payload.get("runtime_evidence"), dict) else {}
     result = {
         "run_id": run_id,
         "status": "applied" if changed_files else "noop",
@@ -71,6 +72,10 @@ def record_post_absorption_hardening_run(
             "independent_worker_count": int(multi_worker.get("independent_worker_count") or 0),
             "employee_result_count": len(aggregate_results),
             "multi_worker_verified": bool(multi_worker.get("verified")),
+            "worker_review_count": int(worker_review.get("worker_review_count") or 0),
+            "worker_review_file_count": int(worker_review.get("file_count") or 0),
+            "worker_review_comment_count": int(worker_review.get("comment_count") or 0),
+            "worker_review_task_group_count": int(worker_review.get("task_group_count") or 0),
             "duration_sec": round(time.monotonic() - started, 3),
         },
         "changed_files": changed_files,

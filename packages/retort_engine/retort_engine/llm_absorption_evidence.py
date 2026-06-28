@@ -207,6 +207,13 @@ def _report_evidence(project: Path) -> list[str]:
         f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
         f"quality_gate_bundle_lint={quality_summary.get('lint_passed', '')}",
         f"quality_gate_bundle_pytest={quality_summary.get('pytest_passed', '')}",
+        f"quality_gate_bundle_test_density={quality_summary.get('test_density_passed', '')}",
+        f"quality_gate_bundle_test_to_source_ratio={quality_summary.get('test_to_source_ratio', '')}",
+        f"quality_gate_bundle_test_density_target={quality_summary.get('test_density_target', '')}",
+        f"quality_gate_bundle_test_density_target_met={quality_summary.get('test_density_target_met', '')}",
+        f"quality_gate_bundle_test_density_missing_lines={quality_summary.get('test_density_missing_lines_to_target', '')}",
+        f"quality_gate_bundle_source_lines={quality_summary.get('source_line_count', '')}",
+        f"quality_gate_bundle_test_lines={quality_summary.get('test_line_count', '')}",
         f"quality_gate_bundle_contract={quality_summary.get('contract_passed', '')}",
         f"quality_gate_bundle_single_command={quality_summary.get('single_command_surface', '')}",
         f"pr_publish_dry_run_status={publish_report.get('status', '')}",
@@ -461,12 +468,15 @@ def _employee_result_evidence(project: Path) -> list[str]:
     payload = read_json(latest)
     runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
     review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
+    multi_worker = runtime.get("multi_worker") if isinstance(runtime.get("multi_worker"), dict) else {}
     patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
     patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
     return [
         f"employee_results_file={latest}",
         f"employee_result_count={len(payload.get('results') or [])}; execution_mode={payload.get('execution_mode', '')}",
         f"employee_runtime_worker_review={review.get('status', '')}; comments={review.get('comment_count', '')}; artifact={review.get('artifact', '')}",
+        f"employee_runtime_worker_review_files={review.get('file_count', '')}; task_groups={review.get('task_group_count', '')}; worker_reviews={review.get('worker_review_count', '')}",
+        f"employee_runtime_multi_worker_verified={multi_worker.get('verified', '')}; workers={multi_worker.get('worker_count', '')}; independent_workers={multi_worker.get('independent_worker_count', '')}; result_paths={multi_worker.get('result_path_count', '')}",
         f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
 
@@ -492,6 +502,10 @@ def _latest_run_evidence(project: Path) -> list[str]:
                 f"latest_absorption_independent_worker_count={summary.get('independent_worker_count', '')}",
                 f"latest_absorption_employee_result_count={summary.get('employee_result_count', '')}",
                 f"latest_absorption_multi_worker_verified={summary.get('multi_worker_verified', '')}",
+                f"latest_absorption_worker_review_count={summary.get('worker_review_count', '')}",
+                f"latest_absorption_worker_review_files={summary.get('worker_review_file_count', '')}",
+                f"latest_absorption_worker_review_comments={summary.get('worker_review_comment_count', '')}",
+                f"latest_absorption_worker_review_task_groups={summary.get('worker_review_task_group_count', '')}",
             ]
     return []
 

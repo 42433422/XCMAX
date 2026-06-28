@@ -534,6 +534,7 @@ def latest_employee_worker_review(root: Path) -> dict[str, Any]:
             continue
         runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
         review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
+        multi_worker = runtime.get("multi_worker") if isinstance(runtime.get("multi_worker"), dict) else {}
         if review:
             artifact_text = str(review.get("artifact") or "")
             return {
@@ -541,6 +542,12 @@ def latest_employee_worker_review(root: Path) -> dict[str, Any]:
                 "comment_count": int(review.get("comment_count") or 0),
                 "file_count": int(review.get("file_count") or 0),
                 "task_group_count": int(review.get("task_group_count") or 0),
+                "worker_review_count": int(review.get("worker_review_count") or 0),
+                "multi_worker_verified": bool(multi_worker.get("verified")),
+                "worker_count": int(multi_worker.get("worker_count") or 0),
+                "independent_worker_count": int(multi_worker.get("independent_worker_count") or 0),
+                "result_path_count": int(multi_worker.get("result_path_count") or 0),
+                "multi_file_review_verified": int(review.get("file_count") or 0) >= 10 and int(review.get("comment_count") or 0) >= 20,
                 "artifact": artifact_text,
                 "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),
             }

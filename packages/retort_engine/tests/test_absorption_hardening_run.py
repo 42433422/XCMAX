@@ -46,6 +46,10 @@ def test_record_post_absorption_hardening_run_materializes_latest_behavior_diff(
     assert result["summary"]["independent_worker_count"] == 2
     assert result["summary"]["employee_result_count"] >= 2
     assert result["summary"]["multi_worker_verified"] is True
+    assert result["summary"]["worker_review_count"] == 2
+    assert result["summary"]["worker_review_file_count"] >= 2
+    assert result["summary"]["worker_review_comment_count"] >= 2
+    assert result["summary"]["worker_review_task_group_count"] >= 2
     assert result["code_graph_proof"]["run_id"] == result["run_id"]
     employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
     assert employee_result["execution_mode"] == "employee_runtime_worker_multi_process"
