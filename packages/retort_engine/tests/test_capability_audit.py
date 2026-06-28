@@ -24,10 +24,11 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa
     result_dir.mkdir(parents=True)
     review_artifact = result_dir / "worker_review.json"
     review_artifact.write_text("{}", encoding="utf-8")
-    (result_dir / "result.json").write_text(
+    aggregate_result = result_dir / "result.json"
+    aggregate_result.write_text(
         json.dumps(
             {
-                "execution_mode": "employee_runtime_worker",
+                "execution_mode": "employee_runtime_worker_multi_process",
                 "runtime_evidence": {
                     "worker_review": {
                         "status": "reviewed",
@@ -41,6 +42,21 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa
                 },
             }
         ),
+        encoding="utf-8",
+    )
+    (result_dir / "zz_scheduler_stress_worker.json").write_text(
+        json.dumps(
+            {
+                "execution_mode": "employee_runtime_worker",
+                "runtime_evidence": {
+                    "worker_review": {"status": "reviewed", "comment_count": 2, "file_count": 1, "task_group_count": 1, "artifact": str(review_artifact)},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "run.json").write_text(
+        json.dumps({"source": "https://github.com/example/repo", "changed_files": [str(source), str(test)], "employee_results_path": str(aggregate_result)}),
         encoding="utf-8",
     )
     docs = tmp_path / "docs"

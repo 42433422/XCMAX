@@ -33,8 +33,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     test.write_text("def test_feature():\n    assert True\n", encoding="utf-8")
     run_dir = tmp_path / ".retort" / "real_absorption_runs"
     run_dir.mkdir(parents=True)
+    aggregate_result_path = tmp_path / ".retort" / "employee_results" / "result.json"
     (run_dir / "run.json").write_text(
-        json.dumps({"source": "https://github.com/owner/repo", "changed_files": [str(source), str(test)]}),
+        json.dumps({"source": "https://github.com/owner/repo", "changed_files": [str(source), str(test)], "employee_results_path": str(aggregate_result_path)}),
         encoding="utf-8",
     )
     docs = tmp_path / "docs"
@@ -289,10 +290,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     )
     result_dir = tmp_path / ".retort" / "employee_results"
     result_dir.mkdir(parents=True)
-    (result_dir / "result.json").write_text(
+    aggregate_result_path.write_text(
         json.dumps(
             {
-                "execution_mode": "employee_runtime_worker",
+                "execution_mode": "employee_runtime_worker_multi_process",
                 "results": [{"task_id": "one"}],
                 "runtime_evidence": {
                     "worker_review": {
@@ -308,6 +309,18 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                         "status": "ready",
                         "summary": {"success_case_verified": True, "failure_case_rolled_back": True},
                     },
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (result_dir / "zz_scheduler_stress_worker.json").write_text(
+        json.dumps(
+            {
+                "execution_mode": "employee_runtime_worker",
+                "results": [{"task_id": "stress"}],
+                "runtime_evidence": {
+                    "worker_review": {"status": "reviewed", "comment_count": 2, "file_count": 1, "task_group_count": 1, "artifact": "stress_review.json"},
                 },
             }
         ),
@@ -331,7 +344,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "semantic_gap_count=1" in evidence
     assert "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard" in evidence
     assert "component_gap_count=1" in evidence
-    assert "employee_result_count=1; execution_mode=employee_runtime_worker" in evidence
+    assert "employee_result_count=1; execution_mode=employee_runtime_worker_multi_process" in evidence
     assert "employee_runtime_worker_review=reviewed; comments=60; artifact=review.json" in evidence
     assert "employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5" in evidence
     assert "employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5" in evidence
