@@ -158,6 +158,52 @@ canvas {
   color: #aebdca;
 }
 
+.ops-dashboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ops-dashboard div {
+  min-width: 0;
+  padding: 7px 7px 6px;
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, .055);
+}
+
+.ops-dashboard span,
+.ops-dashboard b {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ops-dashboard span {
+  color: #8fa0b2;
+  font-size: 10px;
+}
+
+.ops-dashboard b {
+  color: #eaf6ff;
+  font: 700 12px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.ops-dashboard .ok b {
+  color: #9ef0bf;
+}
+
+.ops-dashboard .warn b {
+  color: #ffd27a;
+}
+
+.ops-dashboard .bad b {
+  color: #ff9b9b;
+}
+
 .deep-progress {
   --progress: 0%;
   display: grid;

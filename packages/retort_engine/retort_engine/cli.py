@@ -27,14 +27,16 @@ def main(argv: list[str] | None = None) -> int:
     assess = sub.add_parser("project-assess")
     assess.add_argument("--project", default=".")
     assess.add_argument("--run-local-gates", action="store_true")
-    assess.add_argument("--use-llm", action="store_true")
-    assess.add_argument("--wait-llm-sec", type=float, default=240)
+    assess.add_argument("--use-llm", dest="use_llm", action="store_true", default=None)
+    assess.add_argument("--no-llm", dest="use_llm", action="store_false")
+    assess.add_argument("--wait-llm-sec", type=float, default=None)
     assess.add_argument("--json", action="store_true")
     evolve = sub.add_parser("self-evolve")
     evolve.add_argument("--project", default=".")
     evolve.add_argument("--run-local-gates", action="store_true")
-    evolve.add_argument("--use-llm", action="store_true")
-    evolve.add_argument("--wait-llm-sec", type=float, default=240)
+    evolve.add_argument("--use-llm", dest="use_llm", action="store_true", default=None)
+    evolve.add_argument("--no-llm", dest="use_llm", action="store_false")
+    evolve.add_argument("--wait-llm-sec", type=float, default=None)
     evolve.add_argument("--json", action="store_true")
     absorb_cmd = sub.add_parser("absorb")
     absorb_cmd.add_argument("--own-project", default=".")
@@ -49,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     absorb_cmd.add_argument("--merge-after", action="store_true")
     absorb_cmd.add_argument("--allow-dirty-branch", action="store_true")
     absorb_cmd.add_argument("--refresh", action="store_true")
-    absorb_cmd.add_argument("--use-llm", action="store_true")
+    absorb_cmd.add_argument("--use-llm", dest="use_llm", action="store_true", default=None)
+    absorb_cmd.add_argument("--no-llm", dest="use_llm", action="store_false")
     absorb_cmd.add_argument("--no-execute-absorption", action="store_true")
     absorb_cmd.add_argument("--execution-timeout-sec", type=int, default=1800)
     absorb_cmd.add_argument("--json", action="store_true")
@@ -171,12 +174,12 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=8790)
     args = parser.parse_args(argv)
     if args.command == "project-assess":
-        use_llm = bool(args.use_llm)
+        use_llm = args.use_llm
         result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": use_llm, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": use_llm})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_scores("Retort assessment", result["scores"]))
         return 0
     if args.command == "self-evolve":
-        use_llm = bool(args.use_llm)
+        use_llm = args.use_llm
         result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": use_llm, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": use_llm})
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
