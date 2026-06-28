@@ -131,6 +131,8 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
         "pr_live_publish_probe": "publish-pr-live-probe" in text and "run_live_pr_comment_probe" in text and "/api/publish-pr-live-probe" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
+        "multi_project_absorption_replay": "multi-project-absorption-replay" in text and "build_multi_project_absorption_replay" in text,
+        "absorption_continuity_probe": "absorption-continuity-probe" in text and "build_absorption_continuity_probe" in text,
         "complex_pr_replay": "complex-pr-replay" in text and "build_complex_pr_replay_report" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,

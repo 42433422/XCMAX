@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 
+from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.architecture_contracts import evaluate_architecture_contracts, load_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
@@ -17,6 +18,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
@@ -138,6 +140,16 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
     replay.add_argument("--json", action="store_true")
+    multi_absorption_replay = sub.add_parser("multi-project-absorption-replay")
+    multi_absorption_replay.add_argument("--project", default=".")
+    multi_absorption_replay.add_argument("--min-projects", type=int, default=2)
+    multi_absorption_replay.add_argument("--output", default="")
+    multi_absorption_replay.add_argument("--json", action="store_true")
+    continuity_probe = sub.add_parser("absorption-continuity-probe")
+    continuity_probe.add_argument("--project", default=".")
+    continuity_probe.add_argument("--min-runs", type=int, default=2)
+    continuity_probe.add_argument("--output", default="")
+    continuity_probe.add_argument("--json", action="store_true")
     complex_replay = sub.add_parser("complex-pr-replay")
     complex_replay.add_argument("--project", default=".")
     complex_replay.add_argument("--pr-url", action="append", default=[])
@@ -406,6 +418,26 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort cross-project replay status: {result['status']}")
             print(f"External projects: {result['summary']['external_project_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "multi-project-absorption-replay":
+        result = build_multi_project_absorption_replay(args.project, min_projects=args.min_projects, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort multi-project absorption replay status: {result['status']}")
+            print(f"Ready projects: {result['summary']['ready_project_count']}/{result['summary']['min_project_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "absorption-continuity-probe":
+        result = build_absorption_continuity_probe(args.project, min_runs=args.min_runs, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort absorption continuity status: {result['status']}")
+            print(f"Ready runs: {result['summary']['ready_run_count']}/{result['summary']['min_run_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

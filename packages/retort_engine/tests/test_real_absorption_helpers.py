@@ -210,6 +210,14 @@ def test_review_context_bias_generation_is_executable(tmp_path: Path) -> None:
     assert module.context_signal_strength() == 60
 
 
+def test_review_context_bias_test_template_uses_only_referenced_symbols() -> None:
+    content = real._review_context_bias_test_content("retort_engine.review_context_bias", "https://github.com/example/reviewer")
+
+    assert "context_rank_weight, " not in content
+    assert "context_rank_weights" in content
+    assert "context_signal_strength" in content
+
+
 def test_review_context_bias_generation_merges_previous_absorptions(tmp_path: Path) -> None:
     previous_content = real._review_context_bias_content(
         "run-old",

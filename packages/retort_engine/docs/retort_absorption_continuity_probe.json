@@ -1,0 +1,106 @@
+{
+  "evidence": {
+    "counting_model": {
+      "latest_absorption_run": "changed behavior files in the latest run only",
+      "post_absorption_hardening": "git diff from latest merge commit to HEAD",
+      "support_inventory": "all supported Retort behavior modules and tests"
+    },
+    "run_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs",
+    "scope": "latest_distinct_successful_real_absorption_runs",
+    "source_order": [
+      "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+    ]
+  },
+  "latest_closed_loop": {
+    "merge_commit": "2525bd4b6",
+    "required_flags": {
+      "branch_diff_verified": true,
+      "code_graph_proof_passed": true,
+      "employee_execution_verified": true,
+      "external_advantage_reassessed": true,
+      "merge_verified": true,
+      "post_absorption_tests_passed": true
+    },
+    "run_id": "20260628002727-95b76ebf47",
+    "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+    "state_status": "closed_loop_verified",
+    "verified": true
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "runs": [
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py",
+        "retort_engine/absorbed_review_policy.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_review_policy.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 11,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 7,
+      "gate_count": 12,
+      "latest": true,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628002727-95b76ebf47.json",
+      "run_id": "20260628002727-95b76ebf47",
+      "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py",
+        "retort_engine/absorbed_review_policy.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_review_policy.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 11,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 8,
+      "gate_count": 12,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627235555-f62954c70a.json",
+      "run_id": "20260627235555-f62954c70a",
+      "source": "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent"
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_have_behavior_diff": true,
+    "all_have_behavior_tests": true,
+    "all_have_employee_results": true,
+    "all_have_gates_passed": true,
+    "all_have_per_run_code_graph_proof": true,
+    "continuity_gate_passed": true,
+    "continuity_span_minutes": 31,
+    "counting_model_separated": true,
+    "distinct_source_count": 2,
+    "latest_closed_loop_verified": true,
+    "latest_merge_commit": "2525bd4b6",
+    "min_run_count": 2,
+    "ready_run_count": 2,
+    "selected_run_count": 2
+  }
+}

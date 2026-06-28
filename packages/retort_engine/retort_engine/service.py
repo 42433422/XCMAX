@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
@@ -17,6 +18,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
@@ -97,6 +99,18 @@ class RetortService:
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def multi_project_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_multi_project_absorption_replay(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_projects=int(payload.get("min_projects") or 2),
+        )
+
+    def absorption_continuity_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_absorption_continuity_probe(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_runs=int(payload.get("min_runs") or 2),
+        )
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
@@ -219,6 +233,14 @@ def create_app() -> Any:
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.cross_project_replay(payload)
+
+    @app.post("/multi-project-absorption-replay")
+    def multi_project_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.multi_project_absorption_replay(payload)
+
+    @app.post("/absorption-continuity-probe")
+    def absorption_continuity_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.absorption_continuity_probe(payload)
 
     @app.post("/complex-pr-replay")
     def complex_pr_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
