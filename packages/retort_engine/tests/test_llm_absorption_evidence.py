@@ -214,9 +214,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "closed_loop_five_proofs_verified=True" in evidence
     assert "latest_absorption_source=https://github.com/owner/repo" in evidence
     assert "capability_absorption_local_score_removed=True" in evidence
+    assert "capability_absorption_latest_scope=latest_real_absorption_run" in evidence
     assert not any(item.startswith("capability_absorption_score=") for item in evidence)
     assert not any(item.startswith("capability_absorption_cap=") for item in evidence)
     assert "behavior_test_function_count=1" in evidence
+    assert "post_absorption_hardening_scope=latest_merge_commit_to_head" in evidence
+    assert any(item.startswith("total_behavior_source_file_count=") for item in evidence)
     assert "external_snapshot_revision=abc123" in evidence
     assert "semantic_gap_count=1" in evidence
     assert "license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard" in evidence
