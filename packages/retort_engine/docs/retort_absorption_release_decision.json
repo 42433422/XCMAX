@@ -242,7 +242,7 @@
     "external_advantage_ci_regression_cases": 6,
     "external_advantage_ci_regression_min_delta": 80,
     "external_advantage_ci_regression_ready": true,
-    "external_advantage_matrix_delta": 60.0,
+    "external_advantage_matrix_delta": 55.0,
     "external_advantage_matrix_ready": true,
     "external_advantage_repeat_ready": true,
     "external_advantage_repeat_total_cases": 12,

@@ -225,7 +225,7 @@ def _retort_review_score(case: dict[str, Any], comments: list[dict[str, Any]], s
     task_group_count = int(summary.get("task_group_count") or 0)
     extension_known = int(extension_policy.get("known_extension_count") or 0)
     score = 0
-    score += 30 if severity_matched else 0
+    score += 25 if severity_matched else 0
     score += 20 if context_matched else 0
     score += 15 if publishable_count > 0 else 0
     score += 15 if task_group_count > 0 else 0

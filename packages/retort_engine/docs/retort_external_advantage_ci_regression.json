@@ -2,7 +2,7 @@
   "cases": [
     {
       "absorbed_signal": "security_ranked_pr_review",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "pr-agent-secret-context",
       "checks": {
         "direct_context_matched": true,
@@ -19,7 +19,7 @@
     },
     {
       "absorbed_signal": "ci_review_publisher_safety",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "reviewdog-workflow-token",
       "checks": {
         "direct_context_matched": true,
@@ -36,7 +36,7 @@
     },
     {
       "absorbed_signal": "evaluation_harness_oracle",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "swe-bench-oracle-placeholder",
       "checks": {
         "direct_context_matched": true,
@@ -53,7 +53,7 @@
     },
     {
       "absorbed_signal": "architecture_contract_guard",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "import-linter-contract-bypass",
       "checks": {
         "direct_context_matched": true,
@@ -70,7 +70,7 @@
     },
     {
       "absorbed_signal": "context_packaging_noise_control",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "repomix-context-package-clean",
       "checks": {
         "direct_context_matched": true,
@@ -87,7 +87,7 @@
     },
     {
       "absorbed_signal": "typescript_diff_hunk_review",
-      "behavior_delta": 60,
+      "behavior_delta": 55,
       "case_id": "mopemope-typescript-diff-review",
       "checks": {
         "direct_context_matched": true,
@@ -121,10 +121,10 @@
     "blind_third_party_minimum_delta": 80,
     "case_count": 6,
     "ci_command": "retort external-advantage-ci-regression --project <project>",
-    "duration_sec": 0.015,
+    "duration_sec": 0.014,
     "matrix_case_count": 6,
     "matrix_ready_cases": 6,
-    "matrix_score_delta": 60.0,
+    "matrix_score_delta": 55.0,
     "matrix_status": "ready",
     "min_case_count": 6,
     "passed_case_count": 6,
