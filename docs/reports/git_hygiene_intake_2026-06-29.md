@@ -1,0 +1,269 @@
+# Git Hygiene Intake Report
+
+- Generated: 2026-06-28 20:31:10 UTC
+- Repository: `/private/tmp/xcmax-git-hygiene`
+- Baseline: `main`
+- Branches listed: 134
+- Feature-bearing branches in this report: 99
+- Active dirty branch worktrees detected: 7
+- Dirty files in report-generation worktree: 4
+- Dirty files in report-generation worktree classified as runtime/test artifacts: 0
+- High-confidence tracked runtime candidates: 356
+
+## Policy
+
+- Do not delete feature-bearing branches during cleanup.
+- Do not merge long branches directly into `main`; intake by small reviewed commits.
+- Runtime artifacts must be ignored or untracked before branch integration resumes.
+- Dirty active worktrees must be split by module before any merge attempt.
+
+## Dirty Worktree Modules
+
+| module | files |
+| --- | ---: |
+| `docs` | 2 |
+| `root` | 1 |
+| `scripts` | 1 |
+
+## Active Dirty Worktrees
+
+| branch | dirty files | runtime-like | top modules | path | sample |
+| --- | ---: | ---: | --- | --- | --- |
+| `evaluate-project-level-5sethe` | 312 | 0 | fhd-other:163, fhd-backend:149 | `/Users/a4243342/.trae-cn/worktrees/XCMAX/evaluate-project-level-5sethe` | `FHD/.venv311/bin/Activate.ps1`<br>`FHD/.venv311/bin/activate`<br>`FHD/.venv311/bin/activate.csh`<br>`FHD/.venv311/bin/activate.fish`<br>`FHD/.venv311/bin/alembic`<br>`FHD/.venv311/bin/bandit` |
+| `retort/absorb-test-fix` | 94 | 1 | modstore-deploy:57, yuangon:8, fhd-mobile-android:7, fhd-other:6 | `/Users/a4243342/Desktop/XCMAX` | `.github/workflows/modstore-build-desktop.yml`<br>`FHD/MODstore/modstore_server/digest_vibe_prep.py`<br>`FHD/MODstore/modstore_server/duty_roster.py`<br>`FHD/app/application/modstore_local_client.py`<br>`FHD/app/fastapi_routes/mobile_api_extensions.py`<br>`FHD/config/duty_roster.json` |
+| `main` | 76 | 15 | modstore-deploy:25, retort-engine:23, fhd-mobile-android:14, fhd-backend:10 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9` | `FHD/app/application/im_app_service.py`<br>`FHD/app/db/init_db.py`<br>`FHD/app/db/models/__init__.py`<br>`FHD/app/fastapi_routes/mobile_api_extensions.py`<br>`FHD/app/infrastructure/auth/dependencies.py`<br>`FHD/app/infrastructure/session/session_manager.py` |
+| `claude/sharp-dhawan-6d68fa` | 19 | 0 | fhd-other:19 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/cov90-rebase` | `FHD/dataset_rag/datasets.json`<br>`FHD/metrics/sla-snapshot.json`<br>`FHD/mods/attendance-industry/backend/__init__.py`<br>`FHD/mods/attendance-industry/backend/blueprints.py`<br>`FHD/mods/attendance-industry/backend/database.py`<br>`FHD/mods/attendance-industry/backend/taiyangniao_attendance/__init__.py` |
+| `codex/git-hygiene-intake` | 4 | 0 | docs:2, root:1, scripts:1 | `/private/tmp/xcmax-git-hygiene` | `.gitignore`<br>`docs/reports/git_hygiene_intake_2026-06-29.json`<br>`docs/reports/git_hygiene_intake_2026-06-29.md`<br>`scripts/dev/git_hygiene_inventory.py` |
+| `retort/absorb-quality-hypothesis-581401` | 4 | 4 | runtime-retort:4 | `/Users/a4243342/.codex/worktrees/retort-live/XCMAX` | `packages/retort_engine/.retort/absorption_state.json`<br>`packages/retort_engine/.retort/employee_queue.jsonl`<br>`packages/retort_engine/.retort/llm_reviews.jsonl`<br>`packages/retort_engine/.retort/retort_history.sqlite` |
+| `claude/musing-roentgen-affc4b` | 1 | 0 | fhd-other:1 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/musing-roentgen-affc4b` | `FHD/data/` |
+
+## High-Confidence Tracked Runtime Candidates
+
+- `.hvigor/outputs/build-logs/build.log`
+- `packages/retort_engine/.retort/absorption_state.json`
+- `packages/retort_engine/.retort/cache/github/alibaba/open-code-review`
+- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/competitor_output.json`
+- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/input.patch`
+- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/mopemope_patch_runtime.js`
+- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/retort_output.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_01_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_01_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_02_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_02_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_03_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_03_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_04_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_04_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_05_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_05_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_06_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_06_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_01_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_01_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_02_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_02_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_03_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_03_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_04_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_04_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_05_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_05_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_06_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_06_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_01_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_01_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_02_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_02_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_03_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_03_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_04_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_04_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_05_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_05_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_06_result.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_06_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_payload.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/producer_state.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_check.json`
+- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_payload.json`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/contract.json`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/post_output.json`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/__init__.py`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/codebase_graph.py`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/core.py`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_input.json`
+- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_output.json`
+- ... 276 more
+
+## Branch Intake Queue
+
+| branch | ahead | behind | files | kind | modules | dirty | strategy | last commit |
+| --- | ---: | ---: | ---: | --- | --- | --- | --- | --- |
+| `retort-live-mainline-proof` | 201 | 182 | 553 | large-feature-candidate | runtime-retort:352, retort-engine:201 | no | needs branch-level intake, likely squash/cherry-pick | 80114f30d feat(retort): add product mainline absorption proof |
+| `retort/absorb-packages-retort-engine-retort-cache-github-mopem-20260628002709` | 156 | 182 | 165 | retort-feature-candidate | retort-engine:112, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | b6d523558 Retort absorb packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot |
+| `retort/absorb-packages-retort-engine-retort-cache-github-qodo--20260627235540` | 150 | 182 | 161 | retort-feature-candidate | retort-engine:108, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | 2683a8257 Retort absorb packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent |
+| `retort/absorb-packages-retort-engine-retort-cache-github-qodo--20260627235350` | 149 | 182 | 161 | retort-feature-candidate | retort-engine:108, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | 5789367a8 Retort absorb packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent |
+| `retort/absorb-packages-retort-engine-retort-cache-github-qodo--20260627235148` | 148 | 182 | 161 | retort-feature-candidate | retort-engine:108, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | 8a2438c44 Retort absorb packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent |
+| `retort/absorb-https-github-com-jaygaha-local-ai-pr-reviewer-20260627224355` | 133 | 182 | 140 | retort-feature-candidate | retort-engine:87, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | 2e06a7bd4 Retort absorb https://github.com/jaygaha/local-ai-pr-reviewer |
+| `retort/absorb-https-github-com-jaygaha-local-ai-pr-reviewer-20260627224017` | 132 | 182 | 140 | retort-feature-candidate | retort-engine:87, runtime-retort:53 | no | intake by cherry-pick/squash after Retort review | b37fdcb4e Retort absorb https://github.com/jaygaha/local-ai-pr-reviewer |
+| `retort/absorb-https-github-com-hevinbryant-ai-pr-reviewer-20260627222418` | 127 | 182 | 132 | retort-feature-candidate | retort-engine:83, runtime-retort:49 | no | intake by cherry-pick/squash after Retort review | 6ffdf8be2 Retort absorb https://github.com/hevinbryant/ai-pr-reviewer |
+| `retort/absorb-https-github-com-andreabonn-ai-pr-reviewer-20260627221357` | 124 | 182 | 128 | retort-feature-candidate | retort-engine:83, runtime-retort:45 | no | intake by cherry-pick/squash after Retort review | 14500f7b9 Retort absorb https://github.com/AndreaBonn/ai-pr-reviewer |
+| `retort/absorb-https-github-com-sourish-19-ai-pr-reviewer-20260627220039` | 117 | 182 | 124 | retort-feature-candidate | retort-engine:83, runtime-retort:41 | no | intake by cherry-pick/squash after Retort review | 7b80d0db6 Retort absorb https://github.com/Sourish-19/ai-pr-reviewer |
+| `retort/absorb-https-github-com-aryanbrite-openrabbit-20260627214452` | 111 | 182 | 121 | retort-feature-candidate | retort-engine:82, runtime-retort:39 | no | intake by cherry-pick/squash after Retort review | 1b895cc7e Retort absorb https://github.com/aryanbrite/openrabbit |
+| `retort/absorb-source-20260627214316` | 110 | 182 | 121 | retort-feature-candidate | retort-engine:82, runtime-retort:39 | no | intake by cherry-pick/squash after Retort review | 70181a6b2 feat(retort): absorb reviewscope intent validation |
+| `retort/absorb-https-github-com-seddonym-import-linter-20260627195918` | 93 | 182 | 88 | retort-feature-candidate | retort-engine:58, runtime-retort:30 | no | intake by cherry-pick/squash after Retort review | f6c2a06b0 Retort absorb https://github.com/seddonym/import-linter |
+| `retort/absorb-https-github-com-sunerpy-codegraph-rust-20260627194948` | 88 | 182 | 83 | retort-feature-candidate | retort-engine:53, runtime-retort:30 | no | intake by cherry-pick/squash after Retort review | 33ae98eb1 Retort absorb https://github.com/sunerpy/codegraph-rust |
+| `retort/absorb-https-github-com-openautocoder-agentless-20260627194517` | 84 | 182 | 79 | retort-feature-candidate | retort-engine:53, runtime-retort:26 | no | intake by cherry-pick/squash after Retort review | 758f0111d Retort absorb https://github.com/openautocoder/agentless |
+| `retort/absorb-https-github-com-swe-bench-swe-bench-20260627193402` | 79 | 182 | 75 | retort-feature-candidate | retort-engine:53, runtime-retort:22 | no | intake by cherry-pick/squash after Retort review | 7bb0d036b fix(retort): map SWE-bench oracle to benchmark quality gate |
+| `retort/absorb-test-fix` | 74 | 182 | 166 | active-dirty-feature | retort-engine:115, fhd-other:18, modstore-deploy:7, fhd-backend:6 | yes | preserve; split local edits first | 045485b8e Add mobile tri-platform SSOT |
+| `retort/absorb-https-github-com-nedbat-coveragepy` | 69 | 182 | 131 | large-feature-candidate | retort-engine:92, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 997458b51 Retort absorb https://github.com/nedbat/coveragepy |
+| `retort/absorb-https-github-com-bobbyroe-threejs-earth-20260627192506` | 69 | 182 | 66 | retort-feature-candidate | retort-engine:48, runtime-retort:18 | no | intake by cherry-pick/squash after Retort review | 4c10823dc Retort absorb https://github.com/bobbyroe/threejs-earth |
+| `retort/absorb-https-github-com-a1dancole-openai-code-r` | 66 | 182 | 128 | large-feature-candidate | retort-engine:89, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 65c4a4fc0 Merge retort/absorb-https-github-com-ionelmc-pytest-benchmar |
+| `retort/absorb-https-github-com-bobbyroe-threejs-earth-20260627192151` | 66 | 182 | 66 | retort-feature-candidate | retort-engine:48, runtime-retort:18 | no | intake by cherry-pick/squash after Retort review | 7df68a6b0 Retort absorb https://github.com/bobbyroe/threejs-earth |
+| `retort/absorb-https-github-com-ionelmc-pytest-benchmar` | 65 | 182 | 128 | large-feature-candidate | retort-engine:89, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 75e07386a Retort absorb https://github.com/ionelmc/pytest-benchmark |
+| `retort/absorb-https-github-com-existential-birds-daydr` | 63 | 182 | 127 | large-feature-candidate | retort-engine:88, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | a741325cd Retort absorb https://github.com/existential-birds/daydream |
+| `retort/absorb-https-github-com-miracodeai-mira` | 61 | 182 | 126 | large-feature-candidate | retort-engine:87, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 84a306648 Retort absorb https://github.com/miracodeai/mira |
+| `retort/absorb-https-github-com-openhands-benchmarks-20260627191142` | 60 | 182 | 61 | retort-feature-candidate | retort-engine:48, runtime-retort:13 | no | intake by cherry-pick/squash after Retort review | fab89e435 Retort absorb https://github.com/OpenHands/benchmarks |
+| `retort/absorb-https-github-com-villesau-ai-codereviewe` | 59 | 182 | 125 | large-feature-candidate | retort-engine:86, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | ce8c122ff Retort absorb https://github.com/villesau/ai-codereviewer |
+| `retort/absorb-https-github-com-facebook-pyre-check` | 57 | 182 | 124 | large-feature-candidate | retort-engine:85, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | d10717df4 Retort absorb https://github.com/facebook/pyre-check |
+| `retort/absorb-https-github-com-anc95-chatgpt-coderevie` | 55 | 182 | 123 | large-feature-candidate | retort-engine:84, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 661bb5edb Retort absorb https://github.com/anc95/ChatGPT-CodeReview |
+| `retort/absorb-https-github-com-svetkis-ai-code-review-` | 53 | 182 | 122 | large-feature-candidate | retort-engine:83, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 0983fb116 Retort absorb https://github.com/svetkis/ai-code-review-benchmark |
+| `retort/absorb-https-github-com-dgreenheck-threejs-procedural-p-20260627185344` | 53 | 182 | 55 | retort-feature-candidate | retort-engine:46, runtime-retort:9 | no | intake by cherry-pick/squash after Retort review | 7951b6c8d feat(retort): load absorption light count on startup |
+| `retort/absorb-a1dancole-openai-code-review-20260628` | 51 | 182 | 121 | large-feature-candidate | retort-engine:82, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | e344ba85e Retort absorb https://github.com/a1dancole/openai-code-review |
+| `retort/absorb-https-github-com-withmartian-code-review` | 49 | 182 | 120 | large-feature-candidate | retort-engine:81, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | ac9f1925f Retort absorb https://github.com/withmartian/code-review-benchmark |
+| `retort/absorb-https-github-com-dgreenheck-threejs-procedural-p-20260627184746` | 49 | 182 | 53 | retort-feature-candidate | retort-engine:44, runtime-retort:9 | no | intake by cherry-pick/squash after Retort review | 58c2f0068 Retort absorb https://github.com/dgreenheck/threejs-procedural-planets |
+| `retort/absorb-https-github-com-vercel-labs-openreview` | 47 | 182 | 119 | large-feature-candidate | retort-engine:80, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 511f4d63b Retort absorb https://github.com/vercel-labs/openreview |
+| `retort/absorb-https-github-com-pre-commit-pre-commit` | 45 | 182 | 118 | large-feature-candidate | retort-engine:79, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 8cb8b9b2d Retort absorb https://github.com/pre-commit/pre-commit |
+| `retort/absorb-https-github-com-qodo-ai-pr-agent-20260627183607` | 45 | 182 | 49 | retort-feature-candidate | retort-engine:42, runtime-retort:7 | no | intake by cherry-pick/squash after Retort review | e5d96a813 Retort absorb https://github.com/qodo-ai/pr-agent |
+| `retort/absorb-https-github-com-hypothesisworks-hypothe` | 43 | 182 | 117 | large-feature-candidate | retort-engine:78, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | a7810f764 Retort absorb https://github.com/hypothesisworks/hypothesis |
+| `retort/absorb-https-github-com-mopemope-pr-ai-review-bot-20260627183405` | 42 | 182 | 47 | retort-feature-candidate | retort-engine:42, runtime-retort:5 | no | intake by cherry-pick/squash after Retort review | 6005e0320 Retort absorb https://github.com/mopemope/pr-ai-review-bot |
+| `retort/absorb-https-github-com-ritzwik-acrs-v2` | 41 | 182 | 116 | large-feature-candidate | retort-engine:77, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 60f9fa4e1 Retort absorb https://github.com/RitzwiK/ACRS-v2 |
+| `retort/absorb-https-github-com-vlad-ko-pr-review-bench` | 39 | 182 | 115 | large-feature-candidate | retort-engine:76, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 00a4d14a7 Retort absorb https://github.com/vlad-ko/pr-review-bench |
+| `retort/absorb-private-tmp-retort-depth-source-zulacn-20260627182647` | 39 | 182 | 42 | retort-feature-candidate | retort-engine:42 | no | intake by cherry-pick/squash after Retort review | fde999b65 Retort absorb /private/tmp/retort-depth-source-zULAcN |
+| `retort/absorb-quality-hypothesis-581401` | 37 | 182 | 39 | active-dirty-feature | retort-engine:39 | yes | preserve; split local edits first | c48e24fb1 refactor(retort): split llm evidence and absorption sources |
+| `retort/absorb-https-github-com-shim52-ai-code-review-b` | 36 | 182 | 114 | large-feature-candidate | retort-engine:75, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 53e47627b Retort absorb https://github.com/shim52/ai-code-review-bench |
+| `retort/absorb-anc95-chatgpt-codereview-20260629-0015` | 34 | 182 | 113 | large-feature-candidate | retort-engine:74, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | e276391da Retort absorb https://github.com/anc95/ChatGPT-CodeReview |
+| `retort/absorb-architecture-adr-tools-581401` | 33 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | e80f2ef7b Retort absorb https://github.com/npryce/adr-tools |
+| `retort/absorb-architecture-adr-tools-manual` | 33 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 090962343 Retort absorb https://github.com/npryce/adr-tools |
+| `retort/absorb-reviewscope-20260628-1700` | 32 | 182 | 112 | large-feature-candidate | retort-engine:73, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 4e4aedcb8 Retort absorb ReviewScope and add per-run code graph proof |
+| `retort/absorb-architecture-archunit-581401` | 31 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 39efcc7b3 Retort absorb https://github.com/TNG/ArchUnit |
+| `retort/absorb-architecture-dependency-cruiser-581401` | 31 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | c69a901af Retort absorb https://github.com/sverweij/dependency-cruiser |
+| `retort/absorb-quality-mutmut-581401` | 31 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 038d8d02e Retort absorb https://github.com/boxed/mutmut |
+| `retort-benchmark-test` | 29 | 182 | 71 | large-feature-candidate | retort-engine:32, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | e8527d46a Merge retort/absorb-https-github-com-aleksandrfurmenkovoffic |
+| `retort/absorb-quality-coveragepy-581401` | 29 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | bf79acb0e Retort absorb https://github.com/nedbat/coveragepy |
+| `retort/absorb-https-github-com-aleksandrfurmenkovoffic` | 28 | 182 | 71 | large-feature-candidate | retort-engine:32, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 09c40ad42 Retort absorb https://github.com/AleksandrFurmenkovOfficial/ai-code-review |
+| `retort/absorb-https-github-com-myskilllife-skill-life-` | 27 | 182 | 70 | large-feature-candidate | retort-engine:31, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | ea235d414 Retort absorb https://github.com/MySkillLife/skill-life-ai-pr-review-benchmark |
+| `retort/absorb-https-github-com-code-review-vk-ai-revie` | 26 | 182 | 69 | large-feature-candidate | retort-engine:30, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 45b5f0ba3 Retort absorb https://github.com/Code-review-VK/ai-review-test-1777810528 |
+| `retort/absorb-core-refactor-continue` | 26 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 6d2a0807e Retort absorb https://github.com/continuedev/continue |
+| `retort/absorb-https-github-com-anthropics-claude-code-` | 25 | 182 | 68 | large-feature-candidate | retort-engine:29, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 6b0952b26 Retort absorb https://github.com/anthropics/claude-code-security-review |
+| `retort/absorb-retort-cache-github-sfg-labs-ai-reviewer` | 24 | 182 | 67 | large-feature-candidate | retort-engine:28, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 8c6f8805d Retort absorb .retort/cache/github/sfg-labs/ai-reviewer-security |
+| `retort/absorb-core-refactor-swe-agent` | 24 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 5f9c5eedc Retort absorb https://github.com/SWE-agent/SWE-agent |
+| `feat/foundation-hardening-merge` | 23 | 182 | 66 | large-feature-candidate | retort-engine:27, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | d2190f1c4 Merge retort/absorb-https-github-com-uppadhyayraj-pr-review- |
+| `retort/absorb-https-github-com-uppadhyayraj-pr-review-` | 22 | 182 | 66 | large-feature-candidate | retort-engine:27, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 66c795e00 Retort absorb https://github.com/uppadhyayraj/pr-review-ai-agent |
+| `retort/absorb-core-refactor-pr-agent` | 22 | 182 | 20 | retort-feature-candidate | retort-engine:20 | no | intake by cherry-pick/squash after Retort review | 901001d1b Retort absorb https://github.com/qodo-ai/pr-agent |
+| `retort/absorb-https-github-com-rami-code-review-benchm` | 20 | 182 | 65 | large-feature-candidate | retort-engine:26, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 0b0d2325b Retort absorb https://github.com/rami-code-review/benchmarks |
+| `retort/absorb-archmem-codebase-digest` | 19 | 182 | 17 | retort-feature-candidate | retort-engine:17 | no | intake by cherry-pick/squash after Retort review | c129592e8 Retort absorb https://github.com/kamilstanuch/codebase-digest |
+| `retort/absorb-archmem-software-agent-sdk` | 17 | 182 | 17 | retort-feature-candidate | retort-engine:17 | no | intake by cherry-pick/squash after Retort review | d07d36548 Retort absorb https://github.com/OpenHands/software-agent-sdk |
+| `retort/absorb-https-github-com-ullrai-vibe-pr-reviewer` | 15 | 182 | 63 | large-feature-candidate | retort-engine:24, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | d99668c49 Retort absorb https://github.com/UllrAI/Vibe-PR-Reviewer |
+| `retort/absorb-archmem-aider` | 15 | 182 | 17 | retort-feature-candidate | retort-engine:17 | no | intake by cherry-pick/squash after Retort review | 6ba3d85cb Retort absorb https://github.com/aider-ai/aider |
+| `auto/daily-20260626` | 13 | 307 | 534 | large-feature-candidate | fhd-other:404, 成都修茈科技有限公司:75, retort-engine:34, modstore-deploy:15 | no | needs branch-level intake, likely squash/cherry-pick | 12904359a feat(retort): animate project planet absorption |
+| `retort/absorb-https-github-com-kumarsaurabhsingh-ai-co` | 13 | 182 | 62 | large-feature-candidate | retort-engine:23, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | deb54b52b Retort absorb https://github.com/KumarSaurabhSingh/AI-code-review-bot |
+| `retort/absorb-arch-software-agent-sdk` | 12 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | c9ff27c6d Retort absorb https://github.com/OpenHands/software-agent-sdk |
+| `claude/unruffled-neumann-6839b9` | 12 | 307 | 11 | large-feature-candidate | fhd-backend:6, fhd-other:5 | no | needs branch-level intake, likely squash/cherry-pick | a4a38b766 test(relay): cov测试对齐CURSOR_PROFILE.cli_binary=cursor-agent(修我引入的回归) |
+| `retort/absorb-https-github-com-newlc-ai-code-reviewer` | 10 | 182 | 61 | large-feature-candidate | retort-engine:22, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | a8789fdc1 Retort absorb https://github.com/newlc/ai-code-reviewer |
+| `retort/absorb-arch-mini-swe-agent` | 10 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | a67c7a610 Retort absorb https://github.com/SWE-agent/mini-swe-agent |
+| `auto/daily-20260627` | 9 | 288 | 43 | large-feature-candidate | fhd-backend:17, fhd-other:12, fhd-mobile-android:12, specs:2 | no | needs branch-level intake, likely squash/cherry-pick | d8487fb55 wip: snapshot email_verification + ai_group_chat + android billing before foundation hardening merge |
+| `claude/awesome-wilson-43b38a` | 8 | 533 | 60 | large-feature-candidate | fhd-other:53, fhd-backend:7 | no | needs branch-level intake, likely squash/cherry-pick | 04bf75c6e Merge remote-tracking branch 'origin/main' into claude/awesome-wilson-43b38a |
+| `retort/absorb-arch-aider` | 8 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | 315f57b64 Retort absorb https://github.com/aider-ai/aider |
+| `claude/sharp-dhawan-6d68fa` | 7 | 288 | 112 | active-dirty-feature | fhd-other:112 | yes | preserve; split local edits first | 7485c02dc test(FHD): 删 4 个文件多余 UTF-8 编码声明(CI ruff 0.15.18 UP009) |
+| `retort/absorb-https-github-com-usagi-org-ai-code-revie` | 7 | 182 | 60 | large-feature-candidate | retort-engine:21, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | a0fe94edc Retort absorb https://github.com/Usagi-org/ai-code-review-helper |
+| `retort/absorb-describer` | 6 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | 38a5bf0df Retort absorb https://github.com/apideck-libraries/describer |
+| `super-employee/codex/docs-relay-deliver-proo-26486-c8e489` | 5 | 307 | 498 | large-feature-candidate | fhd-other:403, 成都修茈科技有限公司:75, modstore-deploy:15, fhd-frontend:2 | no | needs branch-level intake, likely squash/cherry-pick | d690127df 超级员工-Codex: 新增文件 docs/RELAY_DELIVER_PROOF.md，写一行：relay 真实交付验证。完成后说明改了哪个文 |
+| `retort/absorb-reviewscope-20260628` | 5 | 182 | 59 | small-feature-candidate | retort-engine:20, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | candidate for direct review/cherry-pick | 43a394079 retort: strengthen review context scoring and absorption proof workflows |
+| `retort/absorb-openreview` | 4 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | 907b607fa Retort absorb https://github.com/vercel-labs/openreview |
+| `retort/absorb-codebase-digest` | 2 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | e8e7e8b78 Retort absorb https://github.com/kamilstanuch/codebase-digest |
+| `devfleet/codex/sub-1-3960d3` | 1 | 307 | 7 | agent-feature-candidate | modstore-deploy:6, fhd-other:1 | no | inspect and cherry-pick useful commits | 66a738e59 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
+| `devfleet/codex/sub-1-045852` | 1 | 307 | 5 | agent-feature-candidate | modstore-deploy:4, fhd-other:1 | no | inspect and cherry-pick useful commits | 5193d2594 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-9f8913` | 1 | 307 | 5 | agent-feature-candidate | modstore-deploy:4, fhd-other:1 | no | inspect and cherry-pick useful commits | 43e2dca67 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-045c34` | 1 | 240 | 4 | agent-feature-candidate | fhd-other:2, modstore-deploy:2 | no | inspect and cherry-pick useful commits | b8d7e77cc devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
+| `devfleet/codex/sub-1-1a0485` | 1 | 307 | 4 | agent-feature-candidate | modstore-deploy:3, fhd-other:1 | no | inspect and cherry-pick useful commits | b2c21cf3b devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
+| `devfleet/codex/sub-1-229907` | 1 | 303 | 4 | agent-feature-candidate | fhd-other:2, modstore-deploy:2 | no | inspect and cherry-pick useful commits | f7e7b3765 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
+| `devfleet/codex/sub-1-000e3c` | 1 | 307 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 653b530b0 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
+| `devfleet/codex/sub-1-6407e8` | 1 | 304 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 99799983f devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-6b15c9` | 1 | 304 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | b61f4e132 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-793954` | 1 | 304 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 36426bae8 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-ab5782` | 1 | 304 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 418f4c135 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-ea7602` | 1 | 304 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 552cf270c devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `devfleet/codex/sub-1-ed21ee` | 1 | 307 | 3 | agent-feature-candidate | modstore-deploy:2, fhd-other:1 | no | inspect and cherry-pick useful commits | 70dcc3eb7 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
+| `codex/workspace-smoke-clean-2` | 1 | 611 | 1 | small-feature-candidate | fhd-other:1 | no | candidate for direct review/cherry-pick | a1f1166af docs(loops): speedup/parallel handoff — review/QA low-effort live, next=parallelize |
+| `devfleet/codex/sub-1-6b0506` | 1 | 307 | 1 | agent-feature-candidate | root:1 | no | inspect and cherry-pick useful commits | 3e1c66b9d devfleet: 在工作区根目录新增文件 RELAY_OK.md，内容只写一行：relay execution verified。完成后用一句话说明你新增了哪个文件。 |
+| `feat/quality-to-9` | 1 | 611 | 1 | small-feature-candidate | fhd-other:1 | no | candidate for direct review/cherry-pick | a1f1166af docs(loops): speedup/parallel handoff — review/QA low-effort live, next=parallelize |
+| `claude/amazing-mcnulty-e8a1bc` | 0 | 288 | 0 | already-contained | - | no | do-not-merge | 5a0fd0d5a Merge remote-tracking branch 'origin/main' |
+| `claude/ecstatic-rubin-a2e0d1` | 0 | 1 | 0 | already-contained | - | no | do-not-merge | b6126732d feat(phase-d): bidirectional human Q&A loop for employees |
+| `claude/musing-blackwell-e87e0c` | 0 | 1 | 0 | already-contained | - | no | do-not-merge | b6126732d feat(phase-d): bidirectional human Q&A loop for employees |
+| `claude/musing-roentgen-affc4b` | 0 | 192 | 0 | already-contained | - | yes | do-not-merge | c63f96be7 feat(cs): real enterprise customer-service IM channel + admin inbox + push |
+| `claude/pedantic-leakey-5611d9` | 0 | 186 | 0 | already-contained | - | no | do-not-merge | 043248e73 Merge retort/absorb-https-github-com-evalops-diffscope |
+| `codex/git-hygiene-intake` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform SSOT |
+| `evaluate-project-level-5sethe` | 0 | 902 | 0 | already-contained | - | yes | do-not-merge | 10e40d4ad chore: update taiyangniao_pro binary database file |
+| `main` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform SSOT |
+| `retort/absorb-20260627` | 0 | 259 | 0 | already-contained | - | no | do-not-merge | c29d117fd feat(retort): close external absorption evolution loop |
+| `retort/absorb-component-pipeline-20260627` | 0 | 285 | 0 | already-contained | - | no | do-not-merge | f9cb8ee54 Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/absorb-contract-feedback-20260627` | 0 | 278 | 0 | already-contained | - | no | do-not-merge | ce698f3ec Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/absorb-final-closure-20260627` | 0 | 275 | 0 | already-contained | - | no | do-not-merge | d7846bacb Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/absorb-go1com-openai-review-deep-20260627c` | 0 | 261 | 0 | already-contained | - | no | do-not-merge | b18b374b7 Retort absorb https://github.com/go1com/openai-review |
+| `retort/absorb-https-github-com-alibaba-open-code-revie` | 0 | 293 | 0 | already-contained | - | no | do-not-merge | 575e5f491 Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/absorb-https-github-com-andreabonn-ai-pr-review` | 0 | 197 | 0 | already-contained | - | no | do-not-merge | 2964a39d9 Retort absorb https://github.com/AndreaBonn/ai-pr-reviewer |
+| `retort/absorb-https-github-com-auth0-auth0-ai-pr-analy` | 0 | 201 | 0 | already-contained | - | no | do-not-merge | cdf5ed77f Retort absorb https://github.com/auth0/auth0-ai-pr-analyzer-gh-action |
+| `retort/absorb-https-github-com-evalops-diffscope` | 0 | 187 | 0 | already-contained | - | no | do-not-merge | 3183bcc20 Retort absorb https://github.com/evalops/diffscope |
+| `retort/absorb-https-github-com-go1com-openai-review` | 0 | 265 | 0 | already-contained | - | no | do-not-merge | 90a113078 Retort absorb https://github.com/go1com/openai-review |
+| `retort/absorb-https-github-com-mopemope-pr-ai-review-b` | 0 | 199 | 0 | already-contained | - | no | do-not-merge | 660845579 Retort absorb https://github.com/mopemope/pr-ai-review-bot |
+| `retort/absorb-https-github-com-review-scope-reviewscop` | 0 | 192 | 0 | already-contained | - | no | do-not-merge | fb4e35d43 Retort absorb https://github.com/Review-scope/ReviewScope |
+| `retort/absorb-https-github-com-sourcefuse-ai-pr-review` | 0 | 271 | 0 | already-contained | - | no | do-not-merge | e052f099e Retort absorb https://github.com/sourcefuse/ai-pr-reviewer |
+| `retort/absorb-license-gate-20260627` | 0 | 281 | 0 | already-contained | - | no | do-not-merge | cedfb6e7f Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/absorb-pr-agent-candidates-closed-20260627` | 0 | 203 | 0 | already-contained | - | no | do-not-merge | ed4c7b3b9 Retort absorb https://github.com/The-PR-Agent/pr-agent |
+| `retort/absorb-pr-agent-depth-20260627` | 0 | 212 | 0 | already-contained | - | no | do-not-merge | 5f9518bcb Retort absorb https://github.com/The-PR-Agent/pr-agent |
+| `retort/absorb-pr-agent-depth-only-20260627` | 0 | 209 | 0 | already-contained | - | no | do-not-merge | 680695bdf Retort absorb https://github.com/The-PR-Agent/pr-agent |
+| `retort/absorb-pr-agent-market-route-20260627` | 0 | 206 | 0 | already-contained | - | no | do-not-merge | 339f27a12 Retort absorb https://github.com/The-PR-Agent/pr-agent |
+| `retort/absorb-proof-chain-20260627` | 0 | 288 | 0 | already-contained | - | no | do-not-merge | 3f2e29e8b Retort absorb https://github.com/alibaba/open-code-review |
+| `retort/complex-pr-replay-20260627` | 0 | 216 | 0 | already-contained | - | no | do-not-merge | 60c4de199 feat(retort): replay complex PRs and reduce review false positives |
+| `retort/eight-project-replay-20260627` | 0 | 228 | 0 | already-contained | - | no | do-not-merge | 8ed9f9247 chore(retort): record eight-project replay branch proof |
+| `retort/live-publish-probe-20260627` | 0 | 218 | 0 | already-contained | - | no | do-not-merge | b139f93fd feat(retort): add live PR publish rollback probe |
+| `retort/operability-replay-20260627` | 0 | 232 | 0 | already-contained | - | no | do-not-merge | 6cfd5dc03 feat(retort): add publish replay evidence loop |
+| `retort/pr-dry-run-evidence-20260627` | 0 | 235 | 0 | already-contained | - | no | do-not-merge | 5b55f9396 feat(retort): add real PR dry-run evidence |
+| `retort/task-acceptance-evidence-20260627` | 0 | 222 | 0 | already-contained | - | no | do-not-merge | 3ab7c5f5d feat(retort): add acceptance-ready task prioritization |
+| `retort/task-dispatch-plan-20260627` | 0 | 214 | 0 | already-contained | - | no | do-not-merge | 921c128af feat(retort): dispatch LLM follow-up tasks to employee queue |
+| `retort/task-sandbox-evidence-20260627` | 0 | 225 | 0 | already-contained | - | no | do-not-merge | b9e9ccb2c feat(retort): add sandbox publish and task prioritization evidence |
+
+## Next Actions
+
+1. Move tracked runtime candidates out of source control with a dedicated cleanup commit.
+2. Split dirty active worktrees by module before branch intake.
+3. Promote small feature candidates into an integration branch using cherry-pick or squash.
+4. Keep large Retort absorption branches as source material until reviewed.
+
