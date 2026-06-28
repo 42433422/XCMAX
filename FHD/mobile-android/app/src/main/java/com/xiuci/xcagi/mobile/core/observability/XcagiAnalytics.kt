@@ -24,4 +24,17 @@ class XcagiAnalytics @Inject constructor(
         bundle.putString("sku", ProductSkuConfig.sku)
         firebase?.logEvent(event, bundle)
     }
+
+    fun logPerformanceMetric(
+        name: String,
+        durationMs: Long,
+        status: String = "ok",
+        params: Map<String, String> = emptyMap(),
+    ) {
+        val metricParams = params.toMutableMap()
+        metricParams["metric_name"] = name
+        metricParams["duration_ms"] = durationMs.toString()
+        metricParams["status"] = status
+        log("mobile_perf", metricParams)
+    }
 }
