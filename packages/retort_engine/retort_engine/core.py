@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -27,6 +28,8 @@ from retort_engine.similar_project_loop import build_absorption_saturation_repor
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
+
+from retort_engine import self_evolution as _self_evolution
 
 
 @dataclass(frozen=True)
@@ -154,28 +157,94 @@ def _project_files(root: Path, skip_parts: set[str]) -> list[Path]:
 
 
 class RetortSelfEvolutionRunner:
-    def __init__(self, *, threshold: float = 90.0) -> None:
+    def __init__(self, *, threshold: float = 90.0, max_rounds: int | None = 8) -> None:
         self.threshold = threshold
+        self.max_rounds = max_rounds
 
     def run(self, project: str, *, run_local_gates: bool = False) -> dict[str, Any]:
         root = Path(project).expanduser().resolve()
         assessment = assess_project(str(root), run_local_gates=run_local_gates)
-        task = {
-            "task_id": "retort-llm-required",
-            "title": "Run PaiBi LLM deep review before self-evolution",
-            "dimension": "llm_scoring",
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "acceptance": "A completed PaiBi LLM review returns dimension scores and questions.",
-        }
+        proof = _public_absorption_state(root)
+        if not proof.get("closed_loop_proof", {}).get("verified"):
+            task = {
+                "task_id": "retort-llm-required",
+                "title": "Run PaiBi LLM deep review before self-evolution",
+                "dimension": "llm_scoring",
+                "owner_hint": "fhd-core-maintainer",
+                "priority": "P0",
+                "acceptance": "A completed PaiBi LLM review returns dimension scores and questions.",
+            }
+            return {
+                "status": "blocked",
+                "stop_reason": "llm_deep_review_required",
+                "final_assessment": assessment.to_dict(),
+                "rounds": [{"round_index": 1, "passed": False, "assessment": assessment.to_dict(), "tasks": [task]}],
+                "tasks": [task],
+                "round_policy": "single_paibi_llm_deep_review",
+            }
+
+        evaluator = _SelfEvolutionEvaluator(str(root), run_local_gates=run_local_gates)
+        improver = _SelfEvolutionImprover()
+        model_runner = _self_evolution.RetortSelfEvolutionRunner(evaluator=evaluator, improver=improver, threshold=self.threshold, max_rounds=self.max_rounds, stop_on_repeated_scores=True)
+        result = model_runner.run({"project": str(root), "run_local_gates": run_local_gates})
+        rounds = [_self_evolution_round_to_payload(item) for item in result.rounds]
         return {
-            "status": "blocked",
-            "stop_reason": "llm_deep_review_required",
-            "final_assessment": assessment.to_dict(),
-            "rounds": [{"round_index": 1, "passed": False, "assessment": assessment.to_dict(), "tasks": [task]}],
-            "tasks": [task],
-            "round_policy": "single_paibi_llm_deep_review",
+            "status": result.status,
+            "stop_reason": result.stop_reason,
+            "final_assessment": (result.final_assessment.to_dict() if result.final_assessment else {}),
+            "rounds": rounds,
+            "tasks": rounds[-1]["tasks"] if rounds else [],
+            "round_policy": "multi_round_self_evolution",
+            "max_rounds": result.max_rounds,
+            "threshold": result.threshold,
         }
+
+
+class _SelfEvolutionEvaluator:
+    def __init__(self, project: str, *, run_local_gates: bool = False) -> None:
+        self.project = project
+        self.run_local_gates = run_local_gates
+
+    def evaluate(self, state: dict[str, Any]) -> _self_evolution.ProjectAssessment:
+        assessment = assess_project(self.project, run_local_gates=self.run_local_gates)
+        scores: tuple[_self_evolution.Score, ...] = tuple(_self_evolution.Score(score.dimension, score.value, str(score.reason)) for score in assessment.scores)
+        return _self_evolution.ProjectAssessment(
+            project=assessment.project,
+            scores=scores,
+            summary="Retort core self-evolution local assessment",
+            strengths=tuple(state.get("strengths", ()) if isinstance(state.get("strengths"), (tuple, list)) else ()),
+            weaknesses=tuple(state.get("weaknesses", ()) if isinstance(state.get("weaknesses"), (tuple, list)) else ()),
+            recommendations=tuple(state.get("recommendations", ()) if isinstance(state.get("recommendations"), (tuple, list)) else ()),
+            evidence=assessment.evidence,
+            metadata=dict(assessment.metadata),
+        )
+
+
+class _SelfEvolutionImprover:
+    def improve(self, state: dict[str, Any], assessment: _self_evolution.ProjectAssessment, tasks: tuple[_self_evolution.ImprovementTask, ...], round_index: int) -> dict[str, Any]:
+        next_state = dict(state)
+        next_state["retort_last_round"] = round_index
+        next_state["retort_last_scores"] = assessment.score_map()
+        next_state["retort_last_tasks"] = [task.to_dict() for task in tasks]
+        return next_state
+
+
+def _self_evolution_round_to_payload(round_payload: _self_evolution.EvolutionRound) -> dict[str, Any]:
+    payload = round_payload.to_dict()
+    assessment = _dict_with_local_score_authority(payload.get("assessment"), payload)
+    payload["assessment"] = assessment
+    return payload
+
+
+def _dict_with_local_score_authority(assessment: dict[str, Any] | None, _fallback: dict[str, Any] | None = None) -> dict[str, Any]:
+    data = dict(assessment or {})
+    metadata = data.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+    metadata.setdefault("score_authority", "paibi_llm_prompt_only")
+    metadata.setdefault("local_scores_removed", True)
+    data["metadata"] = metadata
+    return data
 
 
 class RetortHistory:
@@ -647,13 +716,116 @@ def _commit_absorption_execution(own: Path, source: str, execution: dict[str, An
 
 
 def _rollback_rehearsal(root: Path, merge_commit: str) -> dict[str, Any]:
-    parents = _git(root, "show", "--no-patch", "--format=%P", merge_commit).strip().split()
-    return {
-        "verified": len(parents) >= 2,
-        "merge_commit": merge_commit,
-        "parent_count": len(parents),
-        "rollback_command": f"git revert -m 1 {merge_commit}",
-    }
+    command = f"git revert -m 1 {merge_commit}" if merge_commit else ""
+    if not merge_commit:
+        return {
+            "verified": False,
+            "merge_commit": merge_commit,
+            "parent_count": 0,
+            "rollback_command": command,
+            "revert_stdout_tail": "",
+            "revert_stderr_tail": "missing merge commit",
+            "revert_exit_code": -1,
+        }
+    try:
+        parents = _git(root, "show", "--no-patch", "--format=%P", merge_commit).strip().split()
+    except RuntimeError as exc:
+        return {
+            "verified": False,
+            "merge_commit": merge_commit,
+            "parent_count": 0,
+            "rollback_command": command,
+            "revert_stdout_tail": "",
+            "revert_stderr_tail": str(exc),
+            "revert_exit_code": -1,
+        }
+    if len(parents) < 2:
+        return {
+            "verified": False,
+            "merge_commit": merge_commit,
+            "parent_count": len(parents),
+            "rollback_command": command,
+            "revert_stdout_tail": "",
+            "revert_stderr_tail": "not a merge commit",
+            "revert_exit_code": -1,
+        }
+
+    worktree_root = _git_root(root)
+    if worktree_root is None:
+        return {
+            "verified": False,
+            "merge_commit": merge_commit,
+            "parent_count": len(parents),
+            "rollback_command": command,
+            "revert_stdout_tail": "",
+            "revert_stderr_tail": "git root not found",
+            "revert_exit_code": -1,
+        }
+
+    probe_dir = Path(tempfile.mkdtemp(prefix="retort-revert-probe-", dir=str(worktree_root)) )
+    try:
+        add_result = subprocess.run(
+            ["git", "worktree", "add", "--detach", str(probe_dir), merge_commit],
+            cwd=worktree_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if add_result.returncode != 0:
+            return {
+                "verified": False,
+                "merge_commit": merge_commit,
+                "parent_count": len(parents),
+                "rollback_command": command,
+                "revert_stdout_tail": (add_result.stdout or "")[-4000:],
+                "revert_stderr_tail": (add_result.stderr or "")[-4000:],
+                "revert_exit_code": add_result.returncode,
+            }
+
+        revert_result = subprocess.run(
+            ["git", "revert", "-n", "-m", "1", merge_commit],
+            cwd=probe_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        status_result = subprocess.run(
+            ["git", "status", "--short", "--untracked-files=no"],
+            cwd=probe_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+        if status_result.returncode == 0:
+            conflict_free = not any(line.startswith("UU") for line in (status_result.stdout or "").splitlines())
+            return {
+                "verified": revert_result.returncode == 0 and conflict_free,
+                "merge_commit": merge_commit,
+                "parent_count": len(parents),
+                "rollback_command": command,
+                "revert_stdout_tail": ((revert_result.stdout or "") + "\n" + (status_result.stdout or ""))[-4000:],
+                "revert_stderr_tail": ((revert_result.stderr or "") + "\n" + (status_result.stderr or ""))[-4000:],
+                "revert_exit_code": revert_result.returncode,
+            }
+        return {
+            "verified": False,
+            "merge_commit": merge_commit,
+            "parent_count": len(parents),
+            "rollback_command": command,
+            "revert_stdout_tail": (revert_result.stdout or "")[-4000:],
+            "revert_stderr_tail": (revert_result.stderr or "")[-4000:] + "\n" + (status_result.stderr or "")[-4000:],
+            "revert_exit_code": revert_result.returncode,
+        }
+    finally:
+        subprocess.run(["git", "worktree", "remove", "--force", str(probe_dir)], cwd=worktree_root, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, timeout=30, check=False)
+        if probe_dir.exists():
+            shutil.rmtree(probe_dir, ignore_errors=True)
 
 
 def _absorption_status(tasks: list[dict[str, str]], execution: dict[str, Any]) -> str:
@@ -1045,7 +1217,7 @@ def _evidence_value(evidence: Any, key: str) -> str:
 
 
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
-    require_deep = bool(payload.get("require_deep_review") or payload.get("require_llm_scores"))
+    require_deep = _llm_requires_deep_review(payload)
     if not _llm_enabled(payload):
         metadata = assessment.setdefault("metadata", {})
         disabled = _llm_disabled_review(require_deep=require_deep)
@@ -1135,6 +1307,15 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"employee_worker_review_comment_count={worker_review.get('comment_count', '')}")
     evidence.append(f"employee_worker_review_artifact_exists={worker_review.get('artifact_exists', False)}")
     evidence.append(f"external_project_count={audit.get('external_project_count', '')}")
+    latest_run = _latest_absorption_run(project)
+    code_graph_proof = str(latest_run.get("code_graph_proof_path") or "")
+    evidence.append(f"latest_code_graph_proof={code_graph_proof}")
+    evidence.append(f"latest_code_graph_proof_exists={Path(code_graph_proof).is_file() if code_graph_proof else False}")
+    if code_graph_proof:
+        code_graph = _read_json(Path(code_graph_proof))
+        evidence.append(f"code_graph_nodes={len((code_graph.get('nodes') or []))}")
+        evidence.append(f"code_graph_edges={len((code_graph.get('edges') or []))}")
+        evidence.append(f"code_graph_changed_files={len((code_graph.get('changed_files') or []))}")
     pr_review = _pr_review_runtime_evidence(project)
     evidence.append(f"pr_review_runtime={pr_review.get('runtime')}")
     evidence.append(f"pr_review_cli={pr_review.get('cli')}")
@@ -1280,10 +1461,19 @@ def _maybe_request_llm_review(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not _llm_enabled(payload):
-        return _llm_disabled_review(require_deep=bool(payload.get("require_deep_review") or payload.get("require_llm_scores")))
+        return _llm_disabled_review(require_deep=_llm_requires_deep_review(payload))
     review = request_paibi_llm_review(project=str(project), mode=mode, external_source=external_source, external_path=external_path, scores=scores, tasks=tasks, evidence=evidence or [], metadata=metadata or {}, record=False)
     review["enabled"] = True
     return review
+
+
+def _llm_requires_deep_review(payload: dict[str, Any]) -> bool:
+    return bool(
+        payload.get("require_deep_review")
+        or payload.get("require_llm_scores")
+        or payload.get("require_llm")
+        or payload.get("llm_required")
+    )
 
 
 def _llm_enabled(payload: dict[str, Any]) -> bool:
@@ -1577,7 +1767,13 @@ def _project_relative(root: Path, path: Path) -> str:
 
 
 def _is_generated_absorption_file(rel: str) -> bool:
-    return Path(rel).name in GENERATED_ABSORPTION_NAMES or rel.startswith(".retort/")
+    path = Path(rel)
+    if path.name in GENERATED_ABSORPTION_NAMES:
+        return True
+    if rel.startswith(".retort/"):
+        return True
+    path_text = path.as_posix()
+    return path_text.startswith("docs/retort_") and path.suffix == ".json"
 
 
 def _is_behavior_test_file(rel: str) -> bool:
@@ -1906,9 +2102,7 @@ def _is_exempt_git_status_path(path: str, prefixes: tuple[str, ...]) -> bool:
         return False
     project_rel = normalized[len(project_prefix) :] if project_prefix else normalized
     rel_path = Path(project_rel)
-    if rel_path.name in GENERATED_ABSORPTION_NAMES:
-        return True
-    return len(rel_path.parts) >= 2 and rel_path.parts[0] == "docs" and rel_path.name.startswith("retort_") and rel_path.suffix == ".json"
+    return _is_generated_absorption_file(f"{rel_path.as_posix()}")
 
 
 def _project_prefix_from_runtime_prefixes(prefixes: tuple[str, ...]) -> str:
