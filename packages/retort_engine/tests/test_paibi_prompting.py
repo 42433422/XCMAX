@@ -60,6 +60,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "upstream_pr_ci_probe_multi_repo_generalization=True",
         "competitor_blind_adjudication_status=ready",
         "competitor_blind_adjudication_imports_retort=False",
+        "competitor_behavior_regression_status=ready",
+        "competitor_behavior_regression_all_signals=True",
         "cross_domain_ci_regression_rounds=3/3",
         "review_family_behavior_replay_direct_outputs=True",
         "release_decision_self_reference=False",
@@ -83,6 +85,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "upstream_pr_ci_probe_multi_repo_generalization=True" in selected
     assert "competitor_blind_adjudication_status=ready" in selected
     assert "competitor_blind_adjudication_imports_retort=False" in selected
+    assert "competitor_behavior_regression_status=ready" in selected
+    assert "competitor_behavior_regression_all_signals=True" in selected
     assert "cross_domain_ci_regression_rounds=3/3" in selected
     assert "review_family_behavior_replay_direct_outputs=True" in selected
     assert "release_decision_self_reference=False" in selected

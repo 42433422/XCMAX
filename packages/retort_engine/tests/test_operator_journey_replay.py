@@ -25,6 +25,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["upstream_pr_ci_ready"] is True
     assert result["summary"]["competitor_runtime_ready"] is True
     assert result["summary"]["competitor_blind_adjudication_ready"] is True
+    assert result["summary"]["competitor_behavior_regression_ready"] is True
     assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -232,6 +233,11 @@ def _write_docs(root: Path) -> None:
                 "competitor_count": 3,
                 "minimum_blind_delta": 56,
             },
+            "cases": [],
+        },
+        "retort_competitor_behavior_regression.json": {
+            "status": "ready",
+            "summary": {"all_competitor_signals_regressed": True, "all_cases_direct_review_execution": True, "ready_case_count": 3},
             "cases": [],
         },
         "retort_heterogeneous_absorption_replay.json": {

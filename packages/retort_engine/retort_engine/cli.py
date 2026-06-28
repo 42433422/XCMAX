@@ -12,6 +12,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_behavior_regression import build_competitor_behavior_regression
 from retort_engine.competitor_blind_adjudication import build_competitor_blind_adjudication
 from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
@@ -266,6 +267,11 @@ def main(argv: list[str] | None = None) -> int:
     competitor_blind.add_argument("--min-delta", type=int, default=45)
     competitor_blind.add_argument("--output", default="")
     competitor_blind.add_argument("--json", action="store_true")
+    competitor_behavior = sub.add_parser("competitor-behavior-regression")
+    competitor_behavior.add_argument("--project", default=".")
+    competitor_behavior.add_argument("--min-cases", type=int, default=3)
+    competitor_behavior.add_argument("--output", default="")
+    competitor_behavior.add_argument("--json", action="store_true")
     heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
     heterogeneous_replay.add_argument("--project", default=".")
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
@@ -792,6 +798,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort competitor blind adjudication status: {result['status']}")
             print(f"Accepted: {result['summary']['accepted_competitor_count']}/{result['summary']['competitor_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "competitor-behavior-regression":
+        result = build_competitor_behavior_regression(args.project, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort competitor behavior regression status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
