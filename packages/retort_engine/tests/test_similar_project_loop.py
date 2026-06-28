@@ -217,6 +217,38 @@ def test_absorption_saturation_accepts_no_new_core_depth_even_with_remaining_can
     assert saturated["summary"]["saturation_basis"] == "recent_absorptions_add_no_new_core_depth"
 
 
+def test_core_signals_include_signal_evidence_keys(tmp_path: Path) -> None:
+    project = tmp_path / "retort"
+    runs = project / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    (runs / "run-0.json").write_text(
+        json.dumps(
+            {
+                "source": "https://github.com/example/reviewer",
+                "status": "applied",
+                "gates_passed": True,
+                "changed_files": ["retort_engine/absorbed_capabilities.py"],
+                "external_profile": {
+                    "signals": ["review_pipeline"],
+                    "signal_evidence": {"plugin_surface": ["src/main.py"], "multi_provider": ["src/llm.py"]},
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    saturation = build_absorption_saturation_report(
+        project,
+        remaining_candidates=[
+            {"url": "https://github.com/next/reviewer", "similarity_depth_score": 90, "license_allowed": True, "already_absorbed": False}
+        ],
+    )
+
+    assert saturation["summary"]["consecutive_no_new_core_depth_count"] == 0
+    recent = saturation["recent_runs"][0]["core_signals"]
+    assert set(recent) == {"plugin_surface", "multi_provider", "review_pipeline"}
+
 def test_absorption_saturation_treats_low_score_remaining_candidates_as_saturated(tmp_path: Path) -> None:
     project = tmp_path / "retort"
     runs = project / ".retort" / "real_absorption_runs"
