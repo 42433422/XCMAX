@@ -128,6 +128,69 @@ def notify_employee_execution_done(user_id: int, employee_id: str, task: str, st
         logger.warning("notify_employee_execution_done failed: %s", e)
 
 
+def _fhd_internal_base() -> str:
+    return (
+        (
+            os.environ.get("XCAGI_FHD_INTERNAL_URL")
+            or os.environ.get("FHD_INTERNAL_BASE_URL")
+            or os.environ.get("XCAGI_API_BASE_URL")
+            or "http://127.0.0.1:8765"
+        )
+        .strip()
+        .rstrip("/")
+    )
+
+
+def _fhd_internal_api_key() -> str:
+    return (
+        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
+        or ""
+    ).strip()
+
+
+def employee_message_to_boss(
+    user_id: int, employee_id: str, text: str, *, display_name: str = ""
+) -> bool:
+    """员工主动给老板发一条 IM 消息（通用出站原语，best-effort）。
+
+    这是「员工真正长出嘴」的统一入口：员工在干活过程中可主动汇报进度、提建议、求确认——
+    消息作为「该员工发来的 IM」出现在其 1:1 聊天页并实时推送。提问/汇报/建议都复用本函数。
+    需 ``XCAGI_MARKET_INTERNAL_API_KEY``/``XCAGI_CS_INTAKE_LINK_SECRET`` 与 FHD 一致，
+    ``XCAGI_FHD_INTERNAL_URL`` 指向 FHD 内网。返回是否成功投递。
+    """
+    key = _fhd_internal_api_key()
+    body_text = (text or "").strip()
+    if not key or int(user_id or 0) <= 0 or not str(employee_id or "").strip() or not body_text:
+        return False
+    try:
+        import httpx
+
+        with httpx.Client(timeout=5) as client:
+            resp = client.post(
+                f"{_fhd_internal_base()}/api/internal/im/employee-message",
+                headers={"X-Internal-Api-Key": key},
+                json={
+                    "boss_user_id": int(user_id),
+                    "employee_id": str(employee_id),
+                    "body": body_text,
+                    "display_name": str(display_name or employee_id),
+                },
+            )
+            return 200 <= resp.status_code < 300
+    except Exception as e:  # noqa: BLE001 - 出站 IM 失败不影响主流程
+        logger.warning("employee_message_to_boss failed: %s", e)
+        return False
+
+
+def post_employee_question_to_im(
+    user_id: int, employee_id: str, question: str, task: str = ""
+) -> None:
+    """把员工提问作为该员工的 IM 消息投进老板聊天页（phase-D 双向问答出站，复用通用原语）。"""
+    body_text = question if not task else f"{question}\n\n（任务：{task}）"
+    employee_message_to_boss(user_id, employee_id, body_text)
+
+
 def notify_human_question(
     user_id: int,
     question_id: int,
@@ -135,10 +198,10 @@ def notify_human_question(
     question: str,
     task: str = "",
 ) -> None:
-    """Phase-D：员工向老板提问时推送站内通知。
+    """Phase-D：员工向老板提问时推送站内通知 + 投进该员工 IM 聊天页（双向问答出站）。
 
     员工 cognition 输出 requires_human=true 触发 ask_human_blocking，
-    这里负责把"员工有问题等你回答"推送到老板的通知中心 + 邮箱。
+    这里把"员工有问题等你回答"推到通知中心 + 邮箱，并作为 IM 消息出现在该员工聊天页。
     """
     if not user_id:
         return
@@ -160,6 +223,8 @@ def notify_human_question(
         )
     except Exception as e:
         logger.warning("notify_human_question failed: %s", e)
+    # 出站半边：让问题作为该员工的 IM 消息出现在其聊天页（独立 best-effort，不被通知失败影响）。
+    post_employee_question_to_im(user_id, employee_id, question, task)
 
 
 def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: int) -> None:
