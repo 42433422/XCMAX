@@ -1,0 +1,3781 @@
+{
+  "comments": [
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 52,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+      "hunk_header": "@@ -0,0 +1,132 @@",
+      "line": 52,
+      "line_text_excerpt": "        \"needles\": (\"vitest\", \"jest\", \"pytest\", \"benchmark\", \"golden\", \"fixture\"),",
+      "message": "外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。 [test_harness_signal]",
+      "publish_payload": {
+        "body": "外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。 [test_harness_signal]",
+        "line": 52,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 1,
+      "rank_reason": "low:tests:cross_language_transfer:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 410,
+      "review_context": "tests",
+      "review_stage": "classify_risk",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 20,
+      "absorbed_policy_rank_weight": 15,
+      "calibration_rank_weight": 25,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 489,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:",
+      "line": 489,
+      "line_text_excerpt": "        (\"src/reviewer.ts\", 'const provider = \"openai\"'),",
+      "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。 [llm_provider_prompt_surface]",
+      "publish_payload": {
+        "body": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。 [llm_provider_prompt_surface]",
+        "line": 489,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 2,
+      "rank_reason": "medium:config:cross_language_transfer:bias=20:policy=15:calibration=25:feedback=0",
+      "rank_score": 465,
+      "review_context": "config",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 490,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:",
+      "line": 490,
+      "line_text_excerpt": "        (\"src/reviewer.ts\", \"await octokit.rest.pulls.createReview({ pull_number })\"),",
+      "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+      "publish_payload": {
+        "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "line": 490,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 3,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 492,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:",
+      "line": 492,
+      "line_text_excerpt": "        (\"retort_engine/review_bridge.py\", 'subprocess.Popen([\"retort-worker\"])'),",
+      "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+      "publish_payload": {
+        "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "line": 492,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 4,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 493,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:",
+      "line": 493,
+      "line_text_excerpt": "        (\"retort_engine/review_bridge.py\", \"publish(review)\"),",
+      "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+      "publish_payload": {
+        "body": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+        "line": 493,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 5,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 38,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+      "hunk_header": "@@ -0,0 +1,132 @@",
+      "line": 38,
+      "line_text_excerpt": "        \"needles\": (\"async \", \"await \", \"Promise\", \"fetch(\", \"axios.\", \"subprocess\", \"Popen\"),",
+      "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+      "publish_payload": {
+        "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "line": 38,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 6,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 44,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+      "hunk_header": "@@ -0,0 +1,132 @@",
+      "line": 44,
+      "line_text_excerpt": "        \"pattern_id\": \"review_comment_publish\",",
+      "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+      "publish_payload": {
+        "body": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+        "line": 44,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 7,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 45,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+      "hunk_header": "@@ -0,0 +1,132 @@",
+      "line": 45,
+      "line_text_excerpt": "        \"needles\": (\"createReviewComment\", \"pulls.createReview\", \"issues.createComment\", \"create_comment\", \"publish\"),",
+      "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+      "publish_payload": {
+        "body": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+        "line": 45,
+        "path": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 8,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 237,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_pr_review.py",
+      "hunk_header": "@@ -220,6 +220,46 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:",
+      "line": 237,
+      "line_text_excerpt": "+await octokit.rest.pulls.createReview({ pull_number })",
+      "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+      "publish_payload": {
+        "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "line": 237,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 9,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 243,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_pr_review.py",
+      "hunk_header": "@@ -220,6 +220,46 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:",
+      "line": 243,
+      "line_text_excerpt": "+subprocess.Popen([\"retort-worker\"])",
+      "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+      "publish_payload": {
+        "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "line": 243,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 10,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 244,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_pr_review.py",
+      "hunk_header": "@@ -220,6 +220,46 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:",
+      "line": 244,
+      "line_text_excerpt": "+publish(review)",
+      "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+      "publish_payload": {
+        "body": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。 [review_comment_publish]",
+        "line": 244,
+        "path": "packages/retort_engine/tests/test_pr_review.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 11,
+      "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 555,
+      "review_context": "runtime",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 20,
+      "absorbed_policy_rank_weight": 15,
+      "calibration_rank_weight": 25,
+      "capability": "cross_language_transfer",
+      "comment_anchor": {
+        "line": 491,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": true,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:",
+      "line": 491,
+      "line_text_excerpt": "        (\"src/reviewer.ts\", \"const prompt = buildPrompt(model)\"),",
+      "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。 [llm_provider_prompt_surface]",
+      "publish_payload": {
+        "body": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。 [llm_provider_prompt_surface]",
+        "line": 491,
+        "path": "packages/retort_engine/retort_engine/capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 12,
+      "rank_reason": "medium:config:cross_language_transfer:bias=20:policy=15:calibration=25:feedback=0",
+      "rank_score": 465,
+      "review_context": "config",
+      "review_stage": "classify_risk",
+      "severity": "medium",
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "context_groups": [
+    {
+      "added_change_count": 47,
+      "context": "tests",
+      "file_count": 3,
+      "files": [
+        "packages/retort_engine/tests/test_capability_audit.py",
+        "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "packages/retort_engine/tests/test_pr_review.py"
+      ],
+      "hunk_count": 5,
+      "review_focus": "behavior_proof_and_regression_scope"
+    },
+    {
+      "added_change_count": 9,
+      "context": "config",
+      "file_count": 1,
+      "files": [
+        "packages/retort_engine/docs/retort_quality_gate_bundle.json"
+      ],
+      "hunk_count": 3,
+      "review_focus": "runtime_contract_and_environment_drift"
+    },
+    {
+      "added_change_count": 232,
+      "context": "runtime",
+      "file_count": 5,
+      "files": [
+        "packages/retort_engine/retort_engine/capability_audit.py",
+        "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "packages/retort_engine/retort_engine/paibi_prompting.py",
+        "packages/retort_engine/retort_engine/pr_review.py"
+      ],
+      "hunk_count": 16,
+      "review_focus": "core_execution_path"
+    }
+  ],
+  "cross_language_transfer": {
+    "evidence": {
+      "pattern_ids": [
+        "github_action_write_scope",
+        "llm_provider_prompt_surface",
+        "async_review_entrypoint",
+        "review_comment_publish",
+        "test_harness_signal"
+      ],
+      "source": "absorbed_pr_bot_cross_language_transfer"
+    },
+    "findings": [
+      {
+        "file": "packages/retort_engine/retort_engine/capability_audit.py",
+        "language_family": "python",
+        "line": 489,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "(\"src/reviewer.ts\", 'const provider = \"openai\"'),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/capability_audit.py",
+        "language_family": "python",
+        "line": 490,
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。",
+        "pattern_id": "async_review_entrypoint",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "(\"src/reviewer.ts\", \"await octokit.rest.pulls.createReview({ pull_number })\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/capability_audit.py",
+        "language_family": "python",
+        "line": 491,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "(\"src/reviewer.ts\", \"const prompt = buildPrompt(model)\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/capability_audit.py",
+        "language_family": "python",
+        "line": 492,
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。",
+        "pattern_id": "async_review_entrypoint",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "(\"retort_engine/review_bridge.py\", 'subprocess.Popen([\"retort-worker\"])'),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/capability_audit.py",
+        "language_family": "python",
+        "line": 493,
+        "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。",
+        "pattern_id": "review_comment_publish",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "(\"retort_engine/review_bridge.py\", \"publish(review)\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 30,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "\"pattern_id\": \"llm_provider_prompt_surface\","
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 31,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "\"needles\": (\"provider\", \"model\", \"prompt\", \"temperature\", \"openai\", \"anthropic\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 34,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "\"message\": \"外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。\","
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 38,
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。",
+        "pattern_id": "async_review_entrypoint",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "\"needles\": (\"async \", \"await \", \"Promise\", \"fetch(\", \"axios.\", \"subprocess\", \"Popen\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 44,
+        "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。",
+        "pattern_id": "review_comment_publish",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "\"pattern_id\": \"review_comment_publish\","
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 45,
+        "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。",
+        "pattern_id": "review_comment_publish",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "\"needles\": (\"createReviewComment\", \"pulls.createReview\", \"issues.createComment\", \"create_comment\", \"publish\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "language_family": "python",
+        "line": 52,
+        "message": "外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。",
+        "pattern_id": "test_harness_signal",
+        "review_context": "tests",
+        "severity": "low",
+        "text": "\"needles\": (\"vitest\", \"jest\", \"pytest\", \"benchmark\", \"golden\", \"fixture\"),"
+      },
+      {
+        "file": "packages/retort_engine/retort_engine/pr_review.py",
+        "language_family": "python",
+        "line": 128,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "\"comment_ranking_model\": \"severity_context_transfer_publishability_v2\","
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 64,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "assert result[\"summary\"][\"comment_ranking_model\"] == \"severity_context_transfer_publishability_v2\""
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 236,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "+const provider = \"openai\""
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 237,
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。",
+        "pattern_id": "async_review_entrypoint",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "+await octokit.rest.pulls.createReview({ pull_number })"
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 238,
+        "message": "外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。",
+        "pattern_id": "llm_provider_prompt_surface",
+        "review_context": "config",
+        "severity": "medium",
+        "text": "+const prompt = buildPrompt(model)"
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 243,
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。",
+        "pattern_id": "async_review_entrypoint",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "+subprocess.Popen([\"retort-worker\"])"
+      },
+      {
+        "file": "packages/retort_engine/tests/test_pr_review.py",
+        "language_family": "python",
+        "line": 244,
+        "message": "外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。",
+        "pattern_id": "review_comment_publish",
+        "review_context": "runtime",
+        "severity": "medium",
+        "text": "+publish(review)"
+      }
+    ],
+    "status": "mapped",
+    "summary": {
+      "cross_language_core_mapping": true,
+      "finding_count": 19,
+      "language_families": [
+        "config",
+        "python"
+      ],
+      "language_family_count": 2,
+      "pattern_count": 4,
+      "review_context_count": 3,
+      "review_contexts": [
+        "config",
+        "runtime",
+        "tests"
+      ],
+      "severity_counts": {
+        "high": 0,
+        "low": 1,
+        "medium": 18
+      }
+    }
+  },
+  "file_summaries": [
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".json",
+        "family": "data",
+        "known": true,
+        "review_context": "config",
+        "risk_tags": [
+          "schema_drift"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+      "hunk_count": 3,
+      "ready_for_employee_task": false,
+      "review_context": "config",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 5,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/capability_audit.py",
+      "hunk_count": 6,
+      "ready_for_employee_task": true,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 5
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 4,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/cross_language_transfer.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": true,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/paibi_prompting.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/pr_review.py",
+      "hunk_count": 7,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_capability_audit.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 3,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_pr_review.py",
+      "hunk_count": 2,
+      "ready_for_employee_task": true,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 3
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "files": [
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 39,
+              "text": "      \"ok\": true,",
+              "type": "context"
+            },
+            {
+              "line": 40,
+              "text": "      \"returncode\": 0,",
+              "type": "context"
+            },
+            {
+              "line": 41,
+              "text": "      \"stderr_tail\": \"\",",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"stdout_tail\": \"........................................................................ [ 17%]\\n........................................................................ [ 34%]\\n........................................................................ [ 52%]\\n........................................................................ [ 69%]\\n........................................................................ [ 87%]\\n.....................................................                    [100%]\\n413 passed in 19.38s\\n\"",
+              "type": "delete"
+            },
+            {
+              "line": 42,
+              "text": "      \"stdout_tail\": \"........................................................................ [ 17%]\\n........................................................................ [ 34%]\\n........................................................................ [ 52%]\\n........................................................................ [ 69%]\\n........................................................................ [ 86%]\\n......................................................                   [100%]\\n414 passed in 19.58s\\n\"",
+              "type": "add"
+            },
+            {
+              "line": 43,
+              "text": "    },",
+              "type": "context"
+            },
+            {
+              "line": 44,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": 45,
+              "text": "      \"command\": [",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -39,7 +39,7 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 52,
+              "text": "      \"name\": \"test_density\",",
+              "type": "context"
+            },
+            {
+              "line": 53,
+              "text": "      \"ok\": true,",
+              "type": "context"
+            },
+            {
+              "line": 54,
+              "text": "      \"returncode\": 0,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"source_line_count\": 17180,",
+              "type": "delete"
+            },
+            {
+              "line": 55,
+              "text": "      \"source_line_count\": 17391,",
+              "type": "add"
+            },
+            {
+              "line": 56,
+              "text": "      \"stderr_tail\": \"\",",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"stdout_tail\": \"test_to_source_ratio=0.629; target=0.6; missing_test_lines_to_target=0\",",
+              "type": "delete"
+            },
+            {
+              "line": 57,
+              "text": "      \"stdout_tail\": \"test_to_source_ratio=0.624; target=0.6; missing_test_lines_to_target=0\",",
+              "type": "add"
+            },
+            {
+              "line": 58,
+              "text": "      \"target\": 0.6,",
+              "type": "context"
+            },
+            {
+              "line": 59,
+              "text": "      \"target_met\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"test_line_count\": 10814,",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "      \"test_to_source_ratio\": 0.629",
+              "type": "delete"
+            },
+            {
+              "line": 60,
+              "text": "      \"test_line_count\": 10859,",
+              "type": "add"
+            },
+            {
+              "line": 61,
+              "text": "      \"test_to_source_ratio\": 0.624",
+              "type": "add"
+            },
+            {
+              "line": 62,
+              "text": "    },",
+              "type": "context"
+            },
+            {
+              "line": 63,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": 64,
+              "text": "      \"command\": [",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -52,13 +52,13 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 82,
+              "text": "    \"command_name\": \"quality-gates\",",
+              "type": "context"
+            },
+            {
+              "line": 83,
+              "text": "    \"contract_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 84,
+              "text": "    \"contract_schema_count\": 35,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"duration_sec\": 20.096,",
+              "type": "delete"
+            },
+            {
+              "line": 85,
+              "text": "    \"duration_sec\": 20.368,",
+              "type": "add"
+            },
+            {
+              "line": 86,
+              "text": "    \"gate_count\": 4,",
+              "type": "context"
+            },
+            {
+              "line": 87,
+              "text": "    \"lint_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 88,
+              "text": "    \"passed_count\": 4,",
+              "type": "context"
+            },
+            {
+              "line": 89,
+              "text": "    \"pytest_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 90,
+              "text": "    \"single_command_surface\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"source_line_count\": 17180,",
+              "type": "delete"
+            },
+            {
+              "line": 91,
+              "text": "    \"source_line_count\": 17391,",
+              "type": "add"
+            },
+            {
+              "line": 92,
+              "text": "    \"test_density_floor\": 0.4,",
+              "type": "context"
+            },
+            {
+              "line": 93,
+              "text": "    \"test_density_missing_lines_to_target\": 0,",
+              "type": "context"
+            },
+            {
+              "line": 94,
+              "text": "    \"test_density_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 95,
+              "text": "    \"test_density_target\": 0.6,",
+              "type": "context"
+            },
+            {
+              "line": 96,
+              "text": "    \"test_density_target_met\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"test_line_count\": 10814,",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "    \"test_to_source_ratio\": 0.629",
+              "type": "delete"
+            },
+            {
+              "line": 97,
+              "text": "    \"test_line_count\": 10859,",
+              "type": "add"
+            },
+            {
+              "line": 98,
+              "text": "    \"test_to_source_ratio\": 0.624",
+              "type": "add"
+            },
+            {
+              "line": 99,
+              "text": "  }",
+              "type": "context"
+            },
+            {
+              "line": 100,
+              "text": "}",
+              "type": "context"
+            },
+            {
+              "line": 101,
+              "text": "\\ No newline at end of file",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -82,19 +82,19 @@"
+        }
+      ],
+      "path": "packages/retort_engine/docs/retort_quality_gate_bundle.json"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 136,
+              "text": "    release_decision_source = root / \"retort_engine\" / \"absorption_release_decision.py\"",
+              "type": "context"
+            },
+            {
+              "line": 137,
+              "text": "    extension_policy_source = root / \"retort_engine\" / \"diff_extension_policy.py\"",
+              "type": "context"
+            },
+            {
+              "line": 138,
+              "text": "    external_advantage_source = root / \"retort_engine\" / \"external_advantage_matrix.py\"",
+              "type": "context"
+            },
+            {
+              "line": 139,
+              "text": "    cross_language_source = root / \"retort_engine\" / \"cross_language_transfer.py\"",
+              "type": "add"
+            },
+            {
+              "line": 140,
+              "text": "    test = root / \"tests\" / \"test_pr_review.py\"",
+              "type": "context"
+            },
+            {
+              "line": 141,
+              "text": "    dry_test = root / \"tests\" / \"test_pr_dry_run.py\"",
+              "type": "context"
+            },
+            {
+              "line": 142,
+              "text": "    publish_test = root / \"tests\" / \"test_pr_publish.py\"",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -136,6 +136,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:"
+        },
+        {
+          "changes": [
+            {
+              "line": 210,
+              "text": "    extension_policy_contexts: list[str] = []",
+              "type": "context"
+            },
+            {
+              "line": 211,
+              "text": "    extension_policy_families: list[str] = []",
+              "type": "context"
+            },
+            {
+              "line": 212,
+              "text": "    extension_policy_source_name = \"\"",
+              "type": "context"
+            },
+            {
+              "line": 213,
+              "text": "    cross_language_status = \"\"",
+              "type": "add"
+            },
+            {
+              "line": 214,
+              "text": "    cross_language_finding_count = 0",
+              "type": "add"
+            },
+            {
+              "line": 215,
+              "text": "    cross_language_pattern_count = 0",
+              "type": "add"
+            },
+            {
+              "line": 216,
+              "text": "    cross_language_family_count = 0",
+              "type": "add"
+            },
+            {
+              "line": 217,
+              "text": "    cross_language_core_mapping = False",
+              "type": "add"
+            },
+            {
+              "line": 218,
+              "text": "    cross_language_comment_count = 0",
+              "type": "add"
+            },
+            {
+              "line": 219,
+              "text": "    adjudication_status = \"\"",
+              "type": "context"
+            },
+            {
+              "line": 220,
+              "text": "    adjudication_human_label_count = 0",
+              "type": "context"
+            },
+            {
+              "line": 221,
+              "text": "    adjudication_pass_rate = 0.0",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -209,6 +210,12 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:"
+        },
+        {
+          "changes": [
+            {
+              "line": 290,
+              "text": "                extension_policy_unknown_count = int(extension_policy.get(\"unknown_extension_count\") or 0)",
+              "type": "context"
+            },
+            {
+              "line": 291,
+              "text": "                extension_policy_family_count = int(extension_policy.get(\"language_family_count\") or 0)",
+              "type": "context"
+            },
+            {
+              "line": 292,
+              "text": "                extension_policy_context_count = int(extension_policy.get(\"review_context_count\") or 0)",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "                extension_policy_contexts = [str(item) for item in extension_policy.get(\"review_contexts\") or []]",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "                extension_policy_families = [str(item) for item in extension_policy.get(\"language_families\") or []]",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "                extension_policy_source_name = str(extension_policy.get(\"policy_source\") or \"\")",
+              "type": "delete"
+            },
+            {
+              "line": 293,
+              "text": "            extension_policy_contexts = [str(item) for item in extension_policy.get(\"review_contexts\") or []]",
+              "type": "add"
+            },
+            {
+              "line": 294,
+              "text": "            extension_policy_families = [str(item) for item in extension_policy.get(\"language_families\") or []]",
+              "type": "add"
+            },
+            {
+              "line": 295,
+              "text": "            extension_policy_source_name = str(extension_policy.get(\"policy_source\") or \"\")",
+              "type": "add"
+            },
+            {
+              "line": 296,
+              "text": "            cross_review = review_diff(_audit_cross_language_transfer_sample(), max_comments=10)",
+              "type": "add"
+            },
+            {
+              "line": 297,
+              "text": "            cross_transfer = cross_review.get(\"cross_language_transfer\") if isinstance(cross_review.get(\"cross_language_transfer\"), dict) else {}",
+              "type": "add"
+            },
+            {
+              "line": 298,
+              "text": "            cross_summary = cross_transfer.get(\"summary\") if isinstance(cross_transfer.get(\"summary\"), dict) else {}",
+              "type": "add"
+            },
+            {
+              "line": 299,
+              "text": "            cross_language_status = str(cross_transfer.get(\"status\") or \"\")",
+              "type": "add"
+            },
+            {
+              "line": 300,
+              "text": "            cross_language_finding_count = int(cross_summary.get(\"finding_count\") or 0)",
+              "type": "add"
+            },
+            {
+              "line": 301,
+              "text": "            cross_language_pattern_count = int(cross_summary.get(\"pattern_count\") or 0)",
+              "type": "add"
+            },
+            {
+              "line": 302,
+              "text": "            cross_language_family_count = int(cross_summary.get(\"language_family_count\") or 0)",
+              "type": "add"
+            },
+            {
+              "line": 303,
+              "text": "            cross_language_core_mapping = bool(cross_summary.get(\"cross_language_core_mapping\"))",
+              "type": "add"
+            },
+            {
+              "line": 304,
+              "text": "            cross_language_comment_count = sum(1 for comment in cross_review.get(\"comments\") or [] if isinstance(comment, dict) and comment.get(\"capability\") == \"cross_language_transfer\")",
+              "type": "add"
+            },
+            {
+              "line": 305,
+              "text": "            adjudication_report = read_json(root / \"docs\" / \"retort_review_adjudication_calibration.json\")",
+              "type": "context"
+            },
+            {
+              "line": 306,
+              "text": "            adjudication_summary = adjudication_report.get(\"summary\") if isinstance(adjudication_report.get(\"summary\"), dict) else {}",
+              "type": "context"
+            },
+            {
+              "line": 307,
+              "text": "            adjudication_status = str(adjudication_report.get(\"status\") or \"\")",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -283,9 +290,18 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:"
+        },
+        {
+          "changes": [
+            {
+              "line": 356,
+              "text": "        \"extension_policy_review_contexts\": extension_policy_contexts,",
+              "type": "context"
+            },
+            {
+              "line": 357,
+              "text": "        \"extension_policy_language_families\": extension_policy_families,",
+              "type": "context"
+            },
+            {
+              "line": 358,
+              "text": "        \"extension_policy_source\": extension_policy_source_name,",
+              "type": "context"
+            },
+            {
+              "line": 359,
+              "text": "        \"cross_language_transfer_source\": cross_language_source.is_file(),",
+              "type": "add"
+            },
+            {
+              "line": 360,
+              "text": "        \"cross_language_transfer_status\": cross_language_status,",
+              "type": "add"
+            },
+            {
+              "line": 361,
+              "text": "        \"cross_language_transfer_finding_count\": cross_language_finding_count,",
+              "type": "add"
+            },
+            {
+              "line": 362,
+              "text": "        \"cross_language_transfer_pattern_count\": cross_language_pattern_count,",
+              "type": "add"
+            },
+            {
+              "line": 363,
+              "text": "        \"cross_language_transfer_family_count\": cross_language_family_count,",
+              "type": "add"
+            },
+            {
+              "line": 364,
+              "text": "        \"cross_language_transfer_core_mapping\": cross_language_core_mapping,",
+              "type": "add"
+            },
+            {
+              "line": 365,
+              "text": "        \"cross_language_transfer_comment_count\": cross_language_comment_count,",
+              "type": "add"
+            },
+            {
+              "line": 366,
+              "text": "        \"adjudication_status\": adjudication_status,",
+              "type": "context"
+            },
+            {
+              "line": 367,
+              "text": "        \"adjudication_human_label_count\": adjudication_human_label_count,",
+              "type": "context"
+            },
+            {
+              "line": 368,
+              "text": "        \"adjudication_pass_rate\": adjudication_pass_rate,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -340,6 +356,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:"
+        },
+        {
+          "changes": [
+            {
+              "line": 405,
+              "text": "                (\"retort_engine/absorption_release_decision.py\", release_decision_source.is_file()),",
+              "type": "context"
+            },
+            {
+              "line": 406,
+              "text": "                (\"retort_engine/diff_extension_policy.py\", extension_policy_source.is_file()),",
+              "type": "context"
+            },
+            {
+              "line": 407,
+              "text": "                (\"retort_engine/external_advantage_matrix.py\", external_advantage_source.is_file()),",
+              "type": "context"
+            },
+            {
+              "line": 408,
+              "text": "                (\"retort_engine/cross_language_transfer.py\", cross_language_source.is_file()),",
+              "type": "add"
+            },
+            {
+              "line": 409,
+              "text": "            )",
+              "type": "context"
+            },
+            {
+              "line": 410,
+              "text": "            if exists",
+              "type": "context"
+            },
+            {
+              "line": 411,
+              "text": "        ],",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -382,6 +405,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:"
+        },
+        {
+          "changes": [
+            {
+              "line": 481,
+              "text": "    return \"\".join(f\"diff --git a/{path} b/{path}\\n--- a/{path}\\n+++ b/{path}\\n@@ -0,0 +1,1 @@\\n+{line}\\n\" for path, line in rows)",
+              "type": "context"
+            },
+            {
+              "line": 482,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 483,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 484,
+              "text": "def _audit_cross_language_transfer_sample() -> str:",
+              "type": "add"
+            },
+            {
+              "line": 485,
+              "text": "    rows = [",
+              "type": "add"
+            },
+            {
+              "line": 486,
+              "text": "        (\".github/workflows/review.yml\", \"on: pull_request_target\"),",
+              "type": "add"
+            },
+            {
+              "line": 487,
+              "text": "        (\".github/workflows/review.yml\", \"  pull-requests: write\"),",
+              "type": "add"
+            },
+            {
+              "line": 488,
+              "text": "        (\".github/workflows/review.yml\", \"  issues: write\"),",
+              "type": "add"
+            },
+            {
+              "line": 489,
+              "text": "        (\"src/reviewer.ts\", 'const provider = \"openai\"'),",
+              "type": "add"
+            },
+            {
+              "line": 490,
+              "text": "        (\"src/reviewer.ts\", \"await octokit.rest.pulls.createReview({ pull_number })\"),",
+              "type": "add"
+            },
+            {
+              "line": 491,
+              "text": "        (\"src/reviewer.ts\", \"const prompt = buildPrompt(model)\"),",
+              "type": "add"
+            },
+            {
+              "line": 492,
+              "text": "        (\"retort_engine/review_bridge.py\", 'subprocess.Popen([\"retort-worker\"])'),",
+              "type": "add"
+            },
+            {
+              "line": 493,
+              "text": "        (\"retort_engine/review_bridge.py\", \"publish(review)\"),",
+              "type": "add"
+            },
+            {
+              "line": 494,
+              "text": "    ]",
+              "type": "add"
+            },
+            {
+              "line": 495,
+              "text": "    grouped: dict[str, list[str]] = {}",
+              "type": "add"
+            },
+            {
+              "line": 496,
+              "text": "    for path, line in rows:",
+              "type": "add"
+            },
+            {
+              "line": 497,
+              "text": "        grouped.setdefault(path, []).append(line)",
+              "type": "add"
+            },
+            {
+              "line": 498,
+              "text": "    chunks: list[str] = []",
+              "type": "add"
+            },
+            {
+              "line": 499,
+              "text": "    for path, lines in grouped.items():",
+              "type": "add"
+            },
+            {
+              "line": 500,
+              "text": "        chunks.append(f\"diff --git a/{path} b/{path}\\n--- a/{path}\\n+++ b/{path}\\n@@ -0,0 +1,{len(lines)} @@\\n\")",
+              "type": "add"
+            },
+            {
+              "line": 501,
+              "text": "        chunks.extend(f\"+{line}\\n\" for line in lines)",
+              "type": "add"
+            },
+            {
+              "line": 502,
+              "text": "    return \"\".join(chunks)",
+              "type": "add"
+            },
+            {
+              "line": 503,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 504,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 505,
+              "text": "def post_absorption_hardening_files(root: Path) -> dict[str, Any]:",
+              "type": "context"
+            },
+            {
+              "line": 506,
+              "text": "    merge_commit = latest_absorption_merge_commit(root)",
+              "type": "context"
+            },
+            {
+              "line": 507,
+              "text": "    if not merge_commit:",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -457,6 +481,27 @@ def _audit_extension_policy_sample() -> str:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/capability_audit.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 1,
+              "text": "from __future__ import annotations",
+              "type": "add"
+            },
+            {
+              "line": 2,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 3,
+              "text": "from pathlib import Path",
+              "type": "add"
+            },
+            {
+              "line": 4,
+              "text": "from typing import Any",
+              "type": "add"
+            },
+            {
+              "line": 5,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 6,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 7,
+              "text": "LANGUAGE_FAMILY_BY_SUFFIX = {",
+              "type": "add"
+            },
+            {
+              "line": 8,
+              "text": "    \".py\": \"python\",",
+              "type": "add"
+            },
+            {
+              "line": 9,
+              "text": "    \".ts\": \"typescript\",",
+              "type": "add"
+            },
+            {
+              "line": 10,
+              "text": "    \".tsx\": \"typescript\",",
+              "type": "add"
+            },
+            {
+              "line": 11,
+              "text": "    \".js\": \"javascript\",",
+              "type": "add"
+            },
+            {
+              "line": 12,
+              "text": "    \".jsx\": \"javascript\",",
+              "type": "add"
+            },
+            {
+              "line": 13,
+              "text": "    \".go\": \"go\",",
+              "type": "add"
+            },
+            {
+              "line": 14,
+              "text": "    \".rs\": \"rust\",",
+              "type": "add"
+            },
+            {
+              "line": 15,
+              "text": "    \".yaml\": \"config\",",
+              "type": "add"
+            },
+            {
+              "line": 16,
+              "text": "    \".yml\": \"config\",",
+              "type": "add"
+            },
+            {
+              "line": 17,
+              "text": "    \".toml\": \"config\",",
+              "type": "add"
+            },
+            {
+              "line": 18,
+              "text": "    \".json\": \"config\",",
+              "type": "add"
+            },
+            {
+              "line": 19,
+              "text": "}",
+              "type": "add"
+            },
+            {
+              "line": 20,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 21,
+              "text": "TRANSFER_PATTERNS: tuple[dict[str, Any], ...] = (",
+              "type": "add"
+            },
+            {
+              "line": 22,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 23,
+              "text": "        \"pattern_id\": \"github_action_write_scope\",",
+              "type": "add"
+            },
+            {
+              "line": 24,
+              "text": "        \"needles\": (\"pull_request_target\", \"contents: write\", \"pull-requests: write\", \"issues: write\"),",
+              "type": "add"
+            },
+            {
+              "line": 25,
+              "text": "        \"severity\": \"high\",",
+              "type": "add"
+            },
+            {
+              "line": 26,
+              "text": "        \"context\": \"ci_config\",",
+              "type": "add"
+            },
+            {
+              "line": 27,
+              "text": "        \"message\": \"跨语言 PR bot 配置打开写权限，需要证明最小权限、dry-run 降级和回滚路径。\",",
+              "type": "add"
+            },
+            {
+              "line": 28,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 29,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 30,
+              "text": "        \"pattern_id\": \"llm_provider_prompt_surface\",",
+              "type": "add"
+            },
+            {
+              "line": 31,
+              "text": "        \"needles\": (\"provider\", \"model\", \"prompt\", \"temperature\", \"openai\", \"anthropic\"),",
+              "type": "add"
+            },
+            {
+              "line": 32,
+              "text": "        \"severity\": \"medium\",",
+              "type": "add"
+            },
+            {
+              "line": 33,
+              "text": "        \"context\": \"config\",",
+              "type": "add"
+            },
+            {
+              "line": 34,
+              "text": "        \"message\": \"外部 LLM provider/prompt 配置变更需要转成 Retort 的可复评契约，避免只吸收提示词表面。\",",
+              "type": "add"
+            },
+            {
+              "line": 35,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 36,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 37,
+              "text": "        \"pattern_id\": \"async_review_entrypoint\",",
+              "type": "add"
+            },
+            {
+              "line": 38,
+              "text": "        \"needles\": (\"async \", \"await \", \"Promise\", \"fetch(\", \"axios.\", \"subprocess\", \"Popen\"),",
+              "type": "add"
+            },
+            {
+              "line": 39,
+              "text": "        \"severity\": \"medium\",",
+              "type": "add"
+            },
+            {
+              "line": 40,
+              "text": "        \"context\": \"runtime\",",
+              "type": "add"
+            },
+            {
+              "line": 41,
+              "text": "        \"message\": \"跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。\",",
+              "type": "add"
+            },
+            {
+              "line": 42,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 43,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 44,
+              "text": "        \"pattern_id\": \"review_comment_publish\",",
+              "type": "add"
+            },
+            {
+              "line": 45,
+              "text": "        \"needles\": (\"createReviewComment\", \"pulls.createReview\", \"issues.createComment\", \"create_comment\", \"publish\"),",
+              "type": "add"
+            },
+            {
+              "line": 46,
+              "text": "        \"severity\": \"medium\",",
+              "type": "add"
+            },
+            {
+              "line": 47,
+              "text": "        \"context\": \"runtime\",",
+              "type": "add"
+            },
+            {
+              "line": 48,
+              "text": "        \"message\": \"外部评论发布能力必须接入 Retort 的权限降级和删除回滚证明。\",",
+              "type": "add"
+            },
+            {
+              "line": 49,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 50,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 51,
+              "text": "        \"pattern_id\": \"test_harness_signal\",",
+              "type": "add"
+            },
+            {
+              "line": 52,
+              "text": "        \"needles\": (\"vitest\", \"jest\", \"pytest\", \"benchmark\", \"golden\", \"fixture\"),",
+              "type": "add"
+            },
+            {
+              "line": 53,
+              "text": "        \"severity\": \"low\",",
+              "type": "add"
+            },
+            {
+              "line": 54,
+              "text": "        \"context\": \"tests\",",
+              "type": "add"
+            },
+            {
+              "line": 55,
+              "text": "        \"message\": \"外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。\",",
+              "type": "add"
+            },
+            {
+              "line": 56,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 57,
+              "text": ")",
+              "type": "add"
+            },
+            {
+              "line": 58,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 59,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 60,
+              "text": "def build_cross_language_transfer(files: list[dict[str, Any]]) -> dict[str, Any]:",
+              "type": "add"
+            },
+            {
+              "line": 61,
+              "text": "    \"\"\"Map external multi-language PR bot signals into Retort review behavior.\"\"\"",
+              "type": "add"
+            },
+            {
+              "line": 62,
+              "text": "    families = sorted({_language_family(str(item.get(\"path\") or \"\")) for item in files if _language_family(str(item.get(\"path\") or \"\"))})",
+              "type": "add"
+            },
+            {
+              "line": 63,
+              "text": "    findings: list[dict[str, Any]] = []",
+              "type": "add"
+            },
+            {
+              "line": 64,
+              "text": "    for file_review in files:",
+              "type": "add"
+            },
+            {
+              "line": 65,
+              "text": "        path = str(file_review.get(\"path\") or \"\")",
+              "type": "add"
+            },
+            {
+              "line": 66,
+              "text": "        family = _language_family(path)",
+              "type": "add"
+            },
+            {
+              "line": 67,
+              "text": "        for hunk in file_review.get(\"hunks\") or []:",
+              "type": "add"
+            },
+            {
+              "line": 68,
+              "text": "            for change in hunk.get(\"changes\") or []:",
+              "type": "add"
+            },
+            {
+              "line": 69,
+              "text": "                if change.get(\"type\") != \"add\":",
+              "type": "add"
+            },
+            {
+              "line": 70,
+              "text": "                    continue",
+              "type": "add"
+            },
+            {
+              "line": 71,
+              "text": "                text = str(change.get(\"text\") or \"\")",
+              "type": "add"
+            },
+            {
+              "line": 72,
+              "text": "                finding = _transfer_finding(path, family, int(change.get(\"line\") or 0), text)",
+              "type": "add"
+            },
+            {
+              "line": 73,
+              "text": "                if finding:",
+              "type": "add"
+            },
+            {
+              "line": 74,
+              "text": "                    findings.append(finding)",
+              "type": "add"
+            },
+            {
+              "line": 75,
+              "text": "    contexts = sorted({str(item[\"review_context\"]) for item in findings})",
+              "type": "add"
+            },
+            {
+              "line": 76,
+              "text": "    pattern_ids = sorted({str(item[\"pattern_id\"]) for item in findings})",
+              "type": "add"
+            },
+            {
+              "line": 77,
+              "text": "    severity_counts = {severity: sum(1 for item in findings if item[\"severity\"] == severity) for severity in (\"high\", \"medium\", \"low\")}",
+              "type": "add"
+            },
+            {
+              "line": 78,
+              "text": "    return {",
+              "type": "add"
+            },
+            {
+              "line": 79,
+              "text": "        \"status\": \"mapped\" if findings else \"clean\",",
+              "type": "add"
+            },
+            {
+              "line": 80,
+              "text": "        \"summary\": {",
+              "type": "add"
+            },
+            {
+              "line": 81,
+              "text": "            \"language_family_count\": len(families),",
+              "type": "add"
+            },
+            {
+              "line": 82,
+              "text": "            \"language_families\": families,",
+              "type": "add"
+            },
+            {
+              "line": 83,
+              "text": "            \"finding_count\": len(findings),",
+              "type": "add"
+            },
+            {
+              "line": 84,
+              "text": "            \"pattern_count\": len(pattern_ids),",
+              "type": "add"
+            },
+            {
+              "line": 85,
+              "text": "            \"review_context_count\": len(contexts),",
+              "type": "add"
+            },
+            {
+              "line": 86,
+              "text": "            \"review_contexts\": contexts,",
+              "type": "add"
+            },
+            {
+              "line": 87,
+              "text": "            \"severity_counts\": severity_counts,",
+              "type": "add"
+            },
+            {
+              "line": 88,
+              "text": "            \"cross_language_core_mapping\": bool(findings and any(family in {\"typescript\", \"javascript\", \"config\"} for family in families)),",
+              "type": "add"
+            },
+            {
+              "line": 89,
+              "text": "        },",
+              "type": "add"
+            },
+            {
+              "line": 90,
+              "text": "        \"findings\": findings,",
+              "type": "add"
+            },
+            {
+              "line": 91,
+              "text": "        \"evidence\": {",
+              "type": "add"
+            },
+            {
+              "line": 92,
+              "text": "            \"source\": \"absorbed_pr_bot_cross_language_transfer\",",
+              "type": "add"
+            },
+            {
+              "line": 93,
+              "text": "            \"pattern_ids\": [str(item[\"pattern_id\"]) for item in TRANSFER_PATTERNS],",
+              "type": "add"
+            },
+            {
+              "line": 94,
+              "text": "        },",
+              "type": "add"
+            },
+            {
+              "line": 95,
+              "text": "    }",
+              "type": "add"
+            },
+            {
+              "line": 96,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 97,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 98,
+              "text": "def _transfer_finding(path: str, family: str, line: int, text: str) -> dict[str, Any] | None:",
+              "type": "add"
+            },
+            {
+              "line": 99,
+              "text": "    lowered = text.lower()",
+              "type": "add"
+            },
+            {
+              "line": 100,
+              "text": "    for pattern in TRANSFER_PATTERNS:",
+              "type": "add"
+            },
+            {
+              "line": 101,
+              "text": "        needles = tuple(str(item).lower() for item in pattern[\"needles\"])",
+              "type": "add"
+            },
+            {
+              "line": 102,
+              "text": "        if not any(needle in lowered for needle in needles):",
+              "type": "add"
+            },
+            {
+              "line": 103,
+              "text": "            continue",
+              "type": "add"
+            },
+            {
+              "line": 104,
+              "text": "        context = str(pattern[\"context\"])",
+              "type": "add"
+            },
+            {
+              "line": 105,
+              "text": "        if context == \"ci_config\" and not _is_ci_file(path):",
+              "type": "add"
+            },
+            {
+              "line": 106,
+              "text": "            continue",
+              "type": "add"
+            },
+            {
+              "line": 107,
+              "text": "        return {",
+              "type": "add"
+            },
+            {
+              "line": 108,
+              "text": "            \"file\": path,",
+              "type": "add"
+            },
+            {
+              "line": 109,
+              "text": "            \"line\": line,",
+              "type": "add"
+            },
+            {
+              "line": 110,
+              "text": "            \"language_family\": family or \"unknown\",",
+              "type": "add"
+            },
+            {
+              "line": 111,
+              "text": "            \"pattern_id\": str(pattern[\"pattern_id\"]),",
+              "type": "add"
+            },
+            {
+              "line": 112,
+              "text": "            \"severity\": str(pattern[\"severity\"]),",
+              "type": "add"
+            },
+            {
+              "line": 113,
+              "text": "            \"review_context\": context,",
+              "type": "add"
+            },
+            {
+              "line": 114,
+              "text": "            \"message\": str(pattern[\"message\"]),",
+              "type": "add"
+            },
+            {
+              "line": 115,
+              "text": "            \"text\": text.strip()[:240],",
+              "type": "add"
+            },
+            {
+              "line": 116,
+              "text": "        }",
+              "type": "add"
+            },
+            {
+              "line": 117,
+              "text": "    return None",
+              "type": "add"
+            },
+            {
+              "line": 118,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 119,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 120,
+              "text": "def _language_family(path: str) -> str:",
+              "type": "add"
+            },
+            {
+              "line": 121,
+              "text": "    normalized = path.replace(\"\\\\\", \"/\").lower()",
+              "type": "add"
+            },
+            {
+              "line": 122,
+              "text": "    name = normalized.rsplit(\"/\", 1)[-1]",
+              "type": "add"
+            },
+            {
+              "line": 123,
+              "text": "    if name in {\"go.mod\", \"go.sum\"}:",
+              "type": "add"
+            },
+            {
+              "line": 124,
+              "text": "        return \"go\"",
+              "type": "add"
+            },
+            {
+              "line": 125,
+              "text": "    if name in {\"action.yml\", \"action.yaml\"} or normalized.startswith(\".github/workflows/\"):",
+              "type": "add"
+            },
+            {
+              "line": 126,
+              "text": "        return \"config\"",
+              "type": "add"
+            },
+            {
+              "line": 127,
+              "text": "    return LANGUAGE_FAMILY_BY_SUFFIX.get(Path(name).suffix, \"\")",
+              "type": "add"
+            },
+            {
+              "line": 128,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 129,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 130,
+              "text": "def _is_ci_file(path: str) -> bool:",
+              "type": "add"
+            },
+            {
+              "line": 131,
+              "text": "    normalized = path.replace(\"\\\\\", \"/\").lower()",
+              "type": "add"
+            },
+            {
+              "line": 132,
+              "text": "    return normalized.startswith(\".github/workflows/\") or normalized.endswith((\"action.yml\", \"action.yaml\", \"workflow.yml\", \"workflow.yaml\"))",
+              "type": "add"
+            }
+          ],
+          "header": "@@ -0,0 +1,132 @@"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/cross_language_transfer.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 147,
+              "text": "        f\"pr_review_extension_policy_review_contexts={','.join(pr_review.get('extension_policy_review_contexts') or [])}\",",
+              "type": "context"
+            },
+            {
+              "line": 148,
+              "text": "        f\"pr_review_extension_policy_language_families={','.join(pr_review.get('extension_policy_language_families') or [])}\",",
+              "type": "context"
+            },
+            {
+              "line": 149,
+              "text": "        f\"pr_review_extension_policy_source={pr_review.get('extension_policy_source')}\",",
+              "type": "context"
+            },
+            {
+              "line": 150,
+              "text": "        f\"pr_review_cross_language_transfer_source={pr_review.get('cross_language_transfer_source')}\",",
+              "type": "add"
+            },
+            {
+              "line": 151,
+              "text": "        f\"pr_review_cross_language_transfer_status={pr_review.get('cross_language_transfer_status')}\",",
+              "type": "add"
+            },
+            {
+              "line": 152,
+              "text": "        f\"pr_review_cross_language_transfer_findings={pr_review.get('cross_language_transfer_finding_count')}\",",
+              "type": "add"
+            },
+            {
+              "line": 153,
+              "text": "        f\"pr_review_cross_language_transfer_patterns={pr_review.get('cross_language_transfer_pattern_count')}\",",
+              "type": "add"
+            },
+            {
+              "line": 154,
+              "text": "        f\"pr_review_cross_language_transfer_families={pr_review.get('cross_language_transfer_family_count')}\",",
+              "type": "add"
+            },
+            {
+              "line": 155,
+              "text": "        f\"pr_review_cross_language_transfer_core_mapping={pr_review.get('cross_language_transfer_core_mapping')}\",",
+              "type": "add"
+            },
+            {
+              "line": 156,
+              "text": "        f\"pr_review_cross_language_transfer_comments={pr_review.get('cross_language_transfer_comment_count')}\",",
+              "type": "add"
+            },
+            {
+              "line": 157,
+              "text": "    ]",
+              "type": "context"
+            },
+            {
+              "line": 158,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 159,
+              "text": "",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -147,6 +147,13 @@ def _pr_runtime_evidence(project: Path) -> list[str]:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/llm_absorption_evidence.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 252,
+              "text": "        \"pr_low_permission_probe_real_network=\",",
+              "type": "context"
+            },
+            {
+              "line": 253,
+              "text": "        \"pr_readonly_degradation_probe_\",",
+              "type": "context"
+            },
+            {
+              "line": 254,
+              "text": "        \"pr_review_calibration_\",",
+              "type": "context"
+            },
+            {
+              "line": 255,
+              "text": "        \"pr_review_cross_language_transfer_\",",
+              "type": "add"
+            },
+            {
+              "line": 256,
+              "text": "        \"pr_long_run_review_\",",
+              "type": "context"
+            },
+            {
+              "line": 257,
+              "text": "        \"pr_holdout_blind_eval_\",",
+              "type": "context"
+            },
+            {
+              "line": 258,
+              "text": "        \"pr_failure_rollback_replay_\",",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -252,6 +252,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/paibi_prompting.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 7,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 8,
+              "text": "from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file",
+              "type": "context"
+            },
+            {
+              "line": 9,
+              "text": "from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary",
+              "type": "context"
+            },
+            {
+              "line": 10,
+              "text": "from retort_engine.cross_language_transfer import build_cross_language_transfer",
+              "type": "add"
+            },
+            {
+              "line": 11,
+              "text": "from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context",
+              "type": "context"
+            },
+            {
+              "line": 12,
+              "text": "from retort_engine.intent_alignment import assess_change_intent_alignment",
+              "type": "context"
+            },
+            {
+              "line": 13,
+              "text": "from retort_engine.review_calibration_policy import calibration_context_rank_weight, calibration_context_rank_weights, calibration_summary",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -7,6 +7,7 @@ from typing import Any"
+        },
+        {
+          "changes": [
+            {
+              "line": 54,
+              "text": "    context_by_file = {path: str(group[\"context\"]) for group in context_groups for path in group[\"files\"]}",
+              "type": "context"
+            },
+            {
+              "line": 55,
+              "text": "    extension_policy = extension_policy_summary([str(file_review[\"path\"]) for file_review in files])",
+              "type": "context"
+            },
+            {
+              "line": 56,
+              "text": "    static_analysis = scan_static_analysis_findings(files)",
+              "type": "context"
+            },
+            {
+              "line": 57,
+              "text": "    cross_language_transfer = build_cross_language_transfer(files)",
+              "type": "add"
+            },
+            {
+              "line": 58,
+              "text": "    intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)",
+              "type": "context"
+            },
+            {
+              "line": 59,
+              "text": "    feedback_context_weights = _feedback_context_weights(employee_feedback or [])",
+              "type": "context"
+            },
+            {
+              "line": 60,
+              "text": "    static_findings_by_location = {",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -53,6 +54,7 @@ def review_diff("
+        },
+        {
+          "changes": [
+            {
+              "line": 71,
+              "text": "        for hunk in file_review[\"hunks\"]:",
+              "type": "context"
+            },
+            {
+              "line": 72,
+              "text": "            hunk_count += 1",
+              "type": "context"
+            },
+            {
+              "line": 73,
+              "text": "            hunk_comments = _static_analysis_comments(file_path, hunk, strategy, capabilities, review_context, static_findings_by_location)",
+              "type": "context"
+            },
+            {
+              "line": 74,
+              "text": "            hunk_comments.extend(_cross_language_transfer_comments(file_path, hunk, strategy, capabilities, cross_language_transfer))",
+              "type": "add"
+            },
+            {
+              "line": 75,
+              "text": "            hunk_comments.extend(_review_hunk(file_path, hunk, strategy, capabilities, review_context))",
+              "type": "context"
+            },
+            {
+              "line": 76,
+              "text": "            if not hunk_comments:",
+              "type": "context"
+            },
+            {
+              "line": 77,
+              "text": "                hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -69,6 +71,7 @@ def review_diff("
+        },
+        {
+          "changes": [
+            {
+              "line": 122,
+              "text": "        \"absorbed_review_source\": str(context_bias.get(\"source\") or \"\"),",
+              "type": "context"
+            },
+            {
+              "line": 123,
+              "text": "        \"risk_counts\": risk_counts,",
+              "type": "context"
+            },
+            {
+              "line": 124,
+              "text": "        \"static_analysis\": static_analysis[\"summary\"],",
+              "type": "context"
+            },
+            {
+              "line": 125,
+              "text": "        \"cross_language_transfer\": cross_language_transfer[\"summary\"],",
+              "type": "add"
+            },
+            {
+              "line": 126,
+              "text": "        \"intent_alignment\": intent_alignment[\"summary\"],",
+              "type": "context"
+            },
+            {
+              "line": 127,
+              "text": "        \"deep_review_pipeline\": True,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "        \"comment_ranking_model\": \"severity_context_publishability_v1\",",
+              "type": "delete"
+            },
+            {
+              "line": 128,
+              "text": "        \"comment_ranking_model\": \"severity_context_transfer_publishability_v2\",",
+              "type": "add"
+            },
+            {
+              "line": 129,
+              "text": "        \"large_diff_chunking\": large_diff_chunking,",
+              "type": "context"
+            },
+            {
+              "line": 130,
+              "text": "        \"large_diff_chunk_count\": len(context_groups) if large_diff_chunking else (1 if files else 0),",
+              "type": "context"
+            },
+            {
+              "line": 131,
+              "text": "        \"large_diff_context_balancing\": large_diff_chunking,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -119,9 +122,10 @@ def review_diff("
+        },
+        {
+          "changes": [
+            {
+              "line": 146,
+              "text": "        \"task_groups\": task_groups,",
+              "type": "context"
+            },
+            {
+              "line": 147,
+              "text": "        \"incremental\": incremental,",
+              "type": "context"
+            },
+            {
+              "line": 148,
+              "text": "        \"intent_alignment\": intent_alignment,",
+              "type": "context"
+            },
+            {
+              "line": 149,
+              "text": "        \"cross_language_transfer\": cross_language_transfer,",
+              "type": "add"
+            },
+            {
+              "line": 150,
+              "text": "    }",
+              "type": "context"
+            },
+            {
+              "line": 151,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 152,
+              "text": "",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -142,6 +146,7 @@ def review_diff("
+        },
+        {
+          "changes": [
+            {
+              "line": 278,
+              "text": "    return comments",
+              "type": "context"
+            },
+            {
+              "line": 279,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 280,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 281,
+              "text": "def _cross_language_transfer_comments(",
+              "type": "add"
+            },
+            {
+              "line": 282,
+              "text": "    file_path: str,",
+              "type": "add"
+            },
+            {
+              "line": 283,
+              "text": "    hunk: dict[str, Any],",
+              "type": "add"
+            },
+            {
+              "line": 284,
+              "text": "    strategy: dict[str, Any],",
+              "type": "add"
+            },
+            {
+              "line": 285,
+              "text": "    capabilities: list[str],",
+              "type": "add"
+            },
+            {
+              "line": 286,
+              "text": "    transfer: dict[str, Any],",
+              "type": "add"
+            },
+            {
+              "line": 287,
+              "text": ") -> list[dict[str, Any]]:",
+              "type": "add"
+            },
+            {
+              "line": 288,
+              "text": "    findings_by_location = {",
+              "type": "add"
+            },
+            {
+              "line": 289,
+              "text": "        (str(finding.get(\"file\") or \"\"), int(finding.get(\"line\") or 0)): finding",
+              "type": "add"
+            },
+            {
+              "line": 290,
+              "text": "        for finding in transfer.get(\"findings\") or []",
+              "type": "add"
+            },
+            {
+              "line": 291,
+              "text": "        if isinstance(finding, dict)",
+              "type": "add"
+            },
+            {
+              "line": 292,
+              "text": "    }",
+              "type": "add"
+            },
+            {
+              "line": 293,
+              "text": "    comments: list[dict[str, Any]] = []",
+              "type": "add"
+            },
+            {
+              "line": 294,
+              "text": "    for change in hunk.get(\"changes\") or []:",
+              "type": "add"
+            },
+            {
+              "line": 295,
+              "text": "        if change.get(\"type\") != \"add\":",
+              "type": "add"
+            },
+            {
+              "line": 296,
+              "text": "            continue",
+              "type": "add"
+            },
+            {
+              "line": 297,
+              "text": "        line = int(change.get(\"line\") or 0)",
+              "type": "add"
+            },
+            {
+              "line": 298,
+              "text": "        finding = findings_by_location.get((file_path, line))",
+              "type": "add"
+            },
+            {
+              "line": 299,
+              "text": "        if not finding:",
+              "type": "add"
+            },
+            {
+              "line": 300,
+              "text": "            continue",
+              "type": "add"
+            },
+            {
+              "line": 301,
+              "text": "        comments.append(",
+              "type": "add"
+            },
+            {
+              "line": 302,
+              "text": "            _comment(",
+              "type": "add"
+            },
+            {
+              "line": 303,
+              "text": "                file_path,",
+              "type": "add"
+            },
+            {
+              "line": 304,
+              "text": "                line,",
+              "type": "add"
+            },
+            {
+              "line": 305,
+              "text": "                str(finding.get(\"severity\") or \"medium\"),",
+              "type": "add"
+            },
+            {
+              "line": 306,
+              "text": "                f\"{finding.get('message')} [{finding.get('pattern_id')}]\",",
+              "type": "add"
+            },
+            {
+              "line": 307,
+              "text": "                strategy,",
+              "type": "add"
+            },
+            {
+              "line": 308,
+              "text": "                [\"cross_language_transfer\", *capabilities],",
+              "type": "add"
+            },
+            {
+              "line": 309,
+              "text": "                \"classify_risk\",",
+              "type": "add"
+            },
+            {
+              "line": 310,
+              "text": "                str(finding.get(\"review_context\") or review_context_for_file(file_path)),",
+              "type": "add"
+            },
+            {
+              "line": 311,
+              "text": "                hunk=hunk,",
+              "type": "add"
+            },
+            {
+              "line": 312,
+              "text": "                line_text=str(change.get(\"text\") or \"\"),",
+              "type": "add"
+            },
+            {
+              "line": 313,
+              "text": "            )",
+              "type": "add"
+            },
+            {
+              "line": 314,
+              "text": "        )",
+              "type": "add"
+            },
+            {
+              "line": 315,
+              "text": "    return comments",
+              "type": "add"
+            },
+            {
+              "line": 316,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 317,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 318,
+              "text": "def _intent_alignment_comment(",
+              "type": "context"
+            },
+            {
+              "line": 319,
+              "text": "    files: list[dict[str, Any]],",
+              "type": "context"
+            },
+            {
+              "line": 320,
+              "text": "    capabilities: list[str],",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -273,6 +278,43 @@ def _static_analysis_comments("
+        },
+        {
+          "changes": [
+            {
+              "line": 517,
+              "text": "        \"docs\": 20,",
+              "type": "context"
+            },
+            {
+              "line": 518,
+              "text": "        \"other\": 10,",
+              "type": "context"
+            },
+            {
+              "line": 519,
+              "text": "    }.get(str(comment.get(\"review_context\") or \"other\"), 10)",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    capability_weight = {\"static_analysis\": 45, \"intent_alignment\": 30}.get(str(comment.get(\"capability\") or \"\"), 0)",
+              "type": "delete"
+            },
+            {
+              "line": 520,
+              "text": "    capability_weight = {\"static_analysis\": 45, \"cross_language_transfer\": 40, \"intent_alignment\": 30}.get(str(comment.get(\"capability\") or \"\"), 0)",
+              "type": "add"
+            },
+            {
+              "line": 521,
+              "text": "    absorbed_context_weight = int(comment.get(\"absorbed_context_rank_weight\") or 0)",
+              "type": "context"
+            },
+            {
+              "line": 522,
+              "text": "    absorbed_policy_weight = int(comment.get(\"absorbed_policy_rank_weight\") or 0)",
+              "type": "context"
+            },
+            {
+              "line": 523,
+              "text": "    calibration_weight = int(comment.get(\"calibration_rank_weight\") or 0)",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -475,7 +517,7 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/pr_review.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 168,
+              "text": "    assert evidence[\"extension_policy_review_context_count\"] >= 4",
+              "type": "context"
+            },
+            {
+              "line": 169,
+              "text": "    assert {\"runtime\", \"frontend\", \"ci_config\", \"docs\", \"config\"}.issubset(set(evidence[\"extension_policy_review_contexts\"]))",
+              "type": "context"
+            },
+            {
+              "line": 170,
+              "text": "    assert \"retort_engine/diff_extension_policy.py\" in evidence[\"behavior_source_files\"]",
+              "type": "context"
+            },
+            {
+              "line": 171,
+              "text": "    assert \"retort_engine/cross_language_transfer.py\" in evidence[\"behavior_source_files\"]",
+              "type": "add"
+            },
+            {
+              "line": 172,
+              "text": "    assert \"tests/test_diff_extension_policy.py\" in evidence[\"behavior_test_files\"]",
+              "type": "context"
+            },
+            {
+              "line": 173,
+              "text": "    assert evidence[\"cross_language_transfer_status\"] == \"mapped\"",
+              "type": "add"
+            },
+            {
+              "line": 174,
+              "text": "    assert evidence[\"cross_language_transfer_core_mapping\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 175,
+              "text": "    assert evidence[\"cross_language_transfer_finding_count\"] >= 8",
+              "type": "add"
+            }
+          ],
+          "header": "@@ -168,4 +168,8 @@ def test_pr_review_runtime_evidence_reports_extension_policy_depth() -> None:"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_capability_audit.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 30,
+              "text": "    source.parent.mkdir()",
+              "type": "context"
+            },
+            {
+              "line": 31,
+              "text": "    test.parent.mkdir()",
+              "type": "context"
+            },
+            {
+              "line": 32,
+              "text": "    source.write_text(\"def feature():\\n    return True\\n\", encoding=\"utf-8\")",
+              "type": "context"
+            },
+            {
+              "line": 33,
+              "text": "    (source.parent / \"pr_review.py\").write_text(\"def parse_unified_diff():\\n    task_groups = []\\n    return task_groups\\n\", encoding=\"utf-8\")",
+              "type": "add"
+            },
+            {
+              "line": 34,
+              "text": "    (source.parent / \"cross_language_transfer.py\").write_text(\"def build_cross_language_transfer():\\n    return {'status': 'mapped'}\\n\", encoding=\"utf-8\")",
+              "type": "add"
+            },
+            {
+              "line": 35,
+              "text": "    test.write_text(\"def test_feature():\\n    assert True\\n\", encoding=\"utf-8\")",
+              "type": "context"
+            },
+            {
+              "line": 36,
+              "text": "    run_dir = tmp_path / \".retort\" / \"real_absorption_runs\"",
+              "type": "context"
+            },
+            {
+              "line": 37,
+              "text": "    run_dir.mkdir(parents=True)",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -30,6 +30,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        },
+        {
+          "changes": [
+            {
+              "line": 380,
+              "text": "    assert \"external_advantage_matrix_extension_policy_cases=6\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 381,
+              "text": "    assert \"external_advantage_matrix_per_case_before_after=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 382,
+              "text": "    assert \"external_advantage_matrix_all_improved=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 383,
+              "text": "    assert \"pr_review_cross_language_transfer_source=True\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 384,
+              "text": "    assert \"pr_review_cross_language_transfer_status=mapped\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 385,
+              "text": "    assert \"pr_review_cross_language_transfer_core_mapping=True\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 386,
+              "text": "    assert \"review_adjudication_human_label_count=50\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 387,
+              "text": "    assert \"review_adjudication_pass_rate=0.98\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 388,
+              "text": "    assert \"pr_holdout_blind_eval_status=ready\" in evidence",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -378,6 +380,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 61,
+              "text": "    assert result[\"summary\"][\"calibration_policy\"][\"enabled\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 62,
+              "text": "    assert result[\"summary\"][\"calibration_rank_weights\"][\"runtime\"] > 0",
+              "type": "context"
+            },
+            {
+              "line": 63,
+              "text": "    assert result[\"summary\"][\"risk_counts\"][\"high\"] >= 1",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    assert result[\"summary\"][\"comment_ranking_model\"] == \"severity_context_publishability_v1\"",
+              "type": "delete"
+            },
+            {
+              "line": 64,
+              "text": "    assert result[\"summary\"][\"comment_ranking_model\"] == \"severity_context_transfer_publishability_v2\"",
+              "type": "add"
+            },
+            {
+              "line": 65,
+              "text": "    assert result[\"summary\"][\"publishable_comment_count\"] == len(result[\"comments\"])",
+              "type": "context"
+            },
+            {
+              "line": 66,
+              "text": "    assert result[\"comments\"][0][\"rank_score\"] >= result[\"comments\"][1][\"rank_score\"]",
+              "type": "context"
+            },
+            {
+              "line": 67,
+              "text": "    assert result[\"comments\"][0][\"absorbed_context_rank_weight\"] >= 20",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -61,7 +61,7 @@ def test_review_diff_returns_line_comments_and_groups() -> None:"
+        },
+        {
+          "changes": [
+            {
+              "line": 220,
+              "text": "    assert {comment[\"line\"] for comment in result[\"comments\"] if comment[\"capability\"] == \"static_analysis\"} == {1, 2}",
+              "type": "context"
+            },
+            {
+              "line": 221,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 222,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 223,
+              "text": "def test_review_diff_maps_cross_language_pr_bot_patterns_into_core_comments() -> None:",
+              "type": "add"
+            },
+            {
+              "line": 224,
+              "text": "    diff = \"\"\"diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml",
+              "type": "add"
+            },
+            {
+              "line": 225,
+              "text": "--- a/.github/workflows/review.yml",
+              "type": "add"
+            },
+            {
+              "line": 226,
+              "text": "++++ b/.github/workflows/review.yml",
+              "type": "context"
+            },
+            {
+              "line": 227,
+              "text": "@@ -0,0 +1,4 @@",
+              "type": "add"
+            },
+            {
+              "line": 228,
+              "text": "+on: pull_request_target",
+              "type": "add"
+            },
+            {
+              "line": 229,
+              "text": "+permissions:",
+              "type": "add"
+            },
+            {
+              "line": 230,
+              "text": "+  pull-requests: write",
+              "type": "add"
+            },
+            {
+              "line": 231,
+              "text": "+  issues: write",
+              "type": "add"
+            },
+            {
+              "line": 232,
+              "text": "diff --git a/src/reviewer.ts b/src/reviewer.ts",
+              "type": "add"
+            },
+            {
+              "line": 233,
+              "text": "--- a/src/reviewer.ts",
+              "type": "add"
+            },
+            {
+              "line": 234,
+              "text": "++++ b/src/reviewer.ts",
+              "type": "context"
+            },
+            {
+              "line": 235,
+              "text": "@@ -0,0 +1,3 @@",
+              "type": "add"
+            },
+            {
+              "line": 236,
+              "text": "+const provider = \"openai\"",
+              "type": "add"
+            },
+            {
+              "line": 237,
+              "text": "+await octokit.rest.pulls.createReview({ pull_number })",
+              "type": "add"
+            },
+            {
+              "line": 238,
+              "text": "+const prompt = buildPrompt(model)",
+              "type": "add"
+            },
+            {
+              "line": 239,
+              "text": "diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py",
+              "type": "add"
+            },
+            {
+              "line": 240,
+              "text": "--- a/retort_engine/review_bridge.py",
+              "type": "add"
+            },
+            {
+              "line": 241,
+              "text": "++++ b/retort_engine/review_bridge.py",
+              "type": "context"
+            },
+            {
+              "line": 242,
+              "text": "@@ -0,0 +1,2 @@",
+              "type": "add"
+            },
+            {
+              "line": 243,
+              "text": "+subprocess.Popen([\"retort-worker\"])",
+              "type": "add"
+            },
+            {
+              "line": 244,
+              "text": "+publish(review)",
+              "type": "add"
+            },
+            {
+              "line": 245,
+              "text": "\"\"\"",
+              "type": "add"
+            },
+            {
+              "line": 246,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 247,
+              "text": "    result = review_diff(diff, max_comments=10)",
+              "type": "add"
+            },
+            {
+              "line": 248,
+              "text": "    transfer = result[\"summary\"][\"cross_language_transfer\"]",
+              "type": "add"
+            },
+            {
+              "line": 249,
+              "text": "    transfer_comments = [comment for comment in result[\"comments\"] if comment[\"capability\"] == \"cross_language_transfer\"]",
+              "type": "add"
+            },
+            {
+              "line": 250,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 251,
+              "text": "    assert transfer[\"cross_language_core_mapping\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 252,
+              "text": "    assert transfer[\"language_family_count\"] >= 3",
+              "type": "add"
+            },
+            {
+              "line": 253,
+              "text": "    assert transfer[\"finding_count\"] >= 5",
+              "type": "add"
+            },
+            {
+              "line": 254,
+              "text": "    assert transfer[\"pattern_count\"] >= 4",
+              "type": "add"
+            },
+            {
+              "line": 255,
+              "text": "    assert transfer[\"severity_counts\"][\"high\"] >= 2",
+              "type": "add"
+            },
+            {
+              "line": 256,
+              "text": "    assert transfer_comments",
+              "type": "add"
+            },
+            {
+              "line": 257,
+              "text": "    assert {comment[\"review_context\"] for comment in transfer_comments} >= {\"ci_config\", \"config\", \"runtime\"}",
+              "type": "add"
+            },
+            {
+              "line": 258,
+              "text": "    assert {comment[\"file\"] for comment in transfer_comments} >= {\".github/workflows/review.yml\", \"src/reviewer.ts\", \"retort_engine/review_bridge.py\"}",
+              "type": "add"
+            },
+            {
+              "line": 259,
+              "text": "    assert transfer_comments[0][\"rank_reason\"].startswith(\"high:ci_config:cross_language_transfer\")",
+              "type": "add"
+            },
+            {
+              "line": 260,
+              "text": "    assert result[\"cross_language_transfer\"][\"evidence\"][\"source\"] == \"absorbed_pr_bot_cross_language_transfer\"",
+              "type": "add"
+            },
+            {
+              "line": 261,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 262,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 263,
+              "text": "def test_review_diff_surfaces_issue_intent_mismatch() -> None:",
+              "type": "context"
+            },
+            {
+              "line": 264,
+              "text": "    diff = \"\"\"diff --git a/app/theme.css b/app/theme.css",
+              "type": "context"
+            },
+            {
+              "line": 265,
+              "text": "--- a/app/theme.css",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -220,6 +220,46 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_pr_review.py"
+    }
+  ],
+  "incremental": {
+    "current_added_change_count": 288,
+    "enabled": false,
+    "previous_added_change_count": 0,
+    "previous_diff_supplied": false,
+    "reviewed_new_change_count": 288,
+    "skipped_existing_change_count": 0
+  },
+  "intent_alignment": {
+    "evidence": {
+      "reason": "no_issue_context",
+      "style": "reviewscope_absorbed_issue_validation"
+    },
+    "issue_keywords": [],
+    "missing_keywords": [],
+    "overlap_keywords": [],
+    "status": "not_requested",
+    "summary": {
+      "aligned": true,
+      "changed_file_count": 9,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    }
+  },
+  "status": "reviewed",
+  "summary": {
+    "absorbed_context_rank_weights": {
+      "ci_config": 40,
+      "config": 20,
+      "docs": 20,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 55,
+      "security": 50,
+      "tests": 40
+    },
+    "absorbed_context_signal_strength": 100,
+    "absorbed_file_grouping": true,
+    "absorbed_policy_rank_weights": {
+      "ci_config": 15,
+      "config": 15,
+      "docs": 15,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 45,
+      "security": 25,
+      "tests": 40
+    },
+    "absorbed_review_policy": {
+      "enabled": true,
+      "max_context_weight": 45,
+      "run_id": "20260628002727-95b76ebf47",
+      "signal_count": 8,
+      "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "weighted_context_count": 6
+    },
+    "absorbed_review_source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+    "calibration_policy": {
+      "adjudication_pass_rate": 1.0,
+      "adjudication_ready": true,
+      "enabled": true,
+      "holdout_distinct_repo_count": 20,
+      "holdout_ready": true,
+      "holdout_reviewed_pr_count": 24,
+      "max_context_weight": 40,
+      "rollback_ready": true,
+      "rollback_verified_count": 5,
+      "weighted_context_count": 7
+    },
+    "calibration_rank_weights": {
+      "ci_config": 40,
+      "config": 25,
+      "docs": 10,
+      "frontend": 10,
+      "other": 0,
+      "runtime": 35,
+      "security": 35,
+      "tests": 40
+    },
+    "candidate_comment_count": 46,
+    "capabilities": [
+      "review_pipeline",
+      "file_grouping",
+      "safety_policy",
+      "diff_hunk_review",
+      "semantic_index"
+    ],
+    "comment_count": 12,
+    "comment_ranking_model": "severity_context_transfer_publishability_v2",
+    "cross_language_transfer": {
+      "cross_language_core_mapping": true,
+      "finding_count": 19,
+      "language_families": [
+        "config",
+        "python"
+      ],
+      "language_family_count": 2,
+      "pattern_count": 4,
+      "review_context_count": 3,
+      "review_contexts": [
+        "config",
+        "runtime",
+        "tests"
+      ],
+      "severity_counts": {
+        "high": 0,
+        "low": 1,
+        "medium": 18
+      }
+    },
+    "deep_review_pipeline": true,
+    "employee_feedback_context_weights": {},
+    "employee_feedback_ranked": false,
+    "extension_policy": {
+      "file_count": 9,
+      "known_extension_count": 9,
+      "known_extension_ratio": 1.0,
+      "language_families": [
+        "data",
+        "python"
+      ],
+      "language_family_count": 2,
+      "policy_source": "retort_holdout_extension_policy_v1",
+      "review_context_count": 2,
+      "review_contexts": [
+        "config",
+        "runtime"
+      ],
+      "risk_tag_count": 3,
+      "risk_tags": [
+        "runtime_logic",
+        "schema_drift",
+        "typing"
+      ],
+      "unknown_extension_count": 0
+    },
+    "file_count": 9,
+    "file_summary_count": 9,
+    "hunk_count": 24,
+    "incremental": false,
+    "intent_alignment": {
+      "aligned": true,
+      "changed_file_count": 9,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    },
+    "large_diff_chunk_count": 3,
+    "large_diff_chunking": true,
+    "large_diff_context_balancing": true,
+    "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+    "primary_review_contexts": [
+      "tests",
+      "config",
+      "runtime"
+    ],
+    "publishable_comment_count": 12,
+    "ready_for_employee_tasking": true,
+    "review_context_group_count": 3,
+    "reviewed_new_change_count": 288,
+    "risk_counts": {
+      "high": 0,
+      "info": 0,
+      "low": 1,
+      "medium": 11
+    },
+    "skipped_existing_change_count": 0,
+    "stage_count": 5,
+    "static_analysis": {
+      "finding_count": 0,
+      "high_count": 0,
+      "low_count": 0,
+      "medium_count": 0,
+      "rule_count": 5
+    },
+    "suppressed_comment_count": 34
+  },
+  "task_groups": [
+    {
+      "comment_count": 1,
+      "context": "tests",
+      "files": [
+        "packages/retort_engine/tests/test_capability_audit.py",
+        "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "packages/retort_engine/tests/test_pr_review.py",
+        "packages/retort_engine/retort_engine/cross_language_transfer.py"
+      ],
+      "publishable_comment_count": 1,
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 2,
+      "context": "config",
+      "files": [
+        "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+        "packages/retort_engine/retort_engine/capability_audit.py"
+      ],
+      "publishable_comment_count": 2,
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 2
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 9,
+      "context": "runtime",
+      "files": [
+        "packages/retort_engine/retort_engine/capability_audit.py",
+        "packages/retort_engine/retort_engine/cross_language_transfer.py",
+        "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "packages/retort_engine/retort_engine/paibi_prompting.py",
+        "packages/retort_engine/retort_engine/pr_review.py",
+        "packages/retort_engine/tests/test_pr_review.py"
+      ],
+      "publishable_comment_count": 9,
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 9
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ]
+}
