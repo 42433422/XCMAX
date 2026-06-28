@@ -9,7 +9,7 @@
 #   XCAGIMobilePersonal  → 冻结兼容线(com.xiuci.xcagi.mobile.personal,定义 PERSONAL 编译条件)
 #
 # 无第三方依赖;系统框架(SwiftUI/Foundation/Network/Security/LocalAuthentication/
-# AVFoundation/Vision/PhotosUI/WebKit/UserNotifications)由 import 自动链接。
+# AVFoundation/Vision/PhotosUI/WebKit/UserNotifications/MetricKit/os.log)由 import 自动链接。
 
 name: XCAGIMobile
 

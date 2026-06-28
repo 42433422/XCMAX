@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "source": {
+    "policy": "Android is the implementation lead; this file is the cross-platform machine-readable token contract.",
+    "android": [
+      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt",
+      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt",
+      "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
+    ]
+  },
+  "colors": {
+    "brand": {
+      "primary": "#6366F1",
+      "primary_light": "#818CF8",
+      "primary_dark": "#4F46E5",
+      "primary_container": "#EAEBFE",
+      "gradient_end": "#7C3AED"
+    },
+    "status": {
+      "success": "#10B981",
+      "success_light": "#34D399",
+      "success_container": "#E7FAF3",
+      "warning": "#F59E0B",
+      "danger": "#EF4444"
+    },
+    "chat": {
+      "user_bubble_light": "#6366F1",
+      "user_bubble_dark": "#4F46E5",
+      "user_text_light": "#FFFFFF",
+      "user_text_dark": "#EEF0FF"
+    },
+    "moment": {
+      "accent_light": "#5145CD",
+      "accent_dark": "#A5B0FF",
+      "chip_bg_light": "#ECEDFE",
+      "chip_bg_dark": "#2A2A3D",
+      "reply_bg_light": "#F4F5F7",
+      "reply_bg_dark": "#26262E"
+    },
+    "neutral_light": {
+      "n00": "#FFFFFF",
+      "n50": "#F5F6F7",
+      "n100": "#E8E9EB",
+      "n200": "#DEE0E3",
+      "n300": "#C9CDD4",
+      "n400": "#8F959E",
+      "n500": "#646A73",
+      "n600": "#494E56",
+      "n700": "#33363D",
+      "n800": "#1F2329",
+      "n900": "#141619"
+    },
+    "neutral_dark": {
+      "background": "#1A1A1A",
+      "surface": "#242424",
+      "surface_variant": "#2E2E2E",
+      "border": "#383838",
+      "text_primary": "#E5E5E5",
+      "text_secondary": "#888888",
+      "text_tertiary": "#5C5C5C"
+    }
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 20,
+    "xxl": 24,
+    "xxxl": 32
+  },
+  "radius": {
+    "extra_small": 4,
+    "small": 8,
+    "medium": 12,
+    "large": 16,
+    "extra_large": 20
+  },
+  "elevation": {
+    "none": 0,
+    "level1": 1,
+    "level2": 3,
+    "level3": 8
+  },
+  "typography": {
+    "display_large": { "size": 28, "line_height": 36, "weight": "bold" },
+    "display_medium": { "size": 24, "line_height": 32, "weight": "bold" },
+    "display_small": { "size": 20, "line_height": 28, "weight": "semibold" },
+    "headline_large": { "size": 24, "line_height": 32, "weight": "bold" },
+    "headline_medium": { "size": 20, "line_height": 28, "weight": "semibold" },
+    "headline_small": { "size": 18, "line_height": 26, "weight": "semibold" },
+    "title_large": { "size": 18, "line_height": 24, "weight": "semibold" },
+    "title_medium": { "size": 17, "line_height": 22, "weight": "medium" },
+    "title_small": { "size": 15, "line_height": 20, "weight": "medium" },
+    "body_large": { "size": 16, "line_height": 22, "weight": "regular" },
+    "body_medium": { "size": 15, "line_height": 21, "weight": "regular" },
+    "body_small": { "size": 14, "line_height": 19, "weight": "regular" },
+    "label_large": { "size": 14, "line_height": 18, "weight": "medium" },
+    "label_medium": { "size": 13, "line_height": 17, "weight": "medium" },
+    "label_small": { "size": 11, "line_height": 14, "weight": "medium" }
+  },
+  "platform_overrides": {}
+}
