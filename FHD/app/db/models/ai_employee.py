@@ -28,9 +28,7 @@ class AiEmployeeProfile(Base):
     display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     avatar_url: Mapped[str] = mapped_column(String(512), nullable=False, default="")
     owner_user_id: Mapped[int] = mapped_column(Integer, nullable=False, default=0, index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.current_timestamp()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.current_timestamp())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp(), onupdate=func.current_timestamp()
     )

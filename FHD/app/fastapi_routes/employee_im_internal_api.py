@@ -43,14 +43,19 @@ def os_get_env(key: str) -> str:
 
 
 class EmployeeImSendRequest(BaseModel):
-    boss_user_id: int = Field(0, description="老板 user_id；<=0 时 FHD 自动查 owner_user_id 表，再回退 env FHD_BOSS_USER_ID")
+    boss_user_id: int = Field(
+        0,
+        description="老板 user_id；<=0 时 FHD 自动查 owner_user_id 表，再回退 env FHD_BOSS_USER_ID",
+    )
     employee_id: str = Field(..., min_length=1, description="员工 ID（如 llm-ops-engineer）")
     mod_id: str = Field("", description="员工所属 mod_id")
-    display_name: str = Field("", description="员工显示名（如 \"LLM 运维工程师\"）")
+    display_name: str = Field("", description='员工显示名（如 "LLM 运维工程师"）')
     avatar_url: str = Field("", description="员工头像 URL")
     body: str = Field(..., min_length=1, description="消息正文")
     hook: str = Field("", description="触发源标记（cognition/verification/handoff/ask）")
-    owner_user_id: int = Field(0, description="可选；>0 时把员工 owner 设成这个 user_id（per-employee owner 表）")
+    owner_user_id: int = Field(
+        0, description="可选；>0 时把员工 owner 设成这个 user_id（per-employee owner 表）"
+    )
 
 
 def _resolve_boss_uid(svc, payload: EmployeeImSendRequest) -> int:
@@ -154,9 +159,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         )
         return JSONResponse({"success": True, "data": result, "boss_user_id": boss_uid})
     except ValueError as exc:
-        return JSONResponse(
-            {"success": False, "message": str(exc)}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
     except Exception as exc:
         logger.exception(
             "employee_im_send failed: boss=%s employee=%s hook=%s err=%s",
@@ -165,9 +168,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
             payload.hook,
             exc,
         )
-        return JSONResponse(
-            {"success": False, "message": f"推送失败：{exc}"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": f"推送失败：{exc}"}, status_code=500)
     finally:
         try:
             db.close()
@@ -210,14 +211,10 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
             )
         return JSONResponse({"success": True})
     except ValueError as exc:
-        return JSONResponse(
-            {"success": False, "message": str(exc)}, status_code=400
-        )
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
     except Exception as exc:
         logger.exception("employee_im_set_owner failed: %s", exc)
-        return JSONResponse(
-            {"success": False, "message": f"设置失败：{exc}"}, status_code=500
-        )
+        return JSONResponse({"success": False, "message": f"设置失败：{exc}"}, status_code=500)
     finally:
         try:
             db.close()

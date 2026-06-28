@@ -208,7 +208,9 @@ def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         items = ImApplicationService(db).list_cs_inbox()
         return {"success": True, "conversations": items}
     except RECOVERABLE_ERRORS as exc:
@@ -229,7 +231,9 @@ def im_cs_inbox_messages(
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
         return {"success": True, "messages": messages}
     except RECOVERABLE_ERRORS as exc:
@@ -251,7 +255,9 @@ def im_cs_inbox_reply(
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         text = str(body.get("body") or "").strip()
         if not text:
             return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)

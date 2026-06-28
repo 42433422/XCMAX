@@ -1426,7 +1426,9 @@ async def mobile_admin_employees(request: Request, user=Depends(get_mobile_user)
 
             db = SessionLocal()
             try:
-                raw_items = _admin_employee_items(market_profiles, market_connected=market_connected)
+                raw_items = _admin_employee_items(
+                    market_profiles, market_connected=market_connected
+                )
                 im_summary = ImApplicationService(db).employee_im_summary(uid, raw_items)
             finally:
                 db.close()
@@ -3975,9 +3977,7 @@ async def mobile_admin_employee_pending_question_answer(
 
     answer_text = str((body or {}).get("answer") or "").strip()
     if not answer_text:
-        return format_mobile_response(
-            None, "answer 字段不能为空", success=False, code=400
-        )
+        return format_mobile_response(None, "answer 字段不能为空", success=False, code=400)
 
     out = await _modstore_admin_proxy(
         "POST",
