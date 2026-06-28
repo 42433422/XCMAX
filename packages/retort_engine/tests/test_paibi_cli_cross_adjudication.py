@@ -23,6 +23,9 @@ def test_paibi_cli_cross_adjudication_runs_all_supported_cli_identities(tmp_path
     assert result["summary"]["input_contains_score_fields"] is False
     assert result["summary"]["script_imports_retort_engine"] is False
     assert result["summary"]["human_reviewed"] is False
+    assert result["summary"]["human_calibrated_cli_consensus"] is True
+    assert result["summary"]["calibration_human_label_count"] == 50
+    assert result["summary"]["calibration_pass_rate"] == 1.0
     assert result["summary"]["replaces_human_labels"] is False
     assert {item["tool_name"] for item in result["tool_results"]} == set(PAIBI_SUPPORTED_TOOLS)
     assert all(item["output_sha256"] for item in result["tool_results"])
@@ -130,6 +133,25 @@ def _write_inputs(root: Path) -> None:
                     _behavior_case("reviewdog-ci-token-publisher", "reviewdog/reviewdog", "ci_review_publisher_safety"),
                 ],
                 "evidence": {"runtime": "retort_engine.pr_review.review_diff"},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_review_adjudication_calibration.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "human_label_count": 50,
+                    "pass_rate": 1.0,
+                    "pre_calibration_pass_rate": 0.26,
+                    "false_positive_count": 0,
+                    "false_negative_count": 0,
+                    "feedback_recalibration_applied": True,
+                },
+                "cases": [],
+                "evidence": {},
             },
             ensure_ascii=False,
         ),

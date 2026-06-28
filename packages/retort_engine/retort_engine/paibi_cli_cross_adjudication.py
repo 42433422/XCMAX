@@ -26,8 +26,11 @@ def build_paibi_cli_cross_adjudication(
     started = time.monotonic()
     blind_file = Path(blind_path) if blind_path else root / "docs" / "retort_competitor_blind_adjudication.json"
     behavior_file = Path(behavior_path) if behavior_path else root / "docs" / "retort_competitor_behavior_regression.json"
+    calibration_file = root / "docs" / "retort_review_adjudication_calibration.json"
     blind = _read_json(blind_file)
     behavior = _read_json(behavior_file)
+    calibration = _read_json(calibration_file)
+    calibration_summary = calibration.get("summary") if isinstance(calibration.get("summary"), dict) else {}
     adjudication_id = run_id or _run_id("paibi-cli-cross-adjudication")
     lab = root / ".retort" / "paibi_cli_cross_adjudications" / adjudication_id
     lab.mkdir(parents=True, exist_ok=True)
@@ -49,6 +52,19 @@ def build_paibi_cli_cross_adjudication(
         "behavior_status": behavior.get("status", ""),
         "blind_path": str(blind_file),
         "behavior_path": str(behavior_file),
+        "calibration_path": str(calibration_file),
+        "calibration_status": calibration.get("status", ""),
+        "calibration_human_label_count": int(calibration_summary.get("human_label_count") or 0),
+        "calibration_pass_rate": float(calibration_summary.get("pass_rate") or 0.0),
+        "calibration_pre_pass_rate": float(calibration_summary.get("pre_calibration_pass_rate") or 0.0),
+        "calibration_false_positive_count": int(calibration_summary.get("false_positive_count") or 0),
+        "calibration_false_negative_count": int(calibration_summary.get("false_negative_count") or 0),
+        "calibration_feedback_recalibration_applied": calibration_summary.get("feedback_recalibration_applied") is True,
+        "human_calibrated_cli_consensus": calibration.get("status") == "ready"
+        and int(calibration_summary.get("human_label_count") or 0) >= 50
+        and float(calibration_summary.get("pass_rate") or 0.0) >= 0.95
+        and int(calibration_summary.get("false_positive_count") or 0) == 0
+        and int(calibration_summary.get("false_negative_count") or 0) == 0,
         "paibi_supported_tool_count": len(PAIBI_SUPPORTED_TOOLS),
         "tool_count": len(tool_results),
         "accepted_tool_count": len(accepted_tools),
@@ -83,6 +99,7 @@ def build_paibi_cli_cross_adjudication(
         and summary["script_imports_retort_engine"] is False
         and summary["all_subprocesses_successful"] is True
         and summary["output_contains_labels"] is True
+        and summary["human_calibrated_cli_consensus"] is True
     )
     result = {
         "status": "ready" if ready else "needs_paibi_cli_cross_adjudication",
@@ -98,8 +115,13 @@ def build_paibi_cli_cross_adjudication(
         "evidence": {
             "style": "paibi_four_cli_cross_consensus",
             "boundary": "four_separate_subprocesses_with_retort_paibi_tool_identity_and_no_retort_engine_imports",
-            "source_reports": ["retort_competitor_blind_adjudication.json", "retort_competitor_behavior_regression.json"],
-            "acceptance": "all_supported_paibi_cli_identities_accept_same_blind_competitor_behavior_label_without_score_fields",
+            "source_reports": [
+                "retort_competitor_blind_adjudication.json",
+                "retort_competitor_behavior_regression.json",
+                "retort_review_adjudication_calibration.json",
+            ],
+            "calibration_source": "retort_review_adjudication_calibration.json",
+            "acceptance": "all_supported_paibi_cli_identities_accept_same_blind_competitor_behavior_label_without_score_fields_and_after_human_label_calibration",
             "human_reviewed": False,
             "human_label_substitute": "multi_cli_consensus_not_human_review",
         },

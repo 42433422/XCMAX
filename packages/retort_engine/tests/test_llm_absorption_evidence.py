@@ -437,6 +437,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "input_contains_score_fields": False,
                     "script_imports_retort_engine": False,
                     "human_reviewed": False,
+                    "human_calibrated_cli_consensus": True,
+                    "calibration_human_label_count": 50,
+                    "calibration_pass_rate": 1.0,
+                    "calibration_false_positive_count": 0,
+                    "calibration_false_negative_count": 0,
                     "replaces_human_labels": False,
                 },
                 "tool_results": [],
@@ -966,6 +971,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "paibi_cli_cross_adjudication_input_score_fields=False" in evidence
     assert "paibi_cli_cross_adjudication_imports_retort=False" in evidence
     assert "paibi_cli_cross_adjudication_human_reviewed=False" in evidence
+    assert "paibi_cli_cross_adjudication_human_calibrated=True" in evidence
+    assert "paibi_cli_cross_adjudication_calibration_labels=50" in evidence
+    assert "paibi_cli_cross_adjudication_calibration_pass_rate=1.0" in evidence
+    assert "paibi_cli_cross_adjudication_calibration_false_positive=0" in evidence
+    assert "paibi_cli_cross_adjudication_calibration_false_negative=0" in evidence
     assert "paibi_cli_cross_adjudication_replaces_human_labels=False" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
     assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
