@@ -138,6 +138,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         },
         "pr_long_run_review_result": {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "publish_safety_matrix": {}, "evidence": {}},
         "pr_holdout_blind_eval_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
+        "pr_failure_rollback_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "cross_project_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []},
         "multi_project_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}},
         "absorption_continuity_probe_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}},

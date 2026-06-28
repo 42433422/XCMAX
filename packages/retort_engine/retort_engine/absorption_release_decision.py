@@ -11,6 +11,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     continuity = _read_json(root / "docs" / "retort_absorption_continuity_probe.json")
     long_run = _read_json(root / "docs" / "retort_pr_long_run_review.json")
     holdout = _read_json(root / "docs" / "retort_pr_holdout_blind_eval.json")
+    failure_rollback = _read_json(root / "docs" / "retort_pr_failure_rollback_replay.json")
     recovery = _read_json(root / "docs" / "retort_production_recovery_drill.json")
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
@@ -45,6 +46,12 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             holdout.get("status") == "ready" and int(holdout.get("summary", {}).get("accepted_pr_count") or 0) >= int(holdout.get("summary", {}).get("target_pr_count") or 20),
             ["pr_holdout_blind_eval"],
         ),
+        _decision(
+            "allow_failure_rollback_replay",
+            "failure_recovery_validation",
+            failure_rollback.get("status") == "ready" and bool(failure_rollback.get("summary", {}).get("all_failures_rolled_back")),
+            ["pr_failure_rollback_replay"],
+        ),
     ]
     ready = [item for item in decisions if item["ready"]]
     blockers = [item for item in decisions if not item["ready"]]
@@ -59,6 +66,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "recovery_ready": recovery.get("status") == "ready",
         "employee_patch_ready": patch.get("status") == "ready",
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
+        "failure_rollback_ready": failure_rollback.get("status") == "ready",
     }
     result = {
         "status": "ready" if summary["all_core_decisions_ready"] else "blocked",
@@ -72,6 +80,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_absorption_continuity_probe.json",
                 "retort_pr_long_run_review.json",
                 "retort_pr_holdout_blind_eval.json",
+                "retort_pr_failure_rollback_replay.json",
                 "retort_production_recovery_drill.json",
                 "retort_employee_patch_closure.json",
                 "retort_review_quality_benchmark.json",

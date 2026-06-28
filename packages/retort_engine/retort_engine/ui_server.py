@@ -70,6 +70,8 @@ class RetortUIServer:
                         self._json(outer.service.complex_pr_replay(payload))
                     elif self.path == "/api/pr-holdout-blind-eval":
                         self._json(outer.service.pr_holdout_blind_eval(payload))
+                    elif self.path == "/api/pr-failure-rollback-replay":
+                        self._json(outer.service.pr_failure_rollback_replay(payload))
                     elif self.path == "/api/task-prioritization-report":
                         self._json(outer.service.task_prioritization_report(payload))
                     elif self.path == "/api/task-dispatch-plan":

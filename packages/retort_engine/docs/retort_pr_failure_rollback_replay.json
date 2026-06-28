@@ -1,0 +1,90 @@
+{
+  "cases": [
+    {
+      "candidate_commit": "604c654ca29e3a1fb9c4de18a2ae670f2814d12f",
+      "comment_count": 7,
+      "gate_failed": true,
+      "gate_returncode": 17,
+      "pr_url": "https://github.com/psf/requests/pull/7505",
+      "real_pr_reviewed": true,
+      "repo": "psf/requests",
+      "revert_commit": "5a1bd2a4b25121787078fe442ea1dd287d36e768",
+      "review_status": "reviewed",
+      "reviewed_new_change_count": 24,
+      "rollback_verified": true
+    },
+    {
+      "candidate_commit": "825168ace18f70c3db6a950a2a8e6bfab4962c7a",
+      "comment_count": 5,
+      "gate_failed": true,
+      "gate_returncode": 17,
+      "pr_url": "https://github.com/go-gorm/gorm/pull/7798",
+      "real_pr_reviewed": true,
+      "repo": "go-gorm/gorm",
+      "revert_commit": "49ce9055667e24b2fb816108c658e94db4c0653f",
+      "review_status": "reviewed",
+      "reviewed_new_change_count": 19,
+      "rollback_verified": true
+    },
+    {
+      "candidate_commit": "f849d8d6f5b0ef0904a28286034e287976243c29",
+      "comment_count": 5,
+      "gate_failed": true,
+      "gate_returncode": 17,
+      "pr_url": "https://github.com/vuejs/core/pull/15005",
+      "real_pr_reviewed": true,
+      "repo": "vuejs/core",
+      "revert_commit": "0a612d11eccf93cef660ae8bc6e884ab31681740",
+      "review_status": "reviewed",
+      "reviewed_new_change_count": 59,
+      "rollback_verified": true
+    },
+    {
+      "candidate_commit": "0cf95d251e6ef239ab2c9fb93eda652945784233",
+      "comment_count": 8,
+      "gate_failed": true,
+      "gate_returncode": 17,
+      "pr_url": "https://github.com/rust-lang/cargo/pull/17139",
+      "real_pr_reviewed": true,
+      "repo": "rust-lang/cargo",
+      "revert_commit": "57ff2b5fd0dd020a919e16dd361a7583044ba749",
+      "review_status": "reviewed",
+      "reviewed_new_change_count": 52,
+      "rollback_verified": true
+    },
+    {
+      "candidate_commit": "5b14ce638ec536041b92e068aa7b173fd1835ec9",
+      "comment_count": 4,
+      "gate_failed": true,
+      "gate_returncode": 17,
+      "pr_url": "https://github.com/dotnet/runtime/pull/129914",
+      "real_pr_reviewed": true,
+      "repo": "dotnet/runtime",
+      "revert_commit": "c454435551abe4b6d13eb5c1d8ad56f4f13245d2",
+      "review_status": "reviewed",
+      "reviewed_new_change_count": 49,
+      "rollback_verified": true
+    }
+  ],
+  "evidence": {
+    "failure_mode": "candidate_patch_committed_then_gate_fails_then_reverted",
+    "reviewer": "retort_engine.pr_dry_run.review_pr_url",
+    "rollback_engine": "git_revert_in_isolated_sandbox",
+    "scope": "real_public_pr_failure_rollback_replay",
+    "stores_summaries_only": true
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_failures_rolled_back": true,
+    "case_count": 5,
+    "distinct_repo_count": 5,
+    "failed_gate_count": 5,
+    "real_pr_reviewed_count": 5,
+    "rollback_verified_count": 5,
+    "target_case_count": 3,
+    "total_review_comment_count": 29,
+    "total_reviewed_new_change_count": 203,
+    "uses_git_revert": true
+  }
+}
