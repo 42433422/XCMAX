@@ -8,7 +8,7 @@ package com.xiuci.xcagi.mobile.core.model
  * /api/mobile/v1/admin/home 返回的服务端数据为主，本文件用于离线补齐、测试和漂移守卫。
  */
 object DutyRosterSsot {
-    const val PLANNED_EMPLOYEE_COUNT: Int = 54
+    const val PLANNED_EMPLOYEE_COUNT: Int = 55
 
     val PLANNED_EMPLOYEE_IDS: Set<String> = setOf(
         "site-content-editor",
@@ -34,6 +34,7 @@ object DutyRosterSsot {
         "vibe-coding-maintainer",
         "mods-and-eskill-curator",
         "change-request-auditor",
+        "github-pr-gatekeeper",
         "daily-orchestrator",
         "intake-dispatcher",
         "task-router-officer",
@@ -111,6 +112,7 @@ object DutyRosterSsot {
             "vibe-coding-maintainer",
             "mods-and-eskill-curator",
             "change-request-auditor",
+            "github-pr-gatekeeper",
             "daily-orchestrator",
             "intake-dispatcher",
             "task-router-officer",
@@ -175,6 +177,7 @@ object DutyRosterSsot {
         "vibe-coding-maintainer" to "platform-core",
         "mods-and-eskill-curator" to "platform-core",
         "change-request-auditor" to "platform-core",
+        "github-pr-gatekeeper" to "platform-core",
         "daily-orchestrator" to "platform-core",
         "intake-dispatcher" to "platform-core",
         "task-router-officer" to "platform-core",
@@ -232,6 +235,7 @@ object DutyRosterSsot {
         "vibe-coding-maintainer" to "Vibe-Coding 维护员",
         "mods-and-eskill-curator" to "Mods/ESkill 策展员",
         "change-request-auditor" to "变更评审员",
+        "github-pr-gatekeeper" to "GitHub PR 守门员",
         "daily-orchestrator" to "每日编排员",
         "intake-dispatcher" to "需求接入员",
         "task-router-officer" to "任务派发员",
@@ -289,6 +293,7 @@ object DutyRosterSsot {
         "vibe-coding-maintainer" to "全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。",
         "mods-and-eskill-curator" to "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
         "change-request-auditor" to "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+        "github-pr-gatekeeper" to "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。",
         "daily-orchestrator" to "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
         "intake-dispatcher" to "把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。",
         "task-router-officer" to "把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。",

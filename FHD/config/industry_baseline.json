@@ -10,6 +10,11 @@
   ],
   "onboarding_open_industry_ids": ["通用", "考勤", "涂料", "批发", "电商", "餐饮", "物流"],
   "industry_packages": {
+    "通用": {
+      "mod_id": "xcagi-planner-bridge",
+      "product_name": "通用基础行业包",
+      "note": "开放行业基础种子；通用账号以对话与智能生态底座起步"
+    },
     "考勤": {
       "mod_id": "attendance-industry",
       "product_name": "考勤行业包",
@@ -19,6 +24,26 @@
       "mod_id": "coating-industry",
       "product_name": "涂料行业包",
       "note": "客户品牌见 config/customer_delivery.json"
+    },
+    "批发": {
+      "mod_id": "xcagi-erp-domain-bridge",
+      "product_name": "批发分销基础行业包",
+      "note": "开放行业基础种子；正式专属行业包进入 pilot/ga 前可由扩展市场替换"
+    },
+    "电商": {
+      "mod_id": "xcagi-customer-service-bridge",
+      "product_name": "电商客服基础行业包",
+      "note": "开放行业基础种子；正式订单/店铺专属行业包进入 pilot/ga 前可由扩展市场替换"
+    },
+    "餐饮": {
+      "mod_id": "xcagi-erp-domain-bridge",
+      "product_name": "餐饮门店基础行业包",
+      "note": "开放行业基础种子；正式食材/门店专属行业包进入 pilot/ga 前可由扩展市场替换"
+    },
+    "物流": {
+      "mod_id": "xcagi-erp-domain-bridge",
+      "product_name": "物流运单基础行业包",
+      "note": "开放行业基础种子；正式运单专属行业包进入 pilot/ga 前可由扩展市场替换"
     }
   },
   "mod_labels": {

@@ -174,7 +174,7 @@ def publish_fhd() -> list[str]:
             f"# CI SSOT: generated from FHD/.github/workflows/{src.name} — DO NOT edit here.\n"
             f"# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
         )
-        (OUT / out_name).write_text(header + body, encoding="utf-8")
+        (OUT / out_name).write_text(header + body + "\n", encoding="utf-8")
         written.append(out_name)
     return written
 
@@ -193,7 +193,7 @@ def publish_mod() -> list[str]:
             "— DO NOT edit here.\n"
             "# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py\n"
         )
-        (OUT / out_name).write_text(header + body, encoding="utf-8")
+        (OUT / out_name).write_text(header + body + "\n", encoding="utf-8")
         written.append(out_name)
     return written
 
