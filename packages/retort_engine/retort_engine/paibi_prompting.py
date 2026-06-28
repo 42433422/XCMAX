@@ -214,6 +214,15 @@ def project_digest(root: Path, *, snippet_limit: int = 18, snippet_chars: int = 
 
 
 def prioritized_evidence(evidence: list[str]) -> list[str]:
+    critical_keep_prefixes = (
+        "employee_patch_stress_",
+        "operator_journey_replay_employee_patch_stress_",
+        "absorption_release_decision_employee_patch_stress_",
+        "competitor_runtime_comparison_",
+        "absorption_release_decision_competitor_runtime_",
+        "external_process_adjudication_",
+        "upstream_pr_ci_probe_",
+    )
     must_keep_prefixes = (
         "operator_journey_replay_",
         "absorption_release_decision_operator_",
@@ -287,9 +296,10 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "multi_project_absorption_replay_",
         "absorption_continuity_",
     )
-    must_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in must_keep_prefixes)]
-    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes) and item not in must_keep]
-    return [*must_keep, *selected][:80]
+    critical_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in critical_keep_prefixes)]
+    must_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in must_keep_prefixes) and item not in critical_keep]
+    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes) and item not in critical_keep and item not in must_keep]
+    return [*critical_keep, *must_keep, *selected][:100]
 
 
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
