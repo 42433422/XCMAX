@@ -1924,3 +1924,64 @@ def test_append_super_employees_adds_codex_claude():
     assert "claude-super-employee" in ids
     # 统一标 mod_id=super-employee，后端据此路由到 _super_employee_reply。
     assert all(e["mod_id"] == "super-employee" for e in emps)
+
+
+def _super_and_normal_employees() -> list[dict]:
+    return [
+        {
+            "employee_id": "normal-1",
+            "mod_id": "m",
+            "name": "普通员工",
+            "department_key": "prod_web",
+        },
+        {
+            "employee_id": "codex-super-employee",
+            "mod_id": "super-employee",
+            "name": "Codex",
+            "department_key": "",
+        },
+    ]
+
+
+def test_enterprise_candidates_exclude_super_employee(tmp_path: Path):
+    """超级员工仅管理端可见：企业端选人列表不得含超级员工，管理端则保留。"""
+    loader = _super_and_normal_employees
+    admin = make_service(tmp_path / "a", employees=loader, mode="admin")
+    ent = make_service(tmp_path / "e", employees=loader, mode="enterprise")
+    admin_ids = {c["employee_id"] for c in admin.list_member_candidates()}
+    ent_ids = {c["employee_id"] for c in ent.list_member_candidates()}
+    assert "codex-super-employee" in admin_ids
+    assert "codex-super-employee" not in ent_ids
+    assert "normal-1" in ent_ids
+
+
+def test_enterprise_dispatch_targets_exclude_super_employee(tmp_path: Path):
+    """企业端即便超级员工已在群成员里，也不会被选为派工对象；管理端可派。"""
+    members = [
+        {"employee_id": "normal-1", "name": "普通员工"},
+        {"employee_id": "codex-super-employee", "name": "Codex"},
+    ]
+    admin = make_service(tmp_path / "a", employees=lambda: [], mode="admin")
+    ent = make_service(tmp_path / "e", employees=lambda: [], mode="enterprise")
+    ent_ids = {m["employee_id"] for m in ent._pick_dispatch_targets(members, "@所有人 干活", None)}
+    admin_ids = {
+        m["employee_id"] for m in admin._pick_dispatch_targets(members, "@所有人 干活", None)
+    }
+    assert "codex-super-employee" not in ent_ids
+    assert "codex-super-employee" in admin_ids
+
+
+def test_enterprise_add_member_rejects_super_employee(tmp_path: Path):
+    """企业端绕过选人器直接 add_member 超级员工应被拒；管理端允许。"""
+    admin = make_service(tmp_path / "a", employees=lambda: [], mode="admin")
+    ent = make_service(tmp_path / "e", employees=lambda: [], mode="enterprise")
+    eg = ent.create_group(user_id=1, name="企业群")
+    eg_id = eg.get("id") or eg.get("group_id")
+    with pytest.raises(ValueError, match="超级员工仅管理端可邀请"):
+        ent.add_member(user_id=1, group_id=eg_id, member={"employee_id": "codex-super-employee"})
+    ag = admin.create_group(user_id=1, name="管理群")
+    ag_id = ag.get("id") or ag.get("group_id")
+    out = admin.add_member(
+        user_id=1, group_id=ag_id, member={"employee_id": "codex-super-employee"}
+    )
+    assert any(str(m.get("employee_id")) == "codex-super-employee" for m in out.get("members", []))

@@ -50,6 +50,7 @@ _require_admin = require_permission("admin.manage_users")
 
 
 def _user_public_dict(user) -> dict[str, Any]:
+    from app.utils.no_email import email_display, is_no_email_address
     from app.utils.user_avatar_storage import public_avatar_url
 
     return {
@@ -57,6 +58,9 @@ def _user_public_dict(user) -> dict[str, Any]:
         "username": user.username,
         "display_name": user.display_name,
         "email": user.email,
+        # 无邮箱账号(占位邮箱 @auto.xiu-ci.com)前端显示「无邮箱」;raw email 仍保留兼容。
+        "email_display": email_display(user.email),
+        "no_email": is_no_email_address(user.email),
         "role": user.role,
         "is_active": user.is_active,
         "avatar_url": public_avatar_url(getattr(user, "wx_avatar_url", None)),
@@ -610,12 +614,14 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     auth_app_service = get_auth_app_service()
 
     if sku == "enterprise":
-        if not email:
-            return JSONResponse(
-                error_envelope(INVALID_INPUT, "企业版注册需填写邮箱"),
-                status_code=400,
-            )
-        market_reg = await register_market_user(username, password, email, verification_code)
+        # 企业注册统一走市场(单一鉴权源):有邮箱用真实邮箱;无邮箱用占位邮箱
+        # {username}@auto.xiu-ci.com,同样 register_market_user → 账号在市场可登录,
+        # 注册=登录账号打通(market-first 登录认得)。占位后缀供前端显示「无邮箱」。
+        # 见 app/utils/no_email.py。register_market_user 无验证码会走免验证兜底。
+        from app.utils.no_email import synth_no_email_address
+
+        reg_email = email or synth_no_email_address(username)
+        market_reg = await register_market_user(username, password, reg_email, verification_code)
         if not market_reg.get("success"):
             return JSONResponse(
                 error_envelope(
@@ -624,7 +630,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                 ),
                 status_code=400,
             )
-        email_market = _market_user_email_from_raw(market_reg.get("raw")) or email
+        email_market = _market_user_email_from_raw(market_reg.get("raw")) or reg_email
         _jit_create_local_user_for_enterprise(username, password, email_market)
         result = auth_app_service.login(username, password)
         if not result.get("success"):

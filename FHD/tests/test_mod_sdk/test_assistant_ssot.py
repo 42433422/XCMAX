@@ -97,10 +97,9 @@ def test_no_hardcoded_xiaoc_in_mobile_routes():
 
 
 def test_surface_composition_matrix():
-    """四格组成与用户定义的目标矩阵一致。"""
+    """四格组成与用户定义的目标矩阵一致（超级员工 super 仅管理端,企业端不含）。"""
     assert assistant_ssot.surface_composition("desktop", "enterprise") == [
         "platform",
-        "super",
         "dedicated_cs",
     ]
     assert assistant_ssot.surface_composition("desktop", "admin") == ["platform", "super"]
@@ -108,7 +107,6 @@ def test_surface_composition_matrix():
         "assistant",
         "dedicated_cs",
         "platform",
-        "super",
     ]
     assert assistant_ssot.surface_composition("mobile", "admin") == [
         "assistant",

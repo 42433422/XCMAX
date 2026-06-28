@@ -217,11 +217,19 @@ fun XcagiNavHost(
         }
     }
 
-    LaunchedEffect(loggedIn) {
+    LaunchedEffect(loggedIn, startRoute) {
         if (loggedIn) {
             val r = nav.currentDestination?.route
-            if (r == Routes.AUTH || r == Routes.AUTH_AUTO_LOGIN || r == Routes.REGISTER) {
+            if (r == Routes.REGISTER) {
+                // 注册=新账号,始终走启动配置。
                 nav.navigate(Routes.ONBOARDING) {
+                    popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
+                }
+            } else if ((r == Routes.AUTH || r == Routes.AUTH_AUTO_LOGIN) &&
+                    (startRoute == Routes.CHAT || startRoute == Routes.ONBOARDING)) {
+                // 登录落点按"该账号是否已完成启动配置"决定:老账号(已注册+支付)直接进主界面,
+                // 不再每次登录重走配置。startRoute 由登录成功回调据 setupComplete 算出。
+                nav.navigate(startRoute) {
                     popUpTo(nav.graph.findStartDestination().id) { inclusive = true }
                 }
             }
@@ -347,7 +355,7 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.ONBOARDING) },
+                            { /* 登录后导航统一由 LaunchedEffect(loggedIn, startRoute) 处理 */ },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                 }
@@ -356,7 +364,7 @@ fun XcagiNavHost(
                     AuthScreen(
                             vm,
                             { nav.navigate(Routes.REGISTER) },
-                            { nav.navigate(Routes.ONBOARDING) },
+                            { /* 登录后导航统一由 LaunchedEffect(loggedIn, startRoute) 处理 */ },
                             { nav.navigate(Routes.SCAN_QR) },
                     )
                     LaunchedEffect(Unit) { vm.tryAutoLogin() }
@@ -458,7 +466,11 @@ fun XcagiNavHost(
                     ConversationListScreen(
                             vm = vm,
                             onOpenAssistant = { nav.navigate(Routes.AI_CHAT) },
-                            onOpenCustomerService = { nav.navigate(Routes.CS_CHAT) },
+                            onOpenCustomerService = {
+                                // 运营者(管理端)进客服收件箱看客户咨询;企业客户进自己的专属客服。
+                                if (vm.isAdminMode.value) nav.navigate(Routes.ADMIN_CS_CONSOLE)
+                                else nav.navigate(Routes.CS_CHAT)
+                            },
                             onOpenConversation = { conversationId ->
                                 nav.navigate(Routes.conversationChat(conversationId))
                             },
@@ -581,6 +593,12 @@ fun XcagiNavHost(
                                         )
                                 )
                             },
+                    )
+                }
+                composable(Routes.ADMIN_CS_CONSOLE) {
+                    AdminCsConsoleScreen(
+                            vm = vm,
+                            onBack = { nav.popBackStack() },
                     )
                 }
                 composable(Routes.AI_EMPLOYEES) {

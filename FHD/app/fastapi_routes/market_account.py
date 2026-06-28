@@ -497,10 +497,23 @@ async def _proxy_json(
     timeout = _market_http_timeout()
     retries = _market_http_retries()
     last_exc: Exception | None = None
+    mutating = str(method).upper() in {"POST", "PUT", "PATCH", "DELETE"}
     for attempt in range(retries):
         try:
             async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
-                res = await client.request(method, url, json=json_body, headers=headers)
+                req_headers = dict(headers)
+                if mutating:
+                    # 市场对变更类请求强制 CSRF 双提交:先 GET 任意端点拿 csrf_token cookie,
+                    # 再以同值 X-CSRF-Token 头回传(cookie 由同一 client 自动携带)。
+                    # 失败不阻断主请求(老市场无 CSRF 时无副作用)。
+                    try:
+                        await client.get(f"{_market_base_url()}/api/csrf")
+                        csrf = client.cookies.get("csrf_token")
+                        if csrf:
+                            req_headers["X-CSRF-Token"] = csrf
+                    except httpx.HTTPError:
+                        pass
+                res = await client.request(method, url, json=json_body, headers=req_headers)
             break
         except httpx.HTTPError as exc:
             last_exc = exc
