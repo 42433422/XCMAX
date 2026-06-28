@@ -7,6 +7,7 @@ from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
 from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary
+from retort_engine.cross_language_transfer import build_cross_language_transfer
 from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context
 from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.review_calibration_policy import calibration_context_rank_weight, calibration_context_rank_weights, calibration_summary
@@ -53,6 +54,7 @@ def review_diff(
     context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
     extension_policy = extension_policy_summary([str(file_review["path"]) for file_review in files])
     static_analysis = scan_static_analysis_findings(files)
+    cross_language_transfer = build_cross_language_transfer(files)
     intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
     feedback_context_weights = _feedback_context_weights(employee_feedback or [])
     static_findings_by_location = {
@@ -69,6 +71,7 @@ def review_diff(
         for hunk in file_review["hunks"]:
             hunk_count += 1
             hunk_comments = _static_analysis_comments(file_path, hunk, strategy, capabilities, review_context, static_findings_by_location)
+            hunk_comments.extend(_cross_language_transfer_comments(file_path, hunk, strategy, capabilities, cross_language_transfer))
             hunk_comments.extend(_review_hunk(file_path, hunk, strategy, capabilities, review_context))
             if not hunk_comments:
                 hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]
@@ -119,9 +122,10 @@ def review_diff(
         "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
         "static_analysis": static_analysis["summary"],
+        "cross_language_transfer": cross_language_transfer["summary"],
         "intent_alignment": intent_alignment["summary"],
         "deep_review_pipeline": True,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v2",
         "large_diff_chunking": large_diff_chunking,
         "large_diff_chunk_count": len(context_groups) if large_diff_chunking else (1 if files else 0),
         "large_diff_context_balancing": large_diff_chunking,
@@ -142,6 +146,7 @@ def review_diff(
         "task_groups": task_groups,
         "incremental": incremental,
         "intent_alignment": intent_alignment,
+        "cross_language_transfer": cross_language_transfer,
     }
 
 
@@ -266,6 +271,43 @@ def _static_analysis_comments(
                 ["static_analysis", *capabilities],
                 "classify_risk",
                 review_context,
+                hunk=hunk,
+                line_text=str(change.get("text") or ""),
+            )
+        )
+    return comments
+
+
+def _cross_language_transfer_comments(
+    file_path: str,
+    hunk: dict[str, Any],
+    strategy: dict[str, Any],
+    capabilities: list[str],
+    transfer: dict[str, Any],
+) -> list[dict[str, Any]]:
+    findings_by_location = {
+        (str(finding.get("file") or ""), int(finding.get("line") or 0)): finding
+        for finding in transfer.get("findings") or []
+        if isinstance(finding, dict)
+    }
+    comments: list[dict[str, Any]] = []
+    for change in hunk.get("changes") or []:
+        if change.get("type") != "add":
+            continue
+        line = int(change.get("line") or 0)
+        finding = findings_by_location.get((file_path, line))
+        if not finding:
+            continue
+        comments.append(
+            _comment(
+                file_path,
+                line,
+                str(finding.get("severity") or "medium"),
+                f"{finding.get('message')} [{finding.get('pattern_id')}]",
+                strategy,
+                ["cross_language_transfer", *capabilities],
+                "classify_risk",
+                str(finding.get("review_context") or review_context_for_file(file_path)),
                 hunk=hunk,
                 line_text=str(change.get("text") or ""),
             )
@@ -475,7 +517,7 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
         "docs": 20,
         "other": 10,
     }.get(str(comment.get("review_context") or "other"), 10)
-    capability_weight = {"static_analysis": 45, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    capability_weight = {"static_analysis": 45, "cross_language_transfer": 40, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
     absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)
     absorbed_policy_weight = int(comment.get("absorbed_policy_rank_weight") or 0)
     calibration_weight = int(comment.get("calibration_rank_weight") or 0)

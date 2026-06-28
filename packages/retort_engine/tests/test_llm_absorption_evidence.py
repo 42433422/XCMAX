@@ -30,6 +30,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     source.parent.mkdir()
     test.parent.mkdir()
     source.write_text("def feature():\n    return True\n", encoding="utf-8")
+    (source.parent / "pr_review.py").write_text("def parse_unified_diff():\n    task_groups = []\n    return task_groups\n", encoding="utf-8")
+    (source.parent / "cross_language_transfer.py").write_text("def build_cross_language_transfer():\n    return {'status': 'mapped'}\n", encoding="utf-8")
     test.write_text("def test_feature():\n    assert True\n", encoding="utf-8")
     run_dir = tmp_path / ".retort" / "real_absorption_runs"
     run_dir.mkdir(parents=True)
@@ -378,6 +380,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "external_advantage_matrix_extension_policy_cases=6" in evidence
     assert "external_advantage_matrix_per_case_before_after=True" in evidence
     assert "external_advantage_matrix_all_improved=True" in evidence
+    assert "pr_review_cross_language_transfer_source=True" in evidence
+    assert "pr_review_cross_language_transfer_status=mapped" in evidence
+    assert "pr_review_cross_language_transfer_core_mapping=True" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
     assert "pr_holdout_blind_eval_status=ready" in evidence
