@@ -43,16 +43,24 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
         f"capability_absorption_risk_level={audit.get('risk_level')}",
         f"capability_absorption_blockers={','.join(str(item) for item in audit.get('blockers') or [])}",
         f"capability_absorption_reason={audit.get('reason')}",
+        "capability_absorption_latest_scope=latest_real_absorption_run",
         f"behavior_source_file_count={len(audit.get('behavior_source_files') or [])}",
         f"behavior_test_file_count={len(audit.get('behavior_test_files') or [])}",
         f"test_to_source_ratio={audit.get('test_to_source_ratio', '')}",
     ]
     hardening = audit.get("post_absorption_hardening") if isinstance(audit.get("post_absorption_hardening"), dict) else {}
+    latest_source_count = len(audit.get("behavior_source_files") or [])
+    latest_test_count = len(audit.get("behavior_test_files") or [])
+    hardening_source_count = len(hardening.get("behavior_source_files") or [])
+    hardening_test_count = len(hardening.get("behavior_test_files") or [])
     evidence.extend(
         [
+            "post_absorption_hardening_scope=latest_merge_commit_to_head",
             f"post_absorption_hardening_file_count={hardening.get('file_count', '')}",
-            f"post_absorption_hardening_source_count={len(hardening.get('behavior_source_files') or [])}",
-            f"post_absorption_hardening_test_count={len(hardening.get('behavior_test_files') or [])}",
+            f"post_absorption_hardening_source_count={hardening_source_count}",
+            f"post_absorption_hardening_test_count={hardening_test_count}",
+            f"total_behavior_source_file_count={latest_source_count + hardening_source_count}",
+            f"total_behavior_test_file_count={latest_test_count + hardening_test_count}",
         ]
     )
     behavior_test = project / "tests" / "test_absorbed_capabilities.py"
