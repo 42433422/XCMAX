@@ -1,37 +1,36 @@
 {
   "absorbed_signals": [
     "review_pipeline",
-    "file_grouping",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/KumarSaurabhSingh/AI-code-review-bot",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/UllrAI/Vibe-PR-Reviewer",
   "external_snapshot": {
-    "file_count": 15,
-    "git_revision": "8c1a0e4493459da648e4f3aeecbd652342214c1b",
+    "file_count": 7,
+    "git_revision": "cd49dce1d137c72b9812df5b63103115ec69f904",
     "suffix_counts": {
-      ".java": 7,
-      ".md": 1,
-      ".properties": 1,
-      ".xml": 4,
+      ".example": 1,
+      ".md": 2,
+      ".py": 1,
+      ".txt": 1,
       "<none>": 2
     }
   },
-  "generated_at": "2026-06-28T13:26:22Z",
+  "generated_at": "2026-06-28T13:28:33Z",
   "license_review": {
     "detected_license": "",
     "message": "license-incompatible risk: no LICENSE file detected",
     "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/KumarSaurabhSingh/AI-code-review-bot --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/UllrAI/Vibe-PR-Reviewer --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
       "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 4,
+      "minimum_expected_behavior_tests": 3,
       "prioritized_component_count": 0,
-      "task_dimension_count": 4
+      "task_dimension_count": 3
     },
     "component_gaps": [],
     "depth_absorption_workflow": {
@@ -41,7 +40,9 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "README.md"
+            "README.zh.md",
+            "README.md",
+            "app.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -62,17 +63,17 @@
           "title": "Deepen review_pipeline"
         },
         {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
           "evidence_required": [
             "source diff",
             "behavior test",
             "gate output"
           ],
           "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
+          "priority": "P1",
+          "task_id": "retort-depth-safety-policy",
+          "title": "Deepen safety_policy"
         },
         {
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
@@ -115,43 +116,46 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 13,
-          "own_marker_hits": 2239,
+          "external_marker_hits": 98,
+          "own_marker_hits": 2201,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md"
+            "README.zh.md",
+            "README.md",
+            "app.py"
           ]
         },
         {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
           "depth_gap": 0,
           "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
             "evidence_required": [
               "source diff",
               "behavior test",
               "gate output"
             ],
             "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1,
-          "own_marker_hits": 103,
+          "external_marker_hits": 8,
+          "own_marker_hits": 292,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md"
+            "README.md",
+            "app.py"
           ]
         },
         {
@@ -177,12 +181,13 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1,
-          "own_marker_hits": 2510,
+          "external_marker_hits": 11,
+          "own_marker_hits": 2423,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md"
+            "README.md",
+            "app.py"
           ]
         }
       ],
@@ -202,38 +207,46 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 2,
+          "external_marker_hits": 20,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "README.md"
+            "README.zh.md",
+            "README.md",
+            "app.py"
           ]
         }
       ]
     },
     "external_file_groups": {
-      "file_grouping": {
-        "files": [
-          "README.md"
-        ],
-        "marker_hits": 1
-      },
       "provider_surface": {
         "files": [
-          "README.md"
+          "README.zh.md",
+          "README.md",
+          "app.py"
         ],
-        "marker_hits": 2
+        "marker_hits": 20
       },
       "review_pipeline": {
         "files": [
-          "README.md"
+          "README.zh.md",
+          "README.md",
+          "app.py"
         ],
-        "marker_hits": 13
+        "marker_hits": 98
+      },
+      "safety_policy": {
+        "files": [
+          "README.md",
+          "app.py"
+        ],
+        "marker_hits": 8
       },
       "workflow_ci": {
         "files": [
-          "README.md"
+          "README.md",
+          "app.py"
         ],
-        "marker_hits": 1
+        "marker_hits": 11
       }
     },
     "own_file_groups": {
@@ -252,7 +265,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 535
+        "marker_hits": 487
       },
       "diff_hunk_review": {
         "files": [
@@ -281,7 +294,7 @@
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 103
+        "marker_hits": 104
       },
       "plugin_surface": {
         "files": [
@@ -298,7 +311,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 632
+        "marker_hits": 630
       },
       "provider_surface": {
         "files": [
@@ -315,7 +328,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 268
+        "marker_hits": 263
       },
       "review_pipeline": {
         "files": [
@@ -332,7 +345,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 2239
+        "marker_hits": 2201
       },
       "safety_policy": {
         "files": [
@@ -349,7 +362,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 314
+        "marker_hits": 292
       },
       "workflow_ci": {
         "files": [
@@ -366,7 +379,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 2510
+        "marker_hits": 2423
       }
     },
     "pipeline_stages": [
@@ -380,41 +393,42 @@
     ],
     "prioritized_absorptions": []
   },
-  "run_id": "20260628132618-c4f134349d",
+  "run_id": "20260628132829-6c216118b4",
   "semantic_review": {
     "external": {
-      "classes": 0,
+      "classes": 6,
       "cli_markers": 0,
-      "functions": 0,
-      "source_files": 1,
+      "functions": 22,
+      "source_files": 3,
       "test_markers": 0,
-      "workflow_markers": 12
+      "workflow_markers": 91
     },
     "gaps": [],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 748,
-      "source_files": 89,
+      "source_files": 90,
       "test_markers": 215,
-      "workflow_markers": 2927
+      "workflow_markers": 2883
     }
   },
   "signal_evidence": {
-    "file_grouping": [
-      "README.md"
-    ],
     "multi_provider": [
-      "README.md"
+      "README.zh.md",
+      "README.md",
+      "app.py"
     ],
     "plugin_surface": [
-      "README.md"
+      "app.py"
     ],
     "review_pipeline": [
-      "README.md"
+      "README.zh.md",
+      "README.md",
+      "app.py"
     ]
   },
-  "source": "https://github.com/KumarSaurabhSingh/AI-code-review-bot",
+  "source": "https://github.com/UllrAI/Vibe-PR-Reviewer",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -422,7 +436,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/KumarSaurabhSingh/AI-code-review-bot."
+      "why": "Compare implementation patterns from https://github.com/UllrAI/Vibe-PR-Reviewer."
     },
     {
       "dimension": "product_operability",
@@ -430,7 +444,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/KumarSaurabhSingh/AI-code-review-bot."
+      "why": "Extract usable UX improvements from https://github.com/UllrAI/Vibe-PR-Reviewer."
     },
     {
       "dimension": "operational_readiness",
@@ -438,7 +452,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/KumarSaurabhSingh/AI-code-review-bot."
+      "why": "Adapt CI and release checks from https://github.com/UllrAI/Vibe-PR-Reviewer."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -447,14 +461,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "product_operability",
