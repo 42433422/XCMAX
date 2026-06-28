@@ -57,6 +57,15 @@ const statusText = {
   merged: "已合并",
   converged: "已收敛",
   blocked: "已阻断",
+  needs_execution: "等待执行后复评",
+  awaiting_llm_score: "等待 LLM 评分",
+  paibi_llm_until_threshold_then_execute: "排比反问到阈值",
+  scores_below_threshold_require_real_changes: "低于90，需真实改动",
+  all_llm_scores_strictly_above_threshold: "全部 LLM 分数超过阈值",
+  llm_scores_not_ready: "LLM 分数未返回",
+  awaiting_scores: "等待分数",
+  queued_outbox_no_scores: "待发箱未评分",
+  paibi_llm_blocked_without_scores: "排比阻断未评分",
   awaiting_execution_evidence: "等待执行证据",
   internalized_by_self_evolution: "已由反问内化",
   closed_loop_verified: "闭环证据已验证",
@@ -953,21 +962,29 @@ async function absorb() {
 }
 
 async function evolve() {
-  setRunning(true, "排比 LLM 反问深评中");
-  beginProgress("反问 LLM 深评", DEEP_REVIEW_WAIT_SECONDS);
-  pushEvent("开始反问深评", "无限反问评分弱项");
+  const targetScore = 90;
+  setRunning(true, `反问进化到 ${targetScore}+`);
+  beginProgress(`反问进化到 ${targetScore}+`, DEEP_REVIEW_WAIT_SECONDS);
+  pushEvent("开始反问进化", `目标：全部 LLM 分数 > ${targetScore}`);
   try {
-    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
+    const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true, target_score: targetScore, max_rounds: 8});
     llm(r.final_assessment?.llm_review || r.llm_review, r.final_assessment?.llm_review_status, r.final_assessment);
-    assertDeepAssessment(r.final_assessment);
+    if (r.status === "converged" || r.status === "needs_execution") assertDeepAssessment(r.final_assessment);
     scores(r.final_assessment.scores);
     capabilityAudit(r.final_assessment);
     tasks(r.tasks || []);
     renderOpsDashboard({assessment: r.final_assessment, llmReview: r.final_assessment?.llm_review || r.llm_review});
-    completeProgress("反问深评完成");
     $("branchState").textContent = `${labelOf(r.status)}：${labelOf(r.stop_reason)}`;
-    $("statusText").textContent = "已反问";
-    pushEvent("反问深评完成", `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`, r.status === "converged" ? "ok" : "warn");
+    if (r.status === "converged") {
+      completeProgress("反问进化完成");
+      $("statusText").textContent = "已进化到90+";
+      pushEvent("反问进化完成", `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`, "ok");
+    } else {
+      const next = r.next_action || `${labelOf(r.status)} · ${labelOf(r.stop_reason)}`;
+      failProgress(next);
+      $("statusText").textContent = labelOf(r.status);
+      pushEvent("反问进化未完成", `${labelOf(r.stop_reason)} · ${next}`, "warn");
+    }
   } catch (e) {
     failProgress(e.message);
     $("statusText").textContent = "已阻断";

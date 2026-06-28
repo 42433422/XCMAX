@@ -219,6 +219,69 @@ def test_absorption_collects_evidence_then_requires_llm_reassessment(tmp_path: P
     assert evolved["status"] == "blocked"
 
 
+def test_service_self_evolve_does_not_converge_below_90(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("# project\n", encoding="utf-8")
+
+    def fake_request(**_kwargs: object) -> dict[str, object]:
+        return {"status": "accepted", "dispatch": {"status": "accepted", "task_id": "retort-low-score"}}
+
+    def fake_wait(_task_id: str, *, timeout_sec: float = 90.0, interval_sec: float = 5.0) -> dict[str, object]:
+        return {
+            "status": "completed",
+            "task_id": "retort-low-score",
+            "scores": [{"dimension": "calibrated_overall", "value": 61, "reason": "证据不足"}],
+            "json_result": {
+                "level": "prototype",
+                "employee_tasks": [
+                    {
+                        "title": "补齐真实执行证据",
+                        "owner_hint": "test-qa-runner",
+                        "acceptance": "再次深评前必须有真实代码改动和测试输出。",
+                        "evidence_required": "diff, pytest, next PaiBi score",
+                    }
+                ],
+            },
+        }
+
+    monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
+    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
+
+    result = RetortService().self_evolve({"project": str(project), "use_llm": True, "require_deep_review": True, "wait_llm_sec": 1, "target_score": 90})
+
+    assert result["status"] == "needs_execution"
+    assert result["stop_reason"] == "scores_below_threshold_require_real_changes"
+    assert result["round_policy"] == "paibi_llm_until_threshold_then_execute"
+    assert result["rounds"][0]["passed"] is False
+    assert result["completion_gate"]["requires_real_execution_before_next_round"] is True
+    assert result["completion_gate"]["can_continue_without_new_execution"] is False
+    assert result["tasks"][0]["title"] == "补齐真实执行证据"
+    assert (project / ".retort" / "self_evolution_rounds.jsonl").is_file()
+
+
+def test_service_self_evolve_waits_for_llm_scores(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("# project\n", encoding="utf-8")
+
+    def fake_request(**_kwargs: object) -> dict[str, object]:
+        return {"status": "accepted", "dispatch": {"status": "accepted", "task_id": "retort-pending"}}
+
+    def fake_wait(_task_id: str, *, timeout_sec: float = 90.0, interval_sec: float = 5.0) -> dict[str, object]:
+        return {"status": "running", "task_id": "retort-pending", "scores": []}
+
+    monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
+    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
+
+    result = RetortService().self_evolve({"project": str(project), "use_llm": True, "require_deep_review": True, "wait_llm_sec": 1})
+
+    assert result["status"] == "awaiting_llm_score"
+    assert result["stop_reason"] == "awaiting_scores"
+    assert result["tasks"] == []
+    assert result["rounds"][0]["passed"] is False
+
+
 def test_cli_project_assess_passes_llm_flag(tmp_path: Path, monkeypatch) -> None:
     project = tmp_path / "own"
     project.mkdir()
