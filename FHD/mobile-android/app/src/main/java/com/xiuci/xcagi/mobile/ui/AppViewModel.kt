@@ -545,6 +545,19 @@ constructor(
         }
     }
 
+    /**
+     * 登录成功后的落地路由。启动配置(宿主→行业→能力→支付 激活向导)只面向「需激活的普通
+     * 企业账号」；admin(管理端/运营者，本就是产品方)与已完成配置的账号一样，直接进主界面，
+     * 绝不被强制走激活引导。``forceAdmin`` 用于刚登录、accountKind 尚未落库时由调用方显式告知。
+     */
+    private suspend fun routeAfterAuth(forceAdmin: Boolean = false): String =
+            if (forceAdmin ||
+                    sessionStore.isSetupComplete() ||
+                    isAdminAccountKind(sessionStore.accountKindFlow.first())
+            )
+                    Routes.CHAT
+            else Routes.ONBOARDING
+
     fun refreshStartRoute() =
             viewModelScope.launch {
                 val cfg = _appConfig.value
@@ -555,14 +568,12 @@ constructor(
                     return@launch
                 }
                 val loggedIn = sessionStore.isLoggedInFlow.first()
-                val setupComplete = sessionStore.isSetupComplete()
                 _startRoute.value =
                         when {
                             needLegal -> Routes.LEGAL
                             !loggedIn && sessionStore.canAutoLogin() -> Routes.AUTH_AUTO_LOGIN
                             !loggedIn -> Routes.AUTH
-                            setupComplete -> Routes.CHAT
-                            else -> Routes.ONBOARDING
+                            else -> routeAfterAuth()
                         }
             }
 
@@ -586,9 +597,7 @@ constructor(
                             refreshUserAvatar()
                             loadWalletBalance()
                             registerPushWithHint()
-                            _startRoute.value =
-                                    if (sessionStore.isSetupComplete()) Routes.CHAT
-                                    else Routes.ONBOARDING
+                            _startRoute.value = routeAfterAuth()
                         }
                         .onFailure { snack("自动登录失败，请手动登录", true) }
                         .also { _autoLoggingIn.value = false }
@@ -1505,9 +1514,7 @@ constructor(
                         .onSuccess {
                             // 不再重置 setupComplete:已完成启动配置的账号登录后直接进主界面,不重走配置。
                             sessionStore.setActiveUsername(u)
-                            _startRoute.value =
-                                    if (sessionStore.isSetupComplete()) Routes.CHAT
-                                    else Routes.ONBOARDING
+                            _startRoute.value = routeAfterAuth(forceAdmin = isAdmin)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -1575,9 +1582,7 @@ constructor(
                 repo.loginMarketPhone(phone, code)
                         .onSuccess {
                             sessionStore.setActiveUsername(phone)
-                            _startRoute.value =
-                                    if (sessionStore.isSetupComplete()) Routes.CHAT
-                                    else Routes.ONBOARDING
+                            _startRoute.value = routeAfterAuth()
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
