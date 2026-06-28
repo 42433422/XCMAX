@@ -151,7 +151,7 @@ class RetortService:
     def record_hardening_run(self, payload: dict[str, Any]) -> dict[str, Any]:
         return record_post_absorption_hardening_run(
             str(payload.get("project") or payload.get("project_path") or "."),
-            worker_count=int(payload.get("worker_count") or 3),
+            worker_count=int(payload.get("worker_count") or 5),
         )
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:

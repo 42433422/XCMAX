@@ -406,6 +406,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"production_recovery_drill_recovered={recovery_summary.get('recovered_count', '')}/{recovery_summary.get('scenario_count', '')}",
         f"production_recovery_drill_all_recovered={recovery_summary.get('all_recovered', '')}",
         f"production_recovery_drill_real_network_denial={recovery_summary.get('real_network_denial_verified', '')}",
+        f"production_recovery_drill_live_write_rollback={recovery_summary.get('live_write_rollback_verified', '')}",
         f"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}",
         f"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}",
         f"operator_journey_replay_status={operator_journey.get('status', '')}",
