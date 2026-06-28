@@ -414,7 +414,10 @@ class PaibiLLMClient:
             available.append(name)
         dev_tool = str(device.get("devTool") or device.get("dev_tool") or "")
         ordered: list[str] = []
-        if dev_tool in available:
+        for preferred in self._preferred_tools():
+            if preferred in available and preferred not in ordered:
+                ordered.append(preferred)
+        if dev_tool in available and dev_tool not in ordered:
             ordered.append(dev_tool)
         for name in PAIBI_SUPPORTED_TOOLS:
             if name in available and name not in ordered:
@@ -427,6 +430,17 @@ class PaibiLLMClient:
         if capabilities.get("codex_cli") is True:
             return ["codex"]
         return []
+
+    def _preferred_tools(self) -> list[str]:
+        raw = _env("RETORT_PAIBI_TOOL", "RETORT_PAIBI_TOOL_NAME", "RETORT_PAIBI_PREFERRED_TOOL")
+        if not raw:
+            return []
+        tools = []
+        for item in raw.split(","):
+            name = item.strip()
+            if name in PAIBI_SUPPORTED_TOOLS and name not in tools:
+                tools.append(name)
+        return tools
 
     def _outbox(self, project: Path, title: str, prompt: str, reason: str, **extra: Any) -> dict[str, Any]:
         outbox = project / ".retort" / "paibi_llm_outbox.jsonl"

@@ -667,6 +667,48 @@ def test_paibi_llm_review_can_skip_dispatch_record(tmp_path: Path, monkeypatch) 
     assert not (project / ".retort" / "llm_reviews.jsonl").exists()
 
 
+def test_paibi_llm_review_honors_preferred_tool(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    (project / "README.md").write_text("# Own\n", encoding="utf-8")
+    calls: list[dict[str, object]] = []
+    monkeypatch.setenv("RETORT_PAIBI_TOOL", "claude_code")
+
+    def fake_request(self: PaibiLLMClient, method: str, path: str, *, token: str = "", json_body: dict[str, object] | None = None) -> dict[str, object]:
+        if path == "/api/health":
+            return {"success": True}
+        if path == "/api/auth/guest":
+            return {"token": "token-1"}
+        if path == "/api/devices":
+            return {
+                "devices": [
+                    {
+                        "id": "primary",
+                        "name": "Primary",
+                        "status": "online",
+                        "devTool": "codex",
+                        "isPrimary": True,
+                        "tools": [
+                            {"toolName": "codex", "status": "idle"},
+                            {"toolName": "claude_code", "status": "idle"},
+                        ],
+                    }
+                ]
+            }
+        if path == "/api/tasks":
+            assert json_body is not None
+            calls.append(json_body)
+            return {"task": {"id": "task-1", "status": "running"}}
+        raise AssertionError(path)
+
+    monkeypatch.setattr(PaibiLLMClient, "_request", fake_request)
+
+    result = request_paibi_llm_review(project=str(project), mode="assess")
+
+    assert result["dispatch"]["status"] == "accepted"
+    assert calls[0]["tool_name"] == "claude_code"
+
+
 def test_paibi_prompt_keeps_closed_loop_score_cap(tmp_path: Path) -> None:
     project = tmp_path / "own"
     project.mkdir()
