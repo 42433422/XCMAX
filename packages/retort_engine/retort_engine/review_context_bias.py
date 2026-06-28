@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 
-REVIEW_CONTEXT_BIAS: dict[str, Any] = json.loads('{\n  "context_focus": [\n    "runtime",\n    "tests",\n    "ci_config",\n    "config",\n    "docs"\n  ],\n  "enabled": true,\n  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/KumarSaurabhSingh/AI-code-review-bot",\n  "reason": "absorbed external file grouping and review pipeline signals",\n  "run_id": "20260628132618-c4f134349d",\n  "signal_evidence": {\n    "file_grouping": [\n      "README.md"\n    ],\n    "multi_provider": [\n      "README.md"\n    ],\n    "plugin_surface": [\n      "README.md"\n    ],\n    "review_pipeline": [\n      "README.md"\n    ]\n  },\n  "signals": [\n    "review_pipeline",\n    "file_grouping",\n    "plugin_surface",\n    "multi_provider"\n  ],\n  "source": "https://github.com/KumarSaurabhSingh/AI-code-review-bot"\n}')
+REVIEW_CONTEXT_BIAS: dict[str, Any] = json.loads('{\n  "context_focus": [\n    "runtime",\n    "tests",\n    "ci_config",\n    "config",\n    "docs"\n  ],\n  "enabled": true,\n  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/UllrAI/Vibe-PR-Reviewer",\n  "reason": "absorbed external file grouping and review pipeline signals",\n  "run_id": "20260628132829-6c216118b4",\n  "signal_evidence": {\n    "multi_provider": [\n      "README.zh.md",\n      "README.md",\n      "app.py"\n    ],\n    "plugin_surface": [\n      "app.py"\n    ],\n    "review_pipeline": [\n      "README.zh.md",\n      "README.md",\n      "app.py"\n    ]\n  },\n  "signals": [\n    "review_pipeline",\n    "plugin_surface",\n    "multi_provider"\n  ],\n  "source": "https://github.com/UllrAI/Vibe-PR-Reviewer"\n}')
 
 
 def review_context_bias() -> dict[str, Any]:
