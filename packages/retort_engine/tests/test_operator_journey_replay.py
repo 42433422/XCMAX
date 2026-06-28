@@ -248,6 +248,7 @@ def _write_docs(root: Path) -> None:
                 "accepted_tool_count": 4,
                 "all_tools_accepted": True,
                 "cross_tool_consensus": True,
+                "human_calibrated_cli_consensus": True,
             },
             "tool_results": [],
         },

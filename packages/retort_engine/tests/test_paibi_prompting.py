@@ -68,6 +68,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "paibi_cli_cross_adjudication_tools=4/4",
         "paibi_cli_cross_adjudication_all_accepted=True",
         "paibi_cli_cross_adjudication_human_reviewed=False",
+        "paibi_cli_cross_adjudication_human_calibrated=True",
+        "paibi_cli_cross_adjudication_calibration_labels=50",
         "cross_domain_ci_regression_rounds=3/3",
         "review_family_behavior_replay_direct_outputs=True",
         "release_decision_self_reference=False",
@@ -99,6 +101,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "paibi_cli_cross_adjudication_tools=4/4" in selected
     assert "paibi_cli_cross_adjudication_all_accepted=True" in selected
     assert "paibi_cli_cross_adjudication_human_reviewed=False" in selected
+    assert "paibi_cli_cross_adjudication_human_calibrated=True" in selected
+    assert "paibi_cli_cross_adjudication_calibration_labels=50" in selected
     assert "cross_domain_ci_regression_rounds=3/3" in selected
     assert "review_family_behavior_replay_direct_outputs=True" in selected
     assert "release_decision_self_reference=False" in selected
@@ -118,6 +122,7 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff",
         "paibi_cli_cross_adjudication_status=ready",
         "paibi_cli_cross_adjudication_tools=4/4",
+        "paibi_cli_cross_adjudication_human_calibrated=True",
     ]
 
     prompt = build_retort_paibi_prompt(project=tmp_path, mode="assess", evidence=evidence)
@@ -132,4 +137,5 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in prompt
     assert "paibi_cli_cross_adjudication_status=ready" in prompt
     assert "paibi_cli_cross_adjudication_tools=4/4" in prompt
+    assert "paibi_cli_cross_adjudication_human_calibrated=True" in prompt
     assert "pr_holdout_blind_eval_total_comments=179" not in prompt
