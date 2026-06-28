@@ -39,7 +39,7 @@
       "ok": true,
       "returncode": 0,
       "stderr_tail": "",
-      "stdout_tail": "........................................................................ [ 17%]\n........................................................................ [ 34%]\n........................................................................ [ 52%]\n........................................................................ [ 69%]\n........................................................................ [ 87%]\n.....................................................                    [100%]\n413 passed in 19.38s\n"
+      "stdout_tail": "........................................................................ [ 17%]\n........................................................................ [ 34%]\n........................................................................ [ 52%]\n........................................................................ [ 69%]\n........................................................................ [ 86%]\n......................................................                   [100%]\n414 passed in 19.58s\n"
     },
     {
       "command": [
@@ -52,13 +52,13 @@
       "name": "test_density",
       "ok": true,
       "returncode": 0,
-      "source_line_count": 17180,
+      "source_line_count": 17391,
       "stderr_tail": "",
-      "stdout_tail": "test_to_source_ratio=0.629; target=0.6; missing_test_lines_to_target=0",
+      "stdout_tail": "test_to_source_ratio=0.624; target=0.6; missing_test_lines_to_target=0",
       "target": 0.6,
       "target_met": true,
-      "test_line_count": 10814,
-      "test_to_source_ratio": 0.629
+      "test_line_count": 10859,
+      "test_to_source_ratio": 0.624
     },
     {
       "command": [
@@ -82,19 +82,19 @@
     "command_name": "quality-gates",
     "contract_passed": true,
     "contract_schema_count": 35,
-    "duration_sec": 20.096,
+    "duration_sec": 20.368,
     "gate_count": 4,
     "lint_passed": true,
     "passed_count": 4,
     "pytest_passed": true,
     "single_command_surface": true,
-    "source_line_count": 17180,
+    "source_line_count": 17391,
     "test_density_floor": 0.4,
     "test_density_missing_lines_to_target": 0,
     "test_density_passed": true,
     "test_density_target": 0.6,
     "test_density_target_met": true,
-    "test_line_count": 10814,
-    "test_to_source_ratio": 0.629
+    "test_line_count": 10859,
+    "test_to_source_ratio": 0.624
   }
 }

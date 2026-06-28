@@ -61,7 +61,7 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["calibration_policy"]["enabled"] is True
     assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
-    assert result["summary"]["comment_ranking_model"] == "severity_context_publishability_v1"
+    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v2"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
@@ -218,6 +218,46 @@ def test_review_diff_surfaces_static_analysis_findings() -> None:
     assert result["summary"]["static_analysis"]["high_count"] == 2
     assert {comment["capability"] for comment in result["comments"]} >= {"static_analysis"}
     assert {comment["line"] for comment in result["comments"] if comment["capability"] == "static_analysis"} == {1, 2}
+
+
+def test_review_diff_maps_cross_language_pr_bot_patterns_into_core_comments() -> None:
+    diff = """diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml
+--- a/.github/workflows/review.yml
++++ b/.github/workflows/review.yml
+@@ -0,0 +1,4 @@
++on: pull_request_target
++permissions:
++  pull-requests: write
++  issues: write
+diff --git a/src/reviewer.ts b/src/reviewer.ts
+--- a/src/reviewer.ts
++++ b/src/reviewer.ts
+@@ -0,0 +1,3 @@
++const provider = "openai"
++await octokit.rest.pulls.createReview({ pull_number })
++const prompt = buildPrompt(model)
+diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
+--- a/retort_engine/review_bridge.py
++++ b/retort_engine/review_bridge.py
+@@ -0,0 +1,2 @@
++subprocess.Popen(["retort-worker"])
++publish(review)
+"""
+
+    result = review_diff(diff, max_comments=10)
+    transfer = result["summary"]["cross_language_transfer"]
+    transfer_comments = [comment for comment in result["comments"] if comment["capability"] == "cross_language_transfer"]
+
+    assert transfer["cross_language_core_mapping"] is True
+    assert transfer["language_family_count"] >= 3
+    assert transfer["finding_count"] >= 5
+    assert transfer["pattern_count"] >= 4
+    assert transfer["severity_counts"]["high"] >= 2
+    assert transfer_comments
+    assert {comment["review_context"] for comment in transfer_comments} >= {"ci_config", "config", "runtime"}
+    assert {comment["file"] for comment in transfer_comments} >= {".github/workflows/review.yml", "src/reviewer.ts", "retort_engine/review_bridge.py"}
+    assert transfer_comments[0]["rank_reason"].startswith("high:ci_config:cross_language_transfer")
+    assert result["cross_language_transfer"]["evidence"]["source"] == "absorbed_pr_bot_cross_language_transfer"
 
 
 def test_review_diff_surfaces_issue_intent_mismatch() -> None:

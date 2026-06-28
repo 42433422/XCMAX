@@ -168,4 +168,8 @@ def test_pr_review_runtime_evidence_reports_extension_policy_depth() -> None:
     assert evidence["extension_policy_review_context_count"] >= 4
     assert {"runtime", "frontend", "ci_config", "docs", "config"}.issubset(set(evidence["extension_policy_review_contexts"]))
     assert "retort_engine/diff_extension_policy.py" in evidence["behavior_source_files"]
+    assert "retort_engine/cross_language_transfer.py" in evidence["behavior_source_files"]
     assert "tests/test_diff_extension_policy.py" in evidence["behavior_test_files"]
+    assert evidence["cross_language_transfer_status"] == "mapped"
+    assert evidence["cross_language_transfer_core_mapping"] is True
+    assert evidence["cross_language_transfer_finding_count"] >= 8

@@ -147,6 +147,13 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_extension_policy_review_contexts={','.join(pr_review.get('extension_policy_review_contexts') or [])}",
         f"pr_review_extension_policy_language_families={','.join(pr_review.get('extension_policy_language_families') or [])}",
         f"pr_review_extension_policy_source={pr_review.get('extension_policy_source')}",
+        f"pr_review_cross_language_transfer_source={pr_review.get('cross_language_transfer_source')}",
+        f"pr_review_cross_language_transfer_status={pr_review.get('cross_language_transfer_status')}",
+        f"pr_review_cross_language_transfer_findings={pr_review.get('cross_language_transfer_finding_count')}",
+        f"pr_review_cross_language_transfer_patterns={pr_review.get('cross_language_transfer_pattern_count')}",
+        f"pr_review_cross_language_transfer_families={pr_review.get('cross_language_transfer_family_count')}",
+        f"pr_review_cross_language_transfer_core_mapping={pr_review.get('cross_language_transfer_core_mapping')}",
+        f"pr_review_cross_language_transfer_comments={pr_review.get('cross_language_transfer_comment_count')}",
     ]
 
 

@@ -136,6 +136,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     release_decision_source = root / "retort_engine" / "absorption_release_decision.py"
     extension_policy_source = root / "retort_engine" / "diff_extension_policy.py"
     external_advantage_source = root / "retort_engine" / "external_advantage_matrix.py"
+    cross_language_source = root / "retort_engine" / "cross_language_transfer.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -209,6 +210,12 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     extension_policy_contexts: list[str] = []
     extension_policy_families: list[str] = []
     extension_policy_source_name = ""
+    cross_language_status = ""
+    cross_language_finding_count = 0
+    cross_language_pattern_count = 0
+    cross_language_family_count = 0
+    cross_language_core_mapping = False
+    cross_language_comment_count = 0
     adjudication_status = ""
     adjudication_human_label_count = 0
     adjudication_pass_rate = 0.0
@@ -283,9 +290,18 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 extension_policy_unknown_count = int(extension_policy.get("unknown_extension_count") or 0)
                 extension_policy_family_count = int(extension_policy.get("language_family_count") or 0)
                 extension_policy_context_count = int(extension_policy.get("review_context_count") or 0)
-                extension_policy_contexts = [str(item) for item in extension_policy.get("review_contexts") or []]
-                extension_policy_families = [str(item) for item in extension_policy.get("language_families") or []]
-                extension_policy_source_name = str(extension_policy.get("policy_source") or "")
+            extension_policy_contexts = [str(item) for item in extension_policy.get("review_contexts") or []]
+            extension_policy_families = [str(item) for item in extension_policy.get("language_families") or []]
+            extension_policy_source_name = str(extension_policy.get("policy_source") or "")
+            cross_review = review_diff(_audit_cross_language_transfer_sample(), max_comments=10)
+            cross_transfer = cross_review.get("cross_language_transfer") if isinstance(cross_review.get("cross_language_transfer"), dict) else {}
+            cross_summary = cross_transfer.get("summary") if isinstance(cross_transfer.get("summary"), dict) else {}
+            cross_language_status = str(cross_transfer.get("status") or "")
+            cross_language_finding_count = int(cross_summary.get("finding_count") or 0)
+            cross_language_pattern_count = int(cross_summary.get("pattern_count") or 0)
+            cross_language_family_count = int(cross_summary.get("language_family_count") or 0)
+            cross_language_core_mapping = bool(cross_summary.get("cross_language_core_mapping"))
+            cross_language_comment_count = sum(1 for comment in cross_review.get("comments") or [] if isinstance(comment, dict) and comment.get("capability") == "cross_language_transfer")
             adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
             adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
             adjudication_status = str(adjudication_report.get("status") or "")
@@ -340,6 +356,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "extension_policy_review_contexts": extension_policy_contexts,
         "extension_policy_language_families": extension_policy_families,
         "extension_policy_source": extension_policy_source_name,
+        "cross_language_transfer_source": cross_language_source.is_file(),
+        "cross_language_transfer_status": cross_language_status,
+        "cross_language_transfer_finding_count": cross_language_finding_count,
+        "cross_language_transfer_pattern_count": cross_language_pattern_count,
+        "cross_language_transfer_family_count": cross_language_family_count,
+        "cross_language_transfer_core_mapping": cross_language_core_mapping,
+        "cross_language_transfer_comment_count": cross_language_comment_count,
         "adjudication_status": adjudication_status,
         "adjudication_human_label_count": adjudication_human_label_count,
         "adjudication_pass_rate": adjudication_pass_rate,
@@ -382,6 +405,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
                 ("retort_engine/diff_extension_policy.py", extension_policy_source.is_file()),
                 ("retort_engine/external_advantage_matrix.py", external_advantage_source.is_file()),
+                ("retort_engine/cross_language_transfer.py", cross_language_source.is_file()),
             )
             if exists
         ],
@@ -455,6 +479,27 @@ def _audit_extension_policy_sample() -> str:
         (".github/workflows/review.yml", "name: review"),
     ]
     return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+
+
+def _audit_cross_language_transfer_sample() -> str:
+    rows = [
+        (".github/workflows/review.yml", "on: pull_request_target"),
+        (".github/workflows/review.yml", "  pull-requests: write"),
+        (".github/workflows/review.yml", "  issues: write"),
+        ("src/reviewer.ts", 'const provider = "openai"'),
+        ("src/reviewer.ts", "await octokit.rest.pulls.createReview({ pull_number })"),
+        ("src/reviewer.ts", "const prompt = buildPrompt(model)"),
+        ("retort_engine/review_bridge.py", 'subprocess.Popen(["retort-worker"])'),
+        ("retort_engine/review_bridge.py", "publish(review)"),
+    ]
+    grouped: dict[str, list[str]] = {}
+    for path, line in rows:
+        grouped.setdefault(path, []).append(line)
+    chunks: list[str] = []
+    for path, lines in grouped.items():
+        chunks.append(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n")
+        chunks.extend(f"+{line}\n" for line in lines)
+    return "".join(chunks)
 
 
 def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
