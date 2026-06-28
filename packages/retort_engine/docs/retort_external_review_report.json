@@ -2,54 +2,42 @@
   "absorbed_signals": [
     "review_pipeline",
     "file_grouping",
+    "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/sfg-labs/ai-reviewer-security",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/anthropics/claude-code-security-review",
   "external_snapshot": {
-    "file_count": 50,
-    "git_revision": "5fdeab957941fc9d1670fcc4de99aa7cff3c744f",
+    "file_count": 42,
+    "git_revision": "0c6a49f1fa56a1d472575da86a94dbc1edb78eda",
     "suffix_counts": {
-      ".js": 1,
-      ".json": 3,
-      ".md": 18,
-      ".ts": 23,
+      ".ini": 1,
+      ".js": 2,
+      ".json": 1,
+      ".md": 5,
+      ".py": 25,
+      ".txt": 3,
       ".yml": 3,
       "<none>": 2
     }
   },
-  "generated_at": "2026-06-28T13:57:30Z",
+  "generated_at": "2026-06-28T14:18:07Z",
   "license_review": {
-    "detected_license": "UNLICENSED",
-    "message": "license-incompatible risk: UNLICENSED",
-    "status": "blocked"
+    "detected_license": "MIT License",
+    "message": "Allowed license detected: MIT License",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/sfg-labs/ai-reviewer-security --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/anthropics/claude-code-security-review --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 1,
-      "minimum_expected_behavior_tests": 6,
-      "prioritized_component_count": 1,
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 5,
+      "prioritized_component_count": 0,
       "task_dimension_count": 5
     },
-    "component_gaps": [
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 65,
-        "own_files": 12,
-        "representative_external_files": [
-          "README.md",
-          "package-lock.json",
-          "package.json",
-          "CLAUDE.md",
-          "action.yml"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -58,10 +46,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "CLAUDE.md",
-            "tests/tools.spec.ts",
-            "tests/fixtures/diffs.ts",
-            "docs/INSTALL.md"
+            "action.yml",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_workflow_integration.py",
+            "claudecode/constants.py"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -71,10 +59,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "CLAUDE.md",
-            "docs/INSTALL.md"
+            "action.yml",
+            "claudecode/test_github_action_audit.py",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_hard_exclusion_rules.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -122,17 +110,18 @@
           "title": "Deepen diff_hunk_review"
         },
         {
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "dimension": "feedback_loop_closure",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output"
+            "gate output",
+            "precision or false-positive benchmark counters"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P1",
-          "task_id": "retort-depth-workflow-ci",
-          "title": "Deepen workflow_ci"
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -146,6 +135,19 @@
           "priority": "P1",
           "task_id": "retort-depth-safety-policy",
           "title": "Deepen safety_policy"
+        },
+        {
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -176,15 +178,15 @@
             "review JSON with stages and comments"
           ],
           "external_marker_hits": 142,
-          "own_marker_hits": 2416,
+          "own_marker_hits": 2489,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "CLAUDE.md",
-            "action.yml"
+            "action.yml",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_workflow_integration.py",
+            "claudecode/prompts.py"
           ]
         },
         {
@@ -210,16 +212,12 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 7,
-          "own_marker_hits": 106,
+          "external_marker_hits": 1,
+          "own_marker_hits": 109,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md",
-            "tests/orchestrator.spec.ts",
-            "docs/INSTALL.md",
-            "src/diff.ts",
-            "src/orchestrator.ts"
+            "README.md"
           ]
         },
         {
@@ -247,16 +245,85 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 9,
+          "external_marker_hits": 4,
           "own_marker_hits": 21,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
+            "scripts/comment-pr-findings.bun.test.js",
+            "scripts/comment-pr-findings.js"
+          ]
+        },
+        {
+          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "component": "benchmark_eval",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+            "dimension": "feedback_loop_closure",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "precision or false-positive benchmark counters"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-benchmark-eval",
+            "title": "Deepen benchmark_eval"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "precision or false-positive benchmark counters"
+          ],
+          "external_marker_hits": 258,
+          "own_marker_hits": 605,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
             "README.md",
-            "docs/INSTALL.md",
-            "docs/RULES.md",
-            ".github/workflows/ai-review.yml",
-            "src/aggregator.ts"
+            "claudecode/test_hard_exclusion_rules.py",
+            "claudecode/test_prompts.py",
+            "claudecode/test_eval_engine.py",
+            "claudecode/prompts.py"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 317,
+          "own_marker_hits": 326,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "action.yml",
+            "claudecode/test_github_action_audit.py",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_hard_exclusion_rules.py"
           ]
         },
         {
@@ -282,51 +349,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 435,
-          "own_marker_hits": 2730,
+          "external_marker_hits": 884,
+          "own_marker_hits": 2831,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "jest.config.js",
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "tsconfig.json"
-          ]
-        },
-        {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 65,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 386,
-          "own_marker_hits": 321,
-          "priority": "P0",
-          "similarity_score": 97,
-          "source_files": [
-            "README.md",
-            "package-lock.json",
-            "package.json",
-            "CLAUDE.md",
-            "action.yml"
+            "action.yml",
+            "claudecode/test_github_action_audit.py",
+            "claudecode/test_hard_exclusion_rules.py",
+            "claudecode/test_workflow_integration.py"
           ]
         }
       ],
@@ -335,7 +367,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 5,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -346,135 +378,141 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 30,
+          "external_marker_hits": 117,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "CLAUDE.md",
-            "tests/tools.spec.ts",
-            "tests/fixtures/diffs.ts",
-            "docs/INSTALL.md"
+            "action.yml",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_workflow_integration.py",
+            "claudecode/constants.py"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 124,
+          "external_marker_hits": 30,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "CLAUDE.md",
-            "docs/INSTALL.md"
+            "action.yml",
+            "claudecode/test_github_action_audit.py",
+            "claudecode/github_action_audit.py",
+            "claudecode/test_hard_exclusion_rules.py"
           ]
         }
       ]
     },
     "external_file_groups": {
-      "diff_hunk_review": {
+      "benchmark_eval": {
         "files": [
           "README.md",
-          "docs/INSTALL.md",
-          "docs/RULES.md",
-          ".github/workflows/ai-review.yml",
-          "src/aggregator.ts",
-          "src/github/post-inline.ts",
-          "src/github/post-summary.ts"
+          "claudecode/test_hard_exclusion_rules.py",
+          "claudecode/test_prompts.py",
+          "claudecode/test_eval_engine.py",
+          "claudecode/prompts.py",
+          "claudecode/claude_api_client.py",
+          "claudecode/test_github_client.py",
+          "claudecode/test_helper_functions.py",
+          "claudecode/evals/run_eval.py",
+          "claudecode/evals/eval_engine.py",
+          "claudecode/evals/__init__.py",
+          "claudecode/evals/README.md"
         ],
-        "marker_hits": 9
+        "marker_hits": 258
+      },
+      "diff_hunk_review": {
+        "files": [
+          "scripts/comment-pr-findings.bun.test.js",
+          "scripts/comment-pr-findings.js"
+        ],
+        "marker_hits": 4
       },
       "file_grouping": {
         "files": [
-          "README.md",
-          "tests/orchestrator.spec.ts",
-          "docs/INSTALL.md",
-          "src/diff.ts",
-          "src/orchestrator.ts",
-          "src/tools/semgrep.ts",
-          "src/github/pr-diff.ts"
+          "README.md"
         ],
-        "marker_hits": 7
+        "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "CLAUDE.md",
-          "docs/INSTALL.md",
-          "src/runner.ts",
-          "src/tools/patterns.ts",
-          "src/rule-packs/SEC.RBAC.001.md",
-          "src/rule-packs/SEC.SECRET.001.md"
+          "action.yml",
+          "claudecode/test_github_action_audit.py",
+          "claudecode/github_action_audit.py",
+          "claudecode/test_hard_exclusion_rules.py",
+          "claudecode/findings_filter.py",
+          "claudecode/claude_api_client.py",
+          ".claude/commands/security-review.md"
         ],
-        "marker_hits": 124
+        "marker_hits": 30
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "CLAUDE.md",
-          "tests/tools.spec.ts",
-          "tests/fixtures/diffs.ts",
-          "docs/INSTALL.md",
-          "docs/RULES.md",
-          "src/tools/gitleaks.ts",
-          "src/tools/patterns.ts",
-          "src/rule-packs/SEC.RBAC.001.md",
-          "src/rule-packs/SEC.SQL.002.md",
-          "src/rule-packs/SEC.SECRET.001.md"
+          "action.yml",
+          "claudecode/github_action_audit.py",
+          "claudecode/test_workflow_integration.py",
+          "claudecode/constants.py",
+          "claudecode/__init__.py",
+          "claudecode/test_eval_engine.py",
+          "claudecode/prompts.py",
+          "claudecode/test_claude_runner.py",
+          "claudecode/findings_filter.py",
+          "claudecode/claude_api_client.py",
+          "claudecode/test_integration.py"
         ],
-        "marker_hits": 30
+        "marker_hits": 117
       },
       "review_pipeline": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "CLAUDE.md",
           "action.yml",
-          "tests/aggregator.spec.ts",
-          "tests/github.spec.ts",
-          "tests/tools.spec.ts",
-          "tests/orchestrator.spec.ts",
-          "tests/config.spec.ts",
-          "tests/fixtures/diffs.ts",
-          "docs/INSTALL.md"
+          "claudecode/github_action_audit.py",
+          "claudecode/test_workflow_integration.py",
+          "claudecode/prompts.py",
+          "claudecode/test_claude_runner.py",
+          "claudecode/claude_api_client.py",
+          "claudecode/test_main_function.py",
+          "claudecode/evals/README.md",
+          ".claude/commands/security-review.md",
+          "docs/custom-filtering-instructions.md",
+          "docs/custom-security-scan-instructions.md"
         ],
         "marker_hits": 142
       },
       "safety_policy": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "CLAUDE.md",
           "action.yml",
-          "tests/github.spec.ts",
-          "tests/config.spec.ts",
-          "docs/INSTALL.md",
-          "docs/RULES.md",
-          ".github/PULL_REQUEST_TEMPLATE.md",
-          ".github/workflows/ai-review.yml",
-          "src/aggregator.ts"
+          "claudecode/test_github_action_audit.py",
+          "claudecode/github_action_audit.py",
+          "claudecode/test_hard_exclusion_rules.py",
+          "claudecode/test_workflow_integration.py",
+          "claudecode/test_prompts.py",
+          "claudecode/__init__.py",
+          "claudecode/prompts.py",
+          "claudecode/test_claude_runner.py",
+          "claudecode/findings_filter.py",
+          "claudecode/claude_api_client.py"
         ],
-        "marker_hits": 386
+        "marker_hits": 317
       },
       "workflow_ci": {
         "files": [
-          "jest.config.js",
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "tsconfig.json",
-          "CLAUDE.md",
           "action.yml",
-          "tests/aggregator.spec.ts",
-          "tests/github.spec.ts",
-          "tests/diff.spec.ts",
-          "tests/meta.spec.ts",
-          "tests/tools.spec.ts"
+          "claudecode/test_github_action_audit.py",
+          "claudecode/test_hard_exclusion_rules.py",
+          "claudecode/test_workflow_integration.py",
+          "claudecode/test_prompts.py",
+          "claudecode/test_findings_conversion.py",
+          "claudecode/test_eval_engine.py",
+          "claudecode/prompts.py",
+          "claudecode/test_claude_runner.py",
+          "claudecode/findings_filter.py",
+          "claudecode/claude_api_client.py"
         ],
-        "marker_hits": 435
+        "marker_hits": 884
       }
     },
     "own_file_groups": {
@@ -493,7 +531,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 578
+        "marker_hits": 605
       },
       "diff_hunk_review": {
         "files": [
@@ -522,7 +560,7 @@
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 106
+        "marker_hits": 109
       },
       "plugin_surface": {
         "files": [
@@ -539,7 +577,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 653
+        "marker_hits": 665
       },
       "provider_surface": {
         "files": [
@@ -556,7 +594,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 275
+        "marker_hits": 279
       },
       "review_pipeline": {
         "files": [
@@ -573,7 +611,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 2416
+        "marker_hits": 2489
       },
       "safety_policy": {
         "files": [
@@ -590,7 +628,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 321
+        "marker_hits": 326
       },
       "workflow_ci": {
         "files": [
@@ -607,7 +645,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 2730
+        "marker_hits": 2831
       }
     },
     "pipeline_stages": [
@@ -619,72 +657,67 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "README.md",
-          "package-lock.json",
-          "package.json",
-          "CLAUDE.md",
-          "action.yml"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260628135727-2d0e930f13",
+  "run_id": "20260628141803-755b966889",
   "semantic_review": {
     "external": {
-      "classes": 7,
+      "classes": 49,
       "cli_markers": 0,
-      "functions": 48,
-      "source_files": 48,
-      "test_markers": 149,
-      "workflow_markers": 154
+      "functions": 248,
+      "source_files": 36,
+      "test_markers": 226,
+      "workflow_markers": 174
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 4,
+        "metric": "test_markers"
+      }
+    ],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 765,
-      "source_files": 96,
+      "source_files": 100,
       "test_markers": 222,
-      "workflow_markers": 3116
+      "workflow_markers": 3207
     }
   },
   "signal_evidence": {
-    "file_grouping": [
+    "benchmarking": [
       "README.md",
-      "tests/orchestrator.spec.ts",
-      "docs/INSTALL.md",
-      "src/diff.ts",
-      "src/orchestrator.ts"
+      "claudecode/test_hard_exclusion_rules.py",
+      "claudecode/test_prompts.py",
+      "claudecode/test_eval_engine.py",
+      "claudecode/prompts.py"
+    ],
+    "file_grouping": [
+      "README.md"
     ],
     "multi_provider": [
       "README.md",
-      "CLAUDE.md",
-      "tests/tools.spec.ts",
-      "tests/fixtures/diffs.ts",
-      "docs/INSTALL.md"
+      "action.yml",
+      "claudecode/github_action_audit.py",
+      "claudecode/test_workflow_integration.py",
+      "claudecode/constants.py"
     ],
     "plugin_surface": [
       "README.md",
-      "package-lock.json",
-      "package.json",
-      "CLAUDE.md",
-      "tests/fixtures/diffs.ts"
+      "action.yml",
+      "claudecode/test_github_action_audit.py",
+      "claudecode/github_action_audit.py",
+      "claudecode/test_workflow_integration.py"
     ],
     "review_pipeline": [
       "README.md",
-      "package-lock.json",
-      "package.json",
-      "CLAUDE.md",
-      "action.yml"
+      "action.yml",
+      "claudecode/prompts.py",
+      "claudecode/evals/README.md",
+      ".claude/commands/security-review.md"
     ]
   },
-  "source": ".retort/cache/github/sfg-labs/ai-reviewer-security",
+  "source": "https://github.com/anthropics/claude-code-security-review",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -692,7 +725,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from .retort/cache/github/sfg-labs/ai-reviewer-security."
+      "why": "Compare implementation patterns from https://github.com/anthropics/claude-code-security-review."
     },
     {
       "dimension": "product_operability",
@@ -700,7 +733,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from .retort/cache/github/sfg-labs/ai-reviewer-security."
+      "why": "Extract usable UX improvements from https://github.com/anthropics/claude-code-security-review."
     },
     {
       "dimension": "operational_readiness",
@@ -708,7 +741,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from .retort/cache/github/sfg-labs/ai-reviewer-security."
+      "why": "Adapt CI and release checks from https://github.com/anthropics/claude-code-security-review."
     },
     {
       "dimension": "comparative_analysis_depth",
