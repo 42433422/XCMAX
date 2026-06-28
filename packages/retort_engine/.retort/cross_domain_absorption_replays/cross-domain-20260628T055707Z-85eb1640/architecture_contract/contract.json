@@ -1,0 +1,9 @@
+{
+  "forbidden": [
+    "retort_engine.core"
+  ],
+  "name": "graph_cannot_import_core",
+  "reason": "graph layer must remain below core runtime",
+  "source": "retort_engine.codebase_graph",
+  "type": "forbidden_import"
+}

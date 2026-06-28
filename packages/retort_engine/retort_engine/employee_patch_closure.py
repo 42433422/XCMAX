@@ -93,6 +93,10 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
     )
     retry = run_retry_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
     cases = [positive, existing_update, negative, semantic_negative, policy_negative, multi_file, policy_positive, retry]
+    failure_rehearsals = [
+        run_case_failure_rollback_rehearsal(root, lab=lab, case_name=str(case["summary"]["case_name"]), run_id=suite_id)
+        for case in cases
+    ]
     expected_failure_cases = {
         negative["summary"]["case_name"],
         semantic_negative["summary"]["case_name"],
@@ -103,6 +107,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
     unexpected_gate_failure_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_success_cases and not case["summary"]["gates_passed"])
     gate_expected_to_pass_count = len(expected_success_cases)
     gate_expected_to_pass_passed_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_success_cases and case["summary"]["gates_passed"])
+    primary_rollback_verified_count = sum(1 for case in cases if case["summary"]["rollback_verified"])
+    failure_rehearsal_rollback_count = sum(1 for case in failure_rehearsals if case["summary"]["rollback_verified"])
     summary = {
         "run_id": suite_id,
         "case_count": len(cases),
@@ -111,7 +117,13 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "gate_passed_count": sum(1 for case in cases if case["summary"]["gates_passed"]),
         "gate_expected_to_pass_count": gate_expected_to_pass_count,
         "gate_expected_to_pass_passed_count": gate_expected_to_pass_passed_count,
-        "rollback_verified_count": sum(1 for case in cases if case["summary"]["rollback_verified"]),
+        "primary_rollback_verified_count": primary_rollback_verified_count,
+        "rollback_verified_count": failure_rehearsal_rollback_count,
+        "rollback_scope": "per_primary_case_failure_injection",
+        "failure_rehearsal_count": len(failure_rehearsals),
+        "failure_rehearsal_rollback_count": failure_rehearsal_rollback_count,
+        "all_cases_have_failure_rollback_rehearsal": bool(failure_rehearsals) and len(failure_rehearsals) == len(cases),
+        "full_path_rollback_verified": bool(failure_rehearsals) and failure_rehearsal_rollback_count == len(cases),
         "expected_failure_case_count": len(expected_failure_cases),
         "expected_failure_rollback_count": expected_failure_rollback_count,
         "unexpected_gate_failure_count": unexpected_gate_failure_count,
@@ -141,6 +153,7 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
             and retry["status"] == "patch_verified_after_retry"
             and expected_failure_rollback_count == len(expected_failure_cases)
             and unexpected_gate_failure_count == 0
+            and failure_rehearsal_rollback_count == len(cases)
         ),
         "all_cases_have_patch_files": all(bool(case["evidence"].get("patch_path")) and Path(str(case["evidence"]["patch_path"])).is_file() for case in cases),
     }
@@ -156,6 +169,7 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         and summary["successful_repairs_re_reviewed"]
         and summary["retry_case_verified"]
         and summary["retry_first_failure_rolled_back"]
+        and summary["full_path_rollback_verified"]
         and summary["all_expected_outcomes_verified"]
         and summary["all_cases_have_patch_files"]
         else "needs_attention"
@@ -165,9 +179,11 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "project": str(root),
         "summary": summary,
         "cases": cases,
+        "failure_rehearsals": failure_rehearsals,
         "evidence": {
             "lab_dir": str(lab),
             "style": "employee_patch_generation_apply_gate_rollback",
+            "rollback_model": "each_primary_case_has_independent_failure_injection_rehearsal",
             "positive_patch_path": positive["evidence"].get("patch_path", ""),
             "rollback_patch_path": negative["evidence"].get("patch_path", ""),
             "semantic_rollback_patch_path": semantic_negative["evidence"].get("patch_path", ""),
@@ -179,6 +195,19 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return result
+
+
+def run_case_failure_rollback_rehearsal(project: str | Path, *, lab: str | Path, case_name: str, run_id: str = "") -> dict[str, Any]:
+    safe_case = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in case_name)[:80] or "case"
+    return run_employee_patch_closure_case(
+        project,
+        target_file=Path(lab).expanduser().resolve() / "failure_rehearsals" / f"{safe_case}.py",
+        replacement=f"def rollback_rehearsal_{safe_case}(:\n    return 'must-rollback'\n",
+        expected_text="must-rollback",
+        gate_commands=[[sys.executable, "-m", "py_compile", "{target_file}"]],
+        run_id=run_id or _run_id("failure-rehearsal"),
+        case_name=f"{safe_case}_failure_rehearsal",
+    )
 
 
 def run_retry_employee_patch_closure_case(project: str | Path, *, lab: str | Path, run_id: str = "") -> dict[str, Any]:

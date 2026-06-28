@@ -49,6 +49,7 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "absorption_release_decision_operator_journey_ready=True",
         "external_advantage_matrix_score_delta=55",
         "external_advantage_matrix_per_case_before_after=True",
+        "cross_domain_absorption_replay_output_assertions=True",
         "release_decision_self_reference=False",
     ]
 
@@ -59,6 +60,7 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "absorption_release_decision_operator_journey_ready=True" in selected
     assert "external_advantage_matrix_score_delta=55" in selected
     assert "external_advantage_matrix_per_case_before_after=True" in selected
+    assert "cross_domain_absorption_replay_output_assertions=True" in selected
     assert "release_decision_self_reference=False" in selected
 
 
@@ -70,6 +72,7 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "operator_journey_replay_ready_stages=8/8",
         "absorption_release_decision_operator_journey_ready=True",
         "external_advantage_matrix_score_delta=55",
+        "cross_domain_absorption_replay_direct_execution=True",
     ]
 
     prompt = build_retort_paibi_prompt(project=tmp_path, mode="assess", evidence=evidence)
@@ -78,4 +81,5 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "operator_journey_replay_status=ready" in prompt
     assert "operator_journey_replay_ready_stages=8/8" in prompt
     assert "external_advantage_matrix_score_delta=55" in prompt
+    assert "cross_domain_absorption_replay_direct_execution=True" in prompt
     assert "pr_holdout_blind_eval_total_comments=179" not in prompt

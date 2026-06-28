@@ -18,6 +18,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
+    cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     external_merge_landing = _read_json(root / "docs" / "retort_external_merge_landing.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
@@ -68,6 +69,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["heterogeneous_absorption_replay"],
         ),
         _decision(
+            "prove_non_pr_cross_domain_absorption",
+            "cross_domain_absorption",
+            cross_domain_replay.get("status") == "ready"
+            and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
+            and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
+            and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 4,
+            ["cross_domain_absorption_replay"],
+        ),
+        _decision(
             "prove_external_merge_landing",
             "branch_absorption_workflow",
             external_merge_landing.get("status") == "ready"
@@ -114,6 +124,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
+        "cross_domain_absorption_ready": cross_domain_replay.get("status") == "ready",
+        "cross_domain_absorption_domains": cross_domain_replay.get("summary", {}).get("non_pr_domain_count", ""),
+        "cross_domain_absorption_direct_modules": cross_domain_replay.get("summary", {}).get("direct_module_count", ""),
+        "cross_domain_absorption_output_assertions": cross_domain_replay.get("summary", {}).get("all_output_assertions_passed", ""),
         "external_merge_landing_ready": external_merge_landing.get("status") == "ready",
         "external_merge_landing_merge_commits": external_merge_landing.get("summary", {}).get("merge_commit_count", ""),
         "external_merge_landing_post_merge_tests": external_merge_landing.get("summary", {}).get("post_merge_test_passed_count", ""),
@@ -140,6 +154,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_repeat.json",
                 "retort_heterogeneous_absorption_replay.json",
+                "retort_cross_domain_absorption_replay.json",
                 "retort_external_merge_landing.json",
                 "retort_operator_journey_replay.json",
             ],

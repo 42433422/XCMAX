@@ -192,6 +192,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("external_advantage_matrix", docs / "retort_external_advantage_matrix.json", "source_report", ("status", "summary", "matrix")),
         ("external_advantage_repeat", docs / "retort_external_advantage_repeat.json", "source_report", ("status", "summary", "runs")),
         ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
+        ("cross_domain_absorption_replay", docs / "retort_cross_domain_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("external_merge_landing", docs / "retort_external_merge_landing.json", "source_report", ("status", "summary", "cases")),
         ("review_adjudication_calibration", docs / "retort_review_adjudication_calibration.json", "source_report", ("status", "summary", "cases")),
     ]
@@ -313,6 +314,7 @@ def _release_inputs_ready(root: Path) -> bool:
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     external_repeat = _read_json(docs / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
+    cross_domain_replay = _read_json(docs / "retort_cross_domain_absorption_replay.json")
     external_merge_landing = _read_json(docs / "retort_external_merge_landing.json")
     return (
         quality.get("summary", {}).get("all_gates_passed") is True
@@ -332,6 +334,10 @@ def _release_inputs_ready(root: Path) -> bool:
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True
+        and cross_domain_replay.get("status") == "ready"
+        and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
+        and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
+        and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 4
         and external_merge_landing.get("status") == "ready"
         and external_merge_landing.get("summary", {}).get("all_branch_diff_merge_tests_passed") is True
         and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 2

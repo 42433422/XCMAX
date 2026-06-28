@@ -11,6 +11,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService as LLMRetortService
+from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
@@ -197,6 +198,12 @@ class RetortService:
             min_cases=int(payload.get("min_cases") or 6),
         )
 
+    def cross_domain_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_cross_domain_absorption_replay(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_domains=int(payload.get("min_domains") or 4),
+        )
+
     def external_merge_landing(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_merge_landing(
             str(payload.get("project") or payload.get("project_path") or "."),
@@ -369,6 +376,10 @@ def create_app() -> Any:
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.heterogeneous_absorption_replay(payload)
+
+    @app.post("/cross-domain-absorption-replay")
+    def cross_domain_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.cross_domain_absorption_replay(payload)
 
     @app.post("/external-merge-landing")
     def external_merge_landing_route(payload: dict[str, Any]) -> dict[str, Any]:

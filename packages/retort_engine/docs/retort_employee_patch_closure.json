@@ -2,15 +2,15 @@
   "cases": [
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_patch.py"
       ],
       "changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_patch.py"
       ],
       "evidence": {
         "after_hash": "ceb2aec3d89dea4af83e6087ce148b40e1a4a242f6420fc0e79de43a0a6409ce",
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_gate_pass.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_gate_pass.patch",
         "target_exists_after": true
       },
       "gates": [
@@ -19,7 +19,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_patch.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -43,21 +43,21 @@
         "patch_generated": true,
         "retained_change": true,
         "rollback_verified": false,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/existing_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py"
       ],
       "changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/existing_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py"
       ],
       "evidence": {
         "after_hash": "5b1d22376cfc068cb58111004bd2cc52ff744631d236dbd62be63c2b15ebfedf",
         "before_hash": "36f332b2bc6bd50250817d67f5f4de9848dd69c9dd342b21e64c2eccb32b744d",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/existing_file_update_gate_pass.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_file_update_gate_pass.patch",
         "target_exists_after": true
       },
       "gates": [
@@ -66,7 +66,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/existing_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -90,19 +90,19 @@
         "patch_generated": true,
         "retained_change": true,
         "rollback_verified": false,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/existing_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/rollback_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/rollback_patch.py"
       ],
       "changed_files": [],
       "evidence": {
         "after_hash": "4d38f9de7c64a4e5168fbb638a92a4996c4d36efa87bd7c1bf3a11bb5f00f3ef",
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/negative_gate_rollback.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/negative_gate_rollback.patch",
         "target_exists_after": false
       },
       "gates": [
@@ -111,11 +111,11 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/rollback_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/rollback_patch.py"
           ],
           "ok": false,
           "returncode": 1,
-          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/rollback_patch.py\", line 1\n    def employee_patch_value(:\n                             ^\nSyntaxError: invalid syntax\n",
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/rollback_patch.py\", line 1\n    def employee_patch_value(:\n                             ^\nSyntaxError: invalid syntax\n",
           "stdout_tail": ""
         }
       ],
@@ -135,19 +135,19 @@
         "patch_generated": true,
         "retained_change": false,
         "rollback_verified": true,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/rollback_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/rollback_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_rollback_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_rollback_patch.py"
       ],
       "changed_files": [],
       "evidence": {
         "after_hash": "7858220ca88e86ea50ea0fcf3b9db9884078986c59bd545ef7379f85d03cc854",
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_gate_rollback.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_gate_rollback.patch",
         "target_exists_after": false
       },
       "gates": [
@@ -156,7 +156,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_rollback_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_rollback_patch.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -167,7 +167,7 @@
           "command": [
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-c",
-            "from pathlib import Path; text = Path('/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_rollback_patch.py').read_text(); raise SystemExit(0 if 'ALLOW_WRITE = False' in text else 1)"
+            "from pathlib import Path; text = Path('/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_rollback_patch.py').read_text(); raise SystemExit(0 if 'ALLOW_WRITE = False' in text else 1)"
           ],
           "ok": false,
           "returncode": 1,
@@ -191,19 +191,19 @@
         "patch_generated": true,
         "retained_change": false,
         "rollback_verified": true,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_rollback_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_rollback_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_rollback_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_rollback_patch.py"
       ],
       "changed_files": [],
       "evidence": {
         "after_hash": "b2190093f7cd507046f5a61031e90612afd618b81cc9a3853a601ef4c01480e2",
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_gate_rollback.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_gate_rollback.patch",
         "target_exists_after": false
       },
       "gates": [
@@ -212,7 +212,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_rollback_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_rollback_patch.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -223,7 +223,7 @@
           "command": [
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-c",
-            "from pathlib import Path; text = Path('/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_rollback_patch.py').read_text(); raise SystemExit(1 if 'ALLOW_WRITE = True' in text else 0)"
+            "from pathlib import Path; text = Path('/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_rollback_patch.py').read_text(); raise SystemExit(1 if 'ALLOW_WRITE = True' in text else 0)"
           ],
           "ok": false,
           "returncode": 1,
@@ -247,22 +247,22 @@
         "patch_generated": true,
         "retained_change": false,
         "rollback_verified": true,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_rollback_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_rollback_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/runtime.py",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/test_runtime.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/runtime.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/test_runtime.py"
       ],
       "changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/runtime.py",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/test_runtime.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/runtime.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/test_runtime.py"
       ],
       "evidence": {
         "multi_file": true,
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair.patch",
         "reviewed_after_patch": true,
         "target_exists_after": true
       },
@@ -272,8 +272,8 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/runtime.py",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/test_runtime.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/runtime.py",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/test_runtime.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -353,15 +353,19 @@
             "semantic_index"
           ],
           "comment_count": 2,
-          "comment_ranking_model": "severity_context_transfer_publishability_v3",
+          "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
           "core_review_score": {
             "cross_language_core_behavior_active": false,
             "cross_language_max_rank_score": 0,
             "cross_language_ranked_comment_count": 0,
             "cross_language_top_ranked": false,
+            "hunk_semantic_core_behavior_active": false,
+            "hunk_semantic_max_rank_score": 0,
+            "hunk_semantic_ranked_comment_count": 0,
+            "hunk_semantic_top_ranked": false,
             "max_rank_score": 295,
             "min_rank_score": 270,
-            "model": "severity_context_transfer_publishability_v3",
+            "model": "severity_context_transfer_publishability_v4_hunk_semantics",
             "ranked_comment_count": 2
           },
           "cross_language_transfer": {
@@ -406,6 +410,15 @@
           "file_count": 2,
           "file_summary_count": 2,
           "hunk_count": 2,
+          "hunk_semantic_analysis": {
+            "core_behavior_active": false,
+            "finding_count": 0,
+            "finding_types": [],
+            "hunk_analysis_count": 2,
+            "max_confidence": 0,
+            "review_contexts": [],
+            "status": "no_findings"
+          },
           "incremental": false,
           "intent_alignment": {
             "aligned": true,
@@ -454,25 +467,25 @@
         "patch_generated": true,
         "retained_change": true,
         "rollback_verified": false,
-        "run_id": "employee-patch-20260628T042350Z-640d7413",
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de",
         "secondary_review_comment_count": 2,
         "secondary_review_context_count": 2,
         "secondary_review_publishable_count": 2,
         "secondary_review_status": "reviewed"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/runtime.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/multi_file_repair/test_runtime.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/runtime.py,/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair/test_runtime.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py"
       ],
       "changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_patch.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py"
       ],
       "evidence": {
         "after_hash": "974c74913cb8382f14ff9e10e775e6d310f43e3b6fe047c0c7ba57c8256d8a35",
         "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_state_gate_pass.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_state_gate_pass.patch",
         "target_exists_after": true
       },
       "gates": [
@@ -481,7 +494,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_patch.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -505,21 +518,21 @@
         "patch_generated": true,
         "retained_change": true,
         "rollback_verified": false,
-        "run_id": "employee-patch-20260628T042350Z-640d7413"
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_patch.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py"
     },
     {
       "attempted_changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py"
       ],
       "changed_files": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py"
       ],
       "evidence": {
-        "failed_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_first_failure.patch",
-        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_second_success.patch",
+        "failed_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_first_failure.patch",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_second_success.patch",
         "reviewed_after_patch": true,
         "target_exists_after": true
       },
@@ -529,11 +542,11 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py"
           ],
           "ok": false,
           "returncode": 1,
-          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py\", line 1\n    def retry_repair(:\n                     ^\nSyntaxError: invalid syntax\n",
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py\", line 1\n    def retry_repair(:\n                     ^\nSyntaxError: invalid syntax\n",
           "stdout_tail": ""
         },
         {
@@ -541,7 +554,7 @@
             "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
             "-m",
             "py_compile",
-            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py"
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py"
           ],
           "ok": true,
           "returncode": 0,
@@ -621,15 +634,19 @@
             "semantic_index"
           ],
           "comment_count": 1,
-          "comment_ranking_model": "severity_context_transfer_publishability_v3",
+          "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
           "core_review_score": {
             "cross_language_core_behavior_active": false,
             "cross_language_max_rank_score": 0,
             "cross_language_ranked_comment_count": 0,
             "cross_language_top_ranked": false,
+            "hunk_semantic_core_behavior_active": false,
+            "hunk_semantic_max_rank_score": 0,
+            "hunk_semantic_ranked_comment_count": 0,
+            "hunk_semantic_top_ranked": false,
             "max_rank_score": 295,
             "min_rank_score": 295,
-            "model": "severity_context_transfer_publishability_v3",
+            "model": "severity_context_transfer_publishability_v4_hunk_semantics",
             "ranked_comment_count": 1
           },
           "cross_language_transfer": {
@@ -674,6 +691,15 @@
           "file_count": 1,
           "file_summary_count": 1,
           "hunk_count": 1,
+          "hunk_semantic_analysis": {
+            "core_behavior_active": false,
+            "finding_count": 0,
+            "finding_types": [],
+            "hunk_analysis_count": 1,
+            "max_confidence": 0,
+            "review_contexts": [],
+            "status": "no_findings"
+          },
           "incremental": false,
           "intent_alignment": {
             "aligned": true,
@@ -725,24 +751,388 @@
         "retry_count": 2,
         "retry_gate_passed": true,
         "rollback_verified": true,
-        "run_id": "employee-patch-20260628T042350Z-640d7413",
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de",
         "secondary_review_comment_count": 1,
         "secondary_review_status": "reviewed"
       },
-      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/retry_repair.py"
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_repair.py"
     }
   ],
   "evidence": {
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413",
-    "policy_rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/policy_gate_rollback.patch",
-    "positive_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/positive_gate_pass.patch",
-    "rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/negative_gate_rollback.patch",
-    "semantic_rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T042350Z-640d7413/semantic_gate_rollback.patch",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de",
+    "policy_rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_gate_rollback.patch",
+    "positive_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_gate_pass.patch",
+    "rollback_model": "each_primary_case_has_independent_failure_injection_rehearsal",
+    "rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/negative_gate_rollback.patch",
+    "semantic_rollback_patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_gate_rollback.patch",
     "style": "employee_patch_generation_apply_gate_rollback"
   },
+  "failure_rehearsals": [
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/positive_gate_pass.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "d3c8ec13deb4f6556a8be246548f139784c90094047a719d59bd9c3384fbe4a7",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/positive_gate_pass_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/positive_gate_pass.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/positive_gate_pass.py\", line 1\n    def rollback_rehearsal_positive_gate_pass(:\n                                              ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "positive_gate_pass_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/positive_gate_pass.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/existing_file_update_gate_pass.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "32ec27403468d30daa11dc27b235dd50c3a0b4a59acaa02cd15cd6da0da373b2",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_file_update_gate_pass_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/existing_file_update_gate_pass.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/existing_file_update_gate_pass.py\", line 1\n    def rollback_rehearsal_existing_file_update_gate_pass(:\n                                                          ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "existing_file_update_gate_pass_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/existing_file_update_gate_pass.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/negative_gate_rollback.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "b4e97f5d071796edb19f8cde5ccf84daed727c08a1594adbc0e1c6c7512c0c5d",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/negative_gate_rollback_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/negative_gate_rollback.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/negative_gate_rollback.py\", line 1\n    def rollback_rehearsal_negative_gate_rollback(:\n                                                  ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "negative_gate_rollback_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/negative_gate_rollback.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "b5096d300f34fe39f947c1c54846580b29a4cc8b89732694889716b894f1c972",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/semantic_gate_rollback_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py\", line 1\n    def rollback_rehearsal_semantic_gate_rollback(:\n                                                  ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "semantic_gate_rollback_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_gate_rollback.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "4eb005a29af4e3239e93ef88e2e983b7055866288bf863189b86e734044efd3e",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_gate_rollback_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_gate_rollback.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_gate_rollback.py\", line 1\n    def rollback_rehearsal_policy_gate_rollback(:\n                                                ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "policy_gate_rollback_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_gate_rollback.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "0d07e0895fb301618212bfda18418c95f5cd5a199760d96b28200a7406b21233",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/multi_file_repair_reviewed_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py\", line 1\n    def rollback_rehearsal_multi_file_repair_reviewed(:\n                                                      ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "multi_file_repair_reviewed_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/multi_file_repair_reviewed.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_state_gate_pass.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "21c879a7562cceb6f111ffa82cfb54f05d3f423b218cf4cdae28db5c12c3907d",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_state_gate_pass_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_state_gate_pass.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_state_gate_pass.py\", line 1\n    def rollback_rehearsal_policy_state_gate_pass(:\n                                                  ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "policy_state_gate_pass_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/policy_state_gate_pass.py"
+    },
+    {
+      "attempted_changed_files": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/retry_failure_then_success.py"
+      ],
+      "changed_files": [],
+      "evidence": {
+        "after_hash": "01b5d4e42ba5db66dc2067666fd999a27fb1b5e18bc7697c75bbedf4f498e44a",
+        "before_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "patch_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/retry_failure_then_success_failure_rehearsal.patch",
+        "target_exists_after": false
+      },
+      "gates": [
+        {
+          "command": [
+            "/Users/a4243342/Desktop/XCMAX/FHD/.venv/bin/python",
+            "-m",
+            "py_compile",
+            "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/retry_failure_then_success.py"
+          ],
+          "ok": false,
+          "returncode": 1,
+          "stderr_tail": "  File \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/retry_failure_then_success.py\", line 1\n    def rollback_rehearsal_retry_failure_then_success(:\n                                                      ^\nSyntaxError: invalid syntax\n",
+          "stdout_tail": ""
+        }
+      ],
+      "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+      "rollback": {
+        "performed": true,
+        "strategy": "restore_original_file_bytes",
+        "verified": true
+      },
+      "status": "patch_rolled_back",
+      "summary": {
+        "before_exists": false,
+        "case_name": "retry_failure_then_success_failure_rehearsal",
+        "expected_text_present": true,
+        "gates_passed": false,
+        "patch_applied": true,
+        "patch_generated": true,
+        "retained_change": false,
+        "rollback_verified": true,
+        "run_id": "employee-patch-20260628T055707Z-bb9bc7de"
+      },
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/retry_failure_then_success.py"
+    }
+  ],
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
+    "all_cases_have_failure_rollback_rehearsal": true,
     "all_cases_have_patch_files": true,
     "all_expected_outcomes_verified": true,
     "case_count": 8,
@@ -750,6 +1140,9 @@
     "expected_failure_case_count": 3,
     "expected_failure_rollback_count": 3,
     "failure_case_rolled_back": true,
+    "failure_rehearsal_count": 8,
+    "failure_rehearsal_rollback_count": 8,
+    "full_path_rollback_verified": true,
     "gate_expected_to_pass_count": 5,
     "gate_expected_to_pass_passed_count": 5,
     "gate_passed_count": 5,
@@ -759,12 +1152,14 @@
     "patch_generated_count": 8,
     "policy_failure_case_rolled_back": true,
     "policy_state_case_verified": true,
+    "primary_rollback_verified_count": 4,
     "retry_case_verified": true,
     "retry_first_failure_rolled_back": true,
     "retry_second_patch_passed": true,
     "retry_secondary_review_status": "reviewed",
-    "rollback_verified_count": 4,
-    "run_id": "employee-patch-20260628T042350Z-640d7413",
+    "rollback_scope": "per_primary_case_failure_injection",
+    "rollback_verified_count": 8,
+    "run_id": "employee-patch-20260628T055707Z-bb9bc7de",
     "secondary_review_comment_count": 2,
     "secondary_review_status": "reviewed",
     "semantic_failure_case_rolled_back": true,

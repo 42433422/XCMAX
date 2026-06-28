@@ -31,6 +31,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "review_quality_benchmark_result" in contract_names()
     assert "external_advantage_matrix_result" in contract_names()
     assert "external_advantage_repeat_result" in contract_names()
+    assert "cross_domain_absorption_replay_result" in contract_names()
     assert "external_merge_landing_result" in contract_names()
     assert "review_adjudication_calibration_result" in contract_names()
     assert "codebase_graph_result" in contract_names()
@@ -60,6 +61,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
     external_matrix_valid = validate_contract("external_advantage_matrix_result", {"status": "ready", "project": "p", "summary": {}, "matrix": [], "evidence": {}})
     external_repeat_valid = validate_contract("external_advantage_repeat_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}})
+    cross_domain_valid = validate_contract("cross_domain_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     external_merge_valid = validate_contract("external_merge_landing_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     adjudication_valid = validate_contract("review_adjudication_calibration_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     issue_patch_valid = validate_contract("issue_patch_benchmark_result", {"status": "ready", "summary": {}, "cases": [], "evidence": {}})
@@ -92,6 +94,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert benchmark_valid["valid"] is True
     assert external_matrix_valid["valid"] is True
     assert external_repeat_valid["valid"] is True
+    assert cross_domain_valid["valid"] is True
     assert external_merge_valid["valid"] is True
     assert adjudication_valid["valid"] is True
     assert issue_patch_valid["valid"] is True
