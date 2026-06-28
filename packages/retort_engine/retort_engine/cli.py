@@ -17,6 +17,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
@@ -170,6 +171,10 @@ def main(argv: list[str] | None = None) -> int:
     patch_closure.add_argument("--project", default=".")
     patch_closure.add_argument("--output", default="")
     patch_closure.add_argument("--json", action="store_true")
+    quality_gates = sub.add_parser("quality-gates")
+    quality_gates.add_argument("--project", default=".")
+    quality_gates.add_argument("--output", default="")
+    quality_gates.add_argument("--json", action="store_true")
     codebase_graph = sub.add_parser("codebase-graph-report")
     codebase_graph.add_argument("--project", default=".")
     codebase_graph.add_argument("--include-tests", action="store_true")
@@ -479,6 +484,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort employee patch closure status: {result['status']}")
             print(f"Patch cases: {result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "quality-gates":
+        result = run_quality_gate_bundle(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort quality gates status: {result['status']}")
+            print(f"Passed: {result['summary']['passed_count']}/{result['summary']['gate_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

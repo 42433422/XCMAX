@@ -17,6 +17,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
@@ -129,6 +130,9 @@ class RetortService:
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_patch_closure_suite(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_quality_gate_bundle(str(payload.get("project") or payload.get("project_path") or "."))
+
     def codebase_graph_report(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_codebase_graph(
             str(payload.get("project") or payload.get("project_path") or "."),
@@ -236,6 +240,10 @@ def create_app() -> Any:
     @app.post("/employee-patch-closure")
     def employee_patch_closure_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.employee_patch_closure(payload)
+
+    @app.post("/quality-gates")
+    def quality_gate_bundle_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.quality_gate_bundle(payload)
 
     @app.post("/codebase-graph-report")
     def codebase_graph_report_route(payload: dict[str, Any]) -> dict[str, Any]:

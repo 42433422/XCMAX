@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.pr_review import review_diff
+
 
 def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path = "", run_id: str = "") -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
@@ -33,7 +35,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         run_id=suite_id,
         case_name="negative_gate_rollback",
     )
-    cases = [positive, negative]
+    multi_file = run_multi_file_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
+    cases = [positive, negative, multi_file]
     summary = {
         "run_id": suite_id,
         "case_count": len(cases),
@@ -43,9 +46,22 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "rollback_verified_count": sum(1 for case in cases if case["summary"]["rollback_verified"]),
         "success_case_verified": positive["status"] == "patch_verified",
         "failure_case_rolled_back": negative["status"] == "patch_rolled_back",
+        "multi_file_case_verified": multi_file["status"] == "patch_verified",
+        "multi_file_changed_file_count": len(multi_file["changed_files"]),
+        "secondary_review_status": multi_file["summary"].get("secondary_review_status", ""),
+        "secondary_review_comment_count": multi_file["summary"].get("secondary_review_comment_count", 0),
+        "successful_repairs_re_reviewed": bool(multi_file["summary"].get("secondary_review_status") == "reviewed"),
         "all_cases_have_patch_files": all(bool(case["evidence"].get("patch_path")) and Path(str(case["evidence"]["patch_path"])).is_file() for case in cases),
     }
-    status = "ready" if summary["success_case_verified"] and summary["failure_case_rolled_back"] and summary["all_cases_have_patch_files"] else "needs_attention"
+    status = (
+        "ready"
+        if summary["success_case_verified"]
+        and summary["failure_case_rolled_back"]
+        and summary["multi_file_case_verified"]
+        and summary["successful_repairs_re_reviewed"]
+        and summary["all_cases_have_patch_files"]
+        else "needs_attention"
+    )
     result = {
         "status": status,
         "project": str(root),
@@ -63,6 +79,88 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     return result
+
+
+def run_multi_file_employee_patch_closure_case(project: str | Path, *, lab: str | Path, run_id: str = "") -> dict[str, Any]:
+    root = Path(project).expanduser().resolve()
+    case_id = run_id or _run_id("multi-file-employee-patch")
+    lab_root = Path(lab).expanduser().resolve()
+    runtime = lab_root / "multi_file_repair" / "runtime.py"
+    runtime_test = lab_root / "multi_file_repair" / "test_runtime.py"
+    replacements = {
+        runtime: "def resolve_runtime_value(env):\n    value = env.get('APP_VALUE', '')\n    if not value:\n        raise ValueError('APP_VALUE is required')\n    return value\n",
+        runtime_test: "from runtime import resolve_runtime_value\n\n\ndef test_resolve_runtime_value_requires_configured_value():\n    assert resolve_runtime_value({'APP_VALUE': 'verified'}) == 'verified'\n",
+    }
+    before_texts: dict[Path, str] = {}
+    patch_parts: list[str] = []
+    changed_files: list[str] = []
+    for target, replacement in replacements.items():
+        resolved = _resolve_target(root, target)
+        before_exists = resolved.is_file()
+        before = resolved.read_text(encoding="utf-8") if before_exists else ""
+        before_texts[resolved] = before
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        resolved.write_text(replacement, encoding="utf-8")
+        patch_parts.append(_unified_patch(before, replacement, _project_rel(root, resolved), before_exists=before_exists))
+        changed_files.append(str(resolved))
+    patch_text = "".join(patch_parts)
+    patch_path = root / ".retort" / "employee_patch_closures" / case_id / "multi_file_repair.patch"
+    patch_path.parent.mkdir(parents=True, exist_ok=True)
+    patch_path.write_text(patch_text, encoding="utf-8")
+    gates = _run_gates(root, runtime, [[sys.executable, "-m", "py_compile", str(runtime), str(runtime_test)]])
+    gates_passed = bool(gates) and all(gate["ok"] for gate in gates)
+    secondary_review = review_diff(patch_text, issue_context="Repair employee generated patch and prove behavior with tests", max_comments=6)
+    rollback_verified = False
+    if not gates_passed:
+        for target, before in before_texts.items():
+            if before:
+                target.write_text(before, encoding="utf-8")
+            else:
+                try:
+                    target.unlink()
+                except FileNotFoundError:
+                    pass
+        rollback_verified = all((target.read_text(encoding="utf-8") == before) if before else not target.exists() for target, before in before_texts.items())
+    retained_change = gates_passed and all(Path(item).is_file() for item in changed_files)
+    return {
+        "status": "patch_verified" if retained_change else "patch_rolled_back" if rollback_verified else "patch_failed",
+        "project": str(root),
+        "target": ",".join(changed_files),
+        "summary": {
+            "run_id": case_id,
+            "case_name": "multi_file_repair_reviewed",
+            "patch_generated": bool(patch_text.strip()),
+            "patch_applied": len(changed_files) == len(replacements),
+            "gates_passed": gates_passed,
+            "rollback_verified": rollback_verified,
+            "retained_change": retained_change,
+            "before_exists": any(bool(text) for text in before_texts.values()),
+            "expected_text_present": all(marker in "".join(Path(item).read_text(encoding="utf-8") for item in changed_files if Path(item).is_file()) for marker in ("APP_VALUE", "verified")),
+            "secondary_review_status": secondary_review.get("status"),
+            "secondary_review_comment_count": (secondary_review.get("summary") or {}).get("comment_count", 0),
+            "secondary_review_publishable_count": (secondary_review.get("summary") or {}).get("publishable_comment_count", 0),
+            "secondary_review_context_count": (secondary_review.get("summary") or {}).get("review_context_group_count", 0),
+        },
+        "gates": gates,
+        "changed_files": changed_files if retained_change else [],
+        "attempted_changed_files": changed_files,
+        "rollback": {
+            "strategy": "restore_original_file_bytes_for_all_files",
+            "performed": not gates_passed,
+            "verified": rollback_verified,
+        },
+        "secondary_review": {
+            "status": secondary_review.get("status"),
+            "summary": secondary_review.get("summary", {}),
+            "comment_count": len(secondary_review.get("comments") or []),
+        },
+        "evidence": {
+            "patch_path": str(patch_path),
+            "target_exists_after": all(Path(item).exists() for item in changed_files),
+            "multi_file": True,
+            "reviewed_after_patch": secondary_review.get("status") == "reviewed",
+        },
+    }
 
 
 def run_employee_patch_closure_case(
@@ -184,7 +282,8 @@ def _unified_patch(before: str, after: str, rel: str, *, before_exists: bool) ->
     after_lines = after.splitlines(keepends=True)
     fromfile = f"a/{rel}" if before_exists else "/dev/null"
     tofile = f"b/{rel}"
-    return "".join(difflib.unified_diff(before_lines, after_lines, fromfile=fromfile, tofile=tofile))
+    header = f"diff --git a/{rel} b/{rel}\n"
+    return header + "".join(difflib.unified_diff(before_lines, after_lines, fromfile=fromfile, tofile=tofile))
 
 
 def _project_rel(root: Path, path: Path) -> str:
