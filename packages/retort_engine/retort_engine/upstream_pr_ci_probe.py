@@ -13,6 +13,8 @@ DEFAULT_UPSTREAM_PR_TARGETS: tuple[dict[str, Any], ...] = (
     {"repo": "psf/requests", "pr_number": 7536},
     {"repo": "pytest-dev/pytest", "pr_number": 14657},
     {"repo": "encode/httpx", "pr_number": 3773},
+    {"repo": "fastapi/fastapi", "pr_number": 15852},
+    {"repo": "django/django", "pr_number": 19810},
 )
 
 

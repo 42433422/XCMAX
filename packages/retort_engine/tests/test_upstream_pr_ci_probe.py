@@ -12,13 +12,13 @@ def test_upstream_pr_ci_probe_accepts_multi_repo_merged_prs_with_successful_chec
 
     assert result["status"] == "ready"
     assert result["summary"]["merged"] is True
-    assert result["summary"]["target_count"] == 3
-    assert result["summary"]["ready_target_count"] == 3
-    assert result["summary"]["distinct_repo_count"] == 3
+    assert result["summary"]["target_count"] == 5
+    assert result["summary"]["ready_target_count"] == 5
+    assert result["summary"]["distinct_repo_count"] == 5
     assert result["summary"]["multi_repo_ci_generalization"] is True
     assert result["summary"]["all_check_runs_successful"] is True
     assert result["summary"]["all_target_check_runs_successful"] is True
-    assert result["summary"]["total_check_run_count"] == 6
+    assert result["summary"]["total_check_run_count"] == 10
     assert validate_contract("upstream_pr_ci_probe_result", result)["valid"] is True
 
 
@@ -40,7 +40,7 @@ def test_upstream_pr_ci_probe_blocks_failed_checks(tmp_path: Path) -> None:
     result = build_upstream_pr_ci_probe(tmp_path, fetcher=fetcher)
 
     assert result["status"] == "needs_upstream_pr_ci_evidence"
-    assert result["summary"]["total_failed_check_run_count"] == 3
+    assert result["summary"]["total_failed_check_run_count"] == 5
 
 
 def test_service_exposes_upstream_pr_ci_probe_with_real_defaults_shape(tmp_path: Path, monkeypatch) -> None:
@@ -49,7 +49,7 @@ def test_service_exposes_upstream_pr_ci_probe_with_real_defaults_shape(tmp_path:
     result = RetortService().upstream_pr_ci_probe({"project": str(tmp_path)})
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_target_count"] == 3
+    assert result["summary"]["ready_target_count"] == 5
 
 
 def _fetcher(path: str) -> dict:
