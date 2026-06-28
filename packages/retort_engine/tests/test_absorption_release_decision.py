@@ -14,11 +14,12 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 8
+    assert result["summary"]["ready_decision_count"] == 9
     assert result["summary"]["core_decision_path_count"] == 7
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
     assert result["summary"]["external_advantage_matrix_ready"] is True
+    assert result["summary"]["external_advantage_repeat_ready"] is True
     assert result["summary"]["failure_rollback_ready"] is True
     assert result["summary"]["operator_journey_ready"] is True
     assert validate_contract("absorption_release_decision_result", result)["valid"] is True
@@ -81,6 +82,7 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {"all_expected_outcomes_verified": True}},
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}},
         "retort_external_advantage_matrix.json": {"status": "ready", "summary": {"score_delta": 50}},
+        "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True, "total_case_evaluation_count": 12}},
         "retort_operator_journey_replay.json": {"status": "ready", "summary": {"cross_domain_live_probe_ready": True}},
     }
     for name, payload in fixtures.items():

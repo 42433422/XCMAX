@@ -17,6 +17,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
+from retort_engine.external_advantage_repeat import build_external_advantage_repeat
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -183,6 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     continuity_probe.add_argument("--json", action="store_true")
     hardening_run = sub.add_parser("record-hardening-run")
     hardening_run.add_argument("--project", default=".")
+    hardening_run.add_argument("--worker-count", type=int, default=3)
     hardening_run.add_argument("--output", default="")
     hardening_run.add_argument("--json", action="store_true")
     complex_replay = sub.add_parser("complex-pr-replay")
@@ -212,6 +214,12 @@ def main(argv: list[str] | None = None) -> int:
     external_advantage.add_argument("--min-cases", type=int, default=6)
     external_advantage.add_argument("--output", default="")
     external_advantage.add_argument("--json", action="store_true")
+    external_repeat = sub.add_parser("external-advantage-repeat")
+    external_repeat.add_argument("--project", default=".")
+    external_repeat.add_argument("--repeats", type=int, default=2)
+    external_repeat.add_argument("--min-cases", type=int, default=6)
+    external_repeat.add_argument("--output", default="")
+    external_repeat.add_argument("--json", action="store_true")
     adjudication = sub.add_parser("review-adjudication-calibration")
     adjudication.add_argument("--project", default=".")
     adjudication.add_argument("--output", default="")
@@ -546,7 +554,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "record-hardening-run":
-        result = record_post_absorption_hardening_run(args.project, output=args.output)
+        result = record_post_absorption_hardening_run(args.project, output=args.output, worker_count=args.worker_count)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
@@ -618,6 +626,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort external advantage matrix status: {result['status']}")
             print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "external-advantage-repeat":
+        result = build_external_advantage_repeat(args.project, repeat_count=args.repeats, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort external advantage repeat status: {result['status']}")
+            print(f"Repeats: {result['summary']['ready_repeat_count']}/{result['summary']['repeat_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

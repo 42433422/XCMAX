@@ -1,0 +1,83 @@
+{
+  "evidence": {
+    "comparison": "same_cases_same_delta_across_repeated_runs",
+    "source": "retort_engine.external_advantage_matrix",
+    "style": "repeatable_external_advantage_regression_manifest"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "runs": [
+    {
+      "case_ids": [
+        "pr-agent-secret-context",
+        "reviewdog-workflow-token",
+        "swe-bench-oracle-placeholder",
+        "import-linter-contract-bypass",
+        "repomix-context-package-clean",
+        "mopemope-typescript-diff-review"
+      ],
+      "index": 1,
+      "status": "ready",
+      "summary": {
+        "absorbed_signal_count": 6,
+        "all_advantages_improved": true,
+        "baseline_average_score": 40.0,
+        "behavior_delta_count": 6,
+        "case_count": 6,
+        "extension_policy_case_count": 6,
+        "min_case_count": 6,
+        "per_case_before_after": true,
+        "publishable_case_count": 6,
+        "ready_case_count": 6,
+        "retort_average_score": 85.0,
+        "score_delta": 45.0,
+        "source_project_count": 6
+      }
+    },
+    {
+      "case_ids": [
+        "pr-agent-secret-context",
+        "reviewdog-workflow-token",
+        "swe-bench-oracle-placeholder",
+        "import-linter-contract-bypass",
+        "repomix-context-package-clean",
+        "mopemope-typescript-diff-review"
+      ],
+      "index": 2,
+      "status": "ready",
+      "summary": {
+        "absorbed_signal_count": 6,
+        "all_advantages_improved": true,
+        "baseline_average_score": 40.0,
+        "behavior_delta_count": 6,
+        "case_count": 6,
+        "extension_policy_case_count": 6,
+        "min_case_count": 6,
+        "per_case_before_after": true,
+        "publishable_case_count": 6,
+        "ready_case_count": 6,
+        "retort_average_score": 85.0,
+        "score_delta": 45.0,
+        "source_project_count": 6
+      }
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_runs_ready": true,
+    "case_count_per_run": [
+      6,
+      6
+    ],
+    "min_case_count": 6,
+    "minimum_score_delta": 45.0,
+    "ready_repeat_count": 2,
+    "repeat_count": 2,
+    "score_deltas": [
+      45.0,
+      45.0
+    ],
+    "stable_case_set": true,
+    "stable_score_delta": true,
+    "total_case_evaluation_count": 12
+  }
+}

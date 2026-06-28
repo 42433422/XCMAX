@@ -15,6 +15,7 @@ from retort_engine.employee_patch_closure import run_employee_patch_closure_suit
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
+from retort_engine.external_advantage_repeat import build_external_advantage_repeat
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.operator_journey_replay import build_operator_journey_replay
@@ -148,7 +149,10 @@ class RetortService:
         )
 
     def record_hardening_run(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return record_post_absorption_hardening_run(str(payload.get("project") or payload.get("project_path") or "."))
+        return record_post_absorption_hardening_run(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            worker_count=int(payload.get("worker_count") or 3),
+        )
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
@@ -178,6 +182,13 @@ class RetortService:
             min_cases=int(payload.get("min_cases") or 6),
         )
 
+    def external_advantage_repeat(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_external_advantage_repeat(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            repeat_count=int(payload.get("repeat_count") or payload.get("repeats") or 2),
+            min_cases=int(payload.get("min_cases") or 6),
+        )
+
     def review_adjudication_calibration(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_adjudication_calibration(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -186,6 +197,7 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
+            workers_per_round=int(payload.get("workers_per_round") or 1),
         )
 
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -334,6 +346,10 @@ def create_app() -> Any:
     @app.post("/external-advantage-matrix")
     def external_advantage_matrix_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_matrix(payload)
+
+    @app.post("/external-advantage-repeat")
+    def external_advantage_repeat_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.external_advantage_repeat(payload)
 
     @app.post("/review-adjudication-calibration")
     def review_adjudication_calibration_route(payload: dict[str, Any]) -> dict[str, Any]:

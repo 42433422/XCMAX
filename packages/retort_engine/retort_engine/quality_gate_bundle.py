@@ -148,6 +148,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         "task_dispatch_plan_result": {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}},
         "review_quality_benchmark_result": {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}},
         "external_advantage_matrix_result": {"status": "ready", "project": "p", "summary": {}, "matrix": [], "evidence": {}},
+        "external_advantage_repeat_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}},
         "review_adjudication_calibration_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "review_pipeline_diff_replay_result": {
             "status": "ready",
