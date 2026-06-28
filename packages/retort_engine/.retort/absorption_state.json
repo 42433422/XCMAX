@@ -4,8 +4,8 @@
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
-      "merge_commit=d2bea4dbd",
-      "merge_cross_check=True; merge_commit=d2bea4dbd",
+      "merge_commit=537530512",
+      "merge_cross_check=True; merge_commit=537530512",
       "pytest_gate_cross_check=True"
     ],
     "external_advantage_reassessed": true,
@@ -13,22 +13,22 @@
     "post_absorption_tests_passed": true,
     "validation": {
       "evidence": [
-        "merge_cross_check=True; merge_commit=d2bea4dbd",
+        "merge_cross_check=True; merge_commit=537530512",
         "pytest_gate_cross_check=True"
       ],
-      "merge_commit": "d2bea4dbd",
+      "merge_commit": "537530512",
       "merge_commit_verified": true,
       "pytest_gates_verified": true
     }
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/anc95/ChatGPT-CodeReview",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/shim52/ai-code-review-bench",
   "pending_dimensions": [
     "comparative_analysis_depth",
-    "external_ingestion",
+    "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/anc95/ChatGPT-CodeReview",
+  "source": "https://github.com/shim52/ai-code-review-bench",
   "status": "closed_loop_verified",
   "tasks": [
     {
@@ -37,7 +37,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/anc95/ChatGPT-CodeReview."
+      "why": "Compare implementation patterns from https://github.com/shim52/ai-code-review-bench."
     },
     {
       "dimension": "product_operability",
@@ -45,7 +45,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/anc95/ChatGPT-CodeReview."
+      "why": "Extract usable UX improvements from https://github.com/shim52/ai-code-review-bench."
     },
     {
       "dimension": "operational_readiness",
@@ -53,7 +53,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/anc95/ChatGPT-CodeReview."
+      "why": "Adapt CI and release checks from https://github.com/shim52/ai-code-review-bench."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -64,12 +64,12 @@
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
     },
     {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
