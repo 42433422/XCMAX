@@ -96,11 +96,14 @@ def build_retort_paibi_prompt(
     metadata: dict[str, Any] | None = None,
 ) -> str:
     task_lines = "\n".join(f"- {item.get('task_id')}: {item.get('title')} [{item.get('dimension')}]" for item in tasks or []) or "- no tasks supplied"
-    critical_evidence_lines = "\n".join(f"- {item}" for item in prioritized_evidence(evidence or [])) or "- no critical evidence supplied"
-    evidence_lines = "\n".join(f"- {item}" for item in (evidence or [])[:140]) or "- no evidence supplied"
-    scoring_audit_json = json.dumps(scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True)[:5000]
-    own = project_digest(project, snippet_limit=8, snippet_chars=600)
-    external_digest = project_digest(Path(external_path), snippet_limit=2, snippet_chars=500) if external_path and Path(external_path).is_dir() else "external project not materialized"
+    critical = prioritized_evidence(evidence or [])
+    critical_evidence_lines = "\n".join(f"- {item}" for item in critical) or "- no critical evidence supplied"
+    critical_set = set(critical)
+    secondary = [item for item in (evidence or []) if item not in critical_set][:45]
+    evidence_lines = "\n".join(f"- {item}" for item in secondary) or "- no secondary evidence supplied"
+    scoring_audit_json = json.dumps(scoring_audit(metadata or {}), ensure_ascii=False, indent=2, sort_keys=True)[:3000]
+    own = project_digest(project, snippet_limit=5, snippet_chars=420)
+    external_digest = project_digest(Path(external_path), snippet_limit=1, snippet_chars=300) if external_path and Path(external_path).is_dir() else "external project not materialized"
     return f"""MODSTORE_REPORT_ONLY=1
 report_only=true
 [report-only]

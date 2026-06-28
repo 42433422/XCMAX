@@ -56,3 +56,20 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "operator_journey_replay_ready_stages=8/8" in selected
     assert "absorption_release_decision_operator_journey_ready=True" in selected
     assert "release_decision_self_reference=False" in selected
+
+
+def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("# Retort\n", encoding="utf-8")
+    evidence = [
+        *[f"pr_holdout_blind_eval_total_comments={index}" for index in range(180)],
+        "operator_journey_replay_status=ready",
+        "operator_journey_replay_ready_stages=8/8",
+        "absorption_release_decision_operator_journey_ready=True",
+    ]
+
+    prompt = build_retort_paibi_prompt(project=tmp_path, mode="assess", evidence=evidence)
+
+    assert len(prompt) < 32000
+    assert "operator_journey_replay_status=ready" in prompt
+    assert "operator_journey_replay_ready_stages=8/8" in prompt
+    assert "pr_holdout_blind_eval_total_comments=179" not in prompt
