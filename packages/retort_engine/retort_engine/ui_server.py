@@ -96,6 +96,10 @@ class RetortUIServer:
                         self._json(outer.service.absorption_saturation_report(payload))
                     elif self.path == "/api/absorption-lights":
                         self._json(outer.service.absorption_lights(payload))
+                    elif self.path == "/api/competitor-runtime-comparison":
+                        self._json(outer.service.competitor_runtime_comparison(payload))
+                    elif self.path == "/api/upstream-pr-ci-probe":
+                        self._json(outer.service.upstream_pr_ci_probe(payload))
                     elif self.path == "/api/llm-review":
                         self._json(outer.service.llm_review(payload))
                     elif self.path == "/api/llm-review-status":
