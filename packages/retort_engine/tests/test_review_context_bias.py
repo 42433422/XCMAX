@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/hypothesisworks/hypothesis'
-EXPECTED_ABSORPTION_RUN_ID = '20260628172341-a5eb9a1b2f'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/vercel-labs/openreview'
+EXPECTED_ABSORPTION_RUN_ID = '20260628173022-5782efe19c'
 
 
 def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
