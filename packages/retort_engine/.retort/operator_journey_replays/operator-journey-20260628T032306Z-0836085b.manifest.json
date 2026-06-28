@@ -360,53 +360,6 @@
       "sha256": "dcef58a65ff97548067083fbd2b9d216cb3c9d03ef79bdba3cd8dcda6fe445f6"
     }
   ],
-  "evidence": {
-    "flow": "github_or_folder_source_to_deep_review_to_absorption_to_employee_tasks_to_publish_degrade_to_release_decision",
-    "hash_algorithm": "sha256",
-    "source_reports": [
-      "docs/retort_external_review_report.json",
-      "docs/retort_quality_gate_bundle.json",
-      "docs/retort_absorption_continuity_probe.json",
-      "docs/retort_multi_project_absorption_replay.json",
-      "docs/retort_pr_holdout_blind_eval.json",
-      "docs/retort_pr_failure_rollback_replay.json",
-      "docs/retort_employee_patch_closure.json",
-      "docs/retort_employee_scheduler_stress.json",
-      "docs/retort_pr_publish_dry_run.json",
-      "docs/retort_pr_readonly_degradation_probe.json",
-      "docs/retort_pr_low_permission_probe.json",
-      "docs/retort_production_recovery_drill.json",
-      "docs/retort_review_quality_benchmark.json",
-      "docs/retort_external_advantage_matrix.json",
-      "docs/retort_external_advantage_repeat.json",
-      "docs/retort_review_adjudication_calibration.json"
-    ],
-    "style": "operator_end_to_end_absorption_journey_replay"
-  },
-  "live_probes": {
-    "architecture_contracts": {
-      "contract_count": 2,
-      "ready": true,
-      "status": "passed",
-      "violation_count": 0
-    },
-    "blackhole_ui": {
-      "app_exists": true,
-      "canvas_visual": "blackhole-accretion-field",
-      "has_animation_loop": true,
-      "index_exists": true,
-      "missing_count": 0,
-      "ready": true
-    },
-    "codebase_graph": {
-      "edge_count": 4602,
-      "file_count": 146,
-      "hotspot_count": 12,
-      "ready": true,
-      "status": "ready"
-    }
-  },
-  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "replay": {
     "command": [
       "retort",
@@ -420,6 +373,7 @@
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
+  "run_id": "operator-journey-20260628T032306Z-0836085b",
   "stages": [
     {
       "evidence": [

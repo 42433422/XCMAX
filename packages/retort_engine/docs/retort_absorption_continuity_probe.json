@@ -27,7 +27,7 @@
       "post_absorption_hardening_ready": true,
       "post_absorption_tests_passed": true
     },
-    "run_id": "20260628031318-hardening",
+    "run_id": "20260628032252-hardening",
     "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
     "state_status": "closed_loop_verified",
     "verified": true
@@ -93,7 +93,7 @@
         "tests/test_review_calibration_policy.py",
         "tests/test_review_context_bias.py"
       ],
-      "changed_file_count": 69,
+      "changed_file_count": 70,
       "checks": {
         "behavior_diff": true,
         "behavior_tests": true,
@@ -104,11 +104,11 @@
       },
       "code_graph_proof_missing": [],
       "code_graph_proof_status": "proved",
-      "employee_result_count": 3,
+      "employee_result_count": 5,
       "gate_count": 3,
       "latest": true,
-      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628031318-hardening.json",
-      "run_id": "20260628031318-hardening",
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628032252-hardening.json",
+      "run_id": "20260628032252-hardening",
       "source": "retort://post-absorption-hardening/2525bd4b6"
     },
     {
@@ -228,7 +228,7 @@
     "all_have_gates_passed": true,
     "all_have_per_run_code_graph_proof": true,
     "continuity_gate_passed": true,
-    "continuity_span_minutes": 288,
+    "continuity_span_minutes": 298,
     "counting_model_separated": true,
     "distinct_source_count": 5,
     "latest_closed_loop_verified": true,
