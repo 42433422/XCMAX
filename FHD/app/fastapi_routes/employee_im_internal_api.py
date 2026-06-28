@@ -142,7 +142,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
                     continue
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        except Exception:
+        except Exception:  # noqa: BLE001 - websocket fanout is best-effort after DB write
             logger.debug("employee_im_send ws push skipped", exc_info=True)
 
         logger.info(
@@ -171,7 +171,7 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
     finally:
         try:
             db.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass
 
 
@@ -221,5 +221,5 @@ def employee_im_set_owner(request: Request, payload: EmployeeImSetOwnerRequest =
     finally:
         try:
             db.close()
-        except Exception:
+        except Exception:  # noqa: BLE001 - closing a request-scoped DB session must not mask response
             pass
