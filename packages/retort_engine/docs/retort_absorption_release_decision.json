@@ -359,10 +359,10 @@
     "upstream_pr_ci_all_successful": true,
     "upstream_pr_ci_all_targets_successful": true,
     "upstream_pr_ci_check_runs": 30,
-    "upstream_pr_ci_distinct_repos": 3,
+    "upstream_pr_ci_distinct_repos": 5,
     "upstream_pr_ci_ready": true,
-    "upstream_pr_ci_ready_targets": 3,
-    "upstream_pr_ci_target_count": 3,
-    "upstream_pr_ci_total_check_runs": 71
+    "upstream_pr_ci_ready_targets": 5,
+    "upstream_pr_ci_target_count": 5,
+    "upstream_pr_ci_total_check_runs": 130
   }
 }

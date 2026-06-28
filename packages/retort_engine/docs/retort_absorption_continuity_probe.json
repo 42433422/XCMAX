@@ -12,7 +12,12 @@
       "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
       "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
       "https://github.com/jaygaha/local-ai-pr-reviewer",
-      "https://github.com/hevinbryant/ai-pr-reviewer"
+      "https://github.com/hevinbryant/ai-pr-reviewer",
+      "https://github.com/AndreaBonn/ai-pr-reviewer",
+      "https://github.com/Sourish-19/ai-pr-reviewer",
+      "https://github.com/aryanbrite/openrabbit",
+      "https://github.com/Review-scope/ReviewScope",
+      "https://github.com/yamadashy/repomix"
     ]
   },
   "latest_closed_loop": {
@@ -237,6 +242,137 @@
       "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627222436-02cbea1e01.json",
       "run_id": "20260627222436-02cbea1e01",
       "source": "https://github.com/hevinbryant/ai-pr-reviewer"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 9,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 7,
+      "gate_count": 10,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627221413-310a494b4a.json",
+      "run_id": "20260627221413-310a494b4a",
+      "source": "https://github.com/AndreaBonn/ai-pr-reviewer"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 9,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 7,
+      "gate_count": 10,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627220056-7db1f7d16a.json",
+      "run_id": "20260627220056-7db1f7d16a",
+      "source": "https://github.com/Sourish-19/ai-pr-reviewer"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 9,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 8,
+      "gate_count": 10,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627214507-0dc2a6fa81.json",
+      "run_id": "20260627214507-0dc2a6fa81",
+      "source": "https://github.com/aryanbrite/openrabbit"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_capabilities.py",
+        "tests/test_frontend_visual_absorption.py"
+      ],
+      "changed_file_count": 11,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 8,
+      "gate_count": 11,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627213722-6cc7a9e742.json",
+      "run_id": "20260627213722-6cc7a9e742",
+      "source": "https://github.com/Review-scope/ReviewScope"
+    },
+    {
+      "behavior_source_files": [
+        "retort_engine/review_context_bias.py"
+      ],
+      "behavior_test_files": [
+        "tests/test_review_context_bias.py",
+        "tests/test_absorbed_capabilities.py"
+      ],
+      "changed_file_count": 9,
+      "checks": {
+        "behavior_diff": true,
+        "behavior_tests": true,
+        "employee_results": true,
+        "gates_passed": true,
+        "per_run_code_graph_proof": true,
+        "ready": true
+      },
+      "code_graph_proof_missing": [],
+      "code_graph_proof_status": "proved",
+      "employee_result_count": 7,
+      "gate_count": 10,
+      "latest": false,
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260627212946-168c95fefd.json",
+      "run_id": "20260627212946-168c95fefd",
+      "source": "https://github.com/yamadashy/repomix"
     }
   ],
   "status": "ready",
@@ -247,13 +383,13 @@
     "all_have_gates_passed": true,
     "all_have_per_run_code_graph_proof": true,
     "continuity_gate_passed": true,
-    "continuity_span_minutes": 430,
+    "continuity_span_minutes": 485,
     "counting_model_separated": true,
-    "distinct_source_count": 5,
+    "distinct_source_count": 10,
     "latest_closed_loop_verified": true,
     "latest_merge_commit": "2525bd4b6",
-    "min_run_count": 5,
-    "ready_run_count": 5,
-    "selected_run_count": 5
+    "min_run_count": 10,
+    "ready_run_count": 10,
+    "selected_run_count": 10
   }
 }

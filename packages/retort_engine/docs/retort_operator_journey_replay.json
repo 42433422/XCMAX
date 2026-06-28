@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "a02be995b2d726683423ce3e0925cbd17259abf23ecec3f7e9aa7c30159f3005"
+      "sha256": "8c8377a28ea98014c788cc5cb1542daf2db96786f452dc6719d30918864593f3"
     },
     {
       "bytes": 3435,
@@ -64,7 +64,7 @@
       "sha256": "2a05a82c203386dd47d0ac9378b150ab59b385b2824211ff7dfcb6e4da4397fe"
     },
     {
-      "bytes": 10384,
+      "bytes": 15320,
       "exists": true,
       "kind": "source_report",
       "name": "absorption_continuity_probe",
@@ -82,7 +82,7 @@
         "runs"
       ],
       "required_fields_ready": true,
-      "sha256": "390b2c6b3780411247d35cc826c2b756e8af744a200c1e3f16f22264b87ca059"
+      "sha256": "4ca57052714ec89e59d0c0a1868837d67e5ba78eb00f4e031c2b904351d13264"
     },
     {
       "bytes": 16334,
@@ -400,7 +400,7 @@
       "sha256": "d0fc1c311db2bfc518e1d6a36f23c21b01f285df12079512f1eaabad03d9716d"
     },
     {
-      "bytes": 208802,
+      "bytes": 332721,
       "exists": true,
       "kind": "source_report",
       "name": "upstream_pr_ci_probe",
@@ -418,7 +418,7 @@
         "check_runs"
       ],
       "required_fields_ready": true,
-      "sha256": "a37a15c43f1ffa2922a5c40e023b7d5a1bc809c7834445931f3aa6f4e0ec5ea1"
+      "sha256": "e1400581d655cfa36cb0854008ce00b4becd6d743036938b28b4c97280fb8d4f"
     },
     {
       "bytes": 25090,
@@ -776,7 +776,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T091058Z-8f282c5a.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T092254Z-47680493.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -808,7 +808,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=a02be995b2d726683423ce3e0925cbd17259abf23ecec3f7e9aa7c30159f3005",
+        "quality_gate_sha=8c8377a28ea98014c788cc5cb1542daf2db96786f452dc6719d30918864593f3",
         "product_mainline_sha=2a05a82c203386dd47d0ac9378b150ab59b385b2824211ff7dfcb6e4da4397fe"
       ],
       "name": "absorb_and_gate",
@@ -873,7 +873,7 @@
     {
       "evidence": [
         "external_process_sha=924645e5cfece4b3ab87605b405545681b931f274e87b475869ae1231244c6a5",
-        "upstream_pr_ci_sha=a37a15c43f1ffa2922a5c40e023b7d5a1bc809c7834445931f3aa6f4e0ec5ea1",
+        "upstream_pr_ci_sha=e1400581d655cfa36cb0854008ce00b4becd6d743036938b28b4c97280fb8d4f",
         "competitor_runtime_sha=3395e5df77d9c4195f93d982556b66090efe8e0904fd1983c725bdff20a58833",
         "competitor_blind_sha=27a2e668acc751a92f45c6fac9c626c71e6701b626d60b87b9012fd9b946d339",
         "competitor_behavior_sha=3cb3e5e48a7ae9605c21d9ae89d225f46f000cb0f3f153d443efcbaa8e092a1a"
@@ -918,7 +918,7 @@
     "cross_domain_ci_regression_ready": true,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 2.284,
+    "duration_sec": 2.221,
     "employee_patch_stress_ready": true,
     "external_advantage_ci_ready": true,
     "external_process_adjudication_ready": true,
@@ -926,13 +926,13 @@
     "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
     "hashed_artifact_count": 33,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T091058Z-8f282c5a.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T092254Z-47680493.manifest.json",
     "per_run_code_graph_proved": true,
     "product_mainline_absorption_ready": true,
     "ready_stage_count": 11,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T091058Z-8f282c5a",
+    "run_id": "operator-journey-20260628T092254Z-47680493",
     "single_command_surface": true,
     "source_report_count": 32,
     "stage_count": 11,
