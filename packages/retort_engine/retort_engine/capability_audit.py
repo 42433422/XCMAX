@@ -10,7 +10,7 @@ from retort_engine.git_status import GENERATED_ABSORPTION_NAMES
 
 
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
-MIN_TEST_TO_SOURCE_RATIO = 0.4
+MIN_TEST_TO_SOURCE_RATIO = 0.8
 
 
 def capability_absorption_audit(root: Path) -> dict[str, Any]:
@@ -216,6 +216,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     cross_language_family_count = 0
     cross_language_core_mapping = False
     cross_language_comment_count = 0
+    cross_language_top_ranked = False
+    cross_language_core_score_active = False
+    cross_language_max_rank_score = 0
     adjudication_status = ""
     adjudication_human_label_count = 0
     adjudication_pass_rate = 0.0
@@ -302,6 +305,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             cross_language_family_count = int(cross_summary.get("language_family_count") or 0)
             cross_language_core_mapping = bool(cross_summary.get("cross_language_core_mapping"))
             cross_language_comment_count = sum(1 for comment in cross_review.get("comments") or [] if isinstance(comment, dict) and comment.get("capability") == "cross_language_transfer")
+            cross_core_score = (cross_review.get("summary") or {}).get("core_review_score") if isinstance(cross_review.get("summary"), dict) else {}
+            if isinstance(cross_core_score, dict):
+                cross_language_top_ranked = bool(cross_core_score.get("cross_language_top_ranked"))
+                cross_language_core_score_active = bool(cross_core_score.get("cross_language_core_behavior_active"))
+                cross_language_max_rank_score = int(cross_core_score.get("cross_language_max_rank_score") or 0)
             adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
             adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
             adjudication_status = str(adjudication_report.get("status") or "")
@@ -363,6 +371,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "cross_language_transfer_family_count": cross_language_family_count,
         "cross_language_transfer_core_mapping": cross_language_core_mapping,
         "cross_language_transfer_comment_count": cross_language_comment_count,
+        "cross_language_transfer_top_ranked": cross_language_top_ranked,
+        "cross_language_transfer_core_score_active": cross_language_core_score_active,
+        "cross_language_transfer_max_rank_score": cross_language_max_rank_score,
         "adjudication_status": adjudication_status,
         "adjudication_human_label_count": adjudication_human_label_count,
         "adjudication_pass_rate": adjudication_pass_rate,

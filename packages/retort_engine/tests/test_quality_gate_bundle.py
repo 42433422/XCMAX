@@ -8,7 +8,7 @@ from retort_engine.service import RetortService
 
 
 def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> None:
-    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)
+    _write_density_fixture(tmp_path, source_lines=5, test_lines=4)
     calls: list[list[str]] = []
 
     def runner(command: list[str], root: Path) -> dict[str, object]:
@@ -23,7 +23,7 @@ def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> N
     assert result["summary"]["lint_passed"] is True
     assert result["summary"]["pytest_passed"] is True
     assert result["summary"]["test_density_passed"] is True
-    assert result["summary"]["test_to_source_ratio"] == 0.75
+    assert result["summary"]["test_to_source_ratio"] == 0.8
     assert result["summary"]["test_density_target_met"] is True
     assert result["summary"]["test_density_missing_lines_to_target"] == 0
     assert result["summary"]["contract_passed"] is True
@@ -34,7 +34,7 @@ def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> N
 
 
 def test_quality_gate_bundle_fails_when_a_gate_fails(tmp_path: Path) -> None:
-    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)
+    _write_density_fixture(tmp_path, source_lines=5, test_lines=4)
 
     def runner(command: list[str], root: Path) -> dict[str, object]:
         if "ruff" in command:
@@ -58,12 +58,12 @@ def test_quality_gate_bundle_reports_density_target_gap(tmp_path: Path) -> None:
     result = run_quality_gate_bundle(tmp_path, python_executable="python", runner=runner)
 
     density_gate = next(gate for gate in result["gates"] if gate["name"] == "test_density")
-    assert result["status"] == "ready"
-    assert result["summary"]["test_density_passed"] is True
+    assert result["status"] == "failed"
+    assert result["summary"]["test_density_passed"] is False
     assert result["summary"]["test_density_target_met"] is False
     assert result["summary"]["test_to_source_ratio"] == 0.4
-    assert result["summary"]["test_density_missing_lines_to_target"] == 2
-    assert density_gate["ok"] is True
+    assert result["summary"]["test_density_missing_lines_to_target"] == 4
+    assert density_gate["ok"] is False
     assert density_gate["target_met"] is False
 
 
@@ -82,7 +82,7 @@ def test_quality_gate_bundle_blocks_below_density_floor(tmp_path: Path) -> None:
 
 
 def test_quality_gate_bundle_writes_report_and_service_exposes_it(tmp_path: Path) -> None:
-    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)
+    _write_density_fixture(tmp_path, source_lines=5, test_lines=4)
 
     def runner(command: list[str], root: Path) -> dict[str, object]:
         return {"returncode": 0, "stdout": "ok", "stderr": ""}

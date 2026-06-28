@@ -47,6 +47,40 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         run_id=suite_id,
         case_name="negative_gate_rollback",
     )
+    semantic_negative = run_employee_patch_closure_case(
+        root,
+        target_file=lab / "semantic_rollback_patch.py",
+        replacement="ALLOW_WRITE = True\nREASON = 'unsafe-semantic-drift'\n",
+        expected_text="unsafe-semantic-drift",
+        gate_commands=[
+            [sys.executable, "-m", "py_compile", "{target_file}"],
+            [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; text = Path('{target_file}').read_text(); "
+                "raise SystemExit(0 if 'ALLOW_WRITE = False' in text else 1)",
+            ],
+        ],
+        run_id=suite_id,
+        case_name="semantic_gate_rollback",
+    )
+    policy_negative = run_employee_patch_closure_case(
+        root,
+        target_file=lab / "policy_rollback_patch.py",
+        replacement="ALLOW_WRITE = True\nREASON = 'policy-rejected'\n",
+        expected_text="policy-rejected",
+        gate_commands=[
+            [sys.executable, "-m", "py_compile", "{target_file}"],
+            [
+                sys.executable,
+                "-c",
+                "from pathlib import Path; text = Path('{target_file}').read_text(); "
+                "raise SystemExit(1 if 'ALLOW_WRITE = True' in text else 0)",
+            ],
+        ],
+        run_id=suite_id,
+        case_name="policy_gate_rollback",
+    )
     multi_file = run_multi_file_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
     policy_positive = run_employee_patch_closure_case(
         root,
@@ -58,8 +92,12 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         case_name="policy_state_gate_pass",
     )
     retry = run_retry_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
-    cases = [positive, existing_update, negative, multi_file, policy_positive, retry]
-    expected_failure_cases = {negative["summary"]["case_name"]}
+    cases = [positive, existing_update, negative, semantic_negative, policy_negative, multi_file, policy_positive, retry]
+    expected_failure_cases = {
+        negative["summary"]["case_name"],
+        semantic_negative["summary"]["case_name"],
+        policy_negative["summary"]["case_name"],
+    }
     expected_success_cases = {case["summary"]["case_name"] for case in cases if case["summary"]["case_name"] not in expected_failure_cases}
     expected_failure_rollback_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_failure_cases and case["summary"]["rollback_verified"])
     unexpected_gate_failure_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_success_cases and not case["summary"]["gates_passed"])
@@ -80,6 +118,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "success_case_verified": positive["status"] == "patch_verified",
         "existing_file_update_verified": existing_update["status"] == "patch_verified",
         "failure_case_rolled_back": negative["status"] == "patch_rolled_back",
+        "semantic_failure_case_rolled_back": semantic_negative["status"] == "patch_rolled_back",
+        "policy_failure_case_rolled_back": policy_negative["status"] == "patch_rolled_back",
         "multi_file_case_verified": multi_file["status"] == "patch_verified",
         "policy_state_case_verified": policy_positive["status"] == "patch_verified",
         "multi_file_changed_file_count": len(multi_file["changed_files"]),
@@ -94,6 +134,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
             positive["status"] == "patch_verified"
             and existing_update["status"] == "patch_verified"
             and negative["status"] == "patch_rolled_back"
+            and semantic_negative["status"] == "patch_rolled_back"
+            and policy_negative["status"] == "patch_rolled_back"
             and multi_file["status"] == "patch_verified"
             and policy_positive["status"] == "patch_verified"
             and retry["status"] == "patch_verified_after_retry"
@@ -107,6 +149,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         if summary["success_case_verified"]
         and summary["existing_file_update_verified"]
         and summary["failure_case_rolled_back"]
+        and summary["semantic_failure_case_rolled_back"]
+        and summary["policy_failure_case_rolled_back"]
         and summary["multi_file_case_verified"]
         and summary["policy_state_case_verified"]
         and summary["successful_repairs_re_reviewed"]
@@ -126,6 +170,8 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
             "style": "employee_patch_generation_apply_gate_rollback",
             "positive_patch_path": positive["evidence"].get("patch_path", ""),
             "rollback_patch_path": negative["evidence"].get("patch_path", ""),
+            "semantic_rollback_patch_path": semantic_negative["evidence"].get("patch_path", ""),
+            "policy_rollback_patch_path": policy_negative["evidence"].get("patch_path", ""),
         },
     }
     if output:

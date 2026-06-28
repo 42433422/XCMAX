@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 
+RETORT_CONTRACT_COMPATIBILITY_VERSION = "retort-contracts-v1"
+
 RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "assessment": ("project", "scores", "evidence", "metadata"),
     "absorption_result": ("status", "summary", "own_assessment", "external_assessment", "tasks", "execution", "branch_workflow"),
@@ -45,7 +47,28 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
 def validate_contract(name: str, payload: dict[str, Any]) -> dict[str, Any]:
     required = RETORT_CONTRACT_SCHEMAS[name]
     missing = [key for key in required if key not in payload]
-    return {"name": name, "valid": not missing, "missing": missing, "required": list(required)}
+    return {"name": name, "valid": not missing, "missing": missing, "required": list(required), "version": RETORT_CONTRACT_COMPATIBILITY_VERSION}
+
+
+def contract_compatibility_report(name: str, previous_required_fields: tuple[str, ...] | list[str]) -> dict[str, Any]:
+    current_required = RETORT_CONTRACT_SCHEMAS[name]
+    previous = tuple(previous_required_fields)
+    removed_historical_fields = [field for field in previous if field not in current_required]
+    newly_required_fields = [field for field in current_required if field not in previous]
+    append_only = not removed_historical_fields
+    producer_compatible = not newly_required_fields
+    return {
+        "name": name,
+        "version": RETORT_CONTRACT_COMPATIBILITY_VERSION,
+        "current_required": list(current_required),
+        "previous_required": list(previous),
+        "removed_historical_fields": removed_historical_fields,
+        "newly_required_fields": newly_required_fields,
+        "append_only": append_only,
+        "producer_compatible": producer_compatible,
+        "compatible": append_only and producer_compatible,
+        "breaking_change": bool(removed_historical_fields or newly_required_fields),
+    }
 
 
 def contract_names() -> tuple[str, ...]:

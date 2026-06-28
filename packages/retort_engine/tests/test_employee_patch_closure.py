@@ -68,14 +68,16 @@ def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Pat
     assert result["summary"]["success_case_verified"] is True
     assert result["summary"]["existing_file_update_verified"] is True
     assert result["summary"]["failure_case_rolled_back"] is True
-    assert result["summary"]["patch_generated_count"] == 6
-    assert result["summary"]["patch_applied_count"] == 6
+    assert result["summary"]["semantic_failure_case_rolled_back"] is True
+    assert result["summary"]["policy_failure_case_rolled_back"] is True
+    assert result["summary"]["patch_generated_count"] == 8
+    assert result["summary"]["patch_applied_count"] == 8
     assert result["summary"]["gate_passed_count"] == 5
     assert result["summary"]["gate_expected_to_pass_count"] == 5
     assert result["summary"]["gate_expected_to_pass_passed_count"] == 5
-    assert result["summary"]["rollback_verified_count"] == 2
-    assert result["summary"]["expected_failure_case_count"] == 1
-    assert result["summary"]["expected_failure_rollback_count"] == 1
+    assert result["summary"]["rollback_verified_count"] == 4
+    assert result["summary"]["expected_failure_case_count"] == 3
+    assert result["summary"]["expected_failure_rollback_count"] == 3
     assert result["summary"]["unexpected_gate_failure_count"] == 0
     assert result["summary"]["multi_file_case_verified"] is True
     assert result["summary"]["policy_state_case_verified"] is True
@@ -132,6 +134,8 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert patch["summary"]["success_case_verified"] is True
     assert patch["summary"]["existing_file_update_verified"] is True
     assert patch["summary"]["failure_case_rolled_back"] is True
+    assert patch["summary"]["semantic_failure_case_rolled_back"] is True
+    assert patch["summary"]["policy_failure_case_rolled_back"] is True
     assert patch["summary"]["multi_file_case_verified"] is True
     assert patch["summary"]["policy_state_case_verified"] is True
     assert patch["summary"]["retry_case_verified"] is True
@@ -147,3 +151,5 @@ def test_service_exposes_employee_patch_closure(tmp_path: Path) -> None:
     assert result["summary"]["success_case_verified"] is True
     assert result["summary"]["existing_file_update_verified"] is True
     assert result["summary"]["failure_case_rolled_back"] is True
+    assert result["summary"]["semantic_failure_case_rolled_back"] is True
+    assert result["summary"]["policy_failure_case_rolled_back"] is True
