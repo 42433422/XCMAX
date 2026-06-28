@@ -58,6 +58,8 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["absorbed_context_rank_weights"]["runtime"] >= 20
     assert "absorbed_policy_rank_weights" in result["summary"]
     assert "absorbed_review_policy" in result["summary"]
+    assert result["summary"]["calibration_policy"]["enabled"] is True
+    assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
     assert result["summary"]["comment_ranking_model"] == "severity_context_publishability_v1"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
@@ -65,6 +67,8 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
     assert "bias=" in result["comments"][0]["rank_reason"]
     assert "policy=" in result["comments"][0]["rank_reason"]
+    assert "calibration=" in result["comments"][0]["rank_reason"]
+    assert result["comments"][0]["calibration_rank_weight"] > 0
     assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
     assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
     assert result["file_summaries"][0]["stages"]

@@ -36,9 +36,36 @@ def test_build_publish_dry_run_converts_review_comments(tmp_path: Path) -> None:
     assert result["summary"]["skipped_unpublishable_count"] == 1
     assert result["summary"]["idempotent"] is True
     assert result["summary"]["permission_required"] == "pull_request:write"
+    assert result["summary"]["calibration_policy_enabled"] is True
+    assert result["summary"]["selection_model"] == "rank_score_then_dedupe"
     assert result["comments"][0]["path"] == "app.py"
     assert result["rollback"]["strategy"] == "delete_created_review_comments"
     assert validate_contract("pr_publish_dry_run_result", result)["valid"] is True
+
+
+def test_build_publish_dry_run_uses_rank_score_before_original_order(tmp_path: Path) -> None:
+    review_file = tmp_path / "review.json"
+    review_file.write_text(
+        json.dumps(
+            {
+                "pr_url": "https://github.com/acme/repo/pull/2",
+                "diff_url": "https://github.com/acme/repo/pull/2.diff",
+                "review": {
+                    "comments": [
+                        {"file": "app.py", "line": 1, "message": "Low priority.", "severity": "low", "rank_score": 10},
+                        {"file": "app.py", "line": 2, "message": "High calibrated priority.", "severity": "medium", "rank_score": 900},
+                    ]
+                },
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = build_publish_dry_run(review_file, max_comments=1)
+
+    assert result["comments"][0]["line"] == 2
+    assert result["comments"][0]["body"] == "High calibrated priority."
 
 
 def test_run_publish_sandbox_creates_and_rolls_back_receipts(tmp_path: Path) -> None:

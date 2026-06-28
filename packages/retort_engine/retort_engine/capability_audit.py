@@ -131,6 +131,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     pr_long_run_source = root / "retort_engine" / "pr_long_run_review.py"
     holdout_eval_source = root / "retort_engine" / "pr_holdout_blind_eval.py"
     failure_rollback_source = root / "retort_engine" / "pr_failure_rollback_replay.py"
+    calibration_policy_source = root / "retort_engine" / "review_calibration_policy.py"
     recovery_drill_source = root / "retort_engine" / "production_recovery_drill.py"
     release_decision_source = root / "retort_engine" / "absorption_release_decision.py"
     test = root / "tests" / "test_pr_review.py"
@@ -153,6 +154,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     pr_long_run_test = root / "tests" / "test_pr_long_run_review.py"
     holdout_eval_test = root / "tests" / "test_pr_holdout_blind_eval.py"
     failure_rollback_test = root / "tests" / "test_pr_failure_rollback_replay.py"
+    calibration_policy_test = root / "tests" / "test_review_calibration_policy.py"
     recovery_drill_test = root / "tests" / "test_production_recovery_drill.py"
     release_decision_test = root / "tests" / "test_absorption_release_decision.py"
     cli = root / "retort_engine" / "cli.py"
@@ -169,6 +171,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     comment_ranking_model = ""
     absorbed_context_rank_weight_count = 0
     absorbed_context_rank_weight_max = 0
+    calibration_policy_enabled = False
+    calibration_weighted_context_count = 0
+    calibration_max_context_weight = 0
     incremental = False
     incremental_skipped_count = 0
     incremental_new_count = 0
@@ -212,6 +217,11 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             if isinstance(rank_weights, dict):
                 absorbed_context_rank_weight_count = sum(1 for value in rank_weights.values() if int(value or 0) > 0)
                 absorbed_context_rank_weight_max = max([int(value or 0) for value in rank_weights.values()] or [0])
+            calibration = (result.get("summary") or {}).get("calibration_policy") if isinstance(result.get("summary"), dict) else {}
+            if isinstance(calibration, dict):
+                calibration_policy_enabled = bool(calibration.get("enabled"))
+                calibration_weighted_context_count = int(calibration.get("weighted_context_count") or 0)
+                calibration_max_context_weight = int(calibration.get("max_context_weight") or 0)
             previous_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,2 @@\n def f():\n+    # TODO: old issue\n"
             current_diff = "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -1 +1,3 @@\n def f():\n+    # TODO: old issue\n+    token = \"secret\"\n"
             incremental_result = review_diff(current_diff, previous_diff_text=previous_diff)
@@ -275,6 +285,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "comment_ranking_model": comment_ranking_model,
         "absorbed_context_rank_weight_count": absorbed_context_rank_weight_count,
         "absorbed_context_rank_weight_max": absorbed_context_rank_weight_max,
+        "calibration_policy_enabled": calibration_policy_enabled,
+        "calibration_weighted_context_count": calibration_weighted_context_count,
+        "calibration_max_context_weight": calibration_max_context_weight,
         "incremental": incremental,
         "incremental_skipped_count": incremental_skipped_count,
         "incremental_new_count": incremental_new_count,
@@ -336,6 +349,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/pr_long_run_review.py", pr_long_run_source.is_file()),
                 ("retort_engine/pr_holdout_blind_eval.py", holdout_eval_source.is_file()),
                 ("retort_engine/pr_failure_rollback_replay.py", failure_rollback_source.is_file()),
+                ("retort_engine/review_calibration_policy.py", calibration_policy_source.is_file()),
                 ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
                 ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
             )
@@ -364,6 +378,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_pr_long_run_review.py", pr_long_run_test.is_file()),
                 ("tests/test_pr_holdout_blind_eval.py", holdout_eval_test.is_file()),
                 ("tests/test_pr_failure_rollback_replay.py", failure_rollback_test.is_file()),
+                ("tests/test_review_calibration_policy.py", calibration_policy_test.is_file()),
                 ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
                 ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
             )
