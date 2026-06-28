@@ -6,41 +6,32 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/miracodeai/mira",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/existential-birds/daydream",
   "external_snapshot": {
-    "file_count": 292,
-    "git_revision": "3274e6b35039114993d2a023c362c2a4a75bc2ef",
+    "file_count": 333,
+    "git_revision": "2420b94fe00acc0c69f97a486b0352202bec4216",
     "suffix_counts": {
-      ".css": 1,
-      ".diff": 4,
-      ".example": 2,
-      ".html": 1,
-      ".jinja2": 7,
-      ".js": 1,
-      ".json": 15,
+      ".diff": 5,
+      ".json": 17,
+      ".jsonl": 22,
       ".lock": 1,
-      ".md": 8,
-      ".png": 6,
-      ".py": 144,
+      ".md": 26,
+      ".py": 235,
       ".sh": 2,
-      ".svg": 2,
-      ".toml": 3,
-      ".ts": 18,
-      ".tsx": 55,
-      ".typed": 1,
-      ".yaml": 2,
-      ".yml": 11,
-      "<none>": 8
+      ".toml": 1,
+      ".txt": 5,
+      ".yml": 10,
+      "<none>": 9
     }
   },
-  "generated_at": "2026-06-28T17:49:05Z",
+  "generated_at": "2026-06-28T17:55:09Z",
   "license_review": {
     "detected_license": "Apache License",
     "message": "Allowed license detected: Apache License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/miracodeai/mira --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/existential-birds/daydream --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
@@ -51,59 +42,59 @@
     },
     "component_gaps": [
       {
-        "component": "provider_surface",
+        "component": "workflow_ci",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 2200,
+        "marker_gap": 2856,
         "own_files": 12,
         "representative_external_files": [
-          "render.yaml",
           "CHANGELOG.md",
+          "pyproject.toml",
           "README.md",
-          "CONTRIBUTING.md",
-          "FEATURES.md"
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py"
         ]
       },
       {
-        "component": "safety_policy",
+        "component": "provider_surface",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 615,
+        "marker_gap": 1737,
         "own_files": 12,
         "representative_external_files": [
-          "CODE_OF_CONDUCT.md",
+          "CHANGELOG.md",
+          "README.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "bench/review-bot-compare/README.md"
+        ]
+      },
+      {
+        "component": "plugin_surface",
+        "external_files": 12,
+        "file_gap": 0,
+        "marker_gap": 9,
+        "own_files": 12,
+        "representative_external_files": [
           "CHANGELOG.md",
           "pyproject.toml",
-          "railway.toml",
-          "README.md"
+          "README.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/README.md"
         ]
       },
       {
         "component": "diff_hunk_review",
-        "external_files": 11,
-        "file_gap": 4,
-        "marker_gap": -5,
+        "external_files": 12,
+        "file_gap": 5,
+        "marker_gap": 5,
         "own_files": 7,
         "representative_external_files": [
-          "ui/mira/src/pages/settings.tsx",
-          "tests/test_engine.py",
-          "tests/test_github_provider.py",
-          "tests/benchmarks/judge.py",
-          "tests/benchmarks/test_judge_unit.py"
-        ]
-      },
-      {
-        "component": "file_grouping",
-        "external_files": 11,
-        "file_gap": 1,
-        "marker_gap": -88,
-        "own_files": 10,
-        "representative_external_files": [
-          "tests/test_minimax_parser.py",
-          "tests/test_integration.py",
-          "tests/test_index_context.py",
-          "src/mira/dashboard/db.py",
-          "src/mira/dashboard/api.py"
+          "CHANGELOG.md",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/harvest.py",
+          "bench/review-bot-compare/compare.py"
         ]
       }
     ],
@@ -114,11 +105,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "render.yaml",
             "CHANGELOG.md",
             "README.md",
-            "CONTRIBUTING.md",
-            "FEATURES.md"
+            "CLAUDE.md",
+            "bench/review-bot-compare/test_replay.py",
+            "bench/review-bot-compare/README.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -128,10 +119,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "CHANGELOG.md",
-            "SECURITY.md",
-            "ui/mira/tsconfig.node.json",
-            "ui/mira/tsconfig.app.json",
-            "ui/mira/package-lock.json"
+            "pyproject.toml",
+            "README.md",
+            "CLAUDE.md",
+            "bench/review-bot-compare/README.md"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -165,20 +156,6 @@
           "title": "Deepen file_grouping"
         },
         {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -193,19 +170,6 @@
           "title": "Deepen benchmark_eval"
         },
         {
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-workflow-ci",
-          "title": "Deepen workflow_ci"
-        },
-        {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -217,6 +181,33 @@
           "priority": "P1",
           "task_id": "retort-depth-safety-policy",
           "title": "Deepen safety_policy"
+        },
+        {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
+        },
+        {
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -246,16 +237,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 2223,
-          "own_marker_hits": 3396,
+          "external_marker_hits": 3034,
+          "own_marker_hits": 3418,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "render.yaml",
             "CHANGELOG.md",
             "pyproject.toml",
-            "railway.toml"
+            "README.md",
+            "CLAUDE.md",
+            "bench/review-bot-compare/test_replay.py"
           ]
         },
         {
@@ -281,53 +272,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 32,
-          "own_marker_hits": 120,
+          "external_marker_hits": 42,
+          "own_marker_hits": 129,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "tests/test_minimax_parser.py",
-            "tests/test_integration.py",
-            "tests/test_index_context.py",
-            "src/mira/dashboard/db.py",
-            "src/mira/dashboard/api.py"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 16,
-          "own_marker_hits": 21,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "ui/mira/src/pages/settings.tsx",
-            "tests/test_engine.py",
-            "tests/test_github_provider.py",
-            "tests/benchmarks/judge.py",
-            "tests/benchmarks/test_judge_unit.py"
+            "CHANGELOG.md",
+            "CLAUDE.md",
+            "bench/review-bot-compare/test_replay.py",
+            "tests/conftest.py",
+            "tests/test_deep_orchestrator.py"
           ]
         },
         {
@@ -355,58 +309,23 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 271,
-          "own_marker_hits": 701,
+          "external_marker_hits": 674,
+          "own_marker_hits": 780,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "CHANGELOG.md",
-            "pyproject.toml",
             "README.md",
-            "CONTRIBUTING.md",
-            "SECURITY.md"
-          ]
-        },
-        {
-          "absorption_goal": "prove absorption with repeatable local gates and replay commands",
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "component": "workflow_ci",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-workflow-ci",
-            "title": "Deepen workflow_ci"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 3619,
-          "own_marker_hits": 3807,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "CODE_OF_CONDUCT.md",
-            "render.yaml",
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
-            "pyproject.toml"
+            "bench/review-bot-compare/README.md",
+            "bench/review-bot-compare/replay.py",
+            "bench/review-bot-compare/compare.py"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 615,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -425,16 +344,88 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 936,
-          "own_marker_hits": 321,
+          "external_marker_hits": 227,
+          "own_marker_hits": 349,
           "priority": "P0",
-          "similarity_score": 90,
+          "similarity_score": 100,
           "source_files": [
-            "CODE_OF_CONDUCT.md",
             "CHANGELOG.md",
             "pyproject.toml",
-            "railway.toml",
-            "README.md"
+            "README.md",
+            "CLAUDE.md",
+            "tests/test_phases.py"
+          ]
+        },
+        {
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 5,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 26,
+          "own_marker_hits": 21,
+          "priority": "P0",
+          "similarity_score": 97,
+          "source_files": [
+            "CHANGELOG.md",
+            "bench/review-bot-compare/README.md",
+            "bench/review-bot-compare/replay.py",
+            "bench/review-bot-compare/harvest.py",
+            "bench/review-bot-compare/compare.py"
+          ]
+        },
+        {
+          "absorption_goal": "prove absorption with repeatable local gates and replay commands",
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "component": "workflow_ci",
+          "depth_gap": 2856,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-workflow-ci",
+            "title": "Deepen workflow_ci"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 6867,
+          "own_marker_hits": 4011,
+          "priority": "P0",
+          "similarity_score": 93,
+          "source_files": [
+            "CHANGELOG.md",
+            "pyproject.toml",
+            "README.md",
+            "CLAUDE.md",
+            "bench/review-bot-compare/test_replay.py"
           ]
         }
       ],
@@ -454,26 +445,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 2529,
+          "external_marker_hits": 2087,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "render.yaml",
             "CHANGELOG.md",
             "README.md",
-            "CONTRIBUTING.md",
-            "FEATURES.md"
+            "CLAUDE.md",
+            "bench/review-bot-compare/test_replay.py",
+            "bench/review-bot-compare/README.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 138,
+          "external_marker_hits": 804,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "CHANGELOG.md",
-            "SECURITY.md",
-            "ui/mira/tsconfig.node.json",
-            "ui/mira/tsconfig.app.json",
-            "ui/mira/package-lock.json"
+            "pyproject.toml",
+            "README.md",
+            "CLAUDE.md",
+            "bench/review-bot-compare/README.md"
           ]
         }
       ]
@@ -482,136 +473,138 @@
       "benchmark_eval": {
         "files": [
           "CHANGELOG.md",
-          "pyproject.toml",
           "README.md",
-          "CONTRIBUTING.md",
-          "SECURITY.md",
-          "ui/mira/package-lock.json",
-          "tests/test_response_parser.py",
-          "tests/test_import_golden.py",
-          "tests/test_severity.py",
-          "tests/evals/test_eval_bedrock.py",
-          "tests/evals/test_eval_llm.py",
-          "tests/evals/test_eval_learning.py"
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/compare.py",
+          "tests/test_analyzer.py",
+          "tests/test_benchmark_score.py",
+          "tests/test_archive_integration.py",
+          "tests/test_cli_main_integration.py",
+          "tests/test_deep_orchestrator.py",
+          "tests/test_ui.py",
+          "tests/test_benchmark_acquire.py"
         ],
-        "marker_hits": 271
+        "marker_hits": 674
       },
       "diff_hunk_review": {
         "files": [
-          "ui/mira/src/pages/settings.tsx",
-          "tests/test_engine.py",
-          "tests/test_github_provider.py",
-          "tests/benchmarks/judge.py",
-          "tests/benchmarks/test_judge_unit.py",
-          "src/mira/models.py",
-          "src/mira/llm/provider.py",
-          "src/mira/llm/response_parser.py",
-          "src/mira/core/priority.py",
-          "src/mira/core/engine.py",
-          "src/mira/core/passes.py"
+          "CHANGELOG.md",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/harvest.py",
+          "bench/review-bot-compare/compare.py",
+          "tests/test_deep_orchestrator.py",
+          "tests/test_deep_prompts.py",
+          "tests/harness/fake_gh.py",
+          "docs/self-hosted-bot-setup.md",
+          ".github/workflows/README.md",
+          "daydream/pr_review.py",
+          "daydream/phases.py"
         ],
-        "marker_hits": 16
+        "marker_hits": 26
       },
       "file_grouping": {
         "files": [
-          "tests/test_minimax_parser.py",
-          "tests/test_integration.py",
-          "tests/test_index_context.py",
-          "src/mira/dashboard/db.py",
-          "src/mira/dashboard/api.py",
-          "src/mira/dashboard/blast_svg.py",
-          "src/mira/index/store.py",
-          "src/mira/index/jit_context.py",
-          "src/mira/index/context.py",
-          "src/mira/index/indexer.py",
-          "src/mira/github_app/index_handlers.py"
+          "CHANGELOG.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "tests/conftest.py",
+          "tests/test_deep_orchestrator.py",
+          "tests/test_worktree_cwd_grounding.py",
+          "tests/test_deep_pr_comment_integration.py",
+          "daydream/exploration_runner.py",
+          "daydream/runner.py",
+          "daydream/git_ops.py",
+          "daydream/tree_sitter_index.py",
+          "daydream/phases.py"
         ],
-        "marker_hits": 32
+        "marker_hits": 42
       },
       "plugin_surface": {
         "files": [
           "CHANGELOG.md",
-          "SECURITY.md",
-          "ui/mira/tsconfig.node.json",
-          "ui/mira/tsconfig.app.json",
-          "ui/mira/package-lock.json",
-          "ui/mira/package.json",
-          "ui/mira/eslint.config.js",
-          "ui/mira/vite.config.ts",
-          "tests/test_jit_context.py",
-          "tests/test_diff_parser.py",
-          "tests/test_footguns.py",
-          "tests/test_manifests.py"
+          "pyproject.toml",
+          "README.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/judge.py",
+          "tests/test_phases.py",
+          "tests/test_deep_merge.py",
+          "tests/test_cutover_ast.py",
+          "tests/test_git_ops.py",
+          "tests/test_read_only_enforcement.py"
         ],
-        "marker_hits": 138
+        "marker_hits": 804
       },
       "provider_surface": {
         "files": [
-          "render.yaml",
           "CHANGELOG.md",
           "README.md",
-          "CONTRIBUTING.md",
-          "FEATURES.md",
-          "SECURITY.md",
-          "ui/mira/package-lock.json",
-          "ui/mira/src/App.tsx",
-          "ui/mira/src/main.tsx",
-          "ui/mira/src/components/theme-provider.tsx",
-          "ui/mira/src/components/ui/chart.tsx",
-          "ui/mira/src/components/ui/tooltip.tsx"
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/judge.py",
+          "bench/review-bot-compare/compare.py",
+          "tests/test_phases.py",
+          "tests/test_deep_merge.py",
+          "tests/test_github_app_integration.py",
+          "tests/test_git_ops.py",
+          "tests/test_benchmark_score.py"
         ],
-        "marker_hits": 2529
+        "marker_hits": 2087
       },
       "review_pipeline": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "render.yaml",
           "CHANGELOG.md",
           "pyproject.toml",
-          "railway.toml",
           "README.md",
-          "fly.toml",
-          "FEATURES.md",
-          "SECURITY.md",
-          "ui/mira/package.json",
-          "ui/mira/src/components/dashboard/uninstall-modal.tsx",
-          "ui/mira/src/components/dashboard/layout.tsx"
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/common.py",
+          "bench/review-bot-compare/harvest.py",
+          "bench/review-bot-compare/judge.py",
+          "bench/review-bot-compare/compare.py",
+          "tests/test_json_utils.py"
         ],
-        "marker_hits": 2223
+        "marker_hits": 3034
       },
       "safety_policy": {
         "files": [
-          "CODE_OF_CONDUCT.md",
           "CHANGELOG.md",
           "pyproject.toml",
-          "railway.toml",
           "README.md",
-          "CONTRIBUTING.md",
-          "FEATURES.md",
-          "SECURITY.md",
-          "ui/mira/package-lock.json",
-          "ui/mira/src/components/dashboard/setup-modal.tsx",
-          "ui/mira/src/pages/settings.tsx",
-          "ui/mira/src/pages/dashboard.tsx"
+          "CLAUDE.md",
+          "tests/test_phases.py",
+          "tests/test_read_only_enforcement.py",
+          "tests/test_workflow_templates.py",
+          "tests/test_findings.py",
+          "tests/test_backend_claude.py",
+          "tests/test_github_app.py",
+          "tests/test_codex_real_cli_contract.py",
+          "tests/test_trajectory.py"
         ],
-        "marker_hits": 936
+        "marker_hits": 227
       },
       "workflow_ci": {
         "files": [
-          "CODE_OF_CONDUCT.md",
-          "render.yaml",
           "CHANGELOG.md",
-          ".pre-commit-config.yaml",
           "pyproject.toml",
-          "railway.toml",
           "README.md",
-          "CONTRIBUTING.md",
-          "fly.toml",
-          "FEATURES.md",
-          "SECURITY.md",
-          "ui/mira/README.md"
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/common.py",
+          "bench/review-bot-compare/harvest.py",
+          "bench/review-bot-compare/judge.py",
+          "bench/review-bot-compare/compare.py",
+          "tests/test_json_utils.py"
         ],
-        "marker_hits": 3619
+        "marker_hits": 6867
       }
     },
     "own_file_groups": {
@@ -630,7 +623,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 701
+        "marker_hits": 780
       },
       "diff_hunk_review": {
         "files": [
@@ -651,13 +644,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 120
+        "marker_hits": 129
       },
       "plugin_surface": {
         "files": [
@@ -674,7 +669,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 792
+        "marker_hits": 795
       },
       "provider_surface": {
         "files": [
@@ -691,7 +686,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 329
+        "marker_hits": 350
       },
       "review_pipeline": {
         "files": [
@@ -708,7 +703,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3396
+        "marker_hits": 3418
       },
       "safety_policy": {
         "files": [
@@ -725,7 +720,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 321
+        "marker_hits": 349
       },
       "workflow_ci": {
         "files": [
@@ -742,7 +737,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 3807
+        "marker_hits": 4011
       }
     },
     "pipeline_stages": [
@@ -756,27 +751,39 @@
     ],
     "prioritized_absorptions": [
       {
+        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
+        "component": "workflow_ci",
+        "priority": "P0",
+        "source_files": [
+          "CHANGELOG.md",
+          "pyproject.toml",
+          "README.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py"
+        ]
+      },
+      {
         "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
         "component": "provider_surface",
         "priority": "P0",
         "source_files": [
-          "render.yaml",
           "CHANGELOG.md",
           "README.md",
-          "CONTRIBUTING.md",
-          "FEATURES.md"
+          "CLAUDE.md",
+          "bench/review-bot-compare/test_replay.py",
+          "bench/review-bot-compare/README.md"
         ]
       },
       {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
+        "acceptance": "Retort has a tested plugin_surface behavior, not only a recorded signal.",
+        "component": "plugin_surface",
+        "priority": "P1",
         "source_files": [
-          "CODE_OF_CONDUCT.md",
           "CHANGELOG.md",
           "pyproject.toml",
-          "railway.toml",
-          "README.md"
+          "README.md",
+          "CLAUDE.md",
+          "bench/review-bot-compare/README.md"
         ]
       },
       {
@@ -784,52 +791,40 @@
         "component": "diff_hunk_review",
         "priority": "P1",
         "source_files": [
-          "ui/mira/src/pages/settings.tsx",
-          "tests/test_engine.py",
-          "tests/test_github_provider.py",
-          "tests/benchmarks/judge.py",
-          "tests/benchmarks/test_judge_unit.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested file_grouping behavior, not only a recorded signal.",
-        "component": "file_grouping",
-        "priority": "P1",
-        "source_files": [
-          "tests/test_minimax_parser.py",
-          "tests/test_integration.py",
-          "tests/test_index_context.py",
-          "src/mira/dashboard/db.py",
-          "src/mira/dashboard/api.py"
+          "CHANGELOG.md",
+          "bench/review-bot-compare/README.md",
+          "bench/review-bot-compare/replay.py",
+          "bench/review-bot-compare/harvest.py",
+          "bench/review-bot-compare/compare.py"
         ]
       }
     ]
   },
-  "run_id": "20260628174859-cb01f999e0",
+  "run_id": "20260628175502-a237875a09",
   "semantic_review": {
     "external": {
-      "classes": 501,
-      "cli_markers": 8,
-      "functions": 2184,
-      "source_files": 259,
-      "test_markers": 1107,
-      "workflow_markers": 2263
+      "classes": 455,
+      "cli_markers": 0,
+      "functions": 3365,
+      "source_files": 289,
+      "test_markers": 2036,
+      "workflow_markers": 3354
     },
     "gaps": [
       {
-        "external_advantage": 452,
+        "external_advantage": 406,
         "metric": "classes"
       },
       {
-        "external_advantage": 1413,
+        "external_advantage": 2594,
         "metric": "functions"
       },
       {
-        "external_advantage": 107,
+        "external_advantage": 136,
         "metric": "source_files"
       },
       {
-        "external_advantage": 882,
+        "external_advantage": 1811,
         "metric": "test_markers"
       }
     ],
@@ -837,49 +832,49 @@
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 152,
+      "source_files": 153,
       "test_markers": 225,
-      "workflow_markers": 4273
+      "workflow_markers": 4276
     }
   },
   "signal_evidence": {
     "benchmarking": [
       "CHANGELOG.md",
-      "pyproject.toml",
       "README.md",
-      "CONTRIBUTING.md",
-      "SECURITY.md"
+      "bench/review-bot-compare/README.md",
+      "bench/review-bot-compare/replay.py",
+      "bench/review-bot-compare/compare.py"
     ],
     "file_grouping": [
-      "tests/test_minimax_parser.py",
-      "tests/test_integration.py",
-      "tests/test_index_context.py",
-      "src/mira/models.py",
-      "src/mira/llm/response_parser.py"
+      "CHANGELOG.md",
+      "bench/review-bot-compare/test_replay.py",
+      "tests/conftest.py",
+      "tests/test_worktree_cwd_grounding.py",
+      "tests/test_deep_pr_comment_integration.py"
     ],
     "multi_provider": [
-      "render.yaml",
       "CHANGELOG.md",
       "README.md",
-      "CONTRIBUTING.md",
-      "FEATURES.md"
+      "CLAUDE.md",
+      "bench/review-bot-compare/test_replay.py",
+      "bench/review-bot-compare/README.md"
     ],
     "plugin_surface": [
       "CHANGELOG.md",
-      ".pre-commit-config.yaml",
       "pyproject.toml",
       "README.md",
-      "SECURITY.md"
+      "CLAUDE.md",
+      "bench/review-bot-compare/README.md"
     ],
     "review_pipeline": [
-      "render.yaml",
       "CHANGELOG.md",
       "pyproject.toml",
-      "railway.toml",
-      "README.md"
+      "README.md",
+      "CLAUDE.md",
+      "bench/review-bot-compare/replay.py"
     ]
   },
-  "source": "https://github.com/miracodeai/mira",
+  "source": "https://github.com/existential-birds/daydream",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -887,7 +882,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/miracodeai/mira."
+      "why": "Compare implementation patterns from https://github.com/existential-birds/daydream."
     },
     {
       "dimension": "product_operability",
@@ -895,7 +890,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/miracodeai/mira."
+      "why": "Extract usable UX improvements from https://github.com/existential-birds/daydream."
     },
     {
       "dimension": "operational_readiness",
@@ -903,7 +898,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/miracodeai/mira."
+      "why": "Adapt CI and release checks from https://github.com/existential-birds/daydream."
     },
     {
       "dimension": "comparative_analysis_depth",
