@@ -443,16 +443,9 @@ fun ChatScreen(
                 .fillMaxSize()
                 .padding(padding),
         ) {
-            // 超级开发组：Codex / Cursor / Claude / Trae CLI 切换卡片
-            if (superEmployeeConversation && onSwitchCliModel != null && conversationId != null) {
-                SuperDevCliModelSwitchCard(
-                    selectedConversationId = conversationId,
-                    onSelect = onSwitchCliModel,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = Spacing.md, vertical = Spacing.xs),
-                )
-            }
+            // 超级员工对话页不再在顶部显示「超级开发组 · CLI」切换框：
+            // 每个 CLI（Codex/Cursor/Claude/Trae）已是独立联系人，从消息列表各自进入即可，
+            // 顶部内嵌切换器与列表入口重复且干扰对话，按需求移除。
 
             // 同步提示条
             if (syncStale) {
