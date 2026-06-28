@@ -37,6 +37,7 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "real_absorption_run_present": bool(latest_run),
         "real_absorption_gates_passed": latest_run.get("gates_passed") is True if latest_run else False,
         "per_run_code_graph_proved": _code_graph_ready(latest_run),
+        "product_mainline_absorption_ready": _report_ready(root, "retort_product_mainline_absorption_proof.json"),
         "cross_domain_live_probe_ready": _cross_domain_ready(live_probes),
         "frontend_structure_ready": bool((live_probes.get("blackhole_ui") or {}).get("ready")),
         "frontend_operation_replay_ready": bool((live_probes.get("blackhole_ui_operation_replay") or {}).get("ready")),
@@ -92,6 +93,7 @@ def _journey_stages(
     external_report = artifact_by_name.get("external_review_report", {})
     location = _location_evidence(latest_run)
     quality = artifact_by_name.get("quality_gate_bundle", {})
+    mainline_proof = artifact_by_name.get("product_mainline_absorption_proof", {})
     holdout = artifact_by_name.get("pr_holdout_blind_eval", {})
     rollback = artifact_by_name.get("pr_failure_rollback_replay", {})
     employee_patch = artifact_by_name.get("employee_patch_closure", {})
@@ -132,11 +134,12 @@ def _journey_stages(
         _stage(
             "absorb_and_gate",
             "真实吸收和门禁",
-            latest_run.get("gates_passed") is True and quality.get("exists") is True and bool(latest_run.get("changed_files")),
+            latest_run.get("gates_passed") is True and quality.get("exists") is True and mainline_proof.get("exists") is True and bool(latest_run.get("changed_files")),
             [
                 f"changed_files={len(latest_run.get('changed_files') or [])}",
                 f"gates_passed={latest_run.get('gates_passed')}",
                 f"quality_gate_sha={quality.get('sha256', '')}",
+                f"product_mainline_sha={mainline_proof.get('sha256', '')}",
             ],
         ),
         _stage(
@@ -226,6 +229,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
     specs = [
         ("external_review_report", docs / "retort_external_review_report.json", "source_report", ("source", "external_snapshot", "review_pipeline")),
         ("quality_gate_bundle", docs / "retort_quality_gate_bundle.json", "source_report", ("status", "summary", "gates")),
+        ("product_mainline_absorption_proof", docs / "retort_product_mainline_absorption_proof.json", "source_report", ("status", "summary", "changed_files")),
         ("absorption_continuity_probe", docs / "retort_absorption_continuity_probe.json", "source_report", ("status", "summary", "runs")),
         ("multi_project_absorption_replay", docs / "retort_multi_project_absorption_replay.json", "source_report", ("status", "summary", "projects")),
         ("pr_holdout_blind_eval", docs / "retort_pr_holdout_blind_eval.json", "source_report", ("status", "summary", "cases")),
@@ -371,6 +375,7 @@ def _location_evidence(run: dict[str, Any]) -> dict[str, Any]:
 def _release_inputs_ready(root: Path) -> bool:
     docs = root / "docs"
     quality = _read_json(docs / "retort_quality_gate_bundle.json")
+    mainline_proof = _read_json(docs / "retort_product_mainline_absorption_proof.json")
     continuity = _read_json(docs / "retort_absorption_continuity_probe.json")
     long_run = _read_json(docs / "retort_pr_long_run_review.json")
     holdout = _read_json(docs / "retort_pr_holdout_blind_eval.json")
@@ -396,6 +401,8 @@ def _release_inputs_ready(root: Path) -> bool:
     external_merge_landing = _read_json(docs / "retort_external_merge_landing.json")
     return (
         quality.get("summary", {}).get("all_gates_passed") is True
+        and mainline_proof.get("status") == "ready"
+        and mainline_proof.get("summary", {}).get("is_merge_commit") is True
         and continuity.get("status") == "ready"
         and long_run.get("status") == "ready"
         and holdout.get("status") == "ready"
@@ -431,6 +438,7 @@ def _release_inputs_ready(root: Path) -> bool:
         and competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side") is True
         and int(competitor_runtime.get("summary", {}).get("ready_competitor_project_count") or 0) >= 3
         and competitor_runtime.get("summary", {}).get("all_live_upstream_sources_verified") is True
+        and competitor_runtime.get("summary", {}).get("all_live_upstream_sources_materialized") is True
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True

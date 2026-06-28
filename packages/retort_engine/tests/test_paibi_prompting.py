@@ -56,6 +56,7 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "employee_patch_stress_concurrent_workers=120",
         "employee_patch_stress_all_rollbacks=True",
         "employee_scheduler_stress_unique_process_ids=30",
+        "product_mainline_absorption_merge_commit=True",
         "cross_domain_ci_regression_rounds=3/3",
         "review_family_behavior_replay_direct_outputs=True",
         "release_decision_self_reference=False",
@@ -75,6 +76,7 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "employee_patch_stress_concurrent_workers=120" in selected
     assert "employee_patch_stress_all_rollbacks=True" in selected
     assert "employee_scheduler_stress_unique_process_ids=30" in selected
+    assert "product_mainline_absorption_merge_commit=True" in selected
     assert "cross_domain_ci_regression_rounds=3/3" in selected
     assert "review_family_behavior_replay_direct_outputs=True" in selected
     assert "release_decision_self_reference=False" in selected

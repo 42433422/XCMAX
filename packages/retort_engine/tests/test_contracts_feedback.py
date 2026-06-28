@@ -49,6 +49,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "employee_patch_closure_result" in contract_names()
     assert "employee_patch_stress_result" in contract_names()
     assert "production_recovery_drill_result" in contract_names()
+    assert "product_mainline_absorption_proof_result" in contract_names()
     assert "absorption_release_decision_result" in contract_names()
     assert "quality_gate_bundle_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
@@ -96,6 +97,10 @@ def test_contract_schemas_validate_required_outputs() -> None:
     patch_closure_valid = validate_contract("employee_patch_closure_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     patch_stress_valid = validate_contract("employee_patch_stress_result", {"status": "ready", "project": "p", "summary": {}, "workers": [], "evidence": {}})
     recovery_valid = validate_contract("production_recovery_drill_result", {"status": "ready", "project": "p", "summary": {}, "scenarios": [], "evidence": {}})
+    mainline_valid = validate_contract(
+        "product_mainline_absorption_proof_result",
+        {"status": "ready", "project": "p", "summary": {}, "changed_files": [], "source_files": [], "test_files": [], "evidence": {}},
+    )
     release_valid = validate_contract("absorption_release_decision_result", {"status": "ready", "project": "p", "summary": {}, "decisions": [], "evidence": {}})
     quality_gate_valid = validate_contract("quality_gate_bundle_result", {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
@@ -139,6 +144,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert patch_closure_valid["valid"] is True
     assert patch_stress_valid["valid"] is True
     assert recovery_valid["valid"] is True
+    assert mainline_valid["valid"] is True
     assert release_valid["valid"] is True
     assert quality_gate_valid["valid"] is True
     assert invalid["valid"] is False

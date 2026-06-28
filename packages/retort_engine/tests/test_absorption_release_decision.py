@@ -14,9 +14,10 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 23
+    assert result["summary"]["ready_decision_count"] == 24
     assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
+    assert result["summary"]["product_mainline_absorption_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
     assert result["summary"]["external_advantage_matrix_ready"] is True
     assert result["summary"]["external_advantage_ci_regression_ready"] is True
@@ -153,6 +154,15 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_pr_holdout_blind_eval.json": {"status": "ready", "summary": {"accepted_pr_count": 20, "target_pr_count": 20}},
         "retort_pr_failure_rollback_replay.json": {"status": "ready", "summary": {"all_failures_rolled_back": True}},
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}},
+        "retort_product_mainline_absorption_proof.json": {
+            "status": "ready",
+            "summary": {
+                "is_merge_commit": True,
+                "behavior_source_changed_count": 2,
+                "behavior_test_changed_count": 2,
+                "post_merge_quality_gate_passed": True,
+            },
+        },
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {"all_expected_outcomes_verified": True}},
         "retort_employee_patch_stress.json": {
             "status": "ready",
@@ -209,6 +219,7 @@ def _write_decision_inputs(root: Path) -> None:
                 "competitor_project_count": 3,
                 "all_external_processes_successful": True,
                 "all_live_upstream_sources_verified": True,
+                "all_live_upstream_sources_materialized": True,
                 "live_upstream_verified_count": 3,
                 "retort_exceeds_patch_parser_by_semantic_comments": True,
             },

@@ -38,6 +38,7 @@ from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.production_recovery_drill import build_production_recovery_drill
+from retort_engine.product_mainline_absorption_proof import build_product_mainline_absorption_proof
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
@@ -304,6 +305,12 @@ class RetortService:
     def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_production_recovery_drill(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def product_mainline_absorption_proof(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_product_mainline_absorption_proof(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            commit=str(payload.get("commit") or "HEAD"),
+        )
+
     def absorption_release_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_absorption_release_decision(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -516,6 +523,10 @@ def create_app() -> Any:
     @app.post("/production-recovery-drill")
     def production_recovery_drill_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.production_recovery_drill(payload)
+
+    @app.post("/product-mainline-absorption-proof")
+    def product_mainline_absorption_proof_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.product_mainline_absorption_proof(payload)
 
     @app.post("/absorption-release-decision")
     def absorption_release_decision_route(payload: dict[str, Any]) -> dict[str, Any]:
