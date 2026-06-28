@@ -24,6 +24,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "cross_project_replay_result" in contract_names()
     assert "multi_project_absorption_replay_result" in contract_names()
     assert "absorption_continuity_probe_result" in contract_names()
+    assert "hardening_run_result" in contract_names()
     assert "complex_pr_replay_result" in contract_names()
     assert "task_prioritization_result" in contract_names()
     assert "task_dispatch_plan_result" in contract_names()
@@ -50,6 +51,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     multi_replay_valid = validate_contract("multi_project_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}})
     continuity_valid = validate_contract("absorption_continuity_probe_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}})
+    hardening_valid = validate_contract("hardening_run_result", {"run_id": "r", "status": "applied", "summary": {}, "changed_files": [], "gates": [], "gates_passed": True, "code_graph_proof": {}, "employee_results_path": "e"})
     complex_replay_valid = validate_contract("complex_pr_replay_result", {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "evidence": {}})
     task_valid = validate_contract("task_prioritization_result", {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}})
     dispatch_valid = validate_contract("task_dispatch_plan_result", {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}})
@@ -79,6 +81,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert replay_valid["valid"] is True
     assert multi_replay_valid["valid"] is True
     assert continuity_valid["valid"] is True
+    assert hardening_valid["valid"] is True
     assert complex_replay_valid["valid"] is True
     assert task_valid["valid"] is True
     assert dispatch_valid["valid"] is True

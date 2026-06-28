@@ -7,6 +7,7 @@ from pathlib import Path
 
 from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
+from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
 from retort_engine.architecture_contracts import evaluate_architecture_contracts, load_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
@@ -180,6 +181,10 @@ def main(argv: list[str] | None = None) -> int:
     continuity_probe.add_argument("--min-runs", type=int, default=5)
     continuity_probe.add_argument("--output", default="")
     continuity_probe.add_argument("--json", action="store_true")
+    hardening_run = sub.add_parser("record-hardening-run")
+    hardening_run.add_argument("--project", default=".")
+    hardening_run.add_argument("--output", default="")
+    hardening_run.add_argument("--json", action="store_true")
     complex_replay = sub.add_parser("complex-pr-replay")
     complex_replay.add_argument("--project", default=".")
     complex_replay.add_argument("--pr-url", action="append", default=[])
@@ -540,6 +545,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "record-hardening-run":
+        result = record_post_absorption_hardening_run(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort hardening run status: {result['status']}")
+            print(f"Behavior files: {result['summary']['behavior_source_file_count']} source / {result['summary']['behavior_test_file_count']} tests")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["gates_passed"] else 1
     if args.command == "complex-pr-replay":
         result = build_complex_pr_replay_report(args.project, pr_urls=args.pr_url or None, max_comments=args.max_comments, max_bytes=args.max_bytes)
         if args.output:
