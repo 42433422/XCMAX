@@ -36,14 +36,20 @@ def test_record_post_absorption_hardening_run_materializes_latest_behavior_diff(
     _git(["add", "."], tmp_path)
     _git(["commit", "-m", "harden absorption behavior"], tmp_path)
 
-    result = record_post_absorption_hardening_run(tmp_path, python_executable=sys.executable)
+    result = record_post_absorption_hardening_run(tmp_path, python_executable=sys.executable, worker_count=2)
 
     assert result["status"] == "applied"
     assert result["gates_passed"] is True
     assert result["summary"]["behavior_source_file_count"] >= 1
     assert result["summary"]["behavior_test_file_count"] >= 1
+    assert result["summary"]["worker_count"] == 2
+    assert result["summary"]["independent_worker_count"] == 2
+    assert result["summary"]["employee_result_count"] >= 2
+    assert result["summary"]["multi_worker_verified"] is True
     assert result["code_graph_proof"]["run_id"] == result["run_id"]
-    assert Path(result["employee_results_path"]).is_file()
+    employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
+    assert employee_result["execution_mode"] == "employee_runtime_worker_multi_process"
+    assert employee_result["runtime_evidence"]["multi_worker"]["verified"] is True
     assert Path(result["run_record_path"]).is_file()
     assert validate_contract("hardening_run_result", result)["valid"] is True
 

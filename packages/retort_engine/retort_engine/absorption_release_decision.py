@@ -16,6 +16,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
+    external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
         _decision(
@@ -47,6 +48,14 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "comparative_analysis_depth",
             external_matrix.get("status") == "ready" and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0,
             ["external_advantage_matrix"],
+        ),
+        _decision(
+            "prove_repeatable_external_advantage",
+            "comparative_analysis_depth",
+            external_repeat.get("status") == "ready"
+            and external_repeat.get("summary", {}).get("stable_case_set") is True
+            and external_repeat.get("summary", {}).get("stable_score_delta") is True,
+            ["external_advantage_repeat"],
         ),
         _decision(
             "accept_blind_holdout_quality",
@@ -82,6 +91,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
         "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
+        "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
+        "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
         "failure_rollback_ready": failure_rollback.get("status") == "ready",
         "operator_journey_ready": operator_journey.get("status") == "ready",
         "operator_journey_cross_domain_ready": bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
@@ -103,6 +114,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_employee_patch_closure.json",
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
+                "retort_external_advantage_repeat.json",
                 "retort_operator_journey_replay.json",
             ],
         },

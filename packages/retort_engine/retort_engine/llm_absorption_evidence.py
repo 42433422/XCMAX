@@ -186,6 +186,8 @@ def _report_evidence(project: Path) -> list[str]:
     benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
     external_matrix = read_json(project / "docs" / "retort_external_advantage_matrix.json")
     external_matrix_summary = external_matrix.get("summary") if isinstance(external_matrix.get("summary"), dict) else {}
+    external_repeat = read_json(project / "docs" / "retort_external_advantage_repeat.json")
+    external_repeat_summary = external_repeat.get("summary") if isinstance(external_repeat.get("summary"), dict) else {}
     adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
     adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
     stress_report = read_json(project / "docs" / "retort_employee_scheduler_stress.json")
@@ -354,6 +356,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"external_advantage_matrix_extension_policy_cases={external_matrix_summary.get('extension_policy_case_count', '')}",
         f"external_advantage_matrix_per_case_before_after={external_matrix_summary.get('per_case_before_after', '')}",
         f"external_advantage_matrix_all_improved={external_matrix_summary.get('all_advantages_improved', '')}",
+        f"external_advantage_repeat_status={external_repeat.get('status', '')}",
+        f"external_advantage_repeat_ready={external_repeat_summary.get('ready_repeat_count', '')}/{external_repeat_summary.get('repeat_count', '')}",
+        f"external_advantage_repeat_total_case_evaluations={external_repeat_summary.get('total_case_evaluation_count', '')}",
+        f"external_advantage_repeat_stable_case_set={external_repeat_summary.get('stable_case_set', '')}",
+        f"external_advantage_repeat_stable_score_delta={external_repeat_summary.get('stable_score_delta', '')}",
+        f"external_advantage_repeat_minimum_score_delta={external_repeat_summary.get('minimum_score_delta', '')}",
         f"review_adjudication_calibration_status={adjudication_report.get('status', '')}",
         f"review_adjudication_human_label_count={adjudication_summary.get('human_label_count', '')}",
         f"review_adjudication_pass_rate={adjudication_summary.get('pass_rate', '')}",
@@ -471,6 +479,7 @@ def _latest_run_evidence(project: Path) -> list[str]:
             changed_files = [str(item) for item in payload.get("changed_files") or []]
             source_files = [item for item in changed_files if "/retort_engine/" in item and "/tests/" not in item]
             test_files = [item for item in changed_files if "/tests/" in item]
+            summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
             return [
                 f"latest_absorption_run_id={payload.get('run_id', path.stem)}",
                 f"latest_absorption_source={payload.get('source', '')}",
@@ -478,6 +487,10 @@ def _latest_run_evidence(project: Path) -> list[str]:
                 f"latest_absorption_changed_file_count={len(changed_files)}",
                 f"latest_absorption_behavior_source_count={len(source_files)}",
                 f"latest_absorption_behavior_test_count={len(test_files)}",
+                f"latest_absorption_worker_count={summary.get('worker_count', '')}",
+                f"latest_absorption_independent_worker_count={summary.get('independent_worker_count', '')}",
+                f"latest_absorption_employee_result_count={summary.get('employee_result_count', '')}",
+                f"latest_absorption_multi_worker_verified={summary.get('multi_worker_verified', '')}",
             ]
     return []
 
