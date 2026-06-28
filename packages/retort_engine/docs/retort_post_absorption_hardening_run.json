@@ -10,6 +10,7 @@
     "retort_engine/diff_extension_policy.py",
     "retort_engine/employee_patch_closure.py",
     "retort_engine/external_advantage_matrix.py",
+    "retort_engine/external_advantage_repeat.py",
     "retort_engine/llm_absorption_evidence.py",
     "retort_engine/multi_project_absorption_replay.py",
     "retort_engine/operator_journey_replay.py",
@@ -37,7 +38,9 @@
     "tests/test_contracts_feedback.py",
     "tests/test_diff_extension_policy.py",
     "tests/test_employee_patch_closure.py",
+    "tests/test_employee_scheduler_stress.py",
     "tests/test_external_advantage_matrix.py",
+    "tests/test_external_advantage_repeat.py",
     "tests/test_llm_absorption_evidence.py",
     "tests/test_multi_project_absorption_replay.py",
     "tests/test_operator_journey_replay.py",
@@ -58,9 +61,12 @@
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_continuity_probe.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_absorption_release_decision.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_employee_patch_closure.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_employee_scheduler_stress.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_advantage_matrix.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_advantage_repeat.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_multi_project_absorption_replay.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_operator_journey_replay.json",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_post_absorption_hardening_run.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_failure_rollback_replay.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_holdout_blind_eval.json",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_long_run_review.json",
@@ -77,6 +83,7 @@
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/diff_extension_policy.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/employee_patch_closure.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/external_advantage_matrix.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/external_advantage_repeat.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/llm_absorption_evidence.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/multi_project_absorption_replay.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/retort_engine/operator_journey_replay.py",
@@ -102,7 +109,9 @@
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_contracts_feedback.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_diff_extension_policy.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_employee_patch_closure.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_employee_scheduler_stress.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_external_advantage_matrix.py",
+    "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_external_advantage_repeat.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_llm_absorption_evidence.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_multi_project_absorption_replay.py",
     "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/tests/test_operator_journey_replay.py",
@@ -131,6 +140,7 @@
       "retort_engine/diff_extension_policy.py",
       "retort_engine/employee_patch_closure.py",
       "retort_engine/external_advantage_matrix.py",
+      "retort_engine/external_advantage_repeat.py",
       "retort_engine/llm_absorption_evidence.py",
       "retort_engine/multi_project_absorption_replay.py",
       "retort_engine/operator_journey_replay.py",
@@ -161,6 +171,7 @@
       "retort_engine/diff_extension_policy.py",
       "retort_engine/employee_patch_closure.py",
       "retort_engine/external_advantage_matrix.py",
+      "retort_engine/external_advantage_repeat.py",
       "retort_engine/llm_absorption_evidence.py",
       "retort_engine/multi_project_absorption_replay.py",
       "retort_engine/operator_journey_replay.py",
@@ -169,8 +180,7 @@
       "retort_engine/pr_failure_rollback_replay.py",
       "retort_engine/pr_holdout_blind_eval.py",
       "retort_engine/pr_live_probe.py",
-      "retort_engine/pr_long_run_review.py",
-      "retort_engine/pr_publish.py"
+      "retort_engine/pr_long_run_review.py"
     ],
     "changed_hotspots": [
       "retort_engine/capability_audit.py",
@@ -192,6 +202,7 @@
         "retort_engine/diff_extension_policy.py",
         "retort_engine/employee_patch_closure.py",
         "retort_engine/external_advantage_matrix.py",
+        "retort_engine/external_advantage_repeat.py",
         "retort_engine/llm_absorption_evidence.py",
         "retort_engine/multi_project_absorption_replay.py",
         "retort_engine/operator_journey_replay.py",
@@ -236,6 +247,7 @@
           "retort_engine/employee_patch_closure.py",
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/external_advantage_matrix.py",
+          "retort_engine/external_advantage_repeat.py",
           "retort_engine/multi_project_absorption_replay.py",
           "retort_engine/operator_journey_replay.py",
           "retort_engine/pr_dry_run.py",
@@ -294,6 +306,9 @@
         ],
         "retort_engine/external_advantage_matrix.py": [
           "retort_engine/pr_review.py"
+        ],
+        "retort_engine/external_advantage_repeat.py": [
+          "retort_engine/external_advantage_matrix.py"
         ],
         "retort_engine/llm_absorption_evidence.py": [
           "retort_engine/absorption_state.py",
@@ -367,6 +382,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/evolution_map.py",
           "retort_engine/external_advantage_matrix.py",
+          "retort_engine/external_advantage_repeat.py",
           "retort_engine/feedback.py",
           "retort_engine/multi_project_absorption_replay.py",
           "retort_engine/operator_journey_replay.py",
@@ -424,6 +440,7 @@
           "tests/test_employee_patch_closure.py",
           "tests/test_employee_scheduler_stress.py",
           "tests/test_external_advantage_matrix.py",
+          "tests/test_external_advantage_repeat.py",
           "tests/test_multi_project_absorption_replay.py",
           "tests/test_operator_journey_replay.py",
           "tests/test_pr_dry_run.py",
@@ -461,8 +478,14 @@
         ],
         "retort_engine/external_advantage_matrix.py": [
           "retort_engine/cli.py",
+          "retort_engine/external_advantage_repeat.py",
           "retort_engine/service.py",
           "tests/test_external_advantage_matrix.py"
+        ],
+        "retort_engine/external_advantage_repeat.py": [
+          "retort_engine/cli.py",
+          "retort_engine/service.py",
+          "tests/test_external_advantage_repeat.py"
         ],
         "retort_engine/llm_absorption_evidence.py": [
           "retort_engine/core.py",
@@ -562,7 +585,9 @@
           "tests/test_absorption_continuity_probe.py",
           "tests/test_absorption_release_decision.py",
           "tests/test_employee_patch_closure.py",
+          "tests/test_employee_scheduler_stress.py",
           "tests/test_external_advantage_matrix.py",
+          "tests/test_external_advantage_repeat.py",
           "tests/test_multi_project_absorption_replay.py",
           "tests/test_operator_journey_replay.py",
           "tests/test_pr_long_run_review.py",
@@ -608,7 +633,7 @@
     "evidence": {
       "max_files": 400,
       "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
-      "run_id": "20260628025422-hardening",
+      "run_id": "20260628031318-hardening",
       "scope": "per_real_absorption_run",
       "style": "deterministic_post_absorption_code_graph"
     },
@@ -623,6 +648,7 @@
       "retort_engine/diff_extension_policy.py",
       "retort_engine/employee_patch_closure.py",
       "retort_engine/external_advantage_matrix.py",
+      "retort_engine/external_advantage_repeat.py",
       "retort_engine/llm_absorption_evidence.py",
       "retort_engine/multi_project_absorption_replay.py",
       "retort_engine/operator_journey_replay.py",
@@ -631,8 +657,7 @@
       "retort_engine/pr_failure_rollback_replay.py",
       "retort_engine/pr_holdout_blind_eval.py",
       "retort_engine/pr_live_probe.py",
-      "retort_engine/pr_long_run_review.py",
-      "retort_engine/pr_publish.py"
+      "retort_engine/pr_long_run_review.py"
     ],
     "hotspot_files": [
       "retort_engine/capability_audit.py",
@@ -648,11 +673,11 @@
     ],
     "passed": true,
     "per_run_required": true,
-    "run_id": "20260628025422-hardening",
+    "run_id": "20260628031318-hardening",
     "status": "proved",
     "summary": {
-      "changed_behavior_file_count": 28,
-      "changed_file_count": 63,
+      "changed_behavior_file_count": 29,
+      "changed_file_count": 69,
       "changed_focus_file_count": 20,
       "changed_hotspot_count": 6,
       "dependency_cycle_touch_count": 0,
@@ -660,10 +685,11 @@
       "graph_status": "ready"
     }
   },
-  "employee_results_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628025422-hardening.json",
+  "employee_results_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628031318-hardening-zz-aggregate.json",
   "evidence": {
     "employee_runtime_worker_subprocess": true,
     "merge_commit": "2525bd4b6",
+    "multi_worker_verified": true,
     "records_committed_post_merge_behavior": true,
     "source": "git_diff_latest_absorption_merge_to_head"
   },
@@ -686,7 +712,7 @@
       "command": [
         "retort",
         "verify-per-run-code-graph-proof",
-        "20260628025422-hardening"
+        "20260628031318-hardening"
       ],
       "cwd": "",
       "duration_sec": 0.0,
@@ -703,36 +729,56 @@
         "-m",
         "retort_engine.employee_runtime_worker",
         "--payload-file",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_runtime_requests/20260628025422-hardening.json"
+        "<multi-worker-payloads>"
       ],
       "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
-      "duration_sec": 0.053,
+      "duration_sec": 0.074,
       "exit_code": 0,
       "ok": true,
-      "stderr_tail": "",
-      "stdout_tail": "me_requests/20260628025422-hardening.json\",\n        \"worker_review_status=reviewed\",\n        \"worker_review_artifact=/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628025422-hardening.worker_review.json\",\n        \"worker_review_comment_count=12\",\n        \"employee_patch_closure_status=not_requested\",\n        \"employee_patch_closure_success_case=\",\n        \"employee_patch_closure_rollback_case=\"\n      ],\n      \"score_after\": {\n        \"employee_execution_integration\": 95.0,\n        \"feedback_loop_closure\": 95.0\n      },\n      \"status\": \"completed\",\n      \"summary\": \"Independent employee runtime completed absorption task for capability_absorption_score.\",\n      \"task_id\": \"20260628025422-hardening-prove-hardening\"\n    }\n  ],\n  \"run_id\": \"20260628025422-hardening\",\n  \"runtime_evidence\": {\n    \"employee_patch_closure\": {},\n    \"history_store\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/retort_history.sqlite\",\n    \"independent_process\": true,\n    \"queue_path\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_queue.jsonl\",\n    \"result_path\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628025422-hardening.json\",\n    \"task_result_count\": 1,\n    \"worker_payload\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_runtime_requests/20260628025422-hardening.json\",\n    \"worker_review\": {\n      \"artifact\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628025422-hardening.worker_review.json\",\n      \"comment_count\": 12,\n      \"file_count\": 9,\n      \"status\": \"reviewed\",\n      \"task_group_count\": 3\n    }\n  },\n  \"source\": \"retort://post-absorption-hardening/2525bd4b6\"\n}\n"
+      "result_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628031318-hardening-zz-aggregate.json",
+      "stderr_tail": "\n\n",
+      "stdout_tail": "{\"verified\": true, \"worker_count\": 3, \"independent_worker_count\": 3, \"result_path_count\": 3, \"worker_review_count\": 3, \"task_result_count\": 3, \"result_paths\": [\"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628031318-hardening-worker-01.json\", \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628031318-hardening-worker-02.json\", \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628031318-hardening-worker-03.json\"]}",
+      "worker_count": 3
     }
   ],
   "gates_passed": true,
-  "run_id": "20260628025422-hardening",
-  "run_record_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628025422-hardening.json",
+  "run_id": "20260628031318-hardening",
+  "run_record_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628031318-hardening.json",
   "source": "retort://post-absorption-hardening/2525bd4b6",
   "status": "applied",
   "summary": {
-    "behavior_source_file_count": 28,
-    "behavior_test_file_count": 23,
-    "changed_file_count": 63,
-    "duration_sec": 1.197,
+    "behavior_source_file_count": 29,
+    "behavior_test_file_count": 25,
+    "changed_file_count": 69,
+    "duration_sec": 1.356,
+    "employee_result_count": 3,
+    "independent_worker_count": 3,
     "merge_commit": "2525bd4b6",
-    "mode": "post_absorption_hardening"
+    "mode": "post_absorption_hardening",
+    "multi_worker_verified": true,
+    "worker_count": 3
   },
   "tasks": [
     {
       "dimension": "capability_absorption_score",
       "priority": "P0",
-      "task_id": "20260628025422-hardening-prove-hardening",
+      "task_id": "20260628031318-hardening-prove-hardening",
       "title": "Prove post-absorption hardening as latest behavior absorption",
       "why": "The latest absorption score must be anchored to real behavior source and tests after merge."
+    },
+    {
+      "dimension": "architecture_depth",
+      "priority": "P0",
+      "task_id": "20260628031318-hardening-prove-code-graph",
+      "title": "Verify per-run code graph proof for changed core modules",
+      "why": "The absorption proof must locate changed hotspots and dependency impact, not only count files."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "priority": "P0",
+      "task_id": "20260628031318-hardening-prove-external-regression",
+      "title": "Recheck external advantage regression after hardening",
+      "why": "External behavior migration must remain reproducible after the hardening diff."
     }
   ]
 }
