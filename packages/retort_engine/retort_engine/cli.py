@@ -13,11 +13,14 @@ from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
+from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
 from retort_engine.external_merge_landing import build_external_merge_landing
@@ -219,6 +222,12 @@ def main(argv: list[str] | None = None) -> int:
     external_advantage.add_argument("--min-cases", type=int, default=6)
     external_advantage.add_argument("--output", default="")
     external_advantage.add_argument("--json", action="store_true")
+    external_ci = sub.add_parser("external-advantage-ci-regression")
+    external_ci.add_argument("--project", default=".")
+    external_ci.add_argument("--min-cases", type=int, default=6)
+    external_ci.add_argument("--min-blind-delta", type=int, default=80)
+    external_ci.add_argument("--output", default="")
+    external_ci.add_argument("--json", action="store_true")
     external_repeat = sub.add_parser("external-advantage-repeat")
     external_repeat.add_argument("--project", default=".")
     external_repeat.add_argument("--repeats", type=int, default=2)
@@ -235,10 +244,23 @@ def main(argv: list[str] | None = None) -> int:
     cross_domain_replay.add_argument("--min-domains", type=int, default=10)
     cross_domain_replay.add_argument("--output", default="")
     cross_domain_replay.add_argument("--json", action="store_true")
+    cross_domain_e2e = sub.add_parser("cross-domain-end-to-end")
+    cross_domain_e2e.add_argument("--project", default=".")
+    cross_domain_e2e.add_argument("--min-domains", type=int, default=10)
+    cross_domain_e2e.add_argument("--output", default="")
+    cross_domain_e2e.add_argument("--json", action="store_true")
     contract_runtime = sub.add_parser("contract-runtime-rehearsal")
     contract_runtime.add_argument("--project", default=".")
+    contract_runtime.add_argument("--concurrent-workers", type=int, default=120)
+    contract_runtime.add_argument("--run-id", default="")
     contract_runtime.add_argument("--output", default="")
     contract_runtime.add_argument("--json", action="store_true")
+    contract_stress = sub.add_parser("contract-stability-stress")
+    contract_stress.add_argument("--project", default=".")
+    contract_stress.add_argument("--rounds", type=int, default=2)
+    contract_stress.add_argument("--concurrent-workers", type=int, default=120)
+    contract_stress.add_argument("--output", default="")
+    contract_stress.add_argument("--json", action="store_true")
     review_family = sub.add_parser("review-family-behavior-replay")
     review_family.add_argument("--project", default=".")
     review_family.add_argument("--min-cases", type=int, default=3)
@@ -658,6 +680,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "external-advantage-ci-regression":
+        result = build_external_advantage_ci_regression(args.project, min_cases=args.min_cases, min_blind_delta=args.min_blind_delta, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort external advantage CI regression status: {result['status']}")
+            print(f"CI cases: {result['summary']['passed_case_count']}/{result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "external-advantage-repeat":
         result = build_external_advantage_repeat(args.project, repeat_count=args.repeats, min_cases=args.min_cases, output=args.output)
         if args.json:
@@ -690,13 +722,33 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "cross-domain-end-to-end":
+        result = build_cross_domain_end_to_end(args.project, min_domains=args.min_domains, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort cross-domain end-to-end status: {result['status']}")
+            print(f"Linked domains: {result['summary']['linked_domain_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "contract-runtime-rehearsal":
-        result = build_contract_runtime_rehearsal(args.project, output=args.output)
+        result = build_contract_runtime_rehearsal(args.project, output=args.output, run_id=args.run_id, concurrent_workers=args.concurrent_workers)
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort contract runtime rehearsal status: {result['status']}")
             print(f"Rejected violations: {result['summary']['violation_rejected_count']}/{result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "contract-stability-stress":
+        result = build_contract_stability_stress(args.project, rounds=args.rounds, concurrent_workers=args.concurrent_workers, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort contract stability stress status: {result['status']}")
+            print(f"Fault injections: {result['summary']['total_fault_injection_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

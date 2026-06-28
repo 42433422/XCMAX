@@ -14,15 +14,18 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 14
+    assert result["summary"]["ready_decision_count"] == 17
     assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
     assert result["summary"]["external_advantage_matrix_ready"] is True
+    assert result["summary"]["external_advantage_ci_regression_ready"] is True
     assert result["summary"]["external_advantage_repeat_ready"] is True
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
+    assert result["summary"]["cross_domain_end_to_end_ready"] is True
     assert result["summary"]["contract_runtime_rehearsal_ready"] is True
+    assert result["summary"]["contract_stability_stress_ready"] is True
     assert result["summary"]["review_family_behavior_ready"] is True
     assert result["summary"]["external_merge_landing_ready"] is True
     assert result["summary"]["failure_rollback_ready"] is True
@@ -150,6 +153,16 @@ def _write_decision_inputs(root: Path) -> None:
             "status": "ready",
             "summary": {"score_delta": 50, "blind_third_party_all_cases_accepted": True, "blind_third_party_minimum_delta": 65},
         },
+        "retort_external_advantage_ci_regression.json": {
+            "status": "ready",
+            "summary": {
+                "passed_case_count": 6,
+                "case_count": 6,
+                "all_cases_have_ci_acceptance": True,
+                "all_direct_review_regressions_verified": True,
+                "blind_third_party_minimum_delta": 80,
+            },
+        },
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True, "total_case_evaluation_count": 12}},
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
@@ -164,6 +177,15 @@ def _write_decision_inputs(root: Path) -> None:
                 "direct_module_count": 10,
             },
         },
+        "retort_cross_domain_end_to_end.json": {
+            "status": "ready",
+            "summary": {
+                "linked_domain_count": 10,
+                "all_stages_chained": True,
+                "all_stage_outputs_consumed": True,
+                "integrated_review_status": "reviewed",
+            },
+        },
         "retort_contract_runtime_rehearsal.json": {
             "status": "ready",
             "summary": {
@@ -172,7 +194,16 @@ def _write_decision_inputs(root: Path) -> None:
                 "all_concurrent_violations_rejected": True,
                 "all_concurrent_rollbacks_verified": True,
                 "violation_rejected_count": 3,
-                "concurrent_violation_rejected_count": 18,
+                "concurrent_violation_rejected_count": 360,
+            },
+        },
+        "retort_contract_stability_stress.json": {
+            "status": "ready",
+            "summary": {
+                "concurrent_worker_count": 120,
+                "concurrency_floor_exceeded": True,
+                "total_fault_injection_count": 720,
+                "state_leak_count": 0,
             },
         },
         "retort_review_family_behavior_replay.json": {

@@ -1,0 +1,21 @@
+diff --git a/retort_engine/absorption_orchestrator.py b/retort_engine/absorption_orchestrator.py
+--- a/retort_engine/absorption_orchestrator.py
++++ b/retort_engine/absorption_orchestrator.py
+@@ -0,0 +1,17 @@
++def run_integrated_absorption_pipeline(payload):
++    # TODO: remove placeholder orchestration before claiming cross-domain depth
++    secret_token = payload.get('github_token')
++    subprocess.run(payload['command'], shell=True, check=False)
++    yaml.load(payload.get('contract_yaml'))
++    return {'absorbed_domains': [
++        'benchmark_harness:retort_engine.swe_bench_oracle.build_issue_patch_benchmark',
++        'architecture_governance:retort_engine.architecture_contracts.evaluate_architecture_contracts',
++        'codebase_graph:retort_engine.codebase_graph.build_codebase_graph',
++        'context_packaging:retort_engine.context_packager.build_context_pack',
++        'license_policy:retort_engine.license_gate.license_gate',
++        'static_analysis_security:retort_engine.static_analysis_gate.scan_static_analysis_findings',
++        'intent_alignment:retort_engine.intent_alignment.assess_change_intent_alignment',
++        'employee_task_graph:retort_engine.task_prioritization.build_task_prioritization_report',
++        'employee_dispatch:retort_engine.task_dispatch_plan.build_task_dispatch_plan',
++        'core_architecture_refactor:retort_engine.architecture_refactor.build_core_refactor_plan',
++    ]}

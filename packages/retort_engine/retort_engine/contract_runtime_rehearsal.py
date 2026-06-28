@@ -37,7 +37,7 @@ def build_contract_runtime_rehearsal(
     *,
     output: str | Path = "",
     run_id: str = "",
-    concurrent_workers: int = 6,
+    concurrent_workers: int = 120,
     cases: tuple[dict[str, Any], ...] | list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
@@ -82,6 +82,7 @@ def build_contract_runtime_rehearsal(
             "lab_dir": str(lab),
             "runtime_guard": "retort_engine.contracts.validate_contract",
             "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+            "stress_boundary": "default_120_workers_exceeds_deep_review_100_concurrency_floor",
         },
     }
     if output:

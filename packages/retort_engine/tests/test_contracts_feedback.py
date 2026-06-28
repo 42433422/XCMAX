@@ -30,9 +30,12 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "task_dispatch_plan_result" in contract_names()
     assert "review_quality_benchmark_result" in contract_names()
     assert "external_advantage_matrix_result" in contract_names()
+    assert "external_advantage_ci_regression_result" in contract_names()
     assert "external_advantage_repeat_result" in contract_names()
     assert "cross_domain_absorption_replay_result" in contract_names()
+    assert "cross_domain_end_to_end_result" in contract_names()
     assert "contract_runtime_rehearsal_result" in contract_names()
+    assert "contract_stability_stress_result" in contract_names()
     assert "review_family_behavior_replay_result" in contract_names()
     assert "external_merge_landing_result" in contract_names()
     assert "review_adjudication_calibration_result" in contract_names()
@@ -62,9 +65,15 @@ def test_contract_schemas_validate_required_outputs() -> None:
     dispatch_valid = validate_contract("task_dispatch_plan_result", {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}})
     benchmark_valid = validate_contract("review_quality_benchmark_result", {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}})
     external_matrix_valid = validate_contract("external_advantage_matrix_result", {"status": "ready", "project": "p", "summary": {}, "matrix": [], "evidence": {}})
+    external_ci_valid = validate_contract("external_advantage_ci_regression_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     external_repeat_valid = validate_contract("external_advantage_repeat_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}})
     cross_domain_valid = validate_contract("cross_domain_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    cross_domain_e2e_valid = validate_contract(
+        "cross_domain_end_to_end_result",
+        {"status": "ready", "project": "p", "summary": {}, "stages": [], "review": {}, "assertions": {}, "artifacts": {}, "evidence": {}},
+    )
     contract_runtime_valid = validate_contract("contract_runtime_rehearsal_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    contract_stability_valid = validate_contract("contract_stability_stress_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}})
     review_family_valid = validate_contract("review_family_behavior_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     external_merge_valid = validate_contract("external_merge_landing_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     adjudication_valid = validate_contract("review_adjudication_calibration_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
@@ -97,9 +106,12 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert dispatch_valid["valid"] is True
     assert benchmark_valid["valid"] is True
     assert external_matrix_valid["valid"] is True
+    assert external_ci_valid["valid"] is True
     assert external_repeat_valid["valid"] is True
     assert cross_domain_valid["valid"] is True
+    assert cross_domain_e2e_valid["valid"] is True
     assert contract_runtime_valid["valid"] is True
+    assert contract_stability_valid["valid"] is True
     assert review_family_valid["valid"] is True
     assert external_merge_valid["valid"] is True
     assert adjudication_valid["valid"] is True

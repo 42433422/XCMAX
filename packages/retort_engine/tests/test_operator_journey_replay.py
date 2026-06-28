@@ -19,6 +19,9 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["cross_domain_live_probe_ready"] is True
     assert result["summary"]["frontend_operation_replay_ready"] is True
     assert result["summary"]["per_run_code_graph_proved"] is True
+    assert result["summary"]["external_advantage_ci_ready"] is True
+    assert result["summary"]["contract_stability_ready"] is True
+    assert result["summary"]["cross_domain_end_to_end_ready"] is True
     assert Path(result["summary"]["manifest_path"]).is_file()
     assert all(item["sha256"] for item in result["artifacts"] if item["exists"])
     assert validate_contract("operator_journey_replay_result", result)["valid"] is True
@@ -160,6 +163,15 @@ def _write_docs(root: Path) -> None:
             "summary": {"score_delta": 50, "blind_third_party_all_cases_accepted": True, "blind_third_party_minimum_delta": 65},
             "matrix": [],
         },
+        "retort_external_advantage_ci_regression.json": {
+            "status": "ready",
+            "summary": {
+                "all_cases_have_ci_acceptance": True,
+                "all_direct_review_regressions_verified": True,
+                "blind_third_party_minimum_delta": 80,
+            },
+            "cases": [],
+        },
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True}, "runs": []},
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
@@ -175,6 +187,11 @@ def _write_docs(root: Path) -> None:
             },
             "cases": [],
         },
+        "retort_cross_domain_end_to_end.json": {
+            "status": "ready",
+            "summary": {"all_stages_chained": True, "all_stage_outputs_consumed": True},
+            "stages": [],
+        },
         "retort_contract_runtime_rehearsal.json": {
             "status": "ready",
             "summary": {
@@ -184,6 +201,11 @@ def _write_docs(root: Path) -> None:
                 "all_concurrent_rollbacks_verified": True,
             },
             "cases": [],
+        },
+        "retort_contract_stability_stress.json": {
+            "status": "ready",
+            "summary": {"concurrency_floor_exceeded": True, "state_leak_count": 0},
+            "runs": [],
         },
         "retort_review_family_behavior_replay.json": {
             "status": "ready",
