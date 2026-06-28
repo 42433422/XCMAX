@@ -1,56 +1,39 @@
 {
   "absorbed_signals": [
     "review_pipeline",
-    "file_grouping",
     "benchmarking",
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/AleksandrFurmenkovOfficial/ai-code-review",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/a1dancole/OpenAI-Code-Review",
   "external_snapshot": {
-    "file_count": 22,
-    "git_revision": "29f692d9d1e00f86661e406198449bcd2d69b863",
+    "file_count": 25,
+    "git_revision": "832f070dd2b48f9cc84d48d6f01cde7ea4eb1e6a",
     "suffix_counts": {
-      ".js": 14,
-      ".json": 2,
-      ".md": 1,
-      ".yaml": 1,
-      ".yml": 2,
+      ".json": 6,
+      ".md": 4,
+      ".png": 8,
+      ".ts": 5,
       "<none>": 2
     }
   },
-  "generated_at": "2026-06-28T16:47:12Z",
+  "generated_at": "2026-06-28T16:51:25Z",
   "license_review": {
     "detected_license": "MIT License",
     "message": "Allowed license detected: MIT License",
     "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/AleksandrFurmenkovOfficial/ai-code-review --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/a1dancole/OpenAI-Code-Review --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 1,
-      "minimum_expected_behavior_tests": 6,
-      "prioritized_component_count": 1,
-      "task_dimension_count": 5
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 4,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 4
     },
-    "component_gaps": [
-      {
-        "component": "safety_policy",
-        "external_files": 5,
-        "file_gap": -7,
-        "marker_gap": 73,
-        "own_files": 12,
-        "representative_external_files": [
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          ".github/workflows/aireview.yaml",
-          "src/base-ai-agent.js"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -59,10 +42,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "action.yml",
-            ".github/workflows/aireview.yaml"
+            "Open AI Code Review/vss-extension.json",
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/main.ts",
+            "Open AI Code Review/src/task.json"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -72,10 +55,10 @@
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "setup.js",
-            "action.yml"
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/repository.ts",
+            "Open AI Code Review/src/main.ts",
+            "Open AI Code Review/src/task.json"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -96,33 +79,6 @@
           "title": "Deepen review_pipeline"
         },
         {
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-file-grouping",
-          "title": "Deepen file_grouping"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "dimension": "feedback_loop_closure",
           "evidence_required": [
@@ -137,19 +93,6 @@
           "title": "Deepen benchmark_eval"
         },
         {
-          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
-          "dimension": "operational_readiness",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-workflow-ci",
-          "title": "Deepen workflow_ci"
-        },
-        {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "dimension": "operational_readiness",
           "evidence_required": [
@@ -161,6 +104,19 @@
           "priority": "P1",
           "task_id": "retort-depth-safety-policy",
           "title": "Deepen safety_policy"
+        },
+        {
+          "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
+          "dimension": "operational_readiness",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-workflow-ci",
+          "title": "Deepen workflow_ci"
         }
       ],
       "focus_mode": "similar_function_depth_only",
@@ -190,84 +146,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 346,
-          "own_marker_hits": 3128,
+          "external_marker_hits": 141,
+          "own_marker_hits": 3155,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "setup.js",
-            "action.yml"
-          ]
-        },
-        {
-          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
-          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-          "component": "file_grouping",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-file-grouping",
-            "title": "Deepen file_grouping"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 4,
-          "own_marker_hits": 115,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "README.md",
-            "src/anthropic-agent.js",
-            "src/openai-agent.js"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 13,
-          "own_marker_hits": 21,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "src/anthropic-agent.js",
-            "src/openai-agent.js",
-            "src/github-api.js"
+            "Open AI Code Review/vss-extension.json",
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/repository.ts",
+            "Open AI Code Review/src/main.ts"
           ]
         },
         {
@@ -295,13 +183,46 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 6,
-          "own_marker_hits": 716,
+          "external_marker_hits": 1,
+          "own_marker_hits": 707,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "eslint.config.js",
-            "src/core-wrapper.js"
+            "Open AI Code Review/src/tsconfig.json"
+          ]
+        },
+        {
+          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
+          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+          "component": "safety_policy",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
+            "dimension": "operational_readiness",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-safety-policy",
+            "title": "Deepen safety_policy"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output"
+          ],
+          "external_marker_hits": 16,
+          "own_marker_hits": 329,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/package-lock.json",
+            "Open AI Code Review/src/package.json"
           ]
         },
         {
@@ -327,51 +248,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 426,
-          "own_marker_hits": 3558,
+          "external_marker_hits": 187,
+          "own_marker_hits": 3570,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "setup.js",
-            "eslint.config.js"
-          ]
-        },
-        {
-          "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
-          "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-          "component": "safety_policy",
-          "depth_gap": 73,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
-            "dimension": "operational_readiness",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-safety-policy",
-            "title": "Deepen safety_policy"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output"
-          ],
-          "external_marker_hits": 420,
-          "own_marker_hits": 347,
-          "priority": "P0",
-          "similarity_score": 97,
-          "source_files": [
-            "package-lock.json",
-            "package.json",
-            "setup.js",
-            ".github/workflows/aireview.yaml",
-            "src/base-ai-agent.js"
+            "Open AI Code Review/vss-extension.json",
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/repository.ts",
+            "Open AI Code Review/src/main.ts"
           ]
         }
       ],
@@ -380,7 +266,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 6,
+        "focused_component_count": 4,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -391,26 +277,26 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 244,
+          "external_marker_hits": 52,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "action.yml",
-            ".github/workflows/aireview.yaml"
+            "Open AI Code Review/vss-extension.json",
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/main.ts",
+            "Open AI Code Review/src/task.json"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 145,
+          "external_marker_hits": 40,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
             "README.md",
-            "package-lock.json",
-            "package.json",
-            "setup.js",
-            "action.yml"
+            "Open AI Code Review/assets/overview.md",
+            "Open AI Code Review/src/repository.ts",
+            "Open AI Code Review/src/main.ts",
+            "Open AI Code Review/src/task.json"
           ]
         }
       ]
@@ -418,100 +304,73 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "eslint.config.js",
-          "src/core-wrapper.js"
+          "Open AI Code Review/src/tsconfig.json"
         ],
-        "marker_hits": 6
-      },
-      "diff_hunk_review": {
-        "files": [
-          "src/anthropic-agent.js",
-          "src/openai-agent.js",
-          "src/github-api.js"
-        ],
-        "marker_hits": 13
-      },
-      "file_grouping": {
-        "files": [
-          "README.md",
-          "src/anthropic-agent.js",
-          "src/openai-agent.js"
-        ],
-        "marker_hits": 4
+        "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          "action.yml",
-          ".github/workflows/aireview.yaml",
-          "src/input-processor.js",
-          "src/openai-agent.js"
+          "Open AI Code Review/assets/overview.md",
+          "Open AI Code Review/src/repository.ts",
+          "Open AI Code Review/src/main.ts",
+          "Open AI Code Review/src/task.json",
+          "Open AI Code Review/src/package-lock.json",
+          "Open AI Code Review/src/package.json",
+          "Open AI Code Review/src/binaryExtensions.json.d.ts"
         ],
-        "marker_hits": 145
+        "marker_hits": 40
       },
       "provider_surface": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "action.yml",
-          ".github/workflows/aireview.yaml",
-          "src/deepseek-agent.js",
-          "src/base-ai-agent.js",
-          "src/anthropic-agent.js",
-          "src/perplexity-agent.js",
-          "src/input-processor.js",
-          "src/google-agent.js",
-          "src/openai-agent.js"
+          "Open AI Code Review/vss-extension.json",
+          "Open AI Code Review/assets/overview.md",
+          "Open AI Code Review/src/main.ts",
+          "Open AI Code Review/src/task.json",
+          "Open AI Code Review/src/chatgpt.ts",
+          "Open AI Code Review/src/package-lock.json",
+          "Open AI Code Review/src/package.json"
         ],
-        "marker_hits": 244
+        "marker_hits": 52
       },
       "review_pipeline": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          "action.yml",
-          ".github/workflows/aireview.yaml",
-          "src/constants.js",
-          "src/deepseek-agent.js",
-          "src/base-ai-agent.js",
-          "src/anthropic-agent.js",
-          "src/perplexity-agent.js",
-          "src/input-processor.js"
+          "Open AI Code Review/vss-extension.json",
+          "Open AI Code Review/assets/overview.md",
+          "Open AI Code Review/src/repository.ts",
+          "Open AI Code Review/src/main.ts",
+          "Open AI Code Review/src/task.json",
+          "Open AI Code Review/src/chatgpt.ts"
         ],
-        "marker_hits": 346
+        "marker_hits": 141
       },
       "safety_policy": {
         "files": [
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          ".github/workflows/aireview.yaml",
-          "src/base-ai-agent.js"
+          "README.md",
+          "Open AI Code Review/assets/overview.md",
+          "Open AI Code Review/src/package-lock.json",
+          "Open AI Code Review/src/package.json"
         ],
-        "marker_hits": 420
+        "marker_hits": 16
       },
       "workflow_ci": {
         "files": [
           "README.md",
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          "eslint.config.js",
-          "action.yml",
-          ".github/dependabot.yml",
-          ".github/workflows/aireview.yaml",
-          "src/constants.js",
-          "src/base-ai-agent.js",
-          "src/anthropic-agent.js",
-          "src/input-processor.js"
+          "Open AI Code Review/vss-extension.json",
+          "Open AI Code Review/assets/overview.md",
+          "Open AI Code Review/src/repository.ts",
+          "Open AI Code Review/src/main.ts",
+          "Open AI Code Review/src/task.json",
+          "Open AI Code Review/src/chatgpt.ts",
+          "Open AI Code Review/src/package-lock.json",
+          "Open AI Code Review/src/package.json",
+          "Open AI Code Review/src/tsconfig.json",
+          "Open AI Code Review/src/pullrequest.ts",
+          ".github/ISSUE_TEMPLATE/feature_request.md"
         ],
-        "marker_hits": 426
+        "marker_hits": 187
       }
     },
     "own_file_groups": {
@@ -530,7 +389,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 716
+        "marker_hits": 707
       },
       "diff_hunk_review": {
         "files": [
@@ -551,15 +410,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_external_patterns.py",
           "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md",
-          "docs/retort_external_review_report.json"
+          "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 115
+        "marker_hits": 122
       },
       "plugin_surface": {
         "files": [
@@ -576,7 +435,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 776
+        "marker_hits": 744
       },
       "provider_surface": {
         "files": [
@@ -593,7 +452,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 313
+        "marker_hits": 336
       },
       "review_pipeline": {
         "files": [
@@ -610,7 +469,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3128
+        "marker_hits": 3155
       },
       "safety_policy": {
         "files": [
@@ -627,7 +486,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 347
+        "marker_hits": 329
       },
       "workflow_ci": {
         "files": [
@@ -644,7 +503,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 3558
+        "marker_hits": 3570
       }
     },
     "pipeline_stages": [
@@ -656,74 +515,52 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "package-lock.json",
-          "package.json",
-          "setup.js",
-          ".github/workflows/aireview.yaml",
-          "src/base-ai-agent.js"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260628164706-c0261eeff0",
+  "run_id": "20260628165119-6931fac5e6",
   "semantic_review": {
     "external": {
       "classes": 15,
       "cli_markers": 0,
-      "functions": 6,
-      "source_files": 20,
-      "test_markers": 10,
-      "workflow_markers": 304
+      "functions": 2,
+      "source_files": 15,
+      "test_markers": 9,
+      "workflow_markers": 123
     },
     "gaps": [],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 135,
+      "source_files": 136,
       "test_markers": 225,
-      "workflow_markers": 3950
+      "workflow_markers": 3987
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "eslint.config.js",
-      "src/core-wrapper.js"
-    ],
-    "file_grouping": [
-      "README.md",
-      "src/anthropic-agent.js",
-      "src/openai-agent.js"
+      "Open AI Code Review/src/tsconfig.json"
     ],
     "multi_provider": [
       "README.md",
-      "package-lock.json",
-      "package.json",
-      "action.yml",
-      ".github/workflows/aireview.yaml"
+      "Open AI Code Review/vss-extension.json",
+      "Open AI Code Review/assets/overview.md",
+      "Open AI Code Review/src/main.ts",
+      "Open AI Code Review/src/task.json"
     ],
     "plugin_surface": [
       "README.md",
-      "package-lock.json",
-      "package.json",
-      "setup.js",
-      "src/openai-agent.js"
+      "Open AI Code Review/src/package-lock.json"
     ],
     "review_pipeline": [
       "README.md",
-      "package.json",
-      "setup.js",
-      "action.yml",
-      "src/base-ai-agent.js"
+      "Open AI Code Review/vss-extension.json",
+      "Open AI Code Review/assets/overview.md",
+      "Open AI Code Review/src/main.ts",
+      "Open AI Code Review/src/task.json"
     ]
   },
-  "source": "https://github.com/AleksandrFurmenkovOfficial/ai-code-review",
+  "source": "https://github.com/a1dancole/OpenAI-Code-Review",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -731,7 +568,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/AleksandrFurmenkovOfficial/ai-code-review."
+      "why": "Compare implementation patterns from https://github.com/a1dancole/OpenAI-Code-Review."
     },
     {
       "dimension": "product_operability",
@@ -739,7 +576,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/AleksandrFurmenkovOfficial/ai-code-review."
+      "why": "Extract usable UX improvements from https://github.com/a1dancole/OpenAI-Code-Review."
     },
     {
       "dimension": "operational_readiness",
@@ -747,7 +584,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/AleksandrFurmenkovOfficial/ai-code-review."
+      "why": "Adapt CI and release checks from https://github.com/a1dancole/OpenAI-Code-Review."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -756,14 +593,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
     },
     {
       "dimension": "feedback_loop_closure",
