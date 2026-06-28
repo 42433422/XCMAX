@@ -50,13 +50,17 @@ def get_stable_device_id() -> str:
                     _cached = existing
                     return _cached
         except OSError:
-            logger.warning("failed to read device_id, will try to recreate: %s", path, exc_info=True)
+            logger.warning(
+                "failed to read device_id, will try to recreate: %s", path, exc_info=True
+            )
 
         new_id = uuid.uuid4().hex
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(new_id + "\n", encoding="utf-8")
         except OSError:
-            logger.warning("failed to persist device_id, using process-local id: %s", path, exc_info=True)
+            logger.warning(
+                "failed to persist device_id, using process-local id: %s", path, exc_info=True
+            )
         _cached = new_id
         return _cached

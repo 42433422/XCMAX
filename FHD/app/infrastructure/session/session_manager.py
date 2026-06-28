@@ -32,7 +32,9 @@ class SessionManager:
         expires_at = now + timedelta(hours=self.SESSION_EXPIRE_HOURS)
 
         user_row = db.query(User).filter(User.id == user_id).first()
-        account_kind = "admin" if str(getattr(user_row, "role", "") or "") == "admin" else "enterprise"
+        account_kind = (
+            "admin" if str(getattr(user_row, "role", "") or "") == "admin" else "enterprise"
+        )
 
         user_session = UserSession(
             session_id=session_id,

@@ -38,9 +38,7 @@ class ImEmployeeMixin:
             raise ValueError("employee_id 必填")
         username = f"{AI_EMPLOYEE_USERNAME_PREFIX}{eid}"
         row = (
-            self._db.execute(
-                select(User).where(User.username == username).limit(1)
-            )
+            self._db.execute(select(User).where(User.username == username).limit(1))
             .scalars()
             .first()
         )
@@ -102,14 +100,11 @@ class ImEmployeeMixin:
         eid = str(employee_id or "").strip()
         if not eid:
             return 0
-        row = (
-            self._db.execute(
-                select(AiEmployeeProfile.owner_user_id)
-                .where(AiEmployeeProfile.employee_id == eid)
-                .limit(1)
-            )
-            .first()
-        )
+        row = self._db.execute(
+            select(AiEmployeeProfile.owner_user_id)
+            .where(AiEmployeeProfile.employee_id == eid)
+            .limit(1)
+        ).first()
         if row is None:
             return 0
         try:
@@ -134,13 +129,17 @@ class ImEmployeeMixin:
                     "display_name": str(
                         emp.get("name") or emp.get("label") or emp.get("title") or eid
                     ).strip(),
-                    "avatar_url": str(emp.get("avatar_url") or emp.get("market_avatar") or "").strip(),
+                    "avatar_url": str(
+                        emp.get("avatar_url") or emp.get("market_avatar") or ""
+                    ).strip(),
                 }
         if not eid_to_meta:
             return {}
         profiles = (
             self._db.execute(
-                select(AiEmployeeProfile).where(AiEmployeeProfile.employee_id.in_(list(eid_to_meta.keys())))
+                select(AiEmployeeProfile).where(
+                    AiEmployeeProfile.employee_id.in_(list(eid_to_meta.keys()))
+                )
             )
             .scalars()
             .all()
@@ -235,11 +234,7 @@ class ImEmployeeMixin:
             return False
         owner_uid = int(owner_user_id)
         owner_exists = (
-            self._db.execute(
-                select(User.id).where(User.id == owner_uid).limit(1)
-            )
-            .scalars()
-            .first()
+            self._db.execute(select(User.id).where(User.id == owner_uid).limit(1)).scalars().first()
         )
         if owner_exists is None:
             raise ValueError(f"owner_user_id={owner_uid} 不存在")
@@ -266,11 +261,7 @@ class ImEmployeeMixin:
         if boss_uid_int <= 0:
             raise ValueError("boss_user_id 非法")
         boss_exists = (
-            self._db.execute(
-                select(User).where(User.id == boss_uid_int).limit(1)
-            )
-            .scalars()
-            .first()
+            self._db.execute(select(User).where(User.id == boss_uid_int).limit(1)).scalars().first()
         )
         if boss_exists is None:
             raise ValueError(f"boss_user_id={boss_uid_int} 不存在")

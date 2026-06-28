@@ -149,7 +149,7 @@
 | `claude/musing-roentgen-affc4b` | 0 | 192 | 0 | already-contained | - | yes | do-not-merge | c63f96be7 feat(cs): real enterprise customer-service IM channel + admin inbox + push |
 | `claude/pedantic-leakey-5611d9` | 0 | 186 | 0 | already-contained | - | no | do-not-merge | 043248e73 Merge retort/absorb-https-github-com-evalops-diffscope |
 | `evaluate-project-level-5sethe` | 0 | 902 | 0 | already-contained | - | yes | do-not-merge | 10e40d4ad chore: update taiyangniao_pro binary database file |
-| `main` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform SSOT |
+| `main` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform source-of-truth |
 | `retort/absorb-20260627` | 0 | 259 | 0 | already-contained | - | no | do-not-merge | c29d117fd feat(retort): close external absorption evolution loop |
 | `retort/absorb-component-pipeline-20260627` | 0 | 285 | 0 | already-contained | - | no | do-not-merge | f9cb8ee54 Retort absorb https://github.com/alibaba/open-code-review |
 | `retort/absorb-contract-feedback-20260627` | 0 | 278 | 0 | already-contained | - | no | do-not-merge | ce698f3ec Retort absorb https://github.com/alibaba/open-code-review |
