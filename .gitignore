@@ -90,6 +90,7 @@ FHD/mobile-android/.toolchain/
 .cursor/settings.json
 .trae/
 .runtime/
+FHD/data/
 FHD/trae_super_employee/
 
 # 太阳鸟交付包大文件（目录结构与说明入库；exe 由打包脚本生成）
