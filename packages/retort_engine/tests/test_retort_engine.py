@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _llm_absorption_evidence, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
+from retort_engine.core import _is_generated_absorption_file, _is_exempt_git_status_path
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
@@ -321,6 +322,7 @@ def test_llm_absorption_evidence_uses_risk_audit_not_local_score(tmp_path: Path)
     assert "capability_absorption_local_score_removed=True" in evidence
     assert any(item.startswith("capability_absorption_risk_level=") for item in evidence)
     assert any(item.startswith("capability_absorption_blockers=") for item in evidence)
+    assert any(item.startswith("latest_code_graph_proof=") for item in evidence)
 
 
 def test_external_assessment_counts_files_inside_retort_cache(tmp_path: Path) -> None:
@@ -389,6 +391,7 @@ def test_blocking_git_status_exempts_generated_absorption_outputs(tmp_path: Path
         own / "retort_engine" / "absorbed_capabilities.py",
         own / "tests" / "test_absorbed_capabilities.py",
         own / "docs" / "retort_external_review_report.json",
+        own / "docs" / "retort_stage_report.json",
     ]
     for path in generated:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -403,9 +406,22 @@ def test_blocking_git_status_exempts_generated_absorption_outputs(tmp_path: Path
 
     assert _blocking_git_status(repo, own) == ""
 
-    real_file = own / "retort_engine" / "real_behavior.py"
+
+def test_generated_absorption_path_detects_docs_retort_json() -> None:
+    assert _is_generated_absorption_file("docs/retort_stage_report.json") is True
+    assert _is_generated_absorption_file("docs/retort_replay_snapshot.json") is True
+    assert _is_generated_absorption_file("docs/other.json") is False
+    assert _is_exempt_git_status_path("docs/retort_stage_report.json", (".retort/",)) is True
+
+
+def test_blocking_git_status_still_flags_real_code_changes(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    init_repo(repo)
+    own = repo / "packages" / "retort_engine"
+    own.mkdir(parents=True)
+    real_file = own / "real_behavior.py"
     real_file.write_text("print('dirty')\n", encoding="utf-8")
-    assert "real_behavior.py" in _blocking_git_status(repo, own)
+    assert "packages/retort_engine/" in _blocking_git_status(repo, own)
 
 
 def test_record_closed_loop_proof_rejects_unvalidated_manual_flags(tmp_path: Path) -> None:
@@ -606,6 +622,12 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
     assert str(project / "tests" / "test_review_context_bias.py") in result["changed_files"]
     assert Path(result["review_context_bias_path"]).is_file()
     assert Path(result["review_context_bias_test_path"]).is_file()
+    assert Path(result["code_graph_proof_path"]).is_file()
+    proof = json.loads(Path(result["code_graph_proof_path"]).read_text(encoding="utf-8"))
+    assert proof["node_count"] >= 1
+    assert proof["edge_count"] >= 1
+    assert result["code_graph_node_count"] == proof["node_count"]
+    assert result["code_graph_edge_count"] == proof["edge_count"]
     employee_result = json.loads(Path(result["employee_results_path"]).read_text(encoding="utf-8"))
     assert employee_result["execution_mode"] == "employee_runtime_worker"
     assert employee_result["runtime_evidence"]["independent_process"] is True
