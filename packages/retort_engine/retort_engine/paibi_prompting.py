@@ -216,6 +216,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "operator_journey_replay_",
         "absorption_release_decision_operator_",
         "external_advantage_matrix_",
+        "external_merge_landing_",
         "release_decision_self_reference=",
     )
     prefixes = (
@@ -238,7 +239,9 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "post_absorption_hardening_",
         "quality_gate_bundle_",
         "employee_execution_mode=",
+        "employee_worker_",
         "employee_runtime_worker_review=",
+        "employee_runtime_crash_isolation_",
         "employee_runtime_patch_closure=",
         "employee_patch_closure_",
         "production_recovery_drill_",
@@ -253,10 +256,12 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_readonly_degradation_probe_",
         "pr_review_calibration_",
         "pr_review_cross_language_transfer_",
+        "pr_review_hunk_semantic_",
         "pr_long_run_review_",
         "pr_holdout_blind_eval_",
         "pr_failure_rollback_replay_",
         "external_advantage_matrix_",
+        "external_merge_landing_",
         "multi_project_absorption_replay_",
         "absorption_continuity_",
     )

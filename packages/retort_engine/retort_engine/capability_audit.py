@@ -219,6 +219,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     cross_language_top_ranked = False
     cross_language_core_score_active = False
     cross_language_max_rank_score = 0
+    hunk_semantic_status = ""
+    hunk_semantic_finding_count = 0
+    hunk_semantic_types: list[str] = []
+    hunk_semantic_comment_count = 0
+    hunk_semantic_top_ranked = False
+    hunk_semantic_core_score_active = False
+    hunk_semantic_max_rank_score = 0
     adjudication_status = ""
     adjudication_human_label_count = 0
     adjudication_pass_rate = 0.0
@@ -310,6 +317,18 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 cross_language_top_ranked = bool(cross_core_score.get("cross_language_top_ranked"))
                 cross_language_core_score_active = bool(cross_core_score.get("cross_language_core_behavior_active"))
                 cross_language_max_rank_score = int(cross_core_score.get("cross_language_max_rank_score") or 0)
+            hunk_review = review_diff(_audit_hunk_semantic_sample(), max_comments=4)
+            hunk_summary = (hunk_review.get("summary") or {}).get("hunk_semantic_analysis") if isinstance(hunk_review.get("summary"), dict) else {}
+            hunk_core_score = (hunk_review.get("summary") or {}).get("core_review_score") if isinstance(hunk_review.get("summary"), dict) else {}
+            if isinstance(hunk_summary, dict):
+                hunk_semantic_status = str(hunk_summary.get("status") or "")
+                hunk_semantic_finding_count = int(hunk_summary.get("finding_count") or 0)
+                hunk_semantic_types = [str(item) for item in hunk_summary.get("finding_types") or []]
+            hunk_semantic_comment_count = sum(1 for comment in hunk_review.get("comments") or [] if isinstance(comment, dict) and comment.get("capability") == "hunk_semantic_review")
+            if isinstance(hunk_core_score, dict):
+                hunk_semantic_top_ranked = bool(hunk_core_score.get("hunk_semantic_top_ranked"))
+                hunk_semantic_core_score_active = bool(hunk_core_score.get("hunk_semantic_core_behavior_active"))
+                hunk_semantic_max_rank_score = int(hunk_core_score.get("hunk_semantic_max_rank_score") or 0)
             adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
             adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
             adjudication_status = str(adjudication_report.get("status") or "")
@@ -374,6 +393,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "cross_language_transfer_top_ranked": cross_language_top_ranked,
         "cross_language_transfer_core_score_active": cross_language_core_score_active,
         "cross_language_transfer_max_rank_score": cross_language_max_rank_score,
+        "hunk_semantic_review_status": hunk_semantic_status,
+        "hunk_semantic_review_finding_count": hunk_semantic_finding_count,
+        "hunk_semantic_review_types": hunk_semantic_types,
+        "hunk_semantic_review_comment_count": hunk_semantic_comment_count,
+        "hunk_semantic_review_top_ranked": hunk_semantic_top_ranked,
+        "hunk_semantic_review_core_score_active": hunk_semantic_core_score_active,
+        "hunk_semantic_review_max_rank_score": hunk_semantic_max_rank_score,
         "adjudication_status": adjudication_status,
         "adjudication_human_label_count": adjudication_human_label_count,
         "adjudication_pass_rate": adjudication_pass_rate,
@@ -417,6 +443,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/diff_extension_policy.py", extension_policy_source.is_file()),
                 ("retort_engine/external_advantage_matrix.py", external_advantage_source.is_file()),
                 ("retort_engine/cross_language_transfer.py", cross_language_source.is_file()),
+                ("retort_engine/diff_hunk_semantics.py", (root / "retort_engine" / "diff_hunk_semantics.py").is_file()),
             )
             if exists
         ],
@@ -448,6 +475,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
                 ("tests/test_diff_extension_policy.py", extension_policy_test.is_file()),
                 ("tests/test_external_advantage_matrix.py", external_advantage_test.is_file()),
+                ("tests/test_diff_hunk_semantics.py", (root / "tests" / "test_diff_hunk_semantics.py").is_file()),
             )
             if exists
         ],
@@ -511,6 +539,20 @@ def _audit_cross_language_transfer_sample() -> str:
         chunks.append(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,{len(lines)} @@\n")
         chunks.extend(f"+{line}\n" for line in lines)
     return "".join(chunks)
+
+
+def _audit_hunk_semantic_sample() -> str:
+    return """diff --git a/retort_engine/pr_publish.py b/retort_engine/pr_publish.py
+--- a/retort_engine/pr_publish.py
++++ b/retort_engine/pr_publish.py
+@@ -1,5 +1,5 @@
+ def publish_comment(payload):
+-    validate_permissions(payload)
+-    assert payload["rollback_receipt"]
++    publish(payload)
++    return True
+     return payload
+"""
 
 
 def post_absorption_hardening_files(root: Path) -> dict[str, Any]:
@@ -634,6 +676,8 @@ def _employee_worker_review_from_payload(payload: dict[str, Any]) -> dict[str, A
         "worker_process_trace_count": int(process_isolation.get("worker_process_trace_count") or 0),
         "runtime_boundary_verified_count": int(process_isolation.get("runtime_boundary_verified_count") or 0),
         "pid_cross_check_count": int(process_isolation.get("pid_cross_check_count") or 0),
+        "crash_isolation_verified": bool(process_isolation.get("crash_isolation_verified")),
+        "crash_isolation_verified_count": int(process_isolation.get("crash_isolation_verified_count") or 0),
         "multi_file_review_verified": int(review.get("file_count") or 0) >= 10 and int(review.get("comment_count") or 0) >= 20,
         "artifact": artifact_text,
         "artifact_exists": bool(artifact_text) and Path(artifact_text).is_file(),

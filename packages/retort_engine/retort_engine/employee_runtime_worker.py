@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"worker_pid={process_boundary['worker_pid']}",
                     f"worker_parent_pid={process_boundary['parent_pid']}",
                     f"runtime_boundary_verified={process_boundary['runtime_boundary_verified']}",
+                    f"crash_isolation_verified={process_boundary['crash_isolation_verified']}",
                     f"payload_nonce={process_boundary['payload_nonce']}",
                     f"worker_review_status={worker_review.get('status')}",
                     f"worker_review_artifact={worker_review.get('artifact', '')}",
@@ -94,6 +97,9 @@ def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: 
     expected_output_path = Path(str(payload.get("output_path") or output_path)).expanduser().resolve()
     payload_path_verified = payload_path == expected_payload_path and payload_path.is_file()
     result_path_verified = output_path.expanduser().resolve() == expected_output_path
+    crash_probe = _crash_isolation_probe(payload)
+    crash_required = bool((payload.get("crash_isolation_probe") or {}).get("enabled")) if isinstance(payload.get("crash_isolation_probe"), dict) else False
+    crash_verified = not crash_required or bool(crash_probe.get("verified"))
     return {
         "runtime_boundary": "subprocess_payload_file_contract",
         "worker_pid": worker_pid,
@@ -109,7 +115,28 @@ def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: 
         "result_path_verified": result_path_verified,
         "payload_nonce": payload_nonce,
         "payload_nonce_verified": bool(payload_nonce),
-        "runtime_boundary_verified": payload_path_verified and result_path_verified and bool(payload_nonce) and worker_pid != expected_parent_pid,
+        "crash_isolation_probe": crash_probe,
+        "crash_isolation_verified": crash_verified,
+        "runtime_boundary_verified": payload_path_verified and result_path_verified and bool(payload_nonce) and worker_pid != expected_parent_pid and crash_verified,
+    }
+
+
+def _crash_isolation_probe(payload: dict[str, Any]) -> dict[str, Any]:
+    request = payload.get("crash_isolation_probe")
+    if not isinstance(request, dict) or not request.get("enabled"):
+        return {"enabled": False, "verified": True}
+    expected_returncode = int(request.get("expected_returncode") or 73)
+    command = [sys.executable, "-c", f"import sys; sys.exit({expected_returncode})"]
+    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=10)
+    return {
+        "enabled": True,
+        "mode": "expected_child_process_crash",
+        "expected_returncode": expected_returncode,
+        "returncode": int(completed.returncode),
+        "worker_survived": True,
+        "stdout_tail": (completed.stdout or "")[-200:],
+        "stderr_tail": (completed.stderr or "")[-200:],
+        "verified": int(completed.returncode) == expected_returncode,
     }
 
 

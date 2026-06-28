@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "c81e6d31a028b16c1619a59a76327ba2714dafecac873b151285d03996366a0f"
+      "sha256": "2891ae5310fd1b33002654a305965fe31e92a16e8a1d0d2069c0458bfe0ae8d9"
     },
     {
       "bytes": 10192,
@@ -337,6 +337,27 @@
       "sha256": "434b1beb78fe7f272b0c57c322535760690e77511a4cbd8eaba80de88d8bffbd"
     },
     {
+      "bytes": 7503,
+      "exists": true,
+      "kind": "source_report",
+      "name": "external_merge_landing",
+      "path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_external_merge_landing.json",
+      "relative_path": "docs/retort_external_merge_landing.json",
+      "required_field_count": 3,
+      "required_fields": [
+        "status",
+        "summary",
+        "cases"
+      ],
+      "required_fields_present": [
+        "status",
+        "summary",
+        "cases"
+      ],
+      "required_fields_ready": true,
+      "sha256": "6abfa975ab9c8b307747a20cf1ba430999caa39cbf05d37ef287b69f0f6a990c"
+    },
+    {
       "bytes": 59591,
       "exists": true,
       "kind": "source_report",
@@ -401,6 +422,7 @@
       "docs/retort_external_advantage_matrix.json",
       "docs/retort_external_advantage_repeat.json",
       "docs/retort_heterogeneous_absorption_replay.json",
+      "docs/retort_external_merge_landing.json",
       "docs/retort_review_adjudication_calibration.json"
     ],
     "style": "operator_end_to_end_absorption_journey_replay"
@@ -421,8 +443,8 @@
       "ready": true
     },
     "codebase_graph": {
-      "edge_count": 4851,
-      "file_count": 156,
+      "edge_count": 4986,
+      "file_count": 160,
       "hotspot_count": 12,
       "ready": true,
       "status": "ready"
@@ -438,7 +460,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T050643Z-ed65cae3.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T053417Z-3f8787d3.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -470,7 +492,7 @@
       "evidence": [
         "changed_files=87",
         "gates_passed=True",
-        "quality_gate_sha=c81e6d31a028b16c1619a59a76327ba2714dafecac873b151285d03996366a0f"
+        "quality_gate_sha=2891ae5310fd1b33002654a305965fe31e92a16e8a1d0d2069c0458bfe0ae8d9"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -534,21 +556,21 @@
   "status": "ready",
   "summary": {
     "architecture_contract_ready": true,
-    "artifact_count": 18,
+    "artifact_count": 19,
     "codebase_graph_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 1.358,
+    "duration_sec": 1.385,
     "failed_stage_count": 0,
     "frontend_structure_ready": true,
-    "hashed_artifact_count": 18,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T050643Z-ed65cae3.manifest.json",
+    "hashed_artifact_count": 19,
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T053417Z-3f8787d3.manifest.json",
     "per_run_code_graph_proved": true,
     "ready_stage_count": 8,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T050643Z-ed65cae3",
+    "run_id": "operator-journey-20260628T053417Z-3f8787d3",
     "single_command_surface": true,
-    "source_report_count": 17,
+    "source_report_count": 18,
     "stage_count": 8
   }
 }

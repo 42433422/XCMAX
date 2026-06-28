@@ -83,6 +83,8 @@ def record_post_absorption_hardening_run(
             "worker_process_trace_count": int(process_isolation.get("worker_process_trace_count") or 0),
             "runtime_boundary_verified_count": int(process_isolation.get("runtime_boundary_verified_count") or 0),
             "pid_cross_check_count": int(process_isolation.get("pid_cross_check_count") or 0),
+            "crash_isolation_verified": bool(process_isolation.get("crash_isolation_verified")),
+            "crash_isolation_verified_count": int(process_isolation.get("crash_isolation_verified_count") or 0),
             "duration_sec": round(time.monotonic() - started, 3),
         },
         "changed_files": changed_files,
@@ -101,6 +103,7 @@ def record_post_absorption_hardening_run(
             "multi_worker_verified": bool(multi_worker.get("verified")),
             "pid_isolation_verified": bool(process_isolation.get("pid_isolation_verified")),
             "runtime_boundary_verified": bool(process_isolation.get("runtime_boundary_verified")),
+            "crash_isolation_verified": bool(process_isolation.get("crash_isolation_verified")),
         },
     }
     record_path = record_real_absorption_run(root, result)
@@ -223,6 +226,7 @@ def _run_employee_workers(
             "output_path": str(output_path),
             "parent_pid": os.getpid(),
             "runtime_context_nonce": f"{run_id}-worker-{index:02d}-payload-contract",
+            "crash_isolation_probe": {"enabled": True, "expected_returncode": 73},
             "queue_path": str(queue_path),
             "history_store": str(history_store),
             "tasks": task_batch,
@@ -381,6 +385,7 @@ def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: 
     traces = []
     boundary_verified_count = 0
     pid_cross_check_count = 0
+    crash_verified_count = 0
     for payload, result in zip(payloads, worker_results, strict=False):
         command = [str(part) for part in result.get("command") or []]
         output_path = Path(str(payload.get("output_path") or ""))
@@ -390,10 +395,14 @@ def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: 
         worker_reported_pid = int(boundary.get("worker_pid") or 0)
         pid_cross_checked = worker_reported_pid > 0 and worker_reported_pid == int(result.get("pid") or 0)
         boundary_verified = bool(boundary.get("runtime_boundary_verified")) and pid_cross_checked
+        crash_verified = bool(boundary.get("crash_isolation_verified"))
         if boundary_verified:
             boundary_verified_count += 1
         if pid_cross_checked:
             pid_cross_check_count += 1
+        if crash_verified:
+            crash_verified_count += 1
+        crash_probe = boundary.get("crash_isolation_probe") if isinstance(boundary.get("crash_isolation_probe"), dict) else {}
         traces.append(
             {
                 "pid": int(result.get("pid") or 0),
@@ -403,6 +412,9 @@ def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: 
                 "result_path": str(payload.get("output_path") or ""),
                 "runtime_boundary": str(boundary.get("runtime_boundary") or ""),
                 "runtime_boundary_verified": boundary_verified,
+                "crash_isolation_verified": crash_verified,
+                "crash_probe_returncode": int(crash_probe.get("returncode") or 0) if crash_probe else 0,
+                "crash_probe_expected_returncode": int(crash_probe.get("expected_returncode") or 0) if crash_probe else 0,
                 "payload_nonce": str(boundary.get("payload_nonce") or ""),
                 "payload_nonce_verified": bool(boundary.get("payload_nonce_verified")),
                 "returncode": _returncode(result),
@@ -425,6 +437,7 @@ def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: 
         "result_path_count": len(set(result_paths)),
         "runtime_boundary_verified_count": boundary_verified_count,
         "pid_cross_check_count": pid_cross_check_count,
+        "crash_isolation_verified_count": crash_verified_count,
         "all_payload_paths_unique": len(set(payload_paths)) == expected_count,
         "all_result_paths_unique": len(set(result_paths)) == expected_count,
         "all_process_ids_unique": len(unique_ids) == expected_count,
@@ -435,8 +448,10 @@ def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: 
         and len(set(result_paths)) == expected_count
         and boundary_verified_count == expected_count
         and pid_cross_check_count == expected_count
+        and crash_verified_count == expected_count
         and all(item["uses_payload_file"] and item["returncode"] == 0 for item in traces),
         "runtime_boundary_verified": expected_count > 1 and boundary_verified_count == expected_count,
+        "crash_isolation_verified": expected_count > 1 and crash_verified_count == expected_count,
         "process_ids": unique_ids,
         "traces": traces,
     }

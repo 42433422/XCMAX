@@ -18,6 +18,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
+    external_merge_landing = _read_json(root / "docs" / "retort_external_merge_landing.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
         _decision(
@@ -67,6 +68,14 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["heterogeneous_absorption_replay"],
         ),
         _decision(
+            "prove_external_merge_landing",
+            "branch_absorption_workflow",
+            external_merge_landing.get("status") == "ready"
+            and external_merge_landing.get("summary", {}).get("all_branch_diff_merge_tests_passed") is True
+            and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 2,
+            ["external_merge_landing"],
+        ),
+        _decision(
             "accept_blind_holdout_quality",
             "blind_external_validation",
             holdout.get("status") == "ready" and int(holdout.get("summary", {}).get("accepted_pr_count") or 0) >= int(holdout.get("summary", {}).get("target_pr_count") or 20),
@@ -105,6 +114,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
+        "external_merge_landing_ready": external_merge_landing.get("status") == "ready",
+        "external_merge_landing_merge_commits": external_merge_landing.get("summary", {}).get("merge_commit_count", ""),
+        "external_merge_landing_post_merge_tests": external_merge_landing.get("summary", {}).get("post_merge_test_passed_count", ""),
         "failure_rollback_ready": failure_rollback.get("status") == "ready",
         "operator_journey_ready": operator_journey.get("status") == "ready",
         "operator_journey_cross_domain_ready": bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
@@ -128,6 +140,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_repeat.json",
                 "retort_heterogeneous_absorption_replay.json",
+                "retort_external_merge_landing.json",
                 "retort_operator_journey_replay.json",
             ],
         },
