@@ -24,7 +24,13 @@ scope_globs:
   - ./main.js
   - ./news.json
   - ./activities.json
+  - ./privacy.html
   - ./assets/**
+  - corp-butler/**/*.html
+  - corp-butler/**/*.js
+  - corp-butler/**/*.css
+  - corp-butler/**/*.jpg
+  - corp-butler/**/*.json
   # 根 Vite 工具链（与 MODstore_deploy/market 是两套，不要混用）
   - ./src/**
   - ./package.json

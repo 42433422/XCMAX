@@ -35,6 +35,16 @@ logger = logging.getLogger(__name__)
 
 _METRIC_TASK_MAX_LEN = 128
 
+_HUMAN_READABLE_OUTPUT_SYSTEM_APPEND = """\
+【对用户/群内可读输出要求】
+无论原始输入里有多少内部字段，你的最终回复必须说人话，让非工程背景的人也能看懂。
+硬性要求：
+- 用简体中文，先说结论或当前状态，再说关键原因和下一步。
+- 不要直接倾倒 JSON、栈追踪、环境变量、数据库字段、内部事件名；确实必须提及时，先用一句人话解释它代表什么。
+- 控制在 3 到 6 条短句/短 bullet 内；每条只讲一件事。
+- 不要用空泛口号、英文模板、机器翻译腔；少用缩写和内部黑话。
+- 如果没完成，明确说卡在哪里、谁/什么系统需要做什么，不要伪装成已完成。"""
+
 # 员工大会待机：manifest system_prompt 常要求「输出 JSON」，与四段 Markdown 汇报冲突。
 _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
 【员工大会模式 — 覆盖日常 JSON 输出要求】
@@ -107,6 +117,17 @@ def _resolve_metric_user_id(session: Any, user_id: object) -> int:
     if row is None:
         raise RuntimeError("employee_execution_metrics: 库中无 users 行，无法写入指标")
     return int(row[0])
+
+
+def _report_execution_metric_best_effort(metric_id: int) -> None:
+    if int(metric_id or 0) <= 0:
+        return
+    try:
+        from modstore_server.employee_collab_reporter import report_execution_metric
+
+        report_execution_metric(metric_id=int(metric_id))
+    except Exception:
+        logger.exception("collab report (execution metric) failed metric_id=%s", metric_id)
 
 
 _executor_sem: threading.Semaphore | None = None
@@ -581,6 +602,7 @@ async def _cognition_real(
     if not isinstance(normalized_inp, dict):
         normalized_inp = {}
     all_hands_cognition = _is_all_hands_cognition_context(normalized_inp)
+    system_prompt = f"{str(system_prompt).rstrip()}\n\n{_HUMAN_READABLE_OUTPUT_SYSTEM_APPEND}"
     if all_hands_cognition and str(task or "").strip():
         system_prompt = f"{system_prompt.rstrip()}\n\n{_ALL_HANDS_COGNITION_SYSTEM_APPEND}"
 
@@ -1375,11 +1397,15 @@ def _filter_handlers_vibe_coding_maintainer(
     """按 payload 路由 vibe-coding-maintainer，避免每次任务跑完全部 handler。"""
     inp = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
     try:
-        from modstore_server.para_delegate_handler import para_delegate_enabled
+        from modstore_server.para_delegate_handler import (
+            para_delegate_enabled,
+            para_delegate_ready_for_dispatch,
+        )
     except Exception:
         para_delegate_enabled = lambda: False  # type: ignore[assignment]
+        para_delegate_ready_for_dispatch = lambda: False  # type: ignore[assignment]
 
-    if para_delegate_enabled():
+    if para_delegate_enabled() and para_delegate_ready_for_dispatch():
         return ["para_delegate"]
 
     requested = str(inp.get("handler") or "").strip()
@@ -1424,6 +1450,26 @@ def _filter_handlers_vibe_coding_maintainer(
     return selected or list(handlers)
 
 
+def _merge_original_input_into_reasoning(
+    reasoning: Dict[str, Any],
+    input_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Backfill caller runtime controls into cognition output.
+
+    Some cognition responses do not echo the original ``input_data``. Action
+    handlers still need runtime fields such as ``project_root`` and risk flags,
+    so preserve any cognition-provided ``input`` and fill only missing keys from
+    the caller payload.
+    """
+    out = dict(reasoning or {})
+    existing = out.get("input") if isinstance(out.get("input"), dict) else {}
+    merged = dict(existing or {})
+    for key, value in (input_data or {}).items():
+        merged.setdefault(key, value)
+    out["input"] = merged
+    return out
+
+
 def _actions_real(
     config: Dict[str, Any],
     reasoning: Dict[str, Any],
@@ -1443,9 +1489,12 @@ def _actions_real(
     handlers = actions_cfg.get("handlers") or ["echo"]
     if employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"):
         try:
-            from modstore_server.para_delegate_handler import para_delegate_enabled
+            from modstore_server.para_delegate_handler import (
+                para_delegate_enabled,
+                para_delegate_ready_for_dispatch,
+            )
 
-            if para_delegate_enabled():
+            if para_delegate_enabled() and para_delegate_ready_for_dispatch():
                 handlers = ["para_delegate"]
         except Exception:
             pass
@@ -1786,6 +1835,24 @@ def _handlers_execution_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
+def _handler_failure_detail(result: Dict[str, Any]) -> str:
+    outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
+    details: List[str] = []
+    for out in outputs:
+        if not isinstance(out, dict) or out.get("ok") is not False:
+            continue
+        parts = [f"handler {str(out.get('handler') or 'unknown')} failed"]
+        for key in ("status", "status_code", "source", "error"):
+            value = out.get(key)
+            if value is None or value == "":
+                continue
+            parts.append(f"{key}={str(value)[:500]}")
+        details.append(" ".join(parts))
+    if not details:
+        return "one or more handlers returned ok=False"
+    return "; ".join(details)[:2000]
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -1845,17 +1912,19 @@ def execute_employee_task(
 
                 if not gate.get("ok"):
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-                    session.add(
-                        EmployeeExecutionMetric(
-                            user_id=_resolve_metric_user_id(session, user_id),
-                            employee_id=employee_id,
-                            task=_metric_task_preview(task),
-                            status="blocked_by_risk_gate",
-                            duration_ms=duration_ms,
-                            llm_tokens=0,
-                        )
+                    metric = EmployeeExecutionMetric(
+                        user_id=_resolve_metric_user_id(session, user_id),
+                        employee_id=employee_id,
+                        task=_metric_task_preview(task),
+                        status="blocked_by_risk_gate",
+                        duration_ms=duration_ms,
+                        llm_tokens=0,
                     )
+                    session.add(metric)
+                    session.flush()
+                    metric_id = int(metric.id or 0)
                     session.commit()
+                    _report_execution_metric_best_effort(metric_id)
                     logger.info(
                         "employee_execute_finish employee_id=%s user_id=%s status=blocked_by_risk_gate duration_ms=%s",
                         employee_id,
@@ -1909,6 +1978,7 @@ def execute_employee_task(
                         task=task,
                         bench_llm_override=bench_llm_override,
                     )
+                    reasoning = _merge_original_input_into_reasoning(reasoning, payload)
                 result = _actions_real(
                     config.get("actions", {}), reasoning, task, employee_id, user_id
                 )
@@ -1916,7 +1986,9 @@ def execute_employee_task(
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
                 handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
                 exec_status = "success" if handler_ok else "handler_failed"
-                metric_error = "" if handler_ok else "one or more handlers returned ok=False"
+                metric_error = (
+                    "" if handler_ok else _handler_failure_detail(result if isinstance(result, dict) else {})
+                )
                 metric_failure_kind = ""
                 if not handler_ok:
                     # 上游 LLM(认知层)失败常是 handler 失败的根因（如返回空正文）；据其
@@ -1931,19 +2003,21 @@ def execute_employee_task(
                     metric_failure_kind = classify_failure_kind(cog_err or metric_error, cog_status)
                     if cog_err:
                         metric_error = f"{metric_error}; cognition_error={cog_err[:500]}"
-                session.add(
-                    EmployeeExecutionMetric(
-                        user_id=_resolve_metric_user_id(session, user_id),
-                        employee_id=employee_id,
-                        task=_metric_task_preview(task),
-                        status=exec_status,
-                        duration_ms=duration_ms,
-                        llm_tokens=llm_tokens,
-                        error=metric_error,
-                        failure_kind=metric_failure_kind,
-                    )
+                metric = EmployeeExecutionMetric(
+                    user_id=_resolve_metric_user_id(session, user_id),
+                    employee_id=employee_id,
+                    task=_metric_task_preview(task),
+                    status=exec_status,
+                    duration_ms=duration_ms,
+                    llm_tokens=llm_tokens,
+                    error=metric_error,
+                    failure_kind=metric_failure_kind,
                 )
+                session.add(metric)
+                session.flush()
+                metric_id = int(metric.id or 0)
                 session.commit()
+                _report_execution_metric_best_effort(metric_id)
                 if not handler_ok:
                     suppress_lifecycle_events = isinstance(payload, dict) and str(
                         payload.get("suppress_lifecycle_events") or ""
@@ -2108,19 +2182,21 @@ def execute_employee_task(
                 # HTTPException(403, "配额不足: llm_calls")，会在此被捕获。分类保留
                 # 「配额/计费 vs prompt」区分，否则压扁成通用 failed 会喂给自进化引擎重写。
                 failure_kind = classify_failure_kind(err_text)
-                session.add(
-                    EmployeeExecutionMetric(
-                        user_id=_resolve_metric_user_id(session, user_id),
-                        employee_id=employee_id,
-                        task=_metric_task_preview(task),
-                        status="failed",
-                        duration_ms=duration_ms,
-                        llm_tokens=0,
-                        error=err_text,
-                        failure_kind=failure_kind,
-                    )
+                metric = EmployeeExecutionMetric(
+                    user_id=_resolve_metric_user_id(session, user_id),
+                    employee_id=employee_id,
+                    task=_metric_task_preview(task),
+                    status="failed",
+                    duration_ms=duration_ms,
+                    llm_tokens=0,
+                    error=err_text,
+                    failure_kind=failure_kind,
                 )
+                session.add(metric)
+                session.flush()
+                metric_id = int(metric.id or 0)
                 session.commit()
+                _report_execution_metric_best_effort(metric_id)
                 if failure_kind == FAILURE_KIND_QUOTA:
                     logger.warning(
                         "employee_execute_finish employee_id=%s user_id=%s status=failed "

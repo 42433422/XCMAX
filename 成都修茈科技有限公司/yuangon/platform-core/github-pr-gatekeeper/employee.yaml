@@ -1,0 +1,78 @@
+id: github-pr-gatekeeper
+name: GitHub PR 守门员
+version: "1.0.0"
+domain: 通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。
+owner: admin
+area: platform-core
+
+scope_globs:
+  - .github/dependabot.yml
+  - .github/workflows/**
+  - .github/gitleaks-config.toml
+  - MODstore_deploy/modstore_server/auto_fix_loop.py
+  - MODstore_deploy/modstore_server/telemetry_backlog_loop.py
+  - MODstore_deploy/scripts/ci/**
+  - yuangon/platform-core/github-pr-gatekeeper/**
+
+forbidden_globs:
+  - FHD/app/**
+  - FHD/frontend/src/**
+  - MODstore_deploy/modstore_server/models.py
+  - MODstore_deploy/modstore_server/migrations/**
+  - MODstore_deploy/modstore_server/payment_*.py
+  - _local_secrets/**
+  - ".env*"
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    - "dependabot.pr.opened"
+    - "dependabot.autofix.triggered"
+    - "github.pr.checks_completed"
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 180
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+capabilities:
+  - github.pr.review
+  - github.dependabot.merge
+  - github.ci.status
+  - github.pr.comment
+
+skills:
+  - skills/skill-pr-review.md
+  - skills/skill-dependabot-merge.md
+  - skills/skill-github-api.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on:
+  - change-request-auditor
+  - test-qa-runner
+  - vibe-coding-maintainer
+
+examples:
+  - title: "GitHub PR 守门员岗位验收"
+    description: "以最小、无副作用输入验证 PR 分类、CI 状态判断和下一步动作。"
+    input:
+      task: "只读审查一个 Dependabot patch PR，返回 approve/merge/request_changes 建议和证据。"
+      dry_run: true
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-06-28"
+    note: "从 FHD 员工包恢复为 yuangon 正式编制。"

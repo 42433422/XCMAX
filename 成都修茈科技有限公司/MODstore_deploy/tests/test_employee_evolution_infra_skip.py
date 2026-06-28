@@ -46,6 +46,30 @@ def test_evolution_excludes_infra_quota_failures():
         _add_failures(s, "emp-ratelimit", 5, "429 rate limit exceeded")  # 基建：应排除
         _add_failures(s, "emp-real", 4, "tool call returned invalid json")  # 真 prompt 失败：入选
         _add_failures(s, "emp-fewreal", 2, "bad output format")  # 真但 < 阈值：不入选
+        for _ in range(6):
+            s.add(
+                EmployeeExecutionMetric(
+                    user_id=0,
+                    employee_id="emp-lifecycle",
+                    task="Incident team role=fix. Event=employee.evolution.suggested.",
+                    status="failed",
+                    error="one or more handlers returned ok=False",
+                    failure_kind="prompt",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
+        for _ in range(6):
+            s.add(
+                EmployeeExecutionMetric(
+                    user_id=0,
+                    employee_id="vibe-coding-maintainer",
+                    task="Incident team role=fix. Event=on_error.",
+                    status="failed",
+                    error="one or more handlers returned ok=False",
+                    failure_kind="prompt",
+                    created_at=datetime.now(timezone.utc),
+                )
+            )
         s.commit()
         cands = dict(
             svc._evolution_failure_candidates(s, cutoff=cutoff, min_failures=3, limit=20)
@@ -53,6 +77,8 @@ def test_evolution_excludes_infra_quota_failures():
     assert cands.get("emp-real") == 4
     assert "emp-quota" not in cands
     assert "emp-ratelimit" not in cands
+    assert "emp-lifecycle" not in cands
+    assert "vibe-coding-maintainer" not in cands
     assert "emp-fewreal" not in cands
 
 

@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Tuple
 
 from sqlalchemy import func
 
+from modstore_server.code_ownership import resolve_incident_ownership
 from modstore_server.employee_executor import execute_employee_task
 from modstore_server.models import (
     CatalogItem,
@@ -160,6 +161,28 @@ def _recent_stats(session, employee_id: str, *, hours: int = 24) -> Dict[str, An
     }
 
 
+def _ownership_task_context(ownership_match: Dict[str, Any] | None) -> str:
+    if not isinstance(ownership_match, dict) or not ownership_match:
+        return ""
+    files = [
+        str(item).strip()
+        for item in (ownership_match.get("matched_files") or [])
+        if str(item or "").strip()
+    ][:8]
+    globs = [
+        str(item).strip()
+        for item in (ownership_match.get("matched_globs") or [])
+        if str(item or "").strip()
+    ][:6]
+    parts = ["你是本事故命中的代码负责人。"]
+    if files:
+        parts.append("命中文件：" + "、".join(files))
+    if globs:
+        parts.append("归属规则：" + "、".join(globs))
+    parts.append("请围绕这些文件给出可执行修复、验证证据和剩余风险，不要只做泛泛分析。")
+    return "\n".join(parts)
+
+
 def _score_candidate(
     *,
     employee_id: str,
@@ -167,6 +190,7 @@ def _score_candidate(
     incident_priority: int,
     scope: str,
     stats: Dict[str, Any],
+    ownership_match: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     eid = employee_id.lower()
     capability = max(0, 45 - int(binding_priority or 5) * 4)
@@ -180,15 +204,29 @@ def _score_candidate(
     load_penalty = int(stats.get("running") or 0) * 8
     failure_penalty = min(20, int(stats.get("failure") or 0) * 3)
     priority_bonus = incident_priority / 10.0
+    ownership_bonus = 0.0
+    if isinstance(ownership_match, dict) and ownership_match:
+        ownership_bonus = min(55.0, 28.0 + float(ownership_match.get("match_count") or 0) * 8.0)
     score = round(
-        max(0.0, capability + history + priority_bonus - load_penalty - failure_penalty), 3
+        max(
+            0.0,
+            capability
+            + history
+            + priority_bonus
+            + ownership_bonus
+            - load_penalty
+            - failure_penalty,
+        ),
+        3,
     )
     return {
         "capability": round(capability, 3),
+        "code_ownership": ownership_match or {},
         "employee_id": employee_id,
         "history": round(history, 3),
         "incident_priority_bonus": round(priority_bonus, 3),
         "load_penalty": load_penalty,
+        "ownership_bonus": round(ownership_bonus, 3),
         "recent_stats": stats,
         "score": score,
     }
@@ -203,11 +241,24 @@ def rank_market_candidates(event_id: int) -> Dict[str, Any]:
         payload = _payload(ev)
         scope = _scope_from_incident(str(ev.source or ""), payload)
         priority = _incident_priority(str(ev.event_type or ""), payload)
+        code_ownership = resolve_incident_ownership(
+            payload,
+            source=str(ev.source or ""),
+            event_type=str(ev.event_type or ""),
+        )
+        ownership_by_employee = {
+            str(row.get("employee_id") or ""): row
+            for row in (code_ownership.get("owners") or [])
+            if isinstance(row, dict) and str(row.get("employee_id") or "").strip()
+        }
         catalog_ids = _catalog_employee_ids(session)
         bindings = _binding_candidates(session, str(ev.event_type or ""), str(ev.source or ""))
+        for owner_id in ownership_by_employee:
+            bindings[owner_id] = min(bindings.get(owner_id, 100), 1)
         candidates: List[Tuple[float, Dict[str, Any]]] = []
         for eid, bind_priority in bindings.items():
-            if catalog_ids and eid not in catalog_ids:
+            ownership_match = ownership_by_employee.get(eid)
+            if catalog_ids and eid not in catalog_ids and not ownership_match:
                 continue
             scored = _score_candidate(
                 employee_id=eid,
@@ -215,12 +266,15 @@ def rank_market_candidates(event_id: int) -> Dict[str, Any]:
                 incident_priority=priority,
                 scope=scope,
                 stats=_recent_stats(session, eid),
+                ownership_match=ownership_match,
             )
+            scored["catalog_available"] = (not catalog_ids) or eid in catalog_ids
             candidates.append((float(scored["score"]), scored))
         candidates.sort(key=lambda item: item[0], reverse=True)
         return {
             "candidates": [item[1] for item in candidates],
             "event_id": int(event_id),
+            "code_ownership": code_ownership,
             "incident_priority": priority,
             "ok": True,
             "scope": scope,
@@ -258,6 +312,11 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
         source = str(ev.source or "")
 
     brief = f"[market-claim][{event_type}] {summary}"[:800]
+    ownership_context = _ownership_task_context(
+        chosen.get("code_ownership") if isinstance(chosen, dict) else None
+    )
+    if ownership_context:
+        brief = f"{brief}\n{ownership_context}"[:1600]
     result = execute_employee_task(
         employee_id,
         brief,
@@ -267,6 +326,7 @@ def dispatch_incident_via_market(event_id: int) -> Dict[str, Any]:
             "incident_market": {
                 "all_candidates": candidates[:8],
                 "claimed_by": employee_id,
+                "code_ownership": ranked.get("code_ownership"),
                 "event_id": int(event_id),
                 "priority": ranked.get("incident_priority"),
                 "scope": ranked.get("scope"),

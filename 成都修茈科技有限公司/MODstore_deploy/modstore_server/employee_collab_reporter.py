@@ -253,6 +253,9 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
     by_emp: Dict[str, List[Dict[str, Any]]] = {}
     labels: Dict[str, str] = {}
     for it in items:
+        status = str(it.get("status") or "open").strip().lower()
+        if status in ("closed", "merged"):
+            continue
         eid = str(it.get("employee_id") or "").strip()
         if not eid:
             continue
@@ -398,6 +401,54 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
         payload_extra={
             "evolution_record_id": int(evolution_record_id),
             "status": status,
+        },
+    )
+
+
+def report_execution_metric(*, metric_id: int) -> Dict[str, Any]:
+    """任意员工执行指标 → 员工所在部门线程。"""
+    try:
+        from modstore_server.models import EmployeeExecutionMetric, get_session_factory
+
+        sf = get_session_factory()
+        with sf() as session:
+            row = session.get(EmployeeExecutionMetric, int(metric_id))
+            if row is None:
+                return {"ok": False, "skipped": True, "error": "not_found"}
+            employee_id = str(row.employee_id or "").strip()
+            task = _excerpt(str(row.task or ""), 360)
+            status = str(row.status or "").strip() or "unknown"
+            duration_ms = float(row.duration_ms or 0.0)
+            llm_tokens = int(row.llm_tokens or 0)
+            error = _excerpt(str(row.error or ""), 800)
+            failure_kind = str(getattr(row, "failure_kind", "") or "").strip()
+    except Exception:
+        logger.exception("collab reporter: load execution metric failed id=%s", metric_id)
+        return {"ok": False, "skipped": True, "error": "query_failed"}
+
+    ok = status == "success"
+    icon = "✅" if ok else "❌"
+    title = "员工任务完成" if ok else "员工任务失败"
+    lines = [
+        f"{icon} **{title}** · {employee_id or 'unknown'}",
+        "",
+        f"- 任务：{task or '（无任务摘要）'}",
+        f"- 状态：{status}；耗时：{duration_ms:.0f} ms；LLM tokens：{llm_tokens}",
+    ]
+    if failure_kind:
+        lines.append(f"- 失败类型：{failure_kind}")
+    if error:
+        lines.append(f"- 问题摘要：{error}")
+    return _post_report(
+        dept_key=_dept_for_employee(employee_id),
+        sender_employee_id=employee_id,
+        report_key=f"metric|{int(metric_id)}",
+        source="execution_metric",
+        markdown="\n".join(lines),
+        payload_extra={
+            "metric_id": int(metric_id),
+            "status": status,
+            "failure_kind": failure_kind,
         },
     )
 

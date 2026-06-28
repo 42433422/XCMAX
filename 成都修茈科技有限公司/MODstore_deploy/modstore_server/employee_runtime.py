@@ -126,36 +126,35 @@ def normalize_manifest_legacy_deepseek_to_auto(manifest: Dict[str, Any]) -> None
 
 def load_employee_pack(session, pack_id: str) -> Dict[str, Any]:
     requested_id = str(pack_id or "").strip()
-    duty_rec = (
-        get_duty_employee_record(requested_id)
-        if is_planned_duty_employee_pack(requested_id, "employee_pack")
-        else None
+    row = (
+        session.query(CatalogItem)
+        .filter(CatalogItem.pkg_id == requested_id, CatalogItem.artifact == "employee_pack")
+        .first()
     )
-    row = None
-    if duty_rec:
-        pkg_id = str(duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id).strip()
-        name = str(duty_rec.get("name") or pkg_id)
-        version = str(duty_rec.get("version") or "")
-        stored_filename = str(duty_rec.get("stored_filename") or "")
-    else:
-        row = (
-            session.query(CatalogItem)
-            .filter(CatalogItem.pkg_id == pack_id, CatalogItem.artifact == "employee_pack")
-            .first()
-        )
     if row:
         pkg_id = str(row.pkg_id)
         name = str(row.name or pkg_id)
         version = str(row.version or "")
         stored_filename = str(row.stored_filename or "")
-    elif not duty_rec:
-        rec = employee_pack_records_from_store().get(str(pack_id).strip())
-        if not isinstance(rec, dict):
-            raise ValueError(f"员工包不存在: {pack_id}")
-        pkg_id = str(rec.get("id") or pack_id).strip()
-        name = (str(rec.get("name") or pkg_id).strip() or pkg_id)[:256]
-        version = str(rec.get("version") or "1.0.0").strip() or "1.0.0"
-        stored_filename = str(rec.get("stored_filename") or "").strip()
+    else:
+        duty_rec = (
+            get_duty_employee_record(requested_id)
+            if is_planned_duty_employee_pack(requested_id, "employee_pack")
+            else None
+        )
+        if duty_rec:
+            pkg_id = str(duty_rec.get("id") or duty_rec.get("pkg_id") or requested_id).strip()
+            name = str(duty_rec.get("name") or pkg_id)
+            version = str(duty_rec.get("version") or "")
+            stored_filename = str(duty_rec.get("stored_filename") or "")
+        else:
+            rec = employee_pack_records_from_store().get(requested_id)
+            if not isinstance(rec, dict):
+                raise ValueError(f"员工包不存在: {pack_id}")
+            pkg_id = str(rec.get("id") or requested_id).strip()
+            name = (str(rec.get("name") or pkg_id).strip() or pkg_id)[:256]
+            version = str(rec.get("version") or "1.0.0").strip() or "1.0.0"
+            stored_filename = str(rec.get("stored_filename") or "").strip()
 
     manifest: Dict[str, Any] = {"id": pkg_id, "name": name, "version": version}
     fn = (stored_filename or "").strip()

@@ -104,7 +104,7 @@ describe('voice and link utility coverage', () => {
     expect(normalizeXcagiDownloadBase('https://cdn.example.com/root/')).toBe('https://cdn.example.com/root')
 
     expect(xcagiDownloadFileName('personal', 'win', '1.2.3')).toBe('XCAGI-Personal-Setup-1.2.3-x64.exe')
-    expect(xcagiDownloadFileName('enterprise', 'mac', '1.2.3', '9.9.9', 'x64')).toBe('XCAGI-Enterprise-1.2.3-mac-x64.dmg')
+    expect(xcagiDownloadFileName('enterprise', 'mac', '1.2.3', '9.9.9', 'x64')).toBe('XCAGI-1.2.3-mac-x64.dmg')
     expect(xcagiDownloadFileName('personal', 'android', '1.2.3', '9.9.9')).toBe('XCAGI-Personal-Android-9.9.9.apk')
     expect(xcagiDownloadUrl('enterprise', 'android', 'https://cdn', '1', '2')).toBe('https://cdn/enterprise/XCAGI-Enterprise-Android-2.apk')
 

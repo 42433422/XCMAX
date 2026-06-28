@@ -252,6 +252,20 @@ def test_agent_runner_dispatches_scan_project_tree(tmp_path):
 # ── employee_executor agent handler ──────────────────────────────────────────
 
 
+def test_merge_original_input_into_reasoning_backfills_project_root():
+    from modstore_server.employee_executor import _merge_original_input_into_reasoning
+
+    out = _merge_original_input_into_reasoning(
+        {"input": {"priority": "P1"}, "reasoning": "ok"},
+        {"project_root": "/tmp/repo", "priority": "P0", "allow_medium_risk": True},
+    )
+
+    assert out["input"]["project_root"] == "/tmp/repo"
+    assert out["input"]["allow_medium_risk"] is True
+    assert out["input"]["priority"] == "P1"
+    assert out["reasoning"] == "ok"
+
+
 def test_action_agent_runner_missing_project_root_when_required():
     """When requires_project_root=True and no project_root in input, return clear error."""
     from modstore_server.employee_executor import _action_agent_runner
