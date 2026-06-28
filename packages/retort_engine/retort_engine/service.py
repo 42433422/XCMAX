@@ -15,6 +15,7 @@ from retort_engine.employee_scheduler_stress import run_employee_scheduler_stres
 from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
+from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -185,6 +186,9 @@ class RetortService:
     def absorption_release_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_absorption_release_decision(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def operator_journey_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_operator_journey_replay(str(payload.get("project") or payload.get("project_path") or "."))
+
     def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_quality_gate_bundle(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -331,6 +335,10 @@ def create_app() -> Any:
     @app.post("/absorption-release-decision")
     def absorption_release_decision_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.absorption_release_decision(payload)
+
+    @app.post("/operator-journey-replay")
+    def operator_journey_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.operator_journey_replay(payload)
 
     @app.post("/quality-gates")
     def quality_gate_bundle_route(payload: dict[str, Any]) -> dict[str, Any]:

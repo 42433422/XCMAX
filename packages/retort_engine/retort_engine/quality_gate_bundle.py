@@ -163,6 +163,16 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         "employee_patch_closure_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "production_recovery_drill_result": {"status": "ready", "project": "p", "summary": {}, "scenarios": [], "evidence": {}},
         "absorption_release_decision_result": {"status": "ready", "project": "p", "summary": {}, "decisions": [], "evidence": {}},
+        "operator_journey_replay_result": {
+            "status": "ready",
+            "project": "p",
+            "summary": {},
+            "stages": [],
+            "artifacts": [],
+            "live_probes": {},
+            "replay": {},
+            "evidence": {},
+        },
         "quality_gate_bundle_result": {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}},
         "llm_score": {"dimension": "d", "value": 1, "reason": "r"},
     }

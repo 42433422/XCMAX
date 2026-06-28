@@ -189,6 +189,8 @@ def _report_evidence(project: Path) -> list[str]:
     recovery_summary = recovery_report.get("summary") if isinstance(recovery_report.get("summary"), dict) else {}
     release_decision = read_json(project / "docs" / "retort_absorption_release_decision.json")
     release_summary = release_decision.get("summary") if isinstance(release_decision.get("summary"), dict) else {}
+    operator_journey = read_json(project / "docs" / "retort_operator_journey_replay.json")
+    operator_summary = operator_journey.get("summary") if isinstance(operator_journey.get("summary"), dict) else {}
     return [
         f"quality_gate_bundle_status={quality_report.get('status', '')}",
         f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
@@ -377,6 +379,18 @@ def _report_evidence(project: Path) -> list[str]:
         f"production_recovery_drill_real_network_denial={recovery_summary.get('real_network_denial_verified', '')}",
         f"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}",
         f"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}",
+        f"operator_journey_replay_status={operator_journey.get('status', '')}",
+        f"operator_journey_replay_ready_stages={operator_summary.get('ready_stage_count', '')}/{operator_summary.get('stage_count', '')}",
+        f"operator_journey_replay_hashed_artifacts={operator_summary.get('hashed_artifact_count', '')}",
+        f"operator_journey_replay_real_absorption_run_present={operator_summary.get('real_absorption_run_present', '')}",
+        f"operator_journey_replay_gates_passed={operator_summary.get('real_absorption_gates_passed', '')}",
+        f"operator_journey_replay_per_run_code_graph={operator_summary.get('per_run_code_graph_proved', '')}",
+        f"operator_journey_replay_cross_domain_ready={operator_summary.get('cross_domain_live_probe_ready', '')}",
+        f"operator_journey_replay_frontend_ready={operator_summary.get('frontend_structure_ready', '')}",
+        f"operator_journey_replay_architecture_ready={operator_summary.get('architecture_contract_ready', '')}",
+        f"operator_journey_replay_codebase_graph_ready={operator_summary.get('codebase_graph_ready', '')}",
+        f"operator_journey_replay_manifest={operator_summary.get('manifest_path', '')}",
+        f"operator_journey_replay_single_command={operator_summary.get('single_command_surface', '')}",
         f"absorption_release_decision_status={release_decision.get('status', '')}",
         f"absorption_release_decision_ready={release_summary.get('ready_decision_count', '')}/{release_summary.get('decision_count', '')}",
         f"absorption_release_decision_core_paths={release_summary.get('core_decision_path_count', '')}",
@@ -385,6 +399,8 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_holdout_ready={release_summary.get('holdout_blind_eval_ready', '')}",
         f"absorption_release_decision_failure_rollback_ready={release_summary.get('failure_rollback_ready', '')}",
         f"absorption_release_decision_recovery_ready={release_summary.get('recovery_ready', '')}",
+        f"absorption_release_decision_operator_journey_ready={release_summary.get('operator_journey_ready', '')}",
+        f"absorption_release_decision_operator_cross_domain_ready={release_summary.get('operator_journey_cross_domain_ready', '')}",
     ]
 
 

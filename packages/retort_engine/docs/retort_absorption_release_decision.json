@@ -55,6 +55,15 @@
       ],
       "name": "allow_failure_rollback_replay",
       "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "product_operability",
+      "evidence": [
+        "operator_journey_replay"
+      ],
+      "name": "replay_operator_absorption_journey",
+      "ready": true
     }
   ],
   "evidence": {
@@ -66,7 +75,8 @@
       "retort_pr_failure_rollback_replay.json",
       "retort_production_recovery_drill.json",
       "retort_employee_patch_closure.json",
-      "retort_review_quality_benchmark.json"
+      "retort_review_quality_benchmark.json",
+      "retort_operator_journey_replay.json"
     ],
     "style": "core_product_decision_gate"
   },
@@ -76,13 +86,15 @@
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
     "core_decision_path_count": 6,
-    "decision_count": 6,
+    "decision_count": 7,
     "employee_patch_ready": true,
     "failure_rollback_ready": true,
     "holdout_blind_eval_ready": true,
     "long_run_ready": true,
+    "operator_journey_cross_domain_ready": true,
+    "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 6,
+    "ready_decision_count": 7,
     "recovery_ready": true
   }
 }

@@ -188,6 +188,33 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_operator_journey_replay.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "ready_stage_count": 8,
+                    "stage_count": 8,
+                    "hashed_artifact_count": 15,
+                    "real_absorption_run_present": True,
+                    "real_absorption_gates_passed": True,
+                    "per_run_code_graph_proved": True,
+                    "cross_domain_live_probe_ready": True,
+                    "frontend_structure_ready": True,
+                    "architecture_contract_ready": True,
+                    "codebase_graph_ready": True,
+                    "manifest_path": ".retort/operator_journey_replays/run.manifest.json",
+                    "single_command_surface": True,
+                },
+                "stages": [],
+                "artifacts": [],
+                "live_probes": {},
+                "replay": {},
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_pr_holdout_blind_eval.json").write_text(
         json.dumps(
             {
@@ -305,6 +332,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_readonly_degradation_probe_status=read_only_degraded" in evidence
     assert "pr_readonly_degradation_probe_real_network=True" in evidence
     assert "pr_readonly_degradation_probe_artifact_ready=True" in evidence
+    assert "operator_journey_replay_status=ready" in evidence
+    assert "operator_journey_replay_ready_stages=8/8" in evidence
+    assert "operator_journey_replay_cross_domain_ready=True" in evidence
+    assert "operator_journey_replay_single_command=True" in evidence
 
 
 def test_llm_absorption_evidence_read_json_fails_closed(tmp_path: Path) -> None:

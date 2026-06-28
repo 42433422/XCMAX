@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from retort_engine.paibi_prompting import RETORT_SCORE_DIMENSIONS, build_retort_paibi_panel_prompt, build_retort_paibi_prompt, scoring_audit
+from retort_engine.paibi_prompting import RETORT_SCORE_DIMENSIONS, build_retort_paibi_panel_prompt, build_retort_paibi_prompt, prioritized_evidence, scoring_audit
 
 
 def test_prompting_keeps_local_audit_as_risk_signal_not_score(tmp_path: Path) -> None:
@@ -38,3 +38,18 @@ def test_panel_prompt_wraps_base_prompt_with_panel_contract(tmp_path: Path) -> N
 def test_score_dimensions_include_calibrated_overall_and_capability_absorption() -> None:
     assert "capability_absorption_score" in RETORT_SCORE_DIMENSIONS
     assert "calibrated_overall" in RETORT_SCORE_DIMENSIONS
+
+
+def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
+    evidence = [
+        "unimportant=1",
+        "operator_journey_replay_status=ready",
+        "operator_journey_replay_ready_stages=8/8",
+        "release_decision_self_reference=False",
+    ]
+
+    selected = prioritized_evidence(evidence)
+
+    assert "operator_journey_replay_status=ready" in selected
+    assert "operator_journey_replay_ready_stages=8/8" in selected
+    assert "release_decision_self_reference=False" in selected
