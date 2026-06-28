@@ -44,6 +44,7 @@ def build_competitor_runtime_comparison(
     output: str | Path = "",
     run_id: str = "",
     competitor_root: str | Path = "",
+    live_upstream: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     started = time.monotonic()
@@ -53,7 +54,7 @@ def build_competitor_runtime_comparison(
     patch = _sample_patch()
     patch_path = lab / "input.patch"
     patch_path.write_text(patch, encoding="utf-8")
-    runtimes = [_run_competitor_profile(root, lab, patch_path, profile, competitor_root=competitor_root) for profile in COMPETITOR_PROFILES]
+    runtimes = [_run_competitor_profile(root, lab, patch_path, profile, competitor_root=competitor_root, live_upstream=live_upstream) for profile in COMPETITOR_PROFILES]
     primary_runtime = runtimes[0] if runtimes else {}
     primary_output = primary_runtime.get("output") if isinstance(primary_runtime.get("output"), dict) else {}
     competitor_output_path = lab / "competitor_outputs.json"
@@ -73,6 +74,7 @@ def build_competitor_runtime_comparison(
     ready_runtimes = [item for item in runtimes if item.get("ready")]
     source_present = [item for item in runtimes if item.get("source_exists")]
     external_zero = [item for item in runtimes if int(item.get("external_process_returncode", -1)) == 0]
+    live_verified = [item for item in runtimes if (item.get("live_upstream") or {}).get("verified")]
     max_competitor_findings = max((int(item.get("finding_count") or 0) for item in runtimes), default=0)
     summary = {
         "competitor_project": "mopemope/pr-ai-review-bot",
@@ -84,6 +86,11 @@ def build_competitor_runtime_comparison(
         "external_process_success_count": len(external_zero),
         "all_external_processes_successful": len(external_zero) == len(runtimes) and bool(runtimes),
         "all_competitor_sources_exist": len(source_present) == len(runtimes) and bool(runtimes),
+        "live_upstream_requested": live_upstream,
+        "live_upstream_probe_count": len(runtimes) if live_upstream else 0,
+        "live_upstream_verified_count": len(live_verified),
+        "all_live_upstream_sources_verified": bool(live_upstream) and len(live_verified) == len(runtimes) and bool(runtimes),
+        "live_upstream_projects": [str(item.get("project", "")) for item in live_verified],
         "competitor_root": str(primary_runtime.get("root", "")),
         "competitor_source_exists": bool(primary_runtime.get("source_exists")),
         "competitor_source_sha256": str(primary_runtime.get("source_sha256", "")),
@@ -172,7 +179,7 @@ def _full_diff(patch: str) -> str:
     return f"diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n{patch}"
 
 
-def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: dict[str, str], *, competitor_root: str | Path = "") -> dict[str, Any]:
+def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: dict[str, str], *, competitor_root: str | Path = "", live_upstream: bool = False) -> dict[str, Any]:
     if competitor_root and profile["project"] == "mopemope/pr-ai-review-bot":
         competitor = Path(competitor_root).expanduser().resolve()
     else:
@@ -193,6 +200,7 @@ def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: di
     )
     output = _read_json(output_path)
     finding_count = int(output.get("finding_count") or len(output.get("findings") or []) or len(output.get("diagnostics") or []))
+    live = _probe_live_source(profile) if live_upstream else {"requested": False, "verified": False}
     return {
         "project": profile["project"],
         "kind": profile["kind"],
@@ -206,6 +214,7 @@ def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: di
         "external_process_stdout_tail": completed.stdout[-300:],
         "external_process_stderr_tail": completed.stderr[-300:],
         "finding_count": finding_count,
+        "live_upstream": live,
         "ready": source.is_file() and completed.returncode == 0 and output_path.is_file(),
         "output": output,
     }
@@ -217,6 +226,48 @@ def _runner_for_profile(profile: dict[str, str], runner_path: Path, patch_path: 
     if profile["kind"] == "python_review_signal_counter":
         return _PYTHON_REVIEW_SIGNAL_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
     return _PYTHON_DIFF_DIAGNOSTIC_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
+
+
+def _probe_live_source(profile: dict[str, str]) -> dict[str, Any]:
+    repo = profile["project"]
+    source = profile["source"]
+    repo_result = _gh_api(f"repos/{repo}")
+    default_branch = str((repo_result.get("json") or {}).get("default_branch") or "HEAD")
+    source_result = _gh_api(f"repos/{repo}/contents/{source}?ref={default_branch}")
+    payload = source_result.get("json") if isinstance(source_result.get("json"), dict) else {}
+    sha = str(payload.get("sha") or "")
+    return {
+        "requested": True,
+        "project": repo,
+        "source": source,
+        "default_branch": default_branch,
+        "verified": repo_result["returncode"] == 0 and source_result["returncode"] == 0 and bool(sha),
+        "source_sha": sha,
+        "html_url": str(payload.get("html_url") or ""),
+        "download_url": str(payload.get("download_url") or ""),
+        "repo_api_returncode": repo_result["returncode"],
+        "source_api_returncode": source_result["returncode"],
+        "stderr_tail": (repo_result["stderr_tail"] + source_result["stderr_tail"])[-300:],
+    }
+
+
+def _gh_api(endpoint: str) -> dict[str, Any]:
+    try:
+        completed = subprocess.run(
+            ["gh", "api", endpoint],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"returncode": 127, "json": {}, "stderr_tail": str(exc)[-300:]}
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        payload = {}
+    return {"returncode": completed.returncode, "json": payload if isinstance(payload, dict) else {}, "stderr_tail": completed.stderr[-300:]}
 
 
 def _read_json(path: Path) -> dict[str, Any]:

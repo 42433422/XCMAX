@@ -26,6 +26,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
+    assert result["summary"]["cross_domain_ci_regression_ready"] is True
     assert Path(result["summary"]["manifest_path"]).is_file()
     assert all(item["sha256"] for item in result["artifacts"] if item["exists"])
     assert validate_contract("operator_journey_replay_result", result)["valid"] is True
@@ -166,7 +167,7 @@ def _write_docs(root: Path) -> None:
             },
             "workers": [],
         },
-        "retort_employee_scheduler_stress.json": {"status": "ready", "summary": {}, "rounds": []},
+        "retort_employee_scheduler_stress.json": {"status": "ready", "summary": {"unique_successful_process_id_count": 30}, "rounds": []},
         "retort_pr_publish_dry_run.json": {"status": "dry_run_ready", "summary": {}, "comments": []},
         "retort_pr_readonly_degradation_probe.json": {"status": "read_only_degraded", "summary": {}, "evidence": {}},
         "retort_pr_low_permission_probe.json": {"status": "permission_denied_degraded", "summary": {}, "evidence": {}},
@@ -203,6 +204,7 @@ def _write_docs(root: Path) -> None:
                 "side_by_side_output_materialized": True,
                 "multi_competitor_side_by_side": True,
                 "ready_competitor_project_count": 3,
+                "all_live_upstream_sources_verified": True,
             },
             "competitor_output": {},
         },
@@ -224,6 +226,15 @@ def _write_docs(root: Path) -> None:
             "status": "ready",
             "summary": {"all_stages_chained": True, "all_stage_outputs_consumed": True},
             "stages": [],
+        },
+        "retort_cross_domain_ci_regression.json": {
+            "status": "ready",
+            "summary": {
+                "ready_round_count": 3,
+                "round_count": 3,
+                "all_output_assertions_passed": True,
+            },
+            "runs": [],
         },
         "retort_contract_runtime_rehearsal.json": {
             "status": "ready",

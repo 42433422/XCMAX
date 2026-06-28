@@ -15,6 +15,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     recovery = _read_json(root / "docs" / "retort_production_recovery_drill.json")
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     patch_stress = _read_json(root / "docs" / "retort_employee_patch_stress.json")
+    scheduler_stress = _read_json(root / "docs" / "retort_employee_scheduler_stress.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_ci_regression = _read_json(root / "docs" / "retort_external_advantage_ci_regression.json")
@@ -25,6 +26,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
+    cross_domain_ci = _read_json(root / "docs" / "retort_cross_domain_ci_regression.json")
     contract_runtime = _read_json(root / "docs" / "retort_contract_runtime_rehearsal.json")
     contract_stability = _read_json(root / "docs" / "retort_contract_stability_stress.json")
     review_family = _read_json(root / "docs" / "retort_review_family_behavior_replay.json")
@@ -51,6 +53,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and int(patch_stress.get("summary", {}).get("rollback_verified_count") or 0) >= 100
             and patch_stress.get("summary", {}).get("all_post_rollback_gates_passed") is True,
             ["employee_patch_stress"],
+        ),
+        _decision(
+            "stress_employee_independent_processes",
+            "employee_execution",
+            scheduler_stress.get("status") == "ready"
+            and int(scheduler_stress.get("summary", {}).get("unique_successful_process_id_count") or 0) >= 20
+            and scheduler_stress.get("summary", {}).get("pid_isolation_verified") is True
+            and scheduler_stress.get("summary", {}).get("queue_result_history_consistent") is True,
+            ["employee_scheduler_stress"],
         ),
         _decision(
             "publish_or_degrade_review",
@@ -116,6 +127,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side") is True
             and int(competitor_runtime.get("summary", {}).get("ready_competitor_project_count") or 0) >= 3
             and competitor_runtime.get("summary", {}).get("all_external_processes_successful") is True
+            and competitor_runtime.get("summary", {}).get("all_live_upstream_sources_verified") is True
             and competitor_runtime.get("summary", {}).get("retort_exceeds_patch_parser_by_semantic_comments") is True,
             ["competitor_runtime_comparison"],
         ),
@@ -144,6 +156,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and cross_domain_end_to_end.get("summary", {}).get("all_stage_outputs_consumed") is True
             and int(cross_domain_end_to_end.get("summary", {}).get("linked_domain_count") or 0) >= 10,
             ["cross_domain_end_to_end"],
+        ),
+        _decision(
+            "prove_cross_domain_continuous_regression",
+            "cross_domain_absorption",
+            cross_domain_ci.get("status") == "ready"
+            and int(cross_domain_ci.get("summary", {}).get("ready_round_count") or 0) >= 3
+            and cross_domain_ci.get("summary", {}).get("all_output_assertions_passed") is True
+            and cross_domain_ci.get("summary", {}).get("stable_domain_count") is True,
+            ["cross_domain_ci_regression"],
         ),
         _decision(
             "reject_contract_runtime_violations",
@@ -216,6 +237,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "employee_patch_stress_workers": patch_stress.get("summary", {}).get("worker_count", ""),
         "employee_patch_stress_rollbacks": patch_stress.get("summary", {}).get("rollback_verified_count", ""),
         "employee_patch_stress_post_rollback_gates": patch_stress.get("summary", {}).get("post_rollback_gate_passed_count", ""),
+        "employee_scheduler_stress_ready": scheduler_stress.get("status") == "ready",
+        "employee_scheduler_stress_unique_processes": scheduler_stress.get("summary", {}).get("unique_successful_process_id_count", ""),
+        "employee_scheduler_stress_queued_tasks": scheduler_stress.get("summary", {}).get("queued_task_count", ""),
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
         "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
@@ -236,6 +260,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "competitor_runtime_project_count": competitor_runtime.get("summary", {}).get("competitor_project_count", ""),
         "competitor_runtime_ready_projects": competitor_runtime.get("summary", {}).get("ready_competitor_project_count", ""),
         "competitor_runtime_multi_side_by_side": competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side", ""),
+        "competitor_runtime_live_upstream_verified": competitor_runtime.get("summary", {}).get("all_live_upstream_sources_verified", ""),
+        "competitor_runtime_live_upstream_projects": competitor_runtime.get("summary", {}).get("live_upstream_verified_count", ""),
         "competitor_runtime_hunks": competitor_runtime.get("summary", {}).get("competitor_hunk_count", ""),
         "competitor_runtime_retort_comments": competitor_runtime.get("summary", {}).get("retort_comment_count", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
@@ -248,6 +274,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "cross_domain_end_to_end_ready": cross_domain_end_to_end.get("status") == "ready",
         "cross_domain_end_to_end_domains": cross_domain_end_to_end.get("summary", {}).get("linked_domain_count", ""),
         "cross_domain_end_to_end_review_status": cross_domain_end_to_end.get("summary", {}).get("integrated_review_status", ""),
+        "cross_domain_ci_regression_ready": cross_domain_ci.get("status") == "ready",
+        "cross_domain_ci_regression_rounds": cross_domain_ci.get("summary", {}).get("ready_round_count", ""),
+        "cross_domain_ci_regression_total_domains": cross_domain_ci.get("summary", {}).get("total_domain_replay_count", ""),
         "contract_runtime_rehearsal_ready": contract_runtime.get("status") == "ready",
         "contract_runtime_rehearsal_rejected": contract_runtime.get("summary", {}).get("violation_rejected_count", ""),
         "contract_runtime_rehearsal_rollback": contract_runtime.get("summary", {}).get("all_rollbacks_verified", ""),
@@ -284,6 +313,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_production_recovery_drill.json",
                 "retort_employee_patch_closure.json",
                 "retort_employee_patch_stress.json",
+                "retort_employee_scheduler_stress.json",
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_ci_regression.json",
@@ -294,6 +324,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
                 "retort_cross_domain_end_to_end.json",
+                "retort_cross_domain_ci_regression.json",
                 "retort_contract_runtime_rehearsal.json",
                 "retort_contract_stability_stress.json",
                 "retort_review_family_behavior_replay.json",

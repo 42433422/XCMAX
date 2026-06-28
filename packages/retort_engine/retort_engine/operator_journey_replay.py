@@ -49,6 +49,7 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "employee_patch_stress_ready": _report_ready(root, "retort_employee_patch_stress.json"),
         "contract_stability_ready": _report_ready(root, "retort_contract_stability_stress.json"),
         "cross_domain_end_to_end_ready": _report_ready(root, "retort_cross_domain_end_to_end.json"),
+        "cross_domain_ci_regression_ready": _report_ready(root, "retort_cross_domain_ci_regression.json"),
         "manifest_path": str(manifest_path),
         "single_command_surface": True,
         "duration_sec": round(time.monotonic() - started, 3),
@@ -105,6 +106,7 @@ def _journey_stages(
     competitor_runtime = artifact_by_name.get("competitor_runtime_comparison", {})
     contract_stability = artifact_by_name.get("contract_stability_stress", {})
     cross_domain_e2e = artifact_by_name.get("cross_domain_end_to_end", {})
+    cross_domain_ci = artifact_by_name.get("cross_domain_ci_regression", {})
     return [
         _stage(
             "select_external_source",
@@ -199,11 +201,12 @@ def _journey_stages(
         _stage(
             "sustained_depth_gates",
             "持续深度门禁",
-            external_ci.get("exists") is True and contract_stability.get("exists") is True and cross_domain_e2e.get("exists") is True,
+            external_ci.get("exists") is True and contract_stability.get("exists") is True and cross_domain_e2e.get("exists") is True and cross_domain_ci.get("exists") is True,
             [
                 f"external_advantage_ci_sha={external_ci.get('sha256', '')}",
                 f"contract_stability_sha={contract_stability.get('sha256', '')}",
                 f"cross_domain_end_to_end_sha={cross_domain_e2e.get('sha256', '')}",
+                f"cross_domain_ci_regression_sha={cross_domain_ci.get('sha256', '')}",
             ],
         ),
         _stage(
@@ -244,6 +247,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_absorption_replay", docs / "retort_cross_domain_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_end_to_end", docs / "retort_cross_domain_end_to_end.json", "source_report", ("status", "summary", "stages")),
+        ("cross_domain_ci_regression", docs / "retort_cross_domain_ci_regression.json", "source_report", ("status", "summary", "runs")),
         ("contract_runtime_rehearsal", docs / "retort_contract_runtime_rehearsal.json", "source_report", ("status", "summary", "cases")),
         ("contract_stability_stress", docs / "retort_contract_stability_stress.json", "source_report", ("status", "summary", "runs")),
         ("review_family_behavior_replay", docs / "retort_review_family_behavior_replay.json", "source_report", ("status", "summary", "cases")),
@@ -374,6 +378,7 @@ def _release_inputs_ready(root: Path) -> bool:
     recovery = _read_json(docs / "retort_production_recovery_drill.json")
     patch = _read_json(docs / "retort_employee_patch_closure.json")
     patch_stress = _read_json(docs / "retort_employee_patch_stress.json")
+    scheduler_stress = _read_json(docs / "retort_employee_scheduler_stress.json")
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     external_ci = _read_json(docs / "retort_external_advantage_ci_regression.json")
@@ -384,6 +389,7 @@ def _release_inputs_ready(root: Path) -> bool:
     heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(docs / "retort_cross_domain_absorption_replay.json")
     cross_domain_e2e = _read_json(docs / "retort_cross_domain_end_to_end.json")
+    cross_domain_ci = _read_json(docs / "retort_cross_domain_ci_regression.json")
     contract_runtime = _read_json(docs / "retort_contract_runtime_rehearsal.json")
     contract_stability = _read_json(docs / "retort_contract_stability_stress.json")
     review_family = _read_json(docs / "retort_review_family_behavior_replay.json")
@@ -400,6 +406,8 @@ def _release_inputs_ready(root: Path) -> bool:
         and patch_stress.get("summary", {}).get("concurrency_floor_exceeded") is True
         and int(patch_stress.get("summary", {}).get("rollback_verified_count") or 0) >= 100
         and patch_stress.get("summary", {}).get("all_post_rollback_gates_passed") is True
+        and scheduler_stress.get("status") == "ready"
+        and int(scheduler_stress.get("summary", {}).get("unique_successful_process_id_count") or 0) >= 20
         and benchmark.get("status") == "ready"
         and int(benchmark.get("summary", {}).get("post_absorption_score_delta") or 0) > 0
         and external_matrix.get("status") == "ready"
@@ -422,6 +430,7 @@ def _release_inputs_ready(root: Path) -> bool:
         and competitor_runtime.get("summary", {}).get("side_by_side_output_materialized") is True
         and competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side") is True
         and int(competitor_runtime.get("summary", {}).get("ready_competitor_project_count") or 0) >= 3
+        and competitor_runtime.get("summary", {}).get("all_live_upstream_sources_verified") is True
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True
@@ -432,6 +441,9 @@ def _release_inputs_ready(root: Path) -> bool:
         and cross_domain_e2e.get("status") == "ready"
         and cross_domain_e2e.get("summary", {}).get("all_stages_chained") is True
         and cross_domain_e2e.get("summary", {}).get("all_stage_outputs_consumed") is True
+        and cross_domain_ci.get("status") == "ready"
+        and int(cross_domain_ci.get("summary", {}).get("ready_round_count") or 0) >= 3
+        and cross_domain_ci.get("summary", {}).get("all_output_assertions_passed") is True
         and contract_runtime.get("status") == "ready"
         and contract_runtime.get("summary", {}).get("all_violations_rejected") is True
         and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True

@@ -37,6 +37,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "competitor_runtime_comparison_result" in contract_names()
     assert "cross_domain_absorption_replay_result" in contract_names()
     assert "cross_domain_end_to_end_result" in contract_names()
+    assert "cross_domain_ci_regression_result" in contract_names()
     assert "contract_runtime_rehearsal_result" in contract_names()
     assert "contract_stability_stress_result" in contract_names()
     assert "review_family_behavior_replay_result" in contract_names()
@@ -82,6 +83,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
         "cross_domain_end_to_end_result",
         {"status": "ready", "project": "p", "summary": {}, "stages": [], "review": {}, "assertions": {}, "artifacts": {}, "evidence": {}},
     )
+    cross_domain_ci_valid = validate_contract("cross_domain_ci_regression_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}})
     contract_runtime_valid = validate_contract("contract_runtime_rehearsal_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     contract_stability_valid = validate_contract("contract_stability_stress_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}})
     review_family_valid = validate_contract("review_family_behavior_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
@@ -124,6 +126,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert competitor_runtime_valid["valid"] is True
     assert cross_domain_valid["valid"] is True
     assert cross_domain_e2e_valid["valid"] is True
+    assert cross_domain_ci_valid["valid"] is True
     assert contract_runtime_valid["valid"] is True
     assert contract_stability_valid["valid"] is True
     assert review_family_valid["valid"] is True

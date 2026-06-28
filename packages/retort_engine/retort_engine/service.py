@@ -15,6 +15,7 @@ from retort_engine.contract_stability_stress import build_contract_stability_str
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_ci_regression import build_cross_domain_ci_regression
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_patch_stress import build_employee_patch_stress
@@ -226,6 +227,7 @@ class RetortService:
         return build_competitor_runtime_comparison(
             str(payload.get("project") or payload.get("project_path") or "."),
             competitor_root=str(payload.get("competitor_root") or ""),
+            live_upstream=bool(payload.get("live_upstream")),
         )
 
     def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -243,6 +245,13 @@ class RetortService:
     def cross_domain_end_to_end(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_end_to_end(
             str(payload.get("project") or payload.get("project_path") or "."),
+            min_domains=int(payload.get("min_domains") or 10),
+        )
+
+    def cross_domain_ci_regression(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_cross_domain_ci_regression(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            rounds=int(payload.get("rounds") or 3),
             min_domains=int(payload.get("min_domains") or 10),
         )
 
@@ -467,6 +476,10 @@ def create_app() -> Any:
     @app.post("/cross-domain-end-to-end")
     def cross_domain_end_to_end_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.cross_domain_end_to_end(payload)
+
+    @app.post("/cross-domain-ci-regression")
+    def cross_domain_ci_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.cross_domain_ci_regression(payload)
 
     @app.post("/contract-runtime-rehearsal")
     def contract_runtime_rehearsal_route(payload: dict[str, Any]) -> dict[str, Any]:
