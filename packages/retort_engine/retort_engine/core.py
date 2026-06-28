@@ -21,7 +21,17 @@ from retort_engine.absorption_state import save_absorption_state as _save_absorp
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
+from retort_engine.devour_session import assessment_file_count as _assessment_file_count
+from retort_engine.devour_session import assessment_score as _assessment_score
+from retort_engine.devour_session import build_devour_session as _build_devour_session
+from retort_engine.devour_session import external_project_profile as _external_project_profile
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.generalization_proof import build_generalization_proof, write_generalization_proof
+from retort_engine.llm_scoring import attach_llm_scoring as _attach_llm_scoring_impl
+from retort_engine.llm_scoring import llm_disabled_review as _llm_disabled_review_impl
+from retort_engine.llm_scoring import llm_enabled as _llm_enabled_impl
+from retort_engine.llm_scoring import llm_external_reference as _llm_external_reference_impl
+from retort_engine.llm_scoring import llm_requires_deep_review as _llm_requires_deep_review_impl
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
@@ -121,6 +131,7 @@ def assess_project(project: str, *, run_local_gates: bool = False, context_polic
         "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
         "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
+        "generalization_proof": "generalization-proof-report" in text and "build_generalization_proof" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
     }
     tracked = _tracking_state(root)
@@ -498,6 +509,13 @@ class RetortService:
             round_count=int(payload.get("round_count") or payload.get("rounds") or 10),
             tasks_per_round=int(payload.get("tasks_per_round") or 3),
         )
+
+    def generalization_proof_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        project = str(payload.get("project") or payload.get("project_path") or ".")
+        output = str(payload.get("output") or "")
+        if output:
+            return write_generalization_proof(project, output)
+        return build_generalization_proof(project)
 
     def similar_project_radar(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_similar_project_radar(
@@ -889,238 +907,6 @@ def _absorption_visual(pre_assessment: dict[str, Any], own_assessment: dict[str,
     }
 
 
-def _build_devour_session(
-    *,
-    source: str,
-    external_path: Path | None,
-    pre_assessment: dict[str, Any],
-    external_assessment: dict[str, Any],
-    own_assessment: dict[str, Any],
-    tasks: list[dict[str, str]],
-    execution: dict[str, Any],
-    branch_state: dict[str, Any],
-    absorption_state: dict[str, Any],
-    llm_review: dict[str, Any],
-) -> dict[str, Any]:
-    return {
-        "status": _devour_session_status(execution, own_assessment),
-        "source": source,
-        "stage_order": ["pre_dual_review", "overlap_comparison", "absorption_execution", "improvement_proof", "final_self_review"],
-        "pre_dual_review": {
-            "status": "ready",
-            "context_policy": "isolated_before_absorption",
-            "panels": [
-                _assessment_panel("own_before", "主项目吞噬前深评", pre_assessment, source=str(pre_assessment.get("project") or "")),
-                _assessment_panel("external", "外部项目深评", external_assessment, source=source),
-            ],
-        },
-        "overlap_comparison": _overlap_comparison(source, external_path, tasks),
-        "absorption_execution": {
-            "status": str(execution.get("status") or "not_run"),
-            "summary": str(execution.get("summary") or ""),
-            "changed_files": [str(item) for item in execution.get("changed_files") or []],
-            "gates": [item for item in execution.get("gates") or [] if isinstance(item, dict)],
-            "branch": branch_state,
-            "tasks": tasks,
-        },
-        "improvement_proof": _improvement_proof(pre_assessment, own_assessment, execution, absorption_state),
-        "final_self_review": _final_self_review(own_assessment, llm_review),
-    }
-
-
-def _devour_session_status(execution: dict[str, Any], own_assessment: dict[str, Any]) -> str:
-    if _assessment_score(own_assessment) is not None:
-        return "final_deep_review_scored"
-    if execution.get("status") in {"applied", "noop"}:
-        return "absorbed_awaiting_final_llm_score"
-    if execution.get("status") in {"failed", "timeout"}:
-        return "absorption_execution_failed"
-    return "pre_review_ready"
-
-
-def _assessment_panel(role: str, title: str, assessment: dict[str, Any], *, source: str) -> dict[str, Any]:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
-    scores = [item for item in assessment.get("scores") or [] if isinstance(item, dict)]
-    return {
-        "role": role,
-        "title": title,
-        "source": source,
-        "project": str(assessment.get("project") or source),
-        "score": _assessment_score(assessment),
-        "score_status": _assessment_score_status(assessment),
-        "score_source": str(metadata.get("score_source") or metadata.get("score_authority") or "unknown"),
-        "score_count": len(scores),
-        "file_count": _assessment_file_count(assessment),
-        "evidence_highlights": _evidence_highlights(assessment),
-        "feature_highlights": _feature_highlights(metadata),
-        "llm_task_id": str(metadata.get("llm_task_id") or ((assessment.get("llm_review") or {}).get("dispatch") or {}).get("task_id") or ""),
-    }
-
-
-def _assessment_score_status(assessment: dict[str, Any]) -> str:
-    metadata = assessment.get("metadata") if isinstance(assessment.get("metadata"), dict) else {}
-    source = str(metadata.get("score_source") or "")
-    if _assessment_score(assessment) is not None and source == "paibi_llm":
-        return "paibi_llm_completed"
-    if _assessment_score(assessment) is not None:
-        return "score_available"
-    if source == "external_evidence_only":
-        return "external_evidence_collected_needs_llm"
-    if source == "unavailable_external_project":
-        return "external_project_unavailable"
-    return "paibi_llm_required_not_scored"
-
-
-def _evidence_highlights(assessment: dict[str, Any], *, limit: int = 8) -> list[str]:
-    evidence = [str(item) for item in assessment.get("evidence") or []]
-    priority_prefixes = (
-        "source_files=",
-        "test_functions=",
-        "git_tracking_state=",
-        "lint=",
-        "test=",
-        "closed_loop_verified=",
-        "closed_loop_missing=",
-        "capability_absorption_local_score_removed=",
-        "capability_absorption_risk_level=",
-        "capability_absorption_blockers=",
-        "behavior_source_file_count=",
-        "behavior_test_file_count=",
-        "test_to_source_ratio=",
-        "employee_execution_mode=",
-    )
-    picked: list[str] = []
-    for prefix in priority_prefixes:
-        picked.extend(item for item in evidence if item.startswith(prefix) and item not in picked)
-    picked.extend(item for item in evidence if item not in picked)
-    return picked[:limit]
-
-
-def _feature_highlights(metadata: dict[str, Any], *, limit: int = 6) -> list[str]:
-    features = metadata.get("features") if isinstance(metadata.get("features"), dict) else {}
-    return [str(key) for key, value in features.items() if value][:limit]
-
-
-def _overlap_comparison(source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
-    profile = _external_project_profile(external_path)
-    signals = [
-        label
-        for key, label in (
-            ("review_pipeline", "审查流水线"),
-            ("file_grouping", "文件/差异分组"),
-            ("benchmarking", "质量基准"),
-            ("plugin_surface", "CLI/插件入口"),
-        )
-        if profile.get(key)
-    ]
-    dimensions = sorted({str(task.get("dimension") or "") for task in tasks if task.get("dimension")})
-    return {
-        "status": "depth_overlap_found" if tasks else "no_overlap_depth_found",
-        "source": source,
-        "depth_policy": "只吸收与 Retort 当前吸收、评估、证据闭环重合的深度，不扩主线广度。",
-        "external_depth_signals": signals,
-        "overlap_dimensions": dimensions,
-        "absorb_targets": [
-            {
-                "title": str(task.get("title") or ""),
-                "dimension": str(task.get("dimension") or ""),
-                "priority": str(task.get("priority") or ""),
-                "why": str(task.get("why") or ""),
-            }
-            for task in tasks
-        ],
-        "deferred_breadth": ["非重合方向暂不进入 Retort 主线", "可上架为未来 AI 员工或市场候选"],
-    }
-
-
-def _improvement_proof(pre_assessment: dict[str, Any], own_assessment: dict[str, Any], execution: dict[str, Any], absorption_state: dict[str, Any]) -> dict[str, Any]:
-    before_score = _assessment_score(pre_assessment)
-    after_score = _assessment_score(own_assessment)
-    changed_files = [str(item) for item in execution.get("changed_files") or []]
-    gates = [item for item in execution.get("gates") or [] if isinstance(item, dict)]
-    proof = absorption_state.get("closed_loop_proof") if isinstance(absorption_state.get("closed_loop_proof"), dict) else {}
-    flags = proof.get("flags") if isinstance(proof.get("flags"), dict) else {}
-    audit = (own_assessment.get("metadata") or {}).get("capability_absorption_audit") if isinstance(own_assessment.get("metadata"), dict) else {}
-    if not isinstance(audit, dict):
-        audit = {}
-    return {
-        "status": _improvement_proof_status(execution, flags),
-        "before_score": before_score,
-        "after_score": after_score,
-        "score_delta": round(after_score - before_score, 1) if before_score is not None and after_score is not None else None,
-        "changed_file_count": len(changed_files),
-        "changed_files": changed_files,
-        "gate_passed_count": sum(1 for gate in gates if gate.get("ok")),
-        "gate_count": len(gates),
-        "closed_loop_flags": flags,
-        "missing_closed_loop": [str(item) for item in proof.get("missing") or []],
-        "behavior_source_files": [str(item) for item in audit.get("behavior_source_files") or []],
-        "behavior_test_files": [str(item) for item in audit.get("behavior_test_files") or []],
-        "support_behavior_source_files": [str(item) for item in audit.get("support_behavior_source_files") or []],
-        "support_behavior_test_files": [str(item) for item in audit.get("support_behavior_test_files") or []],
-        "generated_evidence_files": [str(item) for item in audit.get("generated_evidence_files") or []],
-        "generated_only": bool(audit.get("generated_only")),
-        "capability_absorption_local_score_removed": bool(audit.get("local_score_removed", True)),
-        "capability_absorption_status": audit.get("status"),
-        "capability_absorption_risk_level": audit.get("risk_level"),
-        "capability_absorption_blockers": [str(item) for item in audit.get("blockers") or []],
-        "test_to_source_ratio": audit.get("test_to_source_ratio"),
-        "reason": str(audit.get("reason") or ""),
-    }
-
-
-def _improvement_proof_status(execution: dict[str, Any], flags: dict[str, Any]) -> str:
-    if execution.get("status") in {"failed", "timeout"}:
-        return "failed"
-    if flags and all(bool(value) for value in flags.values()):
-        return "five_proofs_verified"
-    if execution.get("status") in {"applied", "noop"} and bool(execution.get("gates_passed")):
-        return "execution_and_gates_verified"
-    if execution.get("status") in {"applied", "noop"}:
-        return "execution_verified_needs_gates_or_merge"
-    return "pending_execution"
-
-
-def _final_self_review(own_assessment: dict[str, Any], llm_review: dict[str, Any]) -> dict[str, Any]:
-    metadata = own_assessment.get("metadata") if isinstance(own_assessment.get("metadata"), dict) else {}
-    dispatch = llm_review.get("dispatch") if isinstance(llm_review.get("dispatch"), dict) else {}
-    return {
-        "status": _assessment_score_status(own_assessment),
-        "score": _assessment_score(own_assessment),
-        "score_source": str(metadata.get("score_source") or "paibi_llm_pending"),
-        "scores": [item for item in own_assessment.get("scores") or [] if isinstance(item, dict)],
-        "llm_task_id": str(metadata.get("llm_task_id") or dispatch.get("task_id") or ""),
-        "llm_dispatch_status": str(dispatch.get("status") or llm_review.get("status") or ""),
-        "record_policy": "只有排比 LLM 返回结构化分数时，最终评分才保留。",
-    }
-
-
-def _assessment_score(assessment: dict[str, Any]) -> float | None:
-    scores = assessment.get("scores") if isinstance(assessment, dict) else []
-    if not isinstance(scores, list):
-        return None
-    preferred = ("calibrated_overall", "product_level", "retort_product_maturity")
-    for dimension in preferred:
-        for score in scores:
-            if isinstance(score, dict) and score.get("dimension") == dimension:
-                try:
-                    return round(float(score.get("value")), 1)
-                except (TypeError, ValueError):
-                    return None
-    return None
-
-
-def _assessment_file_count(assessment: dict[str, Any]) -> int:
-    evidence = assessment.get("evidence") if isinstance(assessment, dict) else []
-    if not isinstance(evidence, list):
-        return 0
-    for item in evidence:
-        match = re.match(r"source_files=(\d+)", str(item))
-        if match:
-            return int(match.group(1))
-    return 0
-
-
 def record_closed_loop_proof(project: str, payload: dict[str, Any]) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     state = _load_absorption_state(root)
@@ -1226,59 +1012,24 @@ def _evidence_value(evidence: Any, key: str) -> str:
 
 
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
-    require_deep = _llm_requires_deep_review(payload)
-    metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
-    external_source, external_path = _llm_external_reference(metadata, external_source, external_path)
-    evidence = list(assessment.get("evidence", []))
-    evidence.extend(_llm_absorption_evidence(project))
-    review = _maybe_request_llm_review(
+    return _attach_llm_scoring_impl(
         payload,
+        assessment,
         project,
         mode,
         external_source,
         external_path,
-        [],
         tasks,
-        evidence=evidence,
-        metadata=metadata,
+        evidence_builder=_llm_absorption_evidence,
+        request_review=request_paibi_llm_review,
+        wait_review=wait_for_paibi_llm_review,
+        fetch_status=fetch_paibi_llm_review_status,
+        record_deep_result=record_paibi_llm_deep_result,
     )
-    assessment["llm_review"] = review
-    metadata = assessment.setdefault("metadata", {})
-    if review.get("status") == "disabled":
-        metadata["score_source"] = review.get("score_source", "paibi_llm_disabled")
-        if require_deep:
-            raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
-        return assessment
-    metadata["score_source"] = "paibi_llm_pending"
-    wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
-    task_id = str((review.get("dispatch") or {}).get("task_id") or "")
-    status: dict[str, Any] = {}
-    if wait_sec > 0 and task_id:
-        status = wait_for_paibi_llm_review(task_id, timeout_sec=wait_sec)
-    elif payload.get("llm_task_id"):
-        status = fetch_paibi_llm_review_status(str(payload.get("llm_task_id")))
-    if status:
-        assessment["llm_review_status"] = status
-        if status.get("scores"):
-            assessment["scores"] = status["scores"]
-            metadata["score_source"] = "paibi_llm"
-            metadata["llm_task_id"] = status.get("task_id")
-            if require_deep:
-                record_paibi_llm_deep_result(project=project, mode=mode, review=review, status=status)
-    if require_deep and metadata.get("score_source") != "paibi_llm":
-        current = str((status or {}).get("status") or review.get("status") or (review.get("dispatch") or {}).get("status") or "not_completed")
-        metadata["score_source"] = "paibi_llm_required_not_completed"
-        raise RuntimeError(f"PaiBi LLM deep review did not complete with scores; current status: {current}")
-    return assessment
 
 
 def _llm_external_reference(metadata: dict[str, Any], external_source: str, external_path: str) -> tuple[str, str]:
-    state = metadata.get("absorption_state") if isinstance(metadata.get("absorption_state"), dict) else {}
-    if not external_source:
-        external_source = str(state.get("source") or "")
-    if not external_path:
-        external_path = str(state.get("external_path") or "")
-    return external_source, external_path
+    return _llm_external_reference_impl(metadata, external_source, external_path)
 
 
 def _llm_absorption_evidence(project: Path) -> list[str]:
@@ -1422,6 +1173,14 @@ def _llm_absorption_evidence(project: Path) -> list[str]:
     evidence.append(f"employee_scheduler_stress_failed_process_count={stress_summary.get('failed_process_count', '')}")
     evidence.append(f"employee_scheduler_stress_consistent={stress_summary.get('queue_result_history_consistent', '')}")
     evidence.append(f"employee_scheduler_stress_independent_process={stress_summary.get('independent_process_verified', '')}")
+    generalization = build_generalization_proof(project)
+    generalization_summary = generalization.get("summary") if isinstance(generalization.get("summary"), dict) else {}
+    evidence.append(f"generalization_proof_status={generalization.get('status', '')}")
+    evidence.append(f"generalization_external_project_count={generalization_summary.get('external_project_count', '')}")
+    evidence.append(f"generalization_language_count={generalization_summary.get('language_count', '')}")
+    evidence.append(f"generalization_ci_project_count={generalization_summary.get('ci_project_count', '')}")
+    evidence.append(f"generalization_large_project_count={generalization_summary.get('large_project_count', '')}")
+    evidence.append(f"generalization_pr_replay_status={generalization_summary.get('pr_replay_status', '')}")
     evidence.extend(proof.get("evidence") or [])
     report = project / "docs" / "retort_external_review_report.json"
     if report.is_file():
@@ -1474,27 +1233,15 @@ def _maybe_request_llm_review(
 
 
 def _llm_requires_deep_review(payload: dict[str, Any]) -> bool:
-    return bool(
-        payload.get("require_deep_review")
-        or payload.get("require_llm_scores")
-        or payload.get("require_llm")
-        or payload.get("llm_required")
-    )
+    return _llm_requires_deep_review_impl(payload)
 
 
 def _llm_enabled(payload: dict[str, Any]) -> bool:
-    return bool(payload.get("use_llm") or payload.get("paibi_llm") or payload.get("llm_review"))
+    return _llm_enabled_impl(payload)
 
 
 def _llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:
-    return {
-        "enabled": False,
-        "provider": "paibi",
-        "status": "disabled",
-        "score_source": "paibi_llm_required" if require_deep else "paibi_llm_disabled",
-        "reason": "llm_deep_review_required" if require_deep else "llm_not_requested",
-        "dispatch": {"status": "disabled"},
-    }
+    return _llm_disabled_review_impl(require_deep=require_deep)
 
 
 def _capability_absorption_audit(root: Path) -> dict[str, Any]:
@@ -1887,20 +1634,6 @@ def _run_git_clone(url: str, target: Path) -> None:
     result = subprocess.run(["git", "clone", "--depth", "1", url, str(target)], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=180, check=False)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-
-
-def _external_project_profile(path: Path | None) -> dict[str, bool]:
-    if path is None or not path.is_dir():
-        return {}
-    files = _project_files(path, {".git", "__pycache__", "node_modules"})
-    text = "\n".join(_read(p)[:20000] for p in files[:250] if p.suffix.lower() in {".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json", ".toml"})
-    lowered = text.lower()
-    return {
-        "review_pipeline": any(marker in lowered for marker in ("code review", "review pipeline", "reviewer", "reflection", "localization")),
-        "file_grouping": any(marker in lowered for marker in ("file group", "group files", "changed files", "diff hunk", "patch set")),
-        "benchmarking": any(marker in lowered for marker in ("benchmark", "precision", "recall", "eval", "evaluation")),
-        "plugin_surface": any(marker in lowered for marker in ("plugin", "cli", "github action", "codex")),
-    }
 
 
 def _record_absorption_shock(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
