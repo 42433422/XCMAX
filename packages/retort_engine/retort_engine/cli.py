@@ -24,6 +24,7 @@ from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
+from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_pipeline import build_diff_pipeline_replay
@@ -223,6 +224,10 @@ def main(argv: list[str] | None = None) -> int:
     release_decision.add_argument("--project", default=".")
     release_decision.add_argument("--output", default="")
     release_decision.add_argument("--json", action="store_true")
+    operator_journey = sub.add_parser("operator-journey-replay")
+    operator_journey.add_argument("--project", default=".")
+    operator_journey.add_argument("--output", default="")
+    operator_journey.add_argument("--json", action="store_true")
     quality_gates = sub.add_parser("quality-gates")
     quality_gates.add_argument("--project", default=".")
     quality_gates.add_argument("--output", default="")
@@ -638,6 +643,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort absorption release decision status: {result['status']}")
             print(f"Ready decisions: {result['summary']['ready_decision_count']}/{result['summary']['decision_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "operator-journey-replay":
+        result = build_operator_journey_replay(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort operator journey replay status: {result['status']}")
+            print(f"Ready stages: {result['summary']['ready_stage_count']}/{result['summary']['stage_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

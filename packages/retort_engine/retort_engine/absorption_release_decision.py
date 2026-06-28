@@ -15,6 +15,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     recovery = _read_json(root / "docs" / "retort_production_recovery_drill.json")
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
+    operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
         _decision(
             "run_absorption",
@@ -52,6 +53,12 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             failure_rollback.get("status") == "ready" and bool(failure_rollback.get("summary", {}).get("all_failures_rolled_back")),
             ["pr_failure_rollback_replay"],
         ),
+        _decision(
+            "replay_operator_absorption_journey",
+            "product_operability",
+            operator_journey.get("status") == "ready" and bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
+            ["operator_journey_replay"],
+        ),
     ]
     ready = [item for item in decisions if item["ready"]]
     blockers = [item for item in decisions if not item["ready"]]
@@ -67,6 +74,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "employee_patch_ready": patch.get("status") == "ready",
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
         "failure_rollback_ready": failure_rollback.get("status") == "ready",
+        "operator_journey_ready": operator_journey.get("status") == "ready",
+        "operator_journey_cross_domain_ready": bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
     }
     result = {
         "status": "ready" if summary["all_core_decisions_ready"] else "blocked",
@@ -84,6 +93,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_production_recovery_drill.json",
                 "retort_employee_patch_closure.json",
                 "retort_review_quality_benchmark.json",
+                "retort_operator_journey_replay.json",
             ],
         },
     }
