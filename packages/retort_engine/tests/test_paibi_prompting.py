@@ -46,8 +46,10 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         *[f"pr_holdout_blind_eval_total_comments={index}" for index in range(100)],
         "operator_journey_replay_status=ready",
         "operator_journey_replay_ready_stages=8/8",
+        "operator_journey_replay_frontend_operation_replay_ready=True",
         "absorption_release_decision_operator_journey_ready=True",
         "external_advantage_matrix_score_delta=55",
+        "external_advantage_matrix_blind_third_party_min_delta=65",
         "external_advantage_matrix_per_case_before_after=True",
         "cross_domain_absorption_replay_output_assertions=True",
         "contract_runtime_rehearsal_all_rollbacks=True",
@@ -59,8 +61,10 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
 
     assert "operator_journey_replay_status=ready" in selected
     assert "operator_journey_replay_ready_stages=8/8" in selected
+    assert "operator_journey_replay_frontend_operation_replay_ready=True" in selected
     assert "absorption_release_decision_operator_journey_ready=True" in selected
     assert "external_advantage_matrix_score_delta=55" in selected
+    assert "external_advantage_matrix_blind_third_party_min_delta=65" in selected
     assert "external_advantage_matrix_per_case_before_after=True" in selected
     assert "cross_domain_absorption_replay_output_assertions=True" in selected
     assert "contract_runtime_rehearsal_all_rollbacks=True" in selected

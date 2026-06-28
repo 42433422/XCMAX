@@ -1,0 +1,1 @@
+{"json_result": {"employee_tasks": [{"acceptance": "all concurrent violations rejected", "evidence_required": "rollback trace", "owner_hint": "runtime", "title": "Contract concurrency injection"}, {"acceptance": "operator actions replay green", "evidence_required": "ui replay artifact", "owner_hint": "product-runtime", "title": "Frontend operation replay"}]}}

@@ -1,0 +1,11 @@
+{
+  "contract": "cross_domain_absorption_replay_result",
+  "last_valid_payload": {
+    "cases": [],
+    "evidence": {},
+    "project": "p",
+    "status": "ready",
+    "summary": {}
+  },
+  "worker": 3
+}

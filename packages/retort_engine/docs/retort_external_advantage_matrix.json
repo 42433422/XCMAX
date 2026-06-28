@@ -1,4 +1,119 @@
 {
+  "blind_third_party_adjudication": {
+    "adjudications": [
+      {
+        "absorbed_signal": "security_ranked_pr_review",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "pr-agent-secret-context",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "qodo-ai/pr-agent"
+      },
+      {
+        "absorbed_signal": "ci_review_publisher_safety",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "reviewdog-workflow-token",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "reviewdog/reviewdog"
+      },
+      {
+        "absorbed_signal": "evaluation_harness_oracle",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "swe-bench-oracle-placeholder",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "swe-bench/SWE-bench"
+      },
+      {
+        "absorbed_signal": "architecture_contract_guard",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "import-linter-contract-bypass",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "seddonym/import-linter"
+      },
+      {
+        "absorbed_signal": "context_packaging_noise_control",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "repomix-context-package-clean",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "yamadashy/repomix"
+      },
+      {
+        "absorbed_signal": "typescript_diff_hunk_review",
+        "accepted": true,
+        "blind_baseline_capability": 20,
+        "blind_recomputed_delta": 80,
+        "blind_retort_capability": 100,
+        "case_id": "mopemope-typescript-diff-review",
+        "checks": {
+          "context_evidence": true,
+          "delta_at_least_65": true,
+          "publishable_evidence": true,
+          "score_fields_not_required": true,
+          "severity_evidence": true
+        },
+        "source_project": "mopemope/pr-ai-review-bot"
+      }
+    ],
+    "evidence": {
+      "acceptance_delta_floor": 65,
+      "adjudicator": "retort_engine.external_advantage_adjudicator.blind_third_party_adjudicate_external_advantages",
+      "independence_boundary": "redacted_structural_facts_only_no_baseline_or_retort_score_fields"
+    },
+    "status": "ready",
+    "summary": {
+      "accepted_case_count": 6,
+      "adjudicated_case_count": 6,
+      "all_cases_accepted": true,
+      "all_delta_at_least_65": true,
+      "average_blind_recomputed_delta": 80.0,
+      "minimum_blind_recomputed_delta": 80,
+      "score_fields_consumed": false
+    }
+  },
   "evidence": {
     "absorbed_signals": [
       "architecture_contract_guard",
@@ -9,6 +124,8 @@
       "typescript_diff_hunk_review"
     ],
     "baseline_model": "pre_absorption_keyword_review_without_context_groups_publish_anchors_or_extension_policy",
+    "blind_third_party_adjudicator": "retort_engine.external_advantage_adjudicator.blind_third_party_adjudicate_external_advantages",
+    "blind_third_party_boundary": "redacted_structural_facts_only_no_baseline_or_retort_score_fields",
     "comparison": "same_external_advantage_cases_replayed_before_after_absorption",
     "independent_adjudicator": "retort_engine.external_advantage_adjudicator.adjudicate_external_advantage_rows",
     "regression_model": "executable_input_output_diff_replay",
@@ -133,7 +250,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "pr-agent-secret-context",
       "diff": "diff --git a/pr_agent/settings.py b/pr_agent/settings.py\n--- a/pr_agent/settings.py\n+++ b/pr_agent/settings.py\n@@ -0,0 +1,1 @@\n+OPENAI_API_TOKEN = \"live-secret-value\"\n",
       "expected_context": "security",
@@ -157,9 +274,9 @@
           "medium"
         ],
         "publishable_comment_count": 2,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 3
       },
       "source_project": "qodo-ai/pr-agent"
     },
@@ -175,7 +292,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "reviewdog-workflow-token",
       "diff": "diff --git a/.github/workflows/review.yml b/.github/workflows/review.yml\n--- a/.github/workflows/review.yml\n+++ b/.github/workflows/review.yml\n@@ -0,0 +1,1 @@\n+REVIEWDOG_TOKEN: \"review-token-value\"\n",
       "expected_context": "ci_config",
@@ -197,9 +314,9 @@
           "high"
         ],
         "publishable_comment_count": 1,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 1
       },
       "source_project": "reviewdog/reviewdog"
     },
@@ -215,7 +332,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "swe-bench-oracle-placeholder",
       "diff": "diff --git a/swebench/harness/run_evaluation.py b/swebench/harness/run_evaluation.py\n--- a/swebench/harness/run_evaluation.py\n+++ b/swebench/harness/run_evaluation.py\n@@ -0,0 +1,1 @@\n+# TODO: replace oracle stub before benchmark publication\n",
       "expected_context": "runtime",
@@ -239,9 +356,9 @@
           "low"
         ],
         "publishable_comment_count": 2,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 2
       },
       "source_project": "swe-bench/SWE-bench"
     },
@@ -257,7 +374,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "import-linter-contract-bypass",
       "diff": "diff --git a/importlinter/contracts/layers.py b/importlinter/contracts/layers.py\n--- a/importlinter/contracts/layers.py\n+++ b/importlinter/contracts/layers.py\n@@ -0,0 +1,1 @@\n+# FIXME: bypass contract violation until next release\n",
       "expected_context": "runtime",
@@ -279,9 +396,9 @@
           "medium"
         ],
         "publishable_comment_count": 1,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 1
       },
       "source_project": "seddonym/import-linter"
     },
@@ -297,7 +414,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "repomix-context-package-clean",
       "diff": "diff --git a/docs/context-pack.md b/docs/context-pack.md\n--- a/docs/context-pack.md\n+++ b/docs/context-pack.md\n@@ -0,0 +1,1 @@\n+Document deterministic context packaging inputs and output hashes.\n",
       "expected_context": "docs",
@@ -319,9 +436,9 @@
           "info"
         ],
         "publishable_comment_count": 1,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 1
       },
       "source_project": "yamadashy/repomix"
     },
@@ -337,7 +454,7 @@
         "severity_matched": true,
         "task_group_count": 0
       },
-      "behavior_delta": 45,
+      "behavior_delta": 60,
       "case_id": "mopemope-typescript-diff-review",
       "diff": "diff --git a/src/reviewer.ts b/src/reviewer.ts\n--- a/src/reviewer.ts\n+++ b/src/reviewer.ts\n@@ -0,0 +1,1 @@\n+// TODO: retry review dispatch without duplicate comments\n",
       "expected_context": "runtime",
@@ -359,9 +476,9 @@
           "medium"
         ],
         "publishable_comment_count": 1,
-        "score": 85,
+        "score": 100,
         "severity_matched": true,
-        "task_group_count": 0
+        "task_group_count": 1
       },
       "source_project": "mopemope/pr-ai-review-bot"
     }
@@ -372,7 +489,7 @@
       {
         "absorbed_signal": "security_ranked_pr_review",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "pr-agent-secret-context",
         "checks": {
           "before_after_scores": true,
@@ -400,13 +517,13 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "qodo-ai/pr-agent"
       },
       {
         "absorbed_signal": "ci_review_publisher_safety",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "reviewdog-workflow-token",
         "checks": {
           "before_after_scores": true,
@@ -431,13 +548,13 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "reviewdog/reviewdog"
       },
       {
         "absorbed_signal": "evaluation_harness_oracle",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "swe-bench-oracle-placeholder",
         "checks": {
           "before_after_scores": true,
@@ -464,13 +581,13 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "swe-bench/SWE-bench"
       },
       {
         "absorbed_signal": "architecture_contract_guard",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "import-linter-contract-bypass",
         "checks": {
           "before_after_scores": true,
@@ -495,13 +612,13 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "seddonym/import-linter"
       },
       {
         "absorbed_signal": "context_packaging_noise_control",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "repomix-context-package-clean",
         "checks": {
           "before_after_scores": true,
@@ -526,13 +643,13 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "yamadashy/repomix"
       },
       {
         "absorbed_signal": "typescript_diff_hunk_review",
         "baseline_score": 40,
-        "behavior_delta": 45,
+        "behavior_delta": 60,
         "case_id": "mopemope-typescript-diff-review",
         "checks": {
           "before_after_scores": true,
@@ -557,7 +674,7 @@
           "severity_matched": true
         },
         "passed": true,
-        "retort_score": 85,
+        "retort_score": 100,
         "source_project": "mopemope/pr-ai-review-bot"
       }
     ],
@@ -588,6 +705,14 @@
     "all_use_direct_review_execution": true,
     "baseline_average_score": 40.0,
     "behavior_delta_count": 6,
+    "blind_third_party_accepted_case_count": 6,
+    "blind_third_party_adjudicated_case_count": 6,
+    "blind_third_party_all_cases_accepted": true,
+    "blind_third_party_average_delta": 80.0,
+    "blind_third_party_delta_floor_passed": true,
+    "blind_third_party_minimum_delta": 80,
+    "blind_third_party_score_fields_consumed": false,
+    "blind_third_party_status": "ready",
     "case_count": 6,
     "direct_regression_case_count": 6,
     "extension_policy_case_count": 6,
@@ -603,8 +728,8 @@
     "ready_case_count": 6,
     "regression_case_count": 6,
     "regression_status": "ready",
-    "retort_average_score": 85.0,
-    "score_delta": 45.0,
+    "retort_average_score": 100.0,
+    "score_delta": 60.0,
     "source_project_count": 6
   }
 }

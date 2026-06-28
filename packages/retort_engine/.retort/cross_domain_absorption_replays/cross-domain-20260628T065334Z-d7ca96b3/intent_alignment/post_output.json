@@ -1,0 +1,34 @@
+{
+  "evidence": {
+    "source": "ReviewScope issue-mismatch rule",
+    "style": "reviewscope_absorbed_issue_validation"
+  },
+  "issue_keywords": [
+    "billing",
+    "invoice",
+    "must",
+    "payment",
+    "recovery",
+    "retry",
+    "schedule"
+  ],
+  "missing_keywords": [
+    "must",
+    "recovery"
+  ],
+  "overlap_keywords": [
+    "billing",
+    "invoice",
+    "payment",
+    "retry",
+    "schedule"
+  ],
+  "status": "aligned",
+  "summary": {
+    "aligned": true,
+    "changed_file_count": 1,
+    "changed_keyword_count": 8,
+    "issue_keyword_count": 7,
+    "overlap_keyword_count": 5
+  }
+}

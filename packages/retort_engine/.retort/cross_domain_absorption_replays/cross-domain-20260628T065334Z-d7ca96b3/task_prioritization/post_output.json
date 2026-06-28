@@ -1,0 +1,56 @@
+{
+  "evidence": {
+    "employee_results_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization/.retort/employee_results",
+    "queue_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization/.retort/employee_queue.jsonl"
+  },
+  "priorities": [
+    {
+      "acceptance": "Next absorption run improves or preserves api_contract_quality with post-tests passing.",
+      "completed_evidence_count": 1,
+      "dimension": "api_contract_quality",
+      "employee_feedback_count": 1,
+      "evidence_required": [
+        "queued_task_id",
+        "employee_result",
+        "post_absorption_test",
+        "replay_report"
+      ],
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_api_contract_quality",
+      "owner_hint": "retort-maintainer",
+      "priority": "P0",
+      "queued_count": 2,
+      "ready_for_employee": true
+    },
+    {
+      "acceptance": "Next absorption run improves or preserves product_operability with post-tests passing.",
+      "completed_evidence_count": 1,
+      "dimension": "product_operability",
+      "employee_feedback_count": 1,
+      "evidence_required": [
+        "queued_task_id",
+        "employee_result",
+        "post_absorption_test",
+        "replay_report"
+      ],
+      "feedback_driven": true,
+      "next_action": "feedback_driven_replay_and_verify_product_operability",
+      "owner_hint": "product-runtime",
+      "priority": "P0",
+      "queued_count": 1,
+      "ready_for_employee": true
+    }
+  ],
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization",
+  "status": "ready",
+  "summary": {
+    "all_tasks_have_acceptance": true,
+    "completed_result_count": 2,
+    "employee_feedback_applied": true,
+    "employee_result_count": 2,
+    "feedback_driven_priority_count": 2,
+    "prioritized_dimension_count": 2,
+    "queued_task_count": 3,
+    "ready_employee_task_count": 2
+  }
+}

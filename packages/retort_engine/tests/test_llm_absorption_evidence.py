@@ -188,12 +188,20 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "direct_regression_case_count": 6,
                     "all_use_direct_review_execution": True,
                     "all_delta_regressions_verified": True,
+                    "blind_third_party_status": "ready",
+                    "blind_third_party_adjudicated_case_count": 6,
+                    "blind_third_party_accepted_case_count": 6,
+                    "blind_third_party_minimum_delta": 65,
+                    "blind_third_party_delta_floor_passed": True,
+                    "blind_third_party_score_fields_consumed": False,
                 },
                 "matrix": [],
                 "evidence": {
                     "regression_verifier": "retort_engine.external_advantage_regression.verify_external_advantage_rows",
                     "regression_runtime": "retort_engine.pr_review.review_diff",
                     "regression_model": "executable_input_output_diff_replay",
+                    "blind_third_party_adjudicator": "retort_engine.external_advantage_adjudicator.blind_third_party_adjudicate_external_advantages",
+                    "blind_third_party_boundary": "redacted_structural_facts_only_no_baseline_or_retort_score_fields",
                 },
             }
         ),
@@ -232,30 +240,38 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "case_count": 6,
-                    "ready_case_count": 6,
-                    "non_pr_domain_count": 6,
+                    "case_count": 10,
+                    "ready_case_count": 10,
+                    "non_pr_domain_count": 10,
                     "non_pr_domains": [
                         "architecture_governance",
                         "benchmark_harness",
                         "codebase_graph",
                         "context_packaging",
+                        "core_architecture_refactor",
+                        "employee_dispatch",
+                        "employee_task_graph",
+                        "intent_alignment",
                         "license_policy",
                         "static_analysis_security",
                     ],
-                    "direct_module_count": 6,
+                    "direct_module_count": 10,
                     "direct_modules": [
                         "retort_engine.architecture_contracts.evaluate_architecture_contracts",
+                        "retort_engine.architecture_refactor.build_core_refactor_plan",
                         "retort_engine.codebase_graph.build_codebase_graph",
                         "retort_engine.context_packager.build_context_pack",
+                        "retort_engine.intent_alignment.assess_change_intent_alignment",
                         "retort_engine.license_gate.license_gate",
                         "retort_engine.static_analysis_gate.scan_static_analysis_findings",
                         "retort_engine.swe_bench_oracle.build_issue_patch_benchmark",
+                        "retort_engine.task_dispatch_plan.build_task_dispatch_plan",
+                        "retort_engine.task_prioritization.build_task_prioritization_report",
                     ],
                     "all_before_failed_after_passed": True,
                     "all_direct_modules_executed": True,
                     "all_output_assertions_passed": True,
-                    "independent_accepted_case_count": 4,
+                    "independent_accepted_case_count": 10,
                 },
                 "cases": [],
                 "evidence": {"claim_boundary": "direct_core_modules_not_pr_review_manifest"},
@@ -273,11 +289,20 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "violation_rejected_count": 3,
                     "rollback_verified_count": 3,
                     "valid_payload_accepted_count": 3,
+                    "concurrent_worker_count": 6,
+                    "concurrency_fault_injection_count": 18,
+                    "concurrent_violation_rejected_count": 18,
+                    "concurrent_rollback_verified_count": 18,
                     "all_violations_rejected": True,
                     "all_rollbacks_verified": True,
+                    "all_concurrent_violations_rejected": True,
+                    "all_concurrent_rollbacks_verified": True,
                 },
                 "cases": [],
-                "evidence": {"runtime_guard": "retort_engine.contracts.validate_contract"},
+                "evidence": {
+                    "runtime_guard": "retort_engine.contracts.validate_contract",
+                    "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+                },
             }
         ),
         encoding="utf-8",
@@ -307,13 +332,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "case_count": 2,
-                    "ready_case_count": 2,
-                    "branch_diff_count": 2,
-                    "merge_commit_count": 2,
-                    "post_merge_test_passed_count": 2,
+                    "case_count": 10,
+                    "ready_case_count": 10,
+                    "branch_diff_count": 10,
+                    "merge_commit_count": 10,
+                    "post_merge_test_passed_count": 10,
                     "all_branch_diff_merge_tests_passed": True,
-                    "source_families": ["python_pr_agent", "typescript_pr_bot"],
+                    "source_families": ["agentic_benchmark", "architecture_governance", "architecture_graph", "benchmark_harness", "context_packager", "go_ci_review_publisher", "python_pr_agent", "security_static_analysis", "typescript_pr_bot"],
                 },
                 "cases": [],
                 "evidence": {"verifier": "git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest"},
@@ -380,6 +405,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "per_run_code_graph_proved": True,
                     "cross_domain_live_probe_ready": True,
                     "frontend_structure_ready": True,
+                    "frontend_operation_replay_ready": True,
                     "architecture_contract_ready": True,
                     "codebase_graph_ready": True,
                     "manifest_path": ".retort/operator_journey_replays/run.manifest.json",
@@ -560,6 +586,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "external_advantage_matrix_all_direct_execution=True" in evidence
     assert "external_advantage_matrix_regression_runtime=retort_engine.pr_review.review_diff" in evidence
     assert "external_advantage_matrix_regression_model=executable_input_output_diff_replay" in evidence
+    assert "external_advantage_matrix_blind_third_party_status=ready" in evidence
+    assert "external_advantage_matrix_blind_third_party_accepted=6/6" in evidence
+    assert "external_advantage_matrix_blind_third_party_min_delta=65" in evidence
+    assert "external_advantage_matrix_blind_third_party_delta_floor=True" in evidence
+    assert "external_advantage_matrix_blind_third_party_score_fields_consumed=False" in evidence
+    assert "external_advantage_matrix_blind_third_party_boundary=redacted_structural_facts_only_no_baseline_or_retort_score_fields" in evidence
     assert "heterogeneous_absorption_replay_status=ready" in evidence
     assert "heterogeneous_absorption_replay_ready_cases=6/6" in evidence
     assert "heterogeneous_absorption_replay_cached_sources=6" in evidence
@@ -571,8 +603,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "heterogeneous_absorption_replay_independent_accepted=6/6" in evidence
     assert "heterogeneous_absorption_replay_cross_language_verified=True" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
-    assert "cross_domain_absorption_replay_ready_cases=6/6" in evidence
-    assert "cross_domain_absorption_replay_non_pr_domains=6" in evidence
+    assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
+    assert "cross_domain_absorption_replay_non_pr_domains=10" in evidence
     assert "cross_domain_absorption_replay_before_after=True" in evidence
     assert "cross_domain_absorption_replay_direct_execution=True" in evidence
     assert "cross_domain_absorption_replay_output_assertions=True" in evidence
@@ -581,6 +613,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "contract_runtime_rehearsal_ready_cases=3/3" in evidence
     assert "contract_runtime_rehearsal_violations_rejected=3" in evidence
     assert "contract_runtime_rehearsal_all_rollbacks=True" in evidence
+    assert "contract_runtime_rehearsal_concurrent_workers=6" in evidence
+    assert "contract_runtime_rehearsal_concurrency_faults=18" in evidence
+    assert "contract_runtime_rehearsal_all_concurrent_rejected=True" in evidence
+    assert "contract_runtime_rehearsal_all_concurrent_rollbacks=True" in evidence
+    assert "contract_runtime_rehearsal_fault_model=threaded_invalid_payload_workers_with_per_worker_state_rollback" in evidence
     assert "contract_runtime_rehearsal_guard=retort_engine.contracts.validate_contract" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
@@ -589,10 +626,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "review_family_behavior_replay_direct_outputs=True" in evidence
     assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in evidence
     assert "external_merge_landing_status=ready" in evidence
-    assert "external_merge_landing_ready_cases=2/2" in evidence
-    assert "external_merge_landing_branch_diffs=2" in evidence
-    assert "external_merge_landing_merge_commits=2" in evidence
-    assert "external_merge_landing_post_merge_tests=2" in evidence
+    assert "external_merge_landing_ready_cases=10/10" in evidence
+    assert "external_merge_landing_branch_diffs=10" in evidence
+    assert "external_merge_landing_merge_commits=10" in evidence
+    assert "external_merge_landing_post_merge_tests=10" in evidence
     assert "external_merge_landing_all_passed=True" in evidence
     assert "external_merge_landing_verifier=git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest" in evidence
     assert "pr_review_cross_language_transfer_source=True" in evidence
@@ -641,6 +678,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_status=ready" in evidence
     assert "operator_journey_replay_ready_stages=8/8" in evidence
     assert "operator_journey_replay_cross_domain_ready=True" in evidence
+    assert "operator_journey_replay_frontend_operation_replay_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence
 
 

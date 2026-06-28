@@ -1,0 +1,117 @@
+{
+  "dependency_cycles": [],
+  "edges": [
+    {
+      "from": "pkg/runtime.py:run",
+      "kind": "calls",
+      "to": "pkg.policy.allowed"
+    },
+    {
+      "from": "pkg/policy.py",
+      "kind": "defines",
+      "to": "pkg/policy.py:allowed"
+    },
+    {
+      "from": "pkg/runtime.py",
+      "kind": "defines",
+      "to": "pkg/runtime.py:run"
+    },
+    {
+      "from": "pkg/runtime.py",
+      "kind": "depends_on",
+      "to": "pkg/policy.py"
+    },
+    {
+      "from": "pkg/runtime.py",
+      "kind": "imports",
+      "to": "pkg.policy"
+    }
+  ],
+  "evidence": {
+    "parse_errors": [],
+    "source": "codegraph_absorption",
+    "style": "deterministic_codebase_graph"
+  },
+  "hotspots": [
+    {
+      "degree": 3,
+      "id": "pkg/runtime.py",
+      "incoming": 0,
+      "kind": "file",
+      "outgoing": 3
+    },
+    {
+      "degree": 2,
+      "id": "pkg/runtime.py:run",
+      "incoming": 1,
+      "kind": "function",
+      "outgoing": 1
+    },
+    {
+      "degree": 2,
+      "id": "pkg/policy.py",
+      "incoming": 1,
+      "kind": "file",
+      "outgoing": 1
+    },
+    {
+      "degree": 1,
+      "id": "pkg/policy.py:allowed",
+      "incoming": 1,
+      "kind": "function",
+      "outgoing": 0
+    }
+  ],
+  "nodes": [
+    {
+      "id": "pkg/__init__.py",
+      "kind": "file",
+      "line": 1,
+      "name": "__init__",
+      "path": "pkg/__init__.py"
+    },
+    {
+      "id": "pkg/policy.py",
+      "kind": "file",
+      "line": 1,
+      "name": "policy",
+      "path": "pkg/policy.py"
+    },
+    {
+      "id": "pkg/policy.py:allowed",
+      "kind": "function",
+      "line": 1,
+      "name": "allowed",
+      "path": "pkg/policy.py"
+    },
+    {
+      "id": "pkg/runtime.py",
+      "kind": "file",
+      "line": 1,
+      "name": "runtime",
+      "path": "pkg/runtime.py"
+    },
+    {
+      "id": "pkg/runtime.py:run",
+      "kind": "function",
+      "line": 4,
+      "name": "run",
+      "path": "pkg/runtime.py"
+    }
+  ],
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/code_graph/project",
+  "status": "ready",
+  "summary": {
+    "call_edge_count": 1,
+    "define_edge_count": 2,
+    "dependency_cycle_count": 0,
+    "edge_count": 5,
+    "file_count": 3,
+    "hotspot_count": 4,
+    "import_edge_count": 1,
+    "include_tests": true,
+    "local_dependency_edge_count": 1,
+    "node_count": 5,
+    "parse_error_count": 0
+  }
+}

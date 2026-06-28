@@ -17,6 +17,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["ready_stage_count"] == result["summary"]["stage_count"]
     assert result["summary"]["hashed_artifact_count"] >= 8
     assert result["summary"]["cross_domain_live_probe_ready"] is True
+    assert result["summary"]["frontend_operation_replay_ready"] is True
     assert result["summary"]["per_run_code_graph_proved"] is True
     assert Path(result["summary"]["manifest_path"]).is_file()
     assert all(item["sha256"] for item in result["artifacts"] if item["exists"])
@@ -91,7 +92,18 @@ def _write_frontend(root: Path) -> None:
         "progressSteps",
         "eventList",
         "sessionState",
+        "sourceGithub",
+        "githubUrl",
+        "assessBtn",
+        "absorbBtn",
+        "executionState",
+        "dualReviewPanel",
+        "comparisonPanel",
         "proofPanel",
+        "finalReviewPanel",
+        "codeGraphProofPanel",
+        "refactorPriorityPanel",
+        "codeGraphFocusPanel",
     ]
     body = "\n".join(f'<div id="{item}"></div>' for item in ids if item != "blackholeCanvas")
     (frontend / "index.html").write_text(
@@ -107,6 +119,17 @@ def _write_frontend(root: Path) -> None:
                 "function drawAbsorptionPlanet() {}",
                 "function renderDevourSession() {}",
                 "function beginAbsorption() {}",
+                "function setMode(mode) {}",
+                "function assess() {}",
+                "function absorb() {}",
+                "function refreshEvolutionMap() {}",
+                "function handleAbsorbedProjectClick() { selectAbsorbedProject(); }",
+                "function selectAbsorbedProject() {}",
+                "$('assessBtn').onclick = assess;",
+                "$('absorbBtn').onclick = absorb;",
+                "setMode(\"github\");",
+                "codeGraphProofPanel; refactorPriorityPanel;",
+                "canvas.addEventListener(\"click\", handleAbsorbedProjectClick);",
                 "function draw() { requestAnimationFrame(draw); }",
             ]
         ),
@@ -132,7 +155,11 @@ def _write_docs(root: Path) -> None:
         "retort_pr_low_permission_probe.json": {"status": "permission_denied_degraded", "summary": {}, "evidence": {}},
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}, "scenarios": []},
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}, "samples": []},
-        "retort_external_advantage_matrix.json": {"status": "ready", "summary": {"score_delta": 50}, "matrix": []},
+        "retort_external_advantage_matrix.json": {
+            "status": "ready",
+            "summary": {"score_delta": 50, "blind_third_party_all_cases_accepted": True, "blind_third_party_minimum_delta": 65},
+            "matrix": [],
+        },
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True}, "runs": []},
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
@@ -144,13 +171,18 @@ def _write_docs(root: Path) -> None:
             "summary": {
                 "all_before_failed_after_passed": True,
                 "all_output_assertions_passed": True,
-                "non_pr_domain_count": 6,
+                "non_pr_domain_count": 10,
             },
             "cases": [],
         },
         "retort_contract_runtime_rehearsal.json": {
             "status": "ready",
-            "summary": {"all_violations_rejected": True, "all_rollbacks_verified": True},
+            "summary": {
+                "all_violations_rejected": True,
+                "all_rollbacks_verified": True,
+                "all_concurrent_violations_rejected": True,
+                "all_concurrent_rollbacks_verified": True,
+            },
             "cases": [],
         },
         "retort_review_family_behavior_replay.json": {
@@ -160,7 +192,7 @@ def _write_docs(root: Path) -> None:
         },
         "retort_external_merge_landing.json": {
             "status": "ready",
-            "summary": {"all_branch_diff_merge_tests_passed": True, "merge_commit_count": 2, "post_merge_test_passed_count": 2},
+            "summary": {"all_branch_diff_merge_tests_passed": True, "merge_commit_count": 10, "post_merge_test_passed_count": 10},
             "cases": [],
         },
         "retort_review_adjudication_calibration.json": {"status": "ready", "summary": {}, "cases": []},

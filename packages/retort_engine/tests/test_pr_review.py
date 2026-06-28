@@ -63,6 +63,8 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["risk_counts"]["high"] >= 1
     assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v4_hunk_semantics"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
+    assert result["summary"]["task_group_count"] == len(result["task_groups"])
+    assert result["summary"]["actionable_task_group_count"] >= 1
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
     assert "bias=" in result["comments"][0]["rank_reason"]

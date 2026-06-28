@@ -10,7 +10,7 @@ from typing import Any
 
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
-from retort_engine.ui_features import blackhole_ui_structure
+from retort_engine.ui_features import blackhole_ui_operation_replay, blackhole_ui_structure
 
 
 def build_operator_journey_replay(project: str | Path, *, output: str | Path = "") -> dict[str, Any]:
@@ -39,6 +39,7 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "per_run_code_graph_proved": _code_graph_ready(latest_run),
         "cross_domain_live_probe_ready": _cross_domain_ready(live_probes),
         "frontend_structure_ready": bool((live_probes.get("blackhole_ui") or {}).get("ready")),
+        "frontend_operation_replay_ready": bool((live_probes.get("blackhole_ui_operation_replay") or {}).get("ready")),
         "architecture_contract_ready": bool((live_probes.get("architecture_contracts") or {}).get("ready")),
         "codebase_graph_ready": bool((live_probes.get("codebase_graph") or {}).get("ready")),
         "manifest_path": str(manifest_path),
@@ -159,6 +160,7 @@ def _journey_stages(
                 f"codebase_graph_ready={(live_probes.get('codebase_graph') or {}).get('ready')}",
                 f"architecture_contract_ready={(live_probes.get('architecture_contracts') or {}).get('ready')}",
                 f"blackhole_ui_ready={(live_probes.get('blackhole_ui') or {}).get('ready')}",
+                f"blackhole_ui_operation_replay_ready={(live_probes.get('blackhole_ui_operation_replay') or {}).get('ready')}",
             ],
         ),
         _stage(
@@ -233,6 +235,7 @@ def _live_cross_domain_probes(root: Path) -> dict[str, Any]:
     graph = _safe_call(lambda: build_codebase_graph(root, include_tests=True, max_files=400))
     contracts = _safe_call(lambda: evaluate_architecture_contracts(root, include_tests=True, max_files=400))
     ui = _safe_call(lambda: blackhole_ui_structure(root))
+    ui_replay = _safe_call(lambda: blackhole_ui_operation_replay(root))
     ui_missing = list(ui.get("missing_ids") or []) + list(ui.get("missing_functions") or [])
     return {
         "codebase_graph": {
@@ -256,11 +259,19 @@ def _live_cross_domain_probes(root: Path) -> dict[str, Any]:
             "missing_count": len(ui_missing),
             "has_animation_loop": ui.get("has_animation_loop", False),
         },
+        "blackhole_ui_operation_replay": {
+            "ready": ui_replay.get("status") == "ready",
+            "status": ui_replay.get("status", ""),
+            "action_count": (ui_replay.get("summary") or {}).get("action_count", 0),
+            "ready_action_count": (ui_replay.get("summary") or {}).get("ready_action_count", 0),
+            "all_actions_bound": (ui_replay.get("summary") or {}).get("all_actions_bound", False),
+            "absorbed_project_click_bound": (ui_replay.get("summary") or {}).get("absorbed_project_click_bound", False),
+        },
     }
 
 
 def _cross_domain_ready(probes: dict[str, Any]) -> bool:
-    return all(bool((probes.get(name) or {}).get("ready")) for name in ("codebase_graph", "architecture_contracts", "blackhole_ui"))
+    return all(bool((probes.get(name) or {}).get("ready")) for name in ("codebase_graph", "architecture_contracts", "blackhole_ui", "blackhole_ui_operation_replay"))
 
 
 def _stage(name: str, title: str, ready: bool, evidence: list[str]) -> dict[str, Any]:
@@ -332,6 +343,8 @@ def _release_inputs_ready(root: Path) -> bool:
         and int(benchmark.get("summary", {}).get("post_absorption_score_delta") or 0) > 0
         and external_matrix.get("status") == "ready"
         and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0
+        and external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted") is True
+        and int(external_matrix.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 65
         and external_repeat.get("status") == "ready"
         and external_repeat.get("summary", {}).get("stable_case_set") is True
         and external_repeat.get("summary", {}).get("stable_score_delta") is True
@@ -341,16 +354,18 @@ def _release_inputs_ready(root: Path) -> bool:
         and cross_domain_replay.get("status") == "ready"
         and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
-        and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 6
+        and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 10
         and contract_runtime.get("status") == "ready"
         and contract_runtime.get("summary", {}).get("all_violations_rejected") is True
         and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True
+        and contract_runtime.get("summary", {}).get("all_concurrent_violations_rejected") is True
+        and contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified") is True
         and review_family.get("status") == "ready"
         and review_family.get("summary", {}).get("all_direct_review_outputs_verified") is True
         and review_family.get("summary", {}).get("independent_all_cases_accepted") is True
         and external_merge_landing.get("status") == "ready"
         and external_merge_landing.get("summary", {}).get("all_branch_diff_merge_tests_passed") is True
-        and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 2
+        and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 10
     )
 
 

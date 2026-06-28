@@ -1,0 +1,14 @@
+{
+  "contract": "operator_journey_replay_result",
+  "last_valid_payload": {
+    "artifacts": [],
+    "evidence": {},
+    "live_probes": {},
+    "project": "p",
+    "replay": {},
+    "stages": [],
+    "status": "ready",
+    "summary": {}
+  },
+  "worker": 3
+}

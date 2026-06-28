@@ -18,8 +18,14 @@ def test_contract_runtime_rehearsal_rejects_violations_and_rolls_back(tmp_path: 
     assert result["summary"]["violation_rejected_count"] == 3
     assert result["summary"]["rollback_verified_count"] == 3
     assert result["summary"]["valid_payload_accepted_count"] == 3
+    assert result["summary"]["concurrent_worker_count"] == 6
+    assert result["summary"]["concurrency_fault_injection_count"] == 18
+    assert result["summary"]["concurrent_violation_rejected_count"] == 18
+    assert result["summary"]["concurrent_rollback_verified_count"] == 18
     assert result["summary"]["all_violations_rejected"] is True
     assert result["summary"]["all_rollbacks_verified"] is True
+    assert result["summary"]["all_concurrent_violations_rejected"] is True
+    assert result["summary"]["all_concurrent_rollbacks_verified"] is True
     assert validate_contract("contract_runtime_rehearsal_result", result)["valid"] is True
 
 
@@ -43,3 +49,4 @@ def test_contract_runtime_rehearsal_cli_outputs_contract(tmp_path: Path) -> None
     payload = json.loads(completed.stdout)
     assert validate_contract("contract_runtime_rehearsal_result", payload)["valid"] is True
     assert payload["summary"]["all_rollbacks_verified"] is True
+    assert payload["summary"]["all_concurrent_rollbacks_verified"] is True
