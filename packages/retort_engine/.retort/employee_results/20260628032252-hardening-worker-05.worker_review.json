@@ -1,0 +1,2224 @@
+{
+  "comments": [
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 36,
+        "path": "packages/retort_engine/tests/test_production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_production_recovery_drill.py",
+      "hunk_header": "@@ -31,6 +32,10 @@ def test_service_exposes_production_recovery_drill(tmp_path: Path) -> None:",
+      "line": 36,
+      "line_text_excerpt": "        json.dumps({\"status\": \"live_rolled_back\", \"summary\": {\"live_github_write\": True, \"rollback_verified\": True}, \"evidence\": {\"real_network\": True}}, ensure",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 36,
+        "path": "packages/retort_engine/tests/test_production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 1,
+      "rank_reason": "low:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 370,
+      "review_context": "tests",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 20,
+      "absorbed_policy_rank_weight": 15,
+      "calibration_rank_weight": 25,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 5,
+        "path": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+      "hunk_header": "@@ -2,6 +2,7 @@",
+      "line": 5,
+      "line_text_excerpt": "      \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json\",",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 5,
+        "path": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 2,
+      "rank_reason": "low:config:review_pipeline:bias=20:policy=15:calibration=25:feedback=0",
+      "rank_score": 305,
+      "review_context": "config",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 24,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+      "hunk_header": "@@ -20,11 +21,12 @@ def build_production_recovery_drill(project: str | Path, *, output: str | Path =",
+      "line": 24,
+      "line_text_excerpt": "        \"live_write_rollback_verified\": any(item[\"name\"] == \"live_write_rollback\" and item[\"live_github_write\"] and item[\"rollback_verified\"] for item in scenar",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 24,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 3,
+      "rank_reason": "low:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 395,
+      "review_context": "runtime",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 29,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+      "hunk_header": "@@ -20,11 +21,12 @@ def build_production_recovery_drill(project: str | Path, *, output: str | Path =",
+      "line": 29,
+      "line_text_excerpt": "        \"status\": \"ready\" if summary[\"all_recovered\"] and summary[\"real_network_denial_verified\"] and summary[\"live_write_rollback_verified\"] else \"needs_more_e",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 29,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 4,
+      "rank_reason": "low:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 395,
+      "review_context": "runtime",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 70,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+      "hunk_header": "@@ -63,6 +65,11 @@ def _readonly_recovered(payload: dict[str, Any]) -> bool:",
+      "line": 70,
+      "line_text_excerpt": "    return str(payload.get(\"status\") or \"\") == \"live_rolled_back\" and bool(summary.get(\"live_github_write\")) and bool(summary.get(\"rollback_verified\"))",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 70,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 5,
+      "rank_reason": "low:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 395,
+      "review_context": "runtime",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 20,
+      "absorbed_policy_rank_weight": 15,
+      "calibration_rank_weight": 25,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 22,
+        "path": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+      "hunk_header": "@@ -12,6 +13,16 @@",
+      "line": 22,
+      "line_text_excerpt": "      \"report\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json\",",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 22,
+        "path": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 6,
+      "rank_reason": "low:config:review_pipeline:bias=20:policy=15:calibration=25:feedback=0",
+      "rank_score": 305,
+      "review_context": "config",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "absorbed_context_rank_weight": 20,
+      "absorbed_policy_rank_weight": 15,
+      "calibration_rank_weight": 25,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 41,
+        "path": "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+      "hunk_header": "@@ -38,7 +38,7 @@",
+      "line": 41,
+      "line_text_excerpt": "      \"stdout_tail\": \"........................................................................ [ 17%]\\n.........................................................",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 41,
+        "path": "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 7,
+      "rank_reason": "low:config:review_pipeline:bias=20:policy=15:calibration=25:feedback=0",
+      "rank_score": 305,
+      "review_context": "config",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 21,
+        "path": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+      "hunk_header": "@@ -18,7 +18,7 @@ def record_post_absorption_hardening_run(",
+      "line": 21,
+      "line_text_excerpt": "    worker_count: int = 5,",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 21,
+        "path": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 8,
+      "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 295,
+      "review_context": "runtime",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 121,
+        "path": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+      "hunk_header": "@@ -118,6 +118,18 @@ def _hardening_tasks(run_id: str) -> list[dict[str, Any]]:",
+      "line": 121,
+      "line_text_excerpt": "        (",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 121,
+        "path": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 9,
+      "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 295,
+      "review_context": "runtime",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 187,
+        "path": "packages/retort_engine/retort_engine/cli.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/cli.py",
+      "hunk_header": "@@ -184,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:",
+      "line": 187,
+      "line_text_excerpt": "    hardening_run.add_argument(\"--worker-count\", type=int, default=5)",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 187,
+        "path": "packages/retort_engine/retort_engine/cli.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 10,
+      "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 295,
+      "review_context": "runtime",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 409,
+        "path": "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+      "hunk_header": "@@ -406,6 +406,7 @@ def _report_evidence(project: Path) -> list[str]:",
+      "line": 409,
+      "line_text_excerpt": "        f\"production_recovery_drill_live_write_rollback={recovery_summary.get('live_write_rollback_verified', '')}\",",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 409,
+        "path": "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 11,
+      "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 295,
+      "review_context": "runtime",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 55,
+      "absorbed_policy_rank_weight": 45,
+      "calibration_rank_weight": 35,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 11,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+      "hunk_header": "@@ -8,6 +8,7 @@ from typing import Any",
+      "line": 11,
+      "line_text_excerpt": "        _scenario(\"live_write_rollback\", root / \"docs\" / \"retort_pr_live_publish_probe.json\", _live_write_recovered),",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 11,
+        "path": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 12,
+      "rank_reason": "info:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0",
+      "rank_score": 295,
+      "review_context": "runtime",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "context_groups": [
+    {
+      "added_change_count": 6,
+      "context": "tests",
+      "file_count": 1,
+      "files": [
+        "packages/retort_engine/tests/test_production_recovery_drill.py"
+      ],
+      "hunk_count": 2,
+      "review_focus": "behavior_proof_and_regression_scope"
+    },
+    {
+      "added_change_count": 32,
+      "context": "config",
+      "file_count": 3,
+      "files": [
+        "packages/retort_engine/docs/retort_pr_live_publish_probe.json",
+        "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "packages/retort_engine/docs/retort_quality_gate_bundle.json"
+      ],
+      "hunk_count": 7,
+      "review_focus": "runtime_contract_and_environment_drift"
+    },
+    {
+      "added_change_count": 24,
+      "context": "runtime",
+      "file_count": 5,
+      "files": [
+        "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "packages/retort_engine/retort_engine/cli.py",
+        "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "packages/retort_engine/retort_engine/service.py"
+      ],
+      "hunk_count": 8,
+      "review_focus": "core_execution_path"
+    }
+  ],
+  "file_summaries": [
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".json",
+        "family": "data",
+        "known": true,
+        "review_context": "config",
+        "risk_tags": [
+          "schema_drift"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/docs/retort_pr_live_publish_probe.json",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "config",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 2,
+      "extension_policy": {
+        "extension": ".json",
+        "family": "data",
+        "known": true,
+        "review_context": "config",
+        "risk_tags": [
+          "schema_drift"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/docs/retort_production_recovery_drill.json",
+      "hunk_count": 3,
+      "ready_for_employee_task": false,
+      "review_context": "config",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 2,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 1,
+      "extension_policy": {
+        "extension": ".json",
+        "family": "data",
+        "known": true,
+        "review_context": "config",
+        "risk_tags": [
+          "schema_drift"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "config",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 2,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 2,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 1,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/cli.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 1,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 4,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/production_recovery_drill.py",
+      "hunk_count": 3,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 3,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 0,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/retort_engine/service.py",
+      "hunk_count": 1,
+      "ready_for_employee_task": false,
+      "review_context": "runtime",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 0,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 1,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_production_recovery_drill.py",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "files": [
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 1,
+              "text": "{",
+              "type": "context"
+            },
+            {
+              "line": 2,
+              "text": "  \"created_receipts\": [",
+              "type": "context"
+            },
+            {
+              "line": 3,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"body_marker\": \"retort-live-probe:3713faf929c7\",",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "      \"comment_id\": \"4818319191\",",
+              "type": "delete"
+            },
+            {
+              "line": 4,
+              "text": "      \"body_marker\": \"retort-live-probe:54138927000b\",",
+              "type": "add"
+            },
+            {
+              "line": 5,
+              "text": "      \"comment_id\": \"4824533736\",",
+              "type": "add"
+            },
+            {
+              "line": 6,
+              "text": "      \"created\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"html_url\": \"https://github.com/42433422/XCMAX/pull/97#issuecomment-4818319191\",",
+              "type": "delete"
+            },
+            {
+              "line": 7,
+              "text": "      \"html_url\": \"https://github.com/42433422/XCMAX/pull/99#issuecomment-4824533736\",",
+              "type": "add"
+            },
+            {
+              "line": 8,
+              "text": "      \"target\": \"pull_request_conversation\"",
+              "type": "context"
+            },
+            {
+              "line": 9,
+              "text": "    }",
+              "type": "context"
+            },
+            {
+              "line": 10,
+              "text": "  ],",
+              "type": "context"
+            },
+            {
+              "line": 11,
+              "text": "  \"evidence\": {",
+              "type": "context"
+            },
+            {
+              "line": 12,
+              "text": "    \"api\": \"GitHub REST issues comments\",",
+              "type": "context"
+            },
+            {
+              "line": 13,
+              "text": "    \"base_ref\": \"main\",",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"head_ref\": \"claude/nifty-lovelace-4c1566\",",
+              "type": "delete"
+            },
+            {
+              "line": 14,
+              "text": "    \"degradation\": \"\",",
+              "type": "add"
+            },
+            {
+              "line": 15,
+              "text": "    \"head_ref\": \"claude/musing-roentgen-affc4b\",",
+              "type": "add"
+            },
+            {
+              "line": 16,
+              "text": "    \"real_network\": true,",
+              "type": "add"
+            },
+            {
+              "line": 17,
+              "text": "    \"required_permission\": \"issues:write or pull_requests:write\",",
+              "type": "add"
+            },
+            {
+              "line": 18,
+              "text": "    \"target_is_pull_request\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"token_redacted\": true",
+              "type": "delete"
+            },
+            {
+              "line": 19,
+              "text": "    \"token_redacted\": true,",
+              "type": "add"
+            },
+            {
+              "line": 20,
+              "text": "    \"transport\": \"github_rest\"",
+              "type": "add"
+            },
+            {
+              "line": 21,
+              "text": "  },",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "  \"pr_url\": \"https://github.com/42433422/XCMAX/pull/97\",",
+              "type": "delete"
+            },
+            {
+              "line": 22,
+              "text": "  \"pr_url\": \"https://github.com/42433422/XCMAX/pull/99\",",
+              "type": "add"
+            },
+            {
+              "line": 23,
+              "text": "  \"rollback_receipts\": [",
+              "type": "context"
+            },
+            {
+              "line": 24,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"comment_id\": \"4818319191\",",
+              "type": "delete"
+            },
+            {
+              "line": 25,
+              "text": "      \"comment_id\": \"4824533736\",",
+              "type": "add"
+            },
+            {
+              "line": 26,
+              "text": "      \"deleted\": true,",
+              "type": "context"
+            },
+            {
+              "line": 27,
+              "text": "      \"response\": {},",
+              "type": "context"
+            },
+            {
+              "line": 28,
+              "text": "      \"status_code\": 204",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -1,24 +1,28 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 31,
+              "text": "  \"status\": \"live_rolled_back\",",
+              "type": "context"
+            },
+            {
+              "line": 32,
+              "text": "  \"summary\": {",
+              "type": "context"
+            },
+            {
+              "line": 33,
+              "text": "    \"created_comment_count\": 1,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"duration_sec\": 6.252,",
+              "type": "delete"
+            },
+            {
+              "line": 34,
+              "text": "    \"degraded_without_write\": false,",
+              "type": "add"
+            },
+            {
+              "line": 35,
+              "text": "    \"duration_sec\": 5.718,",
+              "type": "add"
+            },
+            {
+              "line": 36,
+              "text": "    \"live_github_write\": true,",
+              "type": "context"
+            },
+            {
+              "line": 37,
+              "text": "    \"permission_admin\": true,",
+              "type": "context"
+            },
+            {
+              "line": 38,
+              "text": "    \"permission_denied\": false,",
+              "type": "add"
+            },
+            {
+              "line": 39,
+              "text": "    \"permission_maintain\": true,",
+              "type": "context"
+            },
+            {
+              "line": 40,
+              "text": "    \"permission_push\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"pull_number\": 97,",
+              "type": "delete"
+            },
+            {
+              "line": 41,
+              "text": "    \"pull_number\": 99,",
+              "type": "add"
+            },
+            {
+              "line": 42,
+              "text": "    \"pull_status\": 200,",
+              "type": "context"
+            },
+            {
+              "line": 43,
+              "text": "    \"repo_status\": 200,",
+              "type": "context"
+            },
+            {
+              "line": 44,
+              "text": "    \"rollback_verified\": true,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -27,12 +31,14 @@"
+        }
+      ],
+      "path": "packages/retort_engine/docs/retort_pr_live_publish_probe.json"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 2,
+              "text": "  \"evidence\": {",
+              "type": "context"
+            },
+            {
+              "line": 3,
+              "text": "    \"no_secret_material\": true,",
+              "type": "context"
+            },
+            {
+              "line": 4,
+              "text": "    \"source_reports\": [",
+              "type": "context"
+            },
+            {
+              "line": 5,
+              "text": "      \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json\",",
+              "type": "add"
+            },
+            {
+              "line": 6,
+              "text": "      \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_readonly_degradation_probe.json\",",
+              "type": "context"
+            },
+            {
+              "line": 7,
+              "text": "      \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_low_permission_probe.json\",",
+              "type": "context"
+            },
+            {
+              "line": 8,
+              "text": "      \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_publish_sandbox.json\",",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -2,6 +2,7 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 13,
+              "text": "  },",
+              "type": "context"
+            },
+            {
+              "line": 14,
+              "text": "  \"project\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine\",",
+              "type": "context"
+            },
+            {
+              "line": 15,
+              "text": "  \"scenarios\": [",
+              "type": "context"
+            },
+            {
+              "line": 16,
+              "text": "    {",
+              "type": "add"
+            },
+            {
+              "line": 17,
+              "text": "      \"degraded_without_write\": false,",
+              "type": "add"
+            },
+            {
+              "line": 18,
+              "text": "      \"live_github_write\": true,",
+              "type": "add"
+            },
+            {
+              "line": 19,
+              "text": "      \"name\": \"live_write_rollback\",",
+              "type": "add"
+            },
+            {
+              "line": 20,
+              "text": "      \"real_network\": true,",
+              "type": "add"
+            },
+            {
+              "line": 21,
+              "text": "      \"recovered\": true,",
+              "type": "add"
+            },
+            {
+              "line": 22,
+              "text": "      \"report\": \"/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json\",",
+              "type": "add"
+            },
+            {
+              "line": 23,
+              "text": "      \"rollback_verified\": true,",
+              "type": "add"
+            },
+            {
+              "line": 24,
+              "text": "      \"status\": \"live_rolled_back\"",
+              "type": "add"
+            },
+            {
+              "line": 25,
+              "text": "    },",
+              "type": "add"
+            },
+            {
+              "line": 26,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": 27,
+              "text": "      \"degraded_without_write\": true,",
+              "type": "context"
+            },
+            {
+              "line": 28,
+              "text": "      \"live_github_write\": false,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -12,6 +13,16 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 78,
+              "text": "  \"summary\": {",
+              "type": "context"
+            },
+            {
+              "line": 79,
+              "text": "    \"all_recovered\": true,",
+              "type": "context"
+            },
+            {
+              "line": 80,
+              "text": "    \"degradation_scenario_count\": 2,",
+              "type": "context"
+            },
+            {
+              "line": 81,
+              "text": "    \"live_write_rollback_verified\": true,",
+              "type": "add"
+            },
+            {
+              "line": 82,
+              "text": "    \"real_network_denial_verified\": true,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"recovered_count\": 5,",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "    \"rollback_scenario_count\": 4,",
+              "type": "delete"
+            },
+            {
+              "line": null,
+              "text": "    \"scenario_count\": 5",
+              "type": "delete"
+            },
+            {
+              "line": 83,
+              "text": "    \"recovered_count\": 6,",
+              "type": "add"
+            },
+            {
+              "line": 84,
+              "text": "    \"rollback_scenario_count\": 5,",
+              "type": "add"
+            },
+            {
+              "line": 85,
+              "text": "    \"scenario_count\": 6",
+              "type": "add"
+            },
+            {
+              "line": 86,
+              "text": "  }",
+              "type": "context"
+            },
+            {
+              "line": 87,
+              "text": "}",
+              "type": "context"
+            },
+            {
+              "line": 88,
+              "text": "\\ No newline at end of file",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -67,9 +78,10 @@"
+        }
+      ],
+      "path": "packages/retort_engine/docs/retort_production_recovery_drill.json"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 38,
+              "text": "      \"ok\": true,",
+              "type": "context"
+            },
+            {
+              "line": 39,
+              "text": "      \"returncode\": 0,",
+              "type": "context"
+            },
+            {
+              "line": 40,
+              "text": "      \"stderr_tail\": \"\",",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "      \"stdout_tail\": \"........................................................................ [ 17%]\\n........................................................................ [ 35%]\\n........................................................................ [ 53%]\\n........................................................................ [ 70%]\\n........................................................................ [ 88%]\\n...............................................                          [100%]\\n407 passed in 19.19s\\n\"",
+              "type": "delete"
+            },
+            {
+              "line": 41,
+              "text": "      \"stdout_tail\": \"........................................................................ [ 17%]\\n........................................................................ [ 35%]\\n........................................................................ [ 53%]\\n........................................................................ [ 70%]\\n........................................................................ [ 88%]\\n...............................................                          [100%]\\n407 passed in 20.00s\\n\"",
+              "type": "add"
+            },
+            {
+              "line": 42,
+              "text": "    },",
+              "type": "context"
+            },
+            {
+              "line": 43,
+              "text": "    {",
+              "type": "context"
+            },
+            {
+              "line": 44,
+              "text": "      \"command\": [",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -38,7 +38,7 @@"
+        },
+        {
+          "changes": [
+            {
+              "line": 62,
+              "text": "    \"command_name\": \"quality-gates\",",
+              "type": "context"
+            },
+            {
+              "line": 63,
+              "text": "    \"contract_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 64,
+              "text": "    \"contract_schema_count\": 35,",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    \"duration_sec\": 19.491,",
+              "type": "delete"
+            },
+            {
+              "line": 65,
+              "text": "    \"duration_sec\": 20.328,",
+              "type": "add"
+            },
+            {
+              "line": 66,
+              "text": "    \"gate_count\": 3,",
+              "type": "context"
+            },
+            {
+              "line": 67,
+              "text": "    \"lint_passed\": true,",
+              "type": "context"
+            },
+            {
+              "line": 68,
+              "text": "    \"passed_count\": 3,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -62,7 +62,7 @@"
+        }
+      ],
+      "path": "packages/retort_engine/docs/retort_quality_gate_bundle.json"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 18,
+              "text": "    *,",
+              "type": "context"
+            },
+            {
+              "line": 19,
+              "text": "    output: str | Path = \"\",",
+              "type": "context"
+            },
+            {
+              "line": 20,
+              "text": "    python_executable: str = \"\",",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    worker_count: int = 3,",
+              "type": "delete"
+            },
+            {
+              "line": 21,
+              "text": "    worker_count: int = 5,",
+              "type": "add"
+            },
+            {
+              "line": 22,
+              "text": ") -> dict[str, Any]:",
+              "type": "context"
+            },
+            {
+              "line": 23,
+              "text": "    root = Path(project).expanduser().resolve()",
+              "type": "context"
+            },
+            {
+              "line": 24,
+              "text": "    started = time.monotonic()",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -18,7 +18,7 @@ def record_post_absorption_hardening_run("
+        },
+        {
+          "changes": [
+            {
+              "line": 118,
+              "text": "            \"comparative_analysis_depth\",",
+              "type": "context"
+            },
+            {
+              "line": 119,
+              "text": "            \"External behavior migration must remain reproducible after the hardening diff.\",",
+              "type": "context"
+            },
+            {
+              "line": 120,
+              "text": "        ),",
+              "type": "context"
+            },
+            {
+              "line": 121,
+              "text": "        (",
+              "type": "add"
+            },
+            {
+              "line": 122,
+              "text": "            \"prove-live-publish\",",
+              "type": "add"
+            },
+            {
+              "line": 123,
+              "text": "            \"Verify live PR publish rollback evidence is present\",",
+              "type": "add"
+            },
+            {
+              "line": 124,
+              "text": "            \"product_operability\",",
+              "type": "add"
+            },
+            {
+              "line": 125,
+              "text": "            \"Retort must prove real write-and-rollback publication readiness, not only dry-run degradation.\",",
+              "type": "add"
+            },
+            {
+              "line": 126,
+              "text": "        ),",
+              "type": "add"
+            },
+            {
+              "line": 127,
+              "text": "        (",
+              "type": "add"
+            },
+            {
+              "line": 128,
+              "text": "            \"prove-worker-scale\",",
+              "type": "add"
+            },
+            {
+              "line": 129,
+              "text": "            \"Verify scaled employee worker fan-out evidence\",",
+              "type": "add"
+            },
+            {
+              "line": 130,
+              "text": "            \"employee_execution_integration\",",
+              "type": "add"
+            },
+            {
+              "line": 131,
+              "text": "            \"Absorption follow-up needs multiple independent workers with separate result artifacts.\",",
+              "type": "add"
+            },
+            {
+              "line": 132,
+              "text": "        ),",
+              "type": "add"
+            },
+            {
+              "line": 133,
+              "text": "    ]",
+              "type": "context"
+            },
+            {
+              "line": 134,
+              "text": "    return [",
+              "type": "context"
+            },
+            {
+              "line": 135,
+              "text": "        {",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -118,6 +118,18 @@ def _hardening_tasks(run_id: str) -> list[dict[str, Any]]:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/absorption_hardening_run.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 184,
+              "text": "    continuity_probe.add_argument(\"--json\", action=\"store_true\")",
+              "type": "context"
+            },
+            {
+              "line": 185,
+              "text": "    hardening_run = sub.add_parser(\"record-hardening-run\")",
+              "type": "context"
+            },
+            {
+              "line": 186,
+              "text": "    hardening_run.add_argument(\"--project\", default=\".\")",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    hardening_run.add_argument(\"--worker-count\", type=int, default=3)",
+              "type": "delete"
+            },
+            {
+              "line": 187,
+              "text": "    hardening_run.add_argument(\"--worker-count\", type=int, default=5)",
+              "type": "add"
+            },
+            {
+              "line": 188,
+              "text": "    hardening_run.add_argument(\"--output\", default=\"\")",
+              "type": "context"
+            },
+            {
+              "line": 189,
+              "text": "    hardening_run.add_argument(\"--json\", action=\"store_true\")",
+              "type": "context"
+            },
+            {
+              "line": 190,
+              "text": "    complex_replay = sub.add_parser(\"complex-pr-replay\")",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -184,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/cli.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 406,
+              "text": "        f\"production_recovery_drill_recovered={recovery_summary.get('recovered_count', '')}/{recovery_summary.get('scenario_count', '')}\",",
+              "type": "context"
+            },
+            {
+              "line": 407,
+              "text": "        f\"production_recovery_drill_all_recovered={recovery_summary.get('all_recovered', '')}\",",
+              "type": "context"
+            },
+            {
+              "line": 408,
+              "text": "        f\"production_recovery_drill_real_network_denial={recovery_summary.get('real_network_denial_verified', '')}\",",
+              "type": "context"
+            },
+            {
+              "line": 409,
+              "text": "        f\"production_recovery_drill_live_write_rollback={recovery_summary.get('live_write_rollback_verified', '')}\",",
+              "type": "add"
+            },
+            {
+              "line": 410,
+              "text": "        f\"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}\",",
+              "type": "context"
+            },
+            {
+              "line": 411,
+              "text": "        f\"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}\",",
+              "type": "context"
+            },
+            {
+              "line": 412,
+              "text": "        f\"operator_journey_replay_status={operator_journey.get('status', '')}\",",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -406,6 +406,7 @@ def _report_evidence(project: Path) -> list[str]:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/llm_absorption_evidence.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 8,
+              "text": "def build_production_recovery_drill(project: str | Path, *, output: str | Path = \"\") -> dict[str, Any]:",
+              "type": "context"
+            },
+            {
+              "line": 9,
+              "text": "    root = Path(project).expanduser().resolve()",
+              "type": "context"
+            },
+            {
+              "line": 10,
+              "text": "    scenarios = [",
+              "type": "context"
+            },
+            {
+              "line": 11,
+              "text": "        _scenario(\"live_write_rollback\", root / \"docs\" / \"retort_pr_live_publish_probe.json\", _live_write_recovered),",
+              "type": "add"
+            },
+            {
+              "line": 12,
+              "text": "        _scenario(\"readonly_degradation\", root / \"docs\" / \"retort_pr_readonly_degradation_probe.json\", _readonly_recovered),",
+              "type": "context"
+            },
+            {
+              "line": 13,
+              "text": "        _scenario(\"low_permission_write_denied\", root / \"docs\" / \"retort_pr_low_permission_probe.json\", _low_permission_recovered),",
+              "type": "context"
+            },
+            {
+              "line": 14,
+              "text": "        _scenario(\"sandbox_write_rollback\", root / \"docs\" / \"retort_pr_publish_sandbox.json\", _sandbox_recovered),",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -8,6 +8,7 @@ from typing import Any"
+        },
+        {
+          "changes": [
+            {
+              "line": 21,
+              "text": "        \"recovered_count\": len(recovered),",
+              "type": "context"
+            },
+            {
+              "line": 22,
+              "text": "        \"all_recovered\": len(recovered) == len(scenarios),",
+              "type": "context"
+            },
+            {
+              "line": 23,
+              "text": "        \"real_network_denial_verified\": any(item[\"name\"] == \"low_permission_write_denied\" and item[\"real_network\"] and item[\"recovered\"] for item in scenarios),",
+              "type": "context"
+            },
+            {
+              "line": 24,
+              "text": "        \"live_write_rollback_verified\": any(item[\"name\"] == \"live_write_rollback\" and item[\"live_github_write\"] and item[\"rollback_verified\"] for item in scenarios),",
+              "type": "add"
+            },
+            {
+              "line": 25,
+              "text": "        \"rollback_scenario_count\": sum(1 for item in scenarios if item[\"rollback_verified\"]),",
+              "type": "context"
+            },
+            {
+              "line": 26,
+              "text": "        \"degradation_scenario_count\": sum(1 for item in scenarios if item[\"degraded_without_write\"]),",
+              "type": "context"
+            },
+            {
+              "line": 27,
+              "text": "    }",
+              "type": "context"
+            },
+            {
+              "line": 28,
+              "text": "    result = {",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "        \"status\": \"ready\" if summary[\"all_recovered\"] and summary[\"real_network_denial_verified\"] else \"needs_more_evidence\",",
+              "type": "delete"
+            },
+            {
+              "line": 29,
+              "text": "        \"status\": \"ready\" if summary[\"all_recovered\"] and summary[\"real_network_denial_verified\"] and summary[\"live_write_rollback_verified\"] else \"needs_more_evidence\",",
+              "type": "add"
+            },
+            {
+              "line": 30,
+              "text": "        \"project\": str(root),",
+              "type": "context"
+            },
+            {
+              "line": 31,
+              "text": "        \"summary\": summary,",
+              "type": "context"
+            },
+            {
+              "line": 32,
+              "text": "        \"scenarios\": scenarios,",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -20,11 +21,12 @@ def build_production_recovery_drill(project: str | Path, *, output: str | Path ="
+        },
+        {
+          "changes": [
+            {
+              "line": 65,
+              "text": "    return str(payload.get(\"status\") or \"\") == \"read_only_degraded\" and bool(summary.get(\"degraded_without_write\"))",
+              "type": "context"
+            },
+            {
+              "line": 66,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 67,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 68,
+              "text": "def _live_write_recovered(payload: dict[str, Any]) -> bool:",
+              "type": "add"
+            },
+            {
+              "line": 69,
+              "text": "    summary = payload.get(\"summary\") if isinstance(payload.get(\"summary\"), dict) else {}",
+              "type": "add"
+            },
+            {
+              "line": 70,
+              "text": "    return str(payload.get(\"status\") or \"\") == \"live_rolled_back\" and bool(summary.get(\"live_github_write\")) and bool(summary.get(\"rollback_verified\"))",
+              "type": "add"
+            },
+            {
+              "line": 71,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 72,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 73,
+              "text": "def _low_permission_recovered(payload: dict[str, Any]) -> bool:",
+              "type": "context"
+            },
+            {
+              "line": 74,
+              "text": "    summary = payload.get(\"summary\") if isinstance(payload.get(\"summary\"), dict) else {}",
+              "type": "context"
+            },
+            {
+              "line": 75,
+              "text": "    evidence = payload.get(\"evidence\") if isinstance(payload.get(\"evidence\"), dict) else {}",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -63,6 +65,11 @@ def _readonly_recovered(payload: dict[str, Any]) -> bool:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/production_recovery_drill.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 151,
+              "text": "    def record_hardening_run(self, payload: dict[str, Any]) -> dict[str, Any]:",
+              "type": "context"
+            },
+            {
+              "line": 152,
+              "text": "        return record_post_absorption_hardening_run(",
+              "type": "context"
+            },
+            {
+              "line": 153,
+              "text": "            str(payload.get(\"project\") or payload.get(\"project_path\") or \".\"),",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "            worker_count=int(payload.get(\"worker_count\") or 3),",
+              "type": "delete"
+            },
+            {
+              "line": 154,
+              "text": "            worker_count=int(payload.get(\"worker_count\") or 5),",
+              "type": "add"
+            },
+            {
+              "line": 155,
+              "text": "        )",
+              "type": "context"
+            },
+            {
+              "line": 156,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 157,
+              "text": "    def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -151,7 +151,7 @@ class RetortService:"
+        }
+      ],
+      "path": "packages/retort_engine/retort_engine/service.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 16,
+              "text": "    assert result[\"status\"] == \"ready\"",
+              "type": "context"
+            },
+            {
+              "line": 17,
+              "text": "    assert result[\"summary\"][\"all_recovered\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 18,
+              "text": "    assert result[\"summary\"][\"real_network_denial_verified\"] is True",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    assert result[\"summary\"][\"recovered_count\"] == 5",
+              "type": "delete"
+            },
+            {
+              "line": 19,
+              "text": "    assert result[\"summary\"][\"live_write_rollback_verified\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 20,
+              "text": "    assert result[\"summary\"][\"recovered_count\"] == 6",
+              "type": "add"
+            },
+            {
+              "line": 21,
+              "text": "    assert validate_contract(\"production_recovery_drill_result\", result)[\"valid\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 22,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 23,
+              "text": "",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -16,7 +16,8 @@ def test_production_recovery_drill_requires_all_faults_recovered(tmp_path: Path)"
+        },
+        {
+          "changes": [
+            {
+              "line": 32,
+              "text": "def _write_recovery_inputs(root: Path) -> None:",
+              "type": "context"
+            },
+            {
+              "line": 33,
+              "text": "    docs = root / \"docs\"",
+              "type": "context"
+            },
+            {
+              "line": 34,
+              "text": "    docs.mkdir(parents=True, exist_ok=True)",
+              "type": "context"
+            },
+            {
+              "line": 35,
+              "text": "    (docs / \"retort_pr_live_publish_probe.json\").write_text(",
+              "type": "add"
+            },
+            {
+              "line": 36,
+              "text": "        json.dumps({\"status\": \"live_rolled_back\", \"summary\": {\"live_github_write\": True, \"rollback_verified\": True}, \"evidence\": {\"real_network\": True}}, ensure_ascii=False),",
+              "type": "add"
+            },
+            {
+              "line": 37,
+              "text": "        encoding=\"utf-8\",",
+              "type": "add"
+            },
+            {
+              "line": 38,
+              "text": "    )",
+              "type": "add"
+            },
+            {
+              "line": 39,
+              "text": "    (docs / \"retort_pr_readonly_degradation_probe.json\").write_text(",
+              "type": "context"
+            },
+            {
+              "line": 40,
+              "text": "        json.dumps({\"status\": \"read_only_degraded\", \"summary\": {\"degraded_without_write\": True, \"rollback_verified\": True}, \"evidence\": {\"real_network\": True}}, ensure_ascii=False),",
+              "type": "context"
+            },
+            {
+              "line": 41,
+              "text": "        encoding=\"utf-8\",",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -31,6 +32,10 @@ def test_service_exposes_production_recovery_drill(tmp_path: Path) -> None:"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_production_recovery_drill.py"
+    }
+  ],
+  "incremental": {
+    "current_added_change_count": 62,
+    "enabled": false,
+    "previous_added_change_count": 0,
+    "previous_diff_supplied": false,
+    "reviewed_new_change_count": 62,
+    "skipped_existing_change_count": 0
+  },
+  "intent_alignment": {
+    "evidence": {
+      "reason": "no_issue_context",
+      "style": "reviewscope_absorbed_issue_validation"
+    },
+    "issue_keywords": [],
+    "missing_keywords": [],
+    "overlap_keywords": [],
+    "status": "not_requested",
+    "summary": {
+      "aligned": true,
+      "changed_file_count": 9,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    }
+  },
+  "status": "reviewed",
+  "summary": {
+    "absorbed_context_rank_weights": {
+      "ci_config": 40,
+      "config": 20,
+      "docs": 20,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 55,
+      "security": 50,
+      "tests": 40
+    },
+    "absorbed_context_signal_strength": 100,
+    "absorbed_file_grouping": true,
+    "absorbed_policy_rank_weights": {
+      "ci_config": 15,
+      "config": 15,
+      "docs": 15,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 45,
+      "security": 25,
+      "tests": 40
+    },
+    "absorbed_review_policy": {
+      "enabled": true,
+      "max_context_weight": 45,
+      "run_id": "20260628002727-95b76ebf47",
+      "signal_count": 8,
+      "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "weighted_context_count": 6
+    },
+    "absorbed_review_source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+    "calibration_policy": {
+      "adjudication_pass_rate": 1.0,
+      "adjudication_ready": true,
+      "enabled": true,
+      "holdout_distinct_repo_count": 20,
+      "holdout_ready": true,
+      "holdout_reviewed_pr_count": 24,
+      "max_context_weight": 40,
+      "rollback_ready": true,
+      "rollback_verified_count": 5,
+      "weighted_context_count": 7
+    },
+    "calibration_rank_weights": {
+      "ci_config": 40,
+      "config": 25,
+      "docs": 10,
+      "frontend": 10,
+      "other": 0,
+      "runtime": 35,
+      "security": 35,
+      "tests": 40
+    },
+    "candidate_comment_count": 18,
+    "capabilities": [
+      "review_pipeline",
+      "file_grouping",
+      "safety_policy",
+      "diff_hunk_review",
+      "semantic_index"
+    ],
+    "comment_count": 12,
+    "comment_ranking_model": "severity_context_publishability_v1",
+    "deep_review_pipeline": true,
+    "employee_feedback_context_weights": {},
+    "employee_feedback_ranked": false,
+    "extension_policy": {
+      "file_count": 9,
+      "known_extension_count": 9,
+      "known_extension_ratio": 1.0,
+      "language_families": [
+        "data",
+        "python"
+      ],
+      "language_family_count": 2,
+      "policy_source": "retort_holdout_extension_policy_v1",
+      "review_context_count": 2,
+      "review_contexts": [
+        "config",
+        "runtime"
+      ],
+      "risk_tag_count": 3,
+      "risk_tags": [
+        "runtime_logic",
+        "schema_drift",
+        "typing"
+      ],
+      "unknown_extension_count": 0
+    },
+    "file_count": 9,
+    "file_summary_count": 9,
+    "hunk_count": 17,
+    "incremental": false,
+    "intent_alignment": {
+      "aligned": true,
+      "changed_file_count": 9,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    },
+    "large_diff_chunk_count": 3,
+    "large_diff_chunking": true,
+    "large_diff_context_balancing": true,
+    "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+    "primary_review_contexts": [
+      "tests",
+      "config",
+      "runtime"
+    ],
+    "publishable_comment_count": 12,
+    "ready_for_employee_tasking": true,
+    "review_context_group_count": 3,
+    "reviewed_new_change_count": 62,
+    "risk_counts": {
+      "high": 0,
+      "info": 5,
+      "low": 7,
+      "medium": 0
+    },
+    "skipped_existing_change_count": 0,
+    "stage_count": 5,
+    "static_analysis": {
+      "finding_count": 0,
+      "high_count": 0,
+      "low_count": 0,
+      "medium_count": 0,
+      "rule_count": 5
+    },
+    "suppressed_comment_count": 6
+  },
+  "task_groups": [
+    {
+      "comment_count": 1,
+      "context": "tests",
+      "files": [
+        "packages/retort_engine/tests/test_production_recovery_drill.py"
+      ],
+      "publishable_comment_count": 1,
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 3,
+      "context": "config",
+      "files": [
+        "packages/retort_engine/docs/retort_pr_live_publish_probe.json",
+        "packages/retort_engine/docs/retort_production_recovery_drill.json",
+        "packages/retort_engine/docs/retort_quality_gate_bundle.json"
+      ],
+      "publishable_comment_count": 3,
+      "risk_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 3,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "policy_and_contract_review"
+    },
+    {
+      "comment_count": 8,
+      "context": "runtime",
+      "files": [
+        "packages/retort_engine/retort_engine/absorption_hardening_run.py",
+        "packages/retort_engine/retort_engine/cli.py",
+        "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+        "packages/retort_engine/retort_engine/production_recovery_drill.py",
+        "packages/retort_engine/retort_engine/service.py"
+      ],
+      "publishable_comment_count": 8,
+      "risk_counts": {
+        "high": 0,
+        "info": 5,
+        "low": 3,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ]
+}
