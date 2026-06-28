@@ -144,8 +144,18 @@ def _write_docs(root: Path) -> None:
             "summary": {
                 "all_before_failed_after_passed": True,
                 "all_output_assertions_passed": True,
-                "non_pr_domain_count": 4,
+                "non_pr_domain_count": 6,
             },
+            "cases": [],
+        },
+        "retort_contract_runtime_rehearsal.json": {
+            "status": "ready",
+            "summary": {"all_violations_rejected": True, "all_rollbacks_verified": True},
+            "cases": [],
+        },
+        "retort_review_family_behavior_replay.json": {
+            "status": "ready",
+            "summary": {"all_direct_review_outputs_verified": True, "independent_all_cases_accepted": True},
             "cases": [],
         },
         "retort_external_merge_landing.json": {

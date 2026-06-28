@@ -217,6 +217,8 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "absorption_release_decision_operator_",
         "external_advantage_matrix_",
         "cross_domain_absorption_replay_",
+        "contract_runtime_rehearsal_",
+        "review_family_behavior_replay_",
         "external_merge_landing_",
         "release_decision_self_reference=",
     )
@@ -263,6 +265,8 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_failure_rollback_replay_",
         "external_advantage_matrix_",
         "cross_domain_absorption_replay_",
+        "contract_runtime_rehearsal_",
+        "review_family_behavior_replay_",
         "external_merge_landing_",
         "multi_project_absorption_replay_",
         "absorption_continuity_",

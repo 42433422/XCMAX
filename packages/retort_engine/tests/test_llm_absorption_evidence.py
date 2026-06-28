@@ -232,15 +232,24 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "case_count": 4,
-                    "ready_case_count": 4,
-                    "non_pr_domain_count": 4,
-                    "non_pr_domains": ["architecture_governance", "benchmark_harness", "codebase_graph", "context_packaging"],
-                    "direct_module_count": 4,
+                    "case_count": 6,
+                    "ready_case_count": 6,
+                    "non_pr_domain_count": 6,
+                    "non_pr_domains": [
+                        "architecture_governance",
+                        "benchmark_harness",
+                        "codebase_graph",
+                        "context_packaging",
+                        "license_policy",
+                        "static_analysis_security",
+                    ],
+                    "direct_module_count": 6,
                     "direct_modules": [
                         "retort_engine.architecture_contracts.evaluate_architecture_contracts",
                         "retort_engine.codebase_graph.build_codebase_graph",
                         "retort_engine.context_packager.build_context_pack",
+                        "retort_engine.license_gate.license_gate",
+                        "retort_engine.static_analysis_gate.scan_static_analysis_findings",
                         "retort_engine.swe_bench_oracle.build_issue_patch_benchmark",
                     ],
                     "all_before_failed_after_passed": True,
@@ -250,6 +259,45 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "cases": [],
                 "evidence": {"claim_boundary": "direct_core_modules_not_pr_review_manifest"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_contract_runtime_rehearsal.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 3,
+                    "ready_case_count": 3,
+                    "violation_rejected_count": 3,
+                    "rollback_verified_count": 3,
+                    "valid_payload_accepted_count": 3,
+                    "all_violations_rejected": True,
+                    "all_rollbacks_verified": True,
+                },
+                "cases": [],
+                "evidence": {"runtime_guard": "retort_engine.contracts.validate_contract"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_review_family_behavior_replay.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 3,
+                    "ready_case_count": 3,
+                    "language_families": ["python", "typescript"],
+                    "typescript_case_count": 2,
+                    "python_case_count": 1,
+                    "all_direct_review_outputs_verified": True,
+                    "publishable_case_count": 3,
+                    "independent_accepted_case_count": 3,
+                },
+                "cases": [],
+                "evidence": {"direct_runtime": "retort_engine.pr_review.review_diff"},
             }
         ),
         encoding="utf-8",
@@ -523,12 +571,23 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "heterogeneous_absorption_replay_independent_accepted=6/6" in evidence
     assert "heterogeneous_absorption_replay_cross_language_verified=True" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
-    assert "cross_domain_absorption_replay_ready_cases=4/4" in evidence
-    assert "cross_domain_absorption_replay_non_pr_domains=4" in evidence
+    assert "cross_domain_absorption_replay_ready_cases=6/6" in evidence
+    assert "cross_domain_absorption_replay_non_pr_domains=6" in evidence
     assert "cross_domain_absorption_replay_before_after=True" in evidence
     assert "cross_domain_absorption_replay_direct_execution=True" in evidence
     assert "cross_domain_absorption_replay_output_assertions=True" in evidence
     assert "cross_domain_absorption_replay_claim_boundary=direct_core_modules_not_pr_review_manifest" in evidence
+    assert "contract_runtime_rehearsal_status=ready" in evidence
+    assert "contract_runtime_rehearsal_ready_cases=3/3" in evidence
+    assert "contract_runtime_rehearsal_violations_rejected=3" in evidence
+    assert "contract_runtime_rehearsal_all_rollbacks=True" in evidence
+    assert "contract_runtime_rehearsal_guard=retort_engine.contracts.validate_contract" in evidence
+    assert "review_family_behavior_replay_status=ready" in evidence
+    assert "review_family_behavior_replay_ready_cases=3/3" in evidence
+    assert "review_family_behavior_replay_language_families=python,typescript" in evidence
+    assert "review_family_behavior_replay_typescript_cases=2" in evidence
+    assert "review_family_behavior_replay_direct_outputs=True" in evidence
+    assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in evidence
     assert "external_merge_landing_status=ready" in evidence
     assert "external_merge_landing_ready_cases=2/2" in evidence
     assert "external_merge_landing_branch_diffs=2" in evidence

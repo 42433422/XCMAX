@@ -217,6 +217,10 @@ def _report_evidence(project: Path) -> list[str]:
     heterogeneous_summary = heterogeneous_replay.get("summary") if isinstance(heterogeneous_replay.get("summary"), dict) else {}
     cross_domain_replay = read_json(project / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_summary = cross_domain_replay.get("summary") if isinstance(cross_domain_replay.get("summary"), dict) else {}
+    contract_runtime = read_json(project / "docs" / "retort_contract_runtime_rehearsal.json")
+    contract_runtime_summary = contract_runtime.get("summary") if isinstance(contract_runtime.get("summary"), dict) else {}
+    review_family = read_json(project / "docs" / "retort_review_family_behavior_replay.json")
+    review_family_summary = review_family.get("summary") if isinstance(review_family.get("summary"), dict) else {}
     external_merge_landing = read_json(project / "docs" / "retort_external_merge_landing.json")
     external_merge_summary = external_merge_landing.get("summary") if isinstance(external_merge_landing.get("summary"), dict) else {}
     adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
@@ -450,6 +454,23 @@ def _report_evidence(project: Path) -> list[str]:
         f"cross_domain_absorption_replay_output_assertions={cross_domain_summary.get('all_output_assertions_passed', '')}",
         f"cross_domain_absorption_replay_independent_accepted={cross_domain_summary.get('independent_accepted_case_count', '')}/{cross_domain_summary.get('case_count', '')}",
         f"cross_domain_absorption_replay_claim_boundary={(cross_domain_replay.get('evidence') or {}).get('claim_boundary', '') if isinstance(cross_domain_replay.get('evidence'), dict) else ''}",
+        f"contract_runtime_rehearsal_status={contract_runtime.get('status', '')}",
+        f"contract_runtime_rehearsal_ready_cases={contract_runtime_summary.get('ready_case_count', '')}/{contract_runtime_summary.get('case_count', '')}",
+        f"contract_runtime_rehearsal_violations_rejected={contract_runtime_summary.get('violation_rejected_count', '')}",
+        f"contract_runtime_rehearsal_rollbacks={contract_runtime_summary.get('rollback_verified_count', '')}",
+        f"contract_runtime_rehearsal_all_rejected={contract_runtime_summary.get('all_violations_rejected', '')}",
+        f"contract_runtime_rehearsal_all_rollbacks={contract_runtime_summary.get('all_rollbacks_verified', '')}",
+        f"contract_runtime_rehearsal_valid_payloads={contract_runtime_summary.get('valid_payload_accepted_count', '')}",
+        f"contract_runtime_rehearsal_guard={(contract_runtime.get('evidence') or {}).get('runtime_guard', '') if isinstance(contract_runtime.get('evidence'), dict) else ''}",
+        f"review_family_behavior_replay_status={review_family.get('status', '')}",
+        f"review_family_behavior_replay_ready_cases={review_family_summary.get('ready_case_count', '')}/{review_family_summary.get('case_count', '')}",
+        f"review_family_behavior_replay_language_families={','.join(review_family_summary.get('language_families') or []) if isinstance(review_family_summary.get('language_families'), list) else ''}",
+        f"review_family_behavior_replay_typescript_cases={review_family_summary.get('typescript_case_count', '')}",
+        f"review_family_behavior_replay_python_cases={review_family_summary.get('python_case_count', '')}",
+        f"review_family_behavior_replay_direct_outputs={review_family_summary.get('all_direct_review_outputs_verified', '')}",
+        f"review_family_behavior_replay_publishable_cases={review_family_summary.get('publishable_case_count', '')}",
+        f"review_family_behavior_replay_independent_accepted={review_family_summary.get('independent_accepted_case_count', '')}/{review_family_summary.get('case_count', '')}",
+        f"review_family_behavior_replay_runtime={(review_family.get('evidence') or {}).get('direct_runtime', '') if isinstance(review_family.get('evidence'), dict) else ''}",
         f"external_merge_landing_status={external_merge_landing.get('status', '')}",
         f"external_merge_landing_ready_cases={external_merge_summary.get('ready_case_count', '')}/{external_merge_summary.get('case_count', '')}",
         f"external_merge_landing_branch_diffs={external_merge_summary.get('branch_diff_count', '')}",
@@ -545,6 +566,10 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_cross_domain_ready={release_summary.get('cross_domain_absorption_ready', '')}",
         f"absorption_release_decision_cross_domain_domains={release_summary.get('cross_domain_absorption_domains', '')}",
         f"absorption_release_decision_cross_domain_assertions={release_summary.get('cross_domain_absorption_output_assertions', '')}",
+        f"absorption_release_decision_contract_runtime_ready={release_summary.get('contract_runtime_rehearsal_ready', '')}",
+        f"absorption_release_decision_contract_runtime_rollback={release_summary.get('contract_runtime_rehearsal_rollback', '')}",
+        f"absorption_release_decision_review_family_ready={release_summary.get('review_family_behavior_ready', '')}",
+        f"absorption_release_decision_review_family_outputs={release_summary.get('review_family_behavior_outputs', '')}",
         f"absorption_release_decision_operator_journey_ready={release_summary.get('operator_journey_ready', '')}",
         f"absorption_release_decision_operator_cross_domain_ready={release_summary.get('operator_journey_cross_domain_ready', '')}",
     ]

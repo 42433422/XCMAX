@@ -76,6 +76,24 @@
     },
     {
       "action": "allow",
+      "dimension": "api_contract_quality",
+      "evidence": [
+        "contract_runtime_rehearsal"
+      ],
+      "name": "reject_contract_runtime_violations",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "branch_absorption_workflow",
+      "evidence": [
+        "review_family_behavior_replay"
+      ],
+      "name": "prove_review_family_core_behavior",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "branch_absorption_workflow",
       "evidence": [
         "external_merge_landing"
@@ -125,6 +143,8 @@
       "retort_external_advantage_repeat.json",
       "retort_heterogeneous_absorption_replay.json",
       "retort_cross_domain_absorption_replay.json",
+      "retort_contract_runtime_rehearsal.json",
+      "retort_review_family_behavior_replay.json",
       "retort_external_merge_landing.json",
       "retort_operator_journey_replay.json"
     ],
@@ -135,12 +155,15 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
-    "core_decision_path_count": 10,
-    "cross_domain_absorption_direct_modules": 4,
-    "cross_domain_absorption_domains": 4,
+    "contract_runtime_rehearsal_ready": true,
+    "contract_runtime_rehearsal_rejected": 3,
+    "contract_runtime_rehearsal_rollback": true,
+    "core_decision_path_count": 11,
+    "cross_domain_absorption_direct_modules": 6,
+    "cross_domain_absorption_domains": 6,
     "cross_domain_absorption_output_assertions": true,
     "cross_domain_absorption_ready": true,
-    "decision_count": 12,
+    "decision_count": 14,
     "employee_patch_ready": true,
     "external_advantage_matrix_delta": 45.0,
     "external_advantage_matrix_ready": true,
@@ -158,7 +181,11 @@
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 12,
-    "recovery_ready": true
+    "ready_decision_count": 14,
+    "recovery_ready": true,
+    "review_family_behavior_outputs": true,
+    "review_family_behavior_python_cases": 1,
+    "review_family_behavior_ready": true,
+    "review_family_behavior_typescript_cases": 2
   }
 }

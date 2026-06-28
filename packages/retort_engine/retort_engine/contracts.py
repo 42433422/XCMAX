@@ -31,6 +31,8 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "external_advantage_repeat_result": ("status", "project", "summary", "runs", "evidence"),
     "heterogeneous_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
+    "contract_runtime_rehearsal_result": ("status", "project", "summary", "cases", "evidence"),
+    "review_family_behavior_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "external_merge_landing_result": ("status", "project", "summary", "cases", "evidence"),
     "review_adjudication_calibration_result": ("status", "project", "summary", "cases", "evidence"),
     "review_pipeline_diff_replay_result": ("status", "pipeline_stages", "summary", "context_groups", "comments", "task_groups", "evidence"),

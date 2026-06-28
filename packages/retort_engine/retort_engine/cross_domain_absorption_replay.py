@@ -9,13 +9,15 @@ from typing import Any
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.context_packager import build_context_pack
+from retort_engine.license_gate import license_gate
+from retort_engine.static_analysis_gate import scan_static_analysis_findings
 from retort_engine.swe_bench_oracle import build_issue_patch_benchmark
 
 
 def build_cross_domain_absorption_replay(
     project: str | Path,
     *,
-    min_domains: int = 4,
+    min_domains: int = 6,
     output: str | Path = "",
     run_id: str = "",
 ) -> dict[str, Any]:
@@ -28,6 +30,8 @@ def build_cross_domain_absorption_replay(
         _architecture_contract_case(lab),
         _code_graph_case(lab),
         _context_pack_case(lab),
+        _license_gate_case(lab),
+        _static_analysis_case(lab),
     ]
     adjudication = _adjudicate_cases(cases)
     domains = sorted({str(case["domain"]) for case in cases if case.get("domain")})
@@ -231,6 +235,69 @@ def _context_pack_case(lab: Path) -> dict[str, Any]:
         artifacts=[case_lab / "post_output.json"],
         pre_summary={"status": "pre_absorption_no_context_pack_runtime", "selected_file_count": 0},
         post_summary=post["summary"],
+    )
+
+
+def _license_gate_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "license_gate"
+    project = case_lab / "project"
+    project.mkdir(parents=True, exist_ok=True)
+    (project / "LICENSE").write_text("GNU Affero General Public License v3.0\n", encoding="utf-8")
+    result = license_gate(project, enforce=True).to_dict()
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "blocked": result["status"] == "blocked",
+        "detected_agpl": "Affero" in result["detected_license"] or "AGPL" in result["detected_license"],
+        "message_explains_risk": "blocked license" in result["message"],
+    }
+    return _case(
+        case_id="license_gate",
+        domain="license_policy",
+        source_project="github/licensee",
+        direct_module="retort_engine.license_gate.license_gate",
+        expected_behavior="block_incompatible_license_before_absorption",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_license_runtime_gate", "blocked": False},
+        post_summary=result,
+    )
+
+
+def _static_analysis_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "static_analysis"
+    parsed_diff = {
+        "path": "server/review_runner.py",
+        "hunks": [
+            {
+                "changes": [
+                    {"type": "add", "line": 12, "text": "subprocess.run(command, shell=True, check=False)"},
+                    {"type": "add", "line": 13, "text": "yaml.load(payload)"},
+                ]
+            }
+        ],
+    }
+    result = scan_static_analysis_findings([parsed_diff])
+    _write_json(case_lab / "input.json", {"files": [parsed_diff]})
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "blocked": result["status"] == "blocked",
+        "high_findings": int(result["summary"]["high_count"]) >= 2,
+        "rule_ids_returned": {"subprocess-shell-true", "unsafe-yaml-load"}.issubset({str(item.get("rule_id") or "") for item in result.get("findings") or []}),
+    }
+    return _case(
+        case_id="static_analysis",
+        domain="static_analysis_security",
+        source_project="PyCQA/bandit",
+        direct_module="retort_engine.static_analysis_gate.scan_static_analysis_findings",
+        expected_behavior="block_high_risk_added_lines_with_rule_ids",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[case_lab / "input.json", case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_static_analysis_runtime", "finding_count": 0},
+        post_summary=result["summary"],
     )
 
 

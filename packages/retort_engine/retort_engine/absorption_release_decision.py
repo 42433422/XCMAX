@@ -19,6 +19,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
+    contract_runtime = _read_json(root / "docs" / "retort_contract_runtime_rehearsal.json")
+    review_family = _read_json(root / "docs" / "retort_review_family_behavior_replay.json")
     external_merge_landing = _read_json(root / "docs" / "retort_external_merge_landing.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
@@ -74,8 +76,25 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             cross_domain_replay.get("status") == "ready"
             and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
             and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
-            and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 4,
+            and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 6,
             ["cross_domain_absorption_replay"],
+        ),
+        _decision(
+            "reject_contract_runtime_violations",
+            "api_contract_quality",
+            contract_runtime.get("status") == "ready"
+            and contract_runtime.get("summary", {}).get("all_violations_rejected") is True
+            and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True,
+            ["contract_runtime_rehearsal"],
+        ),
+        _decision(
+            "prove_review_family_core_behavior",
+            "branch_absorption_workflow",
+            review_family.get("status") == "ready"
+            and review_family.get("summary", {}).get("all_direct_review_outputs_verified") is True
+            and review_family.get("summary", {}).get("independent_all_cases_accepted") is True
+            and int(review_family.get("summary", {}).get("typescript_case_count") or 0) >= 2,
+            ["review_family_behavior_replay"],
         ),
         _decision(
             "prove_external_merge_landing",
@@ -128,6 +147,13 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "cross_domain_absorption_domains": cross_domain_replay.get("summary", {}).get("non_pr_domain_count", ""),
         "cross_domain_absorption_direct_modules": cross_domain_replay.get("summary", {}).get("direct_module_count", ""),
         "cross_domain_absorption_output_assertions": cross_domain_replay.get("summary", {}).get("all_output_assertions_passed", ""),
+        "contract_runtime_rehearsal_ready": contract_runtime.get("status") == "ready",
+        "contract_runtime_rehearsal_rejected": contract_runtime.get("summary", {}).get("violation_rejected_count", ""),
+        "contract_runtime_rehearsal_rollback": contract_runtime.get("summary", {}).get("all_rollbacks_verified", ""),
+        "review_family_behavior_ready": review_family.get("status") == "ready",
+        "review_family_behavior_typescript_cases": review_family.get("summary", {}).get("typescript_case_count", ""),
+        "review_family_behavior_python_cases": review_family.get("summary", {}).get("python_case_count", ""),
+        "review_family_behavior_outputs": review_family.get("summary", {}).get("all_direct_review_outputs_verified", ""),
         "external_merge_landing_ready": external_merge_landing.get("status") == "ready",
         "external_merge_landing_merge_commits": external_merge_landing.get("summary", {}).get("merge_commit_count", ""),
         "external_merge_landing_post_merge_tests": external_merge_landing.get("summary", {}).get("post_merge_test_passed_count", ""),
@@ -155,6 +181,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_external_advantage_repeat.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
+                "retort_contract_runtime_rehearsal.json",
+                "retort_review_family_behavior_replay.json",
                 "retort_external_merge_landing.json",
                 "retort_operator_journey_replay.json",
             ],

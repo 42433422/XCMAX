@@ -10,6 +10,7 @@ from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
+from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
@@ -33,6 +34,7 @@ from retort_engine.production_recovery_drill import build_production_recovery_dr
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
+from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
@@ -201,7 +203,16 @@ class RetortService:
     def cross_domain_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_absorption_replay(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_domains=int(payload.get("min_domains") or 4),
+            min_domains=int(payload.get("min_domains") or 6),
+        )
+
+    def contract_runtime_rehearsal(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_contract_runtime_rehearsal(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def review_family_behavior_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_review_family_behavior_replay(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 3),
         )
 
     def external_merge_landing(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -380,6 +391,14 @@ def create_app() -> Any:
     @app.post("/cross-domain-absorption-replay")
     def cross_domain_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.cross_domain_absorption_replay(payload)
+
+    @app.post("/contract-runtime-rehearsal")
+    def contract_runtime_rehearsal_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.contract_runtime_rehearsal(payload)
+
+    @app.post("/review-family-behavior-replay")
+    def review_family_behavior_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.review_family_behavior_replay(payload)
 
     @app.post("/external-merge-landing")
     def external_merge_landing_route(payload: dict[str, Any]) -> dict[str, Any]:
