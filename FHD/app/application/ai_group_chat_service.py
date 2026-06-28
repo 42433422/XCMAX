@@ -593,7 +593,7 @@ def _default_enterprise_employee_loader() -> list[dict[str, Any]]:
                     "department_key": layer,
                 }
             )
-    _append_super_employees(employees)
+    # 超级员工(tier 2)仅对管理端开放：企业端群聊不追加，不可选、不可邀请、不可派工。
     return employees
 
 
@@ -830,6 +830,9 @@ class AiGroupChatService:
         判定标志：部门群（``department_key`` 非空）且 ``members_seeded`` 未置 True。
         补员后写 ``members_seeded=True`` 并持久化；用户手动移人后不会再次自动加回。
         """
+        if self._mode != "admin":
+            # 企业端 4 部门初始只保留必备小C助理，不自动铺员工（按需/装 mod 后由生态同步进入）。
+            return
         targets = [
             g
             for g in groups
@@ -908,6 +911,9 @@ class AiGroupChatService:
             eid = str(emp.get("employee_id") or "").strip()
             if not eid or eid in seen:
                 continue
+            if self._mode != "admin" and eid in _SUPER_EMPLOYEE_IDS:
+                # 超级员工仅管理端可选：企业端选人列表一律剔除，与 loader 来源无关。
+                continue
             seen.add(eid)
             out.append(
                 {
@@ -946,6 +952,9 @@ class AiGroupChatService:
         employee_id = str(member.get("employee_id") or "").strip()
         if not employee_id:
             raise ValueError("employee_id 不能为空")
+        if self._mode != "admin" and employee_id in _SUPER_EMPLOYEE_IDS:
+            # 超级员工仅管理端可邀请：企业端即便绕过选人器也不能把超级员工拉入群。
+            raise ValueError("超级员工仅管理端可邀请")
         groups = self._user_groups(user_id)
         group = self._find(groups, group_id)
         if group is None:
@@ -1742,6 +1751,13 @@ class AiGroupChatService:
         work_capable = [
             m for m in members if not _is_required_group_member(str(m.get("employee_id") or ""))
         ]
+        if self._mode != "admin":
+            # 超级员工仅管理端可派工：企业端即便历史已入群也不会被选为派工对象。
+            work_capable = [
+                m
+                for m in work_capable
+                if str(m.get("employee_id") or "") not in _SUPER_EMPLOYEE_IDS
+            ]
         if not work_capable:
             return []
         if self._is_broadcast_mention(text):
@@ -3596,9 +3612,10 @@ class AiGroupChatService:
                 else _FALLBACK_DEPARTMENTS
             )
         # 按 department_key 预分桶员工，种子群直接带入编制成员（微信式"部门群天然有人"）。
+        # 企业端 4 部门初始只保留必备小C助理，员工不预铺；仅管理端按编制预铺。
         members_by_dept: dict[str, list[dict[str, Any]]] = {}
         try:
-            for emp in self._employee_loader() or []:
+            for emp in (self._employee_loader() or []) if self._mode == "admin" else []:
                 if not isinstance(emp, dict):
                     continue
                 dk = str(emp.get("department_key") or "").strip()

@@ -28,3 +28,28 @@ data class CsMessageItemDto(
     @SerializedName("timestamp") val timestamp: String = "",
     @SerializedName("msg_type") val msgType: String = "text",  // text | image | file | card
 )
+
+// ── 管理端客服收件箱(运营者视角)──
+
+data class AdminCsInboxDto(
+    @SerializedName("conversations") val conversations: List<AdminCsInboxItemDto> = emptyList(),
+)
+
+data class AdminCsInboxItemDto(
+    @SerializedName("conversationId") val conversationId: Int = 0,
+    @SerializedName("customerName") val customerName: String = "",
+    @SerializedName("lastMessageAt") val lastMessageAt: String = "",
+    @SerializedName("unreadCount") val unreadCount: Int = 0,
+)
+
+data class AdminCsMessagesDto(
+    @SerializedName("messages") val messages: List<AdminCsMessageItemDto> = emptyList(),
+)
+
+data class AdminCsMessageItemDto(
+    @SerializedName("messageId") val messageId: String = "",
+    @SerializedName("fromCustomer") val fromCustomer: Boolean = false,
+    @SerializedName("senderName") val senderName: String = "",
+    @SerializedName("body") val body: String = "",
+    @SerializedName("timestamp") val timestamp: String = "",
+)

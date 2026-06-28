@@ -39,6 +39,8 @@ constructor(
     private val userIdKey = intPreferencesKey("user_id")
     private val fcmTokenKey = stringPreferencesKey("fcm_token")
     private val setupCompleteKey = booleanPreferencesKey("setup_complete")
+    private val setupCompleteUserKey = stringPreferencesKey("setup_complete_user")
+    private val activeUsernameKey = stringPreferencesKey("active_username")
     private val autoLanProbeKey = booleanPreferencesKey("auto_lan_probe")
     private val syncCursorKey = intPreferencesKey("sync_cursor")
     private val lastSyncAtKey = stringPreferencesKey("last_sync_at")
@@ -121,6 +123,31 @@ constructor(
     suspend fun setSetupComplete(complete: Boolean = true) {
         context.dataStore.edit { it[setupCompleteKey] = complete }
     }
+
+    suspend fun setupCompleteUser(): String =
+            context.dataStore.data.map { it[setupCompleteUserKey] ?: "" }.first()
+
+    /** 标记某账号已完成启动配置(行业/能力/支付);供登录时按账号还原,避免每次登录重走。 */
+    suspend fun markSetupCompleteFor(username: String) {
+        context.dataStore.edit {
+            it[setupCompleteKey] = true
+            it[setupCompleteUserKey] = username.trim()
+        }
+    }
+
+    /** 登录时按"该账号之前是否完成过启动配置"还原 setupComplete。 */
+    suspend fun applySetupCompleteForLogin(username: String) {
+        val u = username.trim()
+        val done = u.isNotEmpty() && setupCompleteUser().equals(u, ignoreCase = true)
+        context.dataStore.edit { it[setupCompleteKey] = done }
+    }
+
+    suspend fun setActiveUsername(username: String) {
+        context.dataStore.edit { it[activeUsernameKey] = username.trim() }
+    }
+
+    suspend fun activeUsername(): String =
+            context.dataStore.data.map { it[activeUsernameKey] ?: "" }.first()
 
     suspend fun setAutoLanProbe(enabled: Boolean) {
         context.dataStore.edit { it[autoLanProbeKey] = enabled }

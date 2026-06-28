@@ -129,6 +129,15 @@ def is_mod_visible_for_enterprise(mod_id: str) -> bool:
         return True
     if not is_client_mod_id(mid):
         return True
+    # 开放引导行业包(coating-industry / attendance-industry 等随产品分发的中性行业 Mod)
+    # 属于 onboarding 开放目录，企业版下始终可见，不与"已购客户 Mod 权益"挂钩。
+    try:
+        from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
+
+        if mid in set(open_industry_seed_mod_ids()):
+            return True
+    except RECOVERABLE_ERRORS:
+        logger.debug("open onboarding industry visibility check skipped", exc_info=True)
     if is_admin_account_session():
         return True
     try:

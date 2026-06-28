@@ -1141,9 +1141,6 @@ fun AiEmployeeListScreen(
                     IconButton(onClick = { vm.refreshModInfos(showError = true) }) {
                         Icon(Icons.Default.Refresh, contentDescription = "刷新AI员工")
                     }
-                    IconButton(onClick = onScan) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = "扫码绑定")
-                    }
                 },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
@@ -1183,26 +1180,12 @@ fun AiEmployeeListScreen(
                     )
                     Spacer(Modifier.height(Spacing.xs))
                     Text(
-                        "扫码绑定企业端或登录管理端后，员工会自动同步到这里。",
+                        "员工会自动同步到这里；如未显示，点右上角刷新。",
                         style = MaterialTheme.typography.bodySmall,
                         color = imTextSecondary(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp),
                     )
-                    Spacer(Modifier.height(Spacing.lg))
-                    Button(
-                        onClick = onScan,
-                        colors = ButtonDefaults.buttonColors(containerColor = XcagiTheme.extra.brandBlue),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.QrCodeScanner,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text("扫码绑定")
-                    }
                 }
             }
         } else {

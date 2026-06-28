@@ -24,6 +24,8 @@ import com.xiuci.xcagi.mobile.core.model.MobileEnvelope
 import com.xiuci.xcagi.mobile.core.model.MobileLoginData
 import com.xiuci.xcagi.mobile.core.model.MeData
 import com.xiuci.xcagi.mobile.core.model.TraeSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.model.AdminCsInboxDto
+import com.xiuci.xcagi.mobile.model.AdminCsMessagesDto
 import com.xiuci.xcagi.mobile.model.CsInfoDto
 import com.xiuci.xcagi.mobile.model.CsMessageResponseDto
 import com.xiuci.xcagi.mobile.model.CsMessagesListDto
@@ -366,6 +368,19 @@ interface FhdApi {
 
     @GET(ApiEndpoints.CS_MESSAGES)
     suspend fun getCsMessages(@Query("since") since: String? = null): MobileEnvelope<CsMessagesListDto>
+
+    // ── 管理端客服收件箱(运营者)──
+    @GET(ApiEndpoints.ADMIN_CS_INBOX)
+    suspend fun getAdminCsInbox(): MobileEnvelope<AdminCsInboxDto>
+
+    @GET(ApiEndpoints.ADMIN_CS_INBOX_MESSAGES)
+    suspend fun getAdminCsMessages(@Path("id") conversationId: Int): MobileEnvelope<AdminCsMessagesDto>
+
+    @POST(ApiEndpoints.ADMIN_CS_INBOX_REPLY)
+    suspend fun replyAdminCs(
+        @Path("id") conversationId: Int,
+        @Body body: Map<String, String>,
+    ): MobileEnvelope<Map<String, Any?>>
 
     @GET(ApiEndpoints.ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES)
     suspend fun getCodexSuperEmployeeMessages(

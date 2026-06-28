@@ -177,13 +177,13 @@
   "surfaces": {
     "_doc": "各端联系人/会话固定区组成(有序)。platform 条目按端解析为不同员工集合。",
     "desktop": {
-      "_doc": "电脑端消息页。小C是悬浮助手(FloatingChatAssistant),不进消息页列表,故 desktop 无 assistant 条目。",
-      "enterprise": ["platform", "super", "dedicated_cs"],
+      "_doc": "电脑端消息页。小C是悬浮助手(FloatingChatAssistant),不进消息页列表,故 desktop 无 assistant 条目。super(超级员工)仅管理端出现,企业端不暴露(运营者自用的中继 CLI,不向客户开放)。",
+      "enterprise": ["platform", "dedicated_cs"],
       "admin": ["platform", "super"]
     },
     "mobile": {
-      "_doc": "手机端联系人/会话固定区。小C助理=智能对话入口,作为联系人出现。",
-      "enterprise": ["assistant", "dedicated_cs", "platform", "super"],
+      "_doc": "手机端联系人/会话固定区。小C助理=智能对话入口,作为联系人出现。super(超级员工)仅管理端出现,企业端不暴露。",
+      "enterprise": ["assistant", "dedicated_cs", "platform"],
       "admin": ["assistant", "platform", "super"]
     }
   }

@@ -1028,11 +1028,11 @@ class TestMobileAdminFeatures:
 class TestMobileAdminCodexSuperEmployeeMessages:
     @pytest.mark.asyncio
     async def test_require_error(self, m):
-        """branch [1172,1173]: _require_mobile_admin_or_enterprise → err."""
+        """branch [1172,1173]: _require_mobile_admin → err."""
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_codex_super_employee_messages(
@@ -1045,7 +1045,7 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         """branch [1175,1176]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1063,7 +1063,7 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1093,11 +1093,11 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
 
     @pytest.mark.asyncio
     async def test_require_error(self, m):
-        """branch [1198,1199]: err from _require_mobile_admin_or_enterprise."""
+        """branch [1198,1199]: err from _require_mobile_admin."""
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_codex_super_employee_invoke(
@@ -1110,7 +1110,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1202,1203]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1127,7 +1127,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1219,1220]: ValueError from invoke → 400."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1147,7 +1147,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1174,7 +1174,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_claude_super_employee_messages(
@@ -1187,7 +1187,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         """branch [1243,1244]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1205,7 +1205,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1239,7 +1239,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_claude_super_employee_invoke(
@@ -1252,7 +1252,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1270,1271]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1269,7 +1269,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1287,1288]: ValueError → 400."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(
@@ -1289,7 +1289,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
                 return_value=({}, None),
             ),
             patch(

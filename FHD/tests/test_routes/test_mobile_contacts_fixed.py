@@ -42,7 +42,8 @@ async def test_fixed_enterprise_has_cs(monkeypatch):
     data = _payload(await ext.get_mobile_fixed_contacts(request=MagicMock(), user=_user()))["data"]
     assert data["side"] == "enterprise"
     assert [e["kind"] for e in data["top"]] == ["assistant", "dedicated_cs"]
-    assert data["bottom"] and all(e["kind"] == "super" for e in data["bottom"])
+    # 超级员工仅管理端开放：企业端固定区 bottom 不含 super
+    assert all(e["kind"] != "super" for e in data["bottom"])
 
 
 @pytest.mark.asyncio

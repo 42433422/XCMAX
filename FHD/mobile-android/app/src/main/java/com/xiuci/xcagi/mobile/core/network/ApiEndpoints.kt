@@ -88,6 +88,11 @@ object ApiEndpoints {
     const val CS_INFO = "$BASE/cs/info"
     const val CS_MESSAGES = "$BASE/cs/messages"
 
+    // 管理端客服收件箱（运营者：企业客户↔企业专属客服）
+    const val ADMIN_CS_INBOX = "$BASE/im/cs/inbox"
+    const val ADMIN_CS_INBOX_MESSAGES = "$BASE/im/cs/inbox/{id}/messages"
+    const val ADMIN_CS_INBOX_REPLY = "$BASE/im/cs/inbox/{id}/reply"
+
     // 管理员
     const val ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/codex-super-employee/messages"
     const val ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES = "$BASE/admin/claude-super-employee/messages"

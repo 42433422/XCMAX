@@ -224,6 +224,16 @@ constructor(
                     .map { ProductSkuConfig.showsEnterpriseNav || isAdminAccountKind(it) }
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProductSkuConfig.showsEnterpriseNav)
 
+    /**
+     * 运营者(管理端账号)判定:用于客服收件箱等管理端专属入口。
+     * 用 Eagerly 而非 WhileSubscribed —— NavHost 仅以 .value 读取(从不 collect),
+     * WhileSubscribed 无订阅者不会启动,.value 会一直停在初始 false 导致 admin 误入客户客服屏。
+     */
+    val isAdminMode =
+            sessionStore.accountKindFlow
+                    .map { isAdminAccountKind(it) }
+                    .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _marketAccess = MutableStateFlow("")
     val marketAccess: StateFlow<String> = _marketAccess.asStateFlow()
 
@@ -383,12 +393,15 @@ constructor(
             ) { mods, kind, timestamps, previews ->
                 val adminMode = isAdminAccountKind(kind)
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
+                // 超级员工(Codex/Claude/Cursor/Trae)仅对管理端账号开放：
+                // 企业版 flavor 下的企业账号一律不显示，避免把运营者自用的中继 CLI 暴露给客户。
                 val fixedItems = fixedConversationItems(
-                        showCodex = isEnterprise || adminMode,
-                        showCursor = isEnterprise || adminMode,
-                        showClaude = isEnterprise || adminMode,
-                        showTrae = isEnterprise || adminMode,
+                        showCodex = adminMode,
+                        showCursor = adminMode,
+                        showClaude = adminMode,
+                        showTrae = adminMode,
                         showCustomerService = isEnterprise && !adminMode,
+                        showAdminCs = adminMode,
                         timestamps = timestamps,
                         previews = previews,
                 )
@@ -562,7 +575,8 @@ constructor(
                 _autoLoggingIn.value = true
                 repo.loginUnified(u, p)
                         .onSuccess {
-                            sessionStore.setSetupComplete(false)
+                            // 不再重置 setupComplete:已完成启动配置的账号自动登录后直接进主界面。
+                            sessionStore.setActiveUsername(u)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -572,7 +586,9 @@ constructor(
                             refreshUserAvatar()
                             loadWalletBalance()
                             registerPushWithHint()
-                            _startRoute.value = Routes.ONBOARDING
+                            _startRoute.value =
+                                    if (sessionStore.isSetupComplete()) Routes.CHAT
+                                    else Routes.ONBOARDING
                         }
                         .onFailure { snack("自动登录失败，请手动登录", true) }
                         .also { _autoLoggingIn.value = false }
@@ -1205,6 +1221,7 @@ constructor(
             showClaude: Boolean,
             showTrae: Boolean,
             showCustomerService: Boolean,
+            showAdminCs: Boolean,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
     ): List<ConversationItem> {
@@ -1292,6 +1309,22 @@ constructor(
                     title = "专属客服",
                     subtitle = cachedConversationPreview(PinnedIds.CS, previews)
                         .ifBlank { "您好，我是您的专属客服" },
+                    timestamp = cachedConversationTimestamp(PinnedIds.CS, timestamps),
+                    isOnline = true,
+                    isPinned = true,
+                )
+            )
+        }
+
+        // 3b. 客户客服收件箱（仅管理端账号：运营者查看并回复企业客户的客服消息）
+        if (showAdminCs) {
+            items.add(
+                ConversationItem(
+                    id = PinnedIds.CS,
+                    type = ConversationType.PINNED_CS,
+                    title = "客户客服",
+                    subtitle = cachedConversationPreview(PinnedIds.CS, previews)
+                        .ifBlank { "查看并回复企业客户的客服消息" },
                     timestamp = cachedConversationTimestamp(PinnedIds.CS, timestamps),
                     isOnline = true,
                     isPinned = true,
@@ -1388,7 +1421,8 @@ constructor(
 
     fun completeSetup() =
             viewModelScope.launch {
-                sessionStore.setSetupComplete(true)
+                // 按账号记"已完成",登录时据此还原,避免每次登录都重走启动配置。
+                sessionStore.markSetupCompleteFor(sessionStore.activeUsername())
                 refreshStartRoute()
             }
 
@@ -1469,8 +1503,11 @@ constructor(
             viewModelScope.launch {
                 repo.loginUnified(u, p, isAdmin)
                         .onSuccess {
-                            // 登录只建立账号会话；行业能力和支付入口在移动端启动配置中完成。
-                            sessionStore.setSetupComplete(false)
+                            // 不再重置 setupComplete:已完成启动配置的账号登录后直接进主界面,不重走配置。
+                            sessionStore.setActiveUsername(u)
+                            _startRoute.value =
+                                    if (sessionStore.isSetupComplete()) Routes.CHAT
+                                    else Routes.ONBOARDING
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -1504,6 +1541,7 @@ constructor(
             viewModelScope.launch {
                 repo.register(u, p, e, industryId, budgetRange)
                         .onSuccess {
+                            sessionStore.setActiveUsername(u)
                             sessionStore.setSetupComplete(false)
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
@@ -1536,7 +1574,10 @@ constructor(
             viewModelScope.launch {
                 repo.loginMarketPhone(phone, code)
                         .onSuccess {
-                            sessionStore.setSetupComplete(false)
+                            sessionStore.setActiveUsername(phone)
+                            _startRoute.value =
+                                    if (sessionStore.isSetupComplete()) Routes.CHAT
+                                    else Routes.ONBOARDING
                             val mode = repo.preferredServerModeAfterLogin()
                             sessionStore.setServerMode(if (mode == ServerMode.LAN) "lan" else "cloud")
                             serverRouter.mode = mode
@@ -2314,6 +2355,8 @@ constructor(
             viewModelScope.launch {
                 pushRegistrar.unregisterAll()
                 repo.logout()
+                // 登出清掉"已完成启动配置"标志:换账号登录从干净状态开始。
+                sessionStore.setSetupComplete(false)
                 refreshStartRoute()
                 onDone()
             }
@@ -2345,6 +2388,27 @@ constructor(
     val csMessages = csRepository.messages
     val csStreaming = csRepository.streaming
     val csInfo = csRepository.csInfo
+
+    // ── 管理端客服收件箱(运营者:企业客户↔企业专属客服)──
+    val adminCsInbox = csRepository.adminInbox
+    val adminCsMessages = csRepository.adminMessages
+
+    /** 运营者:加载客服收件箱会话列表 */
+    suspend fun loadAdminCsInbox(): Result<Unit> =
+            csRepository.loadAdminInbox().onFailure { snack(it.message ?: "加载客服收件箱失败", true) }
+
+    /** 运营者:加载某客服会话消息 */
+    suspend fun loadAdminCsMessages(conversationId: Int): Result<Unit> =
+            csRepository.loadAdminMessages(conversationId)
+                    .onFailure { snack(it.message ?: "加载客服消息失败", true) }
+
+    /** 运营者:以企业专属客服身份回复客户 */
+    suspend fun replyAdminCs(conversationId: Int, body: String): Result<Unit> =
+            csRepository.replyAdmin(conversationId, body)
+                    .onFailure { snack(it.message ?: "回复失败", true) }
+
+    /** 离开某会话时清空消息缓存 */
+    fun clearAdminCsMessages() = csRepository.clearAdminMessages()
 
     /** 加载专属客服信息 */
     suspend fun loadCsInfo() = csRepository.loadCsInfo()

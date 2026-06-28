@@ -201,6 +201,71 @@ def im_unread_total(
         db.close()
 
 
+@router.get("/api/im/cs/inbox")
+def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified_user)):
+    """运营者(管理端)客服收件箱:所有企业客户↔企业专属客服会话(手机端+桌面端同源)。"""
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        if not _is_admin_customer_service_session(request, db):
+            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+        items = ImApplicationService(db).list_cs_inbox()
+        return {"success": True, "conversations": items}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("im_cs_inbox")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.get("/api/im/cs/inbox/{conversation_id}/messages")
+def im_cs_inbox_messages(
+    conversation_id: int,
+    request: Request,
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """运营者读某客服会话历史。"""
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        if not _is_admin_customer_service_session(request, db):
+            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+        messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
+        return {"success": True, "messages": messages}
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("im_cs_inbox_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.post("/api/im/cs/inbox/{conversation_id}/reply")
+def im_cs_inbox_reply(
+    conversation_id: int,
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """运营者以「企业专属客服」身份回复客户(客户端轮询取回)。"""
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        if not _is_admin_customer_service_session(request, db):
+            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+        text = str(body.get("body") or "").strip()
+        if not text:
+            return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
+        result = ImApplicationService(db).cs_reply(conversation_id, text)
+        return {"success": True, **result}
+    except (ValueError, PermissionError) as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("im_cs_inbox_reply")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
 @router.post("/api/im/conversations/direct")
 def im_create_direct(
     body: dict = Body(default_factory=dict),

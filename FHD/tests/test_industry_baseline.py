@@ -117,9 +117,12 @@ def test_onboarding_industry_catalog_neutral_names():
         for p in [*cat["open_packages"], *cat["preview_packages"]]
     }
     assert all_names["考勤"] == "考勤行业包"
-    locked = next(p for p in cat["preview_packages"] if p["industry_id"] == "通用")
+    # 开放引导行业全部可选(含通用清爽起步)；仅非引导项(如管理端)保留为预览不可选
+    general = next(p for p in cat["open_packages"] if p["industry_id"] == "通用")
+    assert general["selectable"] is True
+    assert general["name"] == "通用"
+    locked = next(p for p in cat["preview_packages"] if p["industry_id"] == "管理端")
     assert locked["selectable"] is False
-    assert locked["name"] == "通用"
 
 
 def test_industry_baseline_generic_minimal():
@@ -167,7 +170,9 @@ def test_industry_baseline_legacy_custom_entitlement_adds_account_custom():
     assert any(g["id"] == "account_custom" for g in data["groups"])
 
 
-def test_onboarding_catalog_filtered_attendance_only():
+def test_onboarding_catalog_open_industries_stay_selectable_unrelated_entitlement():
+    # 新契约:开放引导行业(随产品分发的中性行业包)不再被"已购客户 Mod 权益"裁剪,
+    # 即使账号只持有无关的客户 Mod,涂料/考勤等开放行业仍须保持可选。
     from app.mod_sdk.industry_baseline import (
         build_onboarding_industry_catalog,
         filter_onboarding_catalog_for_entitlements,
@@ -175,19 +180,23 @@ def test_onboarding_catalog_filtered_attendance_only():
 
     cat = build_onboarding_industry_catalog()
     filtered = filter_onboarding_catalog_for_entitlements(cat, {"taiyangniao-pro"})
-    assert filtered["open_industry_ids"] == ["考勤"]
+    assert set(filtered["open_industry_ids"]) == set(cat["open_industry_ids"])
+    assert "涂料" in filtered["open_industry_ids"]
+    assert "考勤" in filtered["open_industry_ids"]
     assert all(p["selectable"] for p in filtered["open_packages"])
 
 
-def test_onboarding_catalog_filtered_coating_only():
+def test_onboarding_catalog_open_industries_stay_selectable_empty_entitlement():
+    # 新注册企业账号空权益时,开放引导行业一律可选(这是手机端选不到注册行业的根因修复)。
     from app.mod_sdk.industry_baseline import (
         build_onboarding_industry_catalog,
         filter_onboarding_catalog_for_entitlements,
     )
 
     cat = build_onboarding_industry_catalog()
-    filtered = filter_onboarding_catalog_for_entitlements(cat, {"sz-qsm-pro"})
-    assert filtered["open_industry_ids"] == ["涂料"]
+    filtered = filter_onboarding_catalog_for_entitlements(cat, set())
+    assert set(filtered["open_industry_ids"]) == set(cat["open_industry_ids"])
+    assert all(p["selectable"] for p in filtered["open_packages"])
 
 
 def test_onboarding_catalog_both_entitled():
@@ -200,7 +209,7 @@ def test_onboarding_catalog_both_entitled():
     filtered = filter_onboarding_catalog_for_entitlements(
         cat, {"taiyangniao-pro", "sz-qsm-pro", "attendance-industry"}
     )
-    assert set(filtered["open_industry_ids"]) == {"涂料", "考勤"}
+    assert {"涂料", "考勤"}.issubset(set(filtered["open_industry_ids"]))
 
 
 @pytest.mark.asyncio
@@ -241,7 +250,8 @@ async def test_onboarding_catalog_request_uses_authorization_session(monkeypatch
 
     assert called["sync"] is True
     assert catalog["enterprise_filter_applied"] is True
-    assert catalog["open_industry_ids"] == ["考勤"]
+    # 开放引导行业不再被客户 Mod 权益裁剪:涂料/考勤均保持可选
+    assert catalog["open_industry_ids"] == ["涂料", "考勤"]
 
 
 @pytest.mark.asyncio

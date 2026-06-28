@@ -31,7 +31,7 @@ async def test_mobile_admin_codex_messages_lists_user_scoped_messages(ext_mod):
             return [{"id": "m1", "role": "assistant", "body": "ready"}]
 
     with (
-        patch.object(ext_mod, "_require_mobile_admin_or_enterprise", return_value=({}, None)),
+        patch.object(ext_mod, "_require_mobile_admin", return_value=({}, None)),
         patch.object(ext_mod, "CodexSuperEmployeeService", return_value=FakeCodexService()),
     ):
         response = await ext_mod.mobile_admin_codex_super_employee_messages(
@@ -61,7 +61,7 @@ async def test_mobile_admin_codex_messages_uses_bearer_user_id_when_user_is_deta
 
     request = SimpleNamespace(headers={"Authorization": "Bearer token-1"})
     with (
-        patch.object(ext_mod, "_require_mobile_admin_or_enterprise", return_value=({}, None)),
+        patch.object(ext_mod, "_require_mobile_admin", return_value=({}, None)),
         patch("app.security.mobile_jwt.user_id_from_mobile_bearer", return_value=11),
         patch.object(ext_mod, "CodexSuperEmployeeService", return_value=FakeCodexService()),
     ):
@@ -91,7 +91,7 @@ async def test_mobile_admin_codex_invoke_passes_mobile_context(ext_mod):
 
     body = ext_mod.CodexSuperEmployeeMobileMessageBody(message="手机派工", context={})
     with (
-        patch.object(ext_mod, "_require_mobile_admin_or_enterprise", return_value=({}, None)),
+        patch.object(ext_mod, "_require_mobile_admin", return_value=({}, None)),
         patch.object(ext_mod, "CodexSuperEmployeeService", return_value=FakeCodexService()),
     ):
         response = await ext_mod.mobile_admin_codex_super_employee_invoke(
@@ -118,7 +118,7 @@ async def test_mobile_admin_codex_requires_mobile_admin(ext_mod):
         status_code=403,
     )
     body = ext_mod.CodexSuperEmployeeMobileMessageBody(message="run")
-    with patch.object(ext_mod, "_require_mobile_admin_or_enterprise", return_value=({}, denied)):
+    with patch.object(ext_mod, "_require_mobile_admin", return_value=({}, denied)):
         response = await ext_mod.mobile_admin_codex_super_employee_invoke(
             SimpleNamespace(headers={}),
             body=body,
@@ -137,7 +137,7 @@ async def test_mobile_admin_codex_invoke_rejects_empty_message(ext_mod):
 
     body = ext_mod.CodexSuperEmployeeMobileMessageBody(message="")
     with (
-        patch.object(ext_mod, "_require_mobile_admin_or_enterprise", return_value=({}, None)),
+        patch.object(ext_mod, "_require_mobile_admin", return_value=({}, None)),
         patch.object(ext_mod, "CodexSuperEmployeeService", return_value=FakeCodexService()),
     ):
         response = await ext_mod.mobile_admin_codex_super_employee_invoke(
