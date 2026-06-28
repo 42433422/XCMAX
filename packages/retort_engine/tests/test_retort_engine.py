@@ -5,8 +5,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _llm_absorption_evidence, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
 from retort_engine.core import _is_generated_absorption_file, _is_exempt_git_status_path
 from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
@@ -535,8 +533,10 @@ def test_llm_disabled_semantics_are_consistent(tmp_path: Path) -> None:
     assert attached["llm_review"]["status"] == "disabled"
     assert attached["metadata"]["score_source"] == "paibi_llm_disabled"
 
-    with pytest.raises(RuntimeError, match="PaiBi LLM scoring is required"):
-        _attach_llm_scoring({"require_deep_review": True}, {"metadata": {}}, project, "assess", "", "", [])
+    required = _attach_llm_scoring({"require_deep_review": True}, {"metadata": {}}, project, "assess", "", "", [])
+    assert required["metadata"]["score_source"] == "paibi_llm_required_but_disabled"
+    assert required["metadata"]["llm_decision"] == "blocked_llm_disabled"
+    assert required["metadata"]["llm_score_gate"]["scores_ready"] is False
 
 
 def test_blocking_git_status_exempts_generated_absorption_outputs(tmp_path: Path) -> None:
@@ -887,6 +887,45 @@ def test_paibi_parallel_review_uses_same_device_multi_tool_slots(tmp_path: Path,
     assert len({call["device_id"] for call in calls}) == 1
 
 
+def test_paibi_tool_selection_skips_running_empty_current_task_slot() -> None:
+    client = PaibiLLMClient(api_url="disabled")
+    device = {
+        "id": "primary",
+        "status": "online",
+        "devTool": "codex",
+        "capabilities": {"codex_cli": True},
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": ""},
+            {"toolName": "cursor", "status": "idle"},
+            {"toolName": "trae", "status": "busy"},
+        ],
+    }
+
+    assert client._device_tool_candidates(device) == ["cursor"]
+
+
+def test_paibi_tool_selection_does_not_fallback_to_capabilities_when_tools_exist() -> None:
+    client = PaibiLLMClient(api_url="disabled")
+    device = {
+        "id": "primary",
+        "status": "online",
+        "devTool": "codex",
+        "capabilities": {"codex_cli": True},
+        "tools": [
+            {"toolName": "codex", "status": "running", "currentTask": ""},
+            {"toolName": "cursor", "status": "not_installed"},
+        ],
+    }
+
+    assert client._device_tool_candidates(device) == []
+
+
+def test_paibi_tool_selection_keeps_legacy_no_tools_fallback() -> None:
+    client = PaibiLLMClient(api_url="disabled")
+    assert client._device_tool_candidates({"id": "legacy", "status": "online", "devTool": "codex"}) == ["codex"]
+    assert client._device_tool_candidates({"id": "legacy", "status": "online", "capabilities": {"codex_cli": True}}) == ["codex"]
+
+
 def test_paibi_parallel_status_reports_unblock_tasks(monkeypatch) -> None:
     def fake_fetch_task(self: PaibiLLMClient, task_id: str) -> dict[str, object]:
         return {
@@ -947,7 +986,7 @@ def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, m
     assert scores["employee_execution_integration"] == 70
 
 
-def test_service_assess_rejects_local_score_when_deep_review_required(tmp_path: Path, monkeypatch) -> None:
+def test_service_assess_keeps_pending_gate_when_deep_review_is_not_ready(tmp_path: Path, monkeypatch) -> None:
     project = tmp_path / "own"
     project.mkdir()
     (project / "README.md").write_text("# Own\n", encoding="utf-8")
@@ -961,5 +1000,11 @@ def test_service_assess_rejects_local_score_when_deep_review_required(tmp_path: 
     monkeypatch.setattr("retort_engine.core.request_paibi_llm_review", fake_request)
     monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", fake_wait)
 
-    with pytest.raises(RuntimeError, match="deep review did not complete"):
-        RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1, "require_deep_review": True})
+    result = RetortService().assess({"project": str(project), "use_llm": True, "wait_llm_sec": 1, "require_deep_review": True})
+
+    assert result["scores"] == []
+    assert result["metadata"]["score_source"] == "paibi_llm_pending"
+    assert result["metadata"]["llm_decision"] == "awaiting_scores"
+    assert result["metadata"]["llm_required"] is True
+    assert result["metadata"]["llm_task_id"] == "task-pending"
+    assert result["llm_pending_score"]["decision"] == "awaiting_scores"

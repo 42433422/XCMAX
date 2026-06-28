@@ -9,6 +9,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.generalization_proof import write_generalization_proof
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
@@ -147,6 +148,10 @@ def main(argv: list[str] | None = None) -> int:
     scheduler_stress.add_argument("--tasks-per-round", type=int, default=3)
     scheduler_stress.add_argument("--output", default="")
     scheduler_stress.add_argument("--json", action="store_true")
+    generalization = sub.add_parser("generalization-proof-report")
+    generalization.add_argument("--project", default=".")
+    generalization.add_argument("--output", default="")
+    generalization.add_argument("--json", action="store_true")
     radar = sub.add_parser("similar-project-radar")
     radar.add_argument("--project", default=".")
     radar.add_argument("--query", default="AI PR reviewer")
@@ -374,6 +379,15 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Completed: {result['summary']['completed_result_count']}")
             if args.output:
                 print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "generalization-proof-report":
+        result = write_generalization_proof(args.project, args.output or None)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort generalization proof status: {result['status']}")
+            print(f"Languages: {result['summary']['language_count']}")
+            print(f"Output: {result['output']}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "similar-project-radar":
         result = build_similar_project_radar(args.project, query=args.query, limit=args.limit, min_score=args.min_score)
