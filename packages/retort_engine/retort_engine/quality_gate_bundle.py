@@ -13,7 +13,7 @@ from retort_engine.contracts import contract_names, validate_contract
 
 GateRunner = Callable[[list[str], Path], dict[str, Any]]
 TEST_DENSITY_FLOOR = 0.4
-TEST_DENSITY_TARGET = 0.6
+TEST_DENSITY_TARGET = 0.8
 
 
 def run_quality_gate_bundle(
@@ -96,12 +96,13 @@ def _test_density_gate(root: Path) -> dict[str, Any]:
     missing = max(0, target_lines - test_lines)
     floor_passed = ratio >= TEST_DENSITY_FLOOR
     target_met = ratio >= TEST_DENSITY_TARGET
+    passed = floor_passed and target_met
     return {
         "name": "test_density",
         "kind": "in_process",
         "command": ["retort", "test-density"],
-        "ok": floor_passed,
-        "returncode": 0 if floor_passed else 1,
+        "ok": passed,
+        "returncode": 0 if passed else 1,
         "test_to_source_ratio": ratio,
         "source_line_count": source_lines,
         "test_line_count": test_lines,
@@ -110,7 +111,7 @@ def _test_density_gate(root: Path) -> dict[str, Any]:
         "target_met": target_met,
         "missing_test_lines_to_target": missing,
         "stdout_tail": f"test_to_source_ratio={ratio}; target={TEST_DENSITY_TARGET}; missing_test_lines_to_target={missing}",
-        "stderr_tail": "" if floor_passed else "test density below Retort floor",
+        "stderr_tail": "" if passed else "test density below Retort target",
     }
 
 

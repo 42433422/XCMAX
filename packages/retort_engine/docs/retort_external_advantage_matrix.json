@@ -10,6 +10,7 @@
     ],
     "baseline_model": "pre_absorption_keyword_review_without_context_groups_publish_anchors_or_extension_policy",
     "comparison": "same_external_advantage_cases_replayed_before_after_absorption",
+    "independent_adjudicator": "retort_engine.external_advantage_adjudicator.adjudicate_external_advantage_rows",
     "regression_test_module": "tests/test_external_advantage_regression.py",
     "regression_verifier": "retort_engine.external_advantage_regression.verify_external_advantage_rows",
     "retort_model": "retort_engine.pr_review.review_diff",
@@ -21,6 +22,101 @@
       "swe-bench/SWE-bench",
       "yamadashy/repomix"
     ]
+  },
+  "independent_adjudication": {
+    "adjudications": [
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "pr-agent-secret-context",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "qodo-ai/pr-agent"
+      },
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "reviewdog-workflow-token",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "reviewdog/reviewdog"
+      },
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "swe-bench-oracle-placeholder",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "swe-bench/SWE-bench"
+      },
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "import-linter-contract-bypass",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "seddonym/import-linter"
+      },
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "repomix-context-package-clean",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "yamadashy/repomix"
+      },
+      {
+        "accepted": true,
+        "baseline_recomputed_score": 35,
+        "case_id": "mopemope-typescript-diff-review",
+        "checks": {
+          "extension_policy_or_context": true,
+          "positive_delta": true,
+          "severity_context_publishability": true
+        },
+        "recomputed_delta": 65,
+        "retort_recomputed_score": 100,
+        "source_project": "mopemope/pr-ai-review-bot"
+      }
+    ],
+    "evidence": {
+      "adjudicator": "retort_engine.external_advantage_adjudicator",
+      "independence_boundary": "consumes_serialized_matrix_rows_without_calling_review_diff_or_matrix_scoring"
+    },
+    "status": "ready",
+    "summary": {
+      "accepted_case_count": 6,
+      "adjudicated_case_count": 6,
+      "all_cases_accepted": true,
+      "average_recomputed_delta": 65.0,
+      "minimum_recomputed_delta": 65,
+      "severity_context_publishability_all_verified": true
+    }
   },
   "matrix": [
     {
@@ -387,6 +483,11 @@
     "behavior_delta_count": 6,
     "case_count": 6,
     "extension_policy_case_count": 6,
+    "independent_accepted_case_count": 6,
+    "independent_adjudicated_case_count": 6,
+    "independent_adjudication_status": "ready",
+    "independent_all_cases_accepted": true,
+    "independent_minimum_recomputed_delta": 65,
     "min_case_count": 6,
     "passed_regression_case_count": 6,
     "per_case_before_after": true,

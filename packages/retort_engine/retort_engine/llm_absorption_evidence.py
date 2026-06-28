@@ -157,6 +157,9 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_cross_language_transfer_families={pr_review.get('cross_language_transfer_family_count')}",
         f"pr_review_cross_language_transfer_core_mapping={pr_review.get('cross_language_transfer_core_mapping')}",
         f"pr_review_cross_language_transfer_comments={pr_review.get('cross_language_transfer_comment_count')}",
+        f"pr_review_cross_language_transfer_top_ranked={pr_review.get('cross_language_transfer_top_ranked')}",
+        f"pr_review_cross_language_transfer_core_score_active={pr_review.get('cross_language_transfer_core_score_active')}",
+        f"pr_review_cross_language_transfer_max_rank_score={pr_review.get('cross_language_transfer_max_rank_score')}",
     ]
 
 
@@ -387,6 +390,11 @@ def _report_evidence(project: Path) -> list[str]:
         f"external_advantage_matrix_all_delta_regressions_verified={external_matrix_summary.get('all_delta_regressions_verified', '')}",
         f"external_advantage_matrix_regression_verifier={(external_matrix.get('evidence') or {}).get('regression_verifier', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
         f"external_advantage_matrix_regression_test_module={(external_matrix.get('evidence') or {}).get('regression_test_module', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
+        f"external_advantage_matrix_independent_adjudication={external_matrix_summary.get('independent_adjudication_status', '')}",
+        f"external_advantage_matrix_independent_accepted={external_matrix_summary.get('independent_accepted_case_count', '')}/{external_matrix_summary.get('independent_adjudicated_case_count', '')}",
+        f"external_advantage_matrix_independent_min_delta={external_matrix_summary.get('independent_minimum_recomputed_delta', '')}",
+        f"external_advantage_matrix_independent_all_accepted={external_matrix_summary.get('independent_all_cases_accepted', '')}",
+        f"external_advantage_matrix_independent_adjudicator={(external_matrix.get('evidence') or {}).get('independent_adjudicator', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
         f"external_advantage_repeat_status={external_repeat.get('status', '')}",
         f"external_advantage_repeat_ready={external_repeat_summary.get('ready_repeat_count', '')}/{external_repeat_summary.get('repeat_count', '')}",
         f"external_advantage_repeat_total_case_evaluations={external_repeat_summary.get('total_case_evaluation_count', '')}",

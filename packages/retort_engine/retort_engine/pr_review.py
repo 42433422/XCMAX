@@ -86,6 +86,7 @@ def review_diff(
         feedback_context_weights=feedback_context_weights,
     )
     risk_counts = _risk_counts(comments)
+    core_score = _core_review_score_summary(comments)
     file_summaries = [
         _file_summary(
             str(file_review["path"]),
@@ -121,11 +122,12 @@ def review_diff(
         "employee_feedback_ranked": bool(feedback_context_weights),
         "absorbed_review_source": str(context_bias.get("source") or ""),
         "risk_counts": risk_counts,
+        "core_review_score": core_score,
         "static_analysis": static_analysis["summary"],
         "cross_language_transfer": cross_language_transfer["summary"],
         "intent_alignment": intent_alignment["summary"],
         "deep_review_pipeline": True,
-        "comment_ranking_model": "severity_context_transfer_publishability_v2",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "large_diff_chunking": large_diff_chunking,
         "large_diff_chunk_count": len(context_groups) if large_diff_chunking else (1 if files else 0),
         "large_diff_context_balancing": large_diff_chunking,
@@ -505,6 +507,22 @@ def _feedback_context_map(dimension: str) -> dict[str, int]:
     }.get(dimension, {})
 
 
+def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]:
+    scores = [int(comment.get("rank_score") or 0) for comment in comments]
+    cross_language_comments = [comment for comment in comments if comment.get("capability") == "cross_language_transfer"]
+    top_comment = comments[0] if comments else {}
+    return {
+        "model": "severity_context_transfer_publishability_v3",
+        "max_rank_score": max(scores) if scores else 0,
+        "min_rank_score": min(scores) if scores else 0,
+        "ranked_comment_count": len(comments),
+        "cross_language_ranked_comment_count": len(cross_language_comments),
+        "cross_language_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in cross_language_comments] or [0]),
+        "cross_language_top_ranked": bool(top_comment.get("capability") == "cross_language_transfer"),
+        "cross_language_core_behavior_active": bool(cross_language_comments),
+    }
+
+
 def _comment_rank_score(comment: dict[str, Any]) -> int:
     severity_weight = {"high": 400, "medium": 300, "low": 200, "info": 100}.get(str(comment.get("severity") or ""), 0)
     context_weight = {
@@ -517,7 +535,7 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
         "docs": 20,
         "other": 10,
     }.get(str(comment.get("review_context") or "other"), 10)
-    capability_weight = {"static_analysis": 45, "cross_language_transfer": 40, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    capability_weight = {"static_analysis": 45, "cross_language_transfer": 95, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
     absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)
     absorbed_policy_weight = int(comment.get("absorbed_policy_rank_weight") or 0)
     calibration_weight = int(comment.get("calibration_rank_weight") or 0)

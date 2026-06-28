@@ -61,7 +61,7 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["calibration_policy"]["enabled"] is True
     assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
-    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v2"
+    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v3"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
@@ -257,7 +257,26 @@ diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
     assert {comment["review_context"] for comment in transfer_comments} >= {"ci_config", "config", "runtime"}
     assert {comment["file"] for comment in transfer_comments} >= {".github/workflows/review.yml", "src/reviewer.ts", "retort_engine/review_bridge.py"}
     assert transfer_comments[0]["rank_reason"].startswith("high:ci_config:cross_language_transfer")
+    assert result["summary"]["core_review_score"]["cross_language_core_behavior_active"] is True
+    assert result["summary"]["core_review_score"]["cross_language_ranked_comment_count"] == len(transfer_comments)
+    assert result["summary"]["core_review_score"]["cross_language_top_ranked"] is True
     assert result["cross_language_transfer"]["evidence"]["source"] == "absorbed_pr_bot_cross_language_transfer"
+
+
+def test_cross_language_transfer_weight_changes_core_comment_ordering() -> None:
+    diff = """diff --git a/app/runtime.py b/app/runtime.py
+--- a/app/runtime.py
++++ b/app/runtime.py
+@@ -0,0 +1,2 @@
++# TODO: normal runtime cleanup
++subprocess.Popen(["retort-worker"])
+"""
+
+    result = review_diff(diff, max_comments=2)
+
+    assert result["comments"][0]["capability"] == "cross_language_transfer"
+    assert result["comments"][0]["rank_score"] > result["comments"][1]["rank_score"]
+    assert result["summary"]["core_review_score"]["cross_language_top_ranked"] is True
 
 
 def test_review_diff_surfaces_issue_intent_mismatch() -> None:
