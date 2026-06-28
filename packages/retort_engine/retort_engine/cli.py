@@ -184,7 +184,7 @@ def main(argv: list[str] | None = None) -> int:
     continuity_probe.add_argument("--json", action="store_true")
     hardening_run = sub.add_parser("record-hardening-run")
     hardening_run.add_argument("--project", default=".")
-    hardening_run.add_argument("--worker-count", type=int, default=3)
+    hardening_run.add_argument("--worker-count", type=int, default=5)
     hardening_run.add_argument("--output", default="")
     hardening_run.add_argument("--json", action="store_true")
     complex_replay = sub.add_parser("complex-pr-replay")

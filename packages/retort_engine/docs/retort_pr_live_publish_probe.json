@@ -1,24 +1,28 @@
 {
   "created_receipts": [
     {
-      "body_marker": "retort-live-probe:3713faf929c7",
-      "comment_id": "4818319191",
+      "body_marker": "retort-live-probe:54138927000b",
+      "comment_id": "4824533736",
       "created": true,
-      "html_url": "https://github.com/42433422/XCMAX/pull/97#issuecomment-4818319191",
+      "html_url": "https://github.com/42433422/XCMAX/pull/99#issuecomment-4824533736",
       "target": "pull_request_conversation"
     }
   ],
   "evidence": {
     "api": "GitHub REST issues comments",
     "base_ref": "main",
-    "head_ref": "claude/nifty-lovelace-4c1566",
+    "degradation": "",
+    "head_ref": "claude/musing-roentgen-affc4b",
+    "real_network": true,
+    "required_permission": "issues:write or pull_requests:write",
     "target_is_pull_request": true,
-    "token_redacted": true
+    "token_redacted": true,
+    "transport": "github_rest"
   },
-  "pr_url": "https://github.com/42433422/XCMAX/pull/97",
+  "pr_url": "https://github.com/42433422/XCMAX/pull/99",
   "rollback_receipts": [
     {
-      "comment_id": "4818319191",
+      "comment_id": "4824533736",
       "deleted": true,
       "response": {},
       "status_code": 204
@@ -27,12 +31,14 @@
   "status": "live_rolled_back",
   "summary": {
     "created_comment_count": 1,
-    "duration_sec": 6.252,
+    "degraded_without_write": false,
+    "duration_sec": 5.718,
     "live_github_write": true,
     "permission_admin": true,
+    "permission_denied": false,
     "permission_maintain": true,
     "permission_push": true,
-    "pull_number": 97,
+    "pull_number": 99,
     "pull_status": 200,
     "repo_status": 200,
     "rollback_verified": true,

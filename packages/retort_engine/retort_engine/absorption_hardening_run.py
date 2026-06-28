@@ -18,7 +18,7 @@ def record_post_absorption_hardening_run(
     *,
     output: str | Path = "",
     python_executable: str = "",
-    worker_count: int = 3,
+    worker_count: int = 5,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     started = time.monotonic()
@@ -117,6 +117,18 @@ def _hardening_tasks(run_id: str) -> list[dict[str, Any]]:
             "Recheck external advantage regression after hardening",
             "comparative_analysis_depth",
             "External behavior migration must remain reproducible after the hardening diff.",
+        ),
+        (
+            "prove-live-publish",
+            "Verify live PR publish rollback evidence is present",
+            "product_operability",
+            "Retort must prove real write-and-rollback publication readiness, not only dry-run degradation.",
+        ),
+        (
+            "prove-worker-scale",
+            "Verify scaled employee worker fan-out evidence",
+            "employee_execution_integration",
+            "Absorption follow-up needs multiple independent workers with separate result artifacts.",
         ),
     ]
     return [

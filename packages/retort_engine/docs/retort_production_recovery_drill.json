@@ -2,6 +2,7 @@
   "evidence": {
     "no_secret_material": true,
     "source_reports": [
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json",
       "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_readonly_degradation_probe.json",
       "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_low_permission_probe.json",
       "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_publish_sandbox.json",
@@ -12,6 +13,16 @@
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "scenarios": [
+    {
+      "degraded_without_write": false,
+      "live_github_write": true,
+      "name": "live_write_rollback",
+      "real_network": true,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_live_publish_probe.json",
+      "rollback_verified": true,
+      "status": "live_rolled_back"
+    },
     {
       "degraded_without_write": true,
       "live_github_write": false,
@@ -67,9 +78,10 @@
   "summary": {
     "all_recovered": true,
     "degradation_scenario_count": 2,
+    "live_write_rollback_verified": true,
     "real_network_denial_verified": true,
-    "recovered_count": 5,
-    "rollback_scenario_count": 4,
-    "scenario_count": 5
+    "recovered_count": 6,
+    "rollback_scenario_count": 5,
+    "scenario_count": 6
   }
 }

@@ -8,6 +8,7 @@ from typing import Any
 def build_production_recovery_drill(project: str | Path, *, output: str | Path = "") -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     scenarios = [
+        _scenario("live_write_rollback", root / "docs" / "retort_pr_live_publish_probe.json", _live_write_recovered),
         _scenario("readonly_degradation", root / "docs" / "retort_pr_readonly_degradation_probe.json", _readonly_recovered),
         _scenario("low_permission_write_denied", root / "docs" / "retort_pr_low_permission_probe.json", _low_permission_recovered),
         _scenario("sandbox_write_rollback", root / "docs" / "retort_pr_publish_sandbox.json", _sandbox_recovered),
@@ -20,11 +21,12 @@ def build_production_recovery_drill(project: str | Path, *, output: str | Path =
         "recovered_count": len(recovered),
         "all_recovered": len(recovered) == len(scenarios),
         "real_network_denial_verified": any(item["name"] == "low_permission_write_denied" and item["real_network"] and item["recovered"] for item in scenarios),
+        "live_write_rollback_verified": any(item["name"] == "live_write_rollback" and item["live_github_write"] and item["rollback_verified"] for item in scenarios),
         "rollback_scenario_count": sum(1 for item in scenarios if item["rollback_verified"]),
         "degradation_scenario_count": sum(1 for item in scenarios if item["degraded_without_write"]),
     }
     result = {
-        "status": "ready" if summary["all_recovered"] and summary["real_network_denial_verified"] else "needs_more_evidence",
+        "status": "ready" if summary["all_recovered"] and summary["real_network_denial_verified"] and summary["live_write_rollback_verified"] else "needs_more_evidence",
         "project": str(root),
         "summary": summary,
         "scenarios": scenarios,
@@ -61,6 +63,11 @@ def _scenario(name: str, path: Path, checker: Any) -> dict[str, Any]:
 def _readonly_recovered(payload: dict[str, Any]) -> bool:
     summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
     return str(payload.get("status") or "") == "read_only_degraded" and bool(summary.get("degraded_without_write"))
+
+
+def _live_write_recovered(payload: dict[str, Any]) -> bool:
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    return str(payload.get("status") or "") == "live_rolled_back" and bool(summary.get("live_github_write")) and bool(summary.get("rollback_verified"))
 
 
 def _low_permission_recovered(payload: dict[str, Any]) -> bool:
