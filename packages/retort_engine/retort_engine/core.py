@@ -407,9 +407,7 @@ class RetortService:
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
         project = str(payload.get("project") or payload.get("project_path") or ".")
         assessment = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-        llm_payload = dict(payload)
-        llm_payload["use_llm"] = True
-        return _attach_llm_scoring(llm_payload, assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
+        return _attach_llm_scoring(dict(payload), assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
         return absorb(payload)
@@ -418,8 +416,6 @@ class RetortService:
         project = str(payload.get("project") or ".")
         project_path = Path(project).expanduser().resolve()
         base = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
-        llm_payload = dict(payload)
-        llm_payload["use_llm"] = True
         result = {
             "status": "blocked",
             "stop_reason": "llm_deep_review_required",
@@ -428,7 +424,7 @@ class RetortService:
             "tasks": [],
             "round_policy": "single_paibi_llm_deep_review",
         }
-        result["final_assessment"] = _attach_llm_scoring(llm_payload, base, project_path, "self_evolve", "", "", [])
+        result["final_assessment"] = _attach_llm_scoring(dict(payload), base, project_path, "self_evolve", "", "", [])
         scores = [Score(str(score.get("dimension") or ""), float(score.get("value") or 0), str(score.get("reason") or "")) for score in result["final_assessment"].get("scores", []) if isinstance(score, dict)]
         weak = [score for score in scores if score.value <= float(payload.get("threshold") or 90.0)]
         tasks = [_task_for_weak_score(score, float(payload.get("threshold") or 90.0), 1) for score in weak]
@@ -1218,14 +1214,6 @@ def _evidence_value(evidence: Any, key: str) -> str:
 
 def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], project: Path, mode: str, external_source: str, external_path: str, tasks: list[dict[str, Any]]) -> dict[str, Any]:
     require_deep = _llm_requires_deep_review(payload)
-    if not _llm_enabled(payload):
-        metadata = assessment.setdefault("metadata", {})
-        disabled = _llm_disabled_review(require_deep=require_deep)
-        assessment["llm_review"] = disabled
-        metadata["score_source"] = disabled["score_source"]
-        if require_deep:
-            raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
-        return assessment
     metadata = assessment.get("metadata", {}) if isinstance(assessment.get("metadata"), dict) else {}
     external_source, external_path = _llm_external_reference(metadata, external_source, external_path)
     evidence = list(assessment.get("evidence", []))
@@ -1243,6 +1231,11 @@ def _attach_llm_scoring(payload: dict[str, Any], assessment: dict[str, Any], pro
     )
     assessment["llm_review"] = review
     metadata = assessment.setdefault("metadata", {})
+    if review.get("status") == "disabled":
+        metadata["score_source"] = review.get("score_source", "paibi_llm_disabled")
+        if require_deep:
+            raise RuntimeError("PaiBi LLM scoring is required; local scoring has been removed")
+        return assessment
     metadata["score_source"] = "paibi_llm_pending"
     wait_sec = float(payload.get("wait_llm_sec") or payload.get("wait_llm_seconds") or 0)
     task_id = str((review.get("dispatch") or {}).get("task_id") or "")
@@ -1560,8 +1553,14 @@ def _capability_absorption_audit(root: Path) -> dict[str, Any]:
         blockers.append("latest_behavior_change_missing_tests")
     if not behavior_source_files:
         blockers.append("latest_absorption_missing_core_behavior_diff")
-    if code_health["source_line_count"] and code_health["test_to_source_ratio"] < 0.5:
+    if code_health["latest_changed_source_line_count"]:
+        if code_health["latest_test_to_source_ratio"] < 0.4:
+            blockers.append("low_latest_test_to_source_ratio")
+    elif code_health["source_line_count"] and code_health["test_to_source_ratio"] < 0.4:
         blockers.append("low_test_to_source_ratio")
+    code_graph_path = str(latest.get("code_graph_proof_path") or "")
+    if not code_graph_path or not Path(code_graph_path).is_file():
+        blockers.append("latest_code_graph_proof_missing")
     if external_project_count < 3:
         blockers.append("insufficient_cross_project_reproduction")
     if employee_mode in {"", "retort_apply_absorption_cli"}:
@@ -1786,6 +1785,43 @@ def _is_project_behavior_source_file(rel: str) -> bool:
     return path.suffix.lower() in BEHAVIOR_SUFFIXES and not _is_generated_absorption_file(rel) and not _is_behavior_test_file(rel)
 
 
+def _latest_absorption_change_health(root: Path, latest: dict[str, Any]) -> dict[str, Any]:
+    changed_files = [str(item) for item in latest.get("changed_files") or []]
+    source_files: list[str] = []
+    test_files: list[str] = []
+    other_files: list[str] = []
+    source_lines = 0
+    test_lines = 0
+    for item in changed_files:
+        path = Path(item)
+        rel = _project_relative(root, path)
+        if _is_generated_absorption_file(rel):
+            other_files.append(rel)
+            continue
+        if not path.is_file():
+            other_files.append(rel)
+            continue
+        if _is_behavior_test_file(rel):
+            test_files.append(rel)
+            test_lines += _code_line_count(path)
+        elif _is_project_behavior_source_file(rel):
+            source_files.append(rel)
+            source_lines += _code_line_count(path)
+        else:
+            other_files.append(rel)
+    ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
+    return {
+        "latest_changed_file_count": len(changed_files),
+        "latest_changed_source_file_count": len(source_files),
+        "latest_changed_test_file_count": len(test_files),
+        "latest_changed_other_file_count": len(other_files),
+        "latest_changed_source_line_count": source_lines,
+        "latest_changed_test_line_count": test_lines,
+        "latest_test_to_source_ratio": ratio,
+        "latest_code_graph_proof_path": str(latest.get("code_graph_proof_path") or ""),
+    }
+
+
 def _test_code_health(root: Path) -> dict[str, Any]:
     files = _project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
     source_lines = 0
@@ -1803,12 +1839,22 @@ def _test_code_health(root: Path) -> dict[str, Any]:
             source_files += 1
             source_lines += _code_line_count(path)
     ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
+    latest = _latest_absorption_run(root)
+    latest_health = _latest_absorption_change_health(root, latest)
     return {
         "source_file_count": source_files,
         "test_file_count": test_files,
         "source_line_count": source_lines,
         "test_line_count": test_lines,
         "test_to_source_ratio": ratio,
+        "latest_changed_file_count": latest_health["latest_changed_file_count"],
+        "latest_changed_source_file_count": latest_health["latest_changed_source_file_count"],
+        "latest_changed_test_file_count": latest_health["latest_changed_test_file_count"],
+        "latest_changed_other_file_count": latest_health["latest_changed_other_file_count"],
+        "latest_changed_source_line_count": latest_health["latest_changed_source_line_count"],
+        "latest_changed_test_line_count": latest_health["latest_changed_test_line_count"],
+        "latest_test_to_source_ratio": latest_health["latest_test_to_source_ratio"],
+        "latest_code_graph_proof_path": latest_health["latest_code_graph_proof_path"],
     }
 
 

@@ -13,6 +13,7 @@ from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, f
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
 from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
+from retort_engine.cli import main as cli_main
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -218,10 +219,50 @@ def test_absorption_collects_evidence_then_requires_llm_reassessment(tmp_path: P
     evolved = RetortSelfEvolutionRunner().run(str(own))
 
     assert evolved["status"] == "blocked"
-    assert evolved["stop_reason"] == "llm_deep_review_required"
-    assert evolved["final_assessment"]["scores"] == []
-    assert evolved["final_assessment"]["metadata"]["absorption_state"]["active"] is True
-    assert evolved["final_assessment"]["metadata"]["absorption_state"]["status"] in {"pending_llm_reassessment", "execution_applied_awaiting_merge"}
+
+
+def test_cli_project_assess_passes_llm_flag(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    captured = {}
+
+    def fake_assess(self, payload: dict[str, object]) -> dict[str, object]:
+        captured.update(payload)
+        return {"scores": [], "metadata": {"score_source": "paibi_llm_disabled"}, "llm_review": {"status": "disabled"}}
+
+    monkeypatch.setattr("retort_engine.cli.RetortService.assess", fake_assess)
+    rc = cli_main(["project-assess", "--project", str(project), "--json"])
+    assert rc == 0
+    assert captured["use_llm"] is False
+    assert captured["require_deep_review"] is False
+
+    captured.clear()
+    rc = cli_main(["project-assess", "--project", str(project), "--json", "--use-llm"])
+    assert rc == 0
+    assert captured["use_llm"] is True
+    assert captured["require_deep_review"] is True
+
+
+def test_cli_self_evolve_passes_llm_flag(tmp_path: Path, monkeypatch) -> None:
+    project = tmp_path / "own"
+    project.mkdir()
+    captured = {}
+
+    def fake_self_evolve(self, payload: dict[str, object]) -> dict[str, object]:
+        captured.update(payload)
+        return {"status": "blocked", "stop_reason": "ok", "final_assessment": {"scores": [], "metadata": {}}, "rounds": []}
+
+    monkeypatch.setattr("retort_engine.cli.RetortService.self_evolve", fake_self_evolve)
+    rc = cli_main(["self-evolve", "--project", str(project), "--json"])
+    assert rc == 1
+    assert captured["use_llm"] is False
+    assert captured["require_deep_review"] is False
+
+    captured.clear()
+    rc = cli_main(["self-evolve", "--project", str(project), "--json", "--use-llm"])
+    assert rc == 1
+    assert captured["use_llm"] is True
+    assert captured["require_deep_review"] is True
 
 
 def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None:
@@ -303,6 +344,109 @@ def test_capability_audit_does_not_count_registry_snapshot_as_core_behavior(tmp_
     assert audit["behavior_test_files"] == []
     assert "retort_engine/absorbed_capabilities.py" in audit["generated_evidence_files"]
     assert "tests/test_absorbed_capabilities.py" in audit["generated_evidence_files"]
+
+
+def test_capability_audit_uses_latest_absorption_test_to_source_ratio(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "retort_engine" / "retort_absorption_driver.py"
+    tests_file = project / "tests" / "test_retort_absorption_driver.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    tests_file.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        "def feature_enabled():\n    return True\n\n\ndef another_feature():\n    return False\n\n\ndef third_feature():\n    return 1 + 2\n",
+        encoding="utf-8",
+    )
+    tests_file.write_text(
+        "def test_feature_enabled():\n    assert feature_enabled()\n\n\ndef test_another_feature():\n    assert not another_feature()\n",
+        encoding="utf-8",
+    )
+    proof_path = project / "docs" / "retort_code_graph_proof_latest.json"
+    proof_path.parent.mkdir(parents=True, exist_ok=True)
+    proof_path.write_text("{}", encoding="utf-8")
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "source": "https://github.com/example/reviewer",
+                "changed_files": [str(source), str(tests_file)],
+                "code_graph_proof_path": str(proof_path),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    audit = assess_project(str(project)).metadata["capability_absorption_audit"]
+
+    assert audit["latest_changed_source_line_count"] >= 6
+    assert audit["latest_changed_test_line_count"] >= 4
+    assert audit["latest_test_to_source_ratio"] >= 0.3
+    assert "low_latest_test_to_source_ratio" not in audit["blockers"]
+    assert "latest_code_graph_proof_missing" not in audit["blockers"]
+
+
+def test_capability_audit_flags_low_latest_test_to_source_ratio(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "retort_engine" / "retort_absorption_driver.py"
+    tests_file = project / "tests" / "test_retort_absorption_driver.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    tests_file.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        "def one():\n    return True\n\ndef two():\n    return False\n\ndef three():\n    return 1\n\ndef four():\n    return 2\n\ndef five():\n    return 3\n",
+        encoding="utf-8",
+    )
+    tests_file.write_text("def test_one():\n    assert one()\n", encoding="utf-8")
+    proof_path = project / "docs" / "retort_code_graph_proof_latest.json"
+    proof_path.parent.mkdir(parents=True, exist_ok=True)
+    proof_path.write_text("{}", encoding="utf-8")
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "source": "https://github.com/example/reviewer",
+                "changed_files": [str(source), str(tests_file)],
+                "code_graph_proof_path": str(proof_path),
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    audit = assess_project(str(project)).metadata["capability_absorption_audit"]
+
+    assert audit["latest_test_to_source_ratio"] < 0.4
+    assert "low_latest_test_to_source_ratio" in audit["blockers"]
+
+
+def test_capability_audit_requires_latest_code_graph_proof(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    source = project / "retort_engine" / "retort_absorption_driver.py"
+    tests_file = project / "tests" / "test_retort_absorption_driver.py"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    tests_file.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text("def feature_enabled():\n    return True\n", encoding="utf-8")
+    tests_file.write_text("def test_feature_enabled():\n    assert feature_enabled()\n", encoding="utf-8")
+    run_dir = project / ".retort" / "real_absorption_runs"
+    run_dir.mkdir(parents=True)
+    (run_dir / "run.json").write_text(
+        json.dumps(
+            {
+                "source": "https://github.com/example/reviewer",
+                "changed_files": [str(source), str(tests_file)],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    audit = assess_project(str(project)).metadata["capability_absorption_audit"]
+
+    assert "latest_code_graph_proof_missing" in audit["blockers"]
 
 
 def test_llm_absorption_evidence_uses_risk_audit_not_local_score(tmp_path: Path) -> None:

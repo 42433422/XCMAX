@@ -278,3 +278,35 @@ def test_absorption_saturation_treats_low_score_remaining_candidates_as_saturate
     assert saturated["status"] == "saturated"
     assert saturated["summary"]["remaining_strong_depth_candidate_count"] == 0
     assert saturated["summary"]["saturation_basis"] == "remaining_candidates_below_min_score"
+
+
+def test_absorption_saturation_treats_strong_candidate_depletion_as_saturated_even_with_recent_failures(tmp_path: Path) -> None:
+    project = tmp_path / "retort"
+    runs = project / ".retort" / "real_absorption_runs"
+    runs.mkdir(parents=True)
+    for index in range(3):
+        (runs / f"run-{index}.json").write_text(
+            json.dumps(
+                {
+                    "source": f"https://github.com/example/reviewer-{index}",
+                    "status": "absorption_execution_failed" if index == 0 else "absorption_execution_applied",
+                    "gates_passed": False if index == 0 else True,
+                    "changed_files": ["retort_engine/absorbed_capabilities.py"],
+                    "external_profile": {"signals": []},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+    saturated = build_absorption_saturation_report(
+        project,
+        remaining_candidates=[
+            {"url": "https://github.com/low/formatter", "similarity_depth_score": 32, "license_allowed": True, "already_absorbed": False},
+        ],
+        recent_limit=3,
+    )
+
+    assert saturated["status"] == "saturated"
+    assert saturated["summary"]["saturation_basis"] == "remaining_candidates_below_min_score"
+    assert saturated["summary"]["remaining_strong_depth_candidate_count"] == 0
