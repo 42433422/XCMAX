@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/anc95/ChatGPT-CodeReview'
-EXPECTED_ABSORPTION_RUN_ID = '20260628165957-5df07f797f'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/shim52/ai-code-review-bench'
+EXPECTED_ABSORPTION_RUN_ID = '20260628170457-3af65b9633'
 
 
 def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
