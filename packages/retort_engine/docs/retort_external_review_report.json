@@ -1,103 +1,54 @@
 {
   "absorbed_signals": [
-    "review_pipeline",
-    "benchmarking",
-    "plugin_surface",
-    "multi_provider"
+    "plugin_surface"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/hypothesisworks/hypothesis",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/pre-commit/pre-commit",
   "external_snapshot": {
-    "file_count": 693,
-    "git_revision": "7428f5e807e49f32aa3c48c37ed9a64380af90dd",
+    "file_count": 205,
+    "git_revision": "1553b465fd7ea42321ae0d04d1b41e706b89ae45",
     "suffix_counts": {
-      ".ambr": 5,
-      ".bib": 1,
-      ".cff": 1,
-      ".css": 6,
-      ".gpl": 1,
-      ".html": 7,
-      ".ico": 1,
-      ".in": 5,
+      ".cfg": 1,
+      ".gemspec": 1,
+      ".go": 1,
+      ".gz": 3,
       ".ini": 1,
-      ".jpg": 2,
-      ".js": 1,
-      ".json": 5,
-      ".md": 56,
-      ".png": 6,
-      ".py": 366,
-      ".rst": 45,
-      ".sh": 6,
-      ".sketch": 2,
-      ".svg": 11,
-      ".template": 1,
-      ".toml": 2,
-      ".txt": 58,
-      ".typed": 1,
-      ".webp": 1,
-      ".yml": 6,
-      "<none>": 3
+      ".jpg": 3,
+      ".json": 1,
+      ".lock": 1,
+      ".md": 3,
+      ".mod": 1,
+      ".npmignore": 1,
+      ".pl": 1,
+      ".py": 134,
+      ".r": 1,
+      ".renv": 1,
+      ".rockspec": 1,
+      ".rs": 1,
+      ".sh": 13,
+      ".toml": 1,
+      ".txt": 1,
+      ".yaml": 19,
+      ".yml": 4,
+      "<none>": 11
     }
   },
-  "generated_at": "2026-06-28T17:23:48Z",
+  "generated_at": "2026-06-28T17:25:32Z",
   "license_review": {
-    "detected_license": "",
-    "message": "license-incompatible risk: no LICENSE file detected",
-    "status": "blocked"
+    "detected_license": "Copyright (c) 2014 pre-commit dev team: Anthony Sottile, Ken Struys",
+    "message": "Allowed license detected: Copyright (c) 2014 pre-commit dev team: Anthony Sottile, Ken Struys",
+    "status": "passed"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/hypothesisworks/hypothesis --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/pre-commit/pre-commit --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
-      "component_gap_count": 3,
-      "minimum_expected_behavior_tests": 7,
-      "prioritized_component_count": 3,
-      "task_dimension_count": 4
+      "component_gap_count": 0,
+      "minimum_expected_behavior_tests": 3,
+      "prioritized_component_count": 0,
+      "task_dimension_count": 3
     },
-    "component_gaps": [
-      {
-        "component": "workflow_ci",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 9094,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "README.md",
-          "paper.md",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/types/test_pyright.py"
-        ]
-      },
-      {
-        "component": "provider_surface",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 452,
-        "own_files": 12,
-        "representative_external_files": [
-          "pyproject.toml",
-          "website/content/2016-04-19-rule-based-stateful-testing.md",
-          "website/content/2016-04-16-quickcheck-in-every-language.md",
-          "website/content/2016-05-11-generating-the-right-data.md",
-          "website/content/2016-10-01-pytest-integration-sponsorship.md"
-        ]
-      },
-      {
-        "component": "safety_policy",
-        "external_files": 12,
-        "file_gap": 0,
-        "marker_gap": 176,
-        "own_files": 12,
-        "representative_external_files": [
-          "whole_repo_tests/__init__.py",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/documentation/__init__.py",
-          "whole_repo_tests/types/test_pyright.py",
-          "whole_repo_tests/types/test_mypy.py"
-        ]
-      }
-    ],
+    "component_gaps": [],
     "depth_absorption_workflow": {
       "deferred_breadth_components": [
         {
@@ -105,11 +56,7 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "pyproject.toml",
-            "website/content/2016-04-19-rule-based-stateful-testing.md",
-            "website/content/2016-04-16-quickcheck-in-every-language.md",
-            "website/content/2016-05-11-generating-the-right-data.md",
-            "website/content/2016-10-01-pytest-integration-sponsorship.md"
+            "CHANGELOG.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -118,57 +65,27 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "paper.md",
-            "website/pelicanconf.py",
-            "website/content/2016-10-01-pytest-integration-sponsorship.md",
-            "website/content/2025-11-16-introducing-hypofuzz.md",
-            "website/content/2016-09-23-hypothesis-3.5.0-release.md"
+            "CHANGELOG.md",
+            "pre_commit/languages/ruby.py",
+            "pre_commit/commands/autoupdate.py",
+            "tests/parse_shebang_test.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
       ],
       "employee_tasks": [
         {
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
+            "gate output"
           ],
           "owner_hint": "fhd-core-maintainer",
           "priority": "P0",
-          "task_id": "retort-depth-review-pipeline",
-          "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
-        },
-        {
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "dimension": "feedback_loop_closure",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P1",
-          "task_id": "retort-depth-benchmark-eval",
-          "title": "Deepen benchmark_eval"
+          "task_id": "retort-depth-file-grouping",
+          "title": "Deepen file_grouping"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -200,117 +117,41 @@
       "focus_mode": "similar_function_depth_only",
       "focused_components": [
         {
-          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
-          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
-          "component": "review_pipeline",
+          "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
+          "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
+          "component": "file_grouping",
           "depth_gap": 0,
           "employee_task": {
-            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+            "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
             "dimension": "comparative_analysis_depth",
             "evidence_required": [
               "source diff",
               "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
+              "gate output"
             ],
             "owner_hint": "fhd-core-maintainer",
             "priority": "P0",
-            "task_id": "retort-depth-review-pipeline",
-            "title": "Deepen review_pipeline"
+            "task_id": "retort-depth-file-grouping",
+            "title": "Deepen file_grouping"
           },
           "evidence_required": [
             "source diff",
             "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
+            "gate output"
           ],
-          "external_marker_hits": 66,
-          "own_marker_hits": 3150,
+          "external_marker_hits": 1,
+          "own_marker_hits": 116,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "website/content/2016-04-15-economics-of-software-correctness.md",
-            "website/content/2025-11-16-introducing-hypofuzz.md",
-            "website/content/2017-03-09-hypothesis-for-researchers.md",
-            "website/content/2017-09-14-multi-bug-discovery.md",
-            "website/content/2025-11-01-claude-code-plugin.md"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 2,
-          "own_marker_hits": 21,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "hypothesis/tests/cover/test_reflection.py"
-          ]
-        },
-        {
-          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
-          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-          "component": "benchmark_eval",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
-            "dimension": "feedback_loop_closure",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "precision or false-positive benchmark counters"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P1",
-            "task_id": "retort-depth-benchmark-eval",
-            "title": "Deepen benchmark_eval"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "precision or false-positive benchmark counters"
-          ],
-          "external_marker_hits": 201,
-          "own_marker_hits": 773,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "website/content/2016-04-16-the-purpose-of-hypothesis.md",
-            "website/content/2017-09-28-threshold-problem.md",
-            "website/content/2025-11-16-introducing-hypofuzz.md",
-            "website/content/2016-07-23-what-is-hypothesis.md",
-            "website/content/2016-05-26-exploring-voting-with-hypothesis.md"
+            "CHANGELOG.md"
           ]
         },
         {
           "absorption_goal": "keep license, secret, permission, and rollback checks in the absorption path",
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
           "component": "safety_policy",
-          "depth_gap": 176,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -329,23 +170,23 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 499,
-          "own_marker_hits": 323,
+          "external_marker_hits": 23,
+          "own_marker_hits": 328,
           "priority": "P0",
-          "similarity_score": 94,
+          "similarity_score": 100,
           "source_files": [
-            "whole_repo_tests/__init__.py",
-            "whole_repo_tests/documentation/test_documentation.py",
-            "whole_repo_tests/documentation/__init__.py",
-            "whole_repo_tests/types/test_pyright.py",
-            "whole_repo_tests/types/test_mypy.py"
+            "CHANGELOG.md",
+            "pre_commit/store.py",
+            "pre_commit/staged_files_only.py",
+            "pre_commit/languages/docker.py",
+            "tests/staged_files_only_test.py"
           ]
         },
         {
           "absorption_goal": "prove absorption with repeatable local gates and replay commands",
           "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
           "component": "workflow_ci",
-          "depth_gap": 9094,
+          "depth_gap": 0,
           "employee_task": {
             "acceptance": "Retort has executable, tested workflow_ci behavior in the absorption or PR-review path.",
             "dimension": "operational_readiness",
@@ -364,16 +205,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 12888,
-          "own_marker_hits": 3794,
+          "external_marker_hits": 1658,
+          "own_marker_hits": 3888,
           "priority": "P0",
-          "similarity_score": 89,
+          "similarity_score": 100,
           "source_files": [
-            "pyproject.toml",
+            "CHANGELOG.md",
+            ".pre-commit-config.yaml",
             "README.md",
-            "paper.md",
-            "whole_repo_tests/documentation/test_documentation.py",
-            "whole_repo_tests/types/test_pyright.py"
+            "CONTRIBUTING.md",
+            "pre_commit/store.py"
           ]
         }
       ],
@@ -382,7 +223,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 5,
+        "focused_component_count": 3,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -393,138 +234,75 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 758,
+          "external_marker_hits": 1,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "pyproject.toml",
-            "website/content/2016-04-19-rule-based-stateful-testing.md",
-            "website/content/2016-04-16-quickcheck-in-every-language.md",
-            "website/content/2016-05-11-generating-the-right-data.md",
-            "website/content/2016-10-01-pytest-integration-sponsorship.md"
+            "CHANGELOG.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 191,
+          "external_marker_hits": 8,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "paper.md",
-            "website/pelicanconf.py",
-            "website/content/2016-10-01-pytest-integration-sponsorship.md",
-            "website/content/2025-11-16-introducing-hypofuzz.md",
-            "website/content/2016-09-23-hypothesis-3.5.0-release.md"
+            "CHANGELOG.md",
+            "pre_commit/languages/ruby.py",
+            "pre_commit/commands/autoupdate.py",
+            "tests/parse_shebang_test.py"
           ]
         }
       ]
     },
     "external_file_groups": {
-      "benchmark_eval": {
+      "file_grouping": {
         "files": [
-          "website/content/2016-04-16-the-purpose-of-hypothesis.md",
-          "website/content/2017-09-28-threshold-problem.md",
-          "website/content/2025-11-16-introducing-hypofuzz.md",
-          "website/content/2016-07-23-what-is-hypothesis.md",
-          "website/content/2016-05-26-exploring-voting-with-hypothesis.md",
-          "website/content/2017-09-14-multi-bug-discovery.md",
-          "website/content/2016-07-04-calculating-the-mean.md",
-          "website/theme/static/prism.js",
-          "hypothesis/benchmark/graph.py",
-          "hypothesis/benchmark/README.md",
-          "hypothesis/tests/test_annotated_types.py",
-          "hypothesis/tests/conftest.py"
+          "CHANGELOG.md"
         ],
-        "marker_hits": 201
-      },
-      "diff_hunk_review": {
-        "files": [
-          "hypothesis/tests/cover/test_reflection.py"
-        ],
-        "marker_hits": 2
+        "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
-          "paper.md",
-          "website/pelicanconf.py",
-          "website/content/2016-10-01-pytest-integration-sponsorship.md",
-          "website/content/2025-11-16-introducing-hypofuzz.md",
-          "website/content/2016-09-23-hypothesis-3.5.0-release.md",
-          "website/content/2016-09-04-hypothesis-vs-eris.md",
-          "website/content/2025-11-01-claude-code-plugin.md",
-          "website/theme/static/prism.js",
-          ".github/workflows/fuzz.yml",
-          "hypothesis/pyproject.toml",
-          "hypothesis/tests/conjecture/test_data_tree.py",
-          "hypothesis/tests/attrs/test_attrs.py"
+          "CHANGELOG.md",
+          "pre_commit/languages/ruby.py",
+          "pre_commit/commands/autoupdate.py",
+          "tests/parse_shebang_test.py"
         ],
-        "marker_hits": 191
+        "marker_hits": 8
       },
       "provider_surface": {
         "files": [
-          "pyproject.toml",
-          "website/content/2016-04-19-rule-based-stateful-testing.md",
-          "website/content/2016-04-16-quickcheck-in-every-language.md",
-          "website/content/2016-05-11-generating-the-right-data.md",
-          "website/content/2016-10-01-pytest-integration-sponsorship.md",
-          "website/content/2016-12-10-how-hypothesis-works.md",
-          "website/content/2025-11-16-introducing-hypofuzz.md",
-          "website/content/2017-03-09-hypothesis-for-researchers.md",
-          "website/content/2017-09-14-multi-bug-discovery.md",
-          "website/content/2016-09-04-hypothesis-vs-eris.md",
-          "website/content/2025-11-01-claude-code-plugin.md",
-          ".github/workflows/main.yml"
+          "CHANGELOG.md"
         ],
-        "marker_hits": 758
-      },
-      "review_pipeline": {
-        "files": [
-          "website/content/2016-04-15-economics-of-software-correctness.md",
-          "website/content/2025-11-16-introducing-hypofuzz.md",
-          "website/content/2017-03-09-hypothesis-for-researchers.md",
-          "website/content/2017-09-14-multi-bug-discovery.md",
-          "website/content/2025-11-01-claude-code-plugin.md",
-          "website/content/2017-07-16-types-and-properties.md",
-          "website/content/pages/testimonials.md",
-          ".claude/commands/hypothesis.md",
-          "hypothesis/tests/quality/test_discovery_ability.py",
-          "hypothesis/tests/common/utils.py",
-          "hypothesis/tests/common/debug.py",
-          "hypothesis/tests/ghostwriter/test_ghostwriter_cli.py"
-        ],
-        "marker_hits": 66
+        "marker_hits": 1
       },
       "safety_policy": {
         "files": [
-          "whole_repo_tests/__init__.py",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/documentation/__init__.py",
-          "whole_repo_tests/types/test_pyright.py",
-          "whole_repo_tests/types/test_mypy.py",
-          "whole_repo_tests/types/__init__.py",
-          "whole_repo_tests/types/test_hypothesis.py",
-          "whole_repo_tests/types/revealed_types.py",
-          "whole_repo_tests/whole_repo/test_release_files.py",
-          "whole_repo_tests/whole_repo/test_release_management.py",
-          "whole_repo_tests/whole_repo/test_ci_config.py",
-          "whole_repo_tests/whole_repo/test_shellcheck.py"
+          "CHANGELOG.md",
+          "pre_commit/store.py",
+          "pre_commit/staged_files_only.py",
+          "pre_commit/languages/docker.py",
+          "tests/staged_files_only_test.py",
+          "tests/languages/docker_test.py",
+          "tests/languages/r_test.py"
         ],
-        "marker_hits": 499
+        "marker_hits": 23
       },
       "workflow_ci": {
         "files": [
-          "pyproject.toml",
+          "CHANGELOG.md",
+          ".pre-commit-config.yaml",
           "README.md",
-          "paper.md",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/types/test_pyright.py",
-          "whole_repo_tests/types/test_mypy.py",
-          "whole_repo_tests/types/test_hypothesis.py",
-          "whole_repo_tests/types/revealed_types.py",
-          "whole_repo_tests/whole_repo/test_release_files.py",
-          "whole_repo_tests/whole_repo/test_release_management.py",
-          "whole_repo_tests/whole_repo/test_ci_config.py",
-          "whole_repo_tests/whole_repo/test_shellcheck.py"
+          "CONTRIBUTING.md",
+          "pre_commit/store.py",
+          "pre_commit/util.py",
+          "pre_commit/hook.py",
+          "pre_commit/file_lock.py",
+          "pre_commit/lang_base.py",
+          "pre_commit/clientlib.py",
+          "pre_commit/main.py",
+          "pre_commit/repository.py"
         ],
-        "marker_hits": 12888
+        "marker_hits": 1658
       }
     },
     "own_file_groups": {
@@ -543,7 +321,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 773
+        "marker_hits": 734
       },
       "diff_hunk_review": {
         "files": [
@@ -587,7 +365,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 766
+        "marker_hits": 781
       },
       "provider_surface": {
         "files": [
@@ -604,7 +382,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 306
+        "marker_hits": 324
       },
       "review_pipeline": {
         "files": [
@@ -621,7 +399,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3150
+        "marker_hits": 3253
       },
       "safety_policy": {
         "files": [
@@ -638,7 +416,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 323
+        "marker_hits": 328
       },
       "workflow_ci": {
         "files": [
@@ -655,7 +433,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 3794
+        "marker_hits": 3888
       }
     },
     "pipeline_stages": [
@@ -667,70 +445,33 @@
       "rank_absorption_tasks",
       "verify_feedback_loop"
     ],
-    "prioritized_absorptions": [
-      {
-        "acceptance": "Retort has a tested workflow_ci behavior, not only a recorded signal.",
-        "component": "workflow_ci",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "README.md",
-          "paper.md",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/types/test_pyright.py"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested provider_surface behavior, not only a recorded signal.",
-        "component": "provider_surface",
-        "priority": "P0",
-        "source_files": [
-          "pyproject.toml",
-          "website/content/2016-04-19-rule-based-stateful-testing.md",
-          "website/content/2016-04-16-quickcheck-in-every-language.md",
-          "website/content/2016-05-11-generating-the-right-data.md",
-          "website/content/2016-10-01-pytest-integration-sponsorship.md"
-        ]
-      },
-      {
-        "acceptance": "Retort has a tested safety_policy behavior, not only a recorded signal.",
-        "component": "safety_policy",
-        "priority": "P0",
-        "source_files": [
-          "whole_repo_tests/__init__.py",
-          "whole_repo_tests/documentation/test_documentation.py",
-          "whole_repo_tests/documentation/__init__.py",
-          "whole_repo_tests/types/test_pyright.py",
-          "whole_repo_tests/types/test_mypy.py"
-        ]
-      }
-    ]
+    "prioritized_absorptions": []
   },
-  "run_id": "20260628172341-a5eb9a1b2f",
+  "run_id": "20260628172525-816b17b4f6",
   "semantic_review": {
     "external": {
-      "classes": 1549,
-      "cli_markers": 0,
-      "functions": 7497,
-      "source_files": 541,
-      "test_markers": 3510,
-      "workflow_markers": 49
+      "classes": 73,
+      "cli_markers": 6,
+      "functions": 1206,
+      "source_files": 163,
+      "test_markers": 837,
+      "workflow_markers": 12
     },
     "gaps": [
       {
-        "external_advantage": 1500,
+        "external_advantage": 24,
         "metric": "classes"
       },
       {
-        "external_advantage": 6726,
+        "external_advantage": 435,
         "metric": "functions"
       },
       {
-        "external_advantage": 398,
+        "external_advantage": 19,
         "metric": "source_files"
       },
       {
-        "external_advantage": 3285,
+        "external_advantage": 612,
         "metric": "test_markers"
       }
     ],
@@ -738,42 +479,21 @@
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 143,
+      "source_files": 144,
       "test_markers": 225,
-      "workflow_markers": 3962
+      "workflow_markers": 4092
     }
   },
   "signal_evidence": {
-    "benchmarking": [
-      "website/content/2016-04-16-the-purpose-of-hypothesis.md",
-      "website/content/2017-09-28-threshold-problem.md",
-      "website/content/2025-11-16-introducing-hypofuzz.md",
-      "website/content/2016-07-23-what-is-hypothesis.md",
-      "website/content/2016-05-26-exploring-voting-with-hypothesis.md"
-    ],
-    "multi_provider": [
-      "pyproject.toml",
-      "website/content/2016-04-19-rule-based-stateful-testing.md",
-      "website/content/2016-04-16-quickcheck-in-every-language.md",
-      "website/content/2016-05-11-generating-the-right-data.md",
-      "website/content/2016-10-01-pytest-integration-sponsorship.md"
-    ],
     "plugin_surface": [
-      "pyproject.toml",
-      "website/content/2016-04-15-economics-of-software-correctness.md",
-      "website/content/2016-10-01-pytest-integration-sponsorship.md",
-      "website/content/2016-09-23-hypothesis-3.5.0-release.md",
-      "website/content/2025-11-01-claude-code-plugin.md"
-    ],
-    "review_pipeline": [
-      "website/content/2016-04-15-economics-of-software-correctness.md",
-      "website/content/2017-09-14-multi-bug-discovery.md",
-      "website/content/2025-11-01-claude-code-plugin.md",
-      "website/content/pages/testimonials.md",
-      "hypothesis/tests/quality/test_discovery_ability.py"
+      "pre_commit/store.py",
+      "pre_commit/main.py",
+      "pre_commit/repository.py",
+      "pre_commit/languages/r.py",
+      "pre_commit/languages/ruby.py"
     ]
   },
-  "source": "https://github.com/hypothesisworks/hypothesis",
+  "source": "https://github.com/pre-commit/pre-commit",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -781,7 +501,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/hypothesisworks/hypothesis."
+      "why": "Compare implementation patterns from https://github.com/pre-commit/pre-commit."
     },
     {
       "dimension": "product_operability",
@@ -789,7 +509,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/hypothesisworks/hypothesis."
+      "why": "Extract usable UX improvements from https://github.com/pre-commit/pre-commit."
     },
     {
       "dimension": "operational_readiness",
@@ -797,23 +517,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/hypothesisworks/hypothesis."
-    },
-    {
-      "dimension": "comparative_analysis_depth",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-review-pipeline",
-      "title": "Adopt deterministic review pipeline stages",
-      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "feedback_loop_closure",
-      "owner_hint": "test-qa-runner",
-      "priority": "P2",
-      "task_id": "retort-absorb-benchmarking",
-      "title": "Add absorption quality benchmark counters",
-      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
+      "why": "Adapt CI and release checks from https://github.com/pre-commit/pre-commit."
     },
     {
       "dimension": "product_operability",
