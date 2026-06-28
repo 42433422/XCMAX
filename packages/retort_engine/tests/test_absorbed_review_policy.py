@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from retort_engine.absorbed_review_policy import absorbed_review_policy, policy_context_rank_weight, policy_context_rank_weights, policy_summary
 
-EXPECTED_ABSORPTION_SOURCE = 'packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent'
+EXPECTED_ABSORPTION_SOURCE = 'packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot'
 
 
 def test_absorbed_review_policy_changes_ranking_weights() -> None:

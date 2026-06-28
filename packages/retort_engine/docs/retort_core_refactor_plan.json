@@ -1,15 +1,15 @@
 {
   "code_graph_summary": {
-    "call_edge_count": 1675,
-    "define_edge_count": 905,
+    "call_edge_count": 1726,
+    "define_edge_count": 924,
     "dependency_cycle_count": 0,
-    "edge_count": 3697,
-    "file_count": 118,
+    "edge_count": 3797,
+    "file_count": 120,
     "hotspot_count": 12,
-    "import_edge_count": 888,
+    "import_edge_count": 911,
     "include_tests": true,
-    "local_dependency_edge_count": 229,
-    "node_count": 1023,
+    "local_dependency_edge_count": 236,
+    "node_count": 1044,
     "parse_error_count": 0
   },
   "gate": {
@@ -27,7 +27,7 @@
     "code_graph_hotspot_task_count": 7,
     "ready_component_count": 24,
     "ready_task_count": 12,
-    "source_count": 33,
+    "source_count": 34,
     "task_count": 12
   },
   "tasks": [
@@ -48,10 +48,10 @@
           "path": "retort_engine/real_absorption.py"
         }
       ],
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 17,
       "component": "workflow_ci",
       "contract": "Absorption, merge proof, rollback proof, and local gates must fail closed together.",
-      "gate_pass_rate": 0.889,
+      "gate_pass_rate": 0.892,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -66,7 +66,7 @@
         "wire_workflow_ci_runtime_gate",
         "prove_workflow_ci_with_tests"
       ],
-      "supporting_source_count": 33,
+      "supporting_source_count": 34,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
@@ -74,25 +74,25 @@
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 101,
+      "code_graph_hotspot_score": 108,
       "code_graph_hotspots": [
         {
-          "degree": 53,
+          "degree": 56,
           "id": "retort_engine/cli.py",
           "kind": "file",
           "path": "retort_engine/cli.py"
         },
         {
-          "degree": 48,
+          "degree": 52,
           "id": "retort_engine/service.py",
           "kind": "file",
           "path": "retort_engine/service.py"
         }
       ],
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "automation_surface",
       "contract": "CLI, API, and UI expose the same absorption/refactor workflow.",
-      "gate_pass_rate": 0.938,
+      "gate_pass_rate": 0.939,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -107,29 +107,29 @@
         "wire_automation_surface_runtime_gate",
         "prove_automation_surface_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_retort_engine.py"
       ]
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 101,
+      "code_graph_hotspot_score": 108,
       "code_graph_hotspots": [
         {
-          "degree": 53,
+          "degree": 56,
           "id": "retort_engine/cli.py",
           "kind": "file",
           "path": "retort_engine/cli.py"
         },
         {
-          "degree": 48,
+          "degree": 52,
           "id": "retort_engine/service.py",
           "kind": "file",
           "path": "retort_engine/service.py"
         }
       ],
-      "code_graph_proof_count": 11,
+      "code_graph_proof_count": 12,
       "component": "codebase_graph",
       "contract": "Architecture and absorption targeting use deterministic graph evidence plus import-boundary contracts.",
       "gate_pass_rate": 1.0,
@@ -148,7 +148,7 @@
         "wire_codebase_graph_runtime_gate",
         "prove_codebase_graph_with_tests"
       ],
-      "supporting_source_count": 11,
+      "supporting_source_count": 12,
       "tests": [
         "tests/test_codebase_graph.py",
         "tests/test_architecture_contracts.py",
@@ -157,10 +157,10 @@
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 98,
+      "code_graph_hotspot_score": 99,
       "code_graph_hotspots": [
         {
-          "degree": 60,
+          "degree": 61,
           "id": "retort_engine/pr_review.py",
           "kind": "file",
           "path": "retort_engine/pr_review.py"
@@ -172,10 +172,10 @@
           "path": "retort_engine/review_pipeline.py"
         }
       ],
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 17,
       "component": "review_pipeline",
       "contract": "Review stages, context localization, and PR comments share one component contract.",
-      "gate_pass_rate": 0.886,
+      "gate_pass_rate": 0.889,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -189,7 +189,7 @@
         "wire_review_pipeline_runtime_gate",
         "prove_review_pipeline_with_tests"
       ],
-      "supporting_source_count": 32,
+      "supporting_source_count": 33,
       "tests": [
         "tests/test_review_pipeline.py",
         "tests/test_pr_review.py"
@@ -197,19 +197,19 @@
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 60,
+      "code_graph_hotspot_score": 61,
       "code_graph_hotspots": [
         {
-          "degree": 60,
+          "degree": 61,
           "id": "retort_engine/pr_review.py",
           "kind": "file",
           "path": "retort_engine/pr_review.py"
         }
       ],
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 17,
       "component": "context_localization",
       "contract": "Context grouping and deterministic code graphing feed review without leaking broad, irrelevant files.",
-      "gate_pass_rate": 0.903,
+      "gate_pass_rate": 0.906,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -224,7 +224,7 @@
         "wire_context_localization_runtime_gate",
         "prove_context_localization_with_tests"
       ],
-      "supporting_source_count": 28,
+      "supporting_source_count": 29,
       "tests": [
         "tests/test_review_context_bias.py",
         "tests/test_pr_review.py",
@@ -233,19 +233,19 @@
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 53,
+      "code_graph_hotspot_score": 56,
       "code_graph_hotspots": [
         {
-          "degree": 53,
+          "degree": 56,
           "id": "retort_engine/cli.py",
           "kind": "file",
           "path": "retort_engine/cli.py"
         }
       ],
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "command_contract",
       "contract": "Command results stay schema-checked and replayable.",
-      "gate_pass_rate": 0.938,
+      "gate_pass_rate": 0.939,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -259,7 +259,7 @@
         "wire_command_contract_runtime_gate",
         "prove_command_contract_with_tests"
       ],
-      "supporting_source_count": 30,
+      "supporting_source_count": 31,
       "tests": [
         "tests/test_contracts_feedback.py",
         "tests/test_retort_engine.py"
@@ -267,19 +267,19 @@
     },
     {
       "architecture_depth_score": 100,
-      "code_graph_hotspot_score": 48,
+      "code_graph_hotspot_score": 52,
       "code_graph_hotspots": [
         {
-          "degree": 48,
+          "degree": 52,
           "id": "retort_engine/service.py",
           "kind": "file",
           "path": "retort_engine/service.py"
         }
       ],
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "provider_boundary",
       "contract": "LLM providers stay behind one dispatch/status contract.",
-      "gate_pass_rate": 0.886,
+      "gate_pass_rate": 0.889,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -293,7 +293,7 @@
         "wire_provider_boundary_runtime_gate",
         "prove_provider_boundary_with_tests"
       ],
-      "supporting_source_count": 32,
+      "supporting_source_count": 33,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -302,10 +302,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 15,
+      "code_graph_proof_count": 16,
       "component": "model_adapter",
       "contract": "Prompt construction and provider IO stay separable and testable.",
-      "gate_pass_rate": 0.886,
+      "gate_pass_rate": 0.889,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -319,7 +319,7 @@
         "wire_model_adapter_runtime_gate",
         "prove_model_adapter_with_tests"
       ],
-      "supporting_source_count": 32,
+      "supporting_source_count": 33,
       "tests": [
         "tests/test_retort_engine.py"
       ]
@@ -328,10 +328,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 16,
+      "code_graph_proof_count": 17,
       "component": "safety_policy",
       "contract": "License, dirty-worktree, generated evidence, and rollback policies share one safety boundary.",
-      "gate_pass_rate": 0.941,
+      "gate_pass_rate": 0.943,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -346,7 +346,7 @@
         "wire_safety_policy_runtime_gate",
         "prove_safety_policy_with_tests"
       ],
-      "supporting_source_count": 32,
+      "supporting_source_count": 33,
       "tests": [
         "tests/test_retort_engine.py",
         "tests/test_branching_git_status.py"
@@ -356,10 +356,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 13,
+      "code_graph_proof_count": 14,
       "component": "benchmark_eval",
       "contract": "Review quality and absorption quality share benchmark evidence.",
-      "gate_pass_rate": 0.933,
+      "gate_pass_rate": 0.935,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -374,7 +374,7 @@
         "wire_benchmark_eval_runtime_gate",
         "prove_benchmark_eval_with_tests"
       ],
-      "supporting_source_count": 28,
+      "supporting_source_count": 29,
       "tests": [
         "tests/test_review_quality_benchmark.py",
         "tests/test_absorbed_capabilities.py",
@@ -385,10 +385,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 13,
       "component": "evaluation_loop",
       "contract": "Every absorbed behavior has benchmark counters and regression gates.",
-      "gate_pass_rate": 0.931,
+      "gate_pass_rate": 0.933,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -403,7 +403,7 @@
         "wire_evaluation_loop_runtime_gate",
         "prove_evaluation_loop_with_tests"
       ],
-      "supporting_source_count": 27,
+      "supporting_source_count": 28,
       "tests": [
         "tests/test_absorbed_capabilities.py",
         "tests/test_review_quality_benchmark.py",
@@ -414,10 +414,10 @@
       "architecture_depth_score": 100,
       "code_graph_hotspot_score": 0,
       "code_graph_hotspots": [],
-      "code_graph_proof_count": 12,
+      "code_graph_proof_count": 13,
       "component": "regression_oracle",
       "contract": "Architecture refactors need a pass/fail oracle before merge.",
-      "gate_pass_rate": 0.931,
+      "gate_pass_rate": 0.933,
       "missing_modules": [],
       "missing_tests": [],
       "modules": [
@@ -431,7 +431,7 @@
         "wire_regression_oracle_runtime_gate",
         "prove_regression_oracle_with_tests"
       ],
-      "supporting_source_count": 27,
+      "supporting_source_count": 28,
       "tests": [
         "tests/test_absorbed_capabilities.py",
         "tests/test_architecture_refactor.py"
