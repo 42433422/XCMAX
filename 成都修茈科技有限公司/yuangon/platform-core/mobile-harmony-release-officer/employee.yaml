@@ -1,0 +1,60 @@
+id: mobile-harmony-release-officer
+name: 鸿蒙发版员
+version: "1.0.0"
+domain: P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、企业版发版；本机 Mac mini 执行 hvigor assembleApp → hap-sign-tool 真证书签名 → AGC Publishing API 上传并自动提交审核。
+owner: admin
+area: platform-core
+five_line_id: prod_software
+subzone: build-release
+also_serves: []
+
+scope_globs:
+  - FHD/mobile-harmony/**
+  - FHD/mobile-harmony/scripts/**
+  - FHD/.github/workflows/release-harmony.yml
+  - release-harmony/**
+
+forbidden_globs:
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+
+sla:
+  timeout_seconds: 1800
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+
+capabilities:
+  - harmony.release.audit
+  - harmony.signing.verify
+  - harmony.agc.publish
+
+skills:
+  - skills/skill-mobile-harmony-release-officer.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on:
+  - test-qa-runner
+  - deploy-release-officer
+
+examples:
+  - title: "鸿蒙发版员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次鸿蒙发版员职责范围内的只读检查（不签名、不上传），并返回证据、风险和下一步。"
+      dry_run: true
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-06-28"
+    note: "从 FHD/mods/_employees/mobile-harmony-release-officer 录入 yuangon 编制，补齐鸿蒙发版专岗，与 mobile-ios / mobile-android 对齐。"

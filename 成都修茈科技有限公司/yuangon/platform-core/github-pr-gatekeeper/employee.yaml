@@ -1,0 +1,78 @@
+id: github-pr-gatekeeper
+name: GitHub PR 守门员
+version: "1.0.0"
+domain: 通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。
+owner: admin
+area: platform-core
+five_line_id: prod_software
+subzone: build-release
+also_serves: []
+
+scope_globs:
+  - .github/dependabot.yml
+  - .github/workflows/gitleaks.yml
+  - .github/workflows/codeql.yml
+  - .github/gitleaks-config.toml
+  - MODstore_deploy/modstore_server/auto_fix_loop.py
+  - MODstore_deploy/modstore_server/telemetry_backlog_loop.py
+  - yuangon/platform-core/github-pr-gatekeeper/**
+
+forbidden_globs:
+  - FHD/app/**
+  - FHD/frontend/src/**
+  - MODstore_deploy/modstore_server/models.py
+  - MODstore_deploy/modstore_server/migrations/**
+  - _local_secrets/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: false
+  subscribes:
+    # Dependabot/Renovate PR 打开时触发
+    - "dependabot.pr.opened"
+    # 内部 auto_fix 触发的 PR 自动审查
+    - "dependabot.autofix.triggered"
+  max_patch_budget_tokens: 4000
+  max_patch_steps: 5
+
+sla:
+  timeout_seconds: 300
+  retry_max: 1
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+capabilities:
+  - pr.review
+  - dependabot.merge
+  - github.api
+
+skills:
+  - skills/skill-pr-review.md
+  - skills/skill-dependabot-merge.md
+  - skills/skill-github-api.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+
+depends_on:
+  - change-request-auditor
+  - test-qa-runner
+
+examples:
+  - title: "GitHub PR 守门员岗位验收"
+    description: "以最小、无副作用输入验证岗位输出包含真实证据、风险与下一步。"
+    input:
+      task: "执行一次 GitHub PR 守门员职责范围内的只读检查（不 approve / merge / comment），并返回证据、风险和下一步。"
+      dry_run: true
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-06-28"
+    note: "从 FHD/mods/_employees/github-pr-gatekeeper 录入 yuangon 编制，填补 GitHub 原生 PR 审查专岗，与 change-request-auditor 分工（外部 PR vs 内部 CR）。"

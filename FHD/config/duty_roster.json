@@ -201,6 +201,7 @@
             "pack-registrar",
             "deploy-release-officer",
             "change-request-auditor",
+            "github-pr-gatekeeper",
             "mobile-android-release-officer",
             "mobile-ios-release-officer",
             "mobile-harmony-release-officer"
@@ -307,6 +308,7 @@
         "vibe-coding-maintainer",
         "mods-and-eskill-curator",
         "change-request-auditor",
+        "github-pr-gatekeeper",
         "daily-orchestrator",
         "intake-dispatcher",
         "task-router-officer",
