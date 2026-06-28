@@ -1,0 +1,66 @@
+{
+  "changed_files": [
+    "packages/retort_engine/docs/retort_competitor_runtime_comparison.json",
+    "packages/retort_engine/docs/retort_cross_domain_ci_regression.json",
+    "packages/retort_engine/docs/retort_quality_gate_bundle.json",
+    "packages/retort_engine/retort_engine/absorption_release_decision.py",
+    "packages/retort_engine/retort_engine/cli.py",
+    "packages/retort_engine/retort_engine/competitor_runtime_comparison.py",
+    "packages/retort_engine/retort_engine/contracts.py",
+    "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+    "packages/retort_engine/retort_engine/operator_journey_replay.py",
+    "packages/retort_engine/retort_engine/paibi_prompting.py",
+    "packages/retort_engine/retort_engine/product_mainline_absorption_proof.py",
+    "packages/retort_engine/retort_engine/project_assessment.py",
+    "packages/retort_engine/retort_engine/quality_gate_bundle.py",
+    "packages/retort_engine/retort_engine/service.py",
+    "packages/retort_engine/tests/test_absorption_release_decision.py",
+    "packages/retort_engine/tests/test_contracts_feedback.py",
+    "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+    "packages/retort_engine/tests/test_operator_journey_replay.py",
+    "packages/retort_engine/tests/test_paibi_prompting.py",
+    "packages/retort_engine/tests/test_product_mainline_absorption_proof.py"
+  ],
+  "evidence": {
+    "git_range": "d22fdc9d18e716ecfc00084338626b7eeb1ea250..0ecc773f90036e42d340ffd2724c2fb8f84fbbe2",
+    "quality_report": "docs/retort_quality_gate_bundle.json",
+    "style": "product_mainline_merge_commit_with_behavior_code_and_tests"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "source_files": [
+    "packages/retort_engine/retort_engine/absorption_release_decision.py",
+    "packages/retort_engine/retort_engine/cli.py",
+    "packages/retort_engine/retort_engine/competitor_runtime_comparison.py",
+    "packages/retort_engine/retort_engine/contracts.py",
+    "packages/retort_engine/retort_engine/llm_absorption_evidence.py",
+    "packages/retort_engine/retort_engine/operator_journey_replay.py",
+    "packages/retort_engine/retort_engine/paibi_prompting.py",
+    "packages/retort_engine/retort_engine/product_mainline_absorption_proof.py",
+    "packages/retort_engine/retort_engine/project_assessment.py",
+    "packages/retort_engine/retort_engine/quality_gate_bundle.py",
+    "packages/retort_engine/retort_engine/service.py"
+  ],
+  "status": "ready",
+  "summary": {
+    "behavior_source_changed_count": 11,
+    "behavior_test_changed_count": 6,
+    "changed_file_count": 20,
+    "commit": "0ecc773f90036e42d340ffd2724c2fb8f84fbbe2",
+    "contract_schema_count": 49,
+    "docs_changed_count": 3,
+    "docs_only": false,
+    "first_parent": "d22fdc9d18e716ecfc00084338626b7eeb1ea250",
+    "is_merge_commit": true,
+    "parent_count": 2,
+    "post_merge_quality_gate_passed": true,
+    "test_to_source_ratio": 0.843
+  },
+  "test_files": [
+    "packages/retort_engine/tests/test_absorption_release_decision.py",
+    "packages/retort_engine/tests/test_contracts_feedback.py",
+    "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+    "packages/retort_engine/tests/test_operator_journey_replay.py",
+    "packages/retort_engine/tests/test_paibi_prompting.py",
+    "packages/retort_engine/tests/test_product_mainline_absorption_proof.py"
+  ]
+}
