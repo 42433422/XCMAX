@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from retort_engine.review_context_bias import context_rank_weight, context_rank_weights, context_signal_strength, review_context_bias
+from retort_engine.review_context_bias import context_rank_weights, context_signal_strength, review_context_bias
 
 EXPECTED_ABSORPTION_SOURCE = 'packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot'
 

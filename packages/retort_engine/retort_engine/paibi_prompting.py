@@ -220,6 +220,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "code_graph_proof_passed=",
         "feedback_audit_closed=",
         "capability_absorption_",
+        "latest_absorption_behavior_",
         "behavior_source_file_count=",
         "behavior_test_file_count=",
         "total_behavior_source_file_count=",
@@ -236,6 +237,8 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_low_permission_probe_status=",
         "pr_low_permission_probe_real_network=",
         "pr_readonly_degradation_probe_",
+        "multi_project_absorption_replay_",
+        "absorption_continuity_",
     )
     selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes)]
     return selected[:80]

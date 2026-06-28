@@ -15,6 +15,8 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "pr_live_publish_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
     "pr_readonly_degradation_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
     "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
+    "multi_project_absorption_replay_result": ("status", "project", "summary", "projects", "evidence"),
+    "absorption_continuity_probe_result": ("status", "project", "summary", "runs", "latest_closed_loop", "evidence"),
     "complex_pr_replay_result": ("status", "project", "summary", "pull_requests", "evidence"),
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),
     "task_dispatch_plan_result": ("status", "project", "summary", "tasks", "evidence"),

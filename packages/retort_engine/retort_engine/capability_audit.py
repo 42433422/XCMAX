@@ -126,6 +126,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     adjudication_source = root / "retort_engine" / "review_adjudication_calibration.py"
     review_policy_source = root / "retort_engine" / "absorbed_review_policy.py"
     quality_gate_source = root / "retort_engine" / "quality_gate_bundle.py"
+    multi_absorption_source = root / "retort_engine" / "multi_project_absorption_replay.py"
+    continuity_source = root / "retort_engine" / "absorption_continuity_probe.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -141,6 +143,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     adjudication_test = root / "tests" / "test_review_adjudication_calibration.py"
     review_policy_test = root / "tests" / "test_absorbed_review_policy.py"
     quality_gate_test = root / "tests" / "test_quality_gate_bundle.py"
+    multi_absorption_test = root / "tests" / "test_multi_project_absorption_replay.py"
+    continuity_test = root / "tests" / "test_absorption_continuity_probe.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -317,6 +321,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/review_adjudication_calibration.py", adjudication_source.is_file()),
                 ("retort_engine/absorbed_review_policy.py", review_policy_source.is_file()),
                 ("retort_engine/quality_gate_bundle.py", quality_gate_source.is_file()),
+                ("retort_engine/multi_project_absorption_replay.py", multi_absorption_source.is_file()),
+                ("retort_engine/absorption_continuity_probe.py", continuity_source.is_file()),
             )
             if exists
         ],
@@ -338,6 +344,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_review_adjudication_calibration.py", adjudication_test.is_file()),
                 ("tests/test_absorbed_review_policy.py", review_policy_test.is_file()),
                 ("tests/test_quality_gate_bundle.py", quality_gate_test.is_file()),
+                ("tests/test_multi_project_absorption_replay.py", multi_absorption_test.is_file()),
+                ("tests/test_absorption_continuity_probe.py", continuity_test.is_file()),
             )
             if exists
         ],
