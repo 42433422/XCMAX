@@ -15,7 +15,7 @@
       "security_static_analysis",
       "typescript_pr_bot"
     ],
-    "latest_run_id": "20260628042524-hardening",
+    "latest_run_id": "20260628050614-hardening",
     "run_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs",
     "source_family_order": [
       "post_absorption_hardening",
@@ -46,11 +46,13 @@
         "retort_engine/cross_language_transfer.py",
         "retort_engine/diff_extension_policy.py",
         "retort_engine/employee_patch_closure.py",
+        "retort_engine/employee_runtime_worker.py",
         "retort_engine/employee_scheduler_stress.py",
         "retort_engine/external_advantage_adjudicator.py",
         "retort_engine/external_advantage_matrix.py",
         "retort_engine/external_advantage_regression.py",
         "retort_engine/external_advantage_repeat.py",
+        "retort_engine/heterogeneous_absorption_replay.py",
         "retort_engine/llm_absorption_evidence.py",
         "retort_engine/multi_project_absorption_replay.py",
         "retort_engine/operator_journey_replay.py",
@@ -66,6 +68,7 @@
         "retort_engine/project_assessment.py",
         "retort_engine/quality_gate_bundle.py",
         "retort_engine/real_absorption.py",
+        "retort_engine/review_adjudication_calibration.py",
         "retort_engine/review_calibration_policy.py",
         "retort_engine/service.py",
         "retort_engine/ui_server.py"
@@ -86,6 +89,7 @@
         "tests/test_external_advantage_matrix.py",
         "tests/test_external_advantage_regression.py",
         "tests/test_external_advantage_repeat.py",
+        "tests/test_heterogeneous_absorption_replay.py",
         "tests/test_llm_absorption_evidence.py",
         "tests/test_multi_project_absorption_replay.py",
         "tests/test_operator_journey_replay.py",
@@ -100,10 +104,11 @@
         "tests/test_quality_gate_bundle.py",
         "tests/test_real_absorption_helpers.py",
         "tests/test_retort_engine.py",
+        "tests/test_review_adjudication_calibration.py",
         "tests/test_review_calibration_policy.py",
         "tests/test_review_context_bias.py"
       ],
-      "changed_file_count": 80,
+      "changed_file_count": 87,
       "checks": {
         "behavior_diff": true,
         "behavior_tests": true,
@@ -116,8 +121,8 @@
       "code_graph_proof_missing": [],
       "code_graph_proof_status": "proved",
       "employee_result_count": 5,
-      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628042524-hardening.json",
-      "run_id": "20260628042524-hardening",
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628050614-hardening.json",
+      "run_id": "20260628050614-hardening",
       "source": "retort://post-absorption-hardening/2525bd4b6",
       "source_family": "post_absorption_hardening",
       "worker_review_status": "reviewed"
