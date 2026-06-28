@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from retort_engine.review_context_bias import context_signal_strength, file_grouping_enabled, review_context_bias
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/UllrAI/Vibe-PR-Reviewer'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/svetkis/ai-code-review-benchmark'
 
 
 def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
