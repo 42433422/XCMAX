@@ -157,6 +157,20 @@ class ImApplicationService:
             **sent,
         }
 
+    def employee_id_for_conversation(self, conversation_id: int, boss_user_id: int) -> str | None:
+        """若该 1:1 会话的对端是某 AI 员工合成 User，返回其 employee_id；否则 None。
+
+        入站回流用：老板在某会话回复后，据此判断是否是「回复某员工」，是则把回复回流为该员工的答案。
+        """
+        peer_id = self._direct_peer_id(conversation_id, int(boss_user_id))
+        if not peer_id:
+            return None
+        peer = self._db.get(User, int(peer_id))
+        uname = str(getattr(peer, "username", "") or "")
+        if uname.startswith("emp:"):
+            return uname[len("emp:") :].strip() or None
+        return None
+
     @staticmethod
     def _contact_dict(user: User, *, dedicated_cs: bool = False) -> dict[str, Any]:
         name = str(user.display_name or "").strip() or str(user.username or "").strip()

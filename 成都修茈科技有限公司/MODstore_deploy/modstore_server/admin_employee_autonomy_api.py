@@ -6,7 +6,7 @@ import json
 import re
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 
 from modstore_server.api.deps import require_admin
 from modstore_server.employee_autonomy_service import (
@@ -424,6 +424,41 @@ def answer_human_question(
     if not out.get("ok"):
         raise HTTPException(409, str(out.get("reason") or "answer failed"))
     return out
+
+
+@router.post("/internal/answer-latest")
+def internal_answer_latest_question(
+    request: Request,
+    body: Dict[str, Any] = Body(default_factory=dict),
+) -> Dict[str, Any]:
+    """内部端点：按 (user_id, employee_id) 回答该员工**最新** pending 问题（入站回流）。
+
+    供 FHD 在「老板于员工 IM 聊天页直接回复」时经 ``X-Internal-Api-Key`` 调用，无需 question_id。
+    打通 phase-D 双向问答入站半边。POST body: ``{user_id, employee_id, answer}``。
+    """
+    import os
+
+    expected = (
+        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
+        or ""
+    ).strip()
+    provided = (request.headers.get("X-Internal-Api-Key") or "").strip()
+    if not expected or provided != expected:
+        raise HTTPException(401, "unauthorized")
+    try:
+        user_id = int((body or {}).get("user_id") or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+    employee_id = str((body or {}).get("employee_id") or "").strip()
+    answer = str((body or {}).get("answer") or "").strip()
+    if user_id <= 0 or not employee_id or not answer:
+        raise HTTPException(400, "user_id/employee_id/answer required")
+    from modstore_server.human_uncertainty_queue import answer_latest_pending_for_employee
+
+    return answer_latest_pending_for_employee(
+        user_id=user_id, employee_id=employee_id, answer=answer
+    )
 
 
 @router.get("/questions/stats")
