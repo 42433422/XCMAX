@@ -1,38 +1,36 @@
 {
-  "active": true,
+  "active": false,
   "closed_loop_proof": {
     "branch_diff_verified": true,
     "employee_execution_verified": true,
     "evidence": [
       "retort_cli_status=applied",
-      "duration_sec=10.924",
-      "changed_files=/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_review_context_bias.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_code_graph_proof_20260628131134-6cc7a9e742.json",
-      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    | 1451 ++++++++++++++++++++ |  .../docs/retort_external_review_report.json        |  672 +++++---- |  .../retort_engine/absorbed_capabilities.py         |    2 +- |  .../retort_engine/absorbed_external_patterns.py    |    2 +- |  .../retort_engine/review_context_bias.py           |   14 +- |  .../tests/test_absorbed_capabilities.py            |    2 +- |  .../tests/test_review_context_bias.py              |    2 +- |  7 files changed, 1783 insertions(+), 362 deletions(-)",
+      "duration_sec=10.886",
+      "changed_files=/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_external_patterns.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_absorbed_capabilities.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/retort_engine/review_context_bias.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/tests/test_review_context_bias.py,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_absorption_log.md,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_external_review_report.json,/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_code_graph_proof_20260628131948-56d0af89ca.json",
+      "git_diff_summary= .../retort_engine/docs/retort_absorption_log.md    |  13 + |  .../docs/retort_external_review_report.json        | 600 +++++---------------- |  .../retort_engine/absorbed_capabilities.py         |   2 +- |  .../retort_engine/absorbed_external_patterns.py    |   2 +- |  .../retort_engine/review_context_bias.py           |   2 +- |  .../tests/test_absorbed_capabilities.py            |   2 +- |  .../tests/test_review_context_bias.py              |   2 +- |  7 files changed, 149 insertions(+), 474 deletions(-)",
       "gates_passed=True",
       "review_report=/Users/a4243342/Desktop/XCMAX/packages/retort_engine/docs/retort_external_review_report.json",
-      "employee_results=/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/employee_results/20260628131134-6cc7a9e742.json",
-      "commit=",
-      "merge_commit=",
-      "rollback_rehearsal=False",
+      "employee_results=/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/employee_results/20260628131948-56d0af89ca.json",
+      "commit=a0fe94edc",
+      "merge_commit=6eba315a7",
+      "rollback_rehearsal=True",
       "feedback_audit_closed=False",
       "history_result_count=0",
       "queue_records_written=0",
       "result_tasks_have_queue_records=False"
     ],
     "external_advantage_reassessed": true,
-    "merge_verified": false,
+    "merge_verified": true,
     "post_absorption_tests_passed": true
   },
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Usagi-org/ai-code-review-helper",
   "pending_dimensions": [
     "comparative_analysis_depth",
-    "external_ingestion",
-    "feedback_loop_closure",
     "operational_readiness",
     "product_operability"
   ],
-  "source": "https://github.com/Review-scope/ReviewScope",
-  "status": "execution_applied_awaiting_merge",
+  "source": "https://github.com/Usagi-org/ai-code-review-helper",
+  "status": "closed_loop_verified",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -40,7 +38,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/Review-scope/ReviewScope."
+      "why": "Compare implementation patterns from https://github.com/Usagi-org/ai-code-review-helper."
     },
     {
       "dimension": "product_operability",
@@ -48,7 +46,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/Review-scope/ReviewScope."
+      "why": "Extract usable UX improvements from https://github.com/Usagi-org/ai-code-review-helper."
     },
     {
       "dimension": "operational_readiness",
@@ -56,7 +54,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/Review-scope/ReviewScope."
+      "why": "Adapt CI and release checks from https://github.com/Usagi-org/ai-code-review-helper."
     },
     {
       "dimension": "comparative_analysis_depth",
@@ -65,22 +63,6 @@
       "task_id": "retort-absorb-review-pipeline",
       "title": "Adopt deterministic review pipeline stages",
       "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
-    },
-    {
-      "dimension": "external_ingestion",
-      "owner_hint": "fhd-core-maintainer",
-      "priority": "P1",
-      "task_id": "retort-absorb-file-grouping",
-      "title": "Add external file grouping before deep comparison",
-      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
-    },
-    {
-      "dimension": "feedback_loop_closure",
-      "owner_hint": "test-qa-runner",
-      "priority": "P2",
-      "task_id": "retort-absorb-benchmarking",
-      "title": "Add absorption quality benchmark counters",
-      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
