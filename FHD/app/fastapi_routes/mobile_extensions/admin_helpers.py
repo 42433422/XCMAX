@@ -296,7 +296,8 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
 
     sid = ""
     jwt_meta: dict[str, Any] = {}
-    authorization = request.headers.get("Authorization") or ""
+    authorization_raw = request.headers.get("Authorization") or ""
+    authorization = authorization_raw if isinstance(authorization_raw, str) else ""
     if authorization.startswith("Bearer "):
         payload = verify_mobile_jwt(authorization[7:].strip())
         if payload:
@@ -377,7 +378,8 @@ def _require_mobile_admin_or_enterprise(
 
 
 def _mobile_request_user_id(request: Request, user: Any) -> int:
-    authorization = request.headers.get("Authorization") or ""
+    authorization_raw = request.headers.get("Authorization") or ""
+    authorization = authorization_raw if isinstance(authorization_raw, str) else ""
     if authorization.startswith("Bearer "):
         try:
             from app.security.mobile_jwt import user_id_from_mobile_bearer
