@@ -1,0 +1,2073 @@
+{
+  "evidence": {
+    "acceptance": ">100 concurrent failed employee patches, all rolled back with post-rollback gate pass",
+    "gate": "py_compile_invalid_employee_patch_then_restored_source",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1",
+    "rollback_model": "per_worker_before_after_sha256_restoration",
+    "style": "hundred_plus_concurrent_employee_patch_failure_rollback"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_gates_failed_before_rollback": true,
+    "all_post_rollback_gates_passed": true,
+    "all_rollbacks_verified": true,
+    "attempted_patch_count": 120,
+    "concurrency_floor": 100,
+    "concurrency_floor_exceeded": true,
+    "concurrent_worker_count": 120,
+    "duration_sec": 0.11,
+    "failed_gate_count": 120,
+    "post_rollback_gate_passed_count": 120,
+    "ready_worker_count": 120,
+    "rollback_verified_count": 120,
+    "run_id": "employee-patch-stress-20260628T075344Z-7a2d0ee1",
+    "state_leak_count": 0,
+    "trace_count": 120,
+    "unique_process_id_count": 1,
+    "unique_thread_count": 64,
+    "worker_count": 120
+  },
+  "workers": [
+    {
+      "after_rollback_sha256": "3363141f6cef1b79bd0db05dc4158e5bd243b8b8d5f38eae4a2b9ca4a7e6d15f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_001/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_001/rollback_trace.json"
+      },
+      "before_sha256": "3363141f6cef1b79bd0db05dc4158e5bd243b8b8d5f38eae4a2b9ca4a7e6d15f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_001/employee_patch_target.py",
+      "thread_id": 6185185280,
+      "worker": 1
+    },
+    {
+      "after_rollback_sha256": "d92a7e94688c1788cb548c2e0861e5a7b25c529e3b41364e0c786e23b1a46a6d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_002/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_002/rollback_trace.json"
+      },
+      "before_sha256": "d92a7e94688c1788cb548c2e0861e5a7b25c529e3b41364e0c786e23b1a46a6d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_002/employee_patch_target.py",
+      "thread_id": 6202011648,
+      "worker": 2
+    },
+    {
+      "after_rollback_sha256": "c7b8b8b8d4d67fba4258870e1fe5e7589aaa8f542f74bc31d006d5f89c653fae",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_003/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_003/rollback_trace.json"
+      },
+      "before_sha256": "c7b8b8b8d4d67fba4258870e1fe5e7589aaa8f542f74bc31d006d5f89c653fae",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_003/employee_patch_target.py",
+      "thread_id": 6218838016,
+      "worker": 3
+    },
+    {
+      "after_rollback_sha256": "3722a22e5f44c6e5b5aca2c51ced346162c1d30d148b8934509db3c177f79384",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_004/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_004/rollback_trace.json"
+      },
+      "before_sha256": "3722a22e5f44c6e5b5aca2c51ced346162c1d30d148b8934509db3c177f79384",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_004/employee_patch_target.py",
+      "thread_id": 6235664384,
+      "worker": 4
+    },
+    {
+      "after_rollback_sha256": "e0927bf471afb322cbc12445a4467292f695b2ccd82fd6fed3b14ec2617c3ad4",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_005/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_005/rollback_trace.json"
+      },
+      "before_sha256": "e0927bf471afb322cbc12445a4467292f695b2ccd82fd6fed3b14ec2617c3ad4",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_005/employee_patch_target.py",
+      "thread_id": 6252490752,
+      "worker": 5
+    },
+    {
+      "after_rollback_sha256": "f81451eacca699cc6cf46126f7f69be7696b6742a1638af12dc3b962a09fac30",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_006/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_006/rollback_trace.json"
+      },
+      "before_sha256": "f81451eacca699cc6cf46126f7f69be7696b6742a1638af12dc3b962a09fac30",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_006/employee_patch_target.py",
+      "thread_id": 6269317120,
+      "worker": 6
+    },
+    {
+      "after_rollback_sha256": "8579089561cf7533d6ddf4971e9d58ab6f53992705fbd21021bbcc4c54b306f8",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_007/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_007/rollback_trace.json"
+      },
+      "before_sha256": "8579089561cf7533d6ddf4971e9d58ab6f53992705fbd21021bbcc4c54b306f8",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_007/employee_patch_target.py",
+      "thread_id": 6286143488,
+      "worker": 7
+    },
+    {
+      "after_rollback_sha256": "c0432a4240b2f99cb871ef11d9121ab34fe5b282ab7a10085ee3bcf2330fc71d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_008/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_008/rollback_trace.json"
+      },
+      "before_sha256": "c0432a4240b2f99cb871ef11d9121ab34fe5b282ab7a10085ee3bcf2330fc71d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_008/employee_patch_target.py",
+      "thread_id": 6302969856,
+      "worker": 8
+    },
+    {
+      "after_rollback_sha256": "c939475b8083ca8baaa00ff2dd5d87bad28a77771c85f7f7a57562d621468911",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_009/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_009/rollback_trace.json"
+      },
+      "before_sha256": "c939475b8083ca8baaa00ff2dd5d87bad28a77771c85f7f7a57562d621468911",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_009/employee_patch_target.py",
+      "thread_id": 6319796224,
+      "worker": 9
+    },
+    {
+      "after_rollback_sha256": "05e4064b48ab1f806896ab430e51118792ae2ba89f7214f767100bb35c85dfb1",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_010/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_010/rollback_trace.json"
+      },
+      "before_sha256": "05e4064b48ab1f806896ab430e51118792ae2ba89f7214f767100bb35c85dfb1",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_010/employee_patch_target.py",
+      "thread_id": 6336622592,
+      "worker": 10
+    },
+    {
+      "after_rollback_sha256": "fce1884fa14153f3c0f1145e17879d4c3a83003f9ed1a83428f843d1afc94bb7",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_011/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_011/rollback_trace.json"
+      },
+      "before_sha256": "fce1884fa14153f3c0f1145e17879d4c3a83003f9ed1a83428f843d1afc94bb7",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_011/employee_patch_target.py",
+      "thread_id": 6353448960,
+      "worker": 11
+    },
+    {
+      "after_rollback_sha256": "97651c5aa88fce136ddcc657fa12ab496a7ebf3dc1e4cc3f4f0f2f8dcda82c98",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_012/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_012/rollback_trace.json"
+      },
+      "before_sha256": "97651c5aa88fce136ddcc657fa12ab496a7ebf3dc1e4cc3f4f0f2f8dcda82c98",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_012/employee_patch_target.py",
+      "thread_id": 6370275328,
+      "worker": 12
+    },
+    {
+      "after_rollback_sha256": "d5bd65616e6884431217c98cfcb58f52b270ff3189ba5d3138d1e1f1da3d36a2",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_013/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_013/rollback_trace.json"
+      },
+      "before_sha256": "d5bd65616e6884431217c98cfcb58f52b270ff3189ba5d3138d1e1f1da3d36a2",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_013/employee_patch_target.py",
+      "thread_id": 6387101696,
+      "worker": 13
+    },
+    {
+      "after_rollback_sha256": "fb1764e5064543320ce1294a0feb109e762d2aec82b50365e8fbba0683695470",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_014/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_014/rollback_trace.json"
+      },
+      "before_sha256": "fb1764e5064543320ce1294a0feb109e762d2aec82b50365e8fbba0683695470",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_014/employee_patch_target.py",
+      "thread_id": 6403928064,
+      "worker": 14
+    },
+    {
+      "after_rollback_sha256": "4ec39dddd64334be42f33af03ab68a4789ba17b2c2b8f27f3020aa4fe6d84875",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_015/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_015/rollback_trace.json"
+      },
+      "before_sha256": "4ec39dddd64334be42f33af03ab68a4789ba17b2c2b8f27f3020aa4fe6d84875",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_015/employee_patch_target.py",
+      "thread_id": 6420754432,
+      "worker": 15
+    },
+    {
+      "after_rollback_sha256": "472b7b741c99fa57f009052349ee21c4c006f442e9b2cf51f21cca44a1c040de",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_016/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_016/rollback_trace.json"
+      },
+      "before_sha256": "472b7b741c99fa57f009052349ee21c4c006f442e9b2cf51f21cca44a1c040de",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_016/employee_patch_target.py",
+      "thread_id": 6437580800,
+      "worker": 16
+    },
+    {
+      "after_rollback_sha256": "208266cb619a3ca54d739afd9ffe148dd657a1b30da3d3b9a72be8d1680bc3aa",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_017/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_017/rollback_trace.json"
+      },
+      "before_sha256": "208266cb619a3ca54d739afd9ffe148dd657a1b30da3d3b9a72be8d1680bc3aa",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_017/employee_patch_target.py",
+      "thread_id": 12901707776,
+      "worker": 17
+    },
+    {
+      "after_rollback_sha256": "5b74c816d3894f0bb4ec2e6b51d9a5035b50d0215f8b2da605f7df73b98024fd",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_018/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_018/rollback_trace.json"
+      },
+      "before_sha256": "5b74c816d3894f0bb4ec2e6b51d9a5035b50d0215f8b2da605f7df73b98024fd",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_018/employee_patch_target.py",
+      "thread_id": 12918534144,
+      "worker": 18
+    },
+    {
+      "after_rollback_sha256": "2a415948a54dc3659047e8a75f13fa34c3964bb7ea1bd66b2eb1108edf4eb526",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_019/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_019/rollback_trace.json"
+      },
+      "before_sha256": "2a415948a54dc3659047e8a75f13fa34c3964bb7ea1bd66b2eb1108edf4eb526",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_019/employee_patch_target.py",
+      "thread_id": 12935360512,
+      "worker": 19
+    },
+    {
+      "after_rollback_sha256": "e1354c8eefdfc3738b9793ed10f54c67a942082f6fa4a2b29f5a24f34d06f17f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_020/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_020/rollback_trace.json"
+      },
+      "before_sha256": "e1354c8eefdfc3738b9793ed10f54c67a942082f6fa4a2b29f5a24f34d06f17f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_020/employee_patch_target.py",
+      "thread_id": 12952186880,
+      "worker": 20
+    },
+    {
+      "after_rollback_sha256": "53652ba7a452659157349f93ed23824bda9f607b38dcf32c1847f9291505d175",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_021/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_021/rollback_trace.json"
+      },
+      "before_sha256": "53652ba7a452659157349f93ed23824bda9f607b38dcf32c1847f9291505d175",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_021/employee_patch_target.py",
+      "thread_id": 12969013248,
+      "worker": 21
+    },
+    {
+      "after_rollback_sha256": "bfd029bf7f40888b5ffcd39ff381584098102684b698399ce6e8cbd46e38864d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_022/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_022/rollback_trace.json"
+      },
+      "before_sha256": "bfd029bf7f40888b5ffcd39ff381584098102684b698399ce6e8cbd46e38864d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_022/employee_patch_target.py",
+      "thread_id": 12985839616,
+      "worker": 22
+    },
+    {
+      "after_rollback_sha256": "8291f5c8618a2ef78a1c0a61f07a07f4b0913e13602989045f0ca6fc40c4e94f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_023/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_023/rollback_trace.json"
+      },
+      "before_sha256": "8291f5c8618a2ef78a1c0a61f07a07f4b0913e13602989045f0ca6fc40c4e94f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_023/employee_patch_target.py",
+      "thread_id": 13002665984,
+      "worker": 23
+    },
+    {
+      "after_rollback_sha256": "cf98c39226eb0eb40d91c40336d0d73419e42e5d5d3cba19290690554a7336bc",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_024/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_024/rollback_trace.json"
+      },
+      "before_sha256": "cf98c39226eb0eb40d91c40336d0d73419e42e5d5d3cba19290690554a7336bc",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_024/employee_patch_target.py",
+      "thread_id": 13019492352,
+      "worker": 24
+    },
+    {
+      "after_rollback_sha256": "cff5061142ace841b179426ba8126f63519302e382debaf5e76e863a3a9d1d89",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_025/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_025/rollback_trace.json"
+      },
+      "before_sha256": "cff5061142ace841b179426ba8126f63519302e382debaf5e76e863a3a9d1d89",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_025/employee_patch_target.py",
+      "thread_id": 13036318720,
+      "worker": 25
+    },
+    {
+      "after_rollback_sha256": "7999dac2ec21c4a2e471f8f9bd6863c0f5793b7d2142c7cc42625ae71df7c87f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_026/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_026/rollback_trace.json"
+      },
+      "before_sha256": "7999dac2ec21c4a2e471f8f9bd6863c0f5793b7d2142c7cc42625ae71df7c87f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_026/employee_patch_target.py",
+      "thread_id": 13053145088,
+      "worker": 26
+    },
+    {
+      "after_rollback_sha256": "0014129517a5c15f6c2d326724fac00e1b7209519f4cb73e8a6829b565662672",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_027/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_027/rollback_trace.json"
+      },
+      "before_sha256": "0014129517a5c15f6c2d326724fac00e1b7209519f4cb73e8a6829b565662672",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_027/employee_patch_target.py",
+      "thread_id": 13069971456,
+      "worker": 27
+    },
+    {
+      "after_rollback_sha256": "3cc7766f9b4af18ff3f1874bb6c14e9d30dec02101d64933eec70cf81d157941",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_028/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_028/rollback_trace.json"
+      },
+      "before_sha256": "3cc7766f9b4af18ff3f1874bb6c14e9d30dec02101d64933eec70cf81d157941",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_028/employee_patch_target.py",
+      "thread_id": 13086797824,
+      "worker": 28
+    },
+    {
+      "after_rollback_sha256": "3a28da9389fa84c45f51aa54f3ced06c7895616147f604b620b3fdaa04b92c9e",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_029/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_029/rollback_trace.json"
+      },
+      "before_sha256": "3a28da9389fa84c45f51aa54f3ced06c7895616147f604b620b3fdaa04b92c9e",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_029/employee_patch_target.py",
+      "thread_id": 13103624192,
+      "worker": 29
+    },
+    {
+      "after_rollback_sha256": "69e15524681b00f63a9b96a9f4a52e0562cc853b0ed3aaff1a83bf8f3de8c19b",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_030/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_030/rollback_trace.json"
+      },
+      "before_sha256": "69e15524681b00f63a9b96a9f4a52e0562cc853b0ed3aaff1a83bf8f3de8c19b",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_030/employee_patch_target.py",
+      "thread_id": 13120450560,
+      "worker": 30
+    },
+    {
+      "after_rollback_sha256": "8c3e3bbda8af4fab6dcc036e2d3f2b6b4f499465887e416196e96081bc24bd06",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_031/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_031/rollback_trace.json"
+      },
+      "before_sha256": "8c3e3bbda8af4fab6dcc036e2d3f2b6b4f499465887e416196e96081bc24bd06",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_031/employee_patch_target.py",
+      "thread_id": 13137276928,
+      "worker": 31
+    },
+    {
+      "after_rollback_sha256": "731b2a06cf7e05d55c1b8c2835d8f832057575c6b65243d93ebec4e51adcfc9b",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_032/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_032/rollback_trace.json"
+      },
+      "before_sha256": "731b2a06cf7e05d55c1b8c2835d8f832057575c6b65243d93ebec4e51adcfc9b",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_032/employee_patch_target.py",
+      "thread_id": 13154103296,
+      "worker": 32
+    },
+    {
+      "after_rollback_sha256": "14d36f00ff6ae81c6175dbb07a0de1b52d3f88dd1e116d5fe6a545bb0edb660c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_033/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_033/rollback_trace.json"
+      },
+      "before_sha256": "14d36f00ff6ae81c6175dbb07a0de1b52d3f88dd1e116d5fe6a545bb0edb660c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_033/employee_patch_target.py",
+      "thread_id": 13170929664,
+      "worker": 33
+    },
+    {
+      "after_rollback_sha256": "b2ab8ae8f0ac3ed144a354103c75b78769f17820747aed5bf0a23a112a53a929",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_034/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_034/rollback_trace.json"
+      },
+      "before_sha256": "b2ab8ae8f0ac3ed144a354103c75b78769f17820747aed5bf0a23a112a53a929",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_034/employee_patch_target.py",
+      "thread_id": 6185185280,
+      "worker": 34
+    },
+    {
+      "after_rollback_sha256": "36e11e9e45514f47cbfd4f744b65f5451055c588663be1adc84ea3fcc9cf6c21",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_035/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_035/rollback_trace.json"
+      },
+      "before_sha256": "36e11e9e45514f47cbfd4f744b65f5451055c588663be1adc84ea3fcc9cf6c21",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_035/employee_patch_target.py",
+      "thread_id": 13187756032,
+      "worker": 35
+    },
+    {
+      "after_rollback_sha256": "cb1c726e40cb815ba9b8a3970badd5dbf2dc7ea5b039d5f38333e6c56f328cf3",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_036/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_036/rollback_trace.json"
+      },
+      "before_sha256": "cb1c726e40cb815ba9b8a3970badd5dbf2dc7ea5b039d5f38333e6c56f328cf3",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_036/employee_patch_target.py",
+      "thread_id": 13204582400,
+      "worker": 36
+    },
+    {
+      "after_rollback_sha256": "c8567dbe68335dc2abe9e71d176d253b20d7c77a425133b6aae161461293fbff",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_037/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_037/rollback_trace.json"
+      },
+      "before_sha256": "c8567dbe68335dc2abe9e71d176d253b20d7c77a425133b6aae161461293fbff",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_037/employee_patch_target.py",
+      "thread_id": 13221408768,
+      "worker": 37
+    },
+    {
+      "after_rollback_sha256": "f40033c14e90731a4d6b3e08f05f88449cd679e5ed3e3840bbdfa3c10fd9930c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_038/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_038/rollback_trace.json"
+      },
+      "before_sha256": "f40033c14e90731a4d6b3e08f05f88449cd679e5ed3e3840bbdfa3c10fd9930c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_038/employee_patch_target.py",
+      "thread_id": 6353448960,
+      "worker": 38
+    },
+    {
+      "after_rollback_sha256": "b6c68ff7758be8311e1d532832ad2b64cf54e63b5d554b44171476a0fe62dfa9",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_039/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_039/rollback_trace.json"
+      },
+      "before_sha256": "b6c68ff7758be8311e1d532832ad2b64cf54e63b5d554b44171476a0fe62dfa9",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_039/employee_patch_target.py",
+      "thread_id": 13238235136,
+      "worker": 39
+    },
+    {
+      "after_rollback_sha256": "6bf3f49cda4fde31a40355ba3bd99fd9c59ea264a77ac3cbe2049f974a95a31c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_040/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_040/rollback_trace.json"
+      },
+      "before_sha256": "6bf3f49cda4fde31a40355ba3bd99fd9c59ea264a77ac3cbe2049f974a95a31c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_040/employee_patch_target.py",
+      "thread_id": 13255061504,
+      "worker": 40
+    },
+    {
+      "after_rollback_sha256": "52251d9cecfa50a8247e8f5a279e1c26821320ef14e8ef64cea2d1038071f894",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_041/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_041/rollback_trace.json"
+      },
+      "before_sha256": "52251d9cecfa50a8247e8f5a279e1c26821320ef14e8ef64cea2d1038071f894",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_041/employee_patch_target.py",
+      "thread_id": 6403928064,
+      "worker": 41
+    },
+    {
+      "after_rollback_sha256": "72fdb396c37eac673240c87f52d6e42bf8235973f749cbac5ee494fc72a0cf5f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_042/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_042/rollback_trace.json"
+      },
+      "before_sha256": "72fdb396c37eac673240c87f52d6e42bf8235973f749cbac5ee494fc72a0cf5f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_042/employee_patch_target.py",
+      "thread_id": 6202011648,
+      "worker": 42
+    },
+    {
+      "after_rollback_sha256": "e2be1fe31b93107fb731f6978617d4b15a70069ec5ba4c7b6d5fef0d1a993a20",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_043/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_043/rollback_trace.json"
+      },
+      "before_sha256": "e2be1fe31b93107fb731f6978617d4b15a70069ec5ba4c7b6d5fef0d1a993a20",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_043/employee_patch_target.py",
+      "thread_id": 6336622592,
+      "worker": 43
+    },
+    {
+      "after_rollback_sha256": "bf5bce73bd1d840f4e263abb66c736575326649abe5d58aabc2b43aaf4d590f3",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_044/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_044/rollback_trace.json"
+      },
+      "before_sha256": "bf5bce73bd1d840f4e263abb66c736575326649abe5d58aabc2b43aaf4d590f3",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_044/employee_patch_target.py",
+      "thread_id": 6235664384,
+      "worker": 44
+    },
+    {
+      "after_rollback_sha256": "0e7d6b8b29d4529de46e54759caae9750de6ed1978d0b19e400cad9c114d4229",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_045/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_045/rollback_trace.json"
+      },
+      "before_sha256": "0e7d6b8b29d4529de46e54759caae9750de6ed1978d0b19e400cad9c114d4229",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_045/employee_patch_target.py",
+      "thread_id": 13271887872,
+      "worker": 45
+    },
+    {
+      "after_rollback_sha256": "3cd639546826eea0dc12839f2da627509a483699c4144cd180d38cfdb77bd3df",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_046/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_046/rollback_trace.json"
+      },
+      "before_sha256": "3cd639546826eea0dc12839f2da627509a483699c4144cd180d38cfdb77bd3df",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_046/employee_patch_target.py",
+      "thread_id": 6269317120,
+      "worker": 46
+    },
+    {
+      "after_rollback_sha256": "e16f4b21a8170730ca2650350a3d18c29d46e3e6d89c343c32425704c6936835",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_047/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_047/rollback_trace.json"
+      },
+      "before_sha256": "e16f4b21a8170730ca2650350a3d18c29d46e3e6d89c343c32425704c6936835",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_047/employee_patch_target.py",
+      "thread_id": 13305540608,
+      "worker": 47
+    },
+    {
+      "after_rollback_sha256": "5ffaf010493d288bdbc00b4b3bcbf1eb0f6fef719dbbd706b487b1d8b603a3d7",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_048/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_048/rollback_trace.json"
+      },
+      "before_sha256": "5ffaf010493d288bdbc00b4b3bcbf1eb0f6fef719dbbd706b487b1d8b603a3d7",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_048/employee_patch_target.py",
+      "thread_id": 6218838016,
+      "worker": 48
+    },
+    {
+      "after_rollback_sha256": "1e42f6d59a3c99ffe77d4d77e5335096ec3f37f00c2d06eec21fba58c29b18d1",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_049/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_049/rollback_trace.json"
+      },
+      "before_sha256": "1e42f6d59a3c99ffe77d4d77e5335096ec3f37f00c2d06eec21fba58c29b18d1",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_049/employee_patch_target.py",
+      "thread_id": 6319796224,
+      "worker": 49
+    },
+    {
+      "after_rollback_sha256": "199b56f5a7b562cbb38fa9b858b83b9e8e5c2343d89548c3a15e499aa9706104",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_050/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_050/rollback_trace.json"
+      },
+      "before_sha256": "199b56f5a7b562cbb38fa9b858b83b9e8e5c2343d89548c3a15e499aa9706104",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_050/employee_patch_target.py",
+      "thread_id": 6437580800,
+      "worker": 50
+    },
+    {
+      "after_rollback_sha256": "50252181e1a0c43a4f77c606082a529e5d9336c3dc049836ddafab1a8e2d31f5",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_051/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_051/rollback_trace.json"
+      },
+      "before_sha256": "50252181e1a0c43a4f77c606082a529e5d9336c3dc049836ddafab1a8e2d31f5",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_051/employee_patch_target.py",
+      "thread_id": 13288714240,
+      "worker": 51
+    },
+    {
+      "after_rollback_sha256": "cb17bdfea65362975689d49982c5463b477f0390af2c7965c2f515b147b775b2",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_052/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_052/rollback_trace.json"
+      },
+      "before_sha256": "cb17bdfea65362975689d49982c5463b477f0390af2c7965c2f515b147b775b2",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_052/employee_patch_target.py",
+      "thread_id": 6302969856,
+      "worker": 52
+    },
+    {
+      "after_rollback_sha256": "ac150311e650d91b3f7ab457d976ec04b621a56a5b01a7d8db46fa7e2eb8ac13",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_053/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_053/rollback_trace.json"
+      },
+      "before_sha256": "ac150311e650d91b3f7ab457d976ec04b621a56a5b01a7d8db46fa7e2eb8ac13",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_053/employee_patch_target.py",
+      "thread_id": 13339193344,
+      "worker": 53
+    },
+    {
+      "after_rollback_sha256": "724e780ac93764e3c77ce4ca7478d90ee9ad910a729e6f3ce6f37497cc118d76",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_054/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_054/rollback_trace.json"
+      },
+      "before_sha256": "724e780ac93764e3c77ce4ca7478d90ee9ad910a729e6f3ce6f37497cc118d76",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_054/employee_patch_target.py",
+      "thread_id": 6420754432,
+      "worker": 54
+    },
+    {
+      "after_rollback_sha256": "71978bff0b84579772533e507c58132334b7c81ab22a68c0b07adb1205a0eb25",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_055/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_055/rollback_trace.json"
+      },
+      "before_sha256": "71978bff0b84579772533e507c58132334b7c81ab22a68c0b07adb1205a0eb25",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_055/employee_patch_target.py",
+      "thread_id": 13322366976,
+      "worker": 55
+    },
+    {
+      "after_rollback_sha256": "cbd4093c3cb152ae0549ac4fc61127ae5540075a7350f8c88f1810392e46f595",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_056/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_056/rollback_trace.json"
+      },
+      "before_sha256": "cbd4093c3cb152ae0549ac4fc61127ae5540075a7350f8c88f1810392e46f595",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_056/employee_patch_target.py",
+      "thread_id": 6252490752,
+      "worker": 56
+    },
+    {
+      "after_rollback_sha256": "fa2b5354fa3536e4cc3f20163e01e240d090be8ca6fbde21652b5b72de3f17cb",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_057/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_057/rollback_trace.json"
+      },
+      "before_sha256": "fa2b5354fa3536e4cc3f20163e01e240d090be8ca6fbde21652b5b72de3f17cb",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_057/employee_patch_target.py",
+      "thread_id": 13053145088,
+      "worker": 57
+    },
+    {
+      "after_rollback_sha256": "9e742ff27fc469d0c9d5ea660722617b6e3480a15c44930bdc476e3d7a59616d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_058/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_058/rollback_trace.json"
+      },
+      "before_sha256": "9e742ff27fc469d0c9d5ea660722617b6e3480a15c44930bdc476e3d7a59616d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_058/employee_patch_target.py",
+      "thread_id": 12935360512,
+      "worker": 58
+    },
+    {
+      "after_rollback_sha256": "966448d024b5b1ed8b1c9734de411daa6e2e897b401f93517dfac4e70f09481d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_059/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_059/rollback_trace.json"
+      },
+      "before_sha256": "966448d024b5b1ed8b1c9734de411daa6e2e897b401f93517dfac4e70f09481d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_059/employee_patch_target.py",
+      "thread_id": 6387101696,
+      "worker": 59
+    },
+    {
+      "after_rollback_sha256": "959a131c27aac0aa174c7d952db0f5c6f2bbe674b0a425997434ce5927195980",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_060/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_060/rollback_trace.json"
+      },
+      "before_sha256": "959a131c27aac0aa174c7d952db0f5c6f2bbe674b0a425997434ce5927195980",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_060/employee_patch_target.py",
+      "thread_id": 6286143488,
+      "worker": 60
+    },
+    {
+      "after_rollback_sha256": "90dd61ba87fe43cca52f707b142c989391f95b5355e2c0877a76d07bf913cf74",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_061/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_061/rollback_trace.json"
+      },
+      "before_sha256": "90dd61ba87fe43cca52f707b142c989391f95b5355e2c0877a76d07bf913cf74",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_061/employee_patch_target.py",
+      "thread_id": 6370275328,
+      "worker": 61
+    },
+    {
+      "after_rollback_sha256": "d727e49ad292d8b14dae80007d095479dafe35c0eb9c877c93dac466e181586d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_062/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_062/rollback_trace.json"
+      },
+      "before_sha256": "d727e49ad292d8b14dae80007d095479dafe35c0eb9c877c93dac466e181586d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_062/employee_patch_target.py",
+      "thread_id": 13356019712,
+      "worker": 62
+    },
+    {
+      "after_rollback_sha256": "3349fa8c31ea7b3f21ac679d833a7cf86a363195a4d7aa98321e3f06c8d3bcee",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_063/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_063/rollback_trace.json"
+      },
+      "before_sha256": "3349fa8c31ea7b3f21ac679d833a7cf86a363195a4d7aa98321e3f06c8d3bcee",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_063/employee_patch_target.py",
+      "thread_id": 12969013248,
+      "worker": 63
+    },
+    {
+      "after_rollback_sha256": "538be09e33cf22047ca574038fa901c8c26875a8230c1c8af7bc545f08cded6c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_064/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_064/rollback_trace.json"
+      },
+      "before_sha256": "538be09e33cf22047ca574038fa901c8c26875a8230c1c8af7bc545f08cded6c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_064/employee_patch_target.py",
+      "thread_id": 12918534144,
+      "worker": 64
+    },
+    {
+      "after_rollback_sha256": "f05ad1857eaaaa566116810f8b1b5c00037495bb6c7e4cb331282d7d15001a84",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_065/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_065/rollback_trace.json"
+      },
+      "before_sha256": "f05ad1857eaaaa566116810f8b1b5c00037495bb6c7e4cb331282d7d15001a84",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_065/employee_patch_target.py",
+      "thread_id": 13372846080,
+      "worker": 65
+    },
+    {
+      "after_rollback_sha256": "45192899bc4fb53a829d5ea4099a7f6dfebbf5afa6929135601542895fef5e5b",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_066/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_066/rollback_trace.json"
+      },
+      "before_sha256": "45192899bc4fb53a829d5ea4099a7f6dfebbf5afa6929135601542895fef5e5b",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_066/employee_patch_target.py",
+      "thread_id": 13036318720,
+      "worker": 66
+    },
+    {
+      "after_rollback_sha256": "41f5887777ff9926b0121dc948f22ca51869b5a84e00d01848c34f9e97ed484e",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_067/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_067/rollback_trace.json"
+      },
+      "before_sha256": "41f5887777ff9926b0121dc948f22ca51869b5a84e00d01848c34f9e97ed484e",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_067/employee_patch_target.py",
+      "thread_id": 13389672448,
+      "worker": 67
+    },
+    {
+      "after_rollback_sha256": "f5f87ab30ccdf1f3e4c1e0ead2f6ba44539bcd94e7486b4a9741849cd2cd7a77",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_068/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_068/rollback_trace.json"
+      },
+      "before_sha256": "f5f87ab30ccdf1f3e4c1e0ead2f6ba44539bcd94e7486b4a9741849cd2cd7a77",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_068/employee_patch_target.py",
+      "thread_id": 13406498816,
+      "worker": 68
+    },
+    {
+      "after_rollback_sha256": "0634ee37050a0423c8c462ff938a47c0ba4a17a8f6c3d72c8dfa760ba4e0dfd5",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_069/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_069/rollback_trace.json"
+      },
+      "before_sha256": "0634ee37050a0423c8c462ff938a47c0ba4a17a8f6c3d72c8dfa760ba4e0dfd5",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_069/employee_patch_target.py",
+      "thread_id": 6353448960,
+      "worker": 69
+    },
+    {
+      "after_rollback_sha256": "5a1ec2f5444d6fc31351ca8b27c9cd656cd74709d19ad5969aaf90b5976de0d9",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_070/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_070/rollback_trace.json"
+      },
+      "before_sha256": "5a1ec2f5444d6fc31351ca8b27c9cd656cd74709d19ad5969aaf90b5976de0d9",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_070/employee_patch_target.py",
+      "thread_id": 12985839616,
+      "worker": 70
+    },
+    {
+      "after_rollback_sha256": "9ae6fda57d3ea83652e1a10febb6051395390d961799097d90c16cc889c1885c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_071/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_071/rollback_trace.json"
+      },
+      "before_sha256": "9ae6fda57d3ea83652e1a10febb6051395390d961799097d90c16cc889c1885c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_071/employee_patch_target.py",
+      "thread_id": 13086797824,
+      "worker": 71
+    },
+    {
+      "after_rollback_sha256": "435a9dc2f7afb81441177886917709995b9d8eb6845653696e6fb37efa589a9e",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_072/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_072/rollback_trace.json"
+      },
+      "before_sha256": "435a9dc2f7afb81441177886917709995b9d8eb6845653696e6fb37efa589a9e",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_072/employee_patch_target.py",
+      "thread_id": 13423325184,
+      "worker": 72
+    },
+    {
+      "after_rollback_sha256": "0919e5fa45cdb1a2e822e40efde2c327c93dc3b17e141d6dac6a0ad31c550ce0",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_073/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_073/rollback_trace.json"
+      },
+      "before_sha256": "0919e5fa45cdb1a2e822e40efde2c327c93dc3b17e141d6dac6a0ad31c550ce0",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_073/employee_patch_target.py",
+      "thread_id": 13019492352,
+      "worker": 73
+    },
+    {
+      "after_rollback_sha256": "a50bf557562f8b35c2d2ccb447f105530394a00115af332a1bb74cd559f10c2b",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_074/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_074/rollback_trace.json"
+      },
+      "before_sha256": "a50bf557562f8b35c2d2ccb447f105530394a00115af332a1bb74cd559f10c2b",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_074/employee_patch_target.py",
+      "thread_id": 12901707776,
+      "worker": 74
+    },
+    {
+      "after_rollback_sha256": "a25f7100ce9c73ae3d24924d0b41c0541c7f16c6cd0ec3ca49df6388cb4735a6",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_075/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_075/rollback_trace.json"
+      },
+      "before_sha256": "a25f7100ce9c73ae3d24924d0b41c0541c7f16c6cd0ec3ca49df6388cb4735a6",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_075/employee_patch_target.py",
+      "thread_id": 13187756032,
+      "worker": 75
+    },
+    {
+      "after_rollback_sha256": "e2ef0faa19c9a826eadbf090d35790d3587459aa15b9421738b07d79d67e252a",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_076/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_076/rollback_trace.json"
+      },
+      "before_sha256": "e2ef0faa19c9a826eadbf090d35790d3587459aa15b9421738b07d79d67e252a",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_076/employee_patch_target.py",
+      "thread_id": 6437580800,
+      "worker": 76
+    },
+    {
+      "after_rollback_sha256": "6be703d533b1084912f8d484bd833b39561537013216e17e9633fba81153ac6c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_077/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_077/rollback_trace.json"
+      },
+      "before_sha256": "6be703d533b1084912f8d484bd833b39561537013216e17e9633fba81153ac6c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_077/employee_patch_target.py",
+      "thread_id": 6185185280,
+      "worker": 77
+    },
+    {
+      "after_rollback_sha256": "46b9d80b2ee548670a792b9f248767ffba3d936affdcf9fdce6fa93b15a7c41d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_078/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_078/rollback_trace.json"
+      },
+      "before_sha256": "46b9d80b2ee548670a792b9f248767ffba3d936affdcf9fdce6fa93b15a7c41d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_078/employee_patch_target.py",
+      "thread_id": 6202011648,
+      "worker": 78
+    },
+    {
+      "after_rollback_sha256": "7d1d3cb1dd6b2dfcee366f23fb3b595208c50419c59600c57eedbd1295d51ed7",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_079/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_079/rollback_trace.json"
+      },
+      "before_sha256": "7d1d3cb1dd6b2dfcee366f23fb3b595208c50419c59600c57eedbd1295d51ed7",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_079/employee_patch_target.py",
+      "thread_id": 13456977920,
+      "worker": 79
+    },
+    {
+      "after_rollback_sha256": "0154338674f980112928e7b6eb310cc42dfa4e38c51bfa34f0f0d4a6563eea6f",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_080/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_080/rollback_trace.json"
+      },
+      "before_sha256": "0154338674f980112928e7b6eb310cc42dfa4e38c51bfa34f0f0d4a6563eea6f",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_080/employee_patch_target.py",
+      "thread_id": 13170929664,
+      "worker": 80
+    },
+    {
+      "after_rollback_sha256": "54072cdf551f261ec4dbe9de18d274a351185ffce8cf7fb7b11990dff41e17c3",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_081/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_081/rollback_trace.json"
+      },
+      "before_sha256": "54072cdf551f261ec4dbe9de18d274a351185ffce8cf7fb7b11990dff41e17c3",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_081/employee_patch_target.py",
+      "thread_id": 13288714240,
+      "worker": 81
+    },
+    {
+      "after_rollback_sha256": "e43aff87dc80e476980b2566705644252ea3e0d6fdbcf761cf1e3d294ad222a2",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_082/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_082/rollback_trace.json"
+      },
+      "before_sha256": "e43aff87dc80e476980b2566705644252ea3e0d6fdbcf761cf1e3d294ad222a2",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_082/employee_patch_target.py",
+      "thread_id": 12985839616,
+      "worker": 82
+    },
+    {
+      "after_rollback_sha256": "06c2c406163b6c0addcdcbcc5724ee5f7cede6cc527c5362c5b3f24cdfed948d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_083/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_083/rollback_trace.json"
+      },
+      "before_sha256": "06c2c406163b6c0addcdcbcc5724ee5f7cede6cc527c5362c5b3f24cdfed948d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_083/employee_patch_target.py",
+      "thread_id": 13002665984,
+      "worker": 83
+    },
+    {
+      "after_rollback_sha256": "b496266b21c5f40bcd7719dcc6c05e4b0a3f8d9a346b517b47665c742f3911db",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_084/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_084/rollback_trace.json"
+      },
+      "before_sha256": "b496266b21c5f40bcd7719dcc6c05e4b0a3f8d9a346b517b47665c742f3911db",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_084/employee_patch_target.py",
+      "thread_id": 13120450560,
+      "worker": 84
+    },
+    {
+      "after_rollback_sha256": "3f183418e0fec16ea73e318edcafb4bebb8c821ec1b99737c4680663d27064a8",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_085/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_085/rollback_trace.json"
+      },
+      "before_sha256": "3f183418e0fec16ea73e318edcafb4bebb8c821ec1b99737c4680663d27064a8",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_085/employee_patch_target.py",
+      "thread_id": 13053145088,
+      "worker": 85
+    },
+    {
+      "after_rollback_sha256": "9c531e2a20295fef4fbed9510f9146b89ceb1db8cf4a284860d33071a7e528fb",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_086/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_086/rollback_trace.json"
+      },
+      "before_sha256": "9c531e2a20295fef4fbed9510f9146b89ceb1db8cf4a284860d33071a7e528fb",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_086/employee_patch_target.py",
+      "thread_id": 13356019712,
+      "worker": 86
+    },
+    {
+      "after_rollback_sha256": "216329945b9efb9face5e1aae47af7d4727856f9a59316854772f741c02137bf",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_087/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_087/rollback_trace.json"
+      },
+      "before_sha256": "216329945b9efb9face5e1aae47af7d4727856f9a59316854772f741c02137bf",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_087/employee_patch_target.py",
+      "thread_id": 12952186880,
+      "worker": 87
+    },
+    {
+      "after_rollback_sha256": "310c6baaa912a06536c4c888ca56aaa1f4fb8eec221621e120045df9404e38df",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_088/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_088/rollback_trace.json"
+      },
+      "before_sha256": "310c6baaa912a06536c4c888ca56aaa1f4fb8eec221621e120045df9404e38df",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_088/employee_patch_target.py",
+      "thread_id": 13238235136,
+      "worker": 88
+    },
+    {
+      "after_rollback_sha256": "cbe3a18e0c8e53197e2c2f8148f77fc4268dfbe54846158b566da9c8a58331c9",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_089/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_089/rollback_trace.json"
+      },
+      "before_sha256": "cbe3a18e0c8e53197e2c2f8148f77fc4268dfbe54846158b566da9c8a58331c9",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_089/employee_patch_target.py",
+      "thread_id": 13255061504,
+      "worker": 89
+    },
+    {
+      "after_rollback_sha256": "f6909036786fd311db2ef6a615c23ac28d7216084c4379ab8859a51acfb6a5ff",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_090/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_090/rollback_trace.json"
+      },
+      "before_sha256": "f6909036786fd311db2ef6a615c23ac28d7216084c4379ab8859a51acfb6a5ff",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_090/employee_patch_target.py",
+      "thread_id": 13490630656,
+      "worker": 90
+    },
+    {
+      "after_rollback_sha256": "36127b2fe1c7751a699e23aa9a9b44dc88f25804092471ee98799cbafbf3914b",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_091/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_091/rollback_trace.json"
+      },
+      "before_sha256": "36127b2fe1c7751a699e23aa9a9b44dc88f25804092471ee98799cbafbf3914b",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_091/employee_patch_target.py",
+      "thread_id": 13507457024,
+      "worker": 91
+    },
+    {
+      "after_rollback_sha256": "3890bab0086d40e50002cab02030ff8a5728be115c422ec66762b51ae527d093",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_092/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_092/rollback_trace.json"
+      },
+      "before_sha256": "3890bab0086d40e50002cab02030ff8a5728be115c422ec66762b51ae527d093",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_092/employee_patch_target.py",
+      "thread_id": 6252490752,
+      "worker": 92
+    },
+    {
+      "after_rollback_sha256": "c3ccf52317c833f165b6641050d93529c9f6eb6e06e56448407105339643ff74",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_093/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_093/rollback_trace.json"
+      },
+      "before_sha256": "c3ccf52317c833f165b6641050d93529c9f6eb6e06e56448407105339643ff74",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_093/employee_patch_target.py",
+      "thread_id": 13440151552,
+      "worker": 93
+    },
+    {
+      "after_rollback_sha256": "04da990ac6c1cd5aa33a0f392193f043dabe8313c2e17cd2d060688ce74c8d86",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_094/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_094/rollback_trace.json"
+      },
+      "before_sha256": "04da990ac6c1cd5aa33a0f392193f043dabe8313c2e17cd2d060688ce74c8d86",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_094/employee_patch_target.py",
+      "thread_id": 13473804288,
+      "worker": 94
+    },
+    {
+      "after_rollback_sha256": "d9b9f612f94ceb7fc902d2c596de24f979abb1c2d15615df04948b5353ad19d1",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_095/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_095/rollback_trace.json"
+      },
+      "before_sha256": "d9b9f612f94ceb7fc902d2c596de24f979abb1c2d15615df04948b5353ad19d1",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_095/employee_patch_target.py",
+      "thread_id": 13524283392,
+      "worker": 95
+    },
+    {
+      "after_rollback_sha256": "db2b3a57e3b538e29220b930cb0f324153dc46696dfc473334c699e88f942f47",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_096/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_096/rollback_trace.json"
+      },
+      "before_sha256": "db2b3a57e3b538e29220b930cb0f324153dc46696dfc473334c699e88f942f47",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_096/employee_patch_target.py",
+      "thread_id": 6336622592,
+      "worker": 96
+    },
+    {
+      "after_rollback_sha256": "c3a6f42aef9ee2dbce285703f9c9f9934d5897fbfd1ea31a1b5bad6b150b2d4c",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_097/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_097/rollback_trace.json"
+      },
+      "before_sha256": "c3a6f42aef9ee2dbce285703f9c9f9934d5897fbfd1ea31a1b5bad6b150b2d4c",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_097/employee_patch_target.py",
+      "thread_id": 13137276928,
+      "worker": 97
+    },
+    {
+      "after_rollback_sha256": "fce7bec95891c19bebaebf763d29d22f728eba2a5f6a3e693789a4ec38169639",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_098/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_098/rollback_trace.json"
+      },
+      "before_sha256": "fce7bec95891c19bebaebf763d29d22f728eba2a5f6a3e693789a4ec38169639",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_098/employee_patch_target.py",
+      "thread_id": 13557936128,
+      "worker": 98
+    },
+    {
+      "after_rollback_sha256": "93132e8a7b73c1fcc12421c6233512db804e463265d56abf9433641db849497d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_099/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_099/rollback_trace.json"
+      },
+      "before_sha256": "93132e8a7b73c1fcc12421c6233512db804e463265d56abf9433641db849497d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_099/employee_patch_target.py",
+      "thread_id": 13574762496,
+      "worker": 99
+    },
+    {
+      "after_rollback_sha256": "81fb40f78f25063dd700e624ea32c9faf3b92b5a14b50feb9eaa05709433f209",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_100/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_100/rollback_trace.json"
+      },
+      "before_sha256": "81fb40f78f25063dd700e624ea32c9faf3b92b5a14b50feb9eaa05709433f209",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_100/employee_patch_target.py",
+      "thread_id": 6302969856,
+      "worker": 100
+    },
+    {
+      "after_rollback_sha256": "b541ee0938570187da45fda451a3393f779a85f874577502429a969f17b86159",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_101/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_101/rollback_trace.json"
+      },
+      "before_sha256": "b541ee0938570187da45fda451a3393f779a85f874577502429a969f17b86159",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_101/employee_patch_target.py",
+      "thread_id": 13221408768,
+      "worker": 101
+    },
+    {
+      "after_rollback_sha256": "cb280586db7ec0e3b0bfcd97fde8ce1d808fefe8c04d00b91cb966a194df7a23",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_102/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_102/rollback_trace.json"
+      },
+      "before_sha256": "cb280586db7ec0e3b0bfcd97fde8ce1d808fefe8c04d00b91cb966a194df7a23",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_102/employee_patch_target.py",
+      "thread_id": 13591588864,
+      "worker": 102
+    },
+    {
+      "after_rollback_sha256": "3464caeee06f0e3f1713bb34fd698f9d740029dd8a28fe878ab95ff4927fc0c8",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_103/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_103/rollback_trace.json"
+      },
+      "before_sha256": "3464caeee06f0e3f1713bb34fd698f9d740029dd8a28fe878ab95ff4927fc0c8",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_103/employee_patch_target.py",
+      "thread_id": 13608415232,
+      "worker": 103
+    },
+    {
+      "after_rollback_sha256": "c94539d12e639a28f94b969816356d5ccbbff61750e91304d4e908df0d08ac36",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_104/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_104/rollback_trace.json"
+      },
+      "before_sha256": "c94539d12e639a28f94b969816356d5ccbbff61750e91304d4e908df0d08ac36",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_104/employee_patch_target.py",
+      "thread_id": 6269317120,
+      "worker": 104
+    },
+    {
+      "after_rollback_sha256": "344344c46aaa6a64f12c9c06590d1cbdf22ba5e1109f3a37f1696f55773699fd",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_105/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_105/rollback_trace.json"
+      },
+      "before_sha256": "344344c46aaa6a64f12c9c06590d1cbdf22ba5e1109f3a37f1696f55773699fd",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_105/employee_patch_target.py",
+      "thread_id": 13204582400,
+      "worker": 105
+    },
+    {
+      "after_rollback_sha256": "e27a83fbe2d17b539c425275337da59b694a09008df2cb468e3ede67ca5946e2",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_106/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_106/rollback_trace.json"
+      },
+      "before_sha256": "e27a83fbe2d17b539c425275337da59b694a09008df2cb468e3ede67ca5946e2",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_106/employee_patch_target.py",
+      "thread_id": 13541109760,
+      "worker": 106
+    },
+    {
+      "after_rollback_sha256": "03f42ffc2597913c5910cd7fa3114cad0d392cc76a94375f329bd5f535d97261",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_107/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_107/rollback_trace.json"
+      },
+      "before_sha256": "03f42ffc2597913c5910cd7fa3114cad0d392cc76a94375f329bd5f535d97261",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_107/employee_patch_target.py",
+      "thread_id": 13103624192,
+      "worker": 107
+    },
+    {
+      "after_rollback_sha256": "a36664666dcbacc5e20f96a21b804ef1b6e5c1d45b7278087619830d28c71f67",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_108/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_108/rollback_trace.json"
+      },
+      "before_sha256": "a36664666dcbacc5e20f96a21b804ef1b6e5c1d45b7278087619830d28c71f67",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_108/employee_patch_target.py",
+      "thread_id": 13642067968,
+      "worker": 108
+    },
+    {
+      "after_rollback_sha256": "aec5793c08a1b05dd22aea00b57709993611862f320222427526abacde25a403",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_109/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_109/rollback_trace.json"
+      },
+      "before_sha256": "aec5793c08a1b05dd22aea00b57709993611862f320222427526abacde25a403",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_109/employee_patch_target.py",
+      "thread_id": 13322366976,
+      "worker": 109
+    },
+    {
+      "after_rollback_sha256": "7f832dbabf5c1b7db95f4f473ac6126662b634b85890747776dba10542beef10",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_110/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_110/rollback_trace.json"
+      },
+      "before_sha256": "7f832dbabf5c1b7db95f4f473ac6126662b634b85890747776dba10542beef10",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_110/employee_patch_target.py",
+      "thread_id": 13271887872,
+      "worker": 110
+    },
+    {
+      "after_rollback_sha256": "95fec5e1df99850709680c95d26d5452426fb5b6f6eeeff888e3e9e676351209",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_111/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_111/rollback_trace.json"
+      },
+      "before_sha256": "95fec5e1df99850709680c95d26d5452426fb5b6f6eeeff888e3e9e676351209",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_111/employee_patch_target.py",
+      "thread_id": 13658894336,
+      "worker": 111
+    },
+    {
+      "after_rollback_sha256": "027ad92c673df34a180741218451ade3ce38a412b8a60ba50e226a65c845d59e",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_112/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_112/rollback_trace.json"
+      },
+      "before_sha256": "027ad92c673df34a180741218451ade3ce38a412b8a60ba50e226a65c845d59e",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_112/employee_patch_target.py",
+      "thread_id": 12969013248,
+      "worker": 112
+    },
+    {
+      "after_rollback_sha256": "f10196c3876ef8494d70225ea1623bcda40bf42dbbda4f284a983635af087d41",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_113/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_113/rollback_trace.json"
+      },
+      "before_sha256": "f10196c3876ef8494d70225ea1623bcda40bf42dbbda4f284a983635af087d41",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_113/employee_patch_target.py",
+      "thread_id": 13675720704,
+      "worker": 113
+    },
+    {
+      "after_rollback_sha256": "52cbf74bcc7f720f614f3b166aca72b92b3d8bf20775c8cb65c3c675f7fda6ff",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_114/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_114/rollback_trace.json"
+      },
+      "before_sha256": "52cbf74bcc7f720f614f3b166aca72b92b3d8bf20775c8cb65c3c675f7fda6ff",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_114/employee_patch_target.py",
+      "thread_id": 13154103296,
+      "worker": 114
+    },
+    {
+      "after_rollback_sha256": "c5cb23b9a061e29585c64b5789caec77b6946ba18f10896e13c5e006486c66a5",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_115/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_115/rollback_trace.json"
+      },
+      "before_sha256": "c5cb23b9a061e29585c64b5789caec77b6946ba18f10896e13c5e006486c66a5",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_115/employee_patch_target.py",
+      "thread_id": 13069971456,
+      "worker": 115
+    },
+    {
+      "after_rollback_sha256": "c0cac5f3b5253d8347694ca45cbf4d82eb74eee0ff4189c2d741f7e93796e29d",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_116/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_116/rollback_trace.json"
+      },
+      "before_sha256": "c0cac5f3b5253d8347694ca45cbf4d82eb74eee0ff4189c2d741f7e93796e29d",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_116/employee_patch_target.py",
+      "thread_id": 13692547072,
+      "worker": 116
+    },
+    {
+      "after_rollback_sha256": "5129323d39d297183f2f71a14d2d66b790ef687c028cf4c78d9684040cab7bd8",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_117/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_117/rollback_trace.json"
+      },
+      "before_sha256": "5129323d39d297183f2f71a14d2d66b790ef687c028cf4c78d9684040cab7bd8",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_117/employee_patch_target.py",
+      "thread_id": 12901707776,
+      "worker": 117
+    },
+    {
+      "after_rollback_sha256": "742d00513e6356e5d774464d142d750fae792bceae8de81e37fe7600bdc392f7",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_118/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_118/rollback_trace.json"
+      },
+      "before_sha256": "742d00513e6356e5d774464d142d750fae792bceae8de81e37fe7600bdc392f7",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_118/employee_patch_target.py",
+      "thread_id": 6403928064,
+      "worker": 118
+    },
+    {
+      "after_rollback_sha256": "7609806c2958dacb809b769403874c1395c8d6ff16656819ada80933f1f16134",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_119/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_119/rollback_trace.json"
+      },
+      "before_sha256": "7609806c2958dacb809b769403874c1395c8d6ff16656819ada80933f1f16134",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_119/employee_patch_target.py",
+      "thread_id": 13625241600,
+      "worker": 119
+    },
+    {
+      "after_rollback_sha256": "7d1240309dae8438966735c3698530fb0803d4f200d118c4b8c059e3036f02b4",
+      "artifacts": {
+        "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_120/employee_patch_target.py",
+        "trace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_120/rollback_trace.json"
+      },
+      "before_sha256": "7d1240309dae8438966735c3698530fb0803d4f200d118c4b8c059e3036f02b4",
+      "gate_error_type": "PyCompileError",
+      "gate_failed": true,
+      "post_rollback_gate_passed": true,
+      "process_id": 71705,
+      "ready": true,
+      "rollback_verified": true,
+      "target": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_patch_stress/employee-patch-stress-20260628T075344Z-7a2d0ee1/worker_120/employee_patch_target.py",
+      "thread_id": 13019492352,
+      "worker": 120
+    }
+  ]
+}

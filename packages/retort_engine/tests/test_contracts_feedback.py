@@ -46,6 +46,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "architecture_contract_result" in contract_names()
     assert "employee_scheduler_stress_result" in contract_names()
     assert "employee_patch_closure_result" in contract_names()
+    assert "employee_patch_stress_result" in contract_names()
     assert "production_recovery_drill_result" in contract_names()
     assert "absorption_release_decision_result" in contract_names()
     assert "quality_gate_bundle_result" in contract_names()
@@ -91,6 +92,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     architecture_contract_valid = validate_contract("architecture_contract_result", {"status": "passed", "project": "p", "summary": {}, "contracts": [], "violations": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     patch_closure_valid = validate_contract("employee_patch_closure_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    patch_stress_valid = validate_contract("employee_patch_stress_result", {"status": "ready", "project": "p", "summary": {}, "workers": [], "evidence": {}})
     recovery_valid = validate_contract("production_recovery_drill_result", {"status": "ready", "project": "p", "summary": {}, "scenarios": [], "evidence": {}})
     release_valid = validate_contract("absorption_release_decision_result", {"status": "ready", "project": "p", "summary": {}, "decisions": [], "evidence": {}})
     quality_gate_valid = validate_contract("quality_gate_bundle_result", {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}})
@@ -132,6 +134,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert architecture_contract_valid["valid"] is True
     assert stress_valid["valid"] is True
     assert patch_closure_valid["valid"] is True
+    assert patch_stress_valid["valid"] is True
     assert recovery_valid["valid"] is True
     assert release_valid["valid"] is True
     assert quality_gate_valid["valid"] is True

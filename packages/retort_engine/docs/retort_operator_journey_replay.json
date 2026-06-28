@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "821cc0f8126a63bbd66aa01c92298407347a2eab1ba22f228a73af9bf46b5687"
+      "sha256": "38443d1e65aa1c74ade67c67e16cc1f9df616ac6324de4d016073d621a7798e9"
     },
     {
       "bytes": 10384,
@@ -146,6 +146,27 @@
       ],
       "required_fields_ready": true,
       "sha256": "447cdac09ff7404c128072f02959bf71693e5a0d1cba7caf3a3bec66942e953e"
+    },
+    {
+      "bytes": 139788,
+      "exists": true,
+      "kind": "source_report",
+      "name": "employee_patch_stress",
+      "path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_employee_patch_stress.json",
+      "relative_path": "docs/retort_employee_patch_stress.json",
+      "required_field_count": 3,
+      "required_fields": [
+        "status",
+        "summary",
+        "workers"
+      ],
+      "required_fields_present": [
+        "status",
+        "summary",
+        "workers"
+      ],
+      "required_fields_ready": true,
+      "sha256": "a19d6614ba225169dc050ff3fdc49f3d1655f0b4200982ab5da6294f2a0786c8"
     },
     {
       "bytes": 110796,
@@ -379,7 +400,7 @@
       "sha256": "8113da2bba7a1036faea93396a24cd9aa3c8fa216cdbe8e33621b6d3d626b68b"
     },
     {
-      "bytes": 13238,
+      "bytes": 21751,
       "exists": true,
       "kind": "source_report",
       "name": "competitor_runtime_comparison",
@@ -397,7 +418,7 @@
         "competitor_output"
       ],
       "required_fields_ready": true,
-      "sha256": "c70965c8dfc4f014b61509c9ba89f19fd8b49ed99670c67b68762733a305183b"
+      "sha256": "1820c074cd5dff5306165d0ee8777cbde680f08ce92ad0a68e248cce7939398b"
     },
     {
       "bytes": 12576,
@@ -602,6 +623,7 @@
       "docs/retort_pr_holdout_blind_eval.json",
       "docs/retort_pr_failure_rollback_replay.json",
       "docs/retort_employee_patch_closure.json",
+      "docs/retort_employee_patch_stress.json",
       "docs/retort_employee_scheduler_stress.json",
       "docs/retort_pr_publish_dry_run.json",
       "docs/retort_pr_readonly_degradation_probe.json",
@@ -649,8 +671,8 @@
       "status": "ready"
     },
     "codebase_graph": {
-      "edge_count": 5559,
-      "file_count": 178,
+      "edge_count": 5625,
+      "file_count": 180,
       "hotspot_count": 12,
       "ready": true,
       "status": "ready"
@@ -666,7 +688,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T073800Z-345d93c8.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T075356Z-6449e0e8.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -698,7 +720,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=821cc0f8126a63bbd66aa01c92298407347a2eab1ba22f228a73af9bf46b5687"
+        "quality_gate_sha=38443d1e65aa1c74ade67c67e16cc1f9df616ac6324de4d016073d621a7798e9"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -728,6 +750,16 @@
     },
     {
       "evidence": [
+        "employee_patch_stress_sha=a19d6614ba225169dc050ff3fdc49f3d1655f0b4200982ab5da6294f2a0786c8",
+        "acceptance=>100_concurrent_failed_employee_patches_all_rolled_back"
+      ],
+      "name": "hundred_worker_patch_rollback",
+      "ready": true,
+      "status": "ready",
+      "title": "百级补丁回滚压测"
+    },
+    {
+      "evidence": [
         "publish_dry_run_sha=8ca1210e6a329af2a90ffc29e13b059ec393caa1dfca1aa8c1b2d36e023eea44",
         "readonly_probe_sha=8d93e03d5288279dae70358fe8f6bb3574b770b0768b5cffebd202bfc57029e0",
         "low_permission_probe_sha=85c89b2b14b7e0f58b821c3ac96755f5ae9711e68667d619ceb13c38b43c033b"
@@ -753,7 +785,7 @@
       "evidence": [
         "external_process_sha=924645e5cfece4b3ab87605b405545681b931f274e87b475869ae1231244c6a5",
         "upstream_pr_ci_sha=8113da2bba7a1036faea93396a24cd9aa3c8fa216cdbe8e33621b6d3d626b68b",
-        "competitor_runtime_sha=c70965c8dfc4f014b61509c9ba89f19fd8b49ed99670c67b68762733a305183b"
+        "competitor_runtime_sha=1820c074cd5dff5306165d0ee8777cbde680f08ce92ad0a68e248cce7939398b"
       ],
       "name": "external_independence_probe",
       "ready": true,
@@ -785,28 +817,29 @@
   "status": "ready",
   "summary": {
     "architecture_contract_ready": true,
-    "artifact_count": 28,
+    "artifact_count": 29,
     "codebase_graph_ready": true,
     "competitor_runtime_ready": true,
     "contract_stability_ready": true,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 2.42,
+    "duration_sec": 2.257,
+    "employee_patch_stress_ready": true,
     "external_advantage_ci_ready": true,
     "external_process_adjudication_ready": true,
     "failed_stage_count": 0,
     "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
-    "hashed_artifact_count": 28,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T073800Z-345d93c8.manifest.json",
+    "hashed_artifact_count": 29,
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T075356Z-6449e0e8.manifest.json",
     "per_run_code_graph_proved": true,
-    "ready_stage_count": 10,
+    "ready_stage_count": 11,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T073800Z-345d93c8",
+    "run_id": "operator-journey-20260628T075356Z-6449e0e8",
     "single_command_surface": true,
-    "source_report_count": 27,
-    "stage_count": 10,
+    "source_report_count": 28,
+    "stage_count": 11,
     "upstream_pr_ci_ready": true
   }
 }

@@ -23,6 +23,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["external_process_adjudication_ready"] is True
     assert result["summary"]["upstream_pr_ci_ready"] is True
     assert result["summary"]["competitor_runtime_ready"] is True
+    assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
     assert Path(result["summary"]["manifest_path"]).is_file()
@@ -155,6 +156,16 @@ def _write_docs(root: Path) -> None:
         "retort_pr_holdout_blind_eval.json": {"status": "ready", "summary": {}, "cases": []},
         "retort_pr_failure_rollback_replay.json": {"status": "ready", "summary": {}, "cases": []},
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {}, "cases": []},
+        "retort_employee_patch_stress.json": {
+            "status": "ready",
+            "summary": {
+                "concurrency_floor_exceeded": True,
+                "worker_count": 120,
+                "rollback_verified_count": 120,
+                "all_post_rollback_gates_passed": True,
+            },
+            "workers": [],
+        },
         "retort_employee_scheduler_stress.json": {"status": "ready", "summary": {}, "rounds": []},
         "retort_pr_publish_dry_run.json": {"status": "dry_run_ready", "summary": {}, "comments": []},
         "retort_pr_readonly_degradation_probe.json": {"status": "read_only_degraded", "summary": {}, "evidence": {}},
@@ -188,7 +199,11 @@ def _write_docs(root: Path) -> None:
         },
         "retort_competitor_runtime_comparison.json": {
             "status": "ready",
-            "summary": {"side_by_side_output_materialized": True},
+            "summary": {
+                "side_by_side_output_materialized": True,
+                "multi_competitor_side_by_side": True,
+                "ready_competitor_project_count": 3,
+            },
             "competitor_output": {},
         },
         "retort_heterogeneous_absorption_replay.json": {

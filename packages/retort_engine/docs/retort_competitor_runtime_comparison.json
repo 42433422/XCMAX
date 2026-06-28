@@ -1,85 +1,254 @@
 {
   "artifacts": {
-    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/competitor_output.json",
-    "external_runner": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/mopemope_patch_runtime.js",
-    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/input.patch",
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986",
-    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/retort_output.json"
+    "competitor_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/competitor_outputs.json",
+    "external_runners": [
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope_patch_runtime.js",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo_pr_agent_runtime.py",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog_diff_runtime.py"
+    ],
+    "input_patch": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/input.patch",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc",
+    "retort_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/retort_output.json"
   },
   "competitor_output": {
-    "added_line_count": 4,
-    "hunk_count": 2,
-    "hunks": [
-      {
-        "from": {
-          "content": [
-            "   getBooleanInput,",
-            "   getInput,",
-            "   getMultilineInput,",
-            "   info,",
-            "   setFailed,",
-            " } from \"@actions/core\";"
-          ],
-          "filename": "src/main.ts",
-          "lineCount": 6,
-          "startLine": 2
+    "primary": {
+      "added_line_count": 4,
+      "hunk_count": 2,
+      "hunks": [
+        {
+          "from": {
+            "content": [
+              "   getBooleanInput,",
+              "   getInput,",
+              "   getMultilineInput,",
+              "   info,",
+              "   setFailed,",
+              " } from \"@actions/core\";"
+            ],
+            "filename": "src/main.ts",
+            "lineCount": 6,
+            "startLine": 2
+          },
+          "to": {
+            "content": [
+              "2    getBooleanInput,",
+              "3    getInput,",
+              "4    getMultilineInput,",
+              "5 +  debug,",
+              "6    info,",
+              "7    setFailed,",
+              "8  } from \"@actions/core\";"
+            ],
+            "filename": "src/main.ts",
+            "lineCount": 7,
+            "startLine": 2
+          }
         },
-        "to": {
-          "content": [
-            "2    getBooleanInput,",
-            "3    getInput,",
-            "4    getMultilineInput,",
-            "5 +  debug,",
-            "6    info,",
-            "7    setFailed,",
-            "8  } from \"@actions/core\";"
-          ],
-          "filename": "src/main.ts",
-          "lineCount": 7,
-          "startLine": 2
+        {
+          "from": {
+            "content": [
+              "         info(JSON.stringify(modifiedFile, null, 2));",
+              "       }",
+              "     });",
+              "   } catch (error) {",
+              "     // Fail the workflow run if an error occurs",
+              "     if (error instanceof Error {",
+              ""
+            ],
+            "filename": "src/main.ts",
+            "lineCount": 7,
+            "startLine": 79
+          },
+          "to": {
+            "content": [
+              "80          info(JSON.stringify(modifiedFile, null, 2));",
+              "81        }",
+              "82      });",
+              "83 +",
+              "84 +    info(\"done\");",
+              "85    } catch (error) {",
+              "86 +    debug(\"error\");",
+              "87      // Fail the workflow run if an error occurs",
+              "88      if (error instanceof Error {",
+              "89 "
+            ],
+            "filename": "src/main.ts",
+            "lineCount": 10,
+            "startLine": 80
+          }
         }
+      ],
+      "status": "parsed"
+    },
+    "runtime_count": 3,
+    "runtimes": [
+      {
+        "external_process_returncode": 0,
+        "external_process_stderr_tail": "",
+        "external_process_stdout_tail": "",
+        "finding_count": 0,
+        "kind": "node_patch_parser",
+        "output": {
+          "added_line_count": 4,
+          "hunk_count": 2,
+          "hunks": [
+            {
+              "from": {
+                "content": [
+                  "   getBooleanInput,",
+                  "   getInput,",
+                  "   getMultilineInput,",
+                  "   info,",
+                  "   setFailed,",
+                  " } from \"@actions/core\";"
+                ],
+                "filename": "src/main.ts",
+                "lineCount": 6,
+                "startLine": 2
+              },
+              "to": {
+                "content": [
+                  "2    getBooleanInput,",
+                  "3    getInput,",
+                  "4    getMultilineInput,",
+                  "5 +  debug,",
+                  "6    info,",
+                  "7    setFailed,",
+                  "8  } from \"@actions/core\";"
+                ],
+                "filename": "src/main.ts",
+                "lineCount": 7,
+                "startLine": 2
+              }
+            },
+            {
+              "from": {
+                "content": [
+                  "         info(JSON.stringify(modifiedFile, null, 2));",
+                  "       }",
+                  "     });",
+                  "   } catch (error) {",
+                  "     // Fail the workflow run if an error occurs",
+                  "     if (error instanceof Error {",
+                  ""
+                ],
+                "filename": "src/main.ts",
+                "lineCount": 7,
+                "startLine": 79
+              },
+              "to": {
+                "content": [
+                  "80          info(JSON.stringify(modifiedFile, null, 2));",
+                  "81        }",
+                  "82      });",
+                  "83 +",
+                  "84 +    info(\"done\");",
+                  "85    } catch (error) {",
+                  "86 +    debug(\"error\");",
+                  "87      // Fail the workflow run if an error occurs",
+                  "88      if (error instanceof Error {",
+                  "89 "
+                ],
+                "filename": "src/main.ts",
+                "lineCount": 10,
+                "startLine": 80
+              }
+            }
+          ],
+          "status": "parsed"
+        },
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope__pr-ai-review-bot_output.json",
+        "project": "mopemope/pr-ai-review-bot",
+        "ready": true,
+        "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/mopemope_patch_runtime.js",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
+        "source_exists": true,
+        "source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093"
       },
       {
-        "from": {
-          "content": [
-            "         info(JSON.stringify(modifiedFile, null, 2));",
-            "       }",
-            "     });",
-            "   } catch (error) {",
-            "     // Fail the workflow run if an error occurs",
-            "     if (error instanceof Error {",
-            ""
+        "external_process_returncode": 0,
+        "external_process_stderr_tail": "",
+        "external_process_stdout_tail": "",
+        "finding_count": 2,
+        "kind": "python_review_signal_counter",
+        "output": {
+          "finding_count": 2,
+          "findings": [
+            {
+              "hit_count": 1,
+              "rule": "debug_logging",
+              "samples": [
+                "debug(\"error\");"
+              ]
+            },
+            {
+              "hit_count": 1,
+              "rule": "error_path",
+              "samples": [
+                "debug(\"error\");"
+              ]
+            }
           ],
-          "filename": "src/main.ts",
-          "lineCount": 7,
-          "startLine": 79
+          "status": "review_signal_counted"
         },
-        "to": {
-          "content": [
-            "80          info(JSON.stringify(modifiedFile, null, 2));",
-            "81        }",
-            "82      });",
-            "83 +",
-            "84 +    info(\"done\");",
-            "85    } catch (error) {",
-            "86 +    debug(\"error\");",
-            "87      // Fail the workflow run if an error occurs",
-            "88      if (error instanceof Error {",
-            "89 "
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo-ai__pr-agent_output.json",
+        "project": "qodo-ai/pr-agent",
+        "ready": true,
+        "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/qodo_pr_agent_runtime.py",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
+        "source_exists": true,
+        "source_sha256": "1fe7d662b6a41bad76e2bb183054a389a3b7a0850b92c2da0fccbe05edf1568d"
+      },
+      {
+        "external_process_returncode": 0,
+        "external_process_stderr_tail": "",
+        "external_process_stdout_tail": "",
+        "finding_count": 3,
+        "kind": "python_diff_diagnostic_mapper",
+        "output": {
+          "diagnostics": [
+            {
+              "line": 5,
+              "message": "debug,",
+              "path": "src/main.ts"
+            },
+            {
+              "line": 84,
+              "message": "info(\"done\");",
+              "path": "src/main.ts"
+            },
+            {
+              "line": 86,
+              "message": "debug(\"error\");",
+              "path": "src/main.ts"
+            }
           ],
-          "filename": "src/main.ts",
-          "lineCount": 10,
-          "startLine": 80
-        }
+          "finding_count": 3,
+          "status": "diagnostics_mapped"
+        },
+        "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog__reviewdog_output.json",
+        "project": "reviewdog/reviewdog",
+        "ready": true,
+        "root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog",
+        "runner_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T075344Z-4410e6bc/reviewdog_diff_runtime.py",
+        "source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go",
+        "source_exists": true,
+        "source_sha256": "bce44c0d57e0993029214cabf0332eb70c136788a08ff87098b6834883caded0"
       }
     ],
     "status": "parsed"
   },
   "evidence": {
-    "competitor_boundary": "external_node_process_no_retort_engine_imports",
-    "competitor_source": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
+    "competitor_boundary": "external_node_and_python_processes_no_retort_engine_imports",
+    "competitor_sources": [
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot/src/patchParser.ts",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent/pr_agent/tools/pr_reviewer.py",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog/diff/parse.go"
+    ],
     "retort_runtime": "retort_engine.pr_review.review_diff",
-    "style": "cached_competitor_runtime_side_by_side_output"
+    "style": "multi_cached_competitor_runtime_side_by_side_output"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "retort_output": {
@@ -352,17 +521,32 @@
   },
   "status": "ready",
   "summary": {
+    "all_competitor_sources_exist": true,
+    "all_external_processes_successful": true,
     "competitor_added_line_count": 4,
+    "competitor_finding_count": 5,
     "competitor_hunk_count": 2,
     "competitor_project": "mopemope/pr-ai-review-bot",
+    "competitor_project_count": 3,
+    "competitor_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent",
+      "reviewdog/reviewdog"
+    ],
     "competitor_root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
     "competitor_source_exists": true,
     "competitor_source_sha256": "1b40032fff1912fd0e6ff636e1bff05e67633e1c257369e734e3238c77919093",
-    "duration_sec": 0.12,
+    "duration_sec": 0.115,
+    "external_process_count": 3,
     "external_process_returncode": 0,
     "external_process_stderr_tail": "",
     "external_process_stdout_tail": "",
+    "external_process_success_count": 3,
+    "multi_competitor_side_by_side": true,
+    "ready_competitor_project_count": 3,
+    "real_cached_project_count": 3,
     "retort_comment_count": 3,
+    "retort_exceeds_all_competitors_by_semantic_comments": true,
     "retort_exceeds_patch_parser_by_semantic_comments": true,
     "retort_publishable_comment_count": 3,
     "retort_review_status": "reviewed",

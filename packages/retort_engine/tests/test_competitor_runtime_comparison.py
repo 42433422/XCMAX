@@ -17,6 +17,9 @@ def test_competitor_runtime_comparison_materializes_side_by_side_outputs(tmp_pat
 
     assert result["status"] == "ready"
     assert result["summary"]["competitor_source_exists"] is True
+    assert result["summary"]["competitor_project_count"] == 3
+    assert result["summary"]["ready_competitor_project_count"] == 3
+    assert result["summary"]["multi_competitor_side_by_side"] is True
     assert result["summary"]["competitor_hunk_count"] >= 2
     assert result["summary"]["retort_review_status"] == "reviewed"
     assert result["summary"]["side_by_side_output_materialized"] is True
@@ -30,6 +33,7 @@ def test_service_exposes_competitor_runtime_comparison(tmp_path: Path) -> None:
 
     assert result["status"] == "ready"
     assert result["summary"]["retort_exceeds_patch_parser_by_semantic_comments"] is True
+    assert result["summary"]["retort_exceeds_all_competitors_by_semantic_comments"] is True
 
 
 def test_competitor_runtime_comparison_cli_outputs_contract(tmp_path: Path) -> None:
@@ -56,6 +60,7 @@ def test_competitor_runtime_comparison_cli_outputs_contract(tmp_path: Path) -> N
     payload = json.loads(completed.stdout)
     assert validate_contract("competitor_runtime_comparison_result", payload)["valid"] is True
     assert payload["summary"]["side_by_side_output_materialized"] is True
+    assert payload["summary"]["ready_competitor_project_count"] == 3
 
 
 def _write_competitor_fixture(root: Path) -> Path:
@@ -63,4 +68,10 @@ def _write_competitor_fixture(root: Path) -> Path:
     source = competitor / "src" / "patchParser.ts"
     source.parent.mkdir(parents=True)
     source.write_text("export const parsePatch = () => []\n", encoding="utf-8")
+    qodo_source = root / ".retort" / "cache" / "github" / "qodo-ai" / "pr-agent" / "pr_agent" / "tools" / "pr_reviewer.py"
+    qodo_source.parent.mkdir(parents=True)
+    qodo_source.write_text("class PRReviewer:\n    pass\n", encoding="utf-8")
+    reviewdog_source = root / ".retort" / "cache" / "github" / "reviewdog" / "reviewdog" / "diff" / "parse.go"
+    reviewdog_source.parent.mkdir(parents=True)
+    reviewdog_source.write_text("package diff\n", encoding="utf-8")
     return competitor

@@ -53,6 +53,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "external_advantage_matrix_per_case_before_after=True",
         "cross_domain_absorption_replay_output_assertions=True",
         "contract_runtime_rehearsal_all_rollbacks=True",
+        "employee_patch_stress_concurrent_workers=120",
+        "employee_patch_stress_all_rollbacks=True",
         "review_family_behavior_replay_direct_outputs=True",
         "release_decision_self_reference=False",
     ]
@@ -68,6 +70,8 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "external_advantage_matrix_per_case_before_after=True" in selected
     assert "cross_domain_absorption_replay_output_assertions=True" in selected
     assert "contract_runtime_rehearsal_all_rollbacks=True" in selected
+    assert "employee_patch_stress_concurrent_workers=120" in selected
+    assert "employee_patch_stress_all_rollbacks=True" in selected
     assert "review_family_behavior_replay_direct_outputs=True" in selected
     assert "release_decision_self_reference=False" in selected
 
@@ -82,6 +86,7 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "external_advantage_matrix_score_delta=55",
         "cross_domain_absorption_replay_direct_execution=True",
         "contract_runtime_rehearsal_all_rejected=True",
+        "employee_patch_stress_state_leaks=0",
         "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff",
     ]
 
@@ -93,5 +98,6 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "external_advantage_matrix_score_delta=55" in prompt
     assert "cross_domain_absorption_replay_direct_execution=True" in prompt
     assert "contract_runtime_rehearsal_all_rejected=True" in prompt
+    assert "employee_patch_stress_state_leaks=0" in prompt
     assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in prompt
     assert "pr_holdout_blind_eval_total_comments=179" not in prompt

@@ -46,6 +46,7 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "external_process_adjudication_ready": _report_ready(root, "retort_external_process_adjudication.json"),
         "upstream_pr_ci_ready": _report_ready(root, "retort_upstream_pr_ci_probe.json"),
         "competitor_runtime_ready": _report_ready(root, "retort_competitor_runtime_comparison.json"),
+        "employee_patch_stress_ready": _report_ready(root, "retort_employee_patch_stress.json"),
         "contract_stability_ready": _report_ready(root, "retort_contract_stability_stress.json"),
         "cross_domain_end_to_end_ready": _report_ready(root, "retort_cross_domain_end_to_end.json"),
         "manifest_path": str(manifest_path),
@@ -93,6 +94,7 @@ def _journey_stages(
     holdout = artifact_by_name.get("pr_holdout_blind_eval", {})
     rollback = artifact_by_name.get("pr_failure_rollback_replay", {})
     employee_patch = artifact_by_name.get("employee_patch_closure", {})
+    employee_patch_stress = artifact_by_name.get("employee_patch_stress", {})
     scheduler = artifact_by_name.get("employee_scheduler_stress", {})
     publish_dry_run = artifact_by_name.get("pr_publish_dry_run", {})
     readonly_probe = artifact_by_name.get("pr_readonly_degradation_probe", {})
@@ -152,6 +154,15 @@ def _journey_stages(
             [
                 f"holdout_sha={holdout.get('sha256', '')}",
                 f"rollback_sha={rollback.get('sha256', '')}",
+            ],
+        ),
+        _stage(
+            "hundred_worker_patch_rollback",
+            "百级补丁回滚压测",
+            employee_patch_stress.get("exists") is True and _report_ready(root, "retort_employee_patch_stress.json"),
+            [
+                f"employee_patch_stress_sha={employee_patch_stress.get('sha256', '')}",
+                "acceptance=>100_concurrent_failed_employee_patches_all_rolled_back",
             ],
         ),
         _stage(
@@ -217,6 +228,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("pr_holdout_blind_eval", docs / "retort_pr_holdout_blind_eval.json", "source_report", ("status", "summary", "cases")),
         ("pr_failure_rollback_replay", docs / "retort_pr_failure_rollback_replay.json", "source_report", ("status", "summary", "cases")),
         ("employee_patch_closure", docs / "retort_employee_patch_closure.json", "source_report", ("status", "summary", "cases")),
+        ("employee_patch_stress", docs / "retort_employee_patch_stress.json", "source_report", ("status", "summary", "workers")),
         ("employee_scheduler_stress", docs / "retort_employee_scheduler_stress.json", "source_report", ("status", "summary", "rounds")),
         ("pr_publish_dry_run", docs / "retort_pr_publish_dry_run.json", "source_report", ("status", "summary", "comments")),
         ("pr_readonly_degradation_probe", docs / "retort_pr_readonly_degradation_probe.json", "source_report", ("status", "summary", "evidence")),
@@ -361,6 +373,7 @@ def _release_inputs_ready(root: Path) -> bool:
     failure_rollback = _read_json(docs / "retort_pr_failure_rollback_replay.json")
     recovery = _read_json(docs / "retort_production_recovery_drill.json")
     patch = _read_json(docs / "retort_employee_patch_closure.json")
+    patch_stress = _read_json(docs / "retort_employee_patch_stress.json")
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     external_ci = _read_json(docs / "retort_external_advantage_ci_regression.json")
@@ -383,6 +396,10 @@ def _release_inputs_ready(root: Path) -> bool:
         and failure_rollback.get("status") == "ready"
         and recovery.get("status") == "ready"
         and patch.get("status") == "ready"
+        and patch_stress.get("status") == "ready"
+        and patch_stress.get("summary", {}).get("concurrency_floor_exceeded") is True
+        and int(patch_stress.get("summary", {}).get("rollback_verified_count") or 0) >= 100
+        and patch_stress.get("summary", {}).get("all_post_rollback_gates_passed") is True
         and benchmark.get("status") == "ready"
         and int(benchmark.get("summary", {}).get("post_absorption_score_delta") or 0) > 0
         and external_matrix.get("status") == "ready"
@@ -403,6 +420,8 @@ def _release_inputs_ready(root: Path) -> bool:
         and upstream_ci.get("summary", {}).get("all_check_runs_successful") is True
         and competitor_runtime.get("status") == "ready"
         and competitor_runtime.get("summary", {}).get("side_by_side_output_materialized") is True
+        and competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side") is True
+        and int(competitor_runtime.get("summary", {}).get("ready_competitor_project_count") or 0) >= 3
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True

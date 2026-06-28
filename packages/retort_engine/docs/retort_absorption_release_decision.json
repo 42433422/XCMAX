@@ -21,6 +21,15 @@
     },
     {
       "action": "allow",
+      "dimension": "employee_execution",
+      "evidence": [
+        "employee_patch_stress"
+      ],
+      "name": "stress_employee_patch_rollback",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "product_operability",
       "evidence": [
         "pr_long_run_review",
@@ -192,6 +201,7 @@
       "retort_pr_failure_rollback_replay.json",
       "retort_production_recovery_drill.json",
       "retort_employee_patch_closure.json",
+      "retort_employee_patch_stress.json",
       "retort_review_quality_benchmark.json",
       "retort_external_advantage_matrix.json",
       "retort_external_advantage_ci_regression.json",
@@ -216,7 +226,10 @@
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
     "competitor_runtime_hunks": 2,
+    "competitor_runtime_multi_side_by_side": true,
+    "competitor_runtime_project_count": 3,
     "competitor_runtime_ready": true,
+    "competitor_runtime_ready_projects": 3,
     "competitor_runtime_retort_comments": 3,
     "contract_runtime_rehearsal_concurrent_rejected": 360,
     "contract_runtime_rehearsal_concurrent_rollback": true,
@@ -235,8 +248,12 @@
     "cross_domain_end_to_end_domains": 10,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_end_to_end_review_status": "reviewed",
-    "decision_count": 20,
+    "decision_count": 21,
     "employee_patch_ready": true,
+    "employee_patch_stress_post_rollback_gates": 120,
+    "employee_patch_stress_ready": true,
+    "employee_patch_stress_rollbacks": 120,
+    "employee_patch_stress_workers": 120,
     "external_advantage_blind_third_party_min_delta": 80,
     "external_advantage_blind_third_party_ready": true,
     "external_advantage_ci_regression_cases": 6,
@@ -261,7 +278,7 @@
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 20,
+    "ready_decision_count": 21,
     "recovery_ready": true,
     "review_family_behavior_outputs": true,
     "review_family_behavior_python_cases": 1,

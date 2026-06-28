@@ -156,6 +156,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "architecture_contracts": "architecture-contract-report" in text and "evaluate_architecture_contracts" in text and "architecture_contract_result" in text,
         "employee_scheduler_stress": "employee-scheduler-stress" in text and "run_employee_scheduler_stress" in text,
         "employee_patch_closure": "employee-patch-closure" in text and "run_employee_patch_closure_suite" in text,
+        "employee_patch_stress": "employee-patch-stress" in text and "build_employee_patch_stress" in text and "employee_patch_stress_result" in text,
         "production_recovery_drill": "production-recovery-drill" in text and "build_production_recovery_drill" in text,
         "absorption_release_decision": "absorption-release-decision" in text and "build_absorption_release_decision" in text,
         "real_github_case": "https://github.com/openai/codex" in text,
