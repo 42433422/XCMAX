@@ -35,6 +35,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "external_advantage_repeat_result" in contract_names()
     assert "upstream_pr_ci_probe_result" in contract_names()
     assert "competitor_runtime_comparison_result" in contract_names()
+    assert "competitor_blind_adjudication_result" in contract_names()
     assert "cross_domain_absorption_replay_result" in contract_names()
     assert "cross_domain_end_to_end_result" in contract_names()
     assert "cross_domain_ci_regression_result" in contract_names()
@@ -79,6 +80,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
         "competitor_runtime_comparison_result",
         {"status": "ready", "project": "p", "summary": {}, "competitor_output": {}, "retort_output": {}, "artifacts": {}, "evidence": {}},
     )
+    competitor_blind_valid = validate_contract("competitor_blind_adjudication_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "artifacts": {}, "evidence": {}})
     cross_domain_valid = validate_contract("cross_domain_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
     cross_domain_e2e_valid = validate_contract(
         "cross_domain_end_to_end_result",
@@ -129,6 +131,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert external_repeat_valid["valid"] is True
     assert upstream_ci_valid["valid"] is True
     assert competitor_runtime_valid["valid"] is True
+    assert competitor_blind_valid["valid"] is True
     assert cross_domain_valid["valid"] is True
     assert cross_domain_e2e_valid["valid"] is True
     assert cross_domain_ci_valid["valid"] is True

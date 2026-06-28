@@ -9,6 +9,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_blind_adjudication import build_competitor_blind_adjudication
 from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
 from retort_engine.contract_stability_stress import build_contract_stability_stress
@@ -220,8 +221,8 @@ class RetortService:
     def upstream_pr_ci_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_upstream_pr_ci_probe(
             str(payload.get("project") or payload.get("project_path") or "."),
-            repo=str(payload.get("repo") or "psf/requests"),
-            pr_number=int(payload.get("pr_number") or 7539),
+            repo=str(payload.get("repo") or ""),
+            pr_number=int(payload.get("pr_number") or 0),
         )
 
     def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -229,6 +230,14 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             competitor_root=str(payload.get("competitor_root") or ""),
             live_upstream=bool(payload.get("live_upstream")),
+        )
+
+    def competitor_blind_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_competitor_blind_adjudication(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            comparison_path=str(payload.get("comparison_path") or ""),
+            min_competitors=int(payload.get("min_competitors") or 3),
+            min_delta=int(payload.get("min_delta") or 45),
         )
 
     def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -471,6 +480,10 @@ def create_app() -> Any:
     @app.post("/competitor-runtime-comparison")
     def competitor_runtime_comparison_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.competitor_runtime_comparison(payload)
+
+    @app.post("/competitor-blind-adjudication")
+    def competitor_blind_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.competitor_blind_adjudication(payload)
 
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

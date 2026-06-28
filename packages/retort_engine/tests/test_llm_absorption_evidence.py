@@ -333,6 +333,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "successful_check_run_count": 34,
                     "check_run_count": 34,
                     "all_check_runs_successful": True,
+                    "ready_target_count": 3,
+                    "target_count": 3,
+                    "distinct_repo_count": 3,
+                    "total_successful_check_run_count": 71,
+                    "total_check_run_count": 71,
+                    "all_target_check_runs_successful": True,
+                    "multi_repo_ci_generalization": True,
                     "real_remote_api": True,
                 },
                 "pull_request": {},
@@ -373,6 +380,26 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "retort_output": {},
                 "artifacts": {},
                 "evidence": {"competitor_boundary": "external_node_process_no_retort_engine_imports"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_competitor_blind_adjudication.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "accepted_competitor_count": 3,
+                    "competitor_count": 3,
+                    "minimum_blind_delta": 56,
+                    "script_imports_retort_engine": False,
+                    "input_contains_score_fields": False,
+                    "input_sha256": "insha",
+                    "output_sha256": "outsha",
+                },
+                "cases": [{"label": "retort_wins"}],
+                "artifacts": {},
+                "evidence": {"human_reviewed": False},
             }
         ),
         encoding="utf-8",
@@ -638,6 +665,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "external_process_adjudication_ready": True,
                     "upstream_pr_ci_ready": True,
                     "competitor_runtime_ready": True,
+                    "competitor_blind_adjudication_ready": True,
                     "employee_patch_stress_ready": True,
                     "contract_stability_ready": True,
                     "cross_domain_end_to_end_ready": True,
@@ -852,6 +880,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "upstream_pr_ci_probe_merged=True" in evidence
     assert "upstream_pr_ci_probe_checks=34/34" in evidence
     assert "upstream_pr_ci_probe_all_successful=True" in evidence
+    assert "upstream_pr_ci_probe_targets=3/3" in evidence
+    assert "upstream_pr_ci_probe_distinct_repos=3" in evidence
+    assert "upstream_pr_ci_probe_total_checks=71/71" in evidence
+    assert "upstream_pr_ci_probe_multi_repo_generalization=True" in evidence
     assert "competitor_runtime_comparison_status=ready" in evidence
     assert "competitor_runtime_comparison_project=mopemope/pr-ai-review-bot" in evidence
     assert "competitor_runtime_comparison_project_count=3" in evidence
@@ -866,6 +898,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_runtime_comparison_retort_comments=4" in evidence
     assert "competitor_runtime_comparison_side_by_side=True" in evidence
     assert "competitor_runtime_comparison_retort_exceeds_all=True" in evidence
+    assert "competitor_blind_adjudication_status=ready" in evidence
+    assert "competitor_blind_adjudication_accepted=3/3" in evidence
+    assert "competitor_blind_adjudication_min_delta=56" in evidence
+    assert "competitor_blind_adjudication_imports_retort=False" in evidence
+    assert "competitor_blind_adjudication_input_score_fields=False" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
     assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
     assert "cross_domain_absorption_replay_non_pr_domains=10" in evidence
@@ -975,6 +1012,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_external_process_adjudication_ready=True" in evidence
     assert "operator_journey_replay_upstream_pr_ci_ready=True" in evidence
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
+    assert "operator_journey_replay_competitor_blind_ready=True" in evidence
     assert "operator_journey_replay_employee_patch_stress_ready=True" in evidence
     assert "operator_journey_replay_cross_domain_ci_regression_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence

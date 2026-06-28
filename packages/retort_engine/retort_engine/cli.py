@@ -12,6 +12,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_blind_adjudication import build_competitor_blind_adjudication
 from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
 from retort_engine.contract_stability_stress import build_contract_stability_stress
@@ -248,8 +249,8 @@ def main(argv: list[str] | None = None) -> int:
     external_repeat.add_argument("--json", action="store_true")
     upstream_pr_ci = sub.add_parser("upstream-pr-ci-probe")
     upstream_pr_ci.add_argument("--project", default=".")
-    upstream_pr_ci.add_argument("--repo", default="psf/requests")
-    upstream_pr_ci.add_argument("--pr-number", type=int, default=7539)
+    upstream_pr_ci.add_argument("--repo", default="")
+    upstream_pr_ci.add_argument("--pr-number", type=int, default=0)
     upstream_pr_ci.add_argument("--output", default="")
     upstream_pr_ci.add_argument("--json", action="store_true")
     competitor_runtime = sub.add_parser("competitor-runtime-comparison")
@@ -258,6 +259,13 @@ def main(argv: list[str] | None = None) -> int:
     competitor_runtime.add_argument("--live-upstream", action="store_true")
     competitor_runtime.add_argument("--output", default="")
     competitor_runtime.add_argument("--json", action="store_true")
+    competitor_blind = sub.add_parser("competitor-blind-adjudication")
+    competitor_blind.add_argument("--project", default=".")
+    competitor_blind.add_argument("--comparison-path", default="")
+    competitor_blind.add_argument("--min-competitors", type=int, default=3)
+    competitor_blind.add_argument("--min-delta", type=int, default=45)
+    competitor_blind.add_argument("--output", default="")
+    competitor_blind.add_argument("--json", action="store_true")
     heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
     heterogeneous_replay.add_argument("--project", default=".")
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
@@ -756,7 +764,8 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort upstream PR CI probe status: {result['status']}")
-            print(f"Check runs: {result['summary']['successful_check_run_count']}/{result['summary']['check_run_count']}")
+            print(f"Targets: {result['summary']['ready_target_count']}/{result['summary']['target_count']}")
+            print(f"Check runs: {result['summary']['total_successful_check_run_count']}/{result['summary']['total_check_run_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
@@ -767,6 +776,22 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort competitor runtime comparison status: {result['status']}")
             print(f"Competitor hunks: {result['summary']['competitor_hunk_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "competitor-blind-adjudication":
+        result = build_competitor_blind_adjudication(
+            args.project,
+            comparison_path=args.comparison_path,
+            min_competitors=args.min_competitors,
+            min_delta=args.min_delta,
+            output=args.output,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort competitor blind adjudication status: {result['status']}")
+            print(f"Accepted: {result['summary']['accepted_competitor_count']}/{result['summary']['competitor_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

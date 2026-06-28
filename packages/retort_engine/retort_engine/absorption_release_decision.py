@@ -24,6 +24,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     upstream_pr_ci = _read_json(root / "docs" / "retort_upstream_pr_ci_probe.json")
     competitor_runtime = _read_json(root / "docs" / "retort_competitor_runtime_comparison.json")
+    competitor_blind = _read_json(root / "docs" / "retort_competitor_blind_adjudication.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
@@ -125,9 +126,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "prove_upstream_pr_ci",
             "branch_absorption_workflow",
             upstream_pr_ci.get("status") == "ready"
-            and upstream_pr_ci.get("summary", {}).get("merged") is True
-            and upstream_pr_ci.get("summary", {}).get("all_check_runs_successful") is True
-            and int(upstream_pr_ci.get("summary", {}).get("check_run_count") or 0) > 0,
+            and upstream_pr_ci.get("summary", {}).get("multi_repo_ci_generalization") is True
+            and int(upstream_pr_ci.get("summary", {}).get("distinct_repo_count") or 0) >= 3
+            and int(upstream_pr_ci.get("summary", {}).get("ready_target_count") or 0) >= 3
+            and upstream_pr_ci.get("summary", {}).get("all_target_check_runs_successful") is True,
             ["upstream_pr_ci_probe"],
         ),
         _decision(
@@ -142,6 +144,16 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and competitor_runtime.get("summary", {}).get("all_live_upstream_sources_materialized") is True
             and competitor_runtime.get("summary", {}).get("retort_exceeds_patch_parser_by_semantic_comments") is True,
             ["competitor_runtime_comparison"],
+        ),
+        _decision(
+            "prove_competitor_blind_adjudication",
+            "comparative_analysis_depth",
+            competitor_blind.get("status") == "ready"
+            and competitor_blind.get("summary", {}).get("all_competitors_blind_accepted") is True
+            and competitor_blind.get("summary", {}).get("script_imports_retort_engine") is False
+            and competitor_blind.get("summary", {}).get("input_contains_score_fields") is False
+            and int(competitor_blind.get("summary", {}).get("minimum_blind_delta") or 0) >= 45,
+            ["competitor_blind_adjudication"],
         ),
         _decision(
             "prove_heterogeneous_absorption",
@@ -270,8 +282,13 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
         "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
         "upstream_pr_ci_ready": upstream_pr_ci.get("status") == "ready",
+        "upstream_pr_ci_distinct_repos": upstream_pr_ci.get("summary", {}).get("distinct_repo_count", ""),
+        "upstream_pr_ci_ready_targets": upstream_pr_ci.get("summary", {}).get("ready_target_count", ""),
+        "upstream_pr_ci_target_count": upstream_pr_ci.get("summary", {}).get("target_count", ""),
         "upstream_pr_ci_check_runs": upstream_pr_ci.get("summary", {}).get("check_run_count", ""),
+        "upstream_pr_ci_total_check_runs": upstream_pr_ci.get("summary", {}).get("total_check_run_count", ""),
         "upstream_pr_ci_all_successful": upstream_pr_ci.get("summary", {}).get("all_check_runs_successful", ""),
+        "upstream_pr_ci_all_targets_successful": upstream_pr_ci.get("summary", {}).get("all_target_check_runs_successful", ""),
         "competitor_runtime_ready": competitor_runtime.get("status") == "ready",
         "competitor_runtime_project_count": competitor_runtime.get("summary", {}).get("competitor_project_count", ""),
         "competitor_runtime_ready_projects": competitor_runtime.get("summary", {}).get("ready_competitor_project_count", ""),
@@ -281,6 +298,11 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "competitor_runtime_live_upstream_materialized": competitor_runtime.get("summary", {}).get("all_live_upstream_sources_materialized", ""),
         "competitor_runtime_hunks": competitor_runtime.get("summary", {}).get("competitor_hunk_count", ""),
         "competitor_runtime_retort_comments": competitor_runtime.get("summary", {}).get("retort_comment_count", ""),
+        "competitor_blind_adjudication_ready": competitor_blind.get("status") == "ready",
+        "competitor_blind_adjudication_accepted": competitor_blind.get("summary", {}).get("accepted_competitor_count", ""),
+        "competitor_blind_adjudication_competitors": competitor_blind.get("summary", {}).get("competitor_count", ""),
+        "competitor_blind_adjudication_min_delta": competitor_blind.get("summary", {}).get("minimum_blind_delta", ""),
+        "competitor_blind_adjudication_imports_retort": competitor_blind.get("summary", {}).get("script_imports_retort_engine", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
@@ -339,6 +361,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_external_advantage_repeat.json",
                 "retort_upstream_pr_ci_probe.json",
                 "retort_competitor_runtime_comparison.json",
+                "retort_competitor_blind_adjudication.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
                 "retort_cross_domain_end_to_end.json",

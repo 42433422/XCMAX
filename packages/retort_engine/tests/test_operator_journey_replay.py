@@ -24,6 +24,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["external_process_adjudication_ready"] is True
     assert result["summary"]["upstream_pr_ci_ready"] is True
     assert result["summary"]["competitor_runtime_ready"] is True
+    assert result["summary"]["competitor_blind_adjudication_ready"] is True
     assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -201,7 +202,14 @@ def _write_docs(root: Path) -> None:
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True}, "runs": []},
         "retort_upstream_pr_ci_probe.json": {
             "status": "ready",
-            "summary": {"merged": True, "all_check_runs_successful": True},
+            "summary": {
+                "merged": True,
+                "all_check_runs_successful": True,
+                "multi_repo_ci_generalization": True,
+                "distinct_repo_count": 3,
+                "ready_target_count": 3,
+                "all_target_check_runs_successful": True,
+            },
             "check_runs": [],
         },
         "retort_competitor_runtime_comparison.json": {
@@ -214,6 +222,17 @@ def _write_docs(root: Path) -> None:
                 "all_live_upstream_sources_materialized": True,
             },
             "competitor_output": {},
+        },
+        "retort_competitor_blind_adjudication.json": {
+            "status": "ready",
+            "summary": {
+                "all_competitors_blind_accepted": True,
+                "script_imports_retort_engine": False,
+                "accepted_competitor_count": 3,
+                "competitor_count": 3,
+                "minimum_blind_delta": 56,
+            },
+            "cases": [],
         },
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
