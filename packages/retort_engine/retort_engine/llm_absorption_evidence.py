@@ -461,10 +461,9 @@ def _external_review_evidence(project: Path) -> list[str]:
 
 
 def _employee_result_evidence(project: Path) -> list[str]:
-    results = employee_result_files(project)
-    if not results:
+    latest = latest_employee_result_file(project)
+    if not latest:
         return []
-    latest = results[-1]
     payload = read_json(latest)
     runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
     review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
@@ -479,6 +478,25 @@ def _employee_result_evidence(project: Path) -> list[str]:
         f"employee_runtime_multi_worker_verified={multi_worker.get('verified', '')}; workers={multi_worker.get('worker_count', '')}; independent_workers={multi_worker.get('independent_worker_count', '')}; result_paths={multi_worker.get('result_path_count', '')}",
         f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
+
+
+def latest_employee_result_file(project: Path) -> Path | None:
+    latest = latest_absorption_run_payload(project)
+    result_path = Path(str(latest.get("employee_results_path") or ""))
+    if result_path.is_file():
+        return result_path
+    results = employee_result_files(project)
+    return results[-1] if results else None
+
+
+def latest_absorption_run_payload(project: Path) -> dict[str, Any]:
+    run_dir = project / ".retort" / "real_absorption_runs"
+    runs = sorted(run_dir.glob("*.json")) if run_dir.is_dir() else []
+    for path in reversed(runs):
+        payload = read_json(path)
+        if payload:
+            return payload
+    return {}
 
 
 def _latest_run_evidence(project: Path) -> list[str]:
