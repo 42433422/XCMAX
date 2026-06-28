@@ -20,6 +20,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
     "multi_project_absorption_replay_result": ("status", "project", "summary", "projects", "evidence"),
     "absorption_continuity_probe_result": ("status", "project", "summary", "runs", "latest_closed_loop", "evidence"),
+    "hardening_run_result": ("run_id", "status", "summary", "changed_files", "gates", "gates_passed", "code_graph_proof", "employee_results_path"),
     "complex_pr_replay_result": ("status", "project", "summary", "pull_requests", "evidence"),
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),
     "task_dispatch_plan_result": ("status", "project", "summary", "tasks", "evidence"),

@@ -142,6 +142,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         "cross_project_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []},
         "multi_project_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}},
         "absorption_continuity_probe_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}},
+        "hardening_run_result": {"run_id": "r", "status": "applied", "summary": {}, "changed_files": [], "gates": [], "gates_passed": True, "code_graph_proof": {}, "employee_results_path": "e"},
         "complex_pr_replay_result": {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "evidence": {}},
         "task_prioritization_result": {"status": "ready", "project": "p", "summary": {}, "priorities": [], "evidence": {}},
         "task_dispatch_plan_result": {"status": "ready", "project": "p", "summary": {}, "tasks": [], "evidence": {}},

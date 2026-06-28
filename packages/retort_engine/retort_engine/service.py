@@ -4,6 +4,7 @@ from typing import Any
 
 from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
+from retort_engine.absorption_hardening_run import record_post_absorption_hardening_run
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
@@ -145,6 +146,9 @@ class RetortService:
             str(payload.get("project") or payload.get("project_path") or "."),
             min_runs=int(payload.get("min_runs") or 5),
         )
+
+    def record_hardening_run(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return record_post_absorption_hardening_run(str(payload.get("project") or payload.get("project_path") or "."))
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
@@ -306,6 +310,10 @@ def create_app() -> Any:
     @app.post("/absorption-continuity-probe")
     def absorption_continuity_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.absorption_continuity_probe(payload)
+
+    @app.post("/record-hardening-run")
+    def record_hardening_run_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.record_hardening_run(payload)
 
     @app.post("/complex-pr-replay")
     def complex_pr_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

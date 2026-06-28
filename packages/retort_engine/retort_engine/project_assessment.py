@@ -137,6 +137,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "multi_project_absorption_replay": "multi-project-absorption-replay" in text and "build_multi_project_absorption_replay" in text,
         "absorption_continuity_probe": "absorption-continuity-probe" in text and "build_absorption_continuity_probe" in text,
+        "post_absorption_hardening_run": "record-hardening-run" in text and "record_post_absorption_hardening_run" in text,
         "complex_pr_replay": "complex-pr-replay" in text and "build_complex_pr_replay_report" in text,
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
