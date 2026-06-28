@@ -1909,6 +1909,41 @@ def execute_employee_task(
                         task=task,
                         bench_llm_override=bench_llm_override,
                     )
+                # Phase-D：员工 cognition 输出 requires_human=true 时阻塞等老板回答
+                if isinstance(reasoning, dict):
+                    _ask_human = reasoning.get("requires_human") or reasoning.get("ask_human")
+                    if _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):
+                        _question_text = (
+                            _ask_human
+                            if isinstance(_ask_human, str)
+                            else str(
+                                reasoning.get("human_question")
+                                or reasoning.get("question")
+                                or "需要老板决策"
+                            )
+                        )
+                        try:
+                            from modstore_server.human_uncertainty_queue import (
+                                ask_human_blocking,
+                            )
+
+                            _resp = ask_human_blocking(
+                                employee_id=employee_id,
+                                user_id=_resolve_metric_user_id(session, user_id),
+                                question=_question_text,
+                                task=task,
+                                context={
+                                    "perceived": perceived,
+                                    "reasoning_summary": str(
+                                        reasoning.get("summary", "")
+                                    )[:500],
+                                },
+                            )
+                            reasoning["_human_answer"] = _resp
+                            if _resp.get("status") == "answered":
+                                reasoning["human_answer"] = _resp.get("answer", "")
+                        except Exception as _exc:
+                            reasoning["_human_answer_error"] = str(_exc)
                 result = _actions_real(
                     config.get("actions", {}), reasoning, task, employee_id, user_id
                 )
