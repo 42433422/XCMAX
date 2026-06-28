@@ -25,7 +25,7 @@
       "<none>": 5
     }
   },
-  "generated_at": "2026-06-28T17:57:32Z",
+  "generated_at": "2026-06-28T18:01:22Z",
   "license_review": {
     "detected_license": "BSD 2-Clause License",
     "message": "Allowed license detected: BSD 2-Clause License",
@@ -46,7 +46,7 @@
         "component": "benchmark_eval",
         "external_files": 12,
         "file_gap": 0,
-        "marker_gap": 252,
+        "marker_gap": 196,
         "own_files": 12,
         "representative_external_files": [
           "pyproject.toml",
@@ -141,7 +141,7 @@
             "gate output"
           ],
           "external_marker_hits": 3,
-          "own_marker_hits": 323,
+          "own_marker_hits": 326,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -172,7 +172,7 @@
             "gate output"
           ],
           "external_marker_hits": 2104,
-          "own_marker_hits": 4043,
+          "own_marker_hits": 4049,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
@@ -187,7 +187,7 @@
           "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
           "component": "benchmark_eval",
-          "depth_gap": 252,
+          "depth_gap": 196,
           "employee_task": {
             "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
             "dimension": "feedback_loop_closure",
@@ -209,9 +209,9 @@
             "precision or false-positive benchmark counters"
           ],
           "external_marker_hits": 1018,
-          "own_marker_hits": 766,
+          "own_marker_hits": 822,
           "priority": "P0",
-          "similarity_score": 96,
+          "similarity_score": 97,
           "source_files": [
             "pyproject.toml",
             "tests/test_skip.py",
@@ -324,7 +324,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 766
+        "marker_hits": 822
       },
       "diff_hunk_review": {
         "files": [
@@ -345,15 +345,13 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
-          "retort_engine/absorbed_external_patterns.py",
-          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
           "docs/retort_absorption_log.md"
         ],
-        "marker_hits": 130
+        "marker_hits": 122
       },
       "plugin_surface": {
         "files": [
@@ -387,7 +385,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 337
+        "marker_hits": 323
       },
       "review_pipeline": {
         "files": [
@@ -404,7 +402,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3559
+        "marker_hits": 3362
       },
       "safety_policy": {
         "files": [
@@ -421,7 +419,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 323
+        "marker_hits": 326
       },
       "workflow_ci": {
         "files": [
@@ -438,7 +436,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 4043
+        "marker_hits": 4049
       }
     },
     "pipeline_stages": [
@@ -465,7 +463,7 @@
       }
     ]
   },
-  "run_id": "20260628175727-73d4b9ea48",
+  "run_id": "20260628180115-73d4b9ea48",
   "semantic_review": {
     "external": {
       "classes": 53,
@@ -485,9 +483,9 @@
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 154,
+      "source_files": 155,
       "test_markers": 225,
-      "workflow_markers": 4428
+      "workflow_markers": 4210
     }
   },
   "signal_evidence": {
