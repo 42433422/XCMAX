@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 from retort_engine.contracts import validate_contract
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -52,6 +53,33 @@ def test_holdout_blind_eval_detects_prior_long_run_overlap(tmp_path: Path) -> No
     assert result["status"] == "needs_more_evidence"
     assert result["summary"]["overlap_with_prior_long_run_count"] == 1
     assert result["summary"]["blind_against_prior_reports"] is False
+
+
+def test_holdout_blind_eval_blocks_when_too_many_prs_are_truncated(tmp_path: Path) -> None:
+    urls = [f"https://github.com/owner{i}/repo{i}/pull/{i}" for i in range(1, 5)]
+
+    def reviewer(url: str) -> dict[str, object]:
+        payload = _reviewer(url)
+        payload["summary"]["truncated"] = True  # type: ignore[index]
+        return payload
+
+    result = build_pr_holdout_blind_eval(tmp_path, pr_urls=urls, target_prs=4, reviewer=reviewer)
+
+    assert result["status"] == "needs_more_evidence"
+    assert result["summary"]["truncated_pr_count"] == 4
+    assert result["summary"]["reviewed_pr_count"] == 4
+
+
+def test_holdout_blind_eval_writes_output_report(tmp_path: Path) -> None:
+    urls = [f"https://github.com/owner{i}/repo{i}/pull/{i}" for i in range(1, 4)]
+    output = tmp_path / "docs" / "holdout.json"
+
+    result = build_pr_holdout_blind_eval(tmp_path, pr_urls=urls, target_prs=3, output=output, reviewer=_reviewer)
+    persisted = json.loads(output.read_text(encoding="utf-8"))
+
+    assert result["status"] == "ready"
+    assert persisted["status"] == "ready"
+    assert persisted["summary"]["accepted_pr_count"] == 3
 
 
 def _reviewer(url: str) -> dict[str, object]:
