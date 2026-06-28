@@ -138,6 +138,8 @@ def _report_evidence(project: Path) -> list[str]:
     live_summary = live_probe.get("summary") if isinstance(live_probe.get("summary"), dict) else {}
     low_permission_probe = read_json(project / "docs" / "retort_pr_low_permission_probe.json")
     low_permission_summary = low_permission_probe.get("summary") if isinstance(low_permission_probe.get("summary"), dict) else {}
+    readonly_probe = read_json(project / "docs" / "retort_pr_readonly_degradation_probe.json")
+    readonly_summary = readonly_probe.get("summary") if isinstance(readonly_probe.get("summary"), dict) else {}
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -199,6 +201,14 @@ def _report_evidence(project: Path) -> list[str]:
         f"pr_low_permission_probe_transport={(low_permission_probe.get('evidence') or {}).get('transport', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
         f"pr_low_permission_probe_required_permission={(low_permission_probe.get('evidence') or {}).get('required_permission', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
         f"pr_low_permission_probe_degradation={(low_permission_probe.get('evidence') or {}).get('degradation', '') if isinstance(low_permission_probe.get('evidence'), dict) else ''}",
+        f"pr_readonly_degradation_probe_status={readonly_probe.get('status', '')}",
+        f"pr_readonly_degradation_probe_pr_url={readonly_probe.get('pr_url', '')}",
+        f"pr_readonly_degradation_probe_live_write={readonly_summary.get('live_github_write', '')}",
+        f"pr_readonly_degradation_probe_degraded_without_write={readonly_summary.get('degraded_without_write', '')}",
+        f"pr_readonly_degradation_probe_real_network={(readonly_probe.get('evidence') or {}).get('real_network', '') if isinstance(readonly_probe.get('evidence'), dict) else ''}",
+        f"pr_readonly_degradation_probe_transport={(readonly_probe.get('evidence') or {}).get('transport', '') if isinstance(readonly_probe.get('evidence'), dict) else ''}",
+        f"pr_readonly_degradation_probe_degradation={(readonly_probe.get('evidence') or {}).get('degradation', '') if isinstance(readonly_probe.get('evidence'), dict) else ''}",
+        f"pr_readonly_degradation_probe_artifact_ready={readonly_summary.get('degradation_artifact_ready', '')}",
         f"cross_project_replay_status={replay_report.get('status', '')}",
         f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}",
         f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}",
@@ -281,6 +291,9 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_patch_closure_multi_file_changed_file_count={patch_summary.get('multi_file_changed_file_count', '')}",
         f"employee_patch_closure_secondary_review_status={patch_summary.get('secondary_review_status', '')}",
         f"employee_patch_closure_successful_repairs_re_reviewed={patch_summary.get('successful_repairs_re_reviewed', '')}",
+        f"employee_patch_closure_retry_case_verified={patch_summary.get('retry_case_verified', '')}",
+        f"employee_patch_closure_retry_first_failure_rolled_back={patch_summary.get('retry_first_failure_rolled_back', '')}",
+        f"employee_patch_closure_retry_second_patch_passed={patch_summary.get('retry_second_patch_passed', '')}",
     ]
 
 

@@ -5,7 +5,12 @@ import sys
 from pathlib import Path
 
 from retort_engine.contracts import validate_contract
-from retort_engine.employee_patch_closure import run_employee_patch_closure_case, run_employee_patch_closure_suite, run_multi_file_employee_patch_closure_case
+from retort_engine.employee_patch_closure import (
+    run_employee_patch_closure_case,
+    run_employee_patch_closure_suite,
+    run_multi_file_employee_patch_closure_case,
+    run_retry_employee_patch_closure_case,
+)
 from retort_engine.employee_runtime_worker import write_employee_runtime_results
 from retort_engine.service import RetortService
 
@@ -62,12 +67,14 @@ def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Pat
     assert result["status"] == "ready"
     assert result["summary"]["success_case_verified"] is True
     assert result["summary"]["failure_case_rolled_back"] is True
-    assert result["summary"]["patch_generated_count"] == 3
-    assert result["summary"]["patch_applied_count"] == 3
-    assert result["summary"]["gate_passed_count"] == 2
-    assert result["summary"]["rollback_verified_count"] == 1
+    assert result["summary"]["patch_generated_count"] == 4
+    assert result["summary"]["patch_applied_count"] == 4
+    assert result["summary"]["gate_passed_count"] == 3
+    assert result["summary"]["rollback_verified_count"] == 2
     assert result["summary"]["multi_file_case_verified"] is True
     assert result["summary"]["successful_repairs_re_reviewed"] is True
+    assert result["summary"]["retry_case_verified"] is True
+    assert result["summary"]["retry_first_failure_rolled_back"] is True
     assert output.is_file()
     assert validate_contract("employee_patch_closure_result", result)["valid"] is True
 
@@ -81,6 +88,17 @@ def test_employee_patch_closure_multi_file_case_runs_gate_and_re_review(tmp_path
     assert result["summary"]["secondary_review_context_count"] >= 2
     assert len(result["changed_files"]) == 2
     assert Path(result["evidence"]["patch_path"]).is_file()
+
+
+def test_employee_patch_closure_retry_case_rolls_back_then_repairs(tmp_path: Path) -> None:
+    result = run_retry_employee_patch_closure_case(tmp_path, lab=tmp_path / ".retort" / "lab", run_id="retry-unit")
+
+    assert result["status"] == "patch_verified_after_retry"
+    assert result["summary"]["first_failure_rolled_back"] is True
+    assert result["summary"]["retry_gate_passed"] is True
+    assert result["summary"]["secondary_review_status"] == "reviewed"
+    assert result["rollback"]["verified"] is True
+    assert Path(result["evidence"]["failed_patch_path"]).is_file()
 
 
 def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -> None:
@@ -106,6 +124,7 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert patch["summary"]["success_case_verified"] is True
     assert patch["summary"]["failure_case_rolled_back"] is True
     assert patch["summary"]["multi_file_case_verified"] is True
+    assert patch["summary"]["retry_case_verified"] is True
     assert result["results"][0]["status"] == "completed"
     assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
 

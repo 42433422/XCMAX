@@ -100,6 +100,51 @@ def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", t
     }
 
 
+def run_readonly_pr_degradation_probe(pr_url: str, *, transport: Transport | None = None) -> dict[str, Any]:
+    owner, repo, number = _parse_pr_url(pr_url)
+    call = transport or _github_public_request
+    repo_status, _repo_payload = call("GET", f"https://api.github.com/repos/{owner}/{repo}", None, "")
+    pull_status, pull_payload = call("GET", f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}", None, "")
+    target_found = repo_status < 400 and pull_status < 400 and bool(pull_payload.get("number"))
+    return {
+        "status": "read_only_degraded" if target_found else "blocked",
+        "pr_url": f"https://github.com/{owner}/{repo}/pull/{number}",
+        "summary": {
+            "target_repo": f"{owner}/{repo}",
+            "pull_number": int(number),
+            "repo_status": repo_status,
+            "pull_status": pull_status,
+            "token_present": False,
+            "created_comment_count": 0,
+            "rolled_back_comment_count": 0,
+            "rollback_verified": target_found,
+            "live_github_write": False,
+            "permission_denied": target_found,
+            "degraded_without_write": target_found,
+            "degradation_artifact_ready": target_found,
+        },
+        "created_receipts": [],
+        "rollback_receipts": [{"created": False, "status_code": 0, "response": {"reason": "read_only_probe_suppressed_write"}}] if target_found else [],
+        "evidence": {
+            "api": "GitHub REST public read-only",
+            "target_is_pull_request": bool(pull_payload.get("number")),
+            "head_ref": str((pull_payload.get("head") or {}).get("ref") or ""),
+            "base_ref": str((pull_payload.get("base") or {}).get("ref") or ""),
+            "token_redacted": True,
+            "real_network": transport is None,
+            "transport": "github_rest_readonly" if transport is None else "injected_transport",
+            "required_permission": "issues:write or pull_requests:write",
+            "write_suppressed_reason": "no_token_read_only_probe",
+            "degradation": "dry_run_review_payload_only_no_comment_created" if target_found else "target_not_readable",
+            "degradation_artifact": {
+                "kind": "publish_dry_run",
+                "target": f"{owner}/{repo}#{number}",
+                "next_step": "request_write_token_or_export_review_payload",
+            },
+        },
+    }
+
+
 def _blocked(pr_url: str, reason: str) -> dict[str, Any]:
     return {
         "status": "blocked",
@@ -159,9 +204,46 @@ def _github_request(method: str, url: str, payload: dict[str, Any] | None, token
         return int(exc.code), payload
 
 
+def _github_public_request(method: str, url: str, payload: dict[str, Any] | None, token: str) -> tuple[int, dict[str, Any]]:
+    del token
+    data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "User-Agent": "retort-readonly-probe",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            body = response.read().decode("utf-8")
+            return int(response.status), json.loads(body) if body.strip() else {}
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload = json.loads(body) if body.strip() else {}
+        except json.JSONDecodeError:
+            payload = {"message": body}
+        return int(exc.code), payload
+
+
 def write_live_pr_comment_probe(pr_url: str, output: str | Path, *, body: str = "") -> dict[str, Any]:
     started = time.monotonic()
     result = run_live_pr_comment_probe(pr_url, body=body)
+    result["summary"]["duration_sec"] = round(time.monotonic() - started, 3)
+    path = Path(output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return result
+
+
+def write_readonly_pr_degradation_probe(pr_url: str, output: str | Path) -> dict[str, Any]:
+    started = time.monotonic()
+    result = run_readonly_pr_degradation_probe(pr_url)
     result["summary"]["duration_sec"] = round(time.monotonic() - started, 3)
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)

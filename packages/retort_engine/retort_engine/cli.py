@@ -14,7 +14,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
-from retort_engine.pr_live_probe import write_live_pr_comment_probe
+from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
@@ -130,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
     live_probe.add_argument("--body", default="")
     live_probe.add_argument("--output", default="")
     live_probe.add_argument("--json", action="store_true")
+    readonly_probe = sub.add_parser("publish-pr-readonly-probe")
+    readonly_probe.add_argument("--pr-url", required=True)
+    readonly_probe.add_argument("--output", default="")
+    readonly_probe.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
@@ -381,6 +385,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Rolled back: {result['summary']['rolled_back_comment_count']}")
             print(f"Output: {output}")
         return 0 if result["status"] in {"live_rolled_back", "permission_denied_degraded"} else 1
+    if args.command == "publish-pr-readonly-probe":
+        output = args.output or "retort_pr_readonly_degradation_probe.json"
+        result = write_readonly_pr_degradation_probe(args.pr_url, output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR readonly probe status: {result['status']}")
+            print(f"Readable: {result['summary']['pull_status'] < 400}")
+            print(f"Output: {output}")
+        return 0 if result["status"] == "read_only_degraded" else 1
     if args.command == "cross-project-replay":
         result = build_cross_project_replay(args.project)
         if args.output:

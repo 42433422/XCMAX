@@ -13,6 +13,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "pr_publish_dry_run_result": ("status", "pr_url", "summary", "comments", "rollback"),
     "pr_publish_sandbox_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts"),
     "pr_live_publish_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
+    "pr_readonly_degradation_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
     "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
     "complex_pr_replay_result": ("status", "project", "summary", "pull_requests", "evidence"),
     "task_prioritization_result": ("status", "project", "summary", "priorities", "evidence"),

@@ -233,6 +233,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_live_publish_probe_status=",
         "pr_low_permission_probe_status=",
         "pr_low_permission_probe_real_network=",
+        "pr_readonly_degradation_probe_",
     )
     selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes)]
     return selected[:80]
