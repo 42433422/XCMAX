@@ -139,6 +139,15 @@
     },
     {
       "action": "allow",
+      "dimension": "comparative_analysis_depth",
+      "evidence": [
+        "paibi_cli_cross_adjudication"
+      ],
+      "name": "prove_paibi_four_cli_cross_adjudication",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "cross_language_absorption",
       "evidence": [
         "heterogeneous_absorption_replay"
@@ -258,6 +267,7 @@
       "retort_competitor_runtime_comparison.json",
       "retort_competitor_blind_adjudication.json",
       "retort_competitor_behavior_regression.json",
+      "retort_paibi_cli_cross_adjudication.json",
       "retort_heterogeneous_absorption_replay.json",
       "retort_cross_domain_absorption_replay.json",
       "retort_cross_domain_end_to_end.json",
@@ -313,7 +323,7 @@
     "cross_domain_end_to_end_domains": 10,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_end_to_end_review_status": "reviewed",
-    "decision_count": 26,
+    "decision_count": 27,
     "employee_patch_ready": true,
     "employee_patch_stress_post_rollback_gates": 120,
     "employee_patch_stress_ready": true,
@@ -345,12 +355,17 @@
     "long_run_ready": true,
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
+    "paibi_cli_cross_adjudication_consensus": true,
+    "paibi_cli_cross_adjudication_human_reviewed": false,
+    "paibi_cli_cross_adjudication_ready": true,
+    "paibi_cli_cross_adjudication_tool_count": 4,
+    "paibi_cli_cross_adjudication_tools": 4,
     "product_mainline_absorption_behavior_sources": 11,
     "product_mainline_absorption_behavior_tests": 6,
     "product_mainline_absorption_merge": true,
     "product_mainline_absorption_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 26,
+    "ready_decision_count": 27,
     "recovery_ready": true,
     "review_family_behavior_outputs": true,
     "review_family_behavior_python_cases": 1,

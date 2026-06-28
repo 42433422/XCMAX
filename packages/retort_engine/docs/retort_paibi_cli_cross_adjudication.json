@@ -1,0 +1,156 @@
+{
+  "artifacts": {
+    "input": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/cross_input.json",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1",
+    "outputs": {
+      "claude_code": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/claude_code_output.json",
+      "codex": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/codex_output.json",
+      "cursor": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/cursor_output.json",
+      "trae": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/trae_output.json"
+    },
+    "script": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/paibi_cli_adjudicator.py"
+  },
+  "evidence": {
+    "acceptance": "all_supported_paibi_cli_identities_accept_same_blind_competitor_behavior_label_without_score_fields",
+    "boundary": "four_separate_subprocesses_with_retort_paibi_tool_identity_and_no_retort_engine_imports",
+    "human_label_substitute": "multi_cli_consensus_not_human_review",
+    "human_reviewed": false,
+    "source_reports": [
+      "retort_competitor_blind_adjudication.json",
+      "retort_competitor_behavior_regression.json"
+    ],
+    "style": "paibi_four_cli_cross_consensus"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "accepted_tool_count": 4,
+    "accepted_tool_identities": [
+      "codex",
+      "cursor",
+      "trae",
+      "claude_code"
+    ],
+    "all_subprocesses_successful": true,
+    "all_tools_accepted": true,
+    "behavior_assertion_count": 18,
+    "behavior_case_count": 3,
+    "behavior_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_competitor_behavior_regression.json",
+    "behavior_status": "ready",
+    "blind_case_count": 3,
+    "blind_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_competitor_blind_adjudication.json",
+    "blind_status": "ready",
+    "consensus_label": "retort_wins_with_behavior_regression",
+    "cross_tool_consensus": true,
+    "duration_sec": 0.097,
+    "human_label_substitute": "paibi_four_cli_cross_consensus_not_human_review",
+    "human_reviewed": false,
+    "input_contains_score_fields": false,
+    "input_sha256": "f3354199a2d8fb760c25620d1178dff68e0a0c8d2986e9ad048412b124764edd",
+    "output_contains_labels": true,
+    "output_sha256s": [
+      "689d5533f6eb2c4ee99229945358cc50afe762ca2e62a36832226e817b4f7c55",
+      "10745691088178e53df6587c9c791ad679656bc91325091c422be67a9b66eb75",
+      "07a2fad3036bee5c4924a8d374ceedf89c2ee25ffbeef0785df03408e8a6ac46",
+      "7aae3b700e24e619682b8d783c752a42ec75a7e0a9f6e57e6bdb03af1391e4a0"
+    ],
+    "paibi_supported_tool_count": 4,
+    "replaces_human_labels": false,
+    "script_imports_retort_engine": false,
+    "script_sha256": "abf4536cc9cc18234337b2e032fcf46d2ec7b4e5d1f8d792d807789cc653256a",
+    "separate_subprocess_count": 4,
+    "tool_count": 4,
+    "tool_identities": [
+      "codex",
+      "cursor",
+      "trae",
+      "claude_code"
+    ]
+  },
+  "tool_results": [
+    {
+      "accepted": true,
+      "consensus_label": "retort_wins_with_behavior_regression",
+      "output_contains_labels": true,
+      "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/codex_output.json",
+      "output_sha256": "689d5533f6eb2c4ee99229945358cc50afe762ca2e62a36832226e817b4f7c55",
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "",
+      "summary": {
+        "accepted": true,
+        "accepted_case_count": 6,
+        "case_count": 6,
+        "env_tool_name": "codex",
+        "label": "retort_wins_with_behavior_regression",
+        "rejected": [],
+        "score_fields_consumed": false,
+        "tool_name": "codex"
+      },
+      "tool_name": "codex"
+    },
+    {
+      "accepted": true,
+      "consensus_label": "retort_wins_with_behavior_regression",
+      "output_contains_labels": true,
+      "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/cursor_output.json",
+      "output_sha256": "10745691088178e53df6587c9c791ad679656bc91325091c422be67a9b66eb75",
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "",
+      "summary": {
+        "accepted": true,
+        "accepted_case_count": 6,
+        "case_count": 6,
+        "env_tool_name": "cursor",
+        "label": "retort_wins_with_behavior_regression",
+        "rejected": [],
+        "score_fields_consumed": false,
+        "tool_name": "cursor"
+      },
+      "tool_name": "cursor"
+    },
+    {
+      "accepted": true,
+      "consensus_label": "retort_wins_with_behavior_regression",
+      "output_contains_labels": true,
+      "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/trae_output.json",
+      "output_sha256": "07a2fad3036bee5c4924a8d374ceedf89c2ee25ffbeef0785df03408e8a6ac46",
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "",
+      "summary": {
+        "accepted": true,
+        "accepted_case_count": 6,
+        "case_count": 6,
+        "env_tool_name": "trae",
+        "label": "retort_wins_with_behavior_regression",
+        "rejected": [],
+        "score_fields_consumed": false,
+        "tool_name": "trae"
+      },
+      "tool_name": "trae"
+    },
+    {
+      "accepted": true,
+      "consensus_label": "retort_wins_with_behavior_regression",
+      "output_contains_labels": true,
+      "output_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/paibi_cli_cross_adjudications/paibi-cli-cross-adjudication-20260628T095152Z-871e9db1/claude_code_output.json",
+      "output_sha256": "7aae3b700e24e619682b8d783c752a42ec75a7e0a9f6e57e6bdb03af1391e4a0",
+      "returncode": 0,
+      "stderr_tail": "",
+      "stdout_tail": "",
+      "summary": {
+        "accepted": true,
+        "accepted_case_count": 6,
+        "case_count": 6,
+        "env_tool_name": "claude_code",
+        "label": "retort_wins_with_behavior_regression",
+        "rejected": [],
+        "score_fields_consumed": false,
+        "tool_name": "claude_code"
+      },
+      "tool_name": "claude_code"
+    }
+  ]
+}

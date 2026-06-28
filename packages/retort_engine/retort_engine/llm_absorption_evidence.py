@@ -228,6 +228,8 @@ def _report_evidence(project: Path) -> list[str]:
     competitor_blind_summary = competitor_blind.get("summary") if isinstance(competitor_blind.get("summary"), dict) else {}
     competitor_behavior = read_json(project / "docs" / "retort_competitor_behavior_regression.json")
     competitor_behavior_summary = competitor_behavior.get("summary") if isinstance(competitor_behavior.get("summary"), dict) else {}
+    paibi_cli_cross = read_json(project / "docs" / "retort_paibi_cli_cross_adjudication.json")
+    paibi_cli_cross_summary = paibi_cli_cross.get("summary") if isinstance(paibi_cli_cross.get("summary"), dict) else {}
     heterogeneous_replay = read_json(project / "docs" / "retort_heterogeneous_absorption_replay.json")
     heterogeneous_summary = heterogeneous_replay.get("summary") if isinstance(heterogeneous_replay.get("summary"), dict) else {}
     cross_domain_replay = read_json(project / "docs" / "retort_cross_domain_absorption_replay.json")
@@ -526,6 +528,16 @@ def _report_evidence(project: Path) -> list[str]:
         f"competitor_behavior_regression_all_signals={competitor_behavior_summary.get('all_competitor_signals_regressed', '')}",
         f"competitor_behavior_regression_assertions={competitor_behavior_summary.get('behavior_assertion_count', '')}",
         f"competitor_behavior_regression_runtime={(competitor_behavior.get('evidence') or {}).get('runtime', '') if isinstance(competitor_behavior.get('evidence'), dict) else ''}",
+        f"paibi_cli_cross_adjudication_status={paibi_cli_cross.get('status', '')}",
+        f"paibi_cli_cross_adjudication_tools={paibi_cli_cross_summary.get('accepted_tool_count', '')}/{paibi_cli_cross_summary.get('tool_count', '')}",
+        f"paibi_cli_cross_adjudication_tool_identities={','.join(paibi_cli_cross_summary.get('tool_identities') or []) if isinstance(paibi_cli_cross_summary.get('tool_identities'), list) else ''}",
+        f"paibi_cli_cross_adjudication_all_accepted={paibi_cli_cross_summary.get('all_tools_accepted', '')}",
+        f"paibi_cli_cross_adjudication_consensus={paibi_cli_cross_summary.get('cross_tool_consensus', '')}",
+        f"paibi_cli_cross_adjudication_input_score_fields={paibi_cli_cross_summary.get('input_contains_score_fields', '')}",
+        f"paibi_cli_cross_adjudication_imports_retort={paibi_cli_cross_summary.get('script_imports_retort_engine', '')}",
+        f"paibi_cli_cross_adjudication_human_reviewed={paibi_cli_cross_summary.get('human_reviewed', '')}",
+        f"paibi_cli_cross_adjudication_replaces_human_labels={paibi_cli_cross_summary.get('replaces_human_labels', '')}",
+        f"paibi_cli_cross_adjudication_boundary={(paibi_cli_cross.get('evidence') or {}).get('boundary', '') if isinstance(paibi_cli_cross.get('evidence'), dict) else ''}",
         f"heterogeneous_absorption_replay_status={heterogeneous_replay.get('status', '')}",
         f"heterogeneous_absorption_replay_ready_cases={heterogeneous_summary.get('ready_case_count', '')}/{heterogeneous_summary.get('case_count', '')}",
         f"heterogeneous_absorption_replay_cached_sources={heterogeneous_summary.get('cached_source_count', '')}",
@@ -710,6 +722,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"operator_journey_replay_competitor_runtime_ready={operator_summary.get('competitor_runtime_ready', '')}",
         f"operator_journey_replay_competitor_blind_ready={operator_summary.get('competitor_blind_adjudication_ready', '')}",
         f"operator_journey_replay_competitor_behavior_ready={operator_summary.get('competitor_behavior_regression_ready', '')}",
+        f"operator_journey_replay_paibi_cli_cross_ready={operator_summary.get('paibi_cli_cross_adjudication_ready', '')}",
         f"operator_journey_replay_employee_patch_stress_ready={operator_summary.get('employee_patch_stress_ready', '')}",
         f"operator_journey_replay_contract_stability_ready={operator_summary.get('contract_stability_ready', '')}",
         f"operator_journey_replay_cross_domain_end_to_end_ready={operator_summary.get('cross_domain_end_to_end_ready', '')}",
@@ -743,6 +756,10 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_competitor_blind_min_delta={release_summary.get('competitor_blind_adjudication_min_delta', '')}",
         f"absorption_release_decision_competitor_behavior_ready={release_summary.get('competitor_behavior_regression_ready', '')}",
         f"absorption_release_decision_competitor_behavior_assertions={release_summary.get('competitor_behavior_regression_assertions', '')}",
+        f"absorption_release_decision_paibi_cli_cross_ready={release_summary.get('paibi_cli_cross_adjudication_ready', '')}",
+        f"absorption_release_decision_paibi_cli_cross_tools={release_summary.get('paibi_cli_cross_adjudication_tools', '')}/{release_summary.get('paibi_cli_cross_adjudication_tool_count', '')}",
+        f"absorption_release_decision_paibi_cli_cross_consensus={release_summary.get('paibi_cli_cross_adjudication_consensus', '')}",
+        f"absorption_release_decision_paibi_cli_cross_human_reviewed={release_summary.get('paibi_cli_cross_adjudication_human_reviewed', '')}",
         f"absorption_release_decision_cross_domain_ready={release_summary.get('cross_domain_absorption_ready', '')}",
         f"absorption_release_decision_cross_domain_domains={release_summary.get('cross_domain_absorption_domains', '')}",
         f"absorption_release_decision_cross_domain_assertions={release_summary.get('cross_domain_absorption_output_assertions', '')}",

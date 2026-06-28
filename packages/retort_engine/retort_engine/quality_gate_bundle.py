@@ -204,6 +204,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         },
         "competitor_blind_adjudication_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "artifacts": {}, "evidence": {}},
         "competitor_behavior_regression_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
+        "paibi_cli_cross_adjudication_result": {"status": "ready", "project": "p", "summary": {}, "tool_results": [], "artifacts": {}, "evidence": {}},
         "heterogeneous_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "cross_domain_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "cross_domain_end_to_end_result": {

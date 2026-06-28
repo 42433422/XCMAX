@@ -424,6 +424,31 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_paibi_cli_cross_adjudication.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "tool_count": 4,
+                    "accepted_tool_count": 4,
+                    "tool_identities": ["codex", "cursor", "trae", "claude_code"],
+                    "all_tools_accepted": True,
+                    "cross_tool_consensus": True,
+                    "input_contains_score_fields": False,
+                    "script_imports_retort_engine": False,
+                    "human_reviewed": False,
+                    "replaces_human_labels": False,
+                },
+                "tool_results": [],
+                "artifacts": {},
+                "evidence": {
+                    "boundary": "four_separate_subprocesses_with_retort_paibi_tool_identity_and_no_retort_engine_imports",
+                    "human_reviewed": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_cross_domain_absorption_replay.json").write_text(
         json.dumps(
             {
@@ -687,6 +712,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "competitor_runtime_ready": True,
                     "competitor_blind_adjudication_ready": True,
                     "competitor_behavior_regression_ready": True,
+                    "paibi_cli_cross_adjudication_ready": True,
                     "employee_patch_stress_ready": True,
                     "contract_stability_ready": True,
                     "cross_domain_end_to_end_ready": True,
@@ -932,6 +958,15 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_behavior_regression_direct_review=True" in evidence
     assert "competitor_behavior_regression_all_signals=True" in evidence
     assert "competitor_behavior_regression_assertions=18" in evidence
+    assert "paibi_cli_cross_adjudication_status=ready" in evidence
+    assert "paibi_cli_cross_adjudication_tools=4/4" in evidence
+    assert "paibi_cli_cross_adjudication_tool_identities=codex,cursor,trae,claude_code" in evidence
+    assert "paibi_cli_cross_adjudication_all_accepted=True" in evidence
+    assert "paibi_cli_cross_adjudication_consensus=True" in evidence
+    assert "paibi_cli_cross_adjudication_input_score_fields=False" in evidence
+    assert "paibi_cli_cross_adjudication_imports_retort=False" in evidence
+    assert "paibi_cli_cross_adjudication_human_reviewed=False" in evidence
+    assert "paibi_cli_cross_adjudication_replaces_human_labels=False" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
     assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
     assert "cross_domain_absorption_replay_non_pr_domains=10" in evidence
@@ -1043,6 +1078,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
     assert "operator_journey_replay_competitor_blind_ready=True" in evidence
     assert "operator_journey_replay_competitor_behavior_ready=True" in evidence
+    assert "operator_journey_replay_paibi_cli_cross_ready=True" in evidence
     assert "operator_journey_replay_employee_patch_stress_ready=True" in evidence
     assert "operator_journey_replay_cross_domain_ci_regression_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence

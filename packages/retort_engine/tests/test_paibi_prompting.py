@@ -64,6 +64,10 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "competitor_blind_adjudication_imports_retort=False",
         "competitor_behavior_regression_status=ready",
         "competitor_behavior_regression_all_signals=True",
+        "paibi_cli_cross_adjudication_status=ready",
+        "paibi_cli_cross_adjudication_tools=4/4",
+        "paibi_cli_cross_adjudication_all_accepted=True",
+        "paibi_cli_cross_adjudication_human_reviewed=False",
         "cross_domain_ci_regression_rounds=3/3",
         "review_family_behavior_replay_direct_outputs=True",
         "release_decision_self_reference=False",
@@ -91,6 +95,10 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "competitor_blind_adjudication_imports_retort=False" in selected
     assert "competitor_behavior_regression_status=ready" in selected
     assert "competitor_behavior_regression_all_signals=True" in selected
+    assert "paibi_cli_cross_adjudication_status=ready" in selected
+    assert "paibi_cli_cross_adjudication_tools=4/4" in selected
+    assert "paibi_cli_cross_adjudication_all_accepted=True" in selected
+    assert "paibi_cli_cross_adjudication_human_reviewed=False" in selected
     assert "cross_domain_ci_regression_rounds=3/3" in selected
     assert "review_family_behavior_replay_direct_outputs=True" in selected
     assert "release_decision_self_reference=False" in selected
@@ -108,6 +116,8 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "contract_runtime_rehearsal_all_rejected=True",
         "employee_patch_stress_state_leaks=0",
         "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff",
+        "paibi_cli_cross_adjudication_status=ready",
+        "paibi_cli_cross_adjudication_tools=4/4",
     ]
 
     prompt = build_retort_paibi_prompt(project=tmp_path, mode="assess", evidence=evidence)
@@ -120,4 +130,6 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "contract_runtime_rehearsal_all_rejected=True" in prompt
     assert "employee_patch_stress_state_leaks=0" in prompt
     assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in prompt
+    assert "paibi_cli_cross_adjudication_status=ready" in prompt
+    assert "paibi_cli_cross_adjudication_tools=4/4" in prompt
     assert "pr_holdout_blind_eval_total_comments=179" not in prompt

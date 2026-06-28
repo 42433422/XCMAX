@@ -26,6 +26,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     competitor_runtime = _read_json(root / "docs" / "retort_competitor_runtime_comparison.json")
     competitor_blind = _read_json(root / "docs" / "retort_competitor_blind_adjudication.json")
     competitor_behavior = _read_json(root / "docs" / "retort_competitor_behavior_regression.json")
+    paibi_cli_cross = _read_json(root / "docs" / "retort_paibi_cli_cross_adjudication.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
@@ -165,6 +166,19 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and int(competitor_behavior.get("summary", {}).get("ready_case_count") or 0) >= 3
             and int(competitor_behavior.get("summary", {}).get("behavior_assertion_count") or 0) >= 18,
             ["competitor_behavior_regression"],
+        ),
+        _decision(
+            "prove_paibi_four_cli_cross_adjudication",
+            "comparative_analysis_depth",
+            paibi_cli_cross.get("status") == "ready"
+            and int(paibi_cli_cross.get("summary", {}).get("tool_count") or 0) >= 4
+            and int(paibi_cli_cross.get("summary", {}).get("accepted_tool_count") or 0) >= 4
+            and paibi_cli_cross.get("summary", {}).get("all_tools_accepted") is True
+            and paibi_cli_cross.get("summary", {}).get("cross_tool_consensus") is True
+            and paibi_cli_cross.get("summary", {}).get("input_contains_score_fields") is False
+            and paibi_cli_cross.get("summary", {}).get("script_imports_retort_engine") is False
+            and paibi_cli_cross.get("summary", {}).get("human_reviewed") is False,
+            ["paibi_cli_cross_adjudication"],
         ),
         _decision(
             "prove_heterogeneous_absorption",
@@ -318,6 +332,11 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "competitor_behavior_regression_cases": competitor_behavior.get("summary", {}).get("ready_case_count", ""),
         "competitor_behavior_regression_assertions": competitor_behavior.get("summary", {}).get("behavior_assertion_count", ""),
         "competitor_behavior_regression_direct": competitor_behavior.get("summary", {}).get("all_cases_direct_review_execution", ""),
+        "paibi_cli_cross_adjudication_ready": paibi_cli_cross.get("status") == "ready",
+        "paibi_cli_cross_adjudication_tools": paibi_cli_cross.get("summary", {}).get("accepted_tool_count", ""),
+        "paibi_cli_cross_adjudication_tool_count": paibi_cli_cross.get("summary", {}).get("tool_count", ""),
+        "paibi_cli_cross_adjudication_consensus": paibi_cli_cross.get("summary", {}).get("cross_tool_consensus", ""),
+        "paibi_cli_cross_adjudication_human_reviewed": paibi_cli_cross.get("summary", {}).get("human_reviewed", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
@@ -378,6 +397,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_competitor_runtime_comparison.json",
                 "retort_competitor_blind_adjudication.json",
                 "retort_competitor_behavior_regression.json",
+                "retort_paibi_cli_cross_adjudication.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
                 "retort_cross_domain_end_to_end.json",

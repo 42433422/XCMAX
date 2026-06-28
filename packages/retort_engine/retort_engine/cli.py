@@ -42,6 +42,7 @@ from retort_engine.production_recovery_drill import build_production_recovery_dr
 from retort_engine.product_mainline_absorption_proof import build_product_mainline_absorption_proof
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.operator_journey_replay import build_operator_journey_replay
+from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
 from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
@@ -272,6 +273,12 @@ def main(argv: list[str] | None = None) -> int:
     competitor_behavior.add_argument("--min-cases", type=int, default=3)
     competitor_behavior.add_argument("--output", default="")
     competitor_behavior.add_argument("--json", action="store_true")
+    paibi_cli_cross = sub.add_parser("paibi-cli-cross-adjudication")
+    paibi_cli_cross.add_argument("--project", default=".")
+    paibi_cli_cross.add_argument("--blind-path", default="")
+    paibi_cli_cross.add_argument("--behavior-path", default="")
+    paibi_cli_cross.add_argument("--output", default="")
+    paibi_cli_cross.add_argument("--json", action="store_true")
     heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
     heterogeneous_replay.add_argument("--project", default=".")
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
@@ -808,6 +815,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort competitor behavior regression status: {result['status']}")
             print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "paibi-cli-cross-adjudication":
+        result = build_paibi_cli_cross_adjudication(args.project, blind_path=args.blind_path, behavior_path=args.behavior_path, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PaiBi CLI cross adjudication status: {result['status']}")
+            print(f"Accepted tools: {result['summary']['accepted_tool_count']}/{result['summary']['tool_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

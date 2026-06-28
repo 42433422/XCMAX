@@ -150,6 +150,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "competitor_runtime_comparison": "competitor-runtime-comparison" in text and "build_competitor_runtime_comparison" in text,
         "competitor_blind_adjudication": "competitor-blind-adjudication" in text and "build_competitor_blind_adjudication" in text,
         "competitor_behavior_regression": "competitor-behavior-regression" in text and "build_competitor_behavior_regression" in text,
+        "paibi_cli_cross_adjudication": "paibi-cli-cross-adjudication" in text and "build_paibi_cli_cross_adjudication" in text,
         "cross_domain_end_to_end": "cross-domain-end-to-end" in text and "build_cross_domain_end_to_end" in text,
         "cross_domain_ci_regression": "cross-domain-ci-regression" in text and "build_cross_domain_ci_regression" in text,
         "contract_stability_stress": "contract-stability-stress" in text and "build_contract_stability_stress" in text,
