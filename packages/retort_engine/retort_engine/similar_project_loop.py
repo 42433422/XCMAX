@@ -87,7 +87,7 @@ def run_similar_project_loop(
     dry_run: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
-    candidates = [_candidate_from_url(source) for source in sources or []]
+    candidates = None if sources is None else [_candidate_from_url(source) for source in sources]
     radar = build_similar_project_radar(root, candidates=candidates or None, limit=limit, min_score=min_score)
     selected = radar["candidates"][:limit]
     runs: list[dict[str, Any]] = []
@@ -128,9 +128,11 @@ def run_similar_project_loop(
     if radar.get("status") == "search_failed":
         status = "search_failed"
     elif not selected:
-        status = "no_candidates"
+        status = "needs_attention" if any(run.get("status") == "absorption_failed" for run in runs) else "no_candidates"
     elif dry_run:
         status = "ready"
+    elif any(run.get("status") == "absorption_failed" for run in runs):
+        status = "needs_attention"
     else:
         status = "ready" if all(run.get("gates_passed") for run in runs) else "needs_attention"
     return {
@@ -189,18 +191,17 @@ def build_absorption_saturation_report(
     remaining_count = 0 if remaining_candidates is None else len(remaining_candidates)
     strong_remaining = [item for item in remaining_candidates or [] if _is_open_depth_candidate(item, min_score=min_score)]
     strong_remaining_count = len(strong_remaining)
-    recent_green = len(recent) >= recent_limit and all(item["gates_passed"] for item in recent)
     no_new_depth = consecutive_no_new >= recent_limit
     no_strong_remaining = remaining_candidates is not None and strong_remaining_count == 0
     search_failed = radar_status == "search_failed" or str(radar_summary.get("search_status") or "") == "search_failed"
-    saturated = bool(recent_green and not search_failed and (no_new_depth or no_strong_remaining))
+    saturated = bool((no_new_depth or no_strong_remaining) and not search_failed)
     saturation_basis = "not_saturated"
     if search_failed:
         saturation_basis = "search_failed"
-    elif saturated and no_new_depth:
-        saturation_basis = "recent_absorptions_add_no_new_core_depth"
     elif saturated and no_strong_remaining:
         saturation_basis = "remaining_candidates_below_min_score"
+    elif saturated and no_new_depth:
+        saturation_basis = "recent_absorptions_add_no_new_core_depth"
     return {
         "status": "search_failed" if search_failed else ("saturated" if saturated else "not_saturated"),
         "project": str(root),
