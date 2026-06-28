@@ -1,7 +1,0 @@
-diff --git a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py
---- a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py
-+++ b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/existing_patch.py
-@@ -1,2 +1,2 @@
- def existing_patch_value():
--    return 'old'
-+    return 'verified-existing-update'

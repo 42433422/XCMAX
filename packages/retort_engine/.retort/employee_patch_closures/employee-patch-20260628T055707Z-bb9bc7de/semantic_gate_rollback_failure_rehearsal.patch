@@ -1,6 +1,0 @@
-diff --git a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py
---- /dev/null
-+++ b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/failure_rehearsals/semantic_gate_rollback.py
-@@ -0,0 +1,2 @@
-+def rollback_rehearsal_semantic_gate_rollback(:
-+    return 'must-rollback'

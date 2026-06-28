@@ -1,5 +1,0 @@
-diff --git a/src/config.ts b/src/config.ts
---- a/src/config.ts
-+++ b/src/config.ts
-@@ -0,0 +1 @@
-+export const GITHUB_TOKEN = "live-secret-value";
