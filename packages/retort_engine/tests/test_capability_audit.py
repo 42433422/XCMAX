@@ -25,7 +25,22 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa
     review_artifact = result_dir / "worker_review.json"
     review_artifact.write_text("{}", encoding="utf-8")
     (result_dir / "result.json").write_text(
-        json.dumps({"execution_mode": "employee_runtime_worker", "runtime_evidence": {"worker_review": {"status": "reviewed", "comment_count": 1, "file_count": 1, "artifact": str(review_artifact)}}}),
+        json.dumps(
+            {
+                "execution_mode": "employee_runtime_worker",
+                "runtime_evidence": {
+                    "worker_review": {
+                        "status": "reviewed",
+                        "comment_count": 24,
+                        "file_count": 12,
+                        "task_group_count": 6,
+                        "worker_review_count": 5,
+                        "artifact": str(review_artifact),
+                    },
+                    "multi_worker": {"verified": True, "worker_count": 5, "independent_worker_count": 5, "result_path_count": 5},
+                },
+            }
+        ),
         encoding="utf-8",
     )
     docs = tmp_path / "docs"
@@ -41,6 +56,9 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa
     assert "https://github.com/example/repo" in audit["external_projects"]
     assert len(audit["external_projects"]) == 3
     assert "employee_execution_not_independent_runtime" not in audit["blockers"]
+    assert audit["employee_worker_review"]["multi_worker_verified"] is True
+    assert audit["employee_worker_review"]["worker_review_count"] == 5
+    assert audit["employee_worker_review"]["multi_file_review_verified"] is True
 
 
 def test_absorption_external_projects_combines_run_sources_and_architecture_memory(tmp_path: Path) -> None:
