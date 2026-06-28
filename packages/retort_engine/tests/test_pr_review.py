@@ -144,6 +144,38 @@ diff --git a/src/App.tsx b/src/App.tsx
     assert all(comment["publishable"] is True for comment in result["comments"])
     assert all(comment["comment_anchor"]["side"] == "RIGHT" for comment in result["comments"])
     assert {comment["review_context"] for comment in result["comments"]} >= {"runtime", "frontend"}
+    assert result["summary"]["extension_policy"]["language_family_count"] >= 2
+    assert result["summary"]["extension_policy"]["known_extension_count"] == 2
+    assert {summary["extension_policy"]["family"] for summary in result["file_summaries"]} >= {"go", "typescript"}
+
+
+def test_review_diff_applies_holdout_extension_policy_to_cross_language_files() -> None:
+    diff = (
+        _single_add_diff("src/lib.rs", 'let token = "live-secret-value";')
+        + _single_add_diff("native/buffer.cpp", "// TODO: audit pointer lifetime")
+        + _single_add_diff("service/Worker.csproj", '<PackageReference Include="Example" Version="1.0.0" />')
+        + _single_add_diff("docs/architecture.adoc", "= Architecture")
+        + _single_add_diff("go.mod", "require github.com/example/lib v1.2.3")
+        + _single_add_diff("scripts/review.unknownext", "# TODO: unknown extension")
+    )
+
+    result = review_diff(diff, max_comments=8)
+    summary = result["summary"]["extension_policy"]
+    summaries_by_file = {item["file"]: item for item in result["file_summaries"]}
+
+    assert summary["policy_source"] == "retort_holdout_extension_policy_v1"
+    assert summary["file_count"] == 6
+    assert summary["known_extension_count"] == 5
+    assert summary["unknown_extension_count"] == 1
+    assert summary["language_family_count"] >= 5
+    assert {"runtime", "ci_config", "docs", "config"}.issubset(set(summary["review_contexts"]))
+    assert {"memory_safety", "dependency_graph", "operator_contract"}.issubset(set(summary["risk_tags"]))
+    assert summaries_by_file["src/lib.rs"]["extension_policy"]["family"] == "rust"
+    assert summaries_by_file["native/buffer.cpp"]["extension_policy"]["risk_tags"] == ["memory_safety", "build_flags"]
+    assert summaries_by_file["service/Worker.csproj"]["review_context"] == "ci_config"
+    assert summaries_by_file["docs/architecture.adoc"]["review_context"] == "docs"
+    assert summaries_by_file["go.mod"]["extension_policy"]["family"] == "go"
+    assert summaries_by_file["scripts/review.unknownext"]["extension_policy"]["known"] is False
 
 
 def test_review_diff_ignores_documented_or_fake_secret_terms() -> None:
@@ -283,6 +315,10 @@ def test_review_context_helpers_classify_common_project_files() -> None:
     assert review_context_for_file("app/auth.py") == "security"
     assert review_context_for_file("tests/test_auth.py") == "tests"
     assert review_context_for_file(".github/workflows/ci.yml") == "ci_config"
+    assert review_context_for_file("settings/runtime.yaml") == "config"
+    assert review_context_for_file("service/Worker.csproj") == "ci_config"
+    assert review_context_for_file("docs/architecture.adoc") == "docs"
+    assert review_context_for_file("native/buffer.cpp") == "runtime"
     assert review_context_for_file("docs/review.md") == "docs"
     groups = group_related_files_for_review(["app/auth.py", "tests/test_auth.py"])
     assert [group["context"] for group in groups] == ["security", "tests"]

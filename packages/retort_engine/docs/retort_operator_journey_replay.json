@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "b05992008f853f33124f5be75ff06b71d0713030013b73646667e5c5607b7b4f"
+      "sha256": "22fc21005c974595661ba4fab784aab60281dd92c00646e6889b3be9e6db305a"
     },
     {
       "bytes": 6905,
@@ -355,8 +355,8 @@
       "ready": true
     },
     "codebase_graph": {
-      "edge_count": 4340,
-      "file_count": 138,
+      "edge_count": 4386,
+      "file_count": 140,
       "hotspot_count": 12,
       "ready": true,
       "status": "ready"
@@ -372,7 +372,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T021218Z-6d96abde.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T022523Z-9de96b6d.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -402,7 +402,7 @@
       "evidence": [
         "changed_files=11",
         "gates_passed=True",
-        "quality_gate_sha=b05992008f853f33124f5be75ff06b71d0713030013b73646667e5c5607b7b4f"
+        "quality_gate_sha=22fc21005c974595661ba4fab784aab60281dd92c00646e6889b3be9e6db305a"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -469,16 +469,16 @@
     "artifact_count": 15,
     "codebase_graph_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 1.186,
+    "duration_sec": 1.213,
     "failed_stage_count": 0,
     "frontend_structure_ready": true,
     "hashed_artifact_count": 15,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T021218Z-6d96abde.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T022523Z-9de96b6d.manifest.json",
     "per_run_code_graph_proved": true,
     "ready_stage_count": 8,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T021218Z-6d96abde",
+    "run_id": "operator-journey-20260628T022523Z-9de96b6d",
     "single_command_surface": true,
     "source_report_count": 14,
     "stage_count": 8

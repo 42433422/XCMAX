@@ -121,3 +121,17 @@ def test_pr_review_runtime_evidence_reports_missing_surface(tmp_path: Path) -> N
     assert evidence["runtime"] is False
     assert evidence["behavior_source_files"] == []
     assert evidence["behavior_test_files"] == []
+
+
+def test_pr_review_runtime_evidence_reports_extension_policy_depth() -> None:
+    project = Path(__file__).resolve().parents[1]
+
+    evidence = pr_review_runtime_evidence(project)
+
+    assert evidence["extension_policy_known_count"] >= 8
+    assert evidence["extension_policy_unknown_count"] == 0
+    assert evidence["extension_policy_language_family_count"] >= 7
+    assert evidence["extension_policy_review_context_count"] >= 4
+    assert {"runtime", "frontend", "ci_config", "docs", "config"}.issubset(set(evidence["extension_policy_review_contexts"]))
+    assert "retort_engine/diff_extension_policy.py" in evidence["behavior_source_files"]
+    assert "tests/test_diff_extension_policy.py" in evidence["behavior_test_files"]

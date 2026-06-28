@@ -134,6 +134,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     calibration_policy_source = root / "retort_engine" / "review_calibration_policy.py"
     recovery_drill_source = root / "retort_engine" / "production_recovery_drill.py"
     release_decision_source = root / "retort_engine" / "absorption_release_decision.py"
+    extension_policy_source = root / "retort_engine" / "diff_extension_policy.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -157,6 +158,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     calibration_policy_test = root / "tests" / "test_review_calibration_policy.py"
     recovery_drill_test = root / "tests" / "test_production_recovery_drill.py"
     release_decision_test = root / "tests" / "test_absorption_release_decision.py"
+    extension_policy_test = root / "tests" / "test_diff_extension_policy.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -198,6 +200,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     core_large_diff_context_balancing = False
     employee_feedback_changes_ranking = False
     employee_feedback_rank_context = ""
+    extension_policy_known_count = 0
+    extension_policy_unknown_count = 0
+    extension_policy_family_count = 0
+    extension_policy_context_count = 0
+    extension_policy_contexts: list[str] = []
+    extension_policy_families: list[str] = []
+    extension_policy_source_name = ""
     adjudication_status = ""
     adjudication_human_label_count = 0
     adjudication_pass_rate = 0.0
@@ -265,6 +274,16 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             after_context = str(((feedback_after.get("comments") or [{}])[0] or {}).get("review_context") or "")
             employee_feedback_changes_ranking = bool(before_context and after_context and before_context != after_context)
             employee_feedback_rank_context = after_context
+            extension_review = review_diff(_audit_extension_policy_sample(), max_comments=8)
+            extension_policy = (extension_review.get("summary") or {}).get("extension_policy") if isinstance(extension_review.get("summary"), dict) else {}
+            if isinstance(extension_policy, dict):
+                extension_policy_known_count = int(extension_policy.get("known_extension_count") or 0)
+                extension_policy_unknown_count = int(extension_policy.get("unknown_extension_count") or 0)
+                extension_policy_family_count = int(extension_policy.get("language_family_count") or 0)
+                extension_policy_context_count = int(extension_policy.get("review_context_count") or 0)
+                extension_policy_contexts = [str(item) for item in extension_policy.get("review_contexts") or []]
+                extension_policy_families = [str(item) for item in extension_policy.get("language_families") or []]
+                extension_policy_source_name = str(extension_policy.get("policy_source") or "")
             adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
             adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
             adjudication_status = str(adjudication_report.get("status") or "")
@@ -312,6 +331,13 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "core_large_diff_context_balancing": core_large_diff_context_balancing,
         "employee_feedback_changes_ranking": employee_feedback_changes_ranking,
         "employee_feedback_rank_context": employee_feedback_rank_context,
+        "extension_policy_known_count": extension_policy_known_count,
+        "extension_policy_unknown_count": extension_policy_unknown_count,
+        "extension_policy_language_family_count": extension_policy_family_count,
+        "extension_policy_review_context_count": extension_policy_context_count,
+        "extension_policy_review_contexts": extension_policy_contexts,
+        "extension_policy_language_families": extension_policy_families,
+        "extension_policy_source": extension_policy_source_name,
         "adjudication_status": adjudication_status,
         "adjudication_human_label_count": adjudication_human_label_count,
         "adjudication_pass_rate": adjudication_pass_rate,
@@ -352,6 +378,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/review_calibration_policy.py", calibration_policy_source.is_file()),
                 ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
                 ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
+                ("retort_engine/diff_extension_policy.py", extension_policy_source.is_file()),
             )
             if exists
         ],
@@ -381,6 +408,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_review_calibration_policy.py", calibration_policy_test.is_file()),
                 ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
                 ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
+                ("tests/test_diff_extension_policy.py", extension_policy_test.is_file()),
             )
             if exists
         ],
@@ -406,6 +434,21 @@ def _audit_feedback_diff_sample() -> str:
     rows = [
         ("app/runtime.py", "# TODO: finish runtime behavior"),
         ("tests/test_runtime.py", "# TODO: assert runtime behavior"),
+    ]
+    return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
+
+
+def _audit_extension_policy_sample() -> str:
+    rows = [
+        ("src/lib.rs", 'let token = "live-secret-value";'),
+        ("internal/worker.go", "// TODO: prove goroutine cancellation"),
+        ("frontend/App.tsx", "const token = 'live-secret-value'"),
+        ("service/Worker.cs", "// TODO: validate nullable contract"),
+        ("service/Worker.csproj", "<PackageReference Include=\"Example\" Version=\"1.0.0\" />"),
+        ("native/buffer.cpp", "// TODO: audit pointer lifetime"),
+        ("docs/architecture.adoc", "= Architecture"),
+        ("go.mod", "require github.com/example/lib v1.2.3"),
+        (".github/workflows/review.yml", "name: review"),
     ]
     return "".join(f"diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n@@ -0,0 +1,1 @@\n+{line}\n" for path, line in rows)
 

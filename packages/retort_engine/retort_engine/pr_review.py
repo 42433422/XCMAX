@@ -7,6 +7,7 @@ from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
 from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary
+from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context
 from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.review_calibration_policy import calibration_context_rank_weight, calibration_context_rank_weights, calibration_summary
 from retort_engine.review_context_bias import context_rank_weight, context_rank_weights, context_signal_strength, file_grouping_enabled, review_context_bias
@@ -50,6 +51,7 @@ def review_diff(
     context_groups = group_related_files_for_review(files)
     large_diff_chunking = _large_diff_review_needed(files, diff_text)
     context_by_file = {path: str(group["context"]) for group in context_groups for path in group["files"]}
+    extension_policy = extension_policy_summary([str(file_review["path"]) for file_review in files])
     static_analysis = scan_static_analysis_findings(files)
     intent_alignment = assess_change_intent_alignment(files, issue_context=issue_context, pr_body=pr_body)
     feedback_context_weights = _feedback_context_weights(employee_feedback or [])
@@ -104,6 +106,7 @@ def review_diff(
         "file_summary_count": len(file_summaries),
         "review_context_group_count": len(context_groups),
         "primary_review_contexts": [str(group["context"]) for group in context_groups[:5]],
+        "extension_policy": extension_policy,
         "absorbed_file_grouping": file_grouping_enabled(),
         "absorbed_context_signal_strength": context_signal_strength(),
         "absorbed_context_rank_weights": context_rank_weights(),
@@ -186,17 +189,18 @@ def review_context_for_file(path: str) -> str:
         return "ci_config"
     if normalized.startswith("tests/") or "/tests/" in normalized or name.startswith("test_") or name.endswith((".spec.ts", ".spec.tsx", ".test.ts", ".test.tsx")):
         return "tests"
-    if normalized.startswith("docs/") or suffix in {".md", ".rst"}:
+    extension_context = extension_review_context(path)
+    if normalized.startswith("docs/") or extension_context == "docs":
         return "docs"
     if "auth" in normalized or "security" in normalized or any(marker in normalized for marker in SECRET_MARKERS):
         return "security"
-    if suffix in {".json", ".toml", ".yml", ".yaml", ".ini", ".env"} or name == ".env" or name.endswith(".env"):
+    if normalized.startswith(("config/", "settings/")) or "/config/" in normalized or "/settings/" in normalized:
+        return "config"
+    if suffix in {".ini", ".env"} or name == ".env" or name.endswith(".env"):
         return "config"
     if suffix in {".tsx", ".jsx", ".css", ".html"} or "/frontend/" in normalized or "/ui/" in normalized:
         return "frontend"
-    if suffix in {".py", ".go", ".ts", ".js", ".java", ".rs"}:
-        return "runtime"
-    return "other"
+    return extension_context
 
 
 def group_related_files_for_review(files: list[dict[str, Any]] | list[str]) -> list[dict[str, Any]]:
@@ -536,10 +540,12 @@ def _build_task_groups(files: list[dict[str, Any]], comments: list[dict[str, Any
 
 def _file_summary(file_path: str, strategy: dict[str, Any], file_review: dict[str, Any], comments: list[dict[str, Any]], review_context: str) -> dict[str, Any]:
     severity_counts = {severity: sum(1 for item in comments if item.get("severity") == severity) for severity in SEVERITIES}
+    extension_policy = extension_policy_for_path(file_path)
     return {
         "file": file_path,
         "strategy": strategy.get("strategy", "semantic_review"),
         "review_context": review_context,
+        "extension_policy": extension_policy,
         "hunk_count": len(file_review.get("hunks") or []),
         "comment_count": len(comments),
         "risk_counts": severity_counts,
