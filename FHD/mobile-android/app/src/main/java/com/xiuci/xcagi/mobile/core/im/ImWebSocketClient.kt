@@ -1,5 +1,7 @@
 package com.xiuci.xcagi.mobile.core.im
 
+import android.util.Log
+import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.core.network.ServerRouter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,21 +63,36 @@ class ImWebSocketClient @Inject constructor(
                 override fun onOpen(webSocket: WebSocket, response: Response) {
                     connected = true
                     reconnectAttempts = 0
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "ws onOpen host=${request.url.host}")
+                    }
                     startHeartbeat()
                 }
 
                 override fun onMessage(webSocket: WebSocket, text: String) {
-                    runCatching { JSONObject(text) }.onSuccess { _events.tryEmit(it) }
+                    runCatching { JSONObject(text) }.onSuccess {
+                        val emitted = _events.tryEmit(it)
+                        if (BuildConfig.DEBUG) {
+                            Log.d(
+                                TAG,
+                                "ws event type=${it.optString("type")} conv=${it.optInt("conversation_id", 0)} emitted=$emitted",
+                            )
+                        }
+                    }.onFailure { err ->
+                        Log.w(TAG, "ws parse fail: $err rawLength=${text.length}")
+                    }
                 }
 
                 override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
                     connected = false
+                    Log.w(TAG, "ws onClosed code=$code reason=$reason")
                     stopHeartbeat()
                     scheduleReconnect()
                 }
 
                 override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                     connected = false
+                    Log.w(TAG, "ws onFailure err=$t")
                     stopHeartbeat()
                     scheduleReconnect()
                 }
@@ -133,6 +150,8 @@ class ImWebSocketClient @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "XcagiImWs"
+
         fun parseEvent(json: JSONObject): ImWsEvent? = when (json.optString("type")) {
             "im.message", "message" -> parseMessage(json)
             "im.read", "read" -> parseRead(json)
