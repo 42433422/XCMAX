@@ -5,27 +5,33 @@
     "plugin_surface",
     "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/vlad-ko/pr-review-bench",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/RitzwiK/ACRS-v2",
   "external_snapshot": {
-    "file_count": 15,
-    "git_revision": "09d8b6bb11bd8918d1963fc804abd56f642373cd",
+    "file_count": 59,
+    "git_revision": "6d0331a78c83e6b24faaa3c8370672ecc73a06b3",
     "suffix_counts": {
-      ".csv": 2,
+      ".css": 1,
+      ".html": 1,
+      ".ico": 1,
+      ".js": 3,
+      ".json": 3,
+      ".jsx": 16,
       ".md": 1,
-      ".png": 7,
-      ".py": 2,
-      ".sql": 1,
+      ".png": 5,
+      ".py": 24,
+      ".txt": 1,
+      ".yaml": 1,
       "<none>": 2
     }
   },
-  "generated_at": "2026-06-28T17:13:51Z",
+  "generated_at": "2026-06-28T17:14:44Z",
   "license_review": {
-    "detected_license": "MIT License",
-    "message": "Allowed license detected: MIT License",
-    "status": "passed"
+    "detected_license": "",
+    "message": "license-incompatible risk: no LICENSE file detected",
+    "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/vlad-ko/pr-review-bench --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/RitzwiK/ACRS-v2 --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
@@ -42,7 +48,24 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "ingest.py"
+            "README.md",
+            "frontend/src/pages/Docs.jsx",
+            "frontend/src/pages/Benchmark.jsx",
+            "final_fixes/frontend/src/pages/Docs.jsx",
+            "final_fixes/backend/app.py"
+          ],
+          "status": "closed_until_similarity_saturation"
+        },
+        {
+          "component": "plugin_surface",
+          "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
+          "reason": "early_phase_retort_self_deepening_only",
+          "source_files": [
+            "frontend/vite.config.js",
+            "frontend/package-lock.json",
+            "frontend/package.json",
+            "final_fixes/backend/app.py",
+            "backend/app.py"
           ],
           "status": "closed_until_similarity_saturation"
         }
@@ -61,20 +84,6 @@
           "priority": "P0",
           "task_id": "retort-depth-review-pipeline",
           "title": "Deepen review_pipeline"
-        },
-        {
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "dimension": "comparative_analysis_depth",
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "owner_hint": "fhd-core-maintainer",
-          "priority": "P0",
-          "task_id": "retort-depth-diff-hunk-review",
-          "title": "Deepen diff_hunk_review"
         },
         {
           "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
@@ -144,47 +153,16 @@
             "gate output",
             "review JSON with stages and comments"
           ],
-          "external_marker_hits": 208,
-          "own_marker_hits": 3212,
+          "external_marker_hits": 39,
+          "own_marker_hits": 3228,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "ingest.py",
-            "gen_charts.py",
-            "README.md"
-          ]
-        },
-        {
-          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
-          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-          "component": "diff_hunk_review",
-          "depth_gap": 0,
-          "employee_task": {
-            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
-            "dimension": "comparative_analysis_depth",
-            "evidence_required": [
-              "source diff",
-              "behavior test",
-              "gate output",
-              "review JSON with stages and comments"
-            ],
-            "owner_hint": "fhd-core-maintainer",
-            "priority": "P0",
-            "task_id": "retort-depth-diff-hunk-review",
-            "title": "Deepen diff_hunk_review"
-          },
-          "evidence_required": [
-            "source diff",
-            "behavior test",
-            "gate output",
-            "review JSON with stages and comments"
-          ],
-          "external_marker_hits": 3,
-          "own_marker_hits": 21,
-          "priority": "P0",
-          "similarity_score": 100,
-          "source_files": [
-            "ingest.py"
+            "README.md",
+            "frontend/package.json",
+            "frontend/src/App.jsx",
+            "frontend/src/pages/Docs.jsx",
+            "frontend/src/pages/Analyze.jsx"
           ]
         },
         {
@@ -212,13 +190,16 @@
             "gate output",
             "precision or false-positive benchmark counters"
           ],
-          "external_marker_hits": 3,
-          "own_marker_hits": 738,
+          "external_marker_hits": 170,
+          "own_marker_hits": 719,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "gen_charts.py",
-            "README.md"
+            "README.md",
+            "frontend/package-lock.json",
+            "frontend/src/App.jsx",
+            "frontend/src/components/BackgroundField.jsx",
+            "frontend/src/lib/api.js"
           ]
         },
         {
@@ -244,12 +225,12 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 3,
-          "own_marker_hits": 341,
+          "external_marker_hits": 179,
+          "own_marker_hits": 323,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "README.md"
+            "frontend/package-lock.json"
           ]
         },
         {
@@ -275,14 +256,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 26,
-          "own_marker_hits": 3622,
+          "external_marker_hits": 322,
+          "own_marker_hits": 3609,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "ingest.py",
-            "gen_charts.py",
-            "README.md"
+            "README.md",
+            "frontend/package-lock.json",
+            "frontend/package.json",
+            "frontend/src/App.jsx",
+            "frontend/src/components/ui.jsx"
           ]
         }
       ],
@@ -290,22 +273,38 @@
       "marketplace_candidates_enabled": false,
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
-        "deferred_breadth_component_count": 1,
-        "focused_component_count": 5,
+        "deferred_breadth_component_count": 2,
+        "focused_component_count": 4,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
         "minimum_focused_component_count": 3,
         "passed": true,
-        "rejected_breadth_component_count": 1
+        "rejected_breadth_component_count": 2
       },
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 1,
+          "external_marker_hits": 24,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "ingest.py"
+            "README.md",
+            "frontend/src/pages/Docs.jsx",
+            "frontend/src/pages/Benchmark.jsx",
+            "final_fixes/frontend/src/pages/Docs.jsx",
+            "final_fixes/backend/app.py"
+          ]
+        },
+        {
+          "component": "plugin_surface",
+          "external_marker_hits": 32,
+          "reason": "breadth_only_for_current_phase",
+          "source_files": [
+            "frontend/vite.config.js",
+            "frontend/package-lock.json",
+            "frontend/package.json",
+            "final_fixes/backend/app.py",
+            "backend/app.py"
           ]
         }
       ]
@@ -313,44 +312,83 @@
     "external_file_groups": {
       "benchmark_eval": {
         "files": [
-          "gen_charts.py",
-          "README.md"
+          "README.md",
+          "frontend/package-lock.json",
+          "frontend/src/App.jsx",
+          "frontend/src/components/BackgroundField.jsx",
+          "frontend/src/lib/api.js",
+          "frontend/src/pages/Docs.jsx",
+          "frontend/src/pages/Benchmark.jsx",
+          "frontend/src/pages/Home.jsx",
+          "final_fixes/frontend/src/lib/api.js",
+          "final_fixes/frontend/src/pages/Docs.jsx",
+          "final_fixes/backend/app.py",
+          "final_fixes/backend/models/gat_model.py"
         ],
-        "marker_hits": 3
+        "marker_hits": 170
       },
-      "diff_hunk_review": {
+      "plugin_surface": {
         "files": [
-          "ingest.py"
+          "frontend/vite.config.js",
+          "frontend/package-lock.json",
+          "frontend/package.json",
+          "final_fixes/backend/app.py",
+          "backend/app.py",
+          "backend/utils/repo_handler.py"
         ],
-        "marker_hits": 3
+        "marker_hits": 32
       },
       "provider_surface": {
         "files": [
-          "ingest.py"
+          "README.md",
+          "frontend/src/pages/Docs.jsx",
+          "frontend/src/pages/Benchmark.jsx",
+          "final_fixes/frontend/src/pages/Docs.jsx",
+          "final_fixes/backend/app.py",
+          "backend/app.py",
+          "backend/models/benchmark.py"
         ],
-        "marker_hits": 1
+        "marker_hits": 24
       },
       "review_pipeline": {
         "files": [
-          "ingest.py",
-          "gen_charts.py",
-          "README.md"
+          "README.md",
+          "frontend/package.json",
+          "frontend/src/App.jsx",
+          "frontend/src/pages/Docs.jsx",
+          "frontend/src/pages/Analyze.jsx",
+          "frontend/src/pages/Home.jsx",
+          "final_fixes/frontend/src/pages/Docs.jsx",
+          "final_fixes/frontend/src/pages/Analyze.jsx",
+          "final_fixes/backend/app.py",
+          "final_fixes/backend/models/gat_model.py",
+          "final_fixes/backend/detectors/ai_code_detector.py",
+          "backend/app.py"
         ],
-        "marker_hits": 208
+        "marker_hits": 39
       },
       "safety_policy": {
         "files": [
-          "README.md"
+          "frontend/package-lock.json"
         ],
-        "marker_hits": 3
+        "marker_hits": 179
       },
       "workflow_ci": {
         "files": [
-          "ingest.py",
-          "gen_charts.py",
-          "README.md"
+          "README.md",
+          "frontend/package-lock.json",
+          "frontend/package.json",
+          "frontend/src/App.jsx",
+          "frontend/src/components/ui.jsx",
+          "frontend/src/components/ProgramGraph.jsx",
+          "frontend/src/components/LanguageMarquee.jsx",
+          "frontend/src/components/BackgroundField.jsx",
+          "frontend/src/components/ScanFeed.jsx",
+          "frontend/src/lib/api.js",
+          "frontend/src/pages/Docs.jsx",
+          "frontend/src/pages/Benchmark.jsx"
         ],
-        "marker_hits": 26
+        "marker_hits": 322
       }
     },
     "own_file_groups": {
@@ -369,7 +407,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 738
+        "marker_hits": 719
       },
       "diff_hunk_review": {
         "files": [
@@ -413,7 +451,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 756
+        "marker_hits": 754
       },
       "provider_surface": {
         "files": [
@@ -430,7 +468,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 323
+        "marker_hits": 316
       },
       "review_pipeline": {
         "files": [
@@ -447,7 +485,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3212
+        "marker_hits": 3228
       },
       "safety_policy": {
         "files": [
@@ -464,7 +502,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 341
+        "marker_hits": 323
       },
       "workflow_ci": {
         "files": [
@@ -481,7 +519,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 3622
+        "marker_hits": 3609
       }
     },
     "pipeline_stages": [
@@ -495,46 +533,62 @@
     ],
     "prioritized_absorptions": []
   },
-  "run_id": "20260628171345-fcc9762378",
+  "run_id": "20260628171438-780d913b68",
   "semantic_review": {
     "external": {
-      "classes": 0,
-      "cli_markers": 0,
-      "functions": 47,
-      "source_files": 3,
-      "test_markers": 8,
-      "workflow_markers": 206
+      "classes": 90,
+      "cli_markers": 6,
+      "functions": 354,
+      "source_files": 50,
+      "test_markers": 49,
+      "workflow_markers": 45
     },
-    "gaps": [],
+    "gaps": [
+      {
+        "external_advantage": 41,
+        "metric": "classes"
+      }
+    ],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 140,
+      "source_files": 141,
       "test_markers": 225,
-      "workflow_markers": 4042
+      "workflow_markers": 4056
     }
   },
   "signal_evidence": {
     "benchmarking": [
-      "gen_charts.py",
-      "README.md"
+      "README.md",
+      "frontend/package-lock.json",
+      "frontend/src/App.jsx",
+      "frontend/src/components/BackgroundField.jsx",
+      "frontend/src/lib/api.js"
     ],
     "multi_provider": [
-      "ingest.py"
+      "README.md",
+      "frontend/src/pages/Docs.jsx",
+      "frontend/src/pages/Benchmark.jsx",
+      "final_fixes/frontend/src/pages/Docs.jsx",
+      "final_fixes/backend/app.py"
     ],
     "plugin_surface": [
-      "ingest.py",
-      "gen_charts.py",
-      "README.md"
+      "README.md",
+      "frontend/vite.config.js",
+      "frontend/package-lock.json",
+      "frontend/package.json",
+      "frontend/src/main.jsx"
     ],
     "review_pipeline": [
-      "ingest.py",
-      "gen_charts.py",
-      "README.md"
+      "README.md",
+      "frontend/src/App.jsx",
+      "frontend/src/pages/Docs.jsx",
+      "frontend/src/pages/Home.jsx",
+      "final_fixes/frontend/src/pages/Docs.jsx"
     ]
   },
-  "source": "https://github.com/vlad-ko/pr-review-bench",
+  "source": "https://github.com/RitzwiK/ACRS-v2",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -542,7 +596,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/vlad-ko/pr-review-bench."
+      "why": "Compare implementation patterns from https://github.com/RitzwiK/ACRS-v2."
     },
     {
       "dimension": "product_operability",
@@ -550,7 +604,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/vlad-ko/pr-review-bench."
+      "why": "Extract usable UX improvements from https://github.com/RitzwiK/ACRS-v2."
     },
     {
       "dimension": "operational_readiness",
@@ -558,7 +612,7 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/vlad-ko/pr-review-bench."
+      "why": "Adapt CI and release checks from https://github.com/RitzwiK/ACRS-v2."
     },
     {
       "dimension": "comparative_analysis_depth",
