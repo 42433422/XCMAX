@@ -10,11 +10,18 @@ import urllib.request
 import uuid
 from pathlib import Path
 from typing import Any, Callable
+from typing import Optional, Union
 
-Transport = Callable[[str, str, dict[str, Any] | None, str], tuple[int, dict[str, Any]]]
+Transport = Callable[[str, str, Optional[dict[str, Any]], str], tuple[int, dict[str, Any]]]
 
 
-def run_live_pr_comment_probe(pr_url: str, *, body: str = "", token: str = "", transport: Transport | None = None) -> dict[str, Any]:
+def run_live_pr_comment_probe(
+    pr_url: str,
+    *,
+    body: str = "",
+    token: str = "",
+    transport: Optional[Transport] = None,
+) -> dict[str, Any]:
     owner, repo, number = _parse_pr_url(pr_url)
     resolved_token = _resolve_token(token)
     if not resolved_token:
@@ -116,7 +123,12 @@ def _resolve_token(token: str) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _github_request(method: str, url: str, payload: dict[str, Any] | None, token: str) -> tuple[int, dict[str, Any]]:
+def _github_request(
+    method: str,
+    url: str,
+    payload: Optional[dict[str, Any]],
+    token: str,
+) -> tuple[int, dict[str, Any]]:
     data = None if payload is None else json.dumps(payload, ensure_ascii=False).encode("utf-8")
     request = urllib.request.Request(
         url,
@@ -143,7 +155,7 @@ def _github_request(method: str, url: str, payload: dict[str, Any] | None, token
         return int(exc.code), payload
 
 
-def write_live_pr_comment_probe(pr_url: str, output: str | Path, *, body: str = "") -> dict[str, Any]:
+def write_live_pr_comment_probe(pr_url: str, output: Union[str, Path], *, body: str = "") -> dict[str, Any]:
     started = time.monotonic()
     result = run_live_pr_comment_probe(pr_url, body=body)
     result["summary"]["duration_sec"] = round(time.monotonic() - started, 3)

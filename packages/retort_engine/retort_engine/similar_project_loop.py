@@ -356,8 +356,20 @@ def _load_absorption_runs(root: Path) -> list[dict[str, Any]]:
 
 
 def _core_signals(run: dict[str, Any]) -> list[str]:
-    signals = [str(item) for item in ((run.get("external_profile") or {}).get("signals") or [])]
-    return [signal for signal in signals if signal in {"review_pipeline", "file_grouping", "benchmarking"}]
+    external_profile = run.get("external_profile") or {}
+    signals = [str(item) for item in (external_profile.get("signals") or [])]
+    evidence = external_profile.get("signal_evidence")
+    if isinstance(evidence, dict):
+        signals.extend(str(item) for item in evidence.keys())
+    core_signal_set = {str(item) for item in signals}
+    recognized = {
+        "review_pipeline",
+        "file_grouping",
+        "benchmarking",
+        "plugin_surface",
+        "multi_provider",
+    }
+    return sorted(signal for signal in core_signal_set if signal in recognized)
 
 
 def _loop_run_summary(candidate: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
