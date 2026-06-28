@@ -134,6 +134,11 @@ def _write_docs(root: Path) -> None:
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}, "samples": []},
         "retort_external_advantage_matrix.json": {"status": "ready", "summary": {"score_delta": 50}, "matrix": []},
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True}, "runs": []},
+        "retort_heterogeneous_absorption_replay.json": {
+            "status": "ready",
+            "summary": {"all_before_failed_after_passed": True, "cross_language_absorption_verified": True},
+            "cases": [],
+        },
         "retort_review_adjudication_calibration.json": {"status": "ready", "summary": {}, "cases": []},
         "retort_absorption_release_decision.json": {"status": "ready", "summary": {"all_core_decisions_ready": True}, "decisions": []},
     }

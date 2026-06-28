@@ -16,6 +16,7 @@ from retort_engine.employee_scheduler_stress import run_employee_scheduler_stres
 from retort_engine.evolution_map import build_evolution_map
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
+from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.operator_journey_replay import build_operator_journey_replay
@@ -189,6 +190,12 @@ class RetortService:
             min_cases=int(payload.get("min_cases") or 6),
         )
 
+    def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_heterogeneous_absorption_replay(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 6),
+        )
+
     def review_adjudication_calibration(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_adjudication_calibration(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -350,6 +357,10 @@ def create_app() -> Any:
     @app.post("/external-advantage-repeat")
     def external_advantage_repeat_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_repeat(payload)
+
+    @app.post("/heterogeneous-absorption-replay")
+    def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.heterogeneous_absorption_replay(payload)
 
     @app.post("/review-adjudication-calibration")
     def review_adjudication_calibration_route(payload: dict[str, Any]) -> dict[str, Any]:

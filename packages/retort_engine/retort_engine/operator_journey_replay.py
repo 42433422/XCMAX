@@ -191,6 +191,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("review_quality_benchmark", docs / "retort_review_quality_benchmark.json", "source_report", ("status", "summary", "samples")),
         ("external_advantage_matrix", docs / "retort_external_advantage_matrix.json", "source_report", ("status", "summary", "matrix")),
         ("external_advantage_repeat", docs / "retort_external_advantage_repeat.json", "source_report", ("status", "summary", "runs")),
+        ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("review_adjudication_calibration", docs / "retort_review_adjudication_calibration.json", "source_report", ("status", "summary", "cases")),
     ]
     run_path = Path(str(latest_run.get("run_record_path") or ""))
@@ -310,6 +311,7 @@ def _release_inputs_ready(root: Path) -> bool:
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     external_repeat = _read_json(docs / "retort_external_advantage_repeat.json")
+    heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
     return (
         quality.get("summary", {}).get("all_gates_passed") is True
         and continuity.get("status") == "ready"
@@ -325,6 +327,9 @@ def _release_inputs_ready(root: Path) -> bool:
         and external_repeat.get("status") == "ready"
         and external_repeat.get("summary", {}).get("stable_case_set") is True
         and external_repeat.get("summary", {}).get("stable_score_delta") is True
+        and heterogeneous_replay.get("status") == "ready"
+        and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
+        and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True
     )
 
 

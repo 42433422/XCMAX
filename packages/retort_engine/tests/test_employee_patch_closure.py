@@ -125,11 +125,14 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
         "output_path": str(tmp_path / ".retort" / "employee_results" / "worker.json"),
     }
     payload_file = tmp_path / "payload.json"
+    payload["payload_path"] = str(payload_file)
+    payload["runtime_context_nonce"] = "worker-patch-unit-nonce"
     payload_file.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
 
     result = write_employee_runtime_results(payload_file)
 
     patch = result["runtime_evidence"]["employee_patch_closure"]
+    boundary = result["runtime_evidence"]["process_boundary"]
     assert patch["status"] == "ready"
     assert patch["summary"]["success_case_verified"] is True
     assert patch["summary"]["existing_file_update_verified"] is True
@@ -141,6 +144,11 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert patch["summary"]["retry_case_verified"] is True
     assert patch["summary"]["unexpected_gate_failure_count"] == 0
     assert result["results"][0]["status"] == "completed"
+    assert boundary["runtime_boundary_verified"] is True
+    assert boundary["payload_path_verified"] is True
+    assert boundary["result_path_verified"] is True
+    assert boundary["worker_pid"] > 0
+    assert any("runtime_boundary_verified=True" in item for item in result["results"][0]["evidence"])
     assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
 
 

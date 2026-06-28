@@ -17,6 +17,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
+    heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
         _decision(
@@ -58,6 +59,14 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["external_advantage_repeat"],
         ),
         _decision(
+            "prove_heterogeneous_absorption",
+            "cross_language_absorption",
+            heterogeneous_replay.get("status") == "ready"
+            and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
+            and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True,
+            ["heterogeneous_absorption_replay"],
+        ),
+        _decision(
             "accept_blind_holdout_quality",
             "blind_external_validation",
             holdout.get("status") == "ready" and int(holdout.get("summary", {}).get("accepted_pr_count") or 0) >= int(holdout.get("summary", {}).get("target_pr_count") or 20),
@@ -93,6 +102,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
         "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
         "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
+        "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
+        "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
+        "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
         "failure_rollback_ready": failure_rollback.get("status") == "ready",
         "operator_journey_ready": operator_journey.get("status") == "ready",
         "operator_journey_cross_domain_ready": bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
@@ -115,6 +127,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_repeat.json",
+                "retort_heterogeneous_absorption_replay.json",
                 "retort_operator_journey_replay.json",
             ],
         },

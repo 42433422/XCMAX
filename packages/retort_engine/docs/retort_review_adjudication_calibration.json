@@ -18,9 +18,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -48,9 +58,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -78,9 +98,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -108,9 +138,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -138,9 +178,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -168,9 +218,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -198,9 +258,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -228,9 +298,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -258,9 +338,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -288,9 +378,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -318,9 +418,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -348,9 +458,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -378,9 +498,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -408,9 +538,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -438,9 +578,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -468,9 +618,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -498,9 +658,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -528,9 +698,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -558,9 +738,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -588,9 +778,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -618,9 +818,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -648,9 +858,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -678,9 +898,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -708,9 +938,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -738,9 +978,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -768,9 +1018,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -798,9 +1058,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -828,9 +1098,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -858,9 +1138,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "medium",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -888,9 +1178,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -918,9 +1218,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -948,9 +1258,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -978,9 +1298,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1008,9 +1338,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1038,9 +1378,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1068,9 +1418,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1098,9 +1458,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1128,9 +1498,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1158,9 +1538,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1188,9 +1578,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1218,9 +1618,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1248,9 +1658,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1278,9 +1698,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1308,9 +1738,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1338,9 +1778,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "low",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1368,9 +1818,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1398,9 +1858,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "low",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1428,9 +1898,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1458,9 +1938,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "runtime",
+        "detected_severity": "low",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": true
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1488,9 +1978,19 @@
         ]
       },
       "passed": true,
+      "post_calibration": {
+        "model": "retort_review_calibration_policy",
+        "passed": true
+      },
+      "pre_calibration": {
+        "detected_context": "security",
+        "detected_severity": "high",
+        "model": "pre_calibration_keyword_context_guess",
+        "passed": false
+      },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_publishability_v1",
+        "comment_ranking_model": "severity_context_transfer_publishability_v3",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1509,6 +2009,7 @@
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
+    "calibration_improvement_delta": 0.74,
     "context_count": 4,
     "contexts": [
       "ci_config",
@@ -1517,12 +2018,20 @@
       "tests"
     ],
     "false_negative_count": 0,
+    "false_negative_reduction": 20,
     "false_positive_count": 0,
+    "false_positive_reduction": 17,
+    "feedback_recalibration_applied": true,
     "human_label_count": 50,
     "negative_case_count": 17,
     "pass_rate": 1.0,
     "passed_count": 50,
     "positive_case_count": 33,
+    "post_calibration_pass_rate": 1.0,
+    "pre_calibration_false_negative_count": 20,
+    "pre_calibration_false_positive_count": 17,
+    "pre_calibration_pass_rate": 0.26,
+    "pre_calibration_passed_count": 13,
     "publishable_comment_count": 50
   }
 }

@@ -18,6 +18,7 @@ from retort_engine.employee_patch_closure import run_employee_patch_closure_suit
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
+from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -220,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
     external_repeat.add_argument("--min-cases", type=int, default=6)
     external_repeat.add_argument("--output", default="")
     external_repeat.add_argument("--json", action="store_true")
+    heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
+    heterogeneous_replay.add_argument("--project", default=".")
+    heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
+    heterogeneous_replay.add_argument("--output", default="")
+    heterogeneous_replay.add_argument("--json", action="store_true")
     adjudication = sub.add_parser("review-adjudication-calibration")
     adjudication.add_argument("--project", default=".")
     adjudication.add_argument("--output", default="")
@@ -636,6 +642,17 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort external advantage repeat status: {result['status']}")
             print(f"Repeats: {result['summary']['ready_repeat_count']}/{result['summary']['repeat_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "heterogeneous-absorption-replay":
+        result = build_heterogeneous_absorption_replay(args.project, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort heterogeneous absorption replay status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(f"Language families: {result['summary']['language_family_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
