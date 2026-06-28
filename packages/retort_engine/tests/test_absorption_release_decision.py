@@ -14,9 +14,10 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 4
-    assert result["summary"]["core_decision_path_count"] == 4
+    assert result["summary"]["ready_decision_count"] == 5
+    assert result["summary"]["core_decision_path_count"] == 5
     assert result["summary"]["all_core_decisions_ready"] is True
+    assert result["summary"]["holdout_blind_eval_ready"] is True
     assert validate_contract("absorption_release_decision_result", result)["valid"] is True
 
 
@@ -35,6 +36,7 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_quality_gate_bundle.json": {"status": "ready", "summary": {"all_gates_passed": True}},
         "retort_absorption_continuity_probe.json": {"status": "ready", "summary": {}},
         "retort_pr_long_run_review.json": {"status": "ready", "summary": {}},
+        "retort_pr_holdout_blind_eval.json": {"status": "ready", "summary": {"accepted_pr_count": 20, "target_pr_count": 20}},
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}},
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {"all_expected_outcomes_verified": True}},
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}},

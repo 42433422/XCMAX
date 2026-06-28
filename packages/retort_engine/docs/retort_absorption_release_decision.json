@@ -37,6 +37,15 @@
       ],
       "name": "claim_absorbed_quality_gain",
       "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "blind_external_validation",
+      "evidence": [
+        "pr_holdout_blind_eval"
+      ],
+      "name": "accept_blind_holdout_quality",
+      "ready": true
     }
   ],
   "evidence": {
@@ -44,6 +53,7 @@
       "retort_quality_gate_bundle.json",
       "retort_absorption_continuity_probe.json",
       "retort_pr_long_run_review.json",
+      "retort_pr_holdout_blind_eval.json",
       "retort_production_recovery_drill.json",
       "retort_employee_patch_closure.json",
       "retort_review_quality_benchmark.json"
@@ -55,12 +65,13 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
-    "core_decision_path_count": 4,
-    "decision_count": 4,
+    "core_decision_path_count": 5,
+    "decision_count": 5,
     "employee_patch_ready": true,
+    "holdout_blind_eval_ready": true,
     "long_run_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 4,
+    "ready_decision_count": 5,
     "recovery_ready": true
   }
 }

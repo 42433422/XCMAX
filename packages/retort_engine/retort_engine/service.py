@@ -16,6 +16,7 @@ from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_low_permission_pr_degradation_probe, run_readonly_pr_degradation_probe
 from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
@@ -107,6 +108,16 @@ class RetortService:
         return build_pr_long_run_review(
             str(payload.get("project") or payload.get("project_path") or "."),
             min_prs=int(payload.get("min_prs") or 10),
+        )
+
+    def pr_holdout_blind_eval(self, payload: dict[str, Any]) -> dict[str, Any]:
+        urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
+        return build_pr_holdout_blind_eval(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            pr_urls=urls or None,
+            target_prs=int(payload.get("target_prs") or 20),
+            max_comments=int(payload.get("max_comments") or 12),
+            max_bytes=int(payload.get("max_bytes") or 400000),
         )
 
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -255,6 +266,10 @@ def create_app() -> Any:
     @app.post("/pr-long-run-review")
     def pr_long_run_review_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.pr_long_run_review(payload)
+
+    @app.post("/pr-holdout-blind-eval")
+    def pr_holdout_blind_eval_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.pr_holdout_blind_eval(payload)
 
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

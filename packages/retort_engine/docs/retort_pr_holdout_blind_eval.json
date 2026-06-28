@@ -1,0 +1,577 @@
+{
+  "cases": [
+    {
+      "accepted": true,
+      "comment_count": 7,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 3447,
+      "file_count": 3,
+      "hunk_count": 7,
+      "language_extensions": [
+        "py"
+      ],
+      "pr_url": "https://github.com/psf/requests/pull/7505",
+      "repo": "psf/requests",
+      "reviewed_new_change_count": 24,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 3,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 1457,
+      "file_count": 2,
+      "hunk_count": 3,
+      "language_extensions": [
+        "py",
+        "rst"
+      ],
+      "pr_url": "https://github.com/pallets/flask/pull/6013",
+      "repo": "pallets/flask",
+      "reviewed_new_change_count": 6,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 1,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 485,
+      "file_count": 1,
+      "hunk_count": 1,
+      "language_extensions": [
+        "js"
+      ],
+      "pr_url": "https://github.com/expressjs/express/pull/7265",
+      "repo": "expressjs/express",
+      "reviewed_new_change_count": 1,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 5,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 2822,
+      "file_count": 4,
+      "hunk_count": 5,
+      "language_extensions": [
+        "go"
+      ],
+      "pr_url": "https://github.com/go-gorm/gorm/pull/7798",
+      "repo": "go-gorm/gorm",
+      "reviewed_new_change_count": 19,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 13123,
+      "file_count": 5,
+      "hunk_count": 7,
+      "language_extensions": [
+        "html",
+        "py",
+        "yaml",
+        "yml"
+      ],
+      "pr_url": "https://github.com/fastapi/fastapi/pull/15852",
+      "repo": "fastapi/fastapi",
+      "reviewed_new_change_count": 119,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 5,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 4048,
+      "file_count": 3,
+      "hunk_count": 5,
+      "language_extensions": [
+        "py"
+      ],
+      "pr_url": "https://github.com/encode/django-rest-framework/pull/9978",
+      "repo": "encode/django-rest-framework",
+      "reviewed_new_change_count": 53,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 1,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 328,
+      "file_count": 1,
+      "hunk_count": 1,
+      "language_extensions": [
+        "json"
+      ],
+      "pr_url": "https://github.com/axios/axios/pull/11028",
+      "repo": "axios/axios",
+      "reviewed_new_change_count": 1,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 5,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 3296,
+      "file_count": 2,
+      "hunk_count": 5,
+      "language_extensions": [
+        "ts"
+      ],
+      "pr_url": "https://github.com/vuejs/core/pull/15005",
+      "repo": "vuejs/core",
+      "reviewed_new_change_count": 59,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 27490,
+      "file_count": 12,
+      "hunk_count": 49,
+      "language_extensions": [
+        "rs"
+      ],
+      "pr_url": "https://github.com/rust-lang/cargo/pull/17139",
+      "repo": "rust-lang/cargo",
+      "reviewed_new_change_count": 52,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 2,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 1532,
+      "file_count": 2,
+      "hunk_count": 2,
+      "language_extensions": [
+        "rs"
+      ],
+      "pr_url": "https://github.com/tokio-rs/tokio/pull/8226",
+      "repo": "tokio-rs/tokio",
+      "reviewed_new_change_count": 14,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 30275,
+      "file_count": 31,
+      "hunk_count": 33,
+      "language_extensions": [
+        "adoc",
+        "java"
+      ],
+      "pr_url": "https://github.com/spring-projects/spring-framework/pull/36899",
+      "repo": "spring-projects/spring-framework",
+      "reviewed_new_change_count": 37,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 4,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 3778,
+      "file_count": 3,
+      "hunk_count": 4,
+      "language_extensions": [
+        "cpp",
+        "cs",
+        "csproj"
+      ],
+      "pr_url": "https://github.com/dotnet/runtime/pull/129914",
+      "repo": "dotnet/runtime",
+      "reviewed_new_change_count": 49,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 3,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 2903,
+      "file_count": 3,
+      "hunk_count": 3,
+      "language_extensions": [
+        "py",
+        "rst"
+      ],
+      "pr_url": "https://github.com/pytest-dev/pytest/pull/14646",
+      "repo": "pytest-dev/pytest",
+      "reviewed_new_change_count": 34,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 2,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 1652,
+      "file_count": 1,
+      "hunk_count": 2,
+      "language_extensions": [
+        "md"
+      ],
+      "pr_url": "https://github.com/pydantic/pydantic/pull/13343",
+      "repo": "pydantic/pydantic",
+      "reviewed_new_change_count": 3,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 29723,
+      "file_count": 10,
+      "hunk_count": 20,
+      "language_extensions": [
+        "md",
+        "ts"
+      ],
+      "pr_url": "https://github.com/prisma/prisma/pull/29624",
+      "repo": "prisma/prisma",
+      "reviewed_new_change_count": 274,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 3,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 2224,
+      "file_count": 2,
+      "hunk_count": 3,
+      "language_extensions": [
+        "php"
+      ],
+      "pr_url": "https://github.com/laravel/framework/pull/60609",
+      "repo": "laravel/framework",
+      "reviewed_new_change_count": 44,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 3,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 2037,
+      "file_count": 2,
+      "hunk_count": 3,
+      "language_extensions": [
+        "rb"
+      ],
+      "pr_url": "https://github.com/rails/rails/pull/57891",
+      "repo": "rails/rails",
+      "reviewed_new_change_count": 3,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 20547,
+      "file_count": 24,
+      "hunk_count": 24,
+      "language_extensions": [
+        "mod",
+        "sum",
+        "yaml"
+      ],
+      "pr_url": "https://github.com/hashicorp/terraform/pull/38792",
+      "repo": "hashicorp/terraform",
+      "reviewed_new_change_count": 43,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 1,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 660,
+      "file_count": 1,
+      "hunk_count": 1,
+      "language_extensions": [
+        "py"
+      ],
+      "pr_url": "https://github.com/ansible/ansible/pull/87165",
+      "repo": "ansible/ansible",
+      "reviewed_new_change_count": 1,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 2,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 1696,
+      "file_count": 2,
+      "hunk_count": 2,
+      "language_extensions": [
+        "jsonc",
+        "rs"
+      ],
+      "pr_url": "https://github.com/denoland/deno/pull/35540",
+      "repo": "denoland/deno",
+      "reviewed_new_change_count": 20,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 2,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 877,
+      "file_count": 2,
+      "hunk_count": 2,
+      "language_extensions": [
+        "yml"
+      ],
+      "pr_url": "https://github.com/psf/requests/pull/7539",
+      "repo": "psf/requests",
+      "reviewed_new_change_count": 6,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 12,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 18572,
+      "file_count": 10,
+      "hunk_count": 21,
+      "language_extensions": [
+        "py",
+        "rst"
+      ],
+      "pr_url": "https://github.com/pallets/flask/pull/5928",
+      "repo": "pallets/flask",
+      "reviewed_new_change_count": 194,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 1,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 337,
+      "file_count": 1,
+      "hunk_count": 1,
+      "language_extensions": [
+        "json"
+      ],
+      "pr_url": "https://github.com/expressjs/express/pull/7305",
+      "repo": "expressjs/express",
+      "reviewed_new_change_count": 1,
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "accepted": true,
+      "comment_count": 2,
+      "expectation": {
+        "label_source": "predeclared_holdout_acceptance_properties",
+        "min_comment_count": 1,
+        "min_file_count": 1,
+        "min_reviewed_new_change_count": 1,
+        "review_status": "reviewed"
+      },
+      "fetched_bytes": 1992,
+      "file_count": 1,
+      "hunk_count": 2,
+      "language_extensions": [
+        "go"
+      ],
+      "pr_url": "https://github.com/go-gorm/gorm/pull/7796",
+      "repo": "go-gorm/gorm",
+      "reviewed_new_change_count": 13,
+      "status": "reviewed",
+      "truncated": false
+    }
+  ],
+  "evidence": {
+    "failure_isolation": "single_pr_failure_recorded_without_aborting_holdout",
+    "known_report_paths": [
+      "docs/retort_complex_pr_replay.json",
+      "docs/retort_pr_long_run_review.json"
+    ],
+    "overlap_urls": [],
+    "reviewer": "retort_engine.pr_dry_run.review_pr_url",
+    "sample_source": "github_search_closed_merged_prs_not_used_by_prior_long_run",
+    "scope": "blind_holdout_public_pull_requests",
+    "stores_summaries_only": true
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "acceptance_pass_rate": 1.0,
+    "accepted_pr_count": 24,
+    "blind_against_prior_reports": true,
+    "candidate_pr_count": 24,
+    "distinct_extension_count": 21,
+    "distinct_repo_count": 20,
+    "failed_pr_count": 0,
+    "holdout_label_count": 24,
+    "overlap_with_prior_long_run_count": 0,
+    "reviewed_pr_count": 24,
+    "target_pr_count": 20,
+    "total_comment_count": 124,
+    "total_file_count": 128,
+    "total_hunk_count": 206,
+    "total_reviewed_new_change_count": 1070,
+    "truncated_pr_count": 0
+  }
+}

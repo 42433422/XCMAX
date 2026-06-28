@@ -129,6 +129,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     multi_absorption_source = root / "retort_engine" / "multi_project_absorption_replay.py"
     continuity_source = root / "retort_engine" / "absorption_continuity_probe.py"
     pr_long_run_source = root / "retort_engine" / "pr_long_run_review.py"
+    holdout_eval_source = root / "retort_engine" / "pr_holdout_blind_eval.py"
     recovery_drill_source = root / "retort_engine" / "production_recovery_drill.py"
     release_decision_source = root / "retort_engine" / "absorption_release_decision.py"
     test = root / "tests" / "test_pr_review.py"
@@ -149,6 +150,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     multi_absorption_test = root / "tests" / "test_multi_project_absorption_replay.py"
     continuity_test = root / "tests" / "test_absorption_continuity_probe.py"
     pr_long_run_test = root / "tests" / "test_pr_long_run_review.py"
+    holdout_eval_test = root / "tests" / "test_pr_holdout_blind_eval.py"
     recovery_drill_test = root / "tests" / "test_production_recovery_drill.py"
     release_decision_test = root / "tests" / "test_absorption_release_decision.py"
     cli = root / "retort_engine" / "cli.py"
@@ -330,6 +332,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/multi_project_absorption_replay.py", multi_absorption_source.is_file()),
                 ("retort_engine/absorption_continuity_probe.py", continuity_source.is_file()),
                 ("retort_engine/pr_long_run_review.py", pr_long_run_source.is_file()),
+                ("retort_engine/pr_holdout_blind_eval.py", holdout_eval_source.is_file()),
                 ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
                 ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
             )
@@ -356,6 +359,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_multi_project_absorption_replay.py", multi_absorption_test.is_file()),
                 ("tests/test_absorption_continuity_probe.py", continuity_test.is_file()),
                 ("tests/test_pr_long_run_review.py", pr_long_run_test.is_file()),
+                ("tests/test_pr_holdout_blind_eval.py", holdout_eval_test.is_file()),
                 ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
                 ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
             )
