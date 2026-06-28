@@ -26,6 +26,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["competitor_runtime_ready"] is True
     assert result["summary"]["competitor_blind_adjudication_ready"] is True
     assert result["summary"]["competitor_behavior_regression_ready"] is True
+    assert result["summary"]["paibi_cli_cross_adjudication_ready"] is True
     assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["contract_stability_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -239,6 +240,16 @@ def _write_docs(root: Path) -> None:
             "status": "ready",
             "summary": {"all_competitor_signals_regressed": True, "all_cases_direct_review_execution": True, "ready_case_count": 3},
             "cases": [],
+        },
+        "retort_paibi_cli_cross_adjudication.json": {
+            "status": "ready",
+            "summary": {
+                "tool_count": 4,
+                "accepted_tool_count": 4,
+                "all_tools_accepted": True,
+                "cross_tool_consensus": True,
+            },
+            "tool_results": [],
         },
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",

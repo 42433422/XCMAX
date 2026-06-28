@@ -32,6 +32,7 @@ from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_ab
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.operator_journey_replay import build_operator_journey_replay
+from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -245,6 +246,13 @@ class RetortService:
         return build_competitor_behavior_regression(
             str(payload.get("project") or payload.get("project_path") or "."),
             min_cases=int(payload.get("min_cases") or 3),
+        )
+
+    def paibi_cli_cross_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_paibi_cli_cross_adjudication(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            blind_path=str(payload.get("blind_path") or ""),
+            behavior_path=str(payload.get("behavior_path") or ""),
         )
 
     def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -495,6 +503,10 @@ def create_app() -> Any:
     @app.post("/competitor-behavior-regression")
     def competitor_behavior_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.competitor_behavior_regression(payload)
+
+    @app.post("/paibi-cli-cross-adjudication")
+    def paibi_cli_cross_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.paibi_cli_cross_adjudication(payload)
 
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

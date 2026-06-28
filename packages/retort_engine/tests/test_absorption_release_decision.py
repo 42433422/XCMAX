@@ -14,7 +14,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 26
+    assert result["summary"]["ready_decision_count"] == 27
     assert result["summary"]["core_decision_path_count"] == 12
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["product_mainline_absorption_ready"] is True
@@ -27,6 +27,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     assert result["summary"]["competitor_runtime_ready"] is True
     assert result["summary"]["competitor_blind_adjudication_ready"] is True
     assert result["summary"]["competitor_behavior_regression_ready"] is True
+    assert result["summary"]["paibi_cli_cross_adjudication_ready"] is True
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -146,6 +147,18 @@ def test_absorption_release_decision_blocks_without_review_family_behavior(tmp_p
     assert any(decision["name"] == "prove_review_family_core_behavior" and decision["action"] == "block" for decision in result["decisions"])
 
 
+def test_absorption_release_decision_blocks_without_paibi_cli_cross_adjudication(tmp_path: Path) -> None:
+    _write_decision_inputs(tmp_path)
+    (tmp_path / "docs" / "retort_paibi_cli_cross_adjudication.json").unlink()
+
+    result = build_absorption_release_decision(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert result["summary"]["paibi_cli_cross_adjudication_ready"] is False
+    assert result["summary"]["blocking_decision_count"] == 1
+    assert any(decision["name"] == "prove_paibi_four_cli_cross_adjudication" and decision["action"] == "block" for decision in result["decisions"])
+
+
 def _write_decision_inputs(root: Path) -> None:
     docs = root / "docs"
     docs.mkdir(parents=True, exist_ok=True)
@@ -255,6 +268,21 @@ def _write_decision_inputs(root: Path) -> None:
                 "ready_case_count": 3,
                 "behavior_assertion_count": 18,
             },
+        },
+        "retort_paibi_cli_cross_adjudication.json": {
+            "status": "ready",
+            "summary": {
+                "tool_count": 4,
+                "accepted_tool_count": 4,
+                "all_tools_accepted": True,
+                "cross_tool_consensus": True,
+                "input_contains_score_fields": False,
+                "script_imports_retort_engine": False,
+                "human_reviewed": False,
+            },
+            "tool_results": [],
+            "artifacts": {},
+            "evidence": {"human_reviewed": False},
         },
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",

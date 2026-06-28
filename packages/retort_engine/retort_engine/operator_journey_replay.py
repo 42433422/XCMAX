@@ -49,6 +49,7 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "competitor_runtime_ready": _report_ready(root, "retort_competitor_runtime_comparison.json"),
         "competitor_blind_adjudication_ready": _report_ready(root, "retort_competitor_blind_adjudication.json"),
         "competitor_behavior_regression_ready": _report_ready(root, "retort_competitor_behavior_regression.json"),
+        "paibi_cli_cross_adjudication_ready": _report_ready(root, "retort_paibi_cli_cross_adjudication.json"),
         "employee_patch_stress_ready": _report_ready(root, "retort_employee_patch_stress.json"),
         "contract_stability_ready": _report_ready(root, "retort_contract_stability_stress.json"),
         "cross_domain_end_to_end_ready": _report_ready(root, "retort_cross_domain_end_to_end.json"),
@@ -110,6 +111,7 @@ def _journey_stages(
     competitor_runtime = artifact_by_name.get("competitor_runtime_comparison", {})
     competitor_blind = artifact_by_name.get("competitor_blind_adjudication", {})
     competitor_behavior = artifact_by_name.get("competitor_behavior_regression", {})
+    paibi_cli_cross = artifact_by_name.get("paibi_cli_cross_adjudication", {})
     contract_stability = artifact_by_name.get("contract_stability_stress", {})
     cross_domain_e2e = artifact_by_name.get("cross_domain_end_to_end", {})
     cross_domain_ci = artifact_by_name.get("cross_domain_ci_regression", {})
@@ -198,13 +200,19 @@ def _journey_stages(
         _stage(
             "external_independence_probe",
             "外部独立性证明",
-            external_process.get("exists") is True and upstream_ci.get("exists") is True and competitor_runtime.get("exists") is True and competitor_blind.get("exists") is True and competitor_behavior.get("exists") is True,
+            external_process.get("exists") is True
+            and upstream_ci.get("exists") is True
+            and competitor_runtime.get("exists") is True
+            and competitor_blind.get("exists") is True
+            and competitor_behavior.get("exists") is True
+            and paibi_cli_cross.get("exists") is True,
             [
                 f"external_process_sha={external_process.get('sha256', '')}",
                 f"upstream_pr_ci_sha={upstream_ci.get('sha256', '')}",
                 f"competitor_runtime_sha={competitor_runtime.get('sha256', '')}",
                 f"competitor_blind_sha={competitor_blind.get('sha256', '')}",
                 f"competitor_behavior_sha={competitor_behavior.get('sha256', '')}",
+                f"paibi_cli_cross_sha={paibi_cli_cross.get('sha256', '')}",
             ],
         ),
         _stage(
@@ -256,6 +264,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("competitor_runtime_comparison", docs / "retort_competitor_runtime_comparison.json", "source_report", ("status", "summary", "competitor_output")),
         ("competitor_blind_adjudication", docs / "retort_competitor_blind_adjudication.json", "source_report", ("status", "summary", "cases")),
         ("competitor_behavior_regression", docs / "retort_competitor_behavior_regression.json", "source_report", ("status", "summary", "cases")),
+        ("paibi_cli_cross_adjudication", docs / "retort_paibi_cli_cross_adjudication.json", "source_report", ("status", "summary", "tool_results")),
         ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_absorption_replay", docs / "retort_cross_domain_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_end_to_end", docs / "retort_cross_domain_end_to_end.json", "source_report", ("status", "summary", "stages")),
@@ -401,6 +410,7 @@ def _release_inputs_ready(root: Path) -> bool:
     competitor_runtime = _read_json(docs / "retort_competitor_runtime_comparison.json")
     competitor_blind = _read_json(docs / "retort_competitor_blind_adjudication.json")
     competitor_behavior = _read_json(docs / "retort_competitor_behavior_regression.json")
+    paibi_cli_cross = _read_json(docs / "retort_paibi_cli_cross_adjudication.json")
     heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(docs / "retort_cross_domain_absorption_replay.json")
     cross_domain_e2e = _read_json(docs / "retort_cross_domain_end_to_end.json")
@@ -456,6 +466,10 @@ def _release_inputs_ready(root: Path) -> bool:
         and competitor_behavior.get("status") == "ready"
         and competitor_behavior.get("summary", {}).get("all_competitor_signals_regressed") is True
         and competitor_behavior.get("summary", {}).get("all_cases_direct_review_execution") is True
+        and paibi_cli_cross.get("status") == "ready"
+        and paibi_cli_cross.get("summary", {}).get("all_tools_accepted") is True
+        and paibi_cli_cross.get("summary", {}).get("cross_tool_consensus") is True
+        and int(paibi_cli_cross.get("summary", {}).get("accepted_tool_count") or 0) >= 4
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and heterogeneous_replay.get("summary", {}).get("cross_language_absorption_verified") is True

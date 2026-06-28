@@ -35,6 +35,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "competitor_runtime_comparison_result": ("status", "project", "summary", "competitor_output", "retort_output", "artifacts", "evidence"),
     "competitor_blind_adjudication_result": ("status", "project", "summary", "cases", "artifacts", "evidence"),
     "competitor_behavior_regression_result": ("status", "project", "summary", "cases", "evidence"),
+    "paibi_cli_cross_adjudication_result": ("status", "project", "summary", "tool_results", "artifacts", "evidence"),
     "heterogeneous_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_end_to_end_result": ("status", "project", "summary", "stages", "review", "assertions", "artifacts", "evidence"),
