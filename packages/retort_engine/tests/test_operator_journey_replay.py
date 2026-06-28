@@ -35,6 +35,23 @@ def test_operator_journey_replay_blocks_without_latest_absorption_run(tmp_path: 
     assert any(stage["name"] == "select_external_source" and not stage["ready"] for stage in result["stages"])
 
 
+def test_operator_journey_replay_accepts_post_absorption_graph_focus(tmp_path: Path) -> None:
+    _write_project_fixture(tmp_path)
+    run_path = tmp_path / ".retort" / "real_absorption_runs" / "fixture-run.json"
+    payload = json.loads(run_path.read_text(encoding="utf-8"))
+    payload.pop("pre_absorption_focus")
+    payload["source"] = "retort://post-absorption-hardening/abc1234"
+    payload["code_graph_proof"]["changed_focus_files"] = ["retort_engine/codebase_graph.py"]
+    run_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+
+    result = build_operator_journey_replay(tmp_path)
+
+    stage = next(item for item in result["stages"] if item["name"] == "pre_absorption_locate")
+    assert result["status"] == "ready"
+    assert stage["ready"] is True
+    assert "location_evidence=post_absorption_code_graph_focus" in stage["evidence"]
+
+
 def test_service_exposes_operator_journey_replay(tmp_path: Path) -> None:
     _write_project_fixture(tmp_path)
 

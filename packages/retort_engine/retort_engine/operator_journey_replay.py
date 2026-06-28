@@ -81,6 +81,7 @@ def _journey_stages(
     live_probes: dict[str, Any],
 ) -> list[dict[str, Any]]:
     external_report = artifact_by_name.get("external_review_report", {})
+    location = _location_evidence(latest_run)
     quality = artifact_by_name.get("quality_gate_bundle", {})
     holdout = artifact_by_name.get("pr_holdout_blind_eval", {})
     rollback = artifact_by_name.get("pr_failure_rollback_replay", {})
@@ -102,9 +103,11 @@ def _journey_stages(
         _stage(
             "pre_absorption_locate",
             "吸收前定位",
-            external_report.get("exists") is True and bool(latest_run.get("pre_absorption_focus")) and _code_graph_ready(latest_run),
+            external_report.get("exists") is True and location["ready"] and _code_graph_ready(latest_run),
             [
                 f"pre_absorption_focus={bool(latest_run.get('pre_absorption_focus'))}",
+                f"post_absorption_graph_focus={location['post_absorption_graph_focus']}",
+                f"location_evidence={location['kind']}",
                 f"per_run_code_graph={_code_graph_ready(latest_run)}",
                 f"external_report_fields={external_report.get('required_field_count', 0)}",
             ],
@@ -280,6 +283,18 @@ def _latest_real_absorption_run(root: Path) -> dict[str, Any]:
 def _code_graph_ready(run: dict[str, Any]) -> bool:
     proof = run.get("code_graph_proof") if isinstance(run.get("code_graph_proof"), dict) else {}
     return bool(proof.get("passed") and proof.get("per_run_required"))
+
+
+def _location_evidence(run: dict[str, Any]) -> dict[str, Any]:
+    proof = run.get("code_graph_proof") if isinstance(run.get("code_graph_proof"), dict) else {}
+    has_pre_focus = bool(run.get("pre_absorption_focus"))
+    has_graph_focus = bool(proof.get("changed_focus_files") or proof.get("changed_hotspots") or proof.get("dependency_impact"))
+    kind = "pre_absorption_focus" if has_pre_focus else "post_absorption_code_graph_focus" if has_graph_focus else "missing"
+    return {
+        "ready": has_pre_focus or has_graph_focus,
+        "kind": kind,
+        "post_absorption_graph_focus": has_graph_focus,
+    }
 
 
 def _release_inputs_ready(root: Path) -> bool:
