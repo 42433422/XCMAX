@@ -1,0 +1,15 @@
+{
+  "missing": [
+    "cases"
+  ],
+  "name": "cross_domain_absorption_replay_result",
+  "required": [
+    "status",
+    "project",
+    "summary",
+    "cases",
+    "evidence"
+  ],
+  "valid": false,
+  "version": "retort-contracts-v1"
+}

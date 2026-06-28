@@ -1,0 +1,14 @@
+{
+  "case_id": "operator_journey_missing_replay",
+  "contract": "operator_journey_replay_result",
+  "last_valid_payload": {
+    "artifacts": [],
+    "evidence": {},
+    "live_probes": {},
+    "project": "p",
+    "replay": {},
+    "stages": [],
+    "status": "ready",
+    "summary": {}
+  }
+}

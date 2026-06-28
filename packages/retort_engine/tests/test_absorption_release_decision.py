@@ -14,14 +14,16 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 12
-    assert result["summary"]["core_decision_path_count"] == 10
+    assert result["summary"]["ready_decision_count"] == 14
+    assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
     assert result["summary"]["external_advantage_matrix_ready"] is True
     assert result["summary"]["external_advantage_repeat_ready"] is True
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
+    assert result["summary"]["contract_runtime_rehearsal_ready"] is True
+    assert result["summary"]["review_family_behavior_ready"] is True
     assert result["summary"]["external_merge_landing_ready"] is True
     assert result["summary"]["failure_rollback_ready"] is True
     assert result["summary"]["operator_journey_ready"] is True
@@ -108,6 +110,30 @@ def test_absorption_release_decision_blocks_without_external_merge_landing(tmp_p
     assert any(decision["name"] == "prove_external_merge_landing" and decision["action"] == "block" for decision in result["decisions"])
 
 
+def test_absorption_release_decision_blocks_without_contract_runtime_rehearsal(tmp_path: Path) -> None:
+    _write_decision_inputs(tmp_path)
+    (tmp_path / "docs" / "retort_contract_runtime_rehearsal.json").unlink()
+
+    result = build_absorption_release_decision(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert result["summary"]["contract_runtime_rehearsal_ready"] is False
+    assert result["summary"]["blocking_decision_count"] == 1
+    assert any(decision["name"] == "reject_contract_runtime_violations" and decision["action"] == "block" for decision in result["decisions"])
+
+
+def test_absorption_release_decision_blocks_without_review_family_behavior(tmp_path: Path) -> None:
+    _write_decision_inputs(tmp_path)
+    (tmp_path / "docs" / "retort_review_family_behavior_replay.json").unlink()
+
+    result = build_absorption_release_decision(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert result["summary"]["review_family_behavior_ready"] is False
+    assert result["summary"]["blocking_decision_count"] == 1
+    assert any(decision["name"] == "prove_review_family_core_behavior" and decision["action"] == "block" for decision in result["decisions"])
+
+
 def _write_decision_inputs(root: Path) -> None:
     docs = root / "docs"
     docs.mkdir(parents=True, exist_ok=True)
@@ -131,9 +157,17 @@ def _write_decision_inputs(root: Path) -> None:
             "summary": {
                 "all_before_failed_after_passed": True,
                 "all_output_assertions_passed": True,
-                "non_pr_domain_count": 4,
-                "direct_module_count": 4,
+                "non_pr_domain_count": 6,
+                "direct_module_count": 6,
             },
+        },
+        "retort_contract_runtime_rehearsal.json": {
+            "status": "ready",
+            "summary": {"all_violations_rejected": True, "all_rollbacks_verified": True, "violation_rejected_count": 3},
+        },
+        "retort_review_family_behavior_replay.json": {
+            "status": "ready",
+            "summary": {"all_direct_review_outputs_verified": True, "independent_all_cases_accepted": True, "typescript_case_count": 2, "python_case_count": 1},
         },
         "retort_external_merge_landing.json": {
             "status": "ready",

@@ -1,0 +1,236 @@
+{
+  "cases": [
+    {
+      "artifacts": {
+        "input_diff": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/typescript_duplicate_dispatch/input.diff",
+        "review_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/typescript_duplicate_dispatch/review_output.json"
+      },
+      "before_failed_after_passed": true,
+      "case_id": "typescript_duplicate_dispatch",
+      "language_family": "typescript",
+      "output_assertions": {
+        "context_matched": true,
+        "language_family_detected": true,
+        "publishable_output": true,
+        "severity_matched": true
+      },
+      "post_absorption": {
+        "comment_count": 3,
+        "extension_policy": {
+          "file_count": 1,
+          "known_extension_count": 1,
+          "known_extension_ratio": 1.0,
+          "language_families": [
+            "typescript"
+          ],
+          "language_family_count": 1,
+          "policy_source": "retort_holdout_extension_policy_v1",
+          "review_context_count": 1,
+          "review_contexts": [
+            "runtime"
+          ],
+          "risk_tag_count": 2,
+          "risk_tags": [
+            "async_flow",
+            "type_contract"
+          ],
+          "unknown_extension_count": 0
+        },
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 3
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_extension_policy_or_publishability"
+      },
+      "ready": true,
+      "source_project": "mopemope/pr-ai-review-bot"
+    },
+    {
+      "artifacts": {
+        "input_diff": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/python_duplicate_dispatch/input.diff",
+        "review_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/python_duplicate_dispatch/review_output.json"
+      },
+      "before_failed_after_passed": true,
+      "case_id": "python_duplicate_dispatch",
+      "language_family": "python",
+      "output_assertions": {
+        "context_matched": true,
+        "language_family_detected": true,
+        "publishable_output": true,
+        "severity_matched": true
+      },
+      "post_absorption": {
+        "comment_count": 3,
+        "extension_policy": {
+          "file_count": 1,
+          "known_extension_count": 1,
+          "known_extension_ratio": 1.0,
+          "language_families": [
+            "python"
+          ],
+          "language_family_count": 1,
+          "policy_source": "retort_holdout_extension_policy_v1",
+          "review_context_count": 1,
+          "review_contexts": [
+            "runtime"
+          ],
+          "risk_tag_count": 2,
+          "risk_tags": [
+            "runtime_logic",
+            "typing"
+          ],
+          "unknown_extension_count": 0
+        },
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 3
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_extension_policy_or_publishability"
+      },
+      "ready": true,
+      "source_project": "qodo-ai/pr-agent"
+    },
+    {
+      "artifacts": {
+        "input_diff": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/typescript_secret_config/input.diff",
+        "review_output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b/typescript_secret_config/review_output.json"
+      },
+      "before_failed_after_passed": true,
+      "case_id": "typescript_secret_config",
+      "language_family": "typescript",
+      "output_assertions": {
+        "context_matched": true,
+        "language_family_detected": true,
+        "publishable_output": true,
+        "severity_matched": true
+      },
+      "post_absorption": {
+        "comment_count": 2,
+        "extension_policy": {
+          "file_count": 1,
+          "known_extension_count": 1,
+          "known_extension_ratio": 1.0,
+          "language_families": [
+            "typescript"
+          ],
+          "language_family_count": 1,
+          "policy_source": "retort_holdout_extension_policy_v1",
+          "review_context_count": 1,
+          "review_contexts": [
+            "runtime"
+          ],
+          "risk_tag_count": 2,
+          "risk_tags": [
+            "async_flow",
+            "type_contract"
+          ],
+          "unknown_extension_count": 0
+        },
+        "observed_contexts": [
+          "runtime",
+          "security"
+        ],
+        "observed_severities": [
+          "high",
+          "medium"
+        ],
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 2
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_extension_policy_or_publishability"
+      },
+      "ready": true,
+      "source_project": "mopemope/pr-ai-review-bot"
+    }
+  ],
+  "evidence": {
+    "direct_runtime": "retort_engine.pr_review.review_diff",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/review_family_behavior_replays/review-family-20260628T061635Z-9b39256b",
+    "style": "typescript_python_core_review_behavior_replay"
+  },
+  "independent_adjudication": {
+    "adjudications": [
+      {
+        "accepted": true,
+        "case_id": "typescript_duplicate_dispatch",
+        "checks": {
+          "artifacts_materialized": true,
+          "assertions_passed": true,
+          "before_after": true,
+          "family_is_ts_or_python": true
+        }
+      },
+      {
+        "accepted": true,
+        "case_id": "python_duplicate_dispatch",
+        "checks": {
+          "artifacts_materialized": true,
+          "assertions_passed": true,
+          "before_after": true,
+          "family_is_ts_or_python": true
+        }
+      },
+      {
+        "accepted": true,
+        "case_id": "typescript_secret_config",
+        "checks": {
+          "artifacts_materialized": true,
+          "assertions_passed": true,
+          "before_after": true,
+          "family_is_ts_or_python": true
+        }
+      }
+    ],
+    "status": "ready",
+    "summary": {
+      "accepted_case_count": 3,
+      "adjudicated_case_count": 3,
+      "all_cases_accepted": true
+    }
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_before_failed_after_passed": true,
+    "all_direct_review_outputs_verified": true,
+    "case_count": 3,
+    "independent_accepted_case_count": 3,
+    "independent_adjudication_status": "ready",
+    "independent_all_cases_accepted": true,
+    "language_families": [
+      "python",
+      "typescript"
+    ],
+    "language_family_count": 2,
+    "min_case_count": 3,
+    "publishable_case_count": 3,
+    "python_case_count": 1,
+    "ready_case_count": 3,
+    "run_id": "review-family-20260628T061635Z-9b39256b",
+    "source_project_count": 2,
+    "source_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent"
+    ],
+    "typescript_case_count": 2
+  }
+}

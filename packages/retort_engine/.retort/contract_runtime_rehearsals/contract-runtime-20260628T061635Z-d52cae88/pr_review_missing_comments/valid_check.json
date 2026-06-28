@@ -1,0 +1,14 @@
+{
+  "missing": [],
+  "name": "pr_review_result",
+  "required": [
+    "status",
+    "summary",
+    "files",
+    "comments",
+    "task_groups",
+    "incremental"
+  ],
+  "valid": true,
+  "version": "retort-contracts-v1"
+}

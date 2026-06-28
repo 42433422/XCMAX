@@ -13,6 +13,7 @@ from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
+from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
@@ -33,6 +34,7 @@ from retort_engine.multi_project_absorption_replay import build_multi_project_ab
 from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
+from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
@@ -230,9 +232,18 @@ def main(argv: list[str] | None = None) -> int:
     heterogeneous_replay.add_argument("--json", action="store_true")
     cross_domain_replay = sub.add_parser("cross-domain-absorption-replay")
     cross_domain_replay.add_argument("--project", default=".")
-    cross_domain_replay.add_argument("--min-domains", type=int, default=4)
+    cross_domain_replay.add_argument("--min-domains", type=int, default=6)
     cross_domain_replay.add_argument("--output", default="")
     cross_domain_replay.add_argument("--json", action="store_true")
+    contract_runtime = sub.add_parser("contract-runtime-rehearsal")
+    contract_runtime.add_argument("--project", default=".")
+    contract_runtime.add_argument("--output", default="")
+    contract_runtime.add_argument("--json", action="store_true")
+    review_family = sub.add_parser("review-family-behavior-replay")
+    review_family.add_argument("--project", default=".")
+    review_family.add_argument("--min-cases", type=int, default=3)
+    review_family.add_argument("--output", default="")
+    review_family.add_argument("--json", action="store_true")
     external_merge_landing = sub.add_parser("external-merge-landing")
     external_merge_landing.add_argument("--project", default=".")
     external_merge_landing.add_argument("--min-cases", type=int, default=2)
@@ -676,6 +687,26 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort cross-domain absorption replay status: {result['status']}")
             print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             print(f"Non-PR domains: {result['summary']['non_pr_domain_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "contract-runtime-rehearsal":
+        result = build_contract_runtime_rehearsal(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort contract runtime rehearsal status: {result['status']}")
+            print(f"Rejected violations: {result['summary']['violation_rejected_count']}/{result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "review-family-behavior-replay":
+        result = build_review_family_behavior_replay(args.project, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort review family behavior replay status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
