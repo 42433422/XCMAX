@@ -605,7 +605,7 @@ function renderSessionState(session) {
   title.textContent = labelOf(session.status);
   const source = document.createElement("div");
   source.className = "mini";
-  source.textContent = sourceName(session.source || "");
+  source.textContent = `${sourceName(session.source || "")}${session.run_id ? ` · ${session.run_id}` : ""}`;
   const steps = document.createElement("div");
   steps.className = "devour-steps";
   for (const step of session.stage_order || []) {
@@ -682,8 +682,14 @@ function renderProofPanel(proof) {
     return;
   }
   renderKV(target, [
+    ["Run", proof.run_id || ""],
     ["状态", labelOf(proof.status)],
+    ["绑定账本", labelOf(proof.run_proof_status) || proof.run_proof_status || "未生成"],
     ["分数变化", proof.score_delta == null ? "待最终深评" : `${compactScore(proof.before_score)} -> ${compactScore(proof.after_score)} (+${proof.score_delta})`],
+    ["核心占比", proof.core_behavior_change_ratio == null ? "未知" : `${Math.round(Number(proof.core_behavior_change_ratio) * 100)}%`],
+    ["测试增量", `${proof.test_increment_file_count || 0} 文件 / ${proof.test_increment_line_count || 0} 行`],
+    ["代码图", `${proof.code_graph_node_count || 0} 点 / ${proof.code_graph_edge_count || 0} 边`],
+    ["LLM 裁决", labelOf(proof.llm_final_status) || proof.llm_final_status || "待返回"],
     ["改动文件", proof.changed_file_count || 0],
     ["门禁", `${proof.gate_passed_count || 0}/${proof.gate_count || 0}`],
     ["能力审计", labelOf(proof.capability_absorption_status) || "只审计不打分"],
@@ -705,6 +711,7 @@ function renderProofPanel(proof) {
   appendLabeledChips(target, "本次行为测试", proof.behavior_test_files || [], 5);
   appendLabeledChips(target, "记录/报告文件", proof.generated_evidence_files || [], 5);
   appendLabeledChips(target, "已有支撑能力", proof.support_behavior_source_files || [], 5);
+  if (proof.run_proof_path) appendLabeledChips(target, "Run 账本", [proof.run_proof_path], 1);
 }
 
 function renderFinalReviewPanel(finalReview) {

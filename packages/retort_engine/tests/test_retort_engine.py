@@ -296,6 +296,24 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     assert str(own / "docs" / "retort_external_review_report.json") in execution["changed_files"]
     assert execution["review_report_path"] == str(own / "docs" / "retort_external_review_report.json")
     assert Path(execution["employee_results_path"]).is_file()
+    assert Path(execution["run_proof_path"]).is_file()
+    assert result["run_proof"]["run_id"] == execution["run_id"]
+    assert result["run_proof"]["path"] == execution["run_proof_path"]
+    assert result["run_proof"]["score_binding"]["after_status"] in {
+        "paibi_llm_required_not_scored",
+        "paibi_llm_pending",
+        "paibi_llm_unavailable",
+        "paibi_llm_blocked",
+        "paibi_llm_completed",
+    }
+    assert result["run_proof"]["code_graph_binding"]["path"] == execution["code_graph_proof_path"]
+    assert "core_behavior_change_ratio" in result["run_proof"]["core_change_binding"]
+    assert "test_line_count" in result["run_proof"]["test_increment_binding"]
+    assert result["run_proof"]["llm_final_verdict"]["record_policy"] == "只有排比 LLM 返回结构化分数时，最终评分才保留。"
+    assert result["devour_session"]["run_id"] == execution["run_id"]
+    assert result["devour_session"]["run_proof"]["path"] == execution["run_proof_path"]
+    assert result["devour_session"]["improvement_proof"]["run_proof_path"] == execution["run_proof_path"]
+    assert "core_behavior_change_ratio" in result["devour_session"]["improvement_proof"]
     report = json.loads(Path(execution["review_report_path"]).read_text(encoding="utf-8"))
     assert report["absorbed_signals"]
     assert report["semantic_review"]["external"]["source_files"] >= 1
