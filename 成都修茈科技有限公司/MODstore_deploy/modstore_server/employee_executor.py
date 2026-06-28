@@ -35,6 +35,52 @@ logger = logging.getLogger(__name__)
 
 _METRIC_TASK_MAX_LEN = 128
 
+
+def _emp_im_notify_boss(
+    employee_id: str,
+    manifest: Any,
+    body: str,
+    hook: str,
+) -> None:
+    """员工执行管道 hook 公共入口：从 manifest 抽 display_name + mod_id，调 notify_boss。
+
+    best-effort：任何异常只 log debug，不抛错。body 为空也跳过。
+    4 个 hook 点（perception/cognition/verification/handoff）共用此 helper。
+    """
+    body_text = (body or "").strip()
+    if not body_text:
+        return
+    try:
+        from modstore_server.employee_im_bridge import notify_boss as _notify_boss_im
+
+        _emp_display = ""
+        _emp_mod_id = ""
+        try:
+            if isinstance(manifest, dict):
+                _ident = (
+                    manifest.get("identity")
+                    if isinstance(manifest.get("identity"), dict)
+                    else {}
+                )
+                _emp_display = str(
+                    _ident.get("name") or manifest.get("name") or ""
+                ).strip()
+                _emp_mod_id = str(
+                    manifest.get("mod_id") or manifest.get("id") or ""
+                ).strip()
+        except Exception:
+            logger.debug("emp_im_notify manifest parse skipped", exc_info=True)
+        _notify_boss_im(
+            employee_id,
+            body=body_text[:600],
+            hook=hook,
+            mod_id=_emp_mod_id,
+            display_name=_emp_display,
+        )
+    except Exception:
+        logger.debug("emp_im_notify %s skipped", hook, exc_info=True)
+
+
 # 员工大会待机：manifest system_prompt 常要求「输出 JSON」，与四段 Markdown 汇报冲突。
 _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
 【员工大会模式 — 覆盖日常 JSON 输出要求】
@@ -45,6 +91,41 @@ _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
 - 不得编造 research_context / yuangon_pack_excerpt / recent_failures 中未出现的路径或版本号。"""
 
 _ALL_HANDS_ROLE_CONTEXT_MODES = frozenset({"all_hands_meeting", "all_hands_standby"})
+
+
+# 10 项成熟度第 1 项「主动沟通」协议：让 LLM 知道有 requires_human 通道可用，
+# 遇到下面任一情况必须主动向老板提问（输出 requires_human=true + human_question）。
+# 不破坏原 JSON 输出格式，只是把 requires_human / human_question 作为可选字段加入。
+_PHASE_D_PROTOCOL_APPEND = """\
+【主动沟通协议 — 强制遵守】
+你是真员工，不是提示词机器人。完成任务时遇到以下任一情况，**必须**在 JSON 输出里追加两个字段：
+- "requires_human": true
+- "human_question": "<你具体想问老板的问题，简短一句中文>"
+
+需要主动提问的情况：
+1. 任务优先级不明确（多个任务冲突，不知道先做哪个）
+2. 缺资源（需要其他员工配合、需要数据、需要权限）
+3. 发现风险（代码改动可能影响线上、安全风险、合规风险）
+4. 需要老板决策（业务方向、产品取舍、用户影响）
+5. 任务超出你的职责范围（应该转交给别的员工）
+6. 失败 3 次仍无法解决（需要换思路或换人）
+7. 你不确定的事（宁可问，不要瞎做）
+
+提问要具体，不要套话。例：
+- ❌ "需要老板确认" — 太空
+- ✅ "本周修复 A 还是 B 优先级更高？目前 A 影响 100 用户/天" — 具体
+
+没有上述情况时，正常输出你的工作 JSON，不需要带 requires_human 字段。
+
+【任务转交协议 — 同事协作】
+如果你判断任务**不属于你的职责范围**（如本员工 manifest 没覆盖的代码路径 / 接口 / 服务），
+应该在 JSON 输出里追加：
+- "handoff_to": "<目标员工的 employee_id>"
+- "handoff_reason": "<为什么转交给他，一句话>"
+- "handoff_context": "<上下文摘要，让目标员工不用重新看一遍 task>"
+
+只在你**确实无法处理**时才转交，不要把简单任务推给别人。
+转交后你仍然要正常完成你能做的部分，不要因为转交就停手。"""
 
 
 def _is_all_hands_cognition_context(inp: Any) -> bool:
@@ -576,6 +657,13 @@ async def _cognition_real(
             system_prompt = get_effective_system_prompt(str(employee_id), str(system_prompt))
         except Exception:
             pass
+    # 10 项成熟度第 1 项「主动沟通」协议注入 — 让 LLM 知道有 requires_human 通道可用，
+    # 在不确定优先级 / 缺资源 / 发现风险 / 需要老板决策时必须主动提问。
+    # 不修改 55 个 system.md，在 cognition 层统一注入。
+    if str(task or "").strip() and not _is_all_hands_cognition_context(
+        perceived.get("normalized_input") if isinstance(perceived, dict) else {}
+    ):
+        system_prompt = f"{system_prompt.rstrip()}\n\n{_PHASE_D_PROTOCOL_APPEND}"
     model_cfg = agent.get("model") if isinstance(agent.get("model"), dict) else {}
     normalized_inp = perceived.get("normalized_input", {})
     if not isinstance(normalized_inp, dict):
@@ -671,7 +759,14 @@ async def _cognition_real(
             session_context_json=session_context_json,
         )
     else:
-        user_input = json.dumps(normalized_inp, ensure_ascii=False)
+        # 修复：task 文本必须进入 user message，否则 LLM 看不到自己被要求做什么，
+        # 也就无法判断是否需要触发 requires_human（Phase-D 主动沟通）。
+        _task_text = str(task or "").strip()
+        _inp_json = json.dumps(normalized_inp, ensure_ascii=False)
+        if _task_text:
+            user_input = f"任务：{_task_text}\n\n输入数据：{_inp_json}"
+        else:
+            user_input = _inp_json
         if session_context_json:
             user_input = f"{user_input}\n\n[session_context]\n{session_context_json}"
 
@@ -1884,6 +1979,57 @@ def execute_employee_task(
                 perceived = _perception_real(
                     config.get("perception", {}), payload, session, user_id
                 )
+                # 10 项成熟度第 1 项「看得见」— 注入 workspace_signals / recent_runs /
+                # recent_failures / scope_summary，让 LLM 能看到自己负责的代码和历史执行。
+                try:
+                    from modstore_server.employee_perception_enricher import enrich_perception
+                    _project_root = (
+                        str(payload.get("project_root") or "").strip()
+                        if isinstance(payload, dict) else ""
+                    ) or os.environ.get("MODSTORE_REPO_ROOT", "")
+                    enrich_perception(
+                        employee_id=employee_id,
+                        perceived=perceived if isinstance(perceived, dict) else {},
+                        config=config,
+                        session=session,
+                        project_root=Path(_project_root) if _project_root else None,
+                        manifest=manifest if isinstance(manifest, dict) else None,
+                    )
+                except Exception as _pe_exc:
+                    logger.debug("perception_enricher failed employee_id=%s err=%s", employee_id, _pe_exc)
+                # 10 项成熟度第 3 项「会判断任务」— 用关键词规则给 task 分类
+                # （bug/feature/ops/test/release/security/doc/handoff/unknown），
+                # 注入到 perceived.normalized_input._task_classification，让 LLM 知道任务类型
+                # + 给 human_report「发现什么」段反映。
+                try:
+                    from modstore_server.employee_task_classifier import (
+                        enrich_perception_with_classification,
+                    )
+
+                    enrich_perception_with_classification(
+                        employee_id=employee_id,
+                        task=str(task or ""),
+                        perceived=perceived if isinstance(perceived, dict) else {},
+                    )
+                except Exception as _tc_exc:
+                    logger.debug("task_classifier failed employee_id=%s err=%s", employee_id, _tc_exc)
+                # perception hook：员工像真人一样跟老板说"收到任务"——给老板
+                # 一条「正在处理」的实时反馈，避免老板以为员工没动静。
+                # 只在任务正文非空且短（<=200 字）时推，避免长 payload 干扰。
+                try:
+                    _task_preview = str(task or "").strip()
+                    if _task_preview and len(_task_preview) <= 200:
+                        _perceived_kind = ""
+                        if isinstance(perceived, dict):
+                            _perceived_kind = str(perceived.get("type") or "").strip()
+                        _perception_body = f"📋 收到任务：{_task_preview}"
+                        if _perceived_kind:
+                            _perception_body = f"{_perception_body}\n类型：{_perceived_kind}"
+                        _emp_im_notify_boss(
+                            employee_id, manifest, _perception_body, "perception"
+                        )
+                except Exception:
+                    logger.debug("perception im hook skipped", exc_info=True)
                 file_path_fast = (
                     isinstance(payload, dict)
                     and str(payload.get("file_path") or payload.get("path") or "").strip()
@@ -1909,18 +2055,71 @@ def execute_employee_task(
                         task=task,
                         bench_llm_override=bench_llm_override,
                     )
-                # Phase-D：员工 cognition 输出 requires_human=true 时阻塞等老板回答
+                # Phase-D：员工 cognition 输出 requires_human=true 时阻塞等老板回答。
+                # LLM 实际输出在 reasoning["reasoning"]（字符串），需解析 JSON 才能取
+                # requires_human/human_question 等字段。旧实现直接读 reasoning 顶层 dict
+                # 永远拿不到 LLM 输出，导致 Phase-D 永不触发（commit 修复）。
                 if isinstance(reasoning, dict):
-                    _ask_human = reasoning.get("requires_human") or reasoning.get("ask_human")
+                    _llm_out_raw = reasoning.get("reasoning") or ""
+                    _parsed_llm: Dict[str, Any] = {}
+                    if isinstance(_llm_out_raw, str) and _llm_out_raw.strip():
+                        # 1. 直接 json.loads（LLM 直接输出纯 JSON 时）
+                        try:
+                            _parsed_llm = json.loads(_llm_out_raw) or {}
+                        except (ValueError, TypeError):
+                            _parsed_llm = {}
+                        # 2. 从 ```json ... ``` 代码块抽取（贪婪 .*，匹配嵌套 JSON）
+                        if not isinstance(_parsed_llm, dict):
+                            import re as _re
+                            _m = _re.search(
+                                r"```(?:json)?\s*(\{.*\})\s*```",
+                                _llm_out_raw,
+                                _re.DOTALL,
+                            )
+                            if _m:
+                                try:
+                                    _parsed_llm = json.loads(_m.group(1)) or {}
+                                except (ValueError, TypeError):
+                                    _parsed_llm = {}
+                        # 3. 剥掉首尾 ```json / ``` 后整体 json.loads
+                        if not isinstance(_parsed_llm, dict):
+                            _stripped = _llm_out_raw.strip()
+                            if _stripped.startswith("```"):
+                                _stripped = _re.sub(r"^```(?:json)?\s*", "", _stripped)
+                                _stripped = _re.sub(r"\s*```\s*$", "", _stripped)
+                                try:
+                                    _parsed_llm = json.loads(_stripped) or {}
+                                except (ValueError, TypeError):
+                                    _parsed_llm = {}
+                        # 4. 兜底：从首个含 requires_human 的 {...} 抽取（处理嵌套：
+                        #    找 requires_human 出现的位置，向前找最近的 {，向后匹配同层 }）
+                        if not isinstance(_parsed_llm, dict):
+                            import re as _re
+                            _m2 = _re.search(
+                                r"\{[^{}]*\"requires_human\"[^{}]*\}",
+                                _llm_out_raw,
+                                _re.DOTALL,
+                            )
+                            if _m2:
+                                try:
+                                    _parsed_llm = json.loads(_m2.group(0)) or {}
+                                except (ValueError, TypeError):
+                                    _parsed_llm = {}
+                    _ask_human = None
+                    _human_question_text = ""
+                    if isinstance(_parsed_llm, dict):
+                        _ask_human = _parsed_llm.get("requires_human") or _parsed_llm.get("ask_human")
+                        _human_question_text = str(_parsed_llm.get("human_question") or _parsed_llm.get("question") or "")
+                    # 兼容：万一上层直接把字段塞到 reasoning 顶层
+                    if _ask_human is None:
+                        _ask_human = reasoning.get("requires_human") or reasoning.get("ask_human")
+                    if not _human_question_text:
+                        _human_question_text = str(reasoning.get("human_question") or reasoning.get("question") or "")
                     if _ask_human is True or (isinstance(_ask_human, str) and _ask_human.strip()):
                         _question_text = (
                             _ask_human
-                            if isinstance(_ask_human, str)
-                            else str(
-                                reasoning.get("human_question")
-                                or reasoning.get("question")
-                                or "需要老板决策"
-                            )
+                            if isinstance(_ask_human, str) and _ask_human.strip()
+                            else (_human_question_text or "需要老板决策")
                         )
                         try:
                             from modstore_server.human_uncertainty_queue import (
@@ -1935,24 +2134,201 @@ def execute_employee_task(
                                 context={
                                     "perceived": perceived,
                                     "reasoning_summary": str(
-                                        reasoning.get("summary", "")
+                                        _parsed_llm.get("summary") or reasoning.get("summary", "")
                                     )[:500],
+                                    "llm_parsed": _parsed_llm if isinstance(_parsed_llm, dict) else {},
                                 },
                             )
                             reasoning["_human_answer"] = _resp
+                            reasoning["_phase_d_triggered"] = True
+                            reasoning["_phase_d_question"] = _question_text[:300]
                             if _resp.get("status") == "answered":
                                 reasoning["human_answer"] = _resp.get("answer", "")
                         except Exception as _exc:
                             reasoning["_human_answer_error"] = str(_exc)
+                # cognition hook：让员工像真人一样在 IM 里主动汇报思考结果给老板。
+                # 触发 Phase-D 时推"问老板：X"；否则推 cognition summary（如有）。
+                try:
+                    _im_body = ""
+                    if reasoning.get("_phase_d_triggered"):
+                        _im_q = str(reasoning.get("_phase_d_question") or "").strip()
+                        if _im_q:
+                            _im_body = (
+                                f"🤔 我有个问题想问你：{_im_q}\n\n"
+                                "（已通过任务中心发起，等你在那里回复）"
+                            )
+                    if not _im_body and isinstance(_parsed_llm, dict):
+                        _im_body = str(
+                            _parsed_llm.get("summary") or _parsed_llm.get("reasoning") or ""
+                        ).strip()
+                    if not _im_body and isinstance(reasoning, dict):
+                        _im_body = str(reasoning.get("summary") or "").strip()
+                    if _im_body:
+                        _emp_im_notify_boss(employee_id, manifest, _im_body, "cognition")
+                except Exception:
+                    logger.debug("cognition im hook skipped", exc_info=True)
+                # 10 项成熟度第 6 项 — 会协作：解析 handoff_to 并触发任务转交。
+                # LLM 输出 handoff_to + handoff_reason + handoff_context 表示
+                # 「这事不归我管，转给 @xxx」。本员工仍继续执行能做的部分，不阻断。
+                try:
+                    from modstore_server.employee_handoff import (
+                        perform_handoff,
+                        _resolve_target_employee_id,
+                    )
+
+                    _handoff_to_raw = None
+                    _handoff_reason = ""
+                    _handoff_context = ""
+                    if isinstance(_parsed_llm, dict):
+                        _handoff_to_raw = _parsed_llm.get("handoff_to") or _parsed_llm.get("delegate_to")
+                        _handoff_reason = str(_parsed_llm.get("handoff_reason") or _parsed_llm.get("delegate_reason") or "")
+                        _handoff_context = str(_parsed_llm.get("handoff_context") or _parsed_llm.get("delegate_context") or "")
+                    # 兼容：LLM 把字段塞到 reasoning 顶层
+                    if _handoff_to_raw is None and isinstance(reasoning, dict):
+                        _handoff_to_raw = reasoning.get("handoff_to") or reasoning.get("delegate_to")
+                        if not _handoff_reason:
+                            _handoff_reason = str(reasoning.get("handoff_reason") or reasoning.get("delegate_reason") or "")
+                        if not _handoff_context:
+                            _handoff_context = str(reasoning.get("handoff_context") or reasoning.get("delegate_context") or "")
+
+                    _handoff_target = _resolve_target_employee_id(_handoff_to_raw) if _handoff_to_raw else ""
+                    if _handoff_target:
+                        # 上下文摘要：LLM 解析摘要 + 感知输入类型
+                        _ctx_parts = []
+                        if _handoff_context:
+                            _ctx_parts.append(_handoff_context[:500])
+                        if isinstance(_parsed_llm, dict) and _parsed_llm.get("summary"):
+                            _ctx_parts.append(f"LLM 摘要：{str(_parsed_llm.get('summary'))[:300]}")
+                        _handoff_ctx_str = " | ".join(_ctx_parts)[:1500]
+
+                        _handoff_out = perform_handoff(
+                            source_employee_id=employee_id,
+                            target_employee_id=_handoff_target,
+                            reason=_handoff_reason,
+                            context=_handoff_ctx_str,
+                            original_task=str(task or ""),
+                            extra_payload={
+                                "source_employee_id": employee_id,
+                                "parsed_llm_excerpt": str(_llm_out_raw)[:500] if isinstance(_llm_out_raw, str) else "",
+                            },
+                        )
+                        if isinstance(reasoning, dict):
+                            reasoning["_handoff"] = _handoff_out
+                except Exception as _ho_exc:
+                    logger.debug("handoff perform failed employee_id=%s err=%s", employee_id, _ho_exc)
+                # handoff hook：员工像真人一样通知老板"我把这事转给 @xxx 了"
+                try:
+                    if _handoff_target:
+                        _ho_msg = f"🔁 已转交给 {_handoff_target}"
+                        if _handoff_reason:
+                            _ho_msg = f"{_ho_msg}：{_handoff_reason[:200]}"
+                        _ho_msg = f"{_ho_msg}\n（我仍继续做我能做的部分）"
+                        _emp_im_notify_boss(employee_id, manifest, _ho_msg, "handoff")
+                except Exception:
+                    logger.debug("handoff im hook skipped", exc_info=True)
                 result = _actions_real(
                     config.get("actions", {}), reasoning, task, employee_id, user_id
                 )
+                # 10 项成熟度第 2 项 — 知道自己管什么：硬约束 changed_files 必须在 scope_globs
+                # 内、不命中 forbidden_globs。越权不阻断返回（保留证据），但标记 blocked_by_path_guard。
+                try:
+                    from modstore_server.employee_path_guard import check_path_guard
+
+                    _path_guard = check_path_guard(
+                        config=config,
+                        result=result if isinstance(result, dict) else {},
+                        employee_id=employee_id,
+                    )
+                    if isinstance(result, dict):
+                        result["path_guard"] = _path_guard
+                except Exception as _pg_exc:
+                    logger.debug("path_guard check failed employee_id=%s err=%s", employee_id, _pg_exc)
+                # 10 项成熟度第 5 项 — 会验证：程序化检查文件存在/测试报告/status/summary/handler output
+                try:
+                    from modstore_server.employee_verification import run_verification
+
+                    _verif = run_verification(
+                        employee_id=employee_id,
+                        task=task,
+                        reasoning=reasoning if isinstance(reasoning, dict) else {},
+                        result=result if isinstance(result, dict) else {},
+                        config=config,
+                        project_root=Path(_project_root) if _project_root else None,
+                    )
+                    if isinstance(result, dict):
+                        result["verification"] = _verif
+                except Exception as _v_exc:
+                    logger.debug("verification failed employee_id=%s err=%s", employee_id, _v_exc)
+                # verification hook：员工像真人一样告诉老板"我做完验证了，通过/失败"
+                try:
+                    _verif_dict = _verif if isinstance(_verif, dict) else {}
+                    _v_status = str(_verif_dict.get("status") or _verif_dict.get("ok") or "").strip()
+                    _v_summary = str(_verif_dict.get("summary") or _verif_dict.get("message") or "").strip()
+                    if _v_status or _v_summary:
+                        _icon = "✅" if _v_status.lower() in ("ok", "passed", "pass", "success", "true") else (
+                            "❌" if _v_status.lower() in ("fail", "failed", "error", "false") else "🔍"
+                        )
+                        _verif_body = f"{_icon} 验证：{_v_summary or _v_status}"[:300]
+                        _emp_im_notify_boss(employee_id, manifest, _verif_body, "verification")
+                except Exception:
+                    logger.debug("verification im hook skipped", exc_info=True)
+                # 10 项成熟度第 9 项 — 会学习：失败 >=3 次触发 prompt evolution 信号
+                # 实际触发 prompt override 由 admin API / employee_autonomy_service 完成，
+                # 这里只检测 + 写到 result["evolution_signal"] + 在 human_report 里反映。
+                try:
+                    from modstore_server.employee_self_evolution import check_evolution_signal
+
+                    _evo = check_evolution_signal(
+                        employee_id=employee_id,
+                        session=session,
+                    )
+                    if isinstance(result, dict):
+                        result["evolution_signal"] = _evo
+                except Exception as _evo_exc:
+                    logger.debug("evolution_signal check failed employee_id=%s err=%s", employee_id, _evo_exc)
+                # 把 handoff 结果也写到 result 让 human_report 能读到
+                _ho = reasoning.get("_handoff") if isinstance(reasoning, dict) else None
+                if isinstance(_ho, dict) and isinstance(result, dict):
+                    result["handoff"] = _ho
                 duration_ms = round((time.perf_counter() - t0) * 1000, 3)
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
                 handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
                 exec_status = "success" if handler_ok else "handler_failed"
                 metric_error = "" if handler_ok else "one or more handlers returned ok=False"
                 metric_failure_kind = ""
+                # path_guard 越权 → 标记 blocked_by_path_guard 并附违规路径到 metric
+                _pg = result.get("path_guard") if isinstance(result, dict) else None
+                if isinstance(_pg, dict) and _pg.get("checked") and not _pg.get("ok"):
+                    exec_status = "blocked_by_path_guard"
+                    violations = _pg.get("violations") or []
+                    vstr = "; ".join(
+                        f"{v.get('path','')}({v.get('reason','')})"
+                        for v in violations[:5]
+                        if isinstance(v, dict)
+                    )
+                    metric_error = f"path_guard violations: {vstr}"[:500]
+                    metric_failure_kind = "path_guard_violation"
+                    handler_ok = False
+                # 10 项成熟度第 10 项 — 会说人话：把执行结果转成 Markdown 四段式汇报
+                try:
+                    from modstore_server.employee_human_report import build_human_report
+
+                    _human_report = build_human_report(
+                        employee_id=employee_id,
+                        task=task,
+                        reasoning=reasoning if isinstance(reasoning, dict) else {},
+                        result=result if isinstance(result, dict) else {},
+                        duration_ms=duration_ms,
+                        llm_tokens=llm_tokens,
+                        exec_status=exec_status,
+                        perceived=perceived if isinstance(perceived, dict) else None,
+                        memory=memory if isinstance(memory, dict) else None,
+                        cognition_error=str(reasoning.get("error") or "") if isinstance(reasoning, dict) else "",
+                    )
+                    if isinstance(result, dict):
+                        result["human_report"] = _human_report
+                except Exception as _hr_exc:
+                    logger.debug("build_human_report failed employee_id=%s err=%s", employee_id, _hr_exc)
                 if not handler_ok:
                     # 上游 LLM(认知层)失败常是 handler 失败的根因（如返回空正文）；据其
                     # 错误文本+状态码分类，让配额/计费(403)失败也带上 failure_kind，
