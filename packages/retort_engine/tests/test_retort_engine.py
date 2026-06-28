@@ -233,6 +233,12 @@ def test_cli_project_assess_passes_llm_flag(tmp_path: Path, monkeypatch) -> None
     monkeypatch.setattr("retort_engine.cli.RetortService.assess", fake_assess)
     rc = cli_main(["project-assess", "--project", str(project), "--json"])
     assert rc == 0
+    assert captured["use_llm"] is None
+    assert captured["require_deep_review"] is None
+
+    captured.clear()
+    rc = cli_main(["project-assess", "--project", str(project), "--json", "--no-llm"])
+    assert rc == 0
     assert captured["use_llm"] is False
     assert captured["require_deep_review"] is False
 
@@ -254,6 +260,12 @@ def test_cli_self_evolve_passes_llm_flag(tmp_path: Path, monkeypatch) -> None:
 
     monkeypatch.setattr("retort_engine.cli.RetortService.self_evolve", fake_self_evolve)
     rc = cli_main(["self-evolve", "--project", str(project), "--json"])
+    assert rc == 1
+    assert captured["use_llm"] is None
+    assert captured["require_deep_review"] is None
+
+    captured.clear()
+    rc = cli_main(["self-evolve", "--project", str(project), "--json", "--no-llm"])
     assert rc == 1
     assert captured["use_llm"] is False
     assert captured["require_deep_review"] is False

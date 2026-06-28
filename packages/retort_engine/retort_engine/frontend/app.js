@@ -102,7 +102,11 @@ const statusText = {
   employee_execution_verified: "员工执行",
   post_absorption_tests_passed: "吸收后测试",
   merge_verified: "合并",
-  external_advantage_reassessed: "外部优势复评"
+  external_advantage_reassessed: "外部优势复评",
+  healthy: "健康",
+  watch: "观察",
+  enabled_by_default: "默认开启",
+  explicitly_disabled: "显式关闭"
 };
 const taskText = {
   "Absorb stronger implementation depth": "吸收更强实现深度",
@@ -133,6 +137,53 @@ function setRunning(running, text) {
     const el = $(id);
     if (el) el.disabled = running;
   }
+}
+
+function setOpsMetric(id, value, level = "info") {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = String(value ?? "--");
+  const parent = el.parentElement;
+  if (parent) {
+    parent.classList.remove("ok", "warn", "bad");
+    if (["ok", "warn", "bad"].includes(level)) parent.classList.add(level);
+  }
+}
+
+function evidenceFlag(assessment, key) {
+  return (assessment?.evidence || []).map(String).some(item => item === `${key}=True` || item === `${key}=true`);
+}
+
+function evidenceValue(assessment, key) {
+  const row = (assessment?.evidence || []).map(String).find(item => item.startsWith(`${key}=`));
+  return row ? row.slice(key.length + 1) : "";
+}
+
+function renderOpsDashboard({assessment = null, execution = null, proof = null, branch = null, llmReview = null} = {}) {
+  const audit = assessment?.metadata?.capability_absorption_audit || {};
+  const source = scoreSource(assessment);
+  const llmStatus = source === "paibi_llm" ? "已评分" : llmReview?.dispatch?.status === "accepted" ? "已派发" : llmReview?.dispatch?.status === "queued_outbox" || llmReview?.status === "queued_outbox" ? "待发箱" : llmReview?.enabled === false ? "未启用" : "待命";
+  setOpsMetric("opsLlm", llmStatus, source === "paibi_llm" ? "ok" : llmStatus === "未启用" ? "bad" : "warn");
+
+  const gates = execution?.gates || [];
+  const lintOk = evidenceValue(assessment, "lint") === "True";
+  const testOk = evidenceValue(assessment, "test") === "True";
+  const evidenceGateCount = (lintOk ? 1 : 0) + (testOk ? 1 : 0);
+  const gateText = gates.length ? `${gates.filter(gate => gate.ok).length}/${gates.length}` : lintOk || testOk ? `${evidenceGateCount}/2` : "--";
+  const gateOk = gates.length ? gates.every(gate => gate.ok) : lintOk && testOk;
+  setOpsMetric("opsGates", gateText, gateOk ? "ok" : gateText === "--" ? "warn" : "bad");
+
+  const flags = proof?.closed_loop_flags || assessment?.metadata?.closed_loop_proof?.flags || {};
+  const proofValues = ["branch_diff_verified", "employee_execution_verified", "post_absorption_tests_passed", "merge_verified", "external_advantage_reassessed"].map(key => Boolean(flags[key]));
+  const proofCount = proofValues.filter(Boolean).length;
+  setOpsMetric("opsProof", `${proofCount}/5`, proofCount === 5 || evidenceFlag(assessment, "closed_loop_verified") ? "ok" : proofCount ? "warn" : "bad");
+
+  const ratio = audit.latest_test_to_source_ratio || audit.test_to_source_ratio;
+  const ratioStatus = audit.latest_test_to_source_ratio_status || audit.test_to_source_ratio_status || "";
+  setOpsMetric("opsRatio", ratio == null ? "--" : Number(ratio).toFixed(2), ratioStatus === "healthy" ? "ok" : ratioStatus === "watch" ? "warn" : "bad");
+
+  const branchStatus = labelOf(branch?.status || assessment?.metadata?.absorption_state?.status || "");
+  setOpsMetric("opsBranch", branchStatus || "--", branch?.merged || assessment?.metadata?.closed_loop_proof?.verified ? "ok" : branchStatus ? "warn" : "info");
 }
 
 function formatDuration(seconds) {
@@ -736,6 +787,7 @@ function llm(review, status = null, assessment = null) {
   if (!review || review.enabled === false) {
     clearLlmSync();
     $("llmState").textContent = "排比 LLM 深评未完成，本次不保留评分";
+    setOpsMetric("opsLlm", "未启用", "bad");
     return;
   }
   const d = review.dispatch || review;
@@ -752,14 +804,17 @@ function llm(review, status = null, assessment = null) {
     const taskId = assessment?.metadata?.llm_task_id || status?.task_id || d.task_id || "";
     const level = status?.json_result?.level ? ` · ${status.json_result.level}` : "";
     $("llmState").textContent = `排比 LLM 深评完成${taskId ? `：${taskId}` : ""}${level}`;
+    setOpsMetric("opsLlm", "已评分", "ok");
     return;
   }
   if (status?.status) {
     $("llmState").textContent = `排比 LLM ${status.status}，未返回深评分；本次不保留评分`;
+    setOpsMetric("opsLlm", labelOf(status.status), "warn");
     return;
   }
   const prefix = state.llmParallel ? `已派发并发排比 ${d.subtask_count || review.panels?.length || 0} 个面板` : "已派发排比任务";
   $("llmState").textContent = d.status === "accepted" ? `${prefix}：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
+  setOpsMetric("opsLlm", d.status === "accepted" ? "已派发" : "待发箱", d.status === "accepted" ? "ok" : "warn");
   pushEvent("排比任务", d.task_id || d.reason || d.status || "已记录", d.status === "accepted" ? "ok" : "warn");
   if (d.status === "accepted" && d.task_id) scheduleLlmSync(3000);
 }
@@ -796,6 +851,7 @@ function renderLlmSyncStatus(r) {
   const blockers = r.unblock_tasks?.length ? ` · 解阻 ${r.unblock_tasks.length}` : "";
   const subtasks = r.subtasks?.length ? ` · 子任务 ${r.subtasks.map(s => s.status).join("/")}` : "";
   $("llmState").textContent = `排比 LLM 自动同步：${r.status || "unknown"}${subtasks}${json}${blockers}`;
+  setOpsMetric("opsLlm", r.scores?.length ? "已评分" : labelOf(r.status || "同步中"), r.scores?.length ? "ok" : "warn");
   pushEvent("排比同步", `${r.status || "unknown"}${blockers}`, r.unblock_tasks?.length ? "warn" : "ok");
 }
 
@@ -838,6 +894,7 @@ async function assess() {
     assertDeepAssessment(r);
     scores(r.scores);
     capabilityAudit(r);
+    renderOpsDashboard({assessment: r, llmReview: r.llm_review});
     completeProgress("深评完成");
     $("statusText").textContent = "深评完成";
     pushEvent("深评完成", `排比 LLM 核心分 ${Math.round(scoreValue(r, 0))}`, "ok");
@@ -873,6 +930,7 @@ async function absorb() {
     evidence(r);
     tasks(r.tasks || []);
     llm(r.llm_review);
+    renderOpsDashboard({assessment: r.own_assessment, execution: r.execution, proof: r.devour_session?.improvement_proof, branch: r.branch_workflow, llmReview: r.llm_review});
     $("branchState").textContent = labelOf(r.branch_workflow?.status) || "尚未运行分支流程";
     $("statusText").textContent = labelOf(r.status);
     pushEvent("吸收完成", `${labelOf(r.status)} · 改动 ${(r.execution?.changed_files || []).length} 个文件`, r.execution?.gates_passed ? "ok" : "warn");
@@ -898,6 +956,7 @@ async function evolve() {
     scores(r.final_assessment.scores);
     capabilityAudit(r.final_assessment);
     tasks(r.tasks || []);
+    renderOpsDashboard({assessment: r.final_assessment, llmReview: r.final_assessment?.llm_review || r.llm_review});
     completeProgress("反问深评完成");
     $("branchState").textContent = `${labelOf(r.status)}：${labelOf(r.stop_reason)}`;
     $("statusText").textContent = "已反问";
@@ -1290,6 +1349,7 @@ async function loadDefaultProject() {
 }
 
 resetProgress();
+renderOpsDashboard();
 externalScores(null);
 renderDevourSession(null);
 loadDefaultProject();

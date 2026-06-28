@@ -39,12 +39,19 @@ def blackhole_ui_structure(project_path: Path) -> dict[str, Any]:
         "eventList",
         "sessionState",
         "proofPanel",
+        "opsDashboard",
+        "opsLlm",
+        "opsGates",
+        "opsProof",
+        "opsRatio",
+        "opsBranch",
     }
     required_functions = {
         "drawAbsorptionScene",
         "drawAbsorptionPlanet",
         "renderDevourSession",
         "beginAbsorption",
+        "renderOpsDashboard",
         "draw",
     }
     return {

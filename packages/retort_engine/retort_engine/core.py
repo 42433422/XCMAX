@@ -14,6 +14,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from retort_engine.absorption_state import closed_loop_proof as _closed_loop_proof
+from retort_engine.absorption_state import load_absorption_state as _load_absorption_state
+from retort_engine.absorption_state import public_absorption_state as _public_absorption_state
+from retort_engine.absorption_state import save_absorption_state as _save_absorption_state
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.contracts import contract_names
@@ -22,6 +26,12 @@ from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_p
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
+from retort_engine.quality_metrics import BEHAVIOR_SUFFIXES
+from retort_engine.quality_metrics import is_behavior_test_file as _is_behavior_test_file
+from retort_engine.quality_metrics import is_generated_absorption_file as _is_generated_absorption_file
+from retort_engine.quality_metrics import project_relative as _project_relative
+from retort_engine.quality_metrics import test_code_health as _test_code_health
+from retort_engine.quality_policy import apply_default_llm_policy
 from retort_engine.pr_review import review_diff
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
@@ -278,6 +288,7 @@ def _now_iso() -> str:
 
 
 def absorb(payload: dict[str, Any]) -> dict[str, Any]:
+    payload = apply_default_llm_policy(payload)
     own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
     external = payload.get("external_path") or payload.get("github_url") or payload.get("github") or ""
     external_path = _materialize_external_source(str(external), own, bool(payload.get("refresh")))
@@ -405,6 +416,7 @@ def merge_absorption_branch(project: Path, state: BranchWorkflowState) -> Branch
 
 class RetortService:
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = apply_default_llm_policy(payload)
         project = str(payload.get("project") or payload.get("project_path") or ".")
         assessment = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
         return _attach_llm_scoring(dict(payload), assessment, Path(project).expanduser().resolve(), "assess", "", "", [])
@@ -413,6 +425,7 @@ class RetortService:
         return absorb(payload)
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = apply_default_llm_policy(payload)
         project = str(payload.get("project") or ".")
         project_path = Path(project).expanduser().resolve()
         base = assess_project(project, run_local_gates=bool(payload.get("run_local_gates"))).to_dict()
@@ -1484,21 +1497,10 @@ def _llm_disabled_review(*, require_deep: bool = False) -> dict[str, Any]:
     }
 
 
-GENERATED_ABSORPTION_NAMES = {
-    "retort_absorption_log.md",
-    "retort_external_review_report.json",
-    "absorbed_external_patterns.py",
-    "retort_absorbed_patterns.py",
-    "absorbed_capabilities.py",
-    "test_absorbed_capabilities.py",
-}
-BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
-
-
 def _capability_absorption_audit(root: Path) -> dict[str, Any]:
-    code_health = _test_code_health(root)
     static_risks = _self_assessment_risk_checks(root)
     latest = _latest_absorption_run(root)
+    code_health = _test_code_health(root, latest=latest)
     if not latest:
         blockers = ["no_real_absorption_run", *static_risks["failed"]]
         return {
@@ -1758,115 +1760,6 @@ def _absorption_external_project_count(root: Path) -> int:
     return len(sources)
 
 
-def _project_relative(root: Path, path: Path) -> str:
-    try:
-        return str(path.expanduser().resolve().relative_to(root.expanduser().resolve()))
-    except (OSError, ValueError):
-        return str(path)
-
-
-def _is_generated_absorption_file(rel: str) -> bool:
-    path = Path(rel)
-    if path.name in GENERATED_ABSORPTION_NAMES:
-        return True
-    if rel.startswith(".retort/"):
-        return True
-    path_text = path.as_posix()
-    return path_text.startswith("docs/retort_") and path.suffix == ".json"
-
-
-def _is_behavior_test_file(rel: str) -> bool:
-    path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and ("tests" in path.parts or path.name.startswith("test_"))
-
-
-def _is_project_behavior_source_file(rel: str) -> bool:
-    path = Path(rel)
-    return path.suffix.lower() in BEHAVIOR_SUFFIXES and not _is_generated_absorption_file(rel) and not _is_behavior_test_file(rel)
-
-
-def _latest_absorption_change_health(root: Path, latest: dict[str, Any]) -> dict[str, Any]:
-    changed_files = [str(item) for item in latest.get("changed_files") or []]
-    source_files: list[str] = []
-    test_files: list[str] = []
-    other_files: list[str] = []
-    source_lines = 0
-    test_lines = 0
-    for item in changed_files:
-        path = Path(item)
-        rel = _project_relative(root, path)
-        if _is_generated_absorption_file(rel):
-            other_files.append(rel)
-            continue
-        if not path.is_file():
-            other_files.append(rel)
-            continue
-        if _is_behavior_test_file(rel):
-            test_files.append(rel)
-            test_lines += _code_line_count(path)
-        elif _is_project_behavior_source_file(rel):
-            source_files.append(rel)
-            source_lines += _code_line_count(path)
-        else:
-            other_files.append(rel)
-    ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
-    return {
-        "latest_changed_file_count": len(changed_files),
-        "latest_changed_source_file_count": len(source_files),
-        "latest_changed_test_file_count": len(test_files),
-        "latest_changed_other_file_count": len(other_files),
-        "latest_changed_source_line_count": source_lines,
-        "latest_changed_test_line_count": test_lines,
-        "latest_test_to_source_ratio": ratio,
-        "latest_code_graph_proof_path": str(latest.get("code_graph_proof_path") or ""),
-    }
-
-
-def _test_code_health(root: Path) -> dict[str, Any]:
-    files = _project_files(root, {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"})
-    source_lines = 0
-    test_lines = 0
-    source_files = 0
-    test_files = 0
-    for path in files:
-        rel = _project_relative(root, path)
-        if _is_generated_absorption_file(rel):
-            continue
-        if _is_behavior_test_file(rel):
-            test_files += 1
-            test_lines += _code_line_count(path)
-        elif _is_project_behavior_source_file(rel):
-            source_files += 1
-            source_lines += _code_line_count(path)
-    ratio = round(test_lines / source_lines, 3) if source_lines else 0.0
-    latest = _latest_absorption_run(root)
-    latest_health = _latest_absorption_change_health(root, latest)
-    return {
-        "source_file_count": source_files,
-        "test_file_count": test_files,
-        "source_line_count": source_lines,
-        "test_line_count": test_lines,
-        "test_to_source_ratio": ratio,
-        "latest_changed_file_count": latest_health["latest_changed_file_count"],
-        "latest_changed_source_file_count": latest_health["latest_changed_source_file_count"],
-        "latest_changed_test_file_count": latest_health["latest_changed_test_file_count"],
-        "latest_changed_other_file_count": latest_health["latest_changed_other_file_count"],
-        "latest_changed_source_line_count": latest_health["latest_changed_source_line_count"],
-        "latest_changed_test_line_count": latest_health["latest_changed_test_line_count"],
-        "latest_test_to_source_ratio": latest_health["latest_test_to_source_ratio"],
-        "latest_code_graph_proof_path": latest_health["latest_code_graph_proof_path"],
-    }
-
-
-def _code_line_count(path: Path) -> int:
-    lines = 0
-    for line in _read(path).splitlines():
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and not stripped.startswith("//"):
-            lines += 1
-    return lines
-
-
 def _self_assessment_risk_checks(root: Path) -> dict[str, Any]:
     core = root / "retort_engine" / "core.py"
     loop = root / "retort_engine" / "similar_project_loop.py"
@@ -2039,46 +1932,6 @@ def _advance_absorption_state(root: Path, weak_dimensions: list[str], round_inde
     with log_path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps({"round_index": round_index, "source": state.get("source", ""), "resolved_dimensions": state["resolved_dimensions"], "tasks": tasks}, ensure_ascii=False, sort_keys=True) + "\n")
     return False
-
-
-def _public_absorption_state(root: Path) -> dict[str, Any]:
-    state = _load_absorption_state(root)
-    if not state:
-        return {"active": False, "status": "empty"}
-    public = {key: state.get(key) for key in ("active", "status", "source", "external_path", "pending_dimensions", "resolved_round", "resolved_dimensions") if key in state}
-    public["closed_loop_proof"] = _closed_loop_proof(root)
-    return public
-
-
-def _closed_loop_proof(root: Path) -> dict[str, Any]:
-    state = _load_absorption_state(root)
-    proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
-    flags = {
-        "branch_diff_verified": bool(proof.get("branch_diff_verified")),
-        "employee_execution_verified": bool(proof.get("employee_execution_verified")),
-        "post_absorption_tests_passed": bool(proof.get("post_absorption_tests_passed")),
-        "merge_verified": bool(proof.get("merge_verified")),
-        "external_advantage_reassessed": bool(proof.get("external_advantage_reassessed")),
-    }
-    missing = tuple(key for key, value in flags.items() if not value)
-    return {"verified": not missing, "missing": missing, "flags": flags, "evidence": [str(item) for item in proof.get("evidence") or []]}
-
-
-def _load_absorption_state(root: Path) -> dict[str, Any]:
-    path = root / ".retort" / "absorption_state.json"
-    if not path.is_file():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_absorption_state(root: Path, state: dict[str, Any]) -> None:
-    path = root / ".retort" / "absorption_state.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _python() -> str:

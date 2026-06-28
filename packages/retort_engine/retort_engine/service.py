@@ -12,6 +12,7 @@ from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.quality_policy import apply_default_llm_policy
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -22,15 +23,11 @@ class RetortService:
         self.llm_service = LLMRetortService()
 
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
-        payload = dict(payload)
-        payload.setdefault("use_llm", True)
-        payload.setdefault("require_deep_review", False)
+        payload = apply_default_llm_policy(payload)
         return self.llm_service.assess(payload)
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
-        payload = dict(payload)
-        payload.setdefault("use_llm", True)
-        payload.setdefault("require_deep_review", False)
+        payload = apply_default_llm_policy(payload)
         return self.llm_service.self_evolve(payload)
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
