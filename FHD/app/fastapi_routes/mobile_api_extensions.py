@@ -119,7 +119,8 @@ extension_router = APIRouter(tags=["mobile-api-ext"])
 
 
 def _mobile_session_id_from_request(request: Request) -> str:
-    auth_hdr = request.headers.get("Authorization") or ""
+    auth_raw = request.headers.get("Authorization") or ""
+    auth_hdr = auth_raw if isinstance(auth_raw, str) else ""
     if auth_hdr.startswith("Bearer "):
         try:
             from app.security.mobile_jwt import verify_mobile_jwt
@@ -130,7 +131,8 @@ def _mobile_session_id_from_request(request: Request) -> str:
                 return sid
         except OPERATIONAL_ERRORS:
             logger.exception("mobile session id parse failed")
-    return str(request.headers.get("X-Session-ID") or "").strip()
+    sid_raw = request.headers.get("X-Session-ID") or ""
+    return sid_raw.strip() if isinstance(sid_raw, str) else ""
 
 
 def _mobile_market_authorization(request: Request, user: Any | None = None) -> str:

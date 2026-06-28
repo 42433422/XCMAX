@@ -88,9 +88,9 @@ class TestGetCsInfo:
             data = json.loads(result.body)
         else:
             data = result
-        # /cs 是专属客服(cs-officer)通道,非小C;cs_name 取 SSOT 专属客服标签
+        # /cs 是企业专属客服真实 IM 通道,非小C;cs_name 取 SSOT 专属客服标签
         assert data.get("data", {}).get("cs_available") is True
-        assert data.get("data", {}).get("cs_name") == "专属客服"
+        assert data.get("data", {}).get("cs_name") == "企业专属客服"
         assert data.get("data", {}).get("cs_online") is True
         assert data.get("data", {}).get("cs_avatar") is None
 
@@ -112,9 +112,22 @@ class TestPostCsMessage:
     @pytest.mark.asyncio
     async def test_authorized_returns_message_id(self, ext_mod):
         mock_request = MagicMock()
-        result = await ext_mod.post_cs_message(
-            request=mock_request, body={"body": "hello world"}, user=_mock_user()
-        )
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc._ensure_enterprise_dedicated_cs_user.return_value = SimpleNamespace(id=99)
+        mock_svc.get_or_create_direct.return_value = {"id": 7}
+        mock_svc.send_message.return_value = {
+            "message": {"id": 42, "created_at": "2026-06-29T00:00:00Z"}
+        }
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
+        ):
+            result = await ext_mod.post_cs_message(
+                request=mock_request, body={"body": "hello world"}, user=_mock_user()
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
         if hasattr(result, "body"):
             import json
@@ -123,8 +136,8 @@ class TestPostCsMessage:
         else:
             data = result
         msg_id = data.get("data", {}).get("message_id", "")
-        assert msg_id.startswith("cs_")
-        assert len(msg_id) == 15  # "cs_" + 12 hex chars
+        assert msg_id == "42"
+        assert data.get("data", {}).get("backend") == "enterprise-cs"
         assert "timestamp" in data.get("data", {})
 
     @pytest.mark.asyncio
