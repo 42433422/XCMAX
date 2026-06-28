@@ -45,6 +45,7 @@ class NotificationType(str, Enum):
     EMPLOYEE_EXECUTION_DONE = "employee_execution_done"
     QUOTA_WARNING = "quota_warning"
     SYSTEM = "system"
+    HUMAN_QUESTION_ASKED = "human_question_asked"  # Phase-D：员工向老板提问
 
 
 def create_notification(
@@ -125,6 +126,40 @@ def notify_employee_execution_done(user_id: int, employee_id: str, task: str, st
         )
     except Exception as e:
         logger.warning("notify_employee_execution_done failed: %s", e)
+
+
+def notify_human_question(
+    user_id: int,
+    question_id: int,
+    employee_id: str,
+    question: str,
+    task: str = "",
+) -> None:
+    """Phase-D：员工向老板提问时推送站内通知。
+
+    员工 cognition 输出 requires_human=true 触发 ask_human_blocking，
+    这里负责把"员工有问题等你回答"推送到老板的通知中心 + 邮箱。
+    """
+    if not user_id:
+        return
+    try:
+        title = f"员工 {employee_id} 有问题等你回答"
+        task_suffix = f"（任务：{task}）" if task else ""
+        create_notification(
+            user_id=user_id,
+            notification_type=NotificationType.HUMAN_QUESTION_ASKED,
+            title=title,
+            content=f"{question[:200]}{task_suffix}",
+            data={
+                "question_id": question_id,
+                "employee_id": employee_id,
+                "task": task,
+                "question": question,
+                "phase": "D",
+            },
+        )
+    except Exception as e:
+        logger.warning("notify_human_question failed: %s", e)
 
 
 def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: int) -> None:

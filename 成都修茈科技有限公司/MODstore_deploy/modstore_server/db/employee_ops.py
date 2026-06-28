@@ -314,6 +314,33 @@ class EmployeeSuggestion(Base):
     )
 
 
+class PendingHumanQuestion(Base):
+    """Phase-D：员工向老板的双向问答回路。
+
+    员工 cognition 输出 requires_human=true 时写一行；
+    员工阻塞轮询此表等回答；老板通过 API 回答后员工继续执行。
+    超时未答则降级为 expired，员工按 fallback 策略继续。
+    """
+
+    __tablename__ = "pending_human_questions"
+    __table_args__ = (UniqueConstraint("fingerprint"),)
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    employee_id = Column(String(128), nullable=False, index=True)
+    task = Column(String(256), default="")
+    question = Column(Text, nullable=False)
+    context_json = Column(Text, default="{}")
+    status = Column(String(16), default="pending", index=True)  # pending|answered|expired
+    answer = Column(Text, default="")
+    answered_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    answered_at = Column(DateTime, nullable=True)
+    asked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    fingerprint = Column(String(64), nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class EmployeeEvolutionRecord(Base):
     __tablename__ = "employee_evolution_records"
 

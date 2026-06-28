@@ -375,4 +375,83 @@ def post_collab_message_api(
     return out
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase-D：员工向老板的双向问答回路
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/questions")
+def list_pending_human_questions(
+    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
+    limit: int = Query(50, ge=1, le=200),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """老板查看员工问自己的问题（pending 或历史）。
+
+    GET /api/admin/employee-autonomy/questions?include_history=false
+    """
+    from modstore_server.human_uncertainty_queue import list_pending_questions
+
+    items = list_pending_questions(
+        user_id=_admin_user.id,
+        include_expired=include_history,
+        limit=limit,
+    )
+    return {"items": items, "count": len(items)}
+
+
+@router.post("/questions/{question_id}/answer")
+def answer_human_question(
+    question_id: int,
+    body: Dict[str, Any] = Body(...),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """老板回答员工的问题。
+
+    POST /api/admin/employee-autonomy/questions/{id}/answer
+    body: {"answer": "去这么做..."}
+    """
+    from modstore_server.human_uncertainty_queue import answer_pending_question
+
+    answer = str((body or {}).get("answer") or "").strip()
+    if not answer:
+        raise HTTPException(400, "answer is required")
+    out = answer_pending_question(
+        question_id=question_id,
+        answer=answer,
+        answered_by_user_id=_admin_user.id,
+    )
+    if not out.get("ok"):
+        raise HTTPException(409, str(out.get("reason") or "answer failed"))
+    return out
+
+
+@router.get("/questions/stats")
+def human_questions_stats(
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """老板查看问题统计（pending/answered/expired 数量）。
+
+    GET /api/admin/employee-autonomy/questions/stats
+    """
+    from modstore_server.models import PendingHumanQuestion, get_session_factory
+    from sqlalchemy import func
+
+    sf = get_session_factory()
+    with sf() as session:
+        rows = (
+            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
+            .filter(PendingHumanQuestion.user_id == _admin_user.id)
+            .group_by(PendingHumanQuestion.status)
+            .all()
+        )
+        counts = {status: cnt for status, cnt in rows}
+    return {
+        "pending": counts.get("pending", 0),
+        "answered": counts.get("answered", 0),
+        "expired": counts.get("expired", 0),
+        "total": sum(counts.values()),
+    }
+
+
 __all__ = ["router"]
