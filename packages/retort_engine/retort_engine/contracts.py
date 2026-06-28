@@ -34,6 +34,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "upstream_pr_ci_probe_result": ("status", "project", "summary", "pull_request", "check_runs", "evidence"),
     "competitor_runtime_comparison_result": ("status", "project", "summary", "competitor_output", "retort_output", "artifacts", "evidence"),
     "competitor_blind_adjudication_result": ("status", "project", "summary", "cases", "artifacts", "evidence"),
+    "competitor_behavior_regression_result": ("status", "project", "summary", "cases", "evidence"),
     "heterogeneous_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_absorption_replay_result": ("status", "project", "summary", "cases", "evidence"),
     "cross_domain_end_to_end_result": ("status", "project", "summary", "stages", "review", "assertions", "artifacts", "evidence"),

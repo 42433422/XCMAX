@@ -1,0 +1,102 @@
+{
+  "cases": [
+    {
+      "absorbed_signal": "typescript_patch_output_parsing",
+      "anchor_count": 2,
+      "assertions": {
+        "anchored_comment_present": true,
+        "direct_review_execution": true,
+        "expected_context_present": true,
+        "expected_severity_present": true,
+        "publishable_comment_present": true,
+        "reviewed": true
+      },
+      "case_id": "mopemope-runtime-output-parser",
+      "comment_count": 3,
+      "context_matched": true,
+      "direct_review_execution": true,
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "publishable_comment_count": 3,
+      "ready": true,
+      "review_status": "reviewed",
+      "severity_matched": true,
+      "source_project": "mopemope/pr-ai-review-bot",
+      "task_group_count": 1
+    },
+    {
+      "absorbed_signal": "security_ranked_pr_review",
+      "anchor_count": 1,
+      "assertions": {
+        "anchored_comment_present": true,
+        "direct_review_execution": true,
+        "expected_context_present": true,
+        "expected_severity_present": true,
+        "publishable_comment_present": true,
+        "reviewed": true
+      },
+      "case_id": "qodo-security-secret-review",
+      "comment_count": 2,
+      "context_matched": true,
+      "direct_review_execution": true,
+      "expected_context": "security",
+      "expected_severity": "high",
+      "publishable_comment_count": 2,
+      "ready": true,
+      "review_status": "reviewed",
+      "severity_matched": true,
+      "source_project": "qodo-ai/pr-agent",
+      "task_group_count": 3
+    },
+    {
+      "absorbed_signal": "ci_review_publisher_safety",
+      "anchor_count": 1,
+      "assertions": {
+        "anchored_comment_present": true,
+        "direct_review_execution": true,
+        "expected_context_present": true,
+        "expected_severity_present": true,
+        "publishable_comment_present": true,
+        "reviewed": true
+      },
+      "case_id": "reviewdog-ci-token-publisher",
+      "comment_count": 1,
+      "context_matched": true,
+      "direct_review_execution": true,
+      "expected_context": "ci_config",
+      "expected_severity": "high",
+      "publishable_comment_count": 1,
+      "ready": true,
+      "review_status": "reviewed",
+      "severity_matched": true,
+      "source_project": "reviewdog/reviewdog",
+      "task_group_count": 1
+    }
+  ],
+  "evidence": {
+    "acceptance": "each_competitor_signal_has_direct_review_diff_behavior_assertions",
+    "runtime": "retort_engine.pr_review.review_diff",
+    "source": "competitor_runtime_comparison_and_blind_adjudication_findings",
+    "style": "competitor_difference_to_core_behavior_regression"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_cases_direct_review_execution": true,
+    "all_competitor_signals_regressed": true,
+    "behavior_assertion_count": 18,
+    "case_count": 3,
+    "context_matched_case_count": 3,
+    "duration_sec": 0.005,
+    "min_case_count": 3,
+    "publishable_case_count": 3,
+    "ready_case_count": 3,
+    "severity_matched_case_count": 3,
+    "source_project_count": 3,
+    "source_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent",
+      "reviewdog/reviewdog"
+    ]
+  }
+}

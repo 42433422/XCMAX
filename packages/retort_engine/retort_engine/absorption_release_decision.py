@@ -25,6 +25,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     upstream_pr_ci = _read_json(root / "docs" / "retort_upstream_pr_ci_probe.json")
     competitor_runtime = _read_json(root / "docs" / "retort_competitor_runtime_comparison.json")
     competitor_blind = _read_json(root / "docs" / "retort_competitor_blind_adjudication.json")
+    competitor_behavior = _read_json(root / "docs" / "retort_competitor_behavior_regression.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
@@ -154,6 +155,16 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and competitor_blind.get("summary", {}).get("input_contains_score_fields") is False
             and int(competitor_blind.get("summary", {}).get("minimum_blind_delta") or 0) >= 45,
             ["competitor_blind_adjudication"],
+        ),
+        _decision(
+            "prove_competitor_behavior_regression",
+            "capability_absorption",
+            competitor_behavior.get("status") == "ready"
+            and competitor_behavior.get("summary", {}).get("all_competitor_signals_regressed") is True
+            and competitor_behavior.get("summary", {}).get("all_cases_direct_review_execution") is True
+            and int(competitor_behavior.get("summary", {}).get("ready_case_count") or 0) >= 3
+            and int(competitor_behavior.get("summary", {}).get("behavior_assertion_count") or 0) >= 18,
+            ["competitor_behavior_regression"],
         ),
         _decision(
             "prove_heterogeneous_absorption",
@@ -303,6 +314,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "competitor_blind_adjudication_competitors": competitor_blind.get("summary", {}).get("competitor_count", ""),
         "competitor_blind_adjudication_min_delta": competitor_blind.get("summary", {}).get("minimum_blind_delta", ""),
         "competitor_blind_adjudication_imports_retort": competitor_blind.get("summary", {}).get("script_imports_retort_engine", ""),
+        "competitor_behavior_regression_ready": competitor_behavior.get("status") == "ready",
+        "competitor_behavior_regression_cases": competitor_behavior.get("summary", {}).get("ready_case_count", ""),
+        "competitor_behavior_regression_assertions": competitor_behavior.get("summary", {}).get("behavior_assertion_count", ""),
+        "competitor_behavior_regression_direct": competitor_behavior.get("summary", {}).get("all_cases_direct_review_execution", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
@@ -362,6 +377,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_upstream_pr_ci_probe.json",
                 "retort_competitor_runtime_comparison.json",
                 "retort_competitor_blind_adjudication.json",
+                "retort_competitor_behavior_regression.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
                 "retort_cross_domain_end_to_end.json",

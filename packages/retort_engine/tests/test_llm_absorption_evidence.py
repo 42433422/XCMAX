@@ -404,6 +404,24 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_competitor_behavior_regression.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "ready_case_count": 3,
+                    "case_count": 3,
+                    "source_project_count": 3,
+                    "all_cases_direct_review_execution": True,
+                    "all_competitor_signals_regressed": True,
+                    "behavior_assertion_count": 18,
+                },
+                "cases": [],
+                "evidence": {"runtime": "retort_engine.pr_review.review_diff"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_cross_domain_absorption_replay.json").write_text(
         json.dumps(
             {
@@ -666,6 +684,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "upstream_pr_ci_ready": True,
                     "competitor_runtime_ready": True,
                     "competitor_blind_adjudication_ready": True,
+                    "competitor_behavior_regression_ready": True,
                     "employee_patch_stress_ready": True,
                     "contract_stability_ready": True,
                     "cross_domain_end_to_end_ready": True,
@@ -903,6 +922,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_blind_adjudication_min_delta=56" in evidence
     assert "competitor_blind_adjudication_imports_retort=False" in evidence
     assert "competitor_blind_adjudication_input_score_fields=False" in evidence
+    assert "competitor_behavior_regression_status=ready" in evidence
+    assert "competitor_behavior_regression_ready_cases=3/3" in evidence
+    assert "competitor_behavior_regression_direct_review=True" in evidence
+    assert "competitor_behavior_regression_all_signals=True" in evidence
+    assert "competitor_behavior_regression_assertions=18" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
     assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
     assert "cross_domain_absorption_replay_non_pr_domains=10" in evidence
@@ -1013,6 +1037,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "operator_journey_replay_upstream_pr_ci_ready=True" in evidence
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
     assert "operator_journey_replay_competitor_blind_ready=True" in evidence
+    assert "operator_journey_replay_competitor_behavior_ready=True" in evidence
     assert "operator_journey_replay_employee_patch_stress_ready=True" in evidence
     assert "operator_journey_replay_cross_domain_ci_regression_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence

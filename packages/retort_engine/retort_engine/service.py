@@ -9,6 +9,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_behavior_regression import build_competitor_behavior_regression
 from retort_engine.competitor_blind_adjudication import build_competitor_blind_adjudication
 from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
@@ -238,6 +239,12 @@ class RetortService:
             comparison_path=str(payload.get("comparison_path") or ""),
             min_competitors=int(payload.get("min_competitors") or 3),
             min_delta=int(payload.get("min_delta") or 45),
+        )
+
+    def competitor_behavior_regression(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_competitor_behavior_regression(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 3),
         )
 
     def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -484,6 +491,10 @@ def create_app() -> Any:
     @app.post("/competitor-blind-adjudication")
     def competitor_blind_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.competitor_blind_adjudication(payload)
+
+    @app.post("/competitor-behavior-regression")
+    def competitor_behavior_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.competitor_behavior_regression(payload)
 
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

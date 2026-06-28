@@ -14,8 +14,8 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 25
-    assert result["summary"]["core_decision_path_count"] == 11
+    assert result["summary"]["ready_decision_count"] == 26
+    assert result["summary"]["core_decision_path_count"] == 12
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["product_mainline_absorption_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
@@ -26,6 +26,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     assert result["summary"]["upstream_pr_ci_ready"] is True
     assert result["summary"]["competitor_runtime_ready"] is True
     assert result["summary"]["competitor_blind_adjudication_ready"] is True
+    assert result["summary"]["competitor_behavior_regression_ready"] is True
     assert result["summary"]["heterogeneous_absorption_ready"] is True
     assert result["summary"]["cross_domain_absorption_ready"] is True
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
@@ -244,6 +245,15 @@ def _write_decision_inputs(root: Path) -> None:
                 "minimum_blind_delta": 56,
                 "script_imports_retort_engine": False,
                 "input_contains_score_fields": False,
+            },
+        },
+        "retort_competitor_behavior_regression.json": {
+            "status": "ready",
+            "summary": {
+                "all_competitor_signals_regressed": True,
+                "all_cases_direct_review_execution": True,
+                "ready_case_count": 3,
+                "behavior_assertion_count": 18,
             },
         },
         "retort_heterogeneous_absorption_replay.json": {
