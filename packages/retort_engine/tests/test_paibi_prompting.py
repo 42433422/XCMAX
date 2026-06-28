@@ -67,6 +67,9 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
         "paibi_cli_cross_adjudication_status=ready",
         "paibi_cli_cross_adjudication_tools=4/4",
         "paibi_cli_cross_adjudication_all_accepted=True",
+        "paibi_cli_cross_adjudication_no_human_model=True",
+        "paibi_cli_cross_adjudication_human_required=False",
+        "paibi_cli_cross_adjudication_oracle_calibrated=True",
         "paibi_cli_cross_adjudication_human_reviewed=False",
         "paibi_cli_cross_adjudication_human_calibrated=True",
         "paibi_cli_cross_adjudication_calibration_labels=50",
@@ -100,6 +103,9 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     assert "paibi_cli_cross_adjudication_status=ready" in selected
     assert "paibi_cli_cross_adjudication_tools=4/4" in selected
     assert "paibi_cli_cross_adjudication_all_accepted=True" in selected
+    assert "paibi_cli_cross_adjudication_no_human_model=True" in selected
+    assert "paibi_cli_cross_adjudication_human_required=False" in selected
+    assert "paibi_cli_cross_adjudication_oracle_calibrated=True" in selected
     assert "paibi_cli_cross_adjudication_human_reviewed=False" in selected
     assert "paibi_cli_cross_adjudication_human_calibrated=True" in selected
     assert "paibi_cli_cross_adjudication_calibration_labels=50" in selected
@@ -122,6 +128,8 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
         "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff",
         "paibi_cli_cross_adjudication_status=ready",
         "paibi_cli_cross_adjudication_tools=4/4",
+        "paibi_cli_cross_adjudication_no_human_model=True",
+        "paibi_cli_cross_adjudication_human_required=False",
         "paibi_cli_cross_adjudication_human_calibrated=True",
     ]
 
@@ -137,5 +145,9 @@ def test_prompt_stays_compact_with_large_evidence_input(tmp_path: Path) -> None:
     assert "review_family_behavior_replay_runtime=retort_engine.pr_review.review_diff" in prompt
     assert "paibi_cli_cross_adjudication_status=ready" in prompt
     assert "paibi_cli_cross_adjudication_tools=4/4" in prompt
+    assert "paibi_cli_cross_adjudication_no_human_model=True" in prompt
+    assert "paibi_cli_cross_adjudication_human_required=False" in prompt
     assert "paibi_cli_cross_adjudication_human_calibrated=True" in prompt
+    assert "没有真人标注员或真人终审可用" in prompt
+    assert "不得输出要求真人终审" in prompt
     assert "pr_holdout_blind_eval_total_comments=179" not in prompt

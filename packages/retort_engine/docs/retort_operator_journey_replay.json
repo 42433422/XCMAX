@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "c92b1d5b7b93a225cb2b2569197216f43aa2eb1e1dbaf3fd36c91e58945acc9f"
+      "sha256": "530fb53e07f17ad5b2b3aece9a71c1c1ed99e57277d00edd6e243e48285a066a"
     },
     {
       "bytes": 3435,
@@ -442,7 +442,7 @@
       "sha256": "3395e5df77d9c4195f93d982556b66090efe8e0904fd1983c725bdff20a58833"
     },
     {
-      "bytes": 3611,
+      "bytes": 3685,
       "exists": true,
       "kind": "source_report",
       "name": "competitor_blind_adjudication",
@@ -460,7 +460,7 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "27a2e668acc751a92f45c6fac9c626c71e6701b626d60b87b9012fd9b946d339"
+      "sha256": "cdda0222b77ff48373a04ca9faf1e8aa6ca72f0f257719df551719cb3b306bb9"
     },
     {
       "bytes": 3317,
@@ -673,7 +673,7 @@
       "sha256": "6c2609dcb891562a77e663d9b3b5e292014b462df242450a5c304f2f20acc64c"
     },
     {
-      "bytes": 59591,
+      "bytes": 60664,
       "exists": true,
       "kind": "source_report",
       "name": "review_adjudication_calibration",
@@ -691,7 +691,7 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "2c4891ee4295e87d04885dd54e61c5f937caddda0d789ca5b32e6c876bd36015"
+      "sha256": "f98ca680d71b33970c69b127fe59a423dde170143f2fcdec1d23d223ceaee887"
     },
     {
       "bytes": 51000,
@@ -798,7 +798,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T100531Z-b9b7b539.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T101831Z-a42bb3a5.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -830,7 +830,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=c92b1d5b7b93a225cb2b2569197216f43aa2eb1e1dbaf3fd36c91e58945acc9f",
+        "quality_gate_sha=530fb53e07f17ad5b2b3aece9a71c1c1ed99e57277d00edd6e243e48285a066a",
         "product_mainline_sha=2a05a82c203386dd47d0ac9378b150ab59b385b2824211ff7dfcb6e4da4397fe"
       ],
       "name": "absorb_and_gate",
@@ -897,7 +897,7 @@
         "external_process_sha=924645e5cfece4b3ab87605b405545681b931f274e87b475869ae1231244c6a5",
         "upstream_pr_ci_sha=e1400581d655cfa36cb0854008ce00b4becd6d743036938b28b4c97280fb8d4f",
         "competitor_runtime_sha=3395e5df77d9c4195f93d982556b66090efe8e0904fd1983c725bdff20a58833",
-        "competitor_blind_sha=27a2e668acc751a92f45c6fac9c626c71e6701b626d60b87b9012fd9b946d339",
+        "competitor_blind_sha=cdda0222b77ff48373a04ca9faf1e8aa6ca72f0f257719df551719cb3b306bb9",
         "competitor_behavior_sha=3cb3e5e48a7ae9605c21d9ae89d225f46f000cb0f3f153d443efcbaa8e092a1a",
         "paibi_cli_cross_sha=f2921fd22bbb4a2a5f25c21bacd4345624e4f365e28196ea5a8b52d373179a20"
       ],
@@ -941,7 +941,7 @@
     "cross_domain_ci_regression_ready": true,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 2.435,
+    "duration_sec": 2.524,
     "employee_patch_stress_ready": true,
     "external_advantage_ci_ready": true,
     "external_process_adjudication_ready": true,
@@ -949,14 +949,14 @@
     "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
     "hashed_artifact_count": 34,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T100531Z-b9b7b539.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T101831Z-a42bb3a5.manifest.json",
     "paibi_cli_cross_adjudication_ready": true,
     "per_run_code_graph_proved": true,
     "product_mainline_absorption_ready": true,
     "ready_stage_count": 11,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T100531Z-b9b7b539",
+    "run_id": "operator-journey-20260628T101831Z-a42bb3a5",
     "single_command_surface": true,
     "source_report_count": 33,
     "stage_count": 11,

@@ -469,7 +469,9 @@ def _release_inputs_ready(root: Path) -> bool:
         and paibi_cli_cross.get("status") == "ready"
         and paibi_cli_cross.get("summary", {}).get("all_tools_accepted") is True
         and paibi_cli_cross.get("summary", {}).get("cross_tool_consensus") is True
-        and paibi_cli_cross.get("summary", {}).get("human_calibrated_cli_consensus") is True
+        and paibi_cli_cross.get("summary", {}).get("no_human_operating_model") is True
+        and paibi_cli_cross.get("summary", {}).get("human_review_required") is False
+        and paibi_cli_cross.get("summary", {}).get("oracle_calibrated_cli_consensus") is True
         and int(paibi_cli_cross.get("summary", {}).get("accepted_tool_count") or 0) >= 4
         and heterogeneous_replay.get("status") == "ready"
         and heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed") is True

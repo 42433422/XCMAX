@@ -30,7 +30,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -70,7 +70,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -110,7 +110,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -150,7 +150,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -190,7 +190,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -230,7 +230,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -270,7 +270,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -310,7 +310,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -350,7 +350,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -390,7 +390,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -430,7 +430,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -470,7 +470,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -510,7 +510,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -550,7 +550,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -590,7 +590,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -630,7 +630,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -670,7 +670,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -710,7 +710,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -750,7 +750,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -790,7 +790,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -830,7 +830,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -870,7 +870,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -910,7 +910,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -950,7 +950,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -990,7 +990,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1030,7 +1030,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1070,7 +1070,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1110,7 +1110,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1150,7 +1150,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1190,7 +1190,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1230,7 +1230,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1270,7 +1270,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1310,7 +1310,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1350,7 +1350,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1390,7 +1390,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1430,7 +1430,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1470,7 +1470,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1510,7 +1510,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1550,7 +1550,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1590,7 +1590,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1630,7 +1630,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1670,7 +1670,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1710,7 +1710,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1750,7 +1750,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1790,7 +1790,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1830,7 +1830,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1870,7 +1870,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1910,7 +1910,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1950,7 +1950,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -1990,7 +1990,7 @@
       },
       "review_summary": {
         "comment_count": 1,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "file_count": 1,
         "hunk_count": 1,
         "large_diff_chunking": false,
@@ -2002,14 +2002,17 @@
     }
   ],
   "evidence": {
+    "human_review_required": false,
     "label_source": "retort_internal_review_oracle_v1",
+    "no_human_operating_model": true,
     "reviewer": "retort_engine.pr_review.review_diff",
-    "style": "curated_human_adjudication_labels"
+    "style": "curated_no_human_oracle_adjudication_labels"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
     "calibration_improvement_delta": 0.74,
+    "calibration_label_count": 50,
     "context_count": 4,
     "contexts": [
       "ci_config",
@@ -2023,7 +2026,12 @@
     "false_positive_reduction": 17,
     "feedback_recalibration_applied": true,
     "human_label_count": 50,
+    "human_review_not_applicable": true,
+    "human_review_required": false,
+    "label_source_type": "retort_oracle_no_human",
+    "legacy_human_label_alias": true,
     "negative_case_count": 17,
+    "no_human_operating_model": true,
     "pass_rate": 1.0,
     "passed_count": 50,
     "positive_case_count": 33,

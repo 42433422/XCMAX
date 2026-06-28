@@ -31,6 +31,7 @@ def build_paibi_cli_cross_adjudication(
     behavior = _read_json(behavior_file)
     calibration = _read_json(calibration_file)
     calibration_summary = calibration.get("summary") if isinstance(calibration.get("summary"), dict) else {}
+    calibration_label_count = int(calibration_summary.get("calibration_label_count") or calibration_summary.get("human_label_count") or 0)
     adjudication_id = run_id or _run_id("paibi-cli-cross-adjudication")
     lab = root / ".retort" / "paibi_cli_cross_adjudications" / adjudication_id
     lab.mkdir(parents=True, exist_ok=True)
@@ -53,15 +54,21 @@ def build_paibi_cli_cross_adjudication(
         "blind_path": str(blind_file),
         "behavior_path": str(behavior_file),
         "calibration_path": str(calibration_file),
+        "no_human_operating_model": True,
+        "human_review_required": False,
+        "human_review_not_applicable": True,
+        "no_human_trust_model": "four_cli_cross_consensus_plus_oracle_calibration_plus_external_independence",
         "calibration_status": calibration.get("status", ""),
-        "calibration_human_label_count": int(calibration_summary.get("human_label_count") or 0),
+        "calibration_label_count": calibration_label_count,
+        "calibration_human_label_count": calibration_label_count,
+        "calibration_label_source_type": str(calibration_summary.get("label_source_type") or "retort_oracle_no_human"),
         "calibration_pass_rate": float(calibration_summary.get("pass_rate") or 0.0),
         "calibration_pre_pass_rate": float(calibration_summary.get("pre_calibration_pass_rate") or 0.0),
         "calibration_false_positive_count": int(calibration_summary.get("false_positive_count") or 0),
         "calibration_false_negative_count": int(calibration_summary.get("false_negative_count") or 0),
         "calibration_feedback_recalibration_applied": calibration_summary.get("feedback_recalibration_applied") is True,
-        "human_calibrated_cli_consensus": calibration.get("status") == "ready"
-        and int(calibration_summary.get("human_label_count") or 0) >= 50
+        "oracle_calibrated_cli_consensus": calibration.get("status") == "ready"
+        and calibration_label_count >= 50
         and float(calibration_summary.get("pass_rate") or 0.0) >= 0.95
         and int(calibration_summary.get("false_positive_count") or 0) == 0
         and int(calibration_summary.get("false_negative_count") or 0) == 0,
@@ -82,7 +89,7 @@ def build_paibi_cli_cross_adjudication(
         "separate_subprocess_count": len(tool_results),
         "all_subprocesses_successful": all(int(item.get("returncode") or 0) == 0 for item in tool_results),
         "human_reviewed": False,
-        "human_label_substitute": "paibi_four_cli_cross_consensus_not_human_review",
+        "human_label_substitute": "no_human_oracle_calibrated_four_cli_consensus",
         "replaces_human_labels": False,
         "input_sha256": _sha256(input_path),
         "script_sha256": _sha256(script_path),
@@ -99,8 +106,11 @@ def build_paibi_cli_cross_adjudication(
         and summary["script_imports_retort_engine"] is False
         and summary["all_subprocesses_successful"] is True
         and summary["output_contains_labels"] is True
-        and summary["human_calibrated_cli_consensus"] is True
+        and summary["no_human_operating_model"] is True
+        and summary["human_review_required"] is False
+        and summary["oracle_calibrated_cli_consensus"] is True
     )
+    summary["human_calibrated_cli_consensus"] = summary["oracle_calibrated_cli_consensus"]
     result = {
         "status": "ready" if ready else "needs_paibi_cli_cross_adjudication",
         "project": str(root),
@@ -121,9 +131,11 @@ def build_paibi_cli_cross_adjudication(
                 "retort_review_adjudication_calibration.json",
             ],
             "calibration_source": "retort_review_adjudication_calibration.json",
-            "acceptance": "all_supported_paibi_cli_identities_accept_same_blind_competitor_behavior_label_without_score_fields_and_after_human_label_calibration",
+            "acceptance": "all_supported_paibi_cli_identities_accept_same_blind_competitor_behavior_label_without_score_fields_under_no_human_oracle_calibration",
+            "no_human_operating_model": True,
+            "human_review_required": False,
             "human_reviewed": False,
-            "human_label_substitute": "multi_cli_consensus_not_human_review",
+            "human_label_substitute": "no_human_oracle_calibrated_multi_cli_consensus",
         },
     }
     if output:

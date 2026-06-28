@@ -94,6 +94,8 @@ def build_competitor_blind_adjudication(
             "boundary": "generated_subprocess_script_imports_no_retort_engine_modules",
             "comparison_source": "retort_competitor_runtime_comparison_artifacts_not_summary_scores",
             "acceptance": "independent_process_labels_retort_wins_against_each_competitor_without_score_fields",
+            "no_human_operating_model": True,
+            "human_review_required": False,
             "human_reviewed": False,
         },
     }

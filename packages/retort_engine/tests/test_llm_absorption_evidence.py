@@ -401,7 +401,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 },
                 "cases": [{"label": "retort_wins"}],
                 "artifacts": {},
-                "evidence": {"human_reviewed": False},
+                "evidence": {"human_reviewed": False, "no_human_operating_model": True, "human_review_required": False},
             }
         ),
         encoding="utf-8",
@@ -436,9 +436,15 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "cross_tool_consensus": True,
                     "input_contains_score_fields": False,
                     "script_imports_retort_engine": False,
+                    "no_human_operating_model": True,
+                    "human_review_required": False,
+                    "human_review_not_applicable": True,
+                    "oracle_calibrated_cli_consensus": True,
                     "human_reviewed": False,
                     "human_calibrated_cli_consensus": True,
+                    "calibration_label_count": 50,
                     "calibration_human_label_count": 50,
+                    "calibration_label_source_type": "retort_oracle_no_human",
                     "calibration_pass_rate": 1.0,
                     "calibration_false_positive_count": 0,
                     "calibration_false_negative_count": 0,
@@ -676,6 +682,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "status": "ready",
                 "summary": {
                     "human_label_count": 50,
+                    "calibration_label_count": 50,
+                    "no_human_operating_model": True,
+                    "human_review_required": False,
+                    "label_source_type": "retort_oracle_no_human",
                     "pass_rate": 0.98,
                     "pre_calibration_pass_rate": 0.62,
                     "post_calibration_pass_rate": 0.98,
@@ -958,6 +968,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_blind_adjudication_min_delta=56" in evidence
     assert "competitor_blind_adjudication_imports_retort=False" in evidence
     assert "competitor_blind_adjudication_input_score_fields=False" in evidence
+    assert "competitor_blind_adjudication_no_human_model=True" in evidence
+    assert "competitor_blind_adjudication_human_required=False" in evidence
     assert "competitor_behavior_regression_status=ready" in evidence
     assert "competitor_behavior_regression_ready_cases=3/3" in evidence
     assert "competitor_behavior_regression_direct_review=True" in evidence
@@ -970,9 +982,14 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "paibi_cli_cross_adjudication_consensus=True" in evidence
     assert "paibi_cli_cross_adjudication_input_score_fields=False" in evidence
     assert "paibi_cli_cross_adjudication_imports_retort=False" in evidence
+    assert "paibi_cli_cross_adjudication_no_human_model=True" in evidence
+    assert "paibi_cli_cross_adjudication_human_required=False" in evidence
+    assert "paibi_cli_cross_adjudication_human_not_applicable=True" in evidence
+    assert "paibi_cli_cross_adjudication_oracle_calibrated=True" in evidence
     assert "paibi_cli_cross_adjudication_human_reviewed=False" in evidence
     assert "paibi_cli_cross_adjudication_human_calibrated=True" in evidence
     assert "paibi_cli_cross_adjudication_calibration_labels=50" in evidence
+    assert "paibi_cli_cross_adjudication_calibration_source=retort_oracle_no_human" in evidence
     assert "paibi_cli_cross_adjudication_calibration_pass_rate=1.0" in evidence
     assert "paibi_cli_cross_adjudication_calibration_false_positive=0" in evidence
     assert "paibi_cli_cross_adjudication_calibration_false_negative=0" in evidence
@@ -1044,7 +1061,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_review_hunk_semantic_types=validation_regression" in evidence
     assert "pr_review_hunk_semantic_top_ranked=True" in evidence
     assert "pr_review_hunk_semantic_core_score_active=True" in evidence
-    assert "review_adjudication_human_label_count=50" in evidence
+    assert "review_adjudication_no_human_model=True" in evidence
+    assert "review_adjudication_human_required=False" in evidence
+    assert "review_adjudication_calibration_label_count=50" in evidence
+    assert "review_adjudication_label_source_type=retort_oracle_no_human" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
     assert "review_adjudication_pre_calibration_pass_rate=0.62" in evidence
     assert "review_adjudication_post_calibration_pass_rate=0.98" in evidence

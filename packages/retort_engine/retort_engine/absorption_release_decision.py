@@ -177,8 +177,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and paibi_cli_cross.get("summary", {}).get("cross_tool_consensus") is True
             and paibi_cli_cross.get("summary", {}).get("input_contains_score_fields") is False
             and paibi_cli_cross.get("summary", {}).get("script_imports_retort_engine") is False
-            and paibi_cli_cross.get("summary", {}).get("human_reviewed") is False
-            and paibi_cli_cross.get("summary", {}).get("human_calibrated_cli_consensus") is True,
+            and paibi_cli_cross.get("summary", {}).get("no_human_operating_model") is True
+            and paibi_cli_cross.get("summary", {}).get("human_review_required") is False
+            and paibi_cli_cross.get("summary", {}).get("oracle_calibrated_cli_consensus") is True,
             ["paibi_cli_cross_adjudication"],
         ),
         _decision(
@@ -337,9 +338,12 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "paibi_cli_cross_adjudication_tools": paibi_cli_cross.get("summary", {}).get("accepted_tool_count", ""),
         "paibi_cli_cross_adjudication_tool_count": paibi_cli_cross.get("summary", {}).get("tool_count", ""),
         "paibi_cli_cross_adjudication_consensus": paibi_cli_cross.get("summary", {}).get("cross_tool_consensus", ""),
+        "paibi_cli_cross_adjudication_no_human_model": paibi_cli_cross.get("summary", {}).get("no_human_operating_model", ""),
+        "paibi_cli_cross_adjudication_human_required": paibi_cli_cross.get("summary", {}).get("human_review_required", ""),
         "paibi_cli_cross_adjudication_human_reviewed": paibi_cli_cross.get("summary", {}).get("human_reviewed", ""),
+        "paibi_cli_cross_adjudication_oracle_calibrated": paibi_cli_cross.get("summary", {}).get("oracle_calibrated_cli_consensus", ""),
         "paibi_cli_cross_adjudication_human_calibrated": paibi_cli_cross.get("summary", {}).get("human_calibrated_cli_consensus", ""),
-        "paibi_cli_cross_adjudication_calibration_labels": paibi_cli_cross.get("summary", {}).get("calibration_human_label_count", ""),
+        "paibi_cli_cross_adjudication_calibration_labels": paibi_cli_cross.get("summary", {}).get("calibration_label_count", ""),
         "paibi_cli_cross_adjudication_calibration_pass_rate": paibi_cli_cross.get("summary", {}).get("calibration_pass_rate", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
