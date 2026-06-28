@@ -5,14 +5,18 @@ import json
 from pathlib import Path
 from typing import Any
 
+from retort_engine.review_calibration_policy import calibration_summary
+
 
 def build_publish_dry_run(review_report_path: str | Path, *, max_comments: int = 50) -> dict[str, Any]:
     report_path = Path(review_report_path)
     report = json.loads(report_path.read_text(encoding="utf-8"))
     review = report.get("review") if isinstance(report.get("review"), dict) else {}
     comments = [item for item in review.get("comments") or [] if isinstance(item, dict)]
+    calibration = calibration_summary()
     publishable = [item for item in comments if item.get("publishable", True) is not False and str(item.get("file") or item.get("path") or "")]
-    selected = _dedupe_comments(publishable)[: max(1, max_comments)]
+    ranked = _rank_publish_candidates(publishable)
+    selected = _dedupe_comments(ranked)[: max(1, max_comments)]
     payload_comments = [_publish_comment(comment) for comment in selected]
     idempotency_key = _idempotency_key(str(report.get("pr_url") or ""), payload_comments)
     return {
@@ -31,6 +35,9 @@ def build_publish_dry_run(review_report_path: str | Path, *, max_comments: int =
             "permission_required": "pull_request:write",
             "idempotency_key": idempotency_key,
             "idempotent": True,
+            "calibration_policy_enabled": calibration["enabled"],
+            "calibration_weighted_context_count": calibration["weighted_context_count"],
+            "selection_model": "rank_score_then_dedupe",
         },
         "comments": payload_comments,
         "rollback": {
@@ -127,3 +134,15 @@ def _dedupe_comments(comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen.add(key)
         deduped.append(comment)
     return deduped
+
+
+def _rank_publish_candidates(comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        comments,
+        key=lambda comment: (
+            -int(comment.get("rank_score") or 0),
+            {"high": 0, "medium": 1, "low": 2, "info": 3}.get(str(comment.get("severity") or "info"), 4),
+            str(comment.get("file") or comment.get("path") or ""),
+            int(comment.get("line") or 0),
+        ),
+    )

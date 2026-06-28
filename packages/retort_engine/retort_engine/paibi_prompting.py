@@ -239,6 +239,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_low_permission_probe_status=",
         "pr_low_permission_probe_real_network=",
         "pr_readonly_degradation_probe_",
+        "pr_review_calibration_",
         "pr_long_run_review_",
         "pr_holdout_blind_eval_",
         "pr_failure_rollback_replay_",
