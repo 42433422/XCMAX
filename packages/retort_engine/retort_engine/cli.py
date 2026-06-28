@@ -18,6 +18,7 @@ from retort_engine.employee_patch_closure import run_employee_patch_closure_suit
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
+from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
@@ -226,6 +227,11 @@ def main(argv: list[str] | None = None) -> int:
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
     heterogeneous_replay.add_argument("--output", default="")
     heterogeneous_replay.add_argument("--json", action="store_true")
+    external_merge_landing = sub.add_parser("external-merge-landing")
+    external_merge_landing.add_argument("--project", default=".")
+    external_merge_landing.add_argument("--min-cases", type=int, default=2)
+    external_merge_landing.add_argument("--output", default="")
+    external_merge_landing.add_argument("--json", action="store_true")
     adjudication = sub.add_parser("review-adjudication-calibration")
     adjudication.add_argument("--project", default=".")
     adjudication.add_argument("--output", default="")
@@ -653,6 +659,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort heterogeneous absorption replay status: {result['status']}")
             print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             print(f"Language families: {result['summary']['language_family_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "external-merge-landing":
+        result = build_external_merge_landing(args.project, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort external merge landing status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(f"Merge commits: {result['summary']['merge_commit_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

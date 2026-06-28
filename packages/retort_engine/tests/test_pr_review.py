@@ -61,13 +61,14 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["calibration_policy"]["enabled"] is True
     assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
-    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v3"
+    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v4_hunk_semantics"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["comments"][0]["rank_score"] >= result["comments"][1]["rank_score"]
     assert result["comments"][0]["absorbed_context_rank_weight"] >= 20
     assert "bias=" in result["comments"][0]["rank_reason"]
     assert "policy=" in result["comments"][0]["rank_reason"]
     assert "calibration=" in result["comments"][0]["rank_reason"]
+    assert "semantic=" in result["comments"][0]["rank_reason"]
     assert result["comments"][0]["calibration_rank_weight"] > 0
     assert result["comments"][0]["publish_payload"]["side"] == "RIGHT"
     assert result["comments"][0]["comment_anchor"]["line"] == result["comments"][0]["line"]
@@ -259,8 +260,55 @@ diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
     assert transfer_comments[0]["rank_reason"].startswith("high:ci_config:cross_language_transfer")
     assert result["summary"]["core_review_score"]["cross_language_core_behavior_active"] is True
     assert result["summary"]["core_review_score"]["cross_language_ranked_comment_count"] == len(transfer_comments)
-    assert result["summary"]["core_review_score"]["cross_language_top_ranked"] is True
+    assert result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"] is True
+    assert result["summary"]["core_review_score"]["hunk_semantic_top_ranked"] is True
     assert result["cross_language_transfer"]["evidence"]["source"] == "absorbed_pr_bot_cross_language_transfer"
+
+
+def test_review_diff_uses_hunk_semantics_for_validation_regression() -> None:
+    diff = """diff --git a/retort_engine/pr_publish.py b/retort_engine/pr_publish.py
+--- a/retort_engine/pr_publish.py
++++ b/retort_engine/pr_publish.py
+@@ -10,8 +10,8 @@
+ def publish_comment(payload):
+-    validate_permissions(payload)
+-    assert payload["rollback_receipt"]
++    publish(payload)
++    return True
+     return payload
+"""
+
+    result = review_diff(diff, max_comments=3)
+    semantic_comments = [comment for comment in result["comments"] if comment["capability"] == "hunk_semantic_review"]
+
+    assert semantic_comments
+    assert semantic_comments[0]["semantic_finding_type"] == "validation_regression"
+    assert semantic_comments[0]["severity"] == "high"
+    assert semantic_comments[0]["rank_position"] == 1
+    assert semantic_comments[0]["semantic_removed_evidence"]
+    assert result["summary"]["hunk_semantic_analysis"]["core_behavior_active"] is True
+    assert result["summary"]["hunk_semantic_analysis"]["finding_count"] >= 1
+    assert result["summary"]["core_review_score"]["hunk_semantic_top_ranked"] is True
+    assert result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"] is True
+
+
+def test_review_diff_uses_hunk_semantics_for_test_weakening() -> None:
+    diff = """diff --git a/tests/test_absorption.py b/tests/test_absorption.py
+--- a/tests/test_absorption.py
++++ b/tests/test_absorption.py
+@@ -1,3 +1,3 @@
+ def test_absorption_merge():
+-    assert result["gates_passed"] is True
++    return True
+"""
+
+    result = review_diff(diff, max_comments=2)
+    semantic_comments = [comment for comment in result["comments"] if comment["capability"] == "hunk_semantic_review"]
+
+    assert semantic_comments
+    assert semantic_comments[0]["semantic_finding_type"] == "test_weakening"
+    assert semantic_comments[0]["review_context"] == "tests"
+    assert result["summary"]["hunk_semantic_analysis"]["finding_types"] == ["test_weakening"]
 
 
 def test_cross_language_transfer_weight_changes_core_comment_ordering() -> None:

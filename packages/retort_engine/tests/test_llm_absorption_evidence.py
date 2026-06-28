@@ -212,6 +212,25 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_external_merge_landing.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 2,
+                    "ready_case_count": 2,
+                    "branch_diff_count": 2,
+                    "merge_commit_count": 2,
+                    "post_merge_test_passed_count": 2,
+                    "all_branch_diff_merge_tests_passed": True,
+                    "source_families": ["python_pr_agent", "typescript_pr_bot"],
+                },
+                "cases": [],
+                "evidence": {"verifier": "git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_pr_readonly_degradation_probe.json").write_text(
         json.dumps(
             {
@@ -354,6 +373,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                             "worker_process_trace_count": 5,
                             "runtime_boundary_verified_count": 5,
                             "pid_cross_check_count": 5,
+                            "crash_isolation_verified": True,
+                            "crash_isolation_verified_count": 5,
                         },
                     },
                     "employee_patch_closure": {
@@ -405,6 +426,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_worker_process_traces=5" in evidence
     assert "employee_worker_runtime_boundary_verified_count=5" in evidence
     assert "employee_worker_pid_cross_check_count=5" in evidence
+    assert "employee_worker_crash_isolation_verified=True" in evidence
+    assert "employee_worker_crash_isolation_verified_count=5" in evidence
+    assert "employee_runtime_crash_isolation_verified=True; crash_verified=5" in evidence
     assert "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True" in evidence
     assert "employee_patch_closure_status=ready" in evidence
     assert "employee_patch_closure_success_case_verified=True" in evidence
@@ -445,9 +469,21 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "heterogeneous_absorption_replay_independent_adjudication=ready" in evidence
     assert "heterogeneous_absorption_replay_independent_accepted=6/6" in evidence
     assert "heterogeneous_absorption_replay_cross_language_verified=True" in evidence
+    assert "external_merge_landing_status=ready" in evidence
+    assert "external_merge_landing_ready_cases=2/2" in evidence
+    assert "external_merge_landing_branch_diffs=2" in evidence
+    assert "external_merge_landing_merge_commits=2" in evidence
+    assert "external_merge_landing_post_merge_tests=2" in evidence
+    assert "external_merge_landing_all_passed=True" in evidence
+    assert "external_merge_landing_verifier=git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest" in evidence
     assert "pr_review_cross_language_transfer_source=True" in evidence
     assert "pr_review_cross_language_transfer_status=mapped" in evidence
     assert "pr_review_cross_language_transfer_core_mapping=True" in evidence
+    assert "pr_review_hunk_semantic_status=active" in evidence
+    assert "pr_review_hunk_semantic_findings=1" in evidence
+    assert "pr_review_hunk_semantic_types=validation_regression" in evidence
+    assert "pr_review_hunk_semantic_top_ranked=True" in evidence
+    assert "pr_review_hunk_semantic_core_score_active=True" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
     assert "review_adjudication_pre_calibration_pass_rate=0.62" in evidence

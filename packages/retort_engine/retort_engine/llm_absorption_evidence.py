@@ -89,6 +89,8 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
             f"employee_worker_process_traces={worker_review.get('worker_process_trace_count', '')}",
             f"employee_worker_runtime_boundary_verified_count={worker_review.get('runtime_boundary_verified_count', '')}",
             f"employee_worker_pid_cross_check_count={worker_review.get('pid_cross_check_count', '')}",
+            f"employee_worker_crash_isolation_verified={worker_review.get('crash_isolation_verified', False)}",
+            f"employee_worker_crash_isolation_verified_count={worker_review.get('crash_isolation_verified_count', '')}",
             f"external_project_count={audit.get('external_project_count', '')}",
             f"core_refactor_execution_status={refactor_execution.get('status')}",
             f"core_refactor_implemented_tasks={refactor_execution.get('implemented_task_count')}/{refactor_execution.get('task_count')}",
@@ -163,6 +165,13 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_cross_language_transfer_top_ranked={pr_review.get('cross_language_transfer_top_ranked')}",
         f"pr_review_cross_language_transfer_core_score_active={pr_review.get('cross_language_transfer_core_score_active')}",
         f"pr_review_cross_language_transfer_max_rank_score={pr_review.get('cross_language_transfer_max_rank_score')}",
+        f"pr_review_hunk_semantic_status={pr_review.get('hunk_semantic_review_status')}",
+        f"pr_review_hunk_semantic_findings={pr_review.get('hunk_semantic_review_finding_count')}",
+        f"pr_review_hunk_semantic_types={','.join(pr_review.get('hunk_semantic_review_types') or [])}",
+        f"pr_review_hunk_semantic_comments={pr_review.get('hunk_semantic_review_comment_count')}",
+        f"pr_review_hunk_semantic_top_ranked={pr_review.get('hunk_semantic_review_top_ranked')}",
+        f"pr_review_hunk_semantic_core_score_active={pr_review.get('hunk_semantic_review_core_score_active')}",
+        f"pr_review_hunk_semantic_max_rank_score={pr_review.get('hunk_semantic_review_max_rank_score')}",
     ]
 
 
@@ -206,6 +215,8 @@ def _report_evidence(project: Path) -> list[str]:
     external_repeat_summary = external_repeat.get("summary") if isinstance(external_repeat.get("summary"), dict) else {}
     heterogeneous_replay = read_json(project / "docs" / "retort_heterogeneous_absorption_replay.json")
     heterogeneous_summary = heterogeneous_replay.get("summary") if isinstance(heterogeneous_replay.get("summary"), dict) else {}
+    external_merge_landing = read_json(project / "docs" / "retort_external_merge_landing.json")
+    external_merge_summary = external_merge_landing.get("summary") if isinstance(external_merge_landing.get("summary"), dict) else {}
     adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
     adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
     stress_report = read_json(project / "docs" / "retort_employee_scheduler_stress.json")
@@ -422,6 +433,14 @@ def _report_evidence(project: Path) -> list[str]:
         f"heterogeneous_absorption_replay_all_independent_accepted={heterogeneous_summary.get('independent_all_cases_accepted', '')}",
         f"heterogeneous_absorption_replay_cross_language_verified={heterogeneous_summary.get('cross_language_absorption_verified', '')}",
         f"heterogeneous_absorption_replay_adjudicator={(heterogeneous_replay.get('evidence') or {}).get('adjudicator', '') if isinstance(heterogeneous_replay.get('evidence'), dict) else ''}",
+        f"external_merge_landing_status={external_merge_landing.get('status', '')}",
+        f"external_merge_landing_ready_cases={external_merge_summary.get('ready_case_count', '')}/{external_merge_summary.get('case_count', '')}",
+        f"external_merge_landing_branch_diffs={external_merge_summary.get('branch_diff_count', '')}",
+        f"external_merge_landing_merge_commits={external_merge_summary.get('merge_commit_count', '')}",
+        f"external_merge_landing_post_merge_tests={external_merge_summary.get('post_merge_test_passed_count', '')}",
+        f"external_merge_landing_all_passed={external_merge_summary.get('all_branch_diff_merge_tests_passed', '')}",
+        f"external_merge_landing_source_families={','.join(external_merge_summary.get('source_families') or []) if isinstance(external_merge_summary.get('source_families'), list) else ''}",
+        f"external_merge_landing_verifier={(external_merge_landing.get('evidence') or {}).get('verifier', '') if isinstance(external_merge_landing.get('evidence'), dict) else ''}",
         f"review_adjudication_calibration_status={adjudication_report.get('status', '')}",
         f"review_adjudication_human_label_count={adjudication_summary.get('human_label_count', '')}",
         f"review_adjudication_pass_rate={adjudication_summary.get('pass_rate', '')}",
@@ -542,6 +561,7 @@ def _employee_result_evidence(project: Path) -> list[str]:
         f"employee_runtime_worker_review_files={review.get('file_count', '')}; task_groups={review.get('task_group_count', '')}; worker_reviews={review.get('worker_review_count', '')}",
         f"employee_runtime_multi_worker_verified={multi_worker.get('verified', '')}; workers={multi_worker.get('worker_count', '')}; independent_workers={multi_worker.get('independent_worker_count', '')}; result_paths={multi_worker.get('result_path_count', '')}",
         f"employee_runtime_pid_isolation_verified={process_isolation.get('pid_isolation_verified', '')}; unique_pids={process_isolation.get('unique_process_id_count', '')}; traces={process_isolation.get('worker_process_trace_count', '')}",
+        f"employee_runtime_crash_isolation_verified={process_isolation.get('crash_isolation_verified', '')}; crash_verified={process_isolation.get('crash_isolation_verified_count', '')}",
         f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
 
@@ -593,6 +613,8 @@ def _latest_run_evidence(project: Path) -> list[str]:
                 f"latest_absorption_pid_isolation_verified={summary.get('pid_isolation_verified', '')}",
                 f"latest_absorption_unique_process_ids={summary.get('unique_process_id_count', '')}",
                 f"latest_absorption_worker_process_traces={summary.get('worker_process_trace_count', '')}",
+                f"latest_absorption_crash_isolation_verified={summary.get('crash_isolation_verified', '')}",
+                f"latest_absorption_crash_isolation_verified_count={summary.get('crash_isolation_verified_count', '')}",
             ]
     return []
 

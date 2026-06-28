@@ -169,7 +169,14 @@ def test_pr_review_runtime_evidence_reports_extension_policy_depth() -> None:
     assert {"runtime", "frontend", "ci_config", "docs", "config"}.issubset(set(evidence["extension_policy_review_contexts"]))
     assert "retort_engine/diff_extension_policy.py" in evidence["behavior_source_files"]
     assert "retort_engine/cross_language_transfer.py" in evidence["behavior_source_files"]
+    assert "retort_engine/diff_hunk_semantics.py" in evidence["behavior_source_files"]
     assert "tests/test_diff_extension_policy.py" in evidence["behavior_test_files"]
+    assert "tests/test_diff_hunk_semantics.py" in evidence["behavior_test_files"]
     assert evidence["cross_language_transfer_status"] == "mapped"
     assert evidence["cross_language_transfer_core_mapping"] is True
     assert evidence["cross_language_transfer_finding_count"] >= 8
+    assert evidence["hunk_semantic_review_status"] == "active"
+    assert evidence["hunk_semantic_review_finding_count"] >= 1
+    assert "validation_regression" in evidence["hunk_semantic_review_types"]
+    assert evidence["hunk_semantic_review_top_ranked"] is True
+    assert evidence["hunk_semantic_review_core_score_active"] is True

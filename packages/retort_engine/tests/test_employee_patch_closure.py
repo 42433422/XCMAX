@@ -122,6 +122,7 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
         "diff_text": "diff --git a/app.py b/app.py\n--- a/app.py\n+++ b/app.py\n@@ -0,0 +1 @@\n+token = 'secret'\n",
         "project": str(tmp_path),
         "patch_closure": {"enabled": True, "project": str(tmp_path)},
+        "crash_isolation_probe": {"enabled": True, "expected_returncode": 73},
         "output_path": str(tmp_path / ".retort" / "employee_results" / "worker.json"),
     }
     payload_file = tmp_path / "payload.json"
@@ -148,7 +149,11 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert boundary["payload_path_verified"] is True
     assert boundary["result_path_verified"] is True
     assert boundary["worker_pid"] > 0
+    assert boundary["crash_isolation_verified"] is True
+    assert boundary["crash_isolation_probe"]["returncode"] == 73
+    assert boundary["crash_isolation_probe"]["worker_survived"] is True
     assert any("runtime_boundary_verified=True" in item for item in result["results"][0]["evidence"])
+    assert any("crash_isolation_verified=True" in item for item in result["results"][0]["evidence"])
     assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
 
 

@@ -8,6 +8,7 @@ from typing import Any
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
 from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary
 from retort_engine.cross_language_transfer import build_cross_language_transfer
+from retort_engine.diff_hunk_semantics import analyze_hunk_semantics, summarize_hunk_semantics
 from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context
 from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.review_calibration_policy import calibration_context_rank_weight, calibration_context_rank_weights, calibration_summary
@@ -63,6 +64,7 @@ def review_diff(
         if isinstance(finding, dict)
     }
     candidate_comments: list[dict[str, Any]] = []
+    hunk_semantic_analyses: list[dict[str, Any]] = []
     hunk_count = 0
     for file_review in files:
         file_path = str(file_review["path"])
@@ -70,8 +72,11 @@ def review_diff(
         review_context = context_by_file.get(file_path, review_context_for_file(file_path))
         for hunk in file_review["hunks"]:
             hunk_count += 1
+            hunk_semantics = analyze_hunk_semantics(file_path, hunk, review_context)
+            hunk_semantic_analyses.append(hunk_semantics)
             hunk_comments = _static_analysis_comments(file_path, hunk, strategy, capabilities, review_context, static_findings_by_location)
             hunk_comments.extend(_cross_language_transfer_comments(file_path, hunk, strategy, capabilities, cross_language_transfer))
+            hunk_comments.extend(_hunk_semantic_comments(file_path, hunk, strategy, capabilities, hunk_semantics))
             hunk_comments.extend(_review_hunk(file_path, hunk, strategy, capabilities, review_context))
             if not hunk_comments:
                 hunk_comments = [_info_comment(file_path, hunk, strategy, capabilities, review_context)]
@@ -87,6 +92,7 @@ def review_diff(
     )
     risk_counts = _risk_counts(comments)
     core_score = _core_review_score_summary(comments)
+    hunk_semantics_summary = summarize_hunk_semantics(hunk_semantic_analyses)
     file_summaries = [
         _file_summary(
             str(file_review["path"]),
@@ -126,8 +132,9 @@ def review_diff(
         "static_analysis": static_analysis["summary"],
         "cross_language_transfer": cross_language_transfer["summary"],
         "intent_alignment": intent_alignment["summary"],
+        "hunk_semantic_analysis": hunk_semantics_summary,
         "deep_review_pipeline": True,
-        "comment_ranking_model": "severity_context_transfer_publishability_v3",
+        "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "large_diff_chunking": large_diff_chunking,
         "large_diff_chunk_count": len(context_groups) if large_diff_chunking else (1 if files else 0),
         "large_diff_context_balancing": large_diff_chunking,
@@ -149,6 +156,7 @@ def review_diff(
         "incremental": incremental,
         "intent_alignment": intent_alignment,
         "cross_language_transfer": cross_language_transfer,
+        "hunk_semantic_analyses": hunk_semantic_analyses,
     }
 
 
@@ -314,6 +322,40 @@ def _cross_language_transfer_comments(
                 line_text=str(change.get("text") or ""),
             )
         )
+    return comments
+
+
+def _hunk_semantic_comments(
+    file_path: str,
+    hunk: dict[str, Any],
+    strategy: dict[str, Any],
+    capabilities: list[str],
+    hunk_semantics: dict[str, Any],
+) -> list[dict[str, Any]]:
+    comments: list[dict[str, Any]] = []
+    for finding in hunk_semantics.get("findings") or []:
+        if not isinstance(finding, dict):
+            continue
+        line = int(finding.get("line") or 0)
+        line_text = " | ".join(str(item) for item in finding.get("added_evidence") or [])[:160]
+        comment = _comment(
+            file_path,
+            line,
+            str(finding.get("severity") or "medium"),
+            str(finding.get("message") or "该 hunk 存在语义回退，需要补行为测试。"),
+            strategy,
+            capabilities,
+            "classify_risk",
+            str(finding.get("review_context") or hunk_semantics.get("review_context") or review_context_for_file(file_path)),
+            hunk=hunk,
+            line_text=line_text,
+        )
+        comment["capability"] = "hunk_semantic_review"
+        comment["semantic_finding_type"] = str(finding.get("type") or "")
+        comment["semantic_confidence"] = int(finding.get("confidence") or 0)
+        comment["semantic_removed_evidence"] = list(finding.get("removed_evidence") or [])[:3]
+        comment["semantic_added_evidence"] = list(finding.get("added_evidence") or [])[:3]
+        comments.append(comment)
     return comments
 
 
@@ -510,9 +552,10 @@ def _feedback_context_map(dimension: str) -> dict[str, int]:
 def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]:
     scores = [int(comment.get("rank_score") or 0) for comment in comments]
     cross_language_comments = [comment for comment in comments if comment.get("capability") == "cross_language_transfer"]
+    semantic_comments = [comment for comment in comments if comment.get("capability") == "hunk_semantic_review"]
     top_comment = comments[0] if comments else {}
     return {
-        "model": "severity_context_transfer_publishability_v3",
+        "model": "severity_context_transfer_publishability_v4_hunk_semantics",
         "max_rank_score": max(scores) if scores else 0,
         "min_rank_score": min(scores) if scores else 0,
         "ranked_comment_count": len(comments),
@@ -520,6 +563,10 @@ def _core_review_score_summary(comments: list[dict[str, Any]]) -> dict[str, Any]
         "cross_language_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in cross_language_comments] or [0]),
         "cross_language_top_ranked": bool(top_comment.get("capability") == "cross_language_transfer"),
         "cross_language_core_behavior_active": bool(cross_language_comments),
+        "hunk_semantic_ranked_comment_count": len(semantic_comments),
+        "hunk_semantic_max_rank_score": max([int(comment.get("rank_score") or 0) for comment in semantic_comments] or [0]),
+        "hunk_semantic_top_ranked": bool(top_comment.get("capability") == "hunk_semantic_review"),
+        "hunk_semantic_core_behavior_active": bool(semantic_comments),
     }
 
 
@@ -535,18 +582,19 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
         "docs": 20,
         "other": 10,
     }.get(str(comment.get("review_context") or "other"), 10)
-    capability_weight = {"static_analysis": 45, "cross_language_transfer": 95, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    capability_weight = {"static_analysis": 45, "cross_language_transfer": 95, "hunk_semantic_review": 120, "intent_alignment": 30}.get(str(comment.get("capability") or ""), 0)
+    semantic_weight = min(60, int(comment.get("semantic_confidence") or 0) // 2)
     absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)
     absorbed_policy_weight = int(comment.get("absorbed_policy_rank_weight") or 0)
     calibration_weight = int(comment.get("calibration_rank_weight") or 0)
     feedback_weight = int(comment.get("feedback_rank_weight") or 0)
     action_weight = 20 if comment.get("employee_actionable") else 0
     publish_weight = 5 if comment.get("publishable") else -20
-    return severity_weight + context_weight + capability_weight + absorbed_context_weight + absorbed_policy_weight + calibration_weight + feedback_weight + action_weight + publish_weight
+    return severity_weight + context_weight + capability_weight + semantic_weight + absorbed_context_weight + absorbed_policy_weight + calibration_weight + feedback_weight + action_weight + publish_weight
 
 
 def _rank_reason(comment: dict[str, Any]) -> str:
-    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}:bias={comment.get('absorbed_context_rank_weight', 0)}:policy={comment.get('absorbed_policy_rank_weight', 0)}:calibration={comment.get('calibration_rank_weight', 0)}:feedback={comment.get('feedback_rank_weight', 0)}"
+    return f"{comment.get('severity')}:{comment.get('review_context')}:{comment.get('capability')}:bias={comment.get('absorbed_context_rank_weight', 0)}:policy={comment.get('absorbed_policy_rank_weight', 0)}:calibration={comment.get('calibration_rank_weight', 0)}:feedback={comment.get('feedback_rank_weight', 0)}:semantic={comment.get('semantic_confidence', 0)}"
 
 
 def _risk_counts(comments: list[dict[str, Any]]) -> dict[str, int]:

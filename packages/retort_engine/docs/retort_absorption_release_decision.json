@@ -67,6 +67,15 @@
     },
     {
       "action": "allow",
+      "dimension": "branch_absorption_workflow",
+      "evidence": [
+        "external_merge_landing"
+      ],
+      "name": "prove_external_merge_landing",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "blind_external_validation",
       "evidence": [
         "pr_holdout_blind_eval"
@@ -106,6 +115,7 @@
       "retort_external_advantage_matrix.json",
       "retort_external_advantage_repeat.json",
       "retort_heterogeneous_absorption_replay.json",
+      "retort_external_merge_landing.json",
       "retort_operator_journey_replay.json"
     ],
     "style": "core_product_decision_gate"
@@ -115,13 +125,16 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
-    "core_decision_path_count": 8,
-    "decision_count": 10,
+    "core_decision_path_count": 9,
+    "decision_count": 11,
     "employee_patch_ready": true,
     "external_advantage_matrix_delta": 45.0,
     "external_advantage_matrix_ready": true,
     "external_advantage_repeat_ready": true,
     "external_advantage_repeat_total_cases": 12,
+    "external_merge_landing_merge_commits": 2,
+    "external_merge_landing_post_merge_tests": 2,
+    "external_merge_landing_ready": true,
     "failure_rollback_ready": true,
     "heterogeneous_absorption_before_after": true,
     "heterogeneous_absorption_languages": 5,
@@ -131,7 +144,7 @@
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 10,
+    "ready_decision_count": 11,
     "recovery_ready": true
   }
 }

@@ -5780,6 +5780,7 @@ def test_core_comment_rank_score_matches_weight_matrix(comment: dict[str, object
     assert f"policy={comment['absorbed_policy_rank_weight']}" in reason
     assert f"calibration={comment['calibration_rank_weight']}" in reason
     assert f"feedback={comment['feedback_rank_weight']}" in reason
+    assert "semantic=" in reason
 
 
 def test_cross_language_transfer_weight_changes_core_ordering() -> None:
@@ -5799,6 +5800,24 @@ def test_cross_language_transfer_weight_changes_core_ordering() -> None:
     assert _comment_rank_score(cross_language) - _comment_rank_score(static_analysis) == 50
 
 
+def test_hunk_semantic_review_weight_beats_cross_language_when_confident() -> None:
+    base_comment = {
+        "severity": "high",
+        "review_context": "ci_config",
+        "absorbed_context_rank_weight": 20,
+        "absorbed_policy_rank_weight": 20,
+        "calibration_rank_weight": 20,
+        "feedback_rank_weight": 0,
+        "employee_actionable": True,
+        "publishable": True,
+    }
+    cross_language = {**base_comment, "capability": "cross_language_transfer"}
+    hunk_semantic = {**base_comment, "capability": "hunk_semantic_review", "semantic_confidence": 92}
+
+    assert _comment_rank_score(hunk_semantic) > _comment_rank_score(cross_language)
+    assert "semantic=92" in _rank_reason(hunk_semantic)
+
+
 def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked() -> None:
     cross_language_comment = {
         "capability": "cross_language_transfer",
@@ -5811,7 +5830,7 @@ def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked(
 
     summary = _core_review_score_summary([cross_language_comment, static_comment])
 
-    assert summary["model"] == "severity_context_transfer_publishability_v3"
+    assert summary["model"] == "severity_context_transfer_publishability_v4_hunk_semantics"
     assert summary["max_rank_score"] == 612
     assert summary["min_rank_score"] == 560
     assert summary["ranked_comment_count"] == 2
@@ -5819,6 +5838,9 @@ def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked(
     assert summary["cross_language_max_rank_score"] == 612
     assert summary["cross_language_top_ranked"] is True
     assert summary["cross_language_core_behavior_active"] is True
+    assert summary["hunk_semantic_ranked_comment_count"] == 0
+    assert summary["hunk_semantic_top_ranked"] is False
+    assert summary["hunk_semantic_core_behavior_active"] is False
 
 
 def test_core_review_score_summary_flags_missing_cross_language_core_behavior() -> None:
@@ -5831,4 +5853,23 @@ def test_core_review_score_summary_flags_missing_cross_language_core_behavior() 
     assert summary["cross_language_max_rank_score"] == 0
     assert summary["cross_language_top_ranked"] is False
     assert summary["cross_language_core_behavior_active"] is False
+    assert summary["hunk_semantic_core_behavior_active"] is False
 
+
+def test_core_review_score_summary_proves_hunk_semantics_is_top_ranked() -> None:
+    semantic_comment = {
+        "capability": "hunk_semantic_review",
+        "rank_score": 740,
+    }
+    cross_language_comment = {
+        "capability": "cross_language_transfer",
+        "rank_score": 690,
+    }
+
+    summary = _core_review_score_summary([semantic_comment, cross_language_comment])
+
+    assert summary["hunk_semantic_ranked_comment_count"] == 1
+    assert summary["hunk_semantic_max_rank_score"] == 740
+    assert summary["hunk_semantic_top_ranked"] is True
+    assert summary["hunk_semantic_core_behavior_active"] is True
+    assert summary["cross_language_core_behavior_active"] is True
