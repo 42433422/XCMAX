@@ -1810,8 +1810,10 @@ def test_enterprise_seeds_four_department_groups(tmp_path: Path):
     assert all(g["member_count"] == 1 for g in groups)
 
 
-def test_enterprise_seed_populates_members_by_layer(tmp_path: Path):
-    """enterprise 模式种子群按 resolve_enterprise_org_layer 派生结果填员。"""
+def test_enterprise_seed_keeps_layer_groups_without_prefilling_market_employees(
+    tmp_path: Path,
+):
+    """enterprise 模式种子群保留 4 层，但不把市场员工预铺进部门群。"""
     emps = [
         {
             "employee_id": "label_print",
@@ -1845,11 +1847,9 @@ def test_enterprise_seed_populates_members_by_layer(tmp_path: Path):
     svc = make_service(tmp_path, employees=emps, mode="enterprise")
     groups = svc.list_groups(user_id=1)
     by_key = {g["department_key"]: g for g in groups}
-    assert by_key["execution"]["member_count"] == 2
-    assert by_key["execution"]["members"][1]["name"] == "标签打印"
-    assert by_key["service"]["member_count"] == 2
-    assert by_key["tools"]["member_count"] == 2
-    assert by_key["management"]["member_count"] == 2
+    for key in ("execution", "service", "tools", "management"):
+        assert by_key[key]["member_count"] == 1
+        assert by_key[key]["members"][0]["employee_id"] == "xcagi-assistant"
 
 
 def test_resolve_enterprise_org_layer_manifest_priority():

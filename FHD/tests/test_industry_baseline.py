@@ -134,7 +134,7 @@ def test_industry_baseline_generic_minimal():
         ],
     )
     assert data["baseline_ready"] is True
-    assert data["industry_mod_ids"] == []
+    assert data["industry_mod_ids"] == ["xcagi-planner-bridge"]
 
 
 def test_industry_baseline_industry_package_installed():
