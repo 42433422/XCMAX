@@ -136,6 +136,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
             "rollback_receipts": [],
             "evidence": {},
         },
+        "pr_long_run_review_result": {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "publish_safety_matrix": {}, "evidence": {}},
         "cross_project_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []},
         "multi_project_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}},
         "absorption_continuity_probe_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}},
@@ -158,6 +159,7 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         "architecture_contract_result": {"status": "passed", "project": "p", "summary": {}, "contracts": [], "violations": [], "evidence": {}},
         "employee_scheduler_stress_result": {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}},
         "employee_patch_closure_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
+        "production_recovery_drill_result": {"status": "ready", "project": "p", "summary": {}, "scenarios": [], "evidence": {}},
         "quality_gate_bundle_result": {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}},
         "llm_score": {"dimension": "d", "value": 1, "reason": "r"},
     }

@@ -14,6 +14,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "pr_publish_sandbox_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts"),
     "pr_live_publish_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
     "pr_readonly_degradation_probe_result": ("status", "pr_url", "summary", "created_receipts", "rollback_receipts", "evidence"),
+    "pr_long_run_review_result": ("status", "project", "summary", "pull_requests", "publish_safety_matrix", "evidence"),
     "cross_project_replay_result": ("status", "project", "summary", "projects", "checks"),
     "multi_project_absorption_replay_result": ("status", "project", "summary", "projects", "evidence"),
     "absorption_continuity_probe_result": ("status", "project", "summary", "runs", "latest_closed_loop", "evidence"),
@@ -28,6 +29,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "architecture_contract_result": ("status", "project", "summary", "contracts", "violations", "evidence"),
     "employee_scheduler_stress_result": ("status", "project", "summary", "rounds", "evidence"),
     "employee_patch_closure_result": ("status", "project", "summary", "cases", "evidence"),
+    "production_recovery_drill_result": ("status", "project", "summary", "scenarios", "evidence"),
     "quality_gate_bundle_result": ("status", "project", "summary", "gates", "evidence"),
     "llm_score": ("dimension", "value", "reason"),
 }

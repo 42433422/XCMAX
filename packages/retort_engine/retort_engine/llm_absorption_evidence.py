@@ -151,6 +151,8 @@ def _report_evidence(project: Path) -> list[str]:
     low_permission_summary = low_permission_probe.get("summary") if isinstance(low_permission_probe.get("summary"), dict) else {}
     readonly_probe = read_json(project / "docs" / "retort_pr_readonly_degradation_probe.json")
     readonly_summary = readonly_probe.get("summary") if isinstance(readonly_probe.get("summary"), dict) else {}
+    long_run_report = read_json(project / "docs" / "retort_pr_long_run_review.json")
+    long_run_summary = long_run_report.get("summary") if isinstance(long_run_report.get("summary"), dict) else {}
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -176,6 +178,8 @@ def _report_evidence(project: Path) -> list[str]:
     patch_summary = patch_report.get("summary") if isinstance(patch_report.get("summary"), dict) else {}
     quality_report = read_json(project / "docs" / "retort_quality_gate_bundle.json")
     quality_summary = quality_report.get("summary") if isinstance(quality_report.get("summary"), dict) else {}
+    recovery_report = read_json(project / "docs" / "retort_production_recovery_drill.json")
+    recovery_summary = recovery_report.get("summary") if isinstance(recovery_report.get("summary"), dict) else {}
     return [
         f"quality_gate_bundle_status={quality_report.get('status', '')}",
         f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
@@ -224,6 +228,13 @@ def _report_evidence(project: Path) -> list[str]:
         f"pr_readonly_degradation_probe_transport={(readonly_probe.get('evidence') or {}).get('transport', '') if isinstance(readonly_probe.get('evidence'), dict) else ''}",
         f"pr_readonly_degradation_probe_degradation={(readonly_probe.get('evidence') or {}).get('degradation', '') if isinstance(readonly_probe.get('evidence'), dict) else ''}",
         f"pr_readonly_degradation_probe_artifact_ready={readonly_summary.get('degradation_artifact_ready', '')}",
+        f"pr_long_run_review_status={long_run_report.get('status', '')}",
+        f"pr_long_run_review_reviewed={long_run_summary.get('reviewed_pr_count', '')}/{long_run_summary.get('target_pr_count', '')}",
+        f"pr_long_run_review_distinct_repos={long_run_summary.get('distinct_repo_count', '')}",
+        f"pr_long_run_review_distinct_extensions={long_run_summary.get('distinct_extension_count', '')}",
+        f"pr_long_run_review_total_comments={long_run_summary.get('total_comment_count', '')}",
+        f"pr_long_run_review_total_reviewed_changes={long_run_summary.get('total_reviewed_new_change_count', '')}",
+        f"pr_long_run_review_publish_safety_ready={long_run_summary.get('publish_safety_matrix_ready', '')}",
         f"cross_project_replay_status={replay_report.get('status', '')}",
         f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}",
         f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}",
@@ -334,6 +345,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_patch_closure_retry_first_failure_rolled_back={patch_summary.get('retry_first_failure_rolled_back', '')}",
         f"employee_patch_closure_retry_second_patch_passed={patch_summary.get('retry_second_patch_passed', '')}",
         f"employee_patch_closure_all_expected_outcomes_verified={patch_summary.get('all_expected_outcomes_verified', '')}",
+        f"production_recovery_drill_status={recovery_report.get('status', '')}",
+        f"production_recovery_drill_recovered={recovery_summary.get('recovered_count', '')}/{recovery_summary.get('scenario_count', '')}",
+        f"production_recovery_drill_all_recovered={recovery_summary.get('all_recovered', '')}",
+        f"production_recovery_drill_real_network_denial={recovery_summary.get('real_network_denial_verified', '')}",
+        f"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}",
+        f"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}",
     ]
 
 
