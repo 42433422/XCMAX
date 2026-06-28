@@ -215,6 +215,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
     must_keep_prefixes = (
         "operator_journey_replay_",
         "absorption_release_decision_operator_",
+        "external_advantage_matrix_",
         "release_decision_self_reference=",
     )
     prefixes = (
@@ -254,6 +255,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "pr_long_run_review_",
         "pr_holdout_blind_eval_",
         "pr_failure_rollback_replay_",
+        "external_advantage_matrix_",
         "multi_project_absorption_replay_",
         "absorption_continuity_",
     )

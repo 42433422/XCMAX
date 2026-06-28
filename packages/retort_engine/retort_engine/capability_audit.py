@@ -135,6 +135,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     recovery_drill_source = root / "retort_engine" / "production_recovery_drill.py"
     release_decision_source = root / "retort_engine" / "absorption_release_decision.py"
     extension_policy_source = root / "retort_engine" / "diff_extension_policy.py"
+    external_advantage_source = root / "retort_engine" / "external_advantage_matrix.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -159,6 +160,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     recovery_drill_test = root / "tests" / "test_production_recovery_drill.py"
     release_decision_test = root / "tests" / "test_absorption_release_decision.py"
     extension_policy_test = root / "tests" / "test_diff_extension_policy.py"
+    external_advantage_test = root / "tests" / "test_external_advantage_matrix.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -379,6 +381,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
                 ("retort_engine/absorption_release_decision.py", release_decision_source.is_file()),
                 ("retort_engine/diff_extension_policy.py", extension_policy_source.is_file()),
+                ("retort_engine/external_advantage_matrix.py", external_advantage_source.is_file()),
             )
             if exists
         ],
@@ -409,6 +412,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
                 ("tests/test_absorption_release_decision.py", release_decision_test.is_file()),
                 ("tests/test_diff_extension_policy.py", extension_policy_test.is_file()),
+                ("tests/test_external_advantage_matrix.py", external_advantage_test.is_file()),
             )
             if exists
         ],

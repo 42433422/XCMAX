@@ -15,6 +15,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     recovery = _read_json(root / "docs" / "retort_production_recovery_drill.json")
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
+    external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
     decisions = [
         _decision(
@@ -40,6 +41,12 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "feedback_loop_closure",
             benchmark.get("status") == "ready" and int(benchmark.get("summary", {}).get("post_absorption_score_delta") or 0) > 0,
             ["review_quality_benchmark"],
+        ),
+        _decision(
+            "prove_external_advantage_matrix",
+            "comparative_analysis_depth",
+            external_matrix.get("status") == "ready" and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0,
+            ["external_advantage_matrix"],
         ),
         _decision(
             "accept_blind_holdout_quality",
@@ -73,6 +80,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "recovery_ready": recovery.get("status") == "ready",
         "employee_patch_ready": patch.get("status") == "ready",
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
+        "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
+        "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
         "failure_rollback_ready": failure_rollback.get("status") == "ready",
         "operator_journey_ready": operator_journey.get("status") == "ready",
         "operator_journey_cross_domain_ready": bool(operator_journey.get("summary", {}).get("cross_domain_live_probe_ready")),
@@ -93,6 +102,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_production_recovery_drill.json",
                 "retort_employee_patch_closure.json",
                 "retort_review_quality_benchmark.json",
+                "retort_external_advantage_matrix.json",
                 "retort_operator_journey_replay.json",
             ],
         },

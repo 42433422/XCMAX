@@ -40,6 +40,15 @@
     },
     {
       "action": "allow",
+      "dimension": "comparative_analysis_depth",
+      "evidence": [
+        "external_advantage_matrix"
+      ],
+      "name": "prove_external_advantage_matrix",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "blind_external_validation",
       "evidence": [
         "pr_holdout_blind_eval"
@@ -76,6 +85,7 @@
       "retort_production_recovery_drill.json",
       "retort_employee_patch_closure.json",
       "retort_review_quality_benchmark.json",
+      "retort_external_advantage_matrix.json",
       "retort_operator_journey_replay.json"
     ],
     "style": "core_product_decision_gate"
@@ -85,16 +95,18 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
-    "core_decision_path_count": 6,
-    "decision_count": 7,
+    "core_decision_path_count": 7,
+    "decision_count": 8,
     "employee_patch_ready": true,
+    "external_advantage_matrix_delta": 45.0,
+    "external_advantage_matrix_ready": true,
     "failure_rollback_ready": true,
     "holdout_blind_eval_ready": true,
     "long_run_ready": true,
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 7,
+    "ready_decision_count": 8,
     "recovery_ready": true
   }
 }

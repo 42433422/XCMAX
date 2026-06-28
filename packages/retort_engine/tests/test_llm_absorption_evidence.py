@@ -150,6 +150,30 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_external_advantage_matrix.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 6,
+                    "ready_case_count": 6,
+                    "source_project_count": 6,
+                    "absorbed_signal_count": 6,
+                    "baseline_average_score": 40,
+                    "retort_average_score": 95,
+                    "score_delta": 55,
+                    "behavior_delta_count": 6,
+                    "publishable_case_count": 6,
+                    "extension_policy_case_count": 6,
+                    "per_case_before_after": True,
+                    "all_advantages_improved": True,
+                },
+                "matrix": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_pr_readonly_degradation_probe.json").write_text(
         json.dumps(
             {
@@ -305,6 +329,18 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "quality_gate_bundle_all_passed=True" in evidence
     assert "quality_gate_bundle_contract=True" in evidence
     assert "review_adjudication_calibration_status=ready" in evidence
+    assert "external_advantage_matrix_status=ready" in evidence
+    assert "external_advantage_matrix_ready_cases=6/6" in evidence
+    assert "external_advantage_matrix_source_projects=6" in evidence
+    assert "external_advantage_matrix_absorbed_signals=6" in evidence
+    assert "external_advantage_matrix_baseline_score=40" in evidence
+    assert "external_advantage_matrix_retort_score=95" in evidence
+    assert "external_advantage_matrix_score_delta=55" in evidence
+    assert "external_advantage_matrix_behavior_delta_count=6" in evidence
+    assert "external_advantage_matrix_publishable_cases=6" in evidence
+    assert "external_advantage_matrix_extension_policy_cases=6" in evidence
+    assert "external_advantage_matrix_per_case_before_after=True" in evidence
+    assert "external_advantage_matrix_all_improved=True" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
     assert "pr_holdout_blind_eval_status=ready" in evidence

@@ -115,6 +115,7 @@ def _write_docs(root: Path) -> None:
         "retort_pr_low_permission_probe.json": {"status": "permission_denied_degraded", "summary": {}, "evidence": {}},
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}, "scenarios": []},
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}, "samples": []},
+        "retort_external_advantage_matrix.json": {"status": "ready", "summary": {"score_delta": 50}, "matrix": []},
         "retort_review_adjudication_calibration.json": {"status": "ready", "summary": {}, "cases": []},
         "retort_absorption_release_decision.json": {"status": "ready", "summary": {"all_core_decisions_ready": True}, "decisions": []},
     }
