@@ -171,11 +171,13 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=8790)
     args = parser.parse_args(argv)
     if args.command == "project-assess":
-        result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
+        use_llm = bool(args.use_llm)
+        result = RetortService().assess({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": use_llm, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": use_llm})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else _format_scores("Retort assessment", result["scores"]))
         return 0
     if args.command == "self-evolve":
-        result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": True, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": True})
+        use_llm = bool(args.use_llm)
+        result = RetortService().self_evolve({"project": args.project, "run_local_gates": args.run_local_gates, "use_llm": use_llm, "wait_llm_sec": args.wait_llm_sec, "require_deep_review": use_llm})
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

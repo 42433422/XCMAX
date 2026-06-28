@@ -20,6 +20,29 @@ SOURCE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".md", 
 SKIP_PARTS = {".git", ".retort", "__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache", "dist", "build"}
 
 
+def normalize_absorbed_capability_state(payload: dict[str, Any] | None) -> dict[str, Any]:
+    """Normalize absorbed capability payload to avoid breakage when generated source gets overwritten."""
+    raw = dict(payload or {})
+    return {
+        "run_id": str(raw.get("run_id") or ""),
+        "source": str(raw.get("source") or ""),
+        "external_path": str(raw.get("external_path") or ""),
+        "signals": [str(item) for item in (raw.get("signals") or []) if str(item)],
+        "signal_evidence": {
+            str(key): [str(item) for item in value if str(item)]
+            for key, value in dict(raw.get("signal_evidence") or {}).items()
+            if isinstance(value, list)
+        },
+        "component_gaps": [dict(item) for item in raw.get("component_gaps") if isinstance(item, dict)],
+        "prioritized_absorptions": [dict(item) for item in raw.get("prioritized_absorptions") if isinstance(item, dict)],
+        "tasks": [dict(task) for task in raw.get("tasks") if isinstance(task, dict)],
+        "benchmark": dict(raw.get("benchmark") or {}),
+        "depth_absorption_workflow": dict(raw.get("depth_absorption_workflow") or {}),
+        "file_count": int(raw.get("file_count") or 0),
+        "score": int(raw.get("score") or 0),
+    }
+
+
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
@@ -61,13 +84,13 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     capability_path.parent.mkdir(parents=True, exist_ok=True)
     capability_path.write_text(_capability_module_content(run_id, source, external_path, tasks, external_profile, review_report), encoding="utf-8")
     capability_test_path.parent.mkdir(parents=True, exist_ok=True)
-    capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source), encoding="utf-8")
+    capability_test_path.write_text(_capability_test_content(_capability_import_name(root, capability_path), source, run_id), encoding="utf-8")
     writes_review_context_bias = _should_absorb_review_context_bias(external_profile)
     if writes_review_context_bias:
         review_context_bias_path.parent.mkdir(parents=True, exist_ok=True)
         review_context_bias_path.write_text(_review_context_bias_content(run_id, source, external_path, external_profile), encoding="utf-8")
         review_context_bias_test_path.parent.mkdir(parents=True, exist_ok=True)
-        review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source), encoding="utf-8")
+        review_context_bias_test_path.write_text(_review_context_bias_test_content(_capability_import_name(root, review_context_bias_path), source, run_id), encoding="utf-8")
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
     report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -284,19 +307,22 @@ def context_signal_strength() -> int:
 '''
 
 
-def _review_context_bias_test_content(import_name: str, source: str) -> str:
+def _review_context_bias_test_content(import_name: str, source: str, run_id: str) -> str:
     source_text = repr(source)
+    run_id_text = repr(run_id)
     return f'''from __future__ import annotations
 
 from {import_name} import context_signal_strength, file_grouping_enabled, review_context_bias
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
+EXPECTED_ABSORPTION_RUN_ID = {run_id_text}
 
 
 def test_review_context_bias_exposes_absorbed_file_grouping() -> None:
     bias = review_context_bias()
 
     assert bias["enabled"] is True
+    assert bias["run_id"] == EXPECTED_ABSORPTION_RUN_ID
     assert bias["source"] == EXPECTED_ABSORPTION_SOURCE
     assert set(bias["signals"]) & {{"file_grouping", "review_pipeline", "diff_hunk_review"}}
     assert file_grouping_enabled() is True
@@ -342,6 +368,7 @@ def _capability_module_content(run_id: str, source: str, external_path: Path, ta
             for task in tasks
         ],
     }
+    capability_payload = normalize_absorbed_capability_state(capability_payload)
     payload_text = repr(json.dumps(capability_payload, ensure_ascii=True, indent=2, sort_keys=True))
     return f'''"""Runtime behavior absorbed from external review tools.
 
@@ -477,17 +504,20 @@ def multi_project_reproduction_index(sources: list[str]) -> dict[str, Any]:
 '''
 
 
-def _capability_test_content(import_name: str, source: str) -> str:
+def _capability_test_content(import_name: str, source: str, run_id: str) -> str:
     source_text = repr(source)
+    run_id_text = repr(run_id)
     return f'''from __future__ import annotations
 
 from {import_name} import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, deferred_breadth_queue, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
 EXPECTED_ABSORPTION_SOURCE = {source_text}
+EXPECTED_ABSORPTION_RUN_ID = {run_id_text}
 
 
 def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
     plan = absorbed_capability_plan()
+    assert plan["run_id"] == EXPECTED_ABSORPTION_RUN_ID
     assert plan["run_id"]
     assert plan["source"] == EXPECTED_ABSORPTION_SOURCE
     assert isinstance(plan["tasks"], list)

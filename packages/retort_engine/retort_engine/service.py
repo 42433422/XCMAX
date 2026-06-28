@@ -22,9 +22,15 @@ class RetortService:
         self.llm_service = LLMRetortService()
 
     def assess(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(payload)
+        payload.setdefault("use_llm", True)
+        payload.setdefault("require_deep_review", False)
         return self.llm_service.assess(payload)
 
     def self_evolve(self, payload: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(payload)
+        payload.setdefault("use_llm", True)
+        payload.setdefault("require_deep_review", False)
         return self.llm_service.self_evolve(payload)
 
     def absorb(self, payload: dict[str, Any]) -> dict[str, Any]:
