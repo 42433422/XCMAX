@@ -40,6 +40,27 @@ def test_absorption_continuity_probe_fails_missing_per_run_code_graph(tmp_path: 
     assert result["runs"][0]["code_graph_proof_missing"] == ["missing_per_run_code_graph_proof"]
 
 
+def test_absorption_continuity_probe_accepts_post_absorption_hardening_run(tmp_path: Path) -> None:
+    _write_run(tmp_path, "20260628013000-b", "github/b", code_graph=True)
+    _write_employee_result(tmp_path, "20260628013000-b")
+    _write_run(
+        tmp_path,
+        "20260628020000-hardening",
+        "retort://post-absorption-hardening/abc1234",
+        code_graph=True,
+    )
+    _write_employee_result(tmp_path, "20260628020000-hardening")
+    _write_closed_loop(tmp_path, "20260628013000-b")
+
+    result = build_absorption_continuity_probe(tmp_path, min_runs=2)
+
+    assert result["status"] == "ready"
+    assert result["latest_closed_loop"]["run_id"] == "20260628020000-hardening"
+    assert result["latest_closed_loop"]["merge_commit"] == "abc1234"
+    assert result["latest_closed_loop"]["required_flags"]["latest_run_referenced"] is True
+    assert result["latest_closed_loop"]["required_flags"]["post_absorption_hardening_ready"] is True
+
+
 def test_service_exposes_absorption_continuity_probe(tmp_path: Path) -> None:
     _write_run(tmp_path, "20260628010000-a", "github/a", code_graph=True)
     _write_employee_result(tmp_path, "20260628010000-a")

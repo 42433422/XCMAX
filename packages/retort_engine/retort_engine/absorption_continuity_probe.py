@@ -127,7 +127,12 @@ def _latest_closed_loop(root: Path, latest_run: dict[str, Any]) -> dict[str, Any
     proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
     evidence = [str(item) for item in proof.get("evidence") or []]
     run_id = str(latest_run.get("run_id") or "")
-    merge_commit = _evidence_value(evidence, "merge_commit")
+    checks = latest_run.get("checks") if isinstance(latest_run.get("checks"), dict) else {}
+    hardening_merge_commit = _hardening_merge_commit(str(latest_run.get("source") or ""))
+    merge_commit = hardening_merge_commit or _evidence_value(evidence, "merge_commit")
+    code_graph_verified = "code_graph_proof_passed=True" in evidence or bool(checks.get("per_run_code_graph_proof"))
+    latest_run_referenced = not run_id or any(run_id in item for item in evidence) or bool(hardening_merge_commit)
+    hardening_ready = not hardening_merge_commit or bool(checks.get("ready"))
     verified = (
         bool(proof.get("branch_diff_verified"))
         and bool(proof.get("employee_execution_verified"))
@@ -135,8 +140,9 @@ def _latest_closed_loop(root: Path, latest_run: dict[str, Any]) -> dict[str, Any
         and bool(proof.get("merge_verified"))
         and bool(proof.get("external_advantage_reassessed"))
         and bool(merge_commit)
-        and (not run_id or any(run_id in item for item in evidence))
-        and "code_graph_proof_passed=True" in evidence
+        and latest_run_referenced
+        and code_graph_verified
+        and hardening_ready
     )
     return {
         "verified": verified,
@@ -150,9 +156,16 @@ def _latest_closed_loop(root: Path, latest_run: dict[str, Any]) -> dict[str, Any
             "post_absorption_tests_passed": bool(proof.get("post_absorption_tests_passed")),
             "merge_verified": bool(proof.get("merge_verified")),
             "external_advantage_reassessed": bool(proof.get("external_advantage_reassessed")),
-            "code_graph_proof_passed": "code_graph_proof_passed=True" in evidence,
+            "code_graph_proof_passed": code_graph_verified,
+            "latest_run_referenced": latest_run_referenced,
+            "post_absorption_hardening_ready": hardening_ready,
         },
     }
+
+
+def _hardening_merge_commit(source: str) -> str:
+    prefix = "retort://post-absorption-hardening/"
+    return source.removeprefix(prefix).strip() if source.startswith(prefix) else ""
 
 
 def _evidence_value(evidence: list[str], key: str) -> str:
