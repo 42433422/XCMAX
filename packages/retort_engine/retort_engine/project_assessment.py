@@ -141,6 +141,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "task_prioritization": "task-prioritization-report" in text and "build_task_prioritization_report" in text,
         "task_dispatch_plan": "task-dispatch-plan" in text and "build_task_dispatch_plan" in text,
         "review_quality_benchmark": "quality-benchmark-report" in text and "build_review_quality_benchmark" in text,
+        "external_advantage_matrix": "external-advantage-matrix" in text and "build_external_advantage_matrix" in text and "/api/external-advantage-matrix" in text,
         "review_adjudication_calibration": "review-adjudication-calibration" in text and "build_review_adjudication_calibration" in text,
         "review_calibration_policy": "calibration_context_rank_weight" in text and "calibration_policy_enabled" in text,
         "codebase_graph": "codebase-graph-report" in text and "build_codebase_graph" in text and "codebase_graph_result" in text,

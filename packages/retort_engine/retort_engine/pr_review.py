@@ -230,7 +230,7 @@ def _review_hunk(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any],
         lowered = text.lower()
         line = int(change.get("line") or 0)
         if _looks_like_secret_leak(text, lowered):
-            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", review_context, hunk=hunk, line_text=text))
+            comments.append(_comment(file_path, line, "high", "新增行疑似包含凭证或密钥，需要改为配置注入并加脱敏测试。", strategy, capabilities, "classify_risk", _line_risk_context(review_context, lowered), hunk=hunk, line_text=text))
         elif "todo" in lowered or "fixme" in lowered:
             comments.append(_comment(file_path, line, "medium", "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。", strategy, capabilities, "reflect_before_publish", review_context, hunk=hunk, line_text=text))
         elif Path(file_path).suffix == ".py" and "print(" in lowered:
@@ -299,6 +299,12 @@ def _intent_alignment_comment(
         hunk=first_hunk,
         line_text=str(first_add.get("text") or ""),
     )
+
+
+def _line_risk_context(default_context: str, lowered_line: str) -> str:
+    if default_context in {"runtime", "other"} and any(marker in lowered_line for marker in SECRET_MARKERS):
+        return "security"
+    return default_context
 
 
 def _info_comment(file_path: str, hunk: dict[str, Any], strategy: dict[str, Any], capabilities: list[str], review_context: str) -> dict[str, Any]:

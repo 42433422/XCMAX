@@ -13,6 +13,7 @@ from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
+from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.operator_journey_replay import build_operator_journey_replay
@@ -167,6 +168,12 @@ class RetortService:
             negative_sample_count=int(payload.get("negative_sample_count") or 0),
         )
 
+    def external_advantage_matrix(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_external_advantage_matrix(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 6),
+        )
+
     def review_adjudication_calibration(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_adjudication_calibration(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -315,6 +322,10 @@ def create_app() -> Any:
     @app.post("/quality-benchmark-report")
     def review_quality_benchmark_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.review_quality_benchmark(payload)
+
+    @app.post("/external-advantage-matrix")
+    def external_advantage_matrix_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.external_advantage_matrix(payload)
 
     @app.post("/review-adjudication-calibration")
     def review_adjudication_calibration_route(payload: dict[str, Any]) -> dict[str, Any]:

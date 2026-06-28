@@ -74,7 +74,7 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["file_summaries"][0]["stages"]
     assert result["file_summaries"][0]["review_context"] == "runtime"
     assert result["comments"][0]["review_stage"]
-    assert result["comments"][0]["review_context"] == "runtime"
+    assert result["comments"][0]["review_context"] == "security"
     assert result["comments"][0]["employee_actionable"] is True
     assert result["task_groups"][0]["risk_counts"]
     assert result["task_groups"][0]["publishable_comment_count"] >= 1
@@ -122,6 +122,13 @@ diff --git a/app/security.py b/app/security.py
         "side": "RIGHT",
         "body": result["comments"][0]["message"],
     }
+
+
+def test_review_diff_secret_line_overrides_file_context_to_security() -> None:
+    result = review_diff(_single_add_diff("pr_agent/settings.py", 'OPENAI_API_TOKEN = "live-secret-value"'))
+
+    assert result["comments"][0]["severity"] == "high"
+    assert result["comments"][0]["review_context"] == "security"
 
 
 def test_review_diff_keeps_publishable_anchors_for_multiple_languages() -> None:

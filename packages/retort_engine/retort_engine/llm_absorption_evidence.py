@@ -184,6 +184,8 @@ def _report_evidence(project: Path) -> list[str]:
     dispatch_summary = dispatch_report.get("summary") if isinstance(dispatch_report.get("summary"), dict) else {}
     benchmark_report = read_json(project / "docs" / "retort_review_quality_benchmark.json")
     benchmark_summary = benchmark_report.get("summary") if isinstance(benchmark_report.get("summary"), dict) else {}
+    external_matrix = read_json(project / "docs" / "retort_external_advantage_matrix.json")
+    external_matrix_summary = external_matrix.get("summary") if isinstance(external_matrix.get("summary"), dict) else {}
     adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
     adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
     stress_report = read_json(project / "docs" / "retort_employee_scheduler_stress.json")
@@ -340,6 +342,18 @@ def _report_evidence(project: Path) -> list[str]:
         f"review_quality_benchmark_cross_project_case_count={benchmark_summary.get('cross_project_case_count', '')}",
         f"review_quality_benchmark_cross_project_family_count={benchmark_summary.get('cross_project_family_count', '')}",
         f"review_quality_benchmark_cross_project_pass_rate={benchmark_summary.get('cross_project_pass_rate', '')}",
+        f"external_advantage_matrix_status={external_matrix.get('status', '')}",
+        f"external_advantage_matrix_ready_cases={external_matrix_summary.get('ready_case_count', '')}/{external_matrix_summary.get('case_count', '')}",
+        f"external_advantage_matrix_source_projects={external_matrix_summary.get('source_project_count', '')}",
+        f"external_advantage_matrix_absorbed_signals={external_matrix_summary.get('absorbed_signal_count', '')}",
+        f"external_advantage_matrix_baseline_score={external_matrix_summary.get('baseline_average_score', '')}",
+        f"external_advantage_matrix_retort_score={external_matrix_summary.get('retort_average_score', '')}",
+        f"external_advantage_matrix_score_delta={external_matrix_summary.get('score_delta', '')}",
+        f"external_advantage_matrix_behavior_delta_count={external_matrix_summary.get('behavior_delta_count', '')}",
+        f"external_advantage_matrix_publishable_cases={external_matrix_summary.get('publishable_case_count', '')}",
+        f"external_advantage_matrix_extension_policy_cases={external_matrix_summary.get('extension_policy_case_count', '')}",
+        f"external_advantage_matrix_per_case_before_after={external_matrix_summary.get('per_case_before_after', '')}",
+        f"external_advantage_matrix_all_improved={external_matrix_summary.get('all_advantages_improved', '')}",
         f"review_adjudication_calibration_status={adjudication_report.get('status', '')}",
         f"review_adjudication_human_label_count={adjudication_summary.get('human_label_count', '')}",
         f"review_adjudication_pass_rate={adjudication_summary.get('pass_rate', '')}",

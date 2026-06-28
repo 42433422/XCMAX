@@ -186,6 +186,7 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("pr_low_permission_probe", docs / "retort_pr_low_permission_probe.json", "source_report", ("status", "summary", "evidence")),
         ("production_recovery_drill", docs / "retort_production_recovery_drill.json", "source_report", ("status", "summary", "scenarios")),
         ("review_quality_benchmark", docs / "retort_review_quality_benchmark.json", "source_report", ("status", "summary", "samples")),
+        ("external_advantage_matrix", docs / "retort_external_advantage_matrix.json", "source_report", ("status", "summary", "matrix")),
         ("review_adjudication_calibration", docs / "retort_review_adjudication_calibration.json", "source_report", ("status", "summary", "cases")),
     ]
     run_path = Path(str(latest_run.get("run_record_path") or ""))
@@ -291,6 +292,7 @@ def _release_inputs_ready(root: Path) -> bool:
     recovery = _read_json(docs / "retort_production_recovery_drill.json")
     patch = _read_json(docs / "retort_employee_patch_closure.json")
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
+    external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
     return (
         quality.get("summary", {}).get("all_gates_passed") is True
         and continuity.get("status") == "ready"
@@ -301,6 +303,8 @@ def _release_inputs_ready(root: Path) -> bool:
         and patch.get("status") == "ready"
         and benchmark.get("status") == "ready"
         and int(benchmark.get("summary", {}).get("post_absorption_score_delta") or 0) > 0
+        and external_matrix.get("status") == "ready"
+        and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0
     )
 
 

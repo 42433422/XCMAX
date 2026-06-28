@@ -1,0 +1,276 @@
+{
+  "evidence": {
+    "absorbed_signals": [
+      "architecture_contract_guard",
+      "ci_review_publisher_safety",
+      "context_packaging_noise_control",
+      "evaluation_harness_oracle",
+      "security_ranked_pr_review",
+      "typescript_diff_hunk_review"
+    ],
+    "baseline_model": "pre_absorption_keyword_review_without_context_groups_publish_anchors_or_extension_policy",
+    "comparison": "same_external_advantage_cases_replayed_before_after_absorption",
+    "retort_model": "retort_engine.pr_review.review_diff",
+    "source_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent",
+      "reviewdog/reviewdog",
+      "seddonym/import-linter",
+      "swe-bench/SWE-bench",
+      "yamadashy/repomix"
+    ]
+  },
+  "matrix": [
+    {
+      "absorbed_signal": "security_ranked_pr_review",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "high",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "pr-agent-secret-context",
+      "expected_context": "security",
+      "expected_severity": "high",
+      "external_advantage": "PR agent style secret review should surface credential leaks as publishable blockers.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "runtime"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "security"
+        ],
+        "observed_severities": [
+          "high"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "qodo-ai/pr-agent"
+    },
+    {
+      "absorbed_signal": "ci_review_publisher_safety",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "high",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "reviewdog-workflow-token",
+      "expected_context": "ci_config",
+      "expected_severity": "high",
+      "external_advantage": "Review publisher workflows need CI context and credential safety at the same time.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "ci_config"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "ci_config"
+        ],
+        "observed_severities": [
+          "high"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "reviewdog/reviewdog"
+    },
+    {
+      "absorbed_signal": "evaluation_harness_oracle",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "swe-bench-oracle-placeholder",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "external_advantage": "Benchmark harness changes must reject placeholder oracles before claiming quality.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "runtime"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "swe-bench/SWE-bench"
+    },
+    {
+      "absorbed_signal": "architecture_contract_guard",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "import-linter-contract-bypass",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "external_advantage": "Architecture governance projects should detect contract bypasses as behavior risk.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "runtime"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "seddonym/import-linter"
+    },
+    {
+      "absorbed_signal": "context_packaging_noise_control",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "info",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "repomix-context-package-clean",
+      "expected_context": "docs",
+      "expected_severity": "info",
+      "external_advantage": "Context packagers should avoid false blockers on clean docs-only packaging updates.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "docs"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "docs"
+        ],
+        "observed_severities": [
+          "info"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "yamadashy/repomix"
+    },
+    {
+      "absorbed_signal": "typescript_diff_hunk_review",
+      "baseline": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "model": "keyword_only_pre_absorption",
+        "publishable_comment_count": 0,
+        "score": 40,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "behavior_delta": 45,
+      "case_id": "mopemope-typescript-diff-review",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "external_advantage": "TypeScript PR bots need extension-aware review for async review flows.",
+      "ready": true,
+      "retort": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_contexts": [
+          "runtime"
+        ],
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "publishable_comment_count": 1,
+        "score": 85,
+        "severity_matched": true,
+        "task_group_count": 0
+      },
+      "source_project": "mopemope/pr-ai-review-bot"
+    }
+  ],
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "absorbed_signal_count": 6,
+    "all_advantages_improved": true,
+    "baseline_average_score": 40.0,
+    "behavior_delta_count": 6,
+    "case_count": 6,
+    "extension_policy_case_count": 6,
+    "min_case_count": 6,
+    "per_case_before_after": true,
+    "publishable_case_count": 6,
+    "ready_case_count": 6,
+    "retort_average_score": 85.0,
+    "score_delta": 45.0,
+    "source_project_count": 6
+  }
+}

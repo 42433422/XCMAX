@@ -15,6 +15,7 @@ from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
+from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_failure_rollback_replay import build_pr_failure_rollback_replay
 from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
@@ -201,6 +202,11 @@ def main(argv: list[str] | None = None) -> int:
     quality_benchmark.add_argument("--negative-sample-count", type=int, default=0)
     quality_benchmark.add_argument("--output", default="")
     quality_benchmark.add_argument("--json", action="store_true")
+    external_advantage = sub.add_parser("external-advantage-matrix")
+    external_advantage.add_argument("--project", default=".")
+    external_advantage.add_argument("--min-cases", type=int, default=6)
+    external_advantage.add_argument("--output", default="")
+    external_advantage.add_argument("--json", action="store_true")
     adjudication = sub.add_parser("review-adjudication-calibration")
     adjudication.add_argument("--project", default=".")
     adjudication.add_argument("--output", default="")
@@ -587,6 +593,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort quality benchmark status: {result['status']}")
             print(f"Samples: {result['summary']['sample_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "external-advantage-matrix":
+        result = build_external_advantage_matrix(args.project, min_cases=args.min_cases, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort external advantage matrix status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
