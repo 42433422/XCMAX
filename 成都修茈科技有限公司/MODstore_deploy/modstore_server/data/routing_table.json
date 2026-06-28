@@ -1,0 +1,1427 @@
+{
+  "generated_at": "2026-06-28T11:07:27+00:00",
+  "employees": [
+    {
+      "id": "artifact-generator",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/artifacts/*",
+        "yuangon/**"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "employee-planner"
+      ]
+    },
+    {
+      "id": "code-validator",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/validation/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "sandbox-tester"
+      ]
+    },
+    {
+      "id": "employee-planner",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/plans/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "intent-analyst"
+      ]
+    },
+    {
+      "id": "hex-quality-assessor",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "FHD/mods/_employees/hex-quality-assessor/**",
+        "yuangon/craft-workshop/hex-quality-assessor/**",
+        "workbench/sessions/*",
+        "workbench/validation/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "quality-validator"
+      ]
+    },
+    {
+      "id": "host-checker",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/hostcheck/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "self-checker"
+      ]
+    },
+    {
+      "id": "intent-analyst",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/intent/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": []
+    },
+    {
+      "id": "miniapp-builder",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/scripts/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "quality-validator"
+      ]
+    },
+    {
+      "id": "pack-registrar",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "catalog/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "workflow-automator"
+      ]
+    },
+    {
+      "id": "quality-validator",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/validation/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "artifact-generator"
+      ]
+    },
+    {
+      "id": "sandbox-tester",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/sandbox/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "pack-registrar"
+      ]
+    },
+    {
+      "id": "script-binder",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "yuangon/**"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "miniapp-builder"
+      ]
+    },
+    {
+      "id": "self-checker",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/selfcheck/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "code-validator"
+      ]
+    },
+    {
+      "id": "workflow-automator",
+      "area": "craft-workshop",
+      "scope_globs": [
+        "workbench/sessions/*",
+        "workbench/workflows/*"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "script-binder"
+      ]
+    },
+    {
+      "id": "employee-pack-curator",
+      "area": "modstore-backend",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/employee_ai_scaffold.py",
+        "MODstore_deploy/modstore_server/employee_ai_pipeline.py",
+        "MODstore_deploy/modstore_server/employee_bench.py",
+        "MODstore_deploy/modstore_server/employee_executor.py",
+        "MODstore_deploy/modstore_server/employee_skill_register.py",
+        "MODstore_deploy/modstore_server/employee_pack_blueprints_template.py",
+        "MODstore_deploy/modstore_server/employee_pack_export.py",
+        "MODstore_deploy/modstore_server/employee_stub_template.py",
+        "MODstore_deploy/modstore_server/employee_impl_planner.py",
+        "MODstore_deploy/modstore_server/employee_runtime.py",
+        "MODstore_deploy/modstore_server/employee_config_v2.py",
+        "MODstore_deploy/modstore_server/employee_config_v2_adapter.py",
+        "MODstore_deploy/modstore_server/employee_api.py",
+        "MODstore_deploy/modstore_server/mod_employee_impl_scaffold.py",
+        "MODstore_deploy/modstore_server/mod_scaffold_runner.py",
+        "MODstore_deploy/modstore_server/mod_employee_agent_runner.py",
+        "MODstore_deploy/modstore_server/services/employee.py",
+        "MODstore_deploy/modstore_server/integrations/vibe_eskill_adapter.py",
+        "MODstore_deploy/modstore_server/market_files/*.xcemp",
+        "yuangon/**/*.xcemp",
+        "MODstore_deploy/docs/employee_publish_wizard.md",
+        "MODstore_deploy/docs/fhd-employee-composition.md",
+        "docs/modstore/员工制作增强设计方案.md",
+        "docs/modstore/ddd.md",
+        "docs/adr/0003-artifacts-bundles-employee-packs.md",
+        "yuangon/modstore-backend/employee-pack-curator/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/market/src/**",
+        "_local_secrets/**"
+      ],
+      "subscribes": [
+        "employee.task.done:vibe-coding-maintainer"
+      ],
+      "depends_on": [
+        "mods-and-eskill-curator",
+        "vibe-coding-maintainer"
+      ]
+    },
+    {
+      "id": "java-payment-bridge-officer",
+      "area": "modstore-backend",
+      "scope_globs": [
+        "MODstore_deploy/java/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/docs/PAYMENT_CONTRACT.md"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "modstore-backend-api",
+        "payment-billing-reconciler"
+      ]
+    },
+    {
+      "id": "modstore-backend-api",
+      "area": "modstore-backend",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/workbench_api.py",
+        "MODstore_deploy/modstore_server/market_api.py",
+        "MODstore_deploy/modstore_server/market_catalog_api.py",
+        "MODstore_deploy/modstore_server/script_workflow_api.py",
+        "MODstore_deploy/modstore_server/realtime_ws.py",
+        "MODstore_deploy/modstore_server/llm_api.py",
+        "MODstore_deploy/modstore_server/llm_chat_proxy.py",
+        "MODstore_deploy/modstore_server/llm_catalog.py",
+        "MODstore_deploy/modstore_server/llm_model_taxonomy.py",
+        "MODstore_deploy/modstore_server/workflow_nl_graph.py",
+        "MODstore_deploy/modstore_server/api/**",
+        "MODstore_deploy/modstore_server/eventing/**",
+        "MODstore_deploy/modstore_server/app.py",
+        "MODstore_deploy/modstore_server/services/**",
+        "MODstore_deploy/modstore_server/application/**",
+        "MODstore_deploy/modstore_server/domain/**",
+        "MODstore_deploy/modstore_server/infrastructure/**",
+        "MODstore_deploy/modstore_server/integrations/**",
+        "MODstore_deploy/modstore_server/tools/**",
+        "MODstore_deploy/config/**",
+        "MODstore_deploy/tools/**",
+        "MODstore_deploy/reset_admin.py",
+        "MODstore_deploy/modstore_build.json.example",
+        "MODstore_deploy/docs/contracts/events/**",
+        "MODstore_deploy/docs/contracts/openapi/**",
+        "MODstore_deploy/docs/contracts/orchestration/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/modstore_server/employee_*.py",
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/alembic/**",
+        "_local_secrets/**",
+        "vibe-coding/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "log-monitor-incident",
+        "deploy-release-officer",
+        "dbops-engineer"
+      ]
+    },
+    {
+      "id": "payment-billing-reconciler",
+      "area": "modstore-backend",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/reconciliation.py",
+        "MODstore_deploy/modstore_server/payment_api.py",
+        "MODstore_deploy/modstore_server/payment_orders.py",
+        "MODstore_deploy/modstore_server/payment_common.py",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/modstore_server/payment_orders/**",
+        "MODstore_deploy/modstore_server/llm_billing.py",
+        "MODstore_deploy/modstore_server/subscription_renewer.py",
+        "MODstore_deploy/modstore_server/llm_key_resolver.py",
+        "MODstore_deploy/java_payment_service/**",
+        "alipay_package/**",
+        "setup-alipay.sh"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/employee_*.py",
+        "vibe-coding/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "security-secrets-guard"
+      ]
+    },
+    {
+      "id": "market-frontend-dev",
+      "area": "modstore-frontend",
+      "scope_globs": [
+        "MODstore_deploy/market/src/views/*.vue",
+        "MODstore_deploy/market/src/views/workflow/**",
+        "MODstore_deploy/market/src/views/WorkbenchHomeView.vue",
+        "MODstore_deploy/market/src/api.ts",
+        "MODstore_deploy/market/src/infrastructure/http/client.ts",
+        "MODstore_deploy/market/src/App.vue",
+        "MODstore_deploy/market/src/components/**",
+        "MODstore_deploy/market/src/stores/**",
+        "MODstore_deploy/market/src/router/**",
+        "MODstore_deploy/market/package.json",
+        "MODstore_deploy/market/vite.config.*",
+        "MODstore_deploy/market/tsconfig*.json",
+        "MODstore_deploy/market/index.html",
+        "MODstore_deploy/market/.prettierrc",
+        "MODstore_deploy/market/.prettierignore",
+        "MODstore_deploy/market/env.d.ts",
+        "MODstore_deploy/market/eslint.config.js",
+        "MODstore_deploy/market/package-lock.json",
+        "MODstore_deploy/market/public/**",
+        "MODstore_deploy/market/vite.corp-butler.config.ts"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/views/workbench/**",
+        "MODstore_deploy/market/src/views/Admin*View.vue",
+        "MODstore_deploy/market/src/views/admin/**",
+        "MODstore_deploy/market/src/components/admin/**",
+        "MODstore_deploy/modstore_server/**",
+        "*.py",
+        "_local_secrets/**",
+        "react"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "modstore-backend-api"
+      ]
+    },
+    {
+      "id": "workbench-ux-stylist",
+      "area": "modstore-frontend",
+      "scope_globs": [
+        "MODstore_deploy/market/src/views/workbench/**",
+        "MODstore_deploy/market/src/components/workbench/**",
+        "MODstore_deploy/market/src/components/admin/**",
+        "MODstore_deploy/market/src/views/WorkbenchHomeView.vue",
+        "MODstore_deploy/market/src/views/Admin*View.vue",
+        "MODstore_deploy/market/src/views/admin/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/views/Home*.vue",
+        "MODstore_deploy/market/src/views/Login*.vue",
+        "MODstore_deploy/market/src/views/Payment*.vue",
+        "MODstore_deploy/market/src/views/Order*.vue",
+        "MODstore_deploy/market/src/api.ts",
+        "MODstore_deploy/modstore_server/**",
+        "*.py",
+        "_local_secrets/**",
+        "react"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "market-frontend-dev"
+      ]
+    },
+    {
+      "id": "ecosystem-delivery-reporter",
+      "area": "partner-ecosystem",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/**/production_line*",
+        "MODstore_deploy/modstore_server/**/operations*",
+        "FHD/app/**/telemetry/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "enterprise-adoption-officer",
+        "deploy-release-officer"
+      ]
+    },
+    {
+      "id": "ecosystem-investor-portal-officer",
+      "area": "partner-ecosystem",
+      "scope_globs": [
+        "MODstore_deploy/market/src/**/admin/**",
+        "MODstore_deploy/market/src/views/**/Investor*",
+        "MODstore_deploy/modstore_server/**/investor*"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "market-frontend-dev",
+        "ecosystem-delivery-reporter"
+      ]
+    },
+    {
+      "id": "ecosystem-joint-catalog-officer",
+      "area": "partner-ecosystem",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/catalog*",
+        "MODstore_deploy/modstore_server/**/packages.json",
+        "MODstore_deploy/market/src/**/catalog*"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "employee-pack-curator",
+        "modstore-backend-api"
+      ]
+    },
+    {
+      "id": "ecosystem-partner-onboard-officer",
+      "area": "partner-ecosystem",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/**/partner*",
+        "MODstore_deploy/modstore_server/**/tenant**",
+        "FHD/app/**/external_crm*"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "modstore-backend-api"
+      ]
+    },
+    {
+      "id": "ecosystem-revenue-share-reconciler",
+      "area": "partner-ecosystem",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/**/reconciliation*",
+        "MODstore_deploy/java_payment_service/**/Order*",
+        "FHD/app/**/payment*"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "payment-billing-reconciler",
+        "java-payment-bridge-officer"
+      ]
+    },
+    {
+      "id": "change-request-auditor",
+      "area": "platform-core",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/api/change_request_api.py",
+        "MODstore_deploy/modstore_server/eventing/audit/**",
+        "MODstore_deploy/scripts/audit_*.py",
+        "MODstore_deploy/docs/runbooks/change-request-audit.md",
+        "yuangon/platform-core/change-request-auditor/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/modstore_server/employee_*.py",
+        "_local_secrets/**"
+      ],
+      "subscribes": [
+        "ops.change_request.submitted",
+        "employee.task.done:test-qa-runner"
+      ],
+      "depends_on": [
+        "test-qa-runner",
+        "employee-pack-quality-interviewer",
+        "security-secrets-guard"
+      ]
+    },
+    {
+      "id": "daily-orchestrator",
+      "area": "platform-core",
+      "scope_globs": [
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/**",
+        "MODstore_deploy/tests/**",
+        "MODstore_deploy/pyproject.toml"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/alembic/**",
+        "**/*.db",
+        "MODstore_deploy/modstore_server/catalog_data/**",
+        "MODstore_deploy/modstore_server/library/**",
+        "MODstore_deploy/var/**",
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "test-qa-runner",
+        "dbops-engineer"
+      ]
+    },
+    {
+      "id": "delivery-receipt-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/app/**/ops_closure/**",
+        "FHD/mods/xcagi-workflow-employee-receipt-confirm/**",
+        "MODstore_deploy/modstore_server/**/delivery**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [
+        "ops.delivery.milestone_ready"
+      ],
+      "depends_on": [
+        "test-qa-runner",
+        "change-request-auditor"
+      ]
+    },
+    {
+      "id": "enterprise-adoption-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/app/**/telemetry/**",
+        "FHD/app/**/crm/**",
+        "MODstore_deploy/modstore_server/**/tenant**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "user-customer-service-officer"
+      ]
+    },
+    {
+      "id": "fhd-core-maintainer",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/app/**",
+        "FHD/tests/**",
+        "FHD/pyproject.toml",
+        "FHD/alembic/**",
+        "FHD/docs/api/openapi.json",
+        "FHD/config/**",
+        "packages/xcagi_common/**",
+        "FHD/mods/_employees/fhd-core-maintainer/**",
+        "yuangon/platform-core/fhd-core-maintainer/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/**",
+        "成都修茈科技有限公司/**",
+        "vibe-coding/**",
+        "_local_secrets/**",
+        "*.vue"
+      ],
+      "subscribes": [
+        "telemetry.backlog.created",
+        "employee.task.failed:test-qa-runner"
+      ],
+      "depends_on": [
+        "test-qa-runner"
+      ]
+    },
+    {
+      "id": "github-pr-gatekeeper",
+      "area": "platform-core",
+      "scope_globs": [
+        ".github/dependabot.yml",
+        ".github/workflows/**",
+        ".github/gitleaks-config.toml",
+        "MODstore_deploy/modstore_server/auto_fix_loop.py",
+        "MODstore_deploy/modstore_server/telemetry_backlog_loop.py",
+        "MODstore_deploy/scripts/ci/**",
+        "yuangon/platform-core/github-pr-gatekeeper/**"
+      ],
+      "forbidden_globs": [
+        "FHD/app/**",
+        "FHD/frontend/src/**",
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "_local_secrets/**",
+        ".env*"
+      ],
+      "subscribes": [
+        "dependabot.pr.opened",
+        "dependabot.autofix.triggered",
+        "github.pr.checks_completed"
+      ],
+      "depends_on": [
+        "change-request-auditor",
+        "test-qa-runner",
+        "vibe-coding-maintainer"
+      ]
+    },
+    {
+      "id": "intake-dispatcher",
+      "area": "platform-core",
+      "scope_globs": [
+        "contact-intake.js",
+        "MODstore_deploy/modstore_server/eventing/intake/**",
+        "MODstore_deploy/modstore_server/api/intake_api.py",
+        "MODstore_deploy/modstore_server/webhook_events/intake/**",
+        "mianshi/**",
+        "yuangon/platform-core/intake-dispatcher/**",
+        "MODstore_deploy/docs/yuangon-process-loop.md",
+        "MODstore_deploy/scripts/intake_watcher.py"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [
+        "ops.intake.user_request",
+        "employee.task.done:wechat-contacts-ai-employee",
+        "ops.intake.customer_ticket",
+        "ops.intake.candidate_pack"
+      ],
+      "depends_on": [
+        "doc-knowledge-curator"
+      ]
+    },
+    {
+      "id": "mobile-android-release-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/mobile-android/**",
+        "FHD/.github/workflows/ci-mobile-android.yml",
+        "FHD/.github/workflows/release-android.yml",
+        "release-apk/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "test-qa-runner",
+        "deploy-release-officer"
+      ]
+    },
+    {
+      "id": "mobile-ios-release-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "FHD/mobile-ios/**",
+        "FHD/.github/workflows/release-ios.yml",
+        "FHD/XCAGI/resources/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "deploy-release-officer",
+        "mobile-android-release-officer"
+      ]
+    },
+    {
+      "id": "mods-and-eskill-curator",
+      "area": "platform-core",
+      "scope_globs": [
+        "mods/**",
+        "FHD/mods/**",
+        "eskill-prototype/**",
+        "MODstore_deploy/modstore_server/market_files/**",
+        "MODstore_deploy/modstore_server/market_files/REGISTRY.json",
+        "MODstore_deploy/modman/**",
+        "ESkill.md"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "MODstore_deploy/modstore_server/*.py",
+        "MODstore_deploy/market/src/**",
+        "vibe-coding/src/**"
+      ],
+      "subscribes": [
+        "employee.task.done:employee-pack-curator",
+        "change_request.applied"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "task-router-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/eventing/router/**",
+        "MODstore_deploy/modstore_server/api/router_api.py",
+        "MODstore_deploy/modstore_server/scripts/build_routing_table.py",
+        "MODstore_deploy/scripts/build_routing_table.py",
+        "MODstore_deploy/docs/routing-table.md",
+        "yuangon/platform-core/task-router-officer/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/market/src/**",
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/modstore_server/payment_*.py",
+        "MODstore_deploy/modstore_server/employee_*.py",
+        "_local_secrets/**"
+      ],
+      "subscribes": [
+        "ops.intake.task.queued",
+        "ops.yuangon.resync.done"
+      ],
+      "depends_on": [
+        "intake-dispatcher",
+        "employee-pack-curator"
+      ]
+    },
+    {
+      "id": "user-customer-service-officer",
+      "area": "platform-core",
+      "scope_globs": [
+        "customer-service/sessions/**",
+        "customer-service/wechat/**",
+        "FHD/mods/_employees/user-customer-service-officer/**",
+        "yuangon/platform-core/user-customer-service-officer/**"
+      ],
+      "forbidden_globs": [
+        "FHD/app/**",
+        "FHD/tests/**",
+        "MODstore_deploy/**",
+        "_local_secrets/**",
+        "*.env*"
+      ],
+      "subscribes": [
+        "ops.intake.customer_ticket"
+      ],
+      "depends_on": [
+        "intake-dispatcher"
+      ]
+    },
+    {
+      "id": "vibe-coding-maintainer",
+      "area": "platform-core",
+      "scope_globs": [
+        "vibe-coding/src/vibe_coding/**",
+        "vibe-coding/tests/**",
+        "vibe-coding/scripts/**",
+        "vibe-coding/pyproject.toml",
+        "vibe-coding/setup.py",
+        "vibe-coding/requirements*.txt",
+        "vibe-coding/docs/**",
+        "vibe-coding/examples/**",
+        "vibe-coding/CHANGELOG.md",
+        "vibe-coding/README.md",
+        "vibe-coding/README_GITHUB.md",
+        "vibe-coding/.gitignore",
+        "vibe-coding/.dockerignore",
+        "vibe-coding/test_vibe_*.py"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/**",
+        "MODstore_deploy/market/src/**",
+        "_local_secrets/**",
+        "*.vue"
+      ],
+      "subscribes": [
+        "employee.task.failed:test-qa-runner",
+        "employee.task.done:modstore-backend-api"
+      ],
+      "depends_on": []
+    },
+    {
+      "id": "doc-knowledge-curator",
+      "area": "quality-and-docs",
+      "scope_globs": [
+        "README.md",
+        "ESkill.md",
+        "docs/**",
+        "*.md",
+        "*.docx",
+        "yuangon/**/README.md",
+        "yuangon/_shared/**",
+        "py-doc-generator.xcemp",
+        "project-doc-generator.xcemp",
+        ".cursor/**",
+        ".trae/**",
+        "*.code-workspace",
+        "MODstore_deploy/.trae/**",
+        "MODstore_deploy/COMPOSE.md",
+        "MODstore_deploy/CONTRIBUTING.md",
+        "MODstore_deploy/pyproject.toml",
+        "MODstore_deploy/templates/**",
+        "MODstore_deploy/examples/**",
+        "MODstore_deploy/docs/**",
+        "MODstore_deploy/market/docs/**",
+        "风格"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/**/*.py",
+        "MODstore_deploy/market/src/**",
+        "*.ts",
+        "nginx-xiu-ci.conf",
+        "nginx-xiu-ci-root.conf",
+        "nginx-default.conf",
+        "_local_secrets/**",
+        "docs/fhd-employee-composition.md",
+        "docs/modstore/员工制作增强设计方案.md",
+        "MODstore_deploy/docs/employee_publish_wizard.md",
+        "docs/adr/0003-artifacts-bundles-employee-packs.md"
+      ],
+      "subscribes": [
+        "employee.task.done:mods-and-eskill-curator",
+        "employee.task.done:vibe-coding-maintainer",
+        "employee.task.done:employee-pack-curator",
+        "employee.task.done:test-qa-runner",
+        "employee.task.done:log-monitor-incident",
+        "employee.task.done:site-content-editor",
+        "employee.task.done:payment-billing-reconciler"
+      ],
+      "depends_on": [
+        "mods-and-eskill-curator",
+        "vibe-coding-maintainer",
+        "employee-pack-curator"
+      ]
+    },
+    {
+      "id": "employee-interview-assistant",
+      "area": "quality-and-docs",
+      "scope_globs": [
+        "yuangon/**/README.md",
+        "yuangon/**/employee.yaml",
+        "yuangon/**/runbook.md",
+        "yuangon/**/skills/*.md",
+        "yuangon/**/tasks/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.key",
+        ".env",
+        "payments/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "doc-knowledge-curator",
+        "employee-pack-curator"
+      ]
+    },
+    {
+      "id": "employee-pack-quality-interviewer",
+      "area": "quality-and-docs",
+      "scope_globs": [
+        "yuangon/**/employee.yaml",
+        "yuangon/**/prompts/*.md",
+        "yuangon/**/skills/*.md"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.key",
+        ".env"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "employee-interview-assistant",
+        "employee-pack-curator"
+      ]
+    },
+    {
+      "id": "test-qa-runner",
+      "area": "quality-and-docs",
+      "scope_globs": [
+        "MODstore_deploy/.flake8",
+        "MODstore_deploy/_mypy_override_test.toml",
+        "MODstore_deploy/market/.ts-strict-allowlist.txt",
+        "MODstore_deploy/market/vitest.config.ts",
+        ".cursor/contracts/error-code-map.yaml",
+        "MODstore_deploy/tests/**",
+        "vibe-coding/tests/**",
+        "playwright.config.ts",
+        "playwright.global-setup.ts",
+        "MODstore_deploy/market/playwright.config.ts",
+        "MODstore_deploy/market/playwright.global-setup.ts",
+        ".pre-commit-config.yaml",
+        "MODstore_deploy/market/src/**/*.test.ts",
+        "MODstore_deploy/market/src/**/*.spec.ts",
+        "MODstore_deploy/market/src/test/**",
+        "MODstore_deploy/market/vite.config.ts",
+        ".github/workflows/ci-*.yml",
+        "MODstore_deploy/tests/conftest.py",
+        "vibe-coding/tests/conftest.py",
+        "MODstore_deploy/tests/test_coverage_gates.py",
+        "MODstore_deploy/scripts/coverage_audit.py"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/**",
+        "vibe-coding/src/**",
+        "_local_secrets/**",
+        "nginx-*.conf"
+      ],
+      "subscribes": [
+        "employee.task.done:modstore-backend-api",
+        "employee.task.done:market-frontend-dev",
+        "employee.task.failed:modstore-backend-api"
+      ],
+      "depends_on": [
+        "modstore-backend-api",
+        "vibe-coding-maintainer",
+        "market-frontend-dev",
+        "deploy-release-officer"
+      ]
+    },
+    {
+      "id": "dbops-engineer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/models.py",
+        "MODstore_deploy/modstore_server/migrations/**",
+        "MODstore_deploy/alembic/**",
+        "MODstore_deploy/alembic.ini",
+        "MODstore_deploy/modstore_server/db.py",
+        "MODstore_deploy/modstore_server/database*.py",
+        "MODstore_deploy/docs/runbooks/dbops-*.md",
+        "MODstore_deploy/scripts/db_*.py",
+        "yuangon/server-and-ops/dbops-engineer/**"
+      ],
+      "forbidden_globs": [
+        "*.vue",
+        "*.ts",
+        "market/src/**",
+        "_local_secrets/**",
+        "**/*.db",
+        "MODstore_deploy/modstore_server/catalog_data/**",
+        "MODstore_deploy/modstore_server/library/**"
+      ],
+      "subscribes": [
+        "employee.task.done:modstore-backend-api",
+        "employee.task.escalate:daily-orchestrator"
+      ],
+      "depends_on": [
+        "security-secrets-guard"
+      ]
+    },
+    {
+      "id": "deploy-release-officer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "MODstore_deploy/desktop-shell/**",
+        "release/**",
+        "deploy/**",
+        "scripts/**",
+        "docker/**",
+        "dist/**",
+        "setup-alipay.sh",
+        "stop_ports.py",
+        "腾讯云Pages部署指南.md",
+        "MODstore_deploy/Dockerfile",
+        "MODstore_deploy/docker-compose.yml",
+        "MODstore_deploy/.dockerignore",
+        "MODstore_deploy/deploy.sh",
+        "MODstore_deploy/deploy.bat",
+        "MODstore_deploy/restart.bat",
+        "MODstore_deploy/start_with_alipay.py",
+        "MODstore_deploy/start-with-alipay.ps1",
+        "MODstore_deploy/start-modstore.bat",
+        "MODstore_deploy/systemd/**",
+        "MODstore_deploy/deploy/**",
+        "MODstore_deploy/market/Dockerfile",
+        "MODstore_deploy/market/nginx.conf",
+        "MODstore_deploy/market/nginx-errors/**",
+        "MODstore_deploy/market/nginx-snippets/**",
+        "MODstore_deploy/market/scripts/**",
+        "MODstore_deploy/scripts/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.vue",
+        "MODstore_deploy/modstore_server/**",
+        "vibe-coding/src/**",
+        "MODstore_deploy/scripts/yuangon_*.py",
+        "MODstore_deploy/scripts/build_routing_table.py",
+        "MODstore_deploy/scripts/intake_watcher.py",
+        "MODstore_deploy/scripts/coverage_audit.py",
+        "MODstore_deploy/scripts/audit_*.py",
+        "MODstore_deploy/scripts/db_*.py"
+      ],
+      "subscribes": [
+        "employee.task.done:test-qa-runner"
+      ],
+      "depends_on": [
+        "nginx-config-engineer",
+        "security-secrets-guard"
+      ]
+    },
+    {
+      "id": "legacy-archive-curator",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "_archive/**",
+        "FHD/.archive/**",
+        "FHD/docs/reports/LEGACY_CLEANUP_TRACKING.md",
+        "scripts/cleanup_archive_secrets.py",
+        "scripts/build-xcmax-tree-data.py"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "retention-officer"
+      ]
+    },
+    {
+      "id": "llm-ops-engineer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "FHD/app/infrastructure/llm/**",
+        "FHD/app/mod_sdk/mod_employee_llm.py",
+        "FHD/app/application/employee_runtime/agent_runner.py",
+        "FHD/app/services/**/llm_*.py",
+        "FHD/frontend/src/domain/llm/**",
+        "MODstore_deploy/modstore_server/llm_*.py",
+        "MODstore_deploy/modstore_server/services/llm.py",
+        "MODstore_deploy/modstore_server/domain/llm/**",
+        "MODstore_deploy/modstore_server/infrastructure/llm_repository.py",
+        "MODstore_deploy/market/src/api/llm.ts",
+        "MODstore_deploy/market/src/domain/llm/**",
+        "MODstore_deploy/market/src/llm*.ts",
+        "MODstore_deploy/market/src/components/llm/**",
+        "yuangon/server-and-ops/llm-ops-engineer/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "**/*.db",
+        "**/*.sqlite*",
+        ".env",
+        ".env.*",
+        "MODstore_deploy/.env*",
+        "MODstore_deploy/keys/**",
+        "MODstore_deploy/keys_staging/**",
+        "MODstore_deploy/modstore_server/catalog_data/**",
+        "MODstore_deploy/modstore_server/library/**"
+      ],
+      "subscribes": [
+        "llm.quota_consumed",
+        "employee.task.failed:daily-orchestrator"
+      ],
+      "depends_on": [
+        "security-secrets-guard",
+        "dbops-engineer",
+        "daily-orchestrator"
+      ]
+    },
+    {
+      "id": "log-monitor-incident",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "coverage/**",
+        "playwright-report/**",
+        "test-results/**",
+        ".cursor_*_log.txt",
+        ".cursor/contracts/error-code-map.yaml",
+        "MODstore_deploy/.pytest_cache/**",
+        "MODstore_deploy/.coverage",
+        "vibe-coding/.pytest_cache/**",
+        "MODstore_deploy/docs/observability.md",
+        "MODstore_deploy/docs/OPS_MONITORING.md",
+        "MODstore_deploy/docs/runbooks/incident-response.md",
+        "MODstore_deploy/docs/sre-operating-model.md",
+        "MODstore_deploy/docs/runbooks/disaster-recovery.md",
+        "MODstore_deploy/docs/runbooks/chaos-game-day.md",
+        "MODstore_deploy/chaos/**",
+        "MODstore_deploy/monitoring/**",
+        "MODstore_deploy/orchestration/**",
+        "MODstore_deploy/perf/**",
+        "MODstore_deploy/docs/runbooks/exercises/**"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/**/*.py",
+        "*.vue",
+        "*.ts",
+        "nginx-*.conf",
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": []
+    },
+    {
+      "id": "nginx-config-engineer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "./nginx-xiu-ci.conf",
+        "./nginx-xiu-ci-root.conf",
+        "./nginx-default.conf",
+        "./xiu-ci.com_nginx.zip",
+        "./_nginx_extract/**",
+        "MODstore_deploy/docs/nginx-*.conf",
+        "MODstore_deploy/docs/runbooks/nginx-*.md",
+        "MODstore_deploy/market/nginx.conf"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "*.vue",
+        "*.ts",
+        "vibe-coding/**",
+        "_local_secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "security-secrets-guard"
+      ]
+    },
+    {
+      "id": "push-update-context-officer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        ".gitignore",
+        ".gitleaks.toml",
+        ".github/**",
+        "MODstore_deploy/.gitignore",
+        "MODstore_deploy/.github/**",
+        "MODstore_deploy/git-push.sh",
+        "MODstore_deploy/git-push.bat",
+        "*.code-workspace",
+        "MODstore_deploy/docs/runbooks/yuangon-resync.md",
+        "MODstore_deploy/scripts/yuangon_*.py",
+        "scripts/yuangon_*.sh",
+        "scripts/yuangon_*.ps1",
+        "scripts/yuangon_*.py"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "*.vue",
+        "vibe-coding/src/**",
+        "yuangon/**/employee.yaml",
+        "yuangon/**/skills/**",
+        "yuangon/**/prompts/**"
+      ],
+      "subscribes": [
+        "yuangon.def.changed"
+      ],
+      "depends_on": [
+        "deploy-release-officer"
+      ]
+    },
+    {
+      "id": "retention-officer",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "MODstore_deploy/modstore_server/workbench_script_runs/**",
+        "MODstore_deploy/modstore_server/market_files/.tmp_chunks/**",
+        "MODstore_deploy/modstore_server/webhook_events/**",
+        ".cursor_*_log.txt",
+        ".cursor_paths_check*.txt",
+        ".cursor_*.txt",
+        "coverage/**",
+        "playwright-report/**",
+        "test-results/**",
+        "__tmp_xcemp/**",
+        "__tmp_emp_*.json",
+        "_nginx_extract/**",
+        "new/**",
+        "alipay_package/**",
+        "taiyangniao-pro/**",
+        "dist/**",
+        "site/**",
+        "*.mp4",
+        "test_image.jpg",
+        "MODstore_deploy.zip",
+        "xiu-ci.com_nginx.zip",
+        ".cursor_inspect_purge.py",
+        "MODstore_deploy/market_vue_baseline/**",
+        "MODstore_deploy/market_vue_baseline*.tar.gz",
+        "MODstore_deploy/market-dist-*.zip",
+        "MODstore_deploy/hero-video.mp4",
+        "MODstore_deploy/modstore.egg-info/**",
+        "MODstore_deploy/market/dist/**",
+        "vibe-coding/test_vibe_*_data/**",
+        "vibe-coding/test_vibe_data/**",
+        "vibe-coding/test_vibe_data*/**",
+        "**/__pycache__/**",
+        "**/.pytest_cache/**",
+        "**/.mypy_cache/**",
+        "**/.ruff_cache/**",
+        "MODstore_deploy/docs/runbooks/file-retention.md",
+        "MODstore_deploy/docs/runbooks/legacy-archive.md"
+      ],
+      "forbidden_globs": [
+        "MODstore_deploy/modstore_server/**/*.py",
+        "vibe-coding/src/**/*.py",
+        "MODstore_deploy/market/src/**/*.vue",
+        "MODstore_deploy/market/src/**/*.ts",
+        "vibe-coding/src/**/*.vue",
+        "vibe-coding/src/**/*.ts",
+        "_local_secrets/**",
+        ".env*",
+        "**/secrets/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "log-monitor-incident"
+      ]
+    },
+    {
+      "id": "security-secrets-guard",
+      "area": "server-and-ops",
+      "scope_globs": [
+        "_local_secrets/**",
+        ".cursor_admin_token.txt",
+        "alipay_package/**",
+        "requirements.txt",
+        "MODstore_deploy/modstore_server/requirements*.txt",
+        "MODstore_deploy/keys/**",
+        "MODstore_deploy/keys_staging/**",
+        "MODstore_deploy/.env",
+        "MODstore_deploy/.env.example",
+        "MODstore_deploy/.env.local",
+        "MODstore_deploy/.env.local.bak-*",
+        "MODstore_deploy/.env.production",
+        "MODstore_deploy/.env.production.example",
+        "MODstore_deploy/.env*",
+        "MODstore_deploy/market/.env*",
+        "MODstore_deploy/market/.deploy-ssh.local*",
+        "MODstore_deploy/env.database.local.example",
+        "MODstore_deploy/runtime_allowlist.json",
+        "MODstore_deploy/deploy-target.local.ps1.example"
+      ],
+      "forbidden_globs": [
+        "*.vue",
+        "*.ts",
+        "MODstore_deploy/modstore_server/*.py",
+        "vibe-coding/**"
+      ],
+      "subscribes": [],
+      "depends_on": []
+    },
+    {
+      "id": "flask-entry-keeper",
+      "area": "site-and-marketing",
+      "scope_globs": [
+        "./app.py",
+        "./requirements.txt",
+        "./public/**",
+        "./uploads/**",
+        "./site/**",
+        "./excel-to-ai.html"
+      ],
+      "forbidden_globs": [
+        "nginx-*.conf",
+        "MODstore_deploy/**",
+        "vibe-coding/**",
+        "_local_secrets/**",
+        "docker/**",
+        "deploy/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "nginx-config-engineer"
+      ]
+    },
+    {
+      "id": "marketing-site-builder",
+      "area": "site-and-marketing",
+      "scope_globs": [
+        "marketing-site/**",
+        "marketing-assets/xc-brand-film/build.sh",
+        "marketing-assets/xc-brand-film/scripts/**",
+        "marketing-assets/xc-brand-film/assets/**"
+      ],
+      "forbidden_globs": [
+        "_local_secrets/**",
+        "MODstore_deploy/**",
+        "site/**"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "site-content-editor",
+        "seo-sitemap-curator"
+      ]
+    },
+    {
+      "id": "seo-sitemap-curator",
+      "area": "site-and-marketing",
+      "scope_globs": [
+        "./sitemap.xml",
+        "./robots.txt",
+        "./baidu_urls.txt",
+        "./BingSiteAuth.xml",
+        "./baidu_verify_*.html"
+      ],
+      "forbidden_globs": [
+        "*.py",
+        "nginx-*.conf",
+        "MODstore_deploy/**",
+        "_local_secrets/**",
+        "styles.css",
+        "main.js"
+      ],
+      "subscribes": [],
+      "depends_on": [
+        "site-content-editor"
+      ]
+    },
+    {
+      "id": "site-content-editor",
+      "area": "site-and-marketing",
+      "scope_globs": [
+        "./developer.html",
+        "./download-release.json",
+        "./index.html",
+        "./about.html",
+        "./cases.html",
+        "./services.html",
+        "./solutions.html",
+        "./news.html",
+        "./contact.html",
+        "./honors.html",
+        "./case-edu.html",
+        "./case-manufacture.html",
+        "./case-park.html",
+        "./excel-to-ai.html",
+        "./styles.css",
+        "./main.js",
+        "./news.json",
+        "./activities.json",
+        "./privacy.html",
+        "./assets/**",
+        "corp-butler/**/*.html",
+        "corp-butler/**/*.js",
+        "corp-butler/**/*.css",
+        "corp-butler/**/*.jpg",
+        "corp-butler/**/*.json",
+        "./src/**",
+        "./package.json",
+        "./package-lock.json",
+        "./vite.config.ts",
+        "./tsconfig.json",
+        "./tsconfig.node.json",
+        "./tsconfig.strict.json",
+        "./tsconfig.strict-baseline.json",
+        "./eslint.config.js",
+        "./.prettierrc",
+        "./.prettierignore",
+        "./env.d.ts"
+      ],
+      "forbidden_globs": [
+        "app.py",
+        "requirements.txt",
+        "nginx-*.conf",
+        "MODstore_deploy/**",
+        "vibe-coding/**",
+        "_local_secrets/**",
+        "deploy/**",
+        "docker/**",
+        "sitemap.xml",
+        "robots.txt"
+      ],
+      "subscribes": [],
+      "depends_on": []
+    }
+  ]
+}

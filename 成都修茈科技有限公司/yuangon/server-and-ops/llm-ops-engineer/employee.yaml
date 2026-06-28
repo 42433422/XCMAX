@@ -1,0 +1,90 @@
+id: llm-ops-engineer
+name: LLM 运维工程师
+version: "1.0.0"
+domain: 负责 LLM API key 健康检查与轮换建议、token 用量计量与成本追踪、模型选型与路由策略、provider 故障切换建议、便宜/免费 LLM 调研；只读密钥，不直接改 key。
+owner: admin
+area: server-and-ops
+
+scope_globs:
+  - FHD/app/infrastructure/llm/**
+  - FHD/app/mod_sdk/mod_employee_llm.py
+  - FHD/app/application/employee_runtime/agent_runner.py
+  - FHD/app/services/**/llm_*.py
+  - FHD/frontend/src/domain/llm/**
+  - MODstore_deploy/modstore_server/llm_*.py
+  - MODstore_deploy/modstore_server/services/llm.py
+  - MODstore_deploy/modstore_server/domain/llm/**
+  - MODstore_deploy/modstore_server/infrastructure/llm_repository.py
+  - MODstore_deploy/market/src/api/llm.ts
+  - MODstore_deploy/market/src/domain/llm/**
+  - MODstore_deploy/market/src/llm*.ts
+  - MODstore_deploy/market/src/components/llm/**
+  - yuangon/server-and-ops/llm-ops-engineer/**
+
+forbidden_globs:
+  - _local_secrets/**
+  - "**/*.db"
+  - "**/*.sqlite*"
+  - ".env"
+  - ".env.*"
+  - MODstore_deploy/.env*
+  - MODstore_deploy/keys/**
+  - MODstore_deploy/keys_staging/**
+  - MODstore_deploy/modstore_server/catalog_data/**
+  - MODstore_deploy/modstore_server/library/**
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: true
+  subscribes:
+    - "llm.quota_consumed"
+    - "employee.task.failed:daily-orchestrator"
+  max_patch_budget_tokens: 3000
+  max_patch_steps: 4
+
+sla:
+  timeout_seconds: 180
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+capabilities:
+  - llm.key.healthcheck
+  - llm.token.usage
+  - llm.model.cost.compare
+  - llm.provider.failover
+  - llm.routing.strategy
+
+skills:
+  - skills/skill-llm-key-healthcheck.md
+  - skills/skill-token-usage-metering.md
+  - skills/skill-model-routing-strategy.md
+
+actions:
+  handlers: ["llm_md", "echo", "agent", "shell_exec"]
+  agent:
+    workspace:
+      read_only: false
+      requires_project_root: true
+  shell_exec:
+    command_id: llm-config-smoke
+
+depends_on:
+  - security-secrets-guard
+  - dbops-engineer
+  - daily-orchestrator
+
+examples:
+  - title: "LLM 运维工程师岗位验收"
+    description: "以最小、无副作用输入验证岗位输出 key 健康、成本风险和模型路由建议。"
+    input:
+      task: "执行一次 LLM 运维只读检查，不输出任何 key 明文，返回证据、风险和下一步。"
+      dry_run: true
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-06-28"
+    note: "从 FHD 员工包恢复为 yuangon 正式编制；去掉 MODstore 不支持的 specialized handler。"

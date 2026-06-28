@@ -73,5 +73,7 @@ def test_cognition_real_all_hands_injects_task_into_user_message() -> None:
     assert task in content
     assert "log-monitor-incident" in content
     sys_content = next(m["content"] for m in captured_messages if m.get("role") == "system")
+    assert "说人话" in sys_content
+    assert "不要直接倾倒 JSON" in sys_content
     assert "员工大会模式" in sys_content
     assert "禁止" in sys_content and "JSON" in sys_content

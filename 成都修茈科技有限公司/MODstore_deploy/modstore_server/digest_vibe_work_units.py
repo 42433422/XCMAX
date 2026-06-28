@@ -23,6 +23,16 @@ _PATH_HINT_RE = re.compile(
 )
 
 _PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+_LOW_SIGNAL_WORK_UNIT_PHRASES = (
+    "当前无明确证据驱动补丁",
+    "当前无明确证据驱动更新",
+    "无证据驱动补丁",
+    "无证据驱动更新",
+    "不派发空补丁",
+    "不生成派发任务",
+    "暂无 recent_failures",
+    "保留员工版本快照用于审计",
+)
 
 
 @dataclass
@@ -95,6 +105,11 @@ def _extract_path_hints(text: str) -> List[str]:
     return hints
 
 
+def _is_low_signal_work_unit(text: str) -> bool:
+    core = re.sub(r"\s+", " ", str(text or "")).strip().lower()
+    return any(phrase.lower() in core for phrase in _LOW_SIGNAL_WORK_UNIT_PHRASES)
+
+
 def _infer_pipeline_step(list_kind: str, task_brief: str, priority: str) -> str:
     if list_kind == "updates":
         low = task_brief.lower()
@@ -163,6 +178,8 @@ def parse_line_markdown_to_work_units(
                     brief = str(bm.group("text") or "").strip()
                     if not brief:
                         continue
+                    if _is_low_signal_work_unit(brief):
+                        continue
                     unit = VibeWorkUnit(
                         employee_id=resolve_work_unit_employee(eid, _extract_path_hints(brief)),
                         dispatch_line=line,
@@ -187,6 +204,8 @@ def parse_line_markdown_to_work_units(
             else:
                 brief = body.strip()
                 if not brief or brief.startswith("|"):
+                    continue
+                if _is_low_signal_work_unit(brief):
                     continue
                 pri = "P2"
                 if allowed_priorities and pri not in allowed_priorities:

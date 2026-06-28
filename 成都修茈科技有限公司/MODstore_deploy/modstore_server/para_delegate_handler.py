@@ -34,6 +34,10 @@ def para_delegate_enabled() -> bool:
     return _env_bool("MODSTORE_PARA_DELEGATE_ENABLED", "1")
 
 
+def para_delegate_ready_for_dispatch() -> bool:
+    return bool(_webhook_url() or _api_base())
+
+
 def _webhook_url() -> str:
     return (os.environ.get("MODSTORE_PARA_DELEGATE_WEBHOOK") or "").strip()
 
@@ -869,4 +873,4 @@ def dispatch_para_delegate(
     return _post_webhook(req)
 
 
-__all__ = ["dispatch_para_delegate", "para_delegate_enabled"]
+__all__ = ["dispatch_para_delegate", "para_delegate_enabled", "para_delegate_ready_for_dispatch"]

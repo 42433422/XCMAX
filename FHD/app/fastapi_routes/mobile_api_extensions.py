@@ -378,6 +378,14 @@ def _shipment_items(limit: int = 100) -> list[dict[str, Any]]:
         ]
 
 
+def _safe_mobile_sync_items(name: str, loader) -> list[dict[str, Any]]:
+    try:
+        return loader()
+    except Exception as exc:  # noqa: BLE001 - 单个业务表缺失不能拖垮手机拉同步
+        logger.warning("mobile sync: %s skipped: %s", name, exc)
+        return []
+
+
 def _ai_conversation_changes(user: Any, limit: int = 100) -> list[dict[str, Any]]:
     """查询当前用户最近的 AI 对话消息，供移动端增量同步。"""
     uid = int(getattr(user, "id", 0) or 0)
@@ -410,7 +418,7 @@ def _ai_conversation_changes(user: Any, limit: int = 100) -> list[dict[str, Any]
                 }
                 for r in reversed(rows)
             ]
-    except OPERATIONAL_ERRORS as exc:
+    except Exception as exc:  # noqa: BLE001 - AI 对话表缺失不能拖垮手机拉同步
         logger.warning("ai_conversation_changes: %s", exc)
         return []
 
@@ -2469,7 +2477,9 @@ async def mobile_ai_circle_posts(
     from app.application.ai_circle_service import list_posts
 
     try:
-        from app.application import employee_circle_sync
+        import importlib
+
+        employee_circle_sync = importlib.import_module("app.application.employee_circle_sync")
 
         await employee_circle_sync.sync_modstore_reports()
     except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
@@ -2918,6 +2928,32 @@ def _mobile_sync_runtime_contract() -> dict[str, Any]:
     }
 
 
+async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[str, Any]]:
+    try:
+        import importlib
+
+        from app.application.ai_circle_service import list_posts
+
+        employee_circle_sync = importlib.import_module("app.application.employee_circle_sync")
+        try:
+            await employee_circle_sync.sync_modstore_reports()
+        except Exception:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
+            logger.warning("mobile sync: circle modstore report sync skipped", exc_info=True)
+
+        uid, _, _ = _ai_circle_user(user)
+        posts = list_posts(user_id=uid, limit=limit)
+        profiles = _ai_circle_employee_profiles()
+        for post in posts:
+            profile = profiles.get(str(post.get("employee_id") or ""))
+            if profile:
+                post["author_name"] = profile["name"]
+                post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
+        return posts
+    except Exception as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
+        logger.warning("mobile sync: circle posts skipped: %s", exc)
+        return []
+
+
 @extension_router.get("/sync/status")
 async def mobile_sync_status(user=Depends(get_mobile_user)):
     if user is None:
@@ -2957,6 +2993,9 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
         im_entity_types = {"im_message", "im_read_state"}
         im_changes = [c for c in changes if str(c.get("entity_type") or "") in im_entity_types]
         ai_changes = _ai_conversation_changes(user, limit=100)
+        circle_posts = await _mobile_sync_circle_posts(user, limit=50)
+        approvals = _safe_mobile_sync_items("approvals", _approval_items)
+        shipments = _safe_mobile_sync_items("shipments", _shipment_items)
         return format_mobile_response(
             data={
                 **_mobile_sync_runtime_contract(),
@@ -2966,8 +3005,10 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
                 "im_change_count": len(im_changes),
                 "ai_changes": ai_changes,
                 "ai_change_count": len(ai_changes),
-                "approvals": _approval_items(),
-                "shipments": _shipment_items(),
+                "circle_posts": circle_posts,
+                "circle_post_count": len(circle_posts),
+                "approvals": approvals,
+                "shipments": shipments,
             },
         )
     except OPERATIONAL_ERRORS as exc:

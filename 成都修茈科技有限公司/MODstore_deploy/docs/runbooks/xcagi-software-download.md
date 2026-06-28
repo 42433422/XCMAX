@@ -2,9 +2,10 @@
 
 ## 页面行为（`SoftwareDownloadView.vue`）
 
-- 构建时注入 `VITE_XCAGI_DOWNLOAD_VERSION`（默认 `8.1.0`）、`VITE_XCAGI_DOWNLOAD_BASE_URL`。
-- 下载页为 **个人版 / 企业版** 两卡；点击 Windows / macOS / Android：通过隐藏 `<a download>` 跳转到  
+- 构建时注入 `VITE_XCAGI_DOWNLOAD_VERSION`（默认 `10.0.0`）、`VITE_XCAGI_DOWNLOAD_BASE_URL`。
+- 下载页为 **个人版 / 企业版** 两卡；普通浏览器点击 Windows / macOS / Android：通过隐藏 `<a download>` 跳转到
   `{BASE}/{personal|enterprise}/{XCAGI-*-Setup|*-mac-x64.dmg|*-Android-*.apk}`。
+- Electron 桌面壳内点击 Windows / macOS 安装包时，优先调用 `window.xcagiDesktop.downloadFile()`，由主进程弹原生保存对话框并写入用户 Downloads；用户取消则停止，IPC 失败才回退浏览器下载。
 - 仅 SKU 非法时才会 `alert`，不会出现「敬请期待」占位。
 - **Android APK** 不在该 Vue 页直链；由内部分发或应用商店提供，产物路径见主仓 `FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md`（`release/packages-v*/personal|enterprise/`）。
 
@@ -23,7 +24,7 @@ xcagi-v8.1.0/{personal,enterprise}/XCAGI-{Personal|Enterprise}-8.1.0-mac-arm64.d
 公网下载基址（market 构建注入）：
 
 ```
-https://xiu-ci.com/xcagi-v8.1.0
+https://xiu-ci.com/xcagi-v10.0.0
 ```
 
 nginx（`xiu-ci.com`）将 `/xcagi-v8.1.0/` alias 到本机安装包目录（与 COS 目录结构一致，CDN 接入前由 CVM 出文件）：

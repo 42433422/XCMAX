@@ -19,7 +19,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from sqlalchemy import func, or_
+from sqlalchemy import and_, func, or_
 
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 from modstore_server.models import (
@@ -895,11 +895,32 @@ _EVOLUTION_INFRA_FAILURE_MARKERS: Tuple[str, ...] = (
     "quota",
     "llm_calls",
     "429",
+    "too many requests",
     "rate limit",
     "rate_limit",
+    "ratelimit",
+    "limitation",
     "missing api key",
     "未配置",
+    "para_api",
+    "para api",
+    "para_delegate",
+    "blocked_no_online_para_device",
+    "missing_para_api_base_or_device_id",
 )
+_EVOLUTION_IGNORED_TASK_MARKERS: Tuple[str, ...] = (
+    "event=employee.evolution.",
+    "event=employee.suggestion.",
+    "event=employee.collab.",
+    "event=employee.brief_todo.",
+    "event=employee.execution.recovery",
+)
+_PARA_DELEGATE_EMPLOYEES: Tuple[str, ...] = (
+    "vibe-coding-maintainer",
+    "change-request-auditor",
+    "test-qa-runner",
+)
+_GENERIC_HANDLER_FAILURE = "one or more handlers returned ok=false"
 
 
 def _alert_evolution_quota_circuit_break(quota_failures: int, lookback_hours: int) -> None:
@@ -926,6 +947,7 @@ def _evolution_failure_candidates(
     若计入会导致配额耗尽时进化引擎空转（见上方说明）。
     """
     err_col = func.coalesce(EmployeeExecutionMetric.error, "")
+    task_col = func.lower(func.coalesce(EmployeeExecutionMetric.task, ""))
     infra_kinds = [FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT]
     query = session.query(
         EmployeeExecutionMetric.employee_id,
@@ -940,6 +962,14 @@ def _evolution_failure_candidates(
     )
     for marker in _EVOLUTION_INFRA_FAILURE_MARKERS:
         query = query.filter(~err_col.ilike(f"%{marker}%"))
+    for marker in _EVOLUTION_IGNORED_TASK_MARKERS:
+        query = query.filter(~task_col.like(f"%{marker}%"))
+    query = query.filter(
+        ~and_(
+            EmployeeExecutionMetric.employee_id.in_(_PARA_DELEGATE_EMPLOYEES),
+            func.lower(err_col) == _GENERIC_HANDLER_FAILURE,
+        )
+    )
     rows = (
         query.group_by(EmployeeExecutionMetric.employee_id)
         .order_by(func.count(EmployeeExecutionMetric.id).desc())

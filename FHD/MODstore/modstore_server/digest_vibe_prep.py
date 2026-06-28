@@ -135,6 +135,35 @@ def _apply_version_stamp(kind: str, body: str, ctx: Dict[str, Any]) -> str:
     return f"{title}\n\n{header}\n{text}".rstrip() + "\n"
 
 
+def _include_meta_maintenance_updates() -> bool:
+    raw = (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_META_UPDATES") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _is_actionable_failure(fail: Any, msg: str) -> bool:
+    msg_lower = str(msg or "").lower()
+    transient_keywords = (
+        "disconnected",
+        "timeout",
+        "timed out",
+        "connection",
+        "remotedisconnected",
+    )
+    if any(kw in msg_lower for kw in transient_keywords):
+        return False
+    if not isinstance(fail, dict):
+        return True
+    status = str(fail.get("status") or "").strip().lower()
+    err = str(fail.get("error") or "").strip()
+    tokens = int(fail.get("llm_tokens") or 0)
+    task = str(fail.get("task") or "")
+    if status in ("skipped", "warning") and not err:
+        return False
+    if status == "failed" and not err and tokens <= 0 and "员工大会" in task:
+        return False
+    return True
+
+
 def _employee_pack_version(pkg_id: str) -> str:
     try:
         from modstore_server.employee_runtime import load_employee_pack
@@ -170,36 +199,39 @@ def _build_template_vibe_markdowns(
         failures = emp.get("recent_failures") if isinstance(emp.get("recent_failures"), list) else []
         domain = str(emp.get("domain") or "").strip()
 
-        update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-        update_lines.append(f"- 职责域：{domain or '（见 manifest）'}")
-        update_lines.append(f"- scope：{scope_txt}")
-        if depends:
-            update_lines.append("- **P2** 核对 depends_on 文档与联调说明是否仍与 manifest 一致")
-            for dep in depends[:3]:
-                update_lines.append(f"  - 依赖 `{dep}`：同步接口/契约说明")
-        if handlers:
-            update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
-            for h in handlers[:3]:
-                update_lines.append(f"  - handler `{h}`")
-        if not depends and not handlers:
-            update_lines.append("- **P2** 补齐岗位 README / runbook（依据 manifest 与 yuangon 节选）")
-        update_lines.append("")
+        if _include_meta_maintenance_updates() and (depends or handlers):
+            update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+            update_lines.append(f"- 职责域：{domain or '（见 manifest）'}")
+            update_lines.append(f"- scope：{scope_txt}")
+            if depends:
+                update_lines.append("- **P2** 核对 depends_on 文档与联调说明是否仍与 manifest 一致")
+                for dep in depends[:3]:
+                    update_lines.append(f"  - 依赖 `{dep}`：同步接口/契约说明")
+            if handlers:
+                update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
+                for h in handlers[:3]:
+                    update_lines.append(f"  - handler `{h}`")
+            update_lines.append("")
 
-        patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-        patch_lines.append(f"- scope：{scope_txt}")
         if failures:
+            actionable_failures: List[str] = []
             for fail in failures[:4]:
                 if isinstance(fail, dict):
                     msg = str(fail.get("message") or fail.get("error") or fail.get("summary") or fail)
                 else:
                     msg = str(fail)
+                if _is_actionable_failure(fail, msg):
+                    actionable_failures.append(msg)
+            if not actionable_failures:
+                continue
+            patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+            patch_lines.append(f"- scope：{scope_txt}")
+            for msg in actionable_failures:
                 patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
-        else:
-            patch_lines.append("- **P2** 暂无 recent_failures；按摘要「待审改动 / pytest」段落人工复核是否需要补丁")
-        patch_lines.append("")
+            patch_lines.append("")
 
-    updates_body = "\n".join(update_lines).strip() or "（无在岗员工快照）"
-    patches_body = "\n".join(patch_lines).strip() or "（无在岗员工快照）"
+    updates_body = "\n".join(update_lines).strip() or "（无证据驱动更新）"
+    patches_body = "\n".join(patch_lines).strip() or "（无证据驱动补丁）"
     return (
         _apply_version_stamp("updates", updates_body, ctx),
         _apply_version_stamp("patches", patches_body, ctx),

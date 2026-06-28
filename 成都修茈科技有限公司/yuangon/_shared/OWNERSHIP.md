@@ -13,7 +13,7 @@
 | 路径 | 所有者 | 备注 |
 |------|--------|------|
 | `app.py`、`requirements.txt`、`public/**`、`uploads/**`、`excel-to-ai.html` | `flask-entry-keeper` | 根 Flask 入口 |
-| `src/**`、`main.js`、`index.html`、`about.html`、`cases.html`、`case-*.html`、`services.html`、`solutions.html`、`news.html`、`contact.html`、`honors.html`、`styles.css`、`assets/**`、`activities.json`、`news.json` | `site-content-editor` | 静态营销站内容（含 Vite 子目录 `src/`） |
+| `src/**`、`main.js`、`index.html`、`about.html`、`cases.html`、`case-*.html`、`services.html`、`solutions.html`、`news.html`、`contact.html`、`honors.html`、`privacy.html`、`styles.css`、`assets/**`、`activities.json`、`news.json`、`corp-butler/**/*.html/js/css/jpg/json` | `site-content-editor` | 静态营销站内容（含 Vite 子目录 `src/` 与 corp-butler 源文件） |
 | `package.json`、`package-lock.json`、`vite.config.ts`、`tsconfig*.json`、`eslint.config.js`、`.prettierrc`、`.prettierignore`、`env.d.ts` | `site-content-editor` | 根前端工具链（与 MODstore_deploy/market/ 工具链是两套，不要混用） |
 | `sitemap.xml`、`robots.txt`、`baidu_urls.txt`、`BingSiteAuth.xml`、`baidu_verify_*.html` | `seo-sitemap-curator` | SEO 资产 |
 | `nginx-*.conf`、`xiu-ci.com_nginx.zip`、`_nginx_extract/**` | `nginx-config-engineer` | Nginx 配置 |
@@ -28,8 +28,8 @@
 | `*.md`（仓库根所有 Markdown，含 `LLM*.md`、`OPC_*.md`、`腾讯云Pages部署指引.md`、`修改建议-需求报告.md`、`README.md`、`ESkill.md`） | `doc-knowledge-curator` | 文档总管 |
 | `*.docx`（如 `AI员工集体建设需求报告.docx`） | `doc-knowledge-curator` | 战略文档 |
 | `project-doc-generator.xcemp`、`py-doc-generator.xcemp` | `doc-knowledge-curator` | 文档生成器员工包（自用工具） |
-| `marketing-site/**` | `marketing-site-builder` | Nunjucks 营销站构建（与根静态站分工） |
-| `mods/**`、`eskill-prototype/**` | `mods-and-eskill-curator` | Mod 包与 ESkill 原型 |
+| `marketing-site/**`、`marketing-assets/xc-brand-film/build.sh`、`marketing-assets/xc-brand-film/scripts/**`、`marketing-assets/xc-brand-film/assets/**` | `marketing-site-builder` | Nunjucks 营销站与品牌影片源素材/脚本（输出文件显式忽略） |
+| `mods/**`、`FHD/mods/**`、`eskill-prototype/**` | `mods-and-eskill-curator` | Mod 包与 ESkill 原型 |
 | `mianshi/**` | `intake-dispatcher`（监听） + `employee-interview-assistant`（处理） + `employee-pack-quality-interviewer`（质询） | 候补员工面试中转 |
 | `vibe-coding/**` | `vibe-coding-maintainer` | 平台核心库（test_vibe_*_data 子目录归 retention-officer 清理） |
 | `MODstore_deploy/**` | 见下表 §二 | MODstore 平台 |
@@ -58,7 +58,7 @@
 | `docs/**` | `doc-knowledge-curator`（默认） | 子项另有专属人员（详见 §三） |
 | `chaos/**`、`monitoring/**`、`orchestration/**`、`perf/**` | `log-monitor-incident` | SRE/可观测域 |
 | `keys/**`、`keys_staging/**`、`.env`、`.env.example`、`.env.local`、`.env.production*`、`runtime_allowlist.json` | `security-secrets-guard` | 凭据/允许清单 |
-| `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`deploy.sh`、`deploy.bat`、`restart.bat`、`start*.{py,bat,ps1}`、`systemd/**` | `deploy-release-officer` | 发布脚手架 |
+| `Dockerfile`、`docker-compose.yml`、`.dockerignore`、`deploy.sh`、`deploy.bat`、`restart.bat`、`start*.{py,bat,ps1}`、`systemd/**`、`market/scripts/**` | `deploy-release-officer` | 发布脚手架 |
 | `git-push.bat`、`git-push.sh`、`.gitignore`、`.github/**` | `push-update-context-officer` | 推送/CI |
 | `pyproject.toml`、`COMPOSE.md`、`CONTRIBUTING.md`、`templates/**`、`examples/**` | `doc-knowledge-curator` | 项目文档 |
 | `modman/**` | `mods-and-eskill-curator` | Mod manager 工具 |
@@ -102,15 +102,45 @@
 **/modstore.egg-info/**
 **/*.pyc
 **/*.pyo
+**/.DS_Store
+**/._*
+*.bak.*
 .coverage
 # 租户实例 / 运行时 / 临时构建产物（Yuangon 全覆盖 Phase 2 注入 employee.yaml 忽略同步）
 MODstore_deploy/library/**
 MODstore_deploy/modstore_server/catalog_data/**
 MODstore_deploy/modstore_server/*.db
 MODstore_deploy/var/**
+MODstore_deploy/data/**
+MODstore_deploy/tmp_*
+MODstore_deploy/*.db*
+MODstore_deploy/:memory:
+MODstore_deploy/artifacts/*.log
+MODstore_deploy/backups/**
+MODstore_deploy/_generated_employee/**
+MODstore_deploy/playwright-report/**
+MODstore_deploy/voice-e2e-result.png
 var/**
 MODstore_deploy/market/market-dist-upload.tgz
 MODstore_deploy/market/tmp_tsc.log
+MODstore_deploy/market/.tmp-*/**
+MODstore_deploy/market/coverage*/**
+MODstore_deploy/market/coverage-*/**
+MODstore_deploy/market/cov*.txt
+MODstore_deploy/market/coverage_output.txt
+MODstore_deploy/market/strict-errors*.txt
+MODstore_deploy/market/strict-e*.txt
+MODstore_deploy/market/out.txt
+MODstore_deploy/market/err.txt
+MODstore_deploy/market/test-results.json
+MODstore_deploy/market/test-edge.wav
+corp-butler/**/chunks/**
+corp-butler/**/assets/**
+corp-butler/**/vosk.wasm.js
+corp-butler/**/vosk.worker.js
+corp-butler/**/*.wasm
+corp-butler/**/model.tar.gz
+marketing-assets/xc-brand-film/output/**
 .cursor_inspect_purge.py
 ```
 
@@ -130,3 +160,4 @@ MODstore_deploy/market/tmp_tsc.log
 | 2026-05-08 | 初版：全仓库 25 名员工 + 显式忽略表 | admin |
 | 2026-05-08 | v1.1：新增 `marketing-site-builder`；§五 扩充租户/运行时显式忽略（Phase2） | admin |
 | 2026-05-08 | §一 补充 `.gitleaks.toml`；§四 访谈员范围含 `tasks/**` | admin |
+| 2026-06-28 | v2.1：同步代码归属审计口径，补 corp-butler/FHD mods/market scripts/品牌影片源文件归属与运行产物/备份忽略 | Codex |

@@ -153,6 +153,10 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
         ".github/workflows/ci-backend-python.yml",
         f".github/workflows/{out_name}",
     )
+    content = content.replace(
+        "working-directory: desktop-shell",
+        "working-directory: 成都修茈科技有限公司/MODstore_deploy/desktop-shell",
+    )
     return content
 
 

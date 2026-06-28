@@ -140,6 +140,47 @@ def _apply_version_stamp(kind: str, body: str, ctx: Dict[str, Any]) -> str:
     return f"{title}\n\n{header}\n{text}".rstrip() + "\n"
 
 
+def _include_meta_maintenance_updates() -> bool:
+    raw = (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_META_UPDATES") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _include_surface_hint_tasks() -> bool:
+    raw = (os.environ.get("MODSTORE_VIBE_PREP_INCLUDE_SURFACE_HINTS") or "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def _is_actionable_failure(fail: Any, msg: str) -> bool:
+    msg_lower = str(msg or "").lower()
+    transient_keywords = (
+        "disconnected",
+        "timeout",
+        "timed out",
+        "connection",
+        "remotedisconnected",
+    )
+    if any(kw in msg_lower for kw in transient_keywords):
+        return False
+    if not isinstance(fail, dict):
+        return True
+    status = str(fail.get("status") or "").strip().lower()
+    err = str(fail.get("error") or "").strip()
+    tokens = int(fail.get("llm_tokens") or 0)
+    task = str(fail.get("task") or "")
+    if status in ("skipped", "warning") and not err:
+        return False
+    if status == "failed" and not err and tokens <= 0 and "员工大会" in task:
+        return False
+    return True
+
+
+def _short_task_reason(reason: str, *, limit: int = 180) -> str:
+    text = re.sub(r"\s+", " ", str(reason or "")).strip()
+    if len(text) <= limit:
+        return text or "未知原因"
+    return text[: limit - 1].rstrip() + "…"
+
+
 def _employee_pack_version(pkg_id: str) -> str:
     try:
         from modstore_server.employee_runtime import load_employee_pack
@@ -163,6 +204,7 @@ def _build_template_vibe_markdowns(
     digest_excerpt: str = "",
     meeting_excerpt: str = "",
     surface_audit_excerpt: str = "",
+    fallback_reason: str = "",
 ) -> Tuple[str, str]:
     """无 Bench LLM 或合成失败时的确定性清单。
 
@@ -201,59 +243,94 @@ def _build_template_vibe_markdowns(
         patch_lines.extend(items)
         patch_lines.append("")
 
-    ps_title_issue = "智能对话 - xcagi" in evidence_lower and (
-        "标题" in evidence or "title" in evidence_lower or "元数据" in evidence
-    )
-    if ps_title_issue:
-        ps_items = [
-            "- **P1** 修复 P-S 页面标题/Head 管理：巡检显示多个业务路由标题均渲染为「智能对话 - XCAGI」，需按当前 route 写入正确 title",
-            "- **P2** 增加路由标题一致性断言，覆盖 `/ai-ecosystem`、`/products`、`/customers`、`/orders`、`/inventory`、`/settings` 等巡检页面",
-        ]
-        _add_patch("vibe-coding-maintainer", "Vibe Coding 维护员", ps_items)
+    reason = _short_task_reason(fallback_reason)
+    if str(fallback_reason or "").strip():
         _add_patch(
-            "fhd-core-maintainer",
-            "FHD Core 维护员",
+            "modstore-backend-api",
+            "MODstore 后端 API 员",
             [
-                "- **P1** 审核前端全局标题服务/路由元数据契约，确保页面切换时不会复用首页标题",
-                "- **P2** 将标题契约写入 P-S 巡检 runbook，避免后续页面新增时漏配 metadata",
+                (
+                    "- **P0** 修复 Vibe 预备任务生成断点："
+                    f"{reason}；确保 Bench LLM 输出合法 JSON，或解析器能提取 "
+                    "updates_markdown / patches_markdown"
+                ),
             ],
         )
-        _add_update(
+        _add_patch(
+            "task-router-officer",
+            "任务派发员",
+            [
+                (
+                    "- **P0** 修复 Vibe fallback 任务责任路由：LLM 合成失败时不能把所有断点挂给 "
+                    "daily-orchestrator，需按实际责任员工进入 action-items 和 AI 交流圈"
+                ),
+            ],
+        )
+        _add_patch(
             "test-qa-runner",
-            "测试执行员",
+            "测试质量运行员",
             [
-                "- **P2** 把 P-S title/route 对照表纳入每日巡检验收项，失败时生成可定位的页面清单",
+                (
+                    "- **P1** 增加回归断言：template fallback 发生时必须进入 "
+                    "action-items、产线执行和 AI 交流圈，不能只留下会议纪要"
+                ),
             ],
         )
 
-    if any(x in evidence for x in ("ERR_CONNECTION_CLOSED", "ERR_HTTP2_PING_FAILED")):
-        _add_patch(
-            "marketing-site-builder",
-            "营销站点构建员",
-            [
-                "- **P1** 排查 P-W 静态站资源加载失败：巡检记录包含 ERR_CONNECTION_CLOSED / ERR_HTTP2_PING_FAILED，需定位 CDN、HTTP/2 或资源引用问题",
-                "- **P2** 为 P-W 资源加载失败补充可重复巡检页面清单与回归步骤",
-            ],
+    if _include_surface_hint_tasks():
+        ps_title_issue = "智能对话 - xcagi" in evidence_lower and (
+            "标题" in evidence or "title" in evidence_lower or "元数据" in evidence
         )
+        if ps_title_issue:
+            ps_items = [
+                "- **P1** 修复 P-S 页面标题/Head 管理：巡检显示多个业务路由标题均渲染为「智能对话 - XCAGI」，需按当前 route 写入正确 title",
+                "- **P2** 增加路由标题一致性断言，覆盖 `/ai-ecosystem`、`/products`、`/customers`、`/orders`、`/inventory`、`/settings` 等巡检页面",
+            ]
+            _add_patch("vibe-coding-maintainer", "Vibe Coding 维护员", ps_items)
+            _add_patch(
+                "fhd-core-maintainer",
+                "FHD Core 维护员",
+                [
+                    "- **P1** 审核前端全局标题服务/路由元数据契约，确保页面切换时不会复用首页标题",
+                    "- **P2** 将标题契约写入 P-S 巡检 runbook，避免后续页面新增时漏配 metadata",
+                ],
+            )
+            _add_update(
+                "test-qa-runner",
+                "测试执行员",
+                [
+                    "- **P2** 把 P-S title/route 对照表纳入每日巡检验收项，失败时生成可定位的页面清单",
+                ],
+            )
 
-    if "404" in evidence and "catalog" in evidence_lower:
-        _add_patch(
-            "market-frontend-dev",
-            "市场前端开发员",
-            [
-                "- **P1** 修复 AI 员工商品页 catalog 404：巡检提到 catalog/40、catalog/50、catalog/41 等商品链接异常",
-                "- **P2** 增加商品详情页存在性检查，避免市场入口指向不存在 SKU",
-            ],
-        )
+        if any(x in evidence for x in ("ERR_CONNECTION_CLOSED", "ERR_HTTP2_PING_FAILED")):
+            _add_patch(
+                "marketing-site-builder",
+                "营销站点构建员",
+                [
+                    "- **P1** 排查 P-W 静态站资源加载失败：巡检记录包含 ERR_CONNECTION_CLOSED / ERR_HTTP2_PING_FAILED，需定位 CDN、HTTP/2 或资源引用问题",
+                    "- **P2** 为 P-W 资源加载失败补充可重复巡检页面清单与回归步骤",
+                ],
+            )
 
-    if "403" in evidence and ("沙箱" in evidence or "sandbox" in evidence_lower):
-        _add_update(
-            "sandbox-tester",
-            "沙箱测试员",
-            [
-                "- **P2** 复核沙箱测试页 403 是否符合权限预期；若是预期行为，将巡检断言改为认证态校验",
-            ],
-        )
+        if "404" in evidence and "catalog" in evidence_lower:
+            _add_patch(
+                "market-frontend-dev",
+                "市场前端开发员",
+                [
+                    "- **P1** 修复 AI 员工商品页 catalog 404：巡检提到 catalog/40、catalog/50、catalog/41 等商品链接异常",
+                    "- **P2** 增加商品详情页存在性检查，避免市场入口指向不存在 SKU",
+                ],
+            )
+
+        if "403" in evidence and ("沙箱" in evidence or "sandbox" in evidence_lower):
+            _add_update(
+                "sandbox-tester",
+                "沙箱测试员",
+                [
+                    "- **P2** 复核沙箱测试页 403 是否符合权限预期；若是预期行为，将巡检断言改为认证态校验",
+                ],
+            )
 
     # recent_failures 是硬事实信号；只为有失败的员工生成补丁，不再为无失败员工生成空泛任务。
     for emp in employees:
@@ -274,31 +351,24 @@ def _build_template_vibe_markdowns(
         has_failures = bool(failures)
         if not has_failures:
             continue
-        dep_pr = "P0" if has_failures else "P1"
-        update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-        update_lines.append(f"- 职责域：{domain or '（见 manifest）'}")
-        update_lines.append(f"- scope：{scope_txt}")
-        if depends:
-            update_lines.append(
-                f"- **{dep_pr}** 核对 depends_on 文档与联调说明是否仍与 manifest 一致"
-            )
-            for dep in depends[:3]:
-                update_lines.append(f"  - 依赖 `{dep}`：同步接口/契约说明")
-        if handlers:
-            update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
-            for h in handlers[:3]:
-                update_lines.append(f"  - handler `{h}`")
-        update_lines.append("")
+        if _include_meta_maintenance_updates() and (depends or handlers):
+            dep_pr = "P0" if has_failures else "P1"
+            update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+            update_lines.append(f"- 职责域：{domain or '（见 manifest）'}")
+            update_lines.append(f"- scope：{scope_txt}")
+            if depends:
+                update_lines.append(
+                    f"- **{dep_pr}** 核对 depends_on 文档与联调说明是否仍与 manifest 一致"
+                )
+                for dep in depends[:3]:
+                    update_lines.append(f"  - 依赖 `{dep}`：同步接口/契约说明")
+            if handlers:
+                update_lines.append("- **P2** 复核 handlers 注册与 yuangon 目录结构一致")
+                for h in handlers[:3]:
+                    update_lines.append(f"  - handler `{h}`")
+            update_lines.append("")
 
-        patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-        patch_lines.append(f"- scope：{scope_txt}")
-        _TRANSIENT_KEYWORDS = (
-            "disconnected",
-            "timeout",
-            "timed out",
-            "connection",
-            "remotedisconnected",
-        )
+        actionable_failures: List[Tuple[str, str]] = []
         for fail in failures[:2]:
             if isinstance(fail, dict):
                 msg = str(fail.get("message") or fail.get("error") or fail.get("summary") or fail)
@@ -306,36 +376,32 @@ def _build_template_vibe_markdowns(
             else:
                 msg = str(fail)
                 fail_task = ""
-            msg_lower = msg.lower()
-            is_transient = any(kw in msg_lower for kw in _TRANSIENT_KEYWORDS)
-            if is_transient:
-                suffix = "（基础设施/LLM 瞬断，优先重试而非改代码）"
-                patch_lines.append(f"- **P0** 修复近期失败：{fail_task[:80] or msg[:160]}{suffix}")
-            else:
-                patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
+            if _is_actionable_failure(fail, msg):
+                actionable_failures.append((msg, fail_task))
+        if not actionable_failures:
+            continue
+        patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
+        patch_lines.append(f"- scope：{scope_txt}")
+        for msg, _fail_task in actionable_failures:
+            patch_lines.append(f"- **P0** 修复近期失败：{msg[:240]}")
         patch_lines.append("")
 
     if not update_lines and employees:
+        update_lines.append("### 员工版本快照（无派发）")
+        update_lines.append("")
+        update_lines.append("| employee | version |")
+        update_lines.append("| --- | --- |")
         for emp in employees[:12]:
             pid = str(emp.get("employee_id") or "").strip()
             if not pid:
                 continue
-            name, pack_ver, scope_txt = _emp_section(pid)
-            update_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-            update_lines.append(f"- scope：{scope_txt}")
-            update_lines.append("- 当前无明确证据驱动更新；保留员工版本快照用于审计。")
-            update_lines.append("")
+            _name, pack_ver, _scope_txt = _emp_section(pid)
+            update_lines.append(f"| `{pid}` | v{pack_ver} |")
+        update_lines.append("")
+        update_lines.append("（无证据驱动更新；不生成派发任务）")
 
     if not patch_lines and employees:
-        for emp in employees[:12]:
-            pid = str(emp.get("employee_id") or "").strip()
-            if not pid:
-                continue
-            name, pack_ver, scope_txt = _emp_section(pid)
-            patch_lines.append(f"## [{pid}] {name} · v{pack_ver}\n")
-            patch_lines.append(f"- scope：{scope_txt}")
-            patch_lines.append("- 当前无明确证据驱动补丁；不派发空补丁。")
-            patch_lines.append("")
+        patch_lines.append("（无证据驱动补丁；不生成派发任务）")
 
     updates_body = "\n".join(update_lines).strip() or "（无证据驱动更新）"
     patches_body = "\n".join(patch_lines).strip() or "（无证据驱动补丁）"
@@ -385,6 +451,7 @@ def _finalize_vibe_result(
         digest_excerpt=digest_excerpt,
         meeting_excerpt=meeting_excerpt,
         surface_audit_excerpt=surface_audit_excerpt,
+        fallback_reason=str(synth.get("error") or "LLM 不可用"),
     )
     patches, backlog_meta = _merge_event_backlog_into_patches(patches)
     return {
