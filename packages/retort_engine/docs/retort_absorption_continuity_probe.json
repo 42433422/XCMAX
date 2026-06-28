@@ -27,7 +27,7 @@
       "post_absorption_hardening_ready": true,
       "post_absorption_tests_passed": true
     },
-    "run_id": "20260628032252-hardening",
+    "run_id": "20260628033450-hardening",
     "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
     "state_status": "closed_loop_verified",
     "verified": true
@@ -70,6 +70,7 @@
         "tests/test_absorption_continuity_probe.py",
         "tests/test_absorption_hardening_run.py",
         "tests/test_absorption_release_decision.py",
+        "tests/test_behavior_matrix_density.py",
         "tests/test_capability_audit.py",
         "tests/test_contracts_feedback.py",
         "tests/test_diff_extension_policy.py",
@@ -88,12 +89,13 @@
         "tests/test_pr_publish.py",
         "tests/test_pr_review.py",
         "tests/test_production_recovery_drill.py",
+        "tests/test_quality_gate_bundle.py",
         "tests/test_real_absorption_helpers.py",
         "tests/test_retort_engine.py",
         "tests/test_review_calibration_policy.py",
         "tests/test_review_context_bias.py"
       ],
-      "changed_file_count": 70,
+      "changed_file_count": 72,
       "checks": {
         "behavior_diff": true,
         "behavior_tests": true,
@@ -107,8 +109,8 @@
       "employee_result_count": 5,
       "gate_count": 3,
       "latest": true,
-      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628032252-hardening.json",
-      "run_id": "20260628032252-hardening",
+      "run_file": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/real_absorption_runs/20260628033450-hardening.json",
+      "run_id": "20260628033450-hardening",
       "source": "retort://post-absorption-hardening/2525bd4b6"
     },
     {
@@ -228,7 +230,7 @@
     "all_have_gates_passed": true,
     "all_have_per_run_code_graph_proof": true,
     "continuity_gate_passed": true,
-    "continuity_span_minutes": 298,
+    "continuity_span_minutes": 310,
     "counting_model_separated": true,
     "distinct_source_count": 5,
     "latest_closed_loop_verified": true,

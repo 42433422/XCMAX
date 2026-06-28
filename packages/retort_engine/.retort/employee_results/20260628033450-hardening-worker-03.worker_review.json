@@ -1,0 +1,1581 @@
+{
+  "comments": [
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 40,
+        "path": "packages/retort_engine/tests/test_capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_capability_audit.py",
+      "hunk_header": "@@ -25,7 +25,22 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa",
+      "line": 40,
+      "line_text_excerpt": "                    \"multi_worker\": {\"verified\": True, \"worker_count\": 5, \"independent_worker_count\": 5, \"result_path_count\": 5},",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 40,
+        "path": "packages/retort_engine/tests/test_capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 1,
+      "rank_reason": "low:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 370,
+      "review_context": "tests",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 306,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_header": "@@ -288,7 +295,15 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_",
+      "line": 306,
+      "line_text_excerpt": "                    \"multi_worker\": {\"verified\": True, \"worker_count\": 5, \"independent_worker_count\": 5, \"result_path_count\": 5},",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 306,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 2,
+      "rank_reason": "low:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 370,
+      "review_context": "tests",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 104,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_header": "@@ -53,3 +94,12 @@ def test_quality_gate_bundle_writes_report_and_service_exposes_it(tmp_path: Path",
+      "line": 104,
+      "line_text_excerpt": "    (package / \"feature.py\").write_text(\"\\n\".join(f\"VALUE_{index} = {index}\" for index in range(source_lines)), encoding=\"utf-8\")",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 104,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 3,
+      "rank_reason": "low:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 370,
+      "review_context": "tests",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 105,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_header": "@@ -53,3 +94,12 @@ def test_quality_gate_bundle_writes_report_and_service_exposes_it(tmp_path: Path",
+      "line": 105,
+      "line_text_excerpt": "    (tests / \"test_feature.py\").write_text(\"\\n\".join(f\"assert {index} == {index}\" for index in range(test_lines)), encoding=\"utf-8\")",
+      "message": "新增行过长，建议拆分为可审阅的局部表达式。",
+      "publish_payload": {
+        "body": "新增行过长，建议拆分为可审阅的局部表达式。",
+        "line": 105,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 4,
+      "rank_reason": "low:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 370,
+      "review_context": "tests",
+      "review_stage": "localize_changed_hunks",
+      "severity": "low",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 59,
+        "path": "packages/retort_engine/tests/test_capability_audit.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_capability_audit.py",
+      "hunk_header": "@@ -41,6 +56,9 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa",
+      "line": 59,
+      "line_text_excerpt": "    assert audit[\"employee_worker_review\"][\"multi_worker_verified\"] is True",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 59,
+        "path": "packages/retort_engine/tests/test_capability_audit.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 5,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 146,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_header": "@@ -143,6 +143,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_",
+      "line": 146,
+      "line_text_excerpt": "                    \"test_density_passed\": True,",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 146,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 6,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 335,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_header": "@@ -317,7 +332,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_",
+      "line": 335,
+      "line_text_excerpt": "    assert \"employee_runtime_worker_review=reviewed; comments=60; artifact=review.json\" in evidence",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 335,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 7,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 347,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_header": "@@ -327,6 +344,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_",
+      "line": 347,
+      "line_text_excerpt": "    assert \"quality_gate_bundle_test_density=True\" in evidence",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 347,
+        "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 8,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 11,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_header": "@@ -8,6 +8,7 @@ from retort_engine.service import RetortService",
+      "line": 11,
+      "line_text_excerpt": "    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 11,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 9,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 25,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_header": "@@ -21,14 +22,20 @@ def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> N",
+      "line": 25,
+      "line_text_excerpt": "    assert result[\"summary\"][\"test_density_passed\"] is True",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 25,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 10,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "absorbed_context_rank_weight": 40,
+      "absorbed_policy_rank_weight": 40,
+      "calibration_rank_weight": 40,
+      "capability": "review_pipeline",
+      "comment_anchor": {
+        "line": 52,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "employee_actionable": false,
+      "feedback_rank_weight": 0,
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_header": "@@ -42,7 +49,41 @@ def test_quality_gate_bundle_fails_when_a_gate_fails(tmp_path: Path) -> None:",
+      "line": 52,
+      "line_text_excerpt": "def test_quality_gate_bundle_reports_density_target_gap(tmp_path: Path) -> None:",
+      "message": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+      "publish_payload": {
+        "body": "该 hunk 已按吸收的评审策略完成检查，未发现阻断问题。",
+        "line": 52,
+        "path": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+        "side": "RIGHT"
+      },
+      "publishable": true,
+      "rank_position": 11,
+      "rank_reason": "info:tests:review_pipeline:bias=40:policy=40:calibration=40:feedback=0",
+      "rank_score": 270,
+      "review_context": "tests",
+      "review_stage": "reflect_before_publish",
+      "severity": "info",
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "context_groups": [
+    {
+      "added_change_count": 96,
+      "context": "tests",
+      "file_count": 3,
+      "files": [
+        "packages/retort_engine/tests/test_capability_audit.py",
+        "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "packages/retort_engine/tests/test_quality_gate_bundle.py"
+      ],
+      "hunk_count": 10,
+      "review_focus": "behavior_proof_and_regression_scope"
+    }
+  ],
+  "file_summaries": [
+    {
+      "comment_count": 2,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_capability_audit.py",
+      "hunk_count": 2,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 4,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+      "hunk_count": 4,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 3,
+        "low": 1,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    },
+    {
+      "comment_count": 5,
+      "extension_policy": {
+        "extension": ".py",
+        "family": "python",
+        "known": true,
+        "review_context": "runtime",
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "source": "retort_holdout_extension_policy_v1"
+      },
+      "file": "packages/retort_engine/tests/test_quality_gate_bundle.py",
+      "hunk_count": 4,
+      "ready_for_employee_task": false,
+      "review_context": "tests",
+      "risk_counts": {
+        "high": 0,
+        "info": 3,
+        "low": 2,
+        "medium": 0
+      },
+      "stages": [
+        {
+          "name": "group_related_files",
+          "status": "completed"
+        },
+        {
+          "name": "localize_changed_hunks",
+          "status": "completed"
+        },
+        {
+          "name": "classify_risk",
+          "status": "completed"
+        },
+        {
+          "name": "reflect_before_publish",
+          "status": "completed"
+        },
+        {
+          "name": "dispatch_employee_task",
+          "status": "completed"
+        }
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ],
+  "files": [
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 25,
+              "text": "    review_artifact = result_dir / \"worker_review.json\"",
+              "type": "context"
+            },
+            {
+              "line": 26,
+              "text": "    review_artifact.write_text(\"{}\", encoding=\"utf-8\")",
+              "type": "context"
+            },
+            {
+              "line": 27,
+              "text": "    (result_dir / \"result.json\").write_text(",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "        json.dumps({\"execution_mode\": \"employee_runtime_worker\", \"runtime_evidence\": {\"worker_review\": {\"status\": \"reviewed\", \"comment_count\": 1, \"file_count\": 1, \"artifact\": str(review_artifact)}}}),",
+              "type": "delete"
+            },
+            {
+              "line": 28,
+              "text": "        json.dumps(",
+              "type": "add"
+            },
+            {
+              "line": 29,
+              "text": "            {",
+              "type": "add"
+            },
+            {
+              "line": 30,
+              "text": "                \"execution_mode\": \"employee_runtime_worker\",",
+              "type": "add"
+            },
+            {
+              "line": 31,
+              "text": "                \"runtime_evidence\": {",
+              "type": "add"
+            },
+            {
+              "line": 32,
+              "text": "                    \"worker_review\": {",
+              "type": "add"
+            },
+            {
+              "line": 33,
+              "text": "                        \"status\": \"reviewed\",",
+              "type": "add"
+            },
+            {
+              "line": 34,
+              "text": "                        \"comment_count\": 24,",
+              "type": "add"
+            },
+            {
+              "line": 35,
+              "text": "                        \"file_count\": 12,",
+              "type": "add"
+            },
+            {
+              "line": 36,
+              "text": "                        \"task_group_count\": 6,",
+              "type": "add"
+            },
+            {
+              "line": 37,
+              "text": "                        \"worker_review_count\": 5,",
+              "type": "add"
+            },
+            {
+              "line": 38,
+              "text": "                        \"artifact\": str(review_artifact),",
+              "type": "add"
+            },
+            {
+              "line": 39,
+              "text": "                    },",
+              "type": "add"
+            },
+            {
+              "line": 40,
+              "text": "                    \"multi_worker\": {\"verified\": True, \"worker_count\": 5, \"independent_worker_count\": 5, \"result_path_count\": 5},",
+              "type": "add"
+            },
+            {
+              "line": 41,
+              "text": "                },",
+              "type": "add"
+            },
+            {
+              "line": 42,
+              "text": "            }",
+              "type": "add"
+            },
+            {
+              "line": 43,
+              "text": "        ),",
+              "type": "add"
+            },
+            {
+              "line": 44,
+              "text": "        encoding=\"utf-8\",",
+              "type": "context"
+            },
+            {
+              "line": 45,
+              "text": "    )",
+              "type": "context"
+            },
+            {
+              "line": 46,
+              "text": "    docs = tmp_path / \"docs\"",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -25,7 +25,22 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa"
+        },
+        {
+          "changes": [
+            {
+              "line": 56,
+              "text": "    assert \"https://github.com/example/repo\" in audit[\"external_projects\"]",
+              "type": "context"
+            },
+            {
+              "line": 57,
+              "text": "    assert len(audit[\"external_projects\"]) == 3",
+              "type": "context"
+            },
+            {
+              "line": 58,
+              "text": "    assert \"employee_execution_not_independent_runtime\" not in audit[\"blockers\"]",
+              "type": "context"
+            },
+            {
+              "line": 59,
+              "text": "    assert audit[\"employee_worker_review\"][\"multi_worker_verified\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 60,
+              "text": "    assert audit[\"employee_worker_review\"][\"worker_review_count\"] == 5",
+              "type": "add"
+            },
+            {
+              "line": 61,
+              "text": "    assert audit[\"employee_worker_review\"][\"multi_file_review_verified\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 62,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 63,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 64,
+              "text": "def test_absorption_external_projects_combines_run_sources_and_architecture_memory(tmp_path: Path) -> None:",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -41,6 +56,9 @@ def test_capability_audit_accepts_behavior_code_and_test_absorption(tmp_path: Pa"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_capability_audit.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 143,
+              "text": "                    \"pytest_passed\": True,",
+              "type": "context"
+            },
+            {
+              "line": 144,
+              "text": "                    \"contract_passed\": True,",
+              "type": "context"
+            },
+            {
+              "line": 145,
+              "text": "                    \"single_command_surface\": True,",
+              "type": "context"
+            },
+            {
+              "line": 146,
+              "text": "                    \"test_density_passed\": True,",
+              "type": "add"
+            },
+            {
+              "line": 147,
+              "text": "                    \"test_density_target_met\": False,",
+              "type": "add"
+            },
+            {
+              "line": 148,
+              "text": "                    \"test_to_source_ratio\": 0.408,",
+              "type": "add"
+            },
+            {
+              "line": 149,
+              "text": "                    \"test_density_target\": 0.6,",
+              "type": "add"
+            },
+            {
+              "line": 150,
+              "text": "                    \"test_density_missing_lines_to_target\": 3276,",
+              "type": "add"
+            },
+            {
+              "line": 151,
+              "text": "                    \"source_line_count\": 17083,",
+              "type": "add"
+            },
+            {
+              "line": 152,
+              "text": "                    \"test_line_count\": 6974,",
+              "type": "add"
+            },
+            {
+              "line": 153,
+              "text": "                },",
+              "type": "context"
+            },
+            {
+              "line": 154,
+              "text": "                \"gates\": [],",
+              "type": "context"
+            },
+            {
+              "line": 155,
+              "text": "                \"evidence\": {},",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -143,6 +143,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        },
+        {
+          "changes": [
+            {
+              "line": 295,
+              "text": "                \"execution_mode\": \"employee_runtime_worker\",",
+              "type": "context"
+            },
+            {
+              "line": 296,
+              "text": "                \"results\": [{\"task_id\": \"one\"}],",
+              "type": "context"
+            },
+            {
+              "line": 297,
+              "text": "                \"runtime_evidence\": {",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "                    \"worker_review\": {\"status\": \"reviewed\", \"comment_count\": 2, \"artifact\": \"review.json\"},",
+              "type": "delete"
+            },
+            {
+              "line": 298,
+              "text": "                    \"worker_review\": {",
+              "type": "add"
+            },
+            {
+              "line": 299,
+              "text": "                        \"status\": \"reviewed\",",
+              "type": "add"
+            },
+            {
+              "line": 300,
+              "text": "                        \"comment_count\": 60,",
+              "type": "add"
+            },
+            {
+              "line": 301,
+              "text": "                        \"file_count\": 45,",
+              "type": "add"
+            },
+            {
+              "line": 302,
+              "text": "                        \"task_group_count\": 15,",
+              "type": "add"
+            },
+            {
+              "line": 303,
+              "text": "                        \"worker_review_count\": 5,",
+              "type": "add"
+            },
+            {
+              "line": 304,
+              "text": "                        \"artifact\": \"review.json\",",
+              "type": "add"
+            },
+            {
+              "line": 305,
+              "text": "                    },",
+              "type": "add"
+            },
+            {
+              "line": 306,
+              "text": "                    \"multi_worker\": {\"verified\": True, \"worker_count\": 5, \"independent_worker_count\": 5, \"result_path_count\": 5},",
+              "type": "add"
+            },
+            {
+              "line": 307,
+              "text": "                    \"employee_patch_closure\": {",
+              "type": "context"
+            },
+            {
+              "line": 308,
+              "text": "                        \"status\": \"ready\",",
+              "type": "context"
+            },
+            {
+              "line": 309,
+              "text": "                        \"summary\": {\"success_case_verified\": True, \"failure_case_rolled_back\": True},",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -288,7 +295,15 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        },
+        {
+          "changes": [
+            {
+              "line": 332,
+              "text": "    assert \"license_review_status=passed; detected=MIT; source_copy_allowed=True; pattern_absorption_allowed=True; isolation=license_gate_standard\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 333,
+              "text": "    assert \"component_gap_count=1\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 334,
+              "text": "    assert \"employee_result_count=1; execution_mode=employee_runtime_worker\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    assert \"employee_runtime_worker_review=reviewed; comments=2; artifact=review.json\" in evidence",
+              "type": "delete"
+            },
+            {
+              "line": 335,
+              "text": "    assert \"employee_runtime_worker_review=reviewed; comments=60; artifact=review.json\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 336,
+              "text": "    assert \"employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 337,
+              "text": "    assert \"employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 338,
+              "text": "    assert \"employee_runtime_patch_closure=ready; success_case=True; rollback_case=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 339,
+              "text": "    assert \"employee_patch_closure_status=ready\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 340,
+              "text": "    assert \"employee_patch_closure_success_case_verified=True\" in evidence",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -317,7 +332,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        },
+        {
+          "changes": [
+            {
+              "line": 344,
+              "text": "    assert \"employee_patch_closure_retry_case_verified=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 345,
+              "text": "    assert \"quality_gate_bundle_status=ready\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 346,
+              "text": "    assert \"quality_gate_bundle_all_passed=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 347,
+              "text": "    assert \"quality_gate_bundle_test_density=True\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 348,
+              "text": "    assert \"quality_gate_bundle_test_to_source_ratio=0.408\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 349,
+              "text": "    assert \"quality_gate_bundle_test_density_target=0.6\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 350,
+              "text": "    assert \"quality_gate_bundle_test_density_target_met=False\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 351,
+              "text": "    assert \"quality_gate_bundle_test_density_missing_lines=3276\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 352,
+              "text": "    assert \"quality_gate_bundle_source_lines=17083\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 353,
+              "text": "    assert \"quality_gate_bundle_test_lines=6974\" in evidence",
+              "type": "add"
+            },
+            {
+              "line": 354,
+              "text": "    assert \"quality_gate_bundle_contract=True\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 355,
+              "text": "    assert \"review_adjudication_calibration_status=ready\" in evidence",
+              "type": "context"
+            },
+            {
+              "line": 356,
+              "text": "    assert \"external_advantage_matrix_status=ready\" in evidence",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -327,6 +344,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_llm_absorption_evidence.py"
+    },
+    {
+      "hunks": [
+        {
+          "changes": [
+            {
+              "line": 8,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 9,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 10,
+              "text": "def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> None:",
+              "type": "context"
+            },
+            {
+              "line": 11,
+              "text": "    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)",
+              "type": "add"
+            },
+            {
+              "line": 12,
+              "text": "    calls: list[list[str]] = []",
+              "type": "context"
+            },
+            {
+              "line": 13,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 14,
+              "text": "    def runner(command: list[str], root: Path) -> dict[str, object]:",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -8,6 +8,7 @@ from retort_engine.service import RetortService"
+        },
+        {
+          "changes": [
+            {
+              "line": 22,
+              "text": "    assert result[\"summary\"][\"all_gates_passed\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 23,
+              "text": "    assert result[\"summary\"][\"lint_passed\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 24,
+              "text": "    assert result[\"summary\"][\"pytest_passed\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 25,
+              "text": "    assert result[\"summary\"][\"test_density_passed\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 26,
+              "text": "    assert result[\"summary\"][\"test_to_source_ratio\"] == 0.75",
+              "type": "add"
+            },
+            {
+              "line": 27,
+              "text": "    assert result[\"summary\"][\"test_density_target_met\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 28,
+              "text": "    assert result[\"summary\"][\"test_density_missing_lines_to_target\"] == 0",
+              "type": "add"
+            },
+            {
+              "line": 29,
+              "text": "    assert result[\"summary\"][\"contract_passed\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 30,
+              "text": "    assert result[\"summary\"][\"single_command_surface\"] is True",
+              "type": "context"
+            },
+            {
+              "line": null,
+              "text": "    assert [gate[\"name\"] for gate in result[\"gates\"]] == [\"lint\", \"pytest\", \"contract\"]",
+              "type": "delete"
+            },
+            {
+              "line": 31,
+              "text": "    assert [gate[\"name\"] for gate in result[\"gates\"]] == [\"lint\", \"pytest\", \"test_density\", \"contract\"]",
+              "type": "add"
+            },
+            {
+              "line": 32,
+              "text": "    assert calls == [[\"python\", \"-m\", \"ruff\", \"check\", \".\"], [\"python\", \"-m\", \"pytest\", \"tests\", \"-q\"]]",
+              "type": "context"
+            },
+            {
+              "line": 33,
+              "text": "    assert validate_contract(\"quality_gate_bundle_result\", result)[\"valid\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 34,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 35,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 36,
+              "text": "def test_quality_gate_bundle_fails_when_a_gate_fails(tmp_path: Path) -> None:",
+              "type": "context"
+            },
+            {
+              "line": 37,
+              "text": "    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)",
+              "type": "add"
+            },
+            {
+              "line": 38,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 39,
+              "text": "    def runner(command: list[str], root: Path) -> dict[str, object]:",
+              "type": "context"
+            },
+            {
+              "line": 40,
+              "text": "        if \"ruff\" in command:",
+              "type": "context"
+            },
+            {
+              "line": 41,
+              "text": "            return {\"returncode\": 1, \"stdout\": \"\", \"stderr\": \"lint failed\"}",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -21,14 +22,20 @@ def test_quality_gate_bundle_runs_lint_pytest_and_contracts(tmp_path: Path) -> N"
+        },
+        {
+          "changes": [
+            {
+              "line": 49,
+              "text": "    assert result[\"evidence\"][\"failure_names\"] == [\"lint\"]",
+              "type": "context"
+            },
+            {
+              "line": 50,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 51,
+              "text": "",
+              "type": "context"
+            },
+            {
+              "line": 52,
+              "text": "def test_quality_gate_bundle_reports_density_target_gap(tmp_path: Path) -> None:",
+              "type": "add"
+            },
+            {
+              "line": 53,
+              "text": "    _write_density_fixture(tmp_path, source_lines=10, test_lines=4)",
+              "type": "add"
+            },
+            {
+              "line": 54,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 55,
+              "text": "    def runner(command: list[str], root: Path) -> dict[str, object]:",
+              "type": "add"
+            },
+            {
+              "line": 56,
+              "text": "        return {\"returncode\": 0, \"stdout\": \"ok\", \"stderr\": \"\"}",
+              "type": "add"
+            },
+            {
+              "line": 57,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 58,
+              "text": "    result = run_quality_gate_bundle(tmp_path, python_executable=\"python\", runner=runner)",
+              "type": "add"
+            },
+            {
+              "line": 59,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 60,
+              "text": "    density_gate = next(gate for gate in result[\"gates\"] if gate[\"name\"] == \"test_density\")",
+              "type": "add"
+            },
+            {
+              "line": 61,
+              "text": "    assert result[\"status\"] == \"ready\"",
+              "type": "add"
+            },
+            {
+              "line": 62,
+              "text": "    assert result[\"summary\"][\"test_density_passed\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 63,
+              "text": "    assert result[\"summary\"][\"test_density_target_met\"] is False",
+              "type": "add"
+            },
+            {
+              "line": 64,
+              "text": "    assert result[\"summary\"][\"test_to_source_ratio\"] == 0.4",
+              "type": "add"
+            },
+            {
+              "line": 65,
+              "text": "    assert result[\"summary\"][\"test_density_missing_lines_to_target\"] == 2",
+              "type": "add"
+            },
+            {
+              "line": 66,
+              "text": "    assert density_gate[\"ok\"] is True",
+              "type": "add"
+            },
+            {
+              "line": 67,
+              "text": "    assert density_gate[\"target_met\"] is False",
+              "type": "add"
+            },
+            {
+              "line": 68,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 69,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 70,
+              "text": "def test_quality_gate_bundle_blocks_below_density_floor(tmp_path: Path) -> None:",
+              "type": "add"
+            },
+            {
+              "line": 71,
+              "text": "    _write_density_fixture(tmp_path, source_lines=10, test_lines=3)",
+              "type": "add"
+            },
+            {
+              "line": 72,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 73,
+              "text": "    def runner(command: list[str], root: Path) -> dict[str, object]:",
+              "type": "add"
+            },
+            {
+              "line": 74,
+              "text": "        return {\"returncode\": 0, \"stdout\": \"ok\", \"stderr\": \"\"}",
+              "type": "add"
+            },
+            {
+              "line": 75,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 76,
+              "text": "    result = run_quality_gate_bundle(tmp_path, python_executable=\"python\", runner=runner)",
+              "type": "add"
+            },
+            {
+              "line": 77,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 78,
+              "text": "    assert result[\"status\"] == \"failed\"",
+              "type": "add"
+            },
+            {
+              "line": 79,
+              "text": "    assert result[\"summary\"][\"all_gates_passed\"] is False",
+              "type": "add"
+            },
+            {
+              "line": 80,
+              "text": "    assert result[\"summary\"][\"test_density_passed\"] is False",
+              "type": "add"
+            },
+            {
+              "line": 81,
+              "text": "    assert result[\"evidence\"][\"failure_names\"] == [\"test_density\"]",
+              "type": "add"
+            },
+            {
+              "line": 82,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 83,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 84,
+              "text": "def test_quality_gate_bundle_writes_report_and_service_exposes_it(tmp_path: Path) -> None:",
+              "type": "context"
+            },
+            {
+              "line": 85,
+              "text": "    _write_density_fixture(tmp_path, source_lines=4, test_lines=3)",
+              "type": "add"
+            },
+            {
+              "line": 86,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 87,
+              "text": "    def runner(command: list[str], root: Path) -> dict[str, object]:",
+              "type": "context"
+            },
+            {
+              "line": 88,
+              "text": "        return {\"returncode\": 0, \"stdout\": \"ok\", \"stderr\": \"\"}",
+              "type": "context"
+            },
+            {
+              "line": 89,
+              "text": "",
+              "type": "context"
+            }
+          ],
+          "header": "@@ -42,7 +49,41 @@ def test_quality_gate_bundle_fails_when_a_gate_fails(tmp_path: Path) -> None:"
+        },
+        {
+          "changes": [
+            {
+              "line": 94,
+              "text": "    assert output.is_file()",
+              "type": "context"
+            },
+            {
+              "line": 95,
+              "text": "    assert result[\"status\"] == \"ready\"",
+              "type": "context"
+            },
+            {
+              "line": 96,
+              "text": "    assert service_result[\"summary\"][\"contract_passed\"] is True",
+              "type": "context"
+            },
+            {
+              "line": 97,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 98,
+              "text": "",
+              "type": "add"
+            },
+            {
+              "line": 99,
+              "text": "def _write_density_fixture(root: Path, *, source_lines: int, test_lines: int) -> None:",
+              "type": "add"
+            },
+            {
+              "line": 100,
+              "text": "    package = root / \"retort_engine\"",
+              "type": "add"
+            },
+            {
+              "line": 101,
+              "text": "    tests = root / \"tests\"",
+              "type": "add"
+            },
+            {
+              "line": 102,
+              "text": "    package.mkdir(parents=True, exist_ok=True)",
+              "type": "add"
+            },
+            {
+              "line": 103,
+              "text": "    tests.mkdir(parents=True, exist_ok=True)",
+              "type": "add"
+            },
+            {
+              "line": 104,
+              "text": "    (package / \"feature.py\").write_text(\"\\n\".join(f\"VALUE_{index} = {index}\" for index in range(source_lines)), encoding=\"utf-8\")",
+              "type": "add"
+            },
+            {
+              "line": 105,
+              "text": "    (tests / \"test_feature.py\").write_text(\"\\n\".join(f\"assert {index} == {index}\" for index in range(test_lines)), encoding=\"utf-8\")",
+              "type": "add"
+            }
+          ],
+          "header": "@@ -53,3 +94,12 @@ def test_quality_gate_bundle_writes_report_and_service_exposes_it(tmp_path: Path"
+        }
+      ],
+      "path": "packages/retort_engine/tests/test_quality_gate_bundle.py"
+    }
+  ],
+  "incremental": {
+    "current_added_change_count": 96,
+    "enabled": false,
+    "previous_added_change_count": 0,
+    "previous_diff_supplied": false,
+    "reviewed_new_change_count": 96,
+    "skipped_existing_change_count": 0
+  },
+  "intent_alignment": {
+    "evidence": {
+      "reason": "no_issue_context",
+      "style": "reviewscope_absorbed_issue_validation"
+    },
+    "issue_keywords": [],
+    "missing_keywords": [],
+    "overlap_keywords": [],
+    "status": "not_requested",
+    "summary": {
+      "aligned": true,
+      "changed_file_count": 3,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    }
+  },
+  "status": "reviewed",
+  "summary": {
+    "absorbed_context_rank_weights": {
+      "ci_config": 40,
+      "config": 20,
+      "docs": 20,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 55,
+      "security": 50,
+      "tests": 40
+    },
+    "absorbed_context_signal_strength": 100,
+    "absorbed_file_grouping": true,
+    "absorbed_policy_rank_weights": {
+      "ci_config": 15,
+      "config": 15,
+      "docs": 15,
+      "frontend": 0,
+      "other": 0,
+      "runtime": 45,
+      "security": 25,
+      "tests": 40
+    },
+    "absorbed_review_policy": {
+      "enabled": true,
+      "max_context_weight": 45,
+      "run_id": "20260628002727-95b76ebf47",
+      "signal_count": 8,
+      "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "weighted_context_count": 6
+    },
+    "absorbed_review_source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+    "calibration_policy": {
+      "adjudication_pass_rate": 1.0,
+      "adjudication_ready": true,
+      "enabled": true,
+      "holdout_distinct_repo_count": 20,
+      "holdout_ready": true,
+      "holdout_reviewed_pr_count": 24,
+      "max_context_weight": 40,
+      "rollback_ready": true,
+      "rollback_verified_count": 5,
+      "weighted_context_count": 7
+    },
+    "calibration_rank_weights": {
+      "ci_config": 40,
+      "config": 25,
+      "docs": 10,
+      "frontend": 10,
+      "other": 0,
+      "runtime": 35,
+      "security": 35,
+      "tests": 40
+    },
+    "candidate_comment_count": 11,
+    "capabilities": [
+      "review_pipeline",
+      "file_grouping",
+      "safety_policy",
+      "diff_hunk_review",
+      "semantic_index"
+    ],
+    "comment_count": 11,
+    "comment_ranking_model": "severity_context_publishability_v1",
+    "deep_review_pipeline": true,
+    "employee_feedback_context_weights": {},
+    "employee_feedback_ranked": false,
+    "extension_policy": {
+      "file_count": 3,
+      "known_extension_count": 3,
+      "known_extension_ratio": 1.0,
+      "language_families": [
+        "python"
+      ],
+      "language_family_count": 1,
+      "policy_source": "retort_holdout_extension_policy_v1",
+      "review_context_count": 1,
+      "review_contexts": [
+        "runtime"
+      ],
+      "risk_tag_count": 2,
+      "risk_tags": [
+        "runtime_logic",
+        "typing"
+      ],
+      "unknown_extension_count": 0
+    },
+    "file_count": 3,
+    "file_summary_count": 3,
+    "hunk_count": 10,
+    "incremental": false,
+    "intent_alignment": {
+      "aligned": true,
+      "changed_file_count": 3,
+      "issue_keyword_count": 0,
+      "overlap_keyword_count": 0
+    },
+    "large_diff_chunk_count": 1,
+    "large_diff_chunking": true,
+    "large_diff_context_balancing": true,
+    "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+    "primary_review_contexts": [
+      "tests"
+    ],
+    "publishable_comment_count": 11,
+    "ready_for_employee_tasking": true,
+    "review_context_group_count": 1,
+    "reviewed_new_change_count": 96,
+    "risk_counts": {
+      "high": 0,
+      "info": 7,
+      "low": 4,
+      "medium": 0
+    },
+    "skipped_existing_change_count": 0,
+    "stage_count": 5,
+    "static_analysis": {
+      "finding_count": 0,
+      "high_count": 0,
+      "low_count": 0,
+      "medium_count": 0,
+      "rule_count": 5
+    },
+    "suppressed_comment_count": 0
+  },
+  "task_groups": [
+    {
+      "comment_count": 11,
+      "context": "tests",
+      "files": [
+        "packages/retort_engine/tests/test_capability_audit.py",
+        "packages/retort_engine/tests/test_llm_absorption_evidence.py",
+        "packages/retort_engine/tests/test_quality_gate_bundle.py"
+      ],
+      "publishable_comment_count": 11,
+      "risk_counts": {
+        "high": 0,
+        "info": 7,
+        "low": 4,
+        "medium": 0
+      },
+      "stages": [
+        "group_related_files",
+        "localize_changed_hunks",
+        "classify_risk",
+        "reflect_before_publish",
+        "dispatch_employee_task"
+      ],
+      "strategy": "diff_hunk_review"
+    }
+  ]
+}

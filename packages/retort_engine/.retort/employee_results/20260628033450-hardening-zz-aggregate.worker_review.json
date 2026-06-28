@@ -1,0 +1,47 @@
+{
+  "reviews": [
+    {
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-worker-01.worker_review.json",
+      "comment_count": 11,
+      "file_count": 3,
+      "status": "reviewed",
+      "task_group_count": 1
+    },
+    {
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-worker-02.worker_review.json",
+      "comment_count": 11,
+      "file_count": 3,
+      "status": "reviewed",
+      "task_group_count": 1
+    },
+    {
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-worker-03.worker_review.json",
+      "comment_count": 11,
+      "file_count": 3,
+      "status": "reviewed",
+      "task_group_count": 1
+    },
+    {
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-worker-04.worker_review.json",
+      "comment_count": 11,
+      "file_count": 3,
+      "status": "reviewed",
+      "task_group_count": 1
+    },
+    {
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-worker-05.worker_review.json",
+      "comment_count": 11,
+      "file_count": 3,
+      "status": "reviewed",
+      "task_group_count": 1
+    }
+  ],
+  "summary": {
+    "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/employee_results/20260628033450-hardening-zz-aggregate.worker_review.json",
+    "comment_count": 55,
+    "file_count": 15,
+    "status": "reviewed",
+    "task_group_count": 5,
+    "worker_review_count": 5
+  }
+}
