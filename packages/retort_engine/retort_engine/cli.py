@@ -37,6 +37,7 @@ from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.production_recovery_drill import build_production_recovery_drill
+from retort_engine.product_mainline_absorption_proof import build_product_mainline_absorption_proof
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
@@ -324,6 +325,11 @@ def main(argv: list[str] | None = None) -> int:
     recovery_drill.add_argument("--project", default=".")
     recovery_drill.add_argument("--output", default="")
     recovery_drill.add_argument("--json", action="store_true")
+    mainline_proof = sub.add_parser("product-mainline-absorption-proof")
+    mainline_proof.add_argument("--project", default=".")
+    mainline_proof.add_argument("--commit", default="HEAD")
+    mainline_proof.add_argument("--output", default="")
+    mainline_proof.add_argument("--json", action="store_true")
     release_decision = sub.add_parser("absorption-release-decision")
     release_decision.add_argument("--project", default=".")
     release_decision.add_argument("--output", default="")
@@ -900,6 +906,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort production recovery status: {result['status']}")
             print(f"Recovered: {result['summary']['recovered_count']}/{result['summary']['scenario_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "product-mainline-absorption-proof":
+        result = build_product_mainline_absorption_proof(args.project, commit=args.commit, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort product mainline absorption proof status: {result['status']}")
+            print(f"Merge commit: {result['summary']['is_merge_commit']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

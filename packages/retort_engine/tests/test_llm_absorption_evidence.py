@@ -168,6 +168,25 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_product_mainline_absorption_proof.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "commit": "abc123",
+                    "is_merge_commit": True,
+                    "behavior_source_changed_count": 3,
+                    "behavior_test_changed_count": 2,
+                    "post_merge_quality_gate_passed": True,
+                },
+                "changed_files": [],
+                "source_files": [],
+                "test_files": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_quality_gate_bundle.json").write_text(
         json.dumps(
             {
@@ -341,6 +360,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "live_upstream_verified_count": 3,
                     "live_upstream_probe_count": 3,
                     "all_live_upstream_sources_verified": True,
+                    "live_upstream_materialized_count": 3,
+                    "all_live_upstream_sources_materialized": True,
                     "competitor_source_exists": True,
                     "competitor_source_sha256": "123",
                     "competitor_hunk_count": 2,
@@ -839,6 +860,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "competitor_runtime_comparison_multi_side_by_side=True" in evidence
     assert "competitor_runtime_comparison_live_upstream_verified=3/3" in evidence
     assert "competitor_runtime_comparison_all_live_upstream_verified=True" in evidence
+    assert "competitor_runtime_comparison_live_upstream_materialized=3/3" in evidence
+    assert "competitor_runtime_comparison_all_live_upstream_materialized=True" in evidence
     assert "competitor_runtime_comparison_hunks=2" in evidence
     assert "competitor_runtime_comparison_retort_comments=4" in evidence
     assert "competitor_runtime_comparison_side_by_side=True" in evidence
@@ -884,6 +907,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_scheduler_stress_unique_process_ids=30" in evidence
     assert "employee_scheduler_stress_successful_process_ids=30" in evidence
     assert "employee_scheduler_stress_pid_isolation_verified=True" in evidence
+    assert "product_mainline_absorption_status=ready" in evidence
+    assert "product_mainline_absorption_merge_commit=True" in evidence
+    assert "product_mainline_absorption_sources=3" in evidence
+    assert "product_mainline_absorption_tests=2" in evidence
+    assert "product_mainline_absorption_quality=True" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
     assert "review_family_behavior_replay_language_families=python,typescript" in evidence

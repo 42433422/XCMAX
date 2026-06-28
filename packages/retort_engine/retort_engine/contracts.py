@@ -50,6 +50,7 @@ RETORT_CONTRACT_SCHEMAS: dict[str, tuple[str, ...]] = {
     "employee_patch_closure_result": ("status", "project", "summary", "cases", "evidence"),
     "employee_patch_stress_result": ("status", "project", "summary", "workers", "evidence"),
     "production_recovery_drill_result": ("status", "project", "summary", "scenarios", "evidence"),
+    "product_mainline_absorption_proof_result": ("status", "project", "summary", "changed_files", "source_files", "test_files", "evidence"),
     "absorption_release_decision_result": ("status", "project", "summary", "decisions", "evidence"),
     "operator_journey_replay_result": ("status", "project", "summary", "stages", "artifacts", "live_probes", "replay", "evidence"),
     "quality_gate_bundle_result": ("status", "project", "summary", "gates", "evidence"),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import subprocess
@@ -75,6 +76,7 @@ def build_competitor_runtime_comparison(
     source_present = [item for item in runtimes if item.get("source_exists")]
     external_zero = [item for item in runtimes if int(item.get("external_process_returncode", -1)) == 0]
     live_verified = [item for item in runtimes if (item.get("live_upstream") or {}).get("verified")]
+    live_materialized = [item for item in runtimes if (item.get("live_upstream") or {}).get("materialized")]
     max_competitor_findings = max((int(item.get("finding_count") or 0) for item in runtimes), default=0)
     summary = {
         "competitor_project": "mopemope/pr-ai-review-bot",
@@ -89,7 +91,9 @@ def build_competitor_runtime_comparison(
         "live_upstream_requested": live_upstream,
         "live_upstream_probe_count": len(runtimes) if live_upstream else 0,
         "live_upstream_verified_count": len(live_verified),
+        "live_upstream_materialized_count": len(live_materialized),
         "all_live_upstream_sources_verified": bool(live_upstream) and len(live_verified) == len(runtimes) and bool(runtimes),
+        "all_live_upstream_sources_materialized": bool(live_upstream) and len(live_materialized) == len(runtimes) and bool(runtimes),
         "live_upstream_projects": [str(item.get("project", "")) for item in live_verified],
         "competitor_root": str(primary_runtime.get("root", "")),
         "competitor_source_exists": bool(primary_runtime.get("source_exists")),
@@ -200,7 +204,7 @@ def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: di
     )
     output = _read_json(output_path)
     finding_count = int(output.get("finding_count") or len(output.get("findings") or []) or len(output.get("diagnostics") or []))
-    live = _probe_live_source(profile) if live_upstream else {"requested": False, "verified": False}
+    live = _probe_live_source(profile, lab=lab) if live_upstream else {"requested": False, "verified": False, "materialized": False}
     return {
         "project": profile["project"],
         "kind": profile["kind"],
@@ -228,7 +232,7 @@ def _runner_for_profile(profile: dict[str, str], runner_path: Path, patch_path: 
     return _PYTHON_DIFF_DIAGNOSTIC_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
 
 
-def _probe_live_source(profile: dict[str, str]) -> dict[str, Any]:
+def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
     repo = profile["project"]
     source = profile["source"]
     repo_result = _gh_api(f"repos/{repo}")
@@ -236,13 +240,28 @@ def _probe_live_source(profile: dict[str, str]) -> dict[str, Any]:
     source_result = _gh_api(f"repos/{repo}/contents/{source}?ref={default_branch}")
     payload = source_result.get("json") if isinstance(source_result.get("json"), dict) else {}
     sha = str(payload.get("sha") or "")
+    materialized_path = lab / "live_upstream" / repo.replace("/", "__") / source
+    content = str(payload.get("content") or "")
+    decoded = b""
+    if content:
+        try:
+            decoded = base64.b64decode(content)
+        except (ValueError, TypeError):
+            decoded = b""
+    if decoded:
+        materialized_path.parent.mkdir(parents=True, exist_ok=True)
+        materialized_path.write_bytes(decoded)
+    materialized_sha = hashlib.sha1((f"blob {len(decoded)}\0").encode("utf-8") + decoded).hexdigest() if decoded else ""
     return {
         "requested": True,
         "project": repo,
         "source": source,
         "default_branch": default_branch,
         "verified": repo_result["returncode"] == 0 and source_result["returncode"] == 0 and bool(sha),
+        "materialized": bool(decoded) and materialized_path.is_file() and materialized_sha == sha,
         "source_sha": sha,
+        "materialized_git_blob_sha": materialized_sha,
+        "materialized_path": str(materialized_path) if decoded else "",
         "html_url": str(payload.get("html_url") or ""),
         "download_url": str(payload.get("download_url") or ""),
         "repo_api_returncode": repo_result["returncode"],

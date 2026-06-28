@@ -1,6 +1,6 @@
 {
   "evidence": {
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T081947Z-631ae535",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T083504Z-162cb0a3",
     "regression_model": "repeat_same_10_domain_chain_and_compare_stability",
     "source_runtime": "retort_engine.cross_domain_end_to_end.build_cross_domain_end_to_end",
     "style": "continuous_cross_domain_regression_gate"
@@ -10,43 +10,43 @@
     {
       "all_stage_outputs_consumed": true,
       "all_stages_chained": true,
-      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T081947Z-631ae535/round_01.json",
-      "artifact_sha256": "8e48c0e8e984f938b660d2ab6ac3d50c2578da5b1ef231dc821d7aa5fe81769c",
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T083504Z-162cb0a3/round_01.json",
+      "artifact_sha256": "88b140cf2e680756ad4926ccf0c49828eb64b54c5b4fd162e5a8c7b97f654cfc",
       "integrated_review_comment_count": 6,
       "integrated_review_status": "reviewed",
       "linked_domain_count": 10,
       "linked_stage_count": 10,
       "output_assertions_passed": true,
       "round_index": 1,
-      "run_id": "cross-domain-ci-20260628T081947Z-631ae535-round-01",
+      "run_id": "cross-domain-ci-20260628T083504Z-162cb0a3-round-01",
       "status": "ready"
     },
     {
       "all_stage_outputs_consumed": true,
       "all_stages_chained": true,
-      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T081947Z-631ae535/round_02.json",
-      "artifact_sha256": "b0e41f41a6a610cd7fca8e9a3aa46806e267f82deae83d2c3ec247802afacc56",
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T083504Z-162cb0a3/round_02.json",
+      "artifact_sha256": "82754a3094af320033d433a85ced5f56451cc4f216a4cad68ec1a414298beeb9",
       "integrated_review_comment_count": 6,
       "integrated_review_status": "reviewed",
       "linked_domain_count": 10,
       "linked_stage_count": 10,
       "output_assertions_passed": true,
       "round_index": 2,
-      "run_id": "cross-domain-ci-20260628T081947Z-631ae535-round-02",
+      "run_id": "cross-domain-ci-20260628T083504Z-162cb0a3-round-02",
       "status": "ready"
     },
     {
       "all_stage_outputs_consumed": true,
       "all_stages_chained": true,
-      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T081947Z-631ae535/round_03.json",
-      "artifact_sha256": "c00daf2a096c42ca08920f10a815c24ca34c584134447707192bae0f40541e36",
+      "artifact": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_ci_regressions/cross-domain-ci-20260628T083504Z-162cb0a3/round_03.json",
+      "artifact_sha256": "f4eb8b59becc585b60eedf284aa9290de2a24817c046b37f1e92f17a0fe8ccb7",
       "integrated_review_comment_count": 6,
       "integrated_review_status": "reviewed",
       "linked_domain_count": 10,
       "linked_stage_count": 10,
       "output_assertions_passed": true,
       "round_index": 3,
-      "run_id": "cross-domain-ci-20260628T081947Z-631ae535-round-03",
+      "run_id": "cross-domain-ci-20260628T083504Z-162cb0a3-round-03",
       "status": "ready"
     }
   ],
@@ -59,13 +59,13 @@
     "all_rounds_ready": true,
     "ci_command": "retort cross-domain-ci-regression --project <project> --rounds 3 --min-domains 10",
     "ci_run_id_count": 3,
-    "duration_sec": 0.046,
+    "duration_sec": 0.05,
     "maximum_linked_domain_count": 10,
     "min_domains": 10,
     "minimum_linked_domain_count": 10,
     "ready_round_count": 3,
     "round_count": 3,
-    "run_id": "cross-domain-ci-20260628T081947Z-631ae535",
+    "run_id": "cross-domain-ci-20260628T083504Z-162cb0a3",
     "stable_domain_count": true,
     "total_domain_replay_count": 30
   }

@@ -249,6 +249,8 @@ def _report_evidence(project: Path) -> list[str]:
     quality_summary = quality_report.get("summary") if isinstance(quality_report.get("summary"), dict) else {}
     recovery_report = read_json(project / "docs" / "retort_production_recovery_drill.json")
     recovery_summary = recovery_report.get("summary") if isinstance(recovery_report.get("summary"), dict) else {}
+    mainline_proof = read_json(project / "docs" / "retort_product_mainline_absorption_proof.json")
+    mainline_summary = mainline_proof.get("summary") if isinstance(mainline_proof.get("summary"), dict) else {}
     release_decision = read_json(project / "docs" / "retort_absorption_release_decision.json")
     release_summary = release_decision.get("summary") if isinstance(release_decision.get("summary"), dict) else {}
     operator_journey = read_json(project / "docs" / "retort_operator_journey_replay.json")
@@ -488,6 +490,8 @@ def _report_evidence(project: Path) -> list[str]:
         f"competitor_runtime_comparison_live_upstream_requested={competitor_runtime_summary.get('live_upstream_requested', '')}",
         f"competitor_runtime_comparison_live_upstream_verified={competitor_runtime_summary.get('live_upstream_verified_count', '')}/{competitor_runtime_summary.get('live_upstream_probe_count', '')}",
         f"competitor_runtime_comparison_all_live_upstream_verified={competitor_runtime_summary.get('all_live_upstream_sources_verified', '')}",
+        f"competitor_runtime_comparison_live_upstream_materialized={competitor_runtime_summary.get('live_upstream_materialized_count', '')}/{competitor_runtime_summary.get('live_upstream_probe_count', '')}",
+        f"competitor_runtime_comparison_all_live_upstream_materialized={competitor_runtime_summary.get('all_live_upstream_sources_materialized', '')}",
         f"competitor_runtime_comparison_source_exists={competitor_runtime_summary.get('competitor_source_exists', '')}",
         f"competitor_runtime_comparison_source_sha={competitor_runtime_summary.get('competitor_source_sha256', '')}",
         f"competitor_runtime_comparison_hunks={competitor_runtime_summary.get('competitor_hunk_count', '')}",
@@ -655,12 +659,19 @@ def _report_evidence(project: Path) -> list[str]:
         f"production_recovery_drill_live_write_rollback={recovery_summary.get('live_write_rollback_verified', '')}",
         f"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}",
         f"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}",
+        f"product_mainline_absorption_status={mainline_proof.get('status', '')}",
+        f"product_mainline_absorption_merge_commit={mainline_summary.get('is_merge_commit', '')}",
+        f"product_mainline_absorption_sources={mainline_summary.get('behavior_source_changed_count', '')}",
+        f"product_mainline_absorption_tests={mainline_summary.get('behavior_test_changed_count', '')}",
+        f"product_mainline_absorption_quality={mainline_summary.get('post_merge_quality_gate_passed', '')}",
+        f"product_mainline_absorption_commit={mainline_summary.get('commit', '')}",
         f"operator_journey_replay_status={operator_journey.get('status', '')}",
         f"operator_journey_replay_ready_stages={operator_summary.get('ready_stage_count', '')}/{operator_summary.get('stage_count', '')}",
         f"operator_journey_replay_hashed_artifacts={operator_summary.get('hashed_artifact_count', '')}",
         f"operator_journey_replay_real_absorption_run_present={operator_summary.get('real_absorption_run_present', '')}",
         f"operator_journey_replay_gates_passed={operator_summary.get('real_absorption_gates_passed', '')}",
         f"operator_journey_replay_per_run_code_graph={operator_summary.get('per_run_code_graph_proved', '')}",
+        f"operator_journey_replay_product_mainline_ready={operator_summary.get('product_mainline_absorption_ready', '')}",
         f"operator_journey_replay_cross_domain_ready={operator_summary.get('cross_domain_live_probe_ready', '')}",
         f"operator_journey_replay_frontend_ready={operator_summary.get('frontend_structure_ready', '')}",
         f"operator_journey_replay_frontend_operation_replay_ready={operator_summary.get('frontend_operation_replay_ready', '')}",
@@ -680,6 +691,8 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_ready={release_summary.get('ready_decision_count', '')}/{release_summary.get('decision_count', '')}",
         f"absorption_release_decision_core_paths={release_summary.get('core_decision_path_count', '')}",
         f"absorption_release_decision_all_ready={release_summary.get('all_core_decisions_ready', '')}",
+        f"absorption_release_decision_product_mainline_ready={release_summary.get('product_mainline_absorption_ready', '')}",
+        f"absorption_release_decision_product_mainline_merge={release_summary.get('product_mainline_absorption_merge', '')}",
         f"absorption_release_decision_long_run_ready={release_summary.get('long_run_ready', '')}",
         f"absorption_release_decision_holdout_ready={release_summary.get('holdout_blind_eval_ready', '')}",
         f"absorption_release_decision_failure_rollback_ready={release_summary.get('failure_rollback_ready', '')}",
@@ -696,6 +709,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_competitor_runtime_projects={release_summary.get('competitor_runtime_ready_projects', '')}/{release_summary.get('competitor_runtime_project_count', '')}",
         f"absorption_release_decision_competitor_runtime_multi_side_by_side={release_summary.get('competitor_runtime_multi_side_by_side', '')}",
         f"absorption_release_decision_competitor_runtime_live_upstream={release_summary.get('competitor_runtime_live_upstream_verified', '')}",
+        f"absorption_release_decision_competitor_runtime_live_materialized={release_summary.get('competitor_runtime_live_upstream_materialized', '')}",
         f"absorption_release_decision_cross_domain_ready={release_summary.get('cross_domain_absorption_ready', '')}",
         f"absorption_release_decision_cross_domain_domains={release_summary.get('cross_domain_absorption_domains', '')}",
         f"absorption_release_decision_cross_domain_assertions={release_summary.get('cross_domain_absorption_output_assertions', '')}",

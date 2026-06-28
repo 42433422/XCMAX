@@ -19,6 +19,7 @@ def test_operator_journey_replay_builds_hash_bound_end_to_end_pack(tmp_path: Pat
     assert result["summary"]["cross_domain_live_probe_ready"] is True
     assert result["summary"]["frontend_operation_replay_ready"] is True
     assert result["summary"]["per_run_code_graph_proved"] is True
+    assert result["summary"]["product_mainline_absorption_ready"] is True
     assert result["summary"]["external_advantage_ci_ready"] is True
     assert result["summary"]["external_process_adjudication_ready"] is True
     assert result["summary"]["upstream_pr_ci_ready"] is True
@@ -151,6 +152,11 @@ def _write_docs(root: Path) -> None:
     fixtures = {
         "retort_external_review_report.json": {"source": "github", "external_snapshot": {}, "review_pipeline": {}},
         "retort_quality_gate_bundle.json": {"status": "ready", "summary": {"all_gates_passed": True}, "gates": []},
+        "retort_product_mainline_absorption_proof.json": {
+            "status": "ready",
+            "summary": {"is_merge_commit": True},
+            "changed_files": ["packages/retort_engine/retort_engine/x.py"],
+        },
         "retort_absorption_continuity_probe.json": {"status": "ready", "summary": {}, "runs": []},
         "retort_multi_project_absorption_replay.json": {"status": "ready", "summary": {}, "projects": []},
         "retort_pr_long_run_review.json": {"status": "ready", "summary": {}, "pull_requests": [], "evidence": {}},
@@ -205,6 +211,7 @@ def _write_docs(root: Path) -> None:
                 "multi_competitor_side_by_side": True,
                 "ready_competitor_project_count": 3,
                 "all_live_upstream_sources_verified": True,
+                "all_live_upstream_sources_materialized": True,
             },
             "competitor_output": {},
         },
