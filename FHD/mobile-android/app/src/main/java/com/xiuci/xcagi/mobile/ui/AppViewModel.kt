@@ -340,6 +340,62 @@ constructor(
     private val _navMenu = MutableStateFlow<List<NavMenuItem>>(emptyList())
     val navMenu: StateFlow<List<NavMenuItem>> = _navMenu.asStateFlow()
 
+    // ── 员工任务中心：Phase-D 主动提问（员工↔老板对话） ──
+    private val _employeeQuestions = MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.EmployeePendingQuestion>>(emptyList())
+    val employeeQuestions: StateFlow<List<com.xiuci.xcagi.mobile.core.model.EmployeePendingQuestion>> = _employeeQuestions.asStateFlow()
+    private val _employeeQuestionsLoading = MutableStateFlow(false)
+    val employeeQuestionsLoading: StateFlow<Boolean> = _employeeQuestionsLoading.asStateFlow()
+    private val _employeeQuestionsError = MutableStateFlow("")
+    val employeeQuestionsError: StateFlow<String> = _employeeQuestionsError.asStateFlow()
+
+    /** 加载员工 Phase-D 主动提问列表（pending 优先）。 */
+    suspend fun loadEmployeePendingQuestions(
+        includeHistory: Boolean = false,
+        employeeId: String? = null,
+    ): Result<Unit> {
+        _employeeQuestionsLoading.value = true
+        _employeeQuestionsError.value = ""
+        val r = repo.loadEmployeePendingQuestions(
+            limit = 100,
+            includeHistory = includeHistory,
+            employeeId = employeeId,
+        )
+        _employeeQuestionsLoading.value = false
+        return r.map { data ->
+            _employeeQuestions.value = data.items
+        }.onFailure {
+            _employeeQuestionsError.value = it.message ?: "加载员工提问失败"
+            snack(_employeeQuestionsError.value, true)
+        }
+    }
+
+    /** 老板回答员工提问。成功后从列表移除该条（pending→answered）。 */
+    suspend fun answerEmployeePendingQuestion(questionId: Int, answer: String): Result<Unit> {
+        if (answer.isBlank()) {
+            snack("回答不能为空", true)
+            return Result.failure(Exception("回答不能为空"))
+        }
+        val r = repo.answerEmployeePendingQuestion(questionId, answer)
+        return r.map {
+            _employeeQuestions.value = _employeeQuestions.value.map { q ->
+                if (q.id == questionId) q.copy(
+                    status = "answered",
+                    answer = answer,
+                    answered_at = System.currentTimeMillis().toString(),
+                ) else q
+            }
+            snack("回答已发送", false)
+        }.onFailure {
+            snack(it.message ?: "回答失败", true)
+        }
+    }
+
+    /** 清空员工提问列表（离开页面时调用）。 */
+    fun clearEmployeeQuestions() {
+        _employeeQuestions.value = emptyList()
+        _employeeQuestionsError.value = ""
+    }
+
     // ── AI 群聊 ──
     private val _aiGroups = MutableStateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupDto>>(emptyList())
     val aiGroups: StateFlow<List<com.xiuci.xcagi.mobile.core.model.AiGroupDto>> = _aiGroups.asStateFlow()
@@ -1747,6 +1803,30 @@ constructor(
                     return@launch
                 }
                 val sessionId = conversationId ?: "default"
+                // 员工 IM 会话：admin_home 返回 im_conv_id 时改走 IM 消息（observe Room + 拉历史），
+                // 不再走本地 chatDao，让员工主动发的消息在现有员工会话里直接显示。
+                if (conversationId != null && conversationId.startsWith("employee:")) {
+                    val parts = conversationId.split(":")
+                    val employeeId = parts.getOrNull(2).orEmpty()
+                    if (employeeId.isNotBlank()) {
+                        val mods = repo.observeCachedModInfos().first()
+                        val emp = mods.flatMap { it.workflow_employees }.find { it.id == employeeId }
+                        val imConvId = emp?.im_conv_id ?: 0
+                        if (imConvId > 0) {
+                            val uid = sessionStore.userIdFlow.first()
+                            repo.seedImMessages(imConvId)
+                            chatJob = viewModelScope.launch {
+                                repo.observeImMessages(imConvId).collect { msgs ->
+                                    _chatMessages.value = msgs.map { m ->
+                                        val role = if (m.sender_user_id == uid) "user" else "assistant"
+                                        ChatMsg(role, m.body, m.created_at, ChatStatus.SENT)
+                                    }
+                                }
+                            }
+                            return@launch
+                        }
+                    }
+                }
                 _chatMessages.value = repo.loadCachedChat(sessionId)
             }
 
@@ -1851,13 +1931,42 @@ constructor(
     fun sendChat(text: String, conversationId: String? = null) {
         val quoted = _replyTo.value
         _replyTo.value = null
+        val now = System.currentTimeMillis()
+        val outgoing = if (quoted != null) "引用「${quoted.text.take(200)}」\n\n$text" else text
+        val userMsg = ChatMsg("user", text, now, ChatStatus.SENT, quote = quoted?.text?.take(120))
+
+        // 员工 IM 会话：有 im_conv_id 时走 IM 发送（POST /api/im/conversations/{id}/messages），
+        // 不走 SSE 流式；无 im_conv_id 回退原 SSE（让员工 AI 流式回复）。
+        if (conversationId != null && conversationId.startsWith("employee:")) {
+            val employeeId = conversationId.split(":").getOrNull(2).orEmpty()
+            if (employeeId.isNotBlank()) {
+                chatJob?.cancel()
+                _chatAction.value = null
+                _chatMessages.value = _chatMessages.value + userMsg
+                chatJob = viewModelScope.launch {
+                    val mods = repo.observeCachedModInfos().first()
+                    val emp = mods.flatMap { it.workflow_employees }.find { it.id == employeeId }
+                    val imConvId = emp?.im_conv_id ?: 0
+                    if (imConvId > 0) {
+                        val result = repo.imSendMessage(imConvId, outgoing)
+                        if (result.isFailure) {
+                            _chatMessages.value = _chatMessages.value +
+                                ChatMsg("assistant", "（发送失败）", System.currentTimeMillis(), ChatStatus.FAILED)
+                        }
+                    } else {
+                        _streaming.value = true
+                        _chatMessages.value = _chatMessages.value +
+                            ChatMsg("assistant", "", System.currentTimeMillis(), ChatStatus.SENDING)
+                        runChatStream(outgoing, text, conversationId)
+                    }
+                }
+                return
+            }
+        }
         chatJob?.cancel()
         _chatAction.value = null
-        val now = System.currentTimeMillis()
-        _chatMessages.value = _chatMessages.value +
-                ChatMsg("user", text, now, ChatStatus.SENT, quote = quoted?.text?.take(120)) +
+        _chatMessages.value = _chatMessages.value + userMsg +
                 ChatMsg("assistant", "", now, ChatStatus.SENDING)
-        val outgoing = if (quoted != null) "引用「${quoted.text.take(200)}」\n\n$text" else text
         runChatStream(outgoing, text, conversationId)
     }
 
@@ -2373,6 +2482,7 @@ constructor(
             normalized.startsWith(Routes.AI_CIRCLE) || normalized == Routes.DISCOVER -> nav(Routes.AI_CIRCLE)
             normalized.startsWith("ai_employee/") -> nav(normalized)
             normalized.startsWith(Routes.SCAN_QR) -> nav(Routes.SCAN_QR)
+            normalized == Routes.IM || normalized.startsWith("im") -> nav(Routes.IM)
             normalized.contains("chat") -> nav(Routes.CHAT)
             normalized.contains("approval") -> {
                 val id = Regex("approval/(\\d+)").find(normalized)?.groupValues?.getOrNull(1)

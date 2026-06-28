@@ -25,15 +25,23 @@ class SessionManager:
         """在调用方已有的事务内创建会话行（避免登录路径嵌套 ``get_db()`` 导致 SQLite 锁/冲突）。"""
         import uuid
 
+        from app.db.models import User
+
         session_id = str(uuid.uuid4())
         now = utc_now_naive()
         expires_at = now + timedelta(hours=self.SESSION_EXPIRE_HOURS)
+
+        user_row = db.query(User).filter(User.id == user_id).first()
+        account_kind = "admin" if str(getattr(user_row, "role", "") or "") == "admin" else "enterprise"
 
         user_session = UserSession(
             session_id=session_id,
             user_id=user_id,
             created_at=now,
             expires_at=expires_at,
+            account_kind=account_kind,
+            market_is_admin=account_kind == "admin",
+            market_is_enterprise=True,
         )
         db.add(user_session)
 
