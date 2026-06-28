@@ -130,6 +130,7 @@ def _feature_flags(text: str, root: Path) -> dict[str, bool]:
         "pr_publish_dry_run": "publish-pr-dry-run" in text and "build_publish_dry_run" in text and "/api/publish-pr-dry-run" in text,
         "pr_publish_sandbox": "publish-pr-sandbox" in text and "run_publish_sandbox" in text and "/api/publish-pr-sandbox" in text,
         "pr_live_publish_probe": "publish-pr-live-probe" in text and "run_live_pr_comment_probe" in text and "/api/publish-pr-live-probe" in text,
+        "pr_low_permission_probe": "publish-pr-low-permission-probe" in text and "run_low_permission_pr_degradation_probe" in text,
         "cross_project_replay": "cross-project-replay" in text and "build_cross_project_replay" in text and "/api/cross-project-replay" in text,
         "multi_project_absorption_replay": "multi-project-absorption-replay" in text and "build_multi_project_absorption_replay" in text,
         "absorption_continuity_probe": "absorption-continuity-probe" in text and "build_absorption_continuity_probe" in text,

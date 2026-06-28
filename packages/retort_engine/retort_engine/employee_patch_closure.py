@@ -26,6 +26,18 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         run_id=suite_id,
         case_name="positive_gate_pass",
     )
+    existing_target = lab / "existing_patch.py"
+    existing_target.parent.mkdir(parents=True, exist_ok=True)
+    existing_target.write_text("def existing_patch_value():\n    return 'old'\n", encoding="utf-8")
+    existing_update = run_employee_patch_closure_case(
+        root,
+        target_file=existing_target,
+        replacement="def existing_patch_value():\n    return 'verified-existing-update'\n",
+        expected_text="verified-existing-update",
+        gate_commands=[[sys.executable, "-m", "py_compile", "{target_file}"]],
+        run_id=suite_id,
+        case_name="existing_file_update_gate_pass",
+    )
     negative = run_employee_patch_closure_case(
         root,
         target_file=lab / "rollback_patch.py",
@@ -36,18 +48,40 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         case_name="negative_gate_rollback",
     )
     multi_file = run_multi_file_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
+    policy_positive = run_employee_patch_closure_case(
+        root,
+        target_file=lab / "policy_patch.py",
+        replacement="ALLOWED_STATE = {'write': False, 'reason': 'readonly-degraded'}\n",
+        expected_text="readonly-degraded",
+        gate_commands=[[sys.executable, "-m", "py_compile", "{target_file}"]],
+        run_id=suite_id,
+        case_name="policy_state_gate_pass",
+    )
     retry = run_retry_employee_patch_closure_case(root, lab=lab, run_id=suite_id)
-    cases = [positive, negative, multi_file, retry]
+    cases = [positive, existing_update, negative, multi_file, policy_positive, retry]
+    expected_failure_cases = {negative["summary"]["case_name"]}
+    expected_success_cases = {case["summary"]["case_name"] for case in cases if case["summary"]["case_name"] not in expected_failure_cases}
+    expected_failure_rollback_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_failure_cases and case["summary"]["rollback_verified"])
+    unexpected_gate_failure_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_success_cases and not case["summary"]["gates_passed"])
+    gate_expected_to_pass_count = len(expected_success_cases)
+    gate_expected_to_pass_passed_count = sum(1 for case in cases if case["summary"]["case_name"] in expected_success_cases and case["summary"]["gates_passed"])
     summary = {
         "run_id": suite_id,
         "case_count": len(cases),
         "patch_generated_count": sum(1 for case in cases if case["summary"]["patch_generated"]),
         "patch_applied_count": sum(1 for case in cases if case["summary"]["patch_applied"]),
         "gate_passed_count": sum(1 for case in cases if case["summary"]["gates_passed"]),
+        "gate_expected_to_pass_count": gate_expected_to_pass_count,
+        "gate_expected_to_pass_passed_count": gate_expected_to_pass_passed_count,
         "rollback_verified_count": sum(1 for case in cases if case["summary"]["rollback_verified"]),
+        "expected_failure_case_count": len(expected_failure_cases),
+        "expected_failure_rollback_count": expected_failure_rollback_count,
+        "unexpected_gate_failure_count": unexpected_gate_failure_count,
         "success_case_verified": positive["status"] == "patch_verified",
+        "existing_file_update_verified": existing_update["status"] == "patch_verified",
         "failure_case_rolled_back": negative["status"] == "patch_rolled_back",
         "multi_file_case_verified": multi_file["status"] == "patch_verified",
+        "policy_state_case_verified": policy_positive["status"] == "patch_verified",
         "multi_file_changed_file_count": len(multi_file["changed_files"]),
         "secondary_review_status": multi_file["summary"].get("secondary_review_status", ""),
         "secondary_review_comment_count": multi_file["summary"].get("secondary_review_comment_count", 0),
@@ -56,16 +90,29 @@ def run_employee_patch_closure_suite(project: str | Path, *, output: str | Path 
         "retry_first_failure_rolled_back": bool(retry["summary"].get("first_failure_rolled_back")),
         "retry_second_patch_passed": bool(retry["summary"].get("retry_gate_passed")),
         "retry_secondary_review_status": retry["summary"].get("secondary_review_status", ""),
+        "all_expected_outcomes_verified": bool(
+            positive["status"] == "patch_verified"
+            and existing_update["status"] == "patch_verified"
+            and negative["status"] == "patch_rolled_back"
+            and multi_file["status"] == "patch_verified"
+            and policy_positive["status"] == "patch_verified"
+            and retry["status"] == "patch_verified_after_retry"
+            and expected_failure_rollback_count == len(expected_failure_cases)
+            and unexpected_gate_failure_count == 0
+        ),
         "all_cases_have_patch_files": all(bool(case["evidence"].get("patch_path")) and Path(str(case["evidence"]["patch_path"])).is_file() for case in cases),
     }
     status = (
         "ready"
         if summary["success_case_verified"]
+        and summary["existing_file_update_verified"]
         and summary["failure_case_rolled_back"]
         and summary["multi_file_case_verified"]
+        and summary["policy_state_case_verified"]
         and summary["successful_repairs_re_reviewed"]
         and summary["retry_case_verified"]
         and summary["retry_first_failure_rolled_back"]
+        and summary["all_expected_outcomes_verified"]
         and summary["all_cases_have_patch_files"]
         else "needs_attention"
     )

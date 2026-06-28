@@ -8,7 +8,7 @@ from typing import Any
 from retort_engine.real_absorption_run_proof import per_run_code_graph_proof_missing
 
 
-def build_absorption_continuity_probe(project: str | Path, *, min_runs: int = 2, output: str | Path = "") -> dict[str, Any]:
+def build_absorption_continuity_probe(project: str | Path, *, min_runs: int = 5, output: str | Path = "") -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     runs = _latest_distinct_successful_runs(root, limit=max(min_runs, 1))
     inspected = [_inspect_run(root, run, latest=(index == 0)) for index, run in enumerate(runs)]

@@ -15,7 +15,7 @@ from retort_engine.evolution_map import build_evolution_map
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
-from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_readonly_pr_degradation_probe
+from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_low_permission_pr_degradation_probe, run_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
@@ -97,19 +97,22 @@ class RetortService:
     def publish_pr_readonly_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_readonly_pr_degradation_probe(str(payload.get("pr_url") or payload.get("url") or ""))
 
+    def publish_pr_low_permission_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return run_low_permission_pr_degradation_probe(str(payload.get("pr_url") or payload.get("url") or ""))
+
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
 
     def multi_project_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_multi_project_absorption_replay(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_projects=int(payload.get("min_projects") or 2),
+            min_projects=int(payload.get("min_projects") or 5),
         )
 
     def absorption_continuity_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_absorption_continuity_probe(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_runs=int(payload.get("min_runs") or 2),
+            min_runs=int(payload.get("min_runs") or 5),
         )
 
     def complex_pr_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -229,6 +232,10 @@ def create_app() -> Any:
     @app.post("/publish-pr-readonly-probe")
     def publish_pr_readonly_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.publish_pr_readonly_probe(payload)
+
+    @app.post("/publish-pr-low-permission-probe")
+    def publish_pr_low_permission_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.publish_pr_low_permission_probe(payload)
 
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

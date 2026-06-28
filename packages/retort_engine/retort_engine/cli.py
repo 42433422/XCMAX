@@ -15,7 +15,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
-from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_readonly_pr_degradation_probe
+from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_low_permission_pr_degradation_probe, write_readonly_pr_degradation_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
@@ -136,18 +136,22 @@ def main(argv: list[str] | None = None) -> int:
     readonly_probe.add_argument("--pr-url", required=True)
     readonly_probe.add_argument("--output", default="")
     readonly_probe.add_argument("--json", action="store_true")
+    low_permission_probe = sub.add_parser("publish-pr-low-permission-probe")
+    low_permission_probe.add_argument("--pr-url", required=True)
+    low_permission_probe.add_argument("--output", default="")
+    low_permission_probe.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
     replay.add_argument("--json", action="store_true")
     multi_absorption_replay = sub.add_parser("multi-project-absorption-replay")
     multi_absorption_replay.add_argument("--project", default=".")
-    multi_absorption_replay.add_argument("--min-projects", type=int, default=2)
+    multi_absorption_replay.add_argument("--min-projects", type=int, default=5)
     multi_absorption_replay.add_argument("--output", default="")
     multi_absorption_replay.add_argument("--json", action="store_true")
     continuity_probe = sub.add_parser("absorption-continuity-probe")
     continuity_probe.add_argument("--project", default=".")
-    continuity_probe.add_argument("--min-runs", type=int, default=2)
+    continuity_probe.add_argument("--min-runs", type=int, default=5)
     continuity_probe.add_argument("--output", default="")
     continuity_probe.add_argument("--json", action="store_true")
     complex_replay = sub.add_parser("complex-pr-replay")
@@ -407,6 +411,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Readable: {result['summary']['pull_status'] < 400}")
             print(f"Output: {output}")
         return 0 if result["status"] == "read_only_degraded" else 1
+    if args.command == "publish-pr-low-permission-probe":
+        output = args.output or "retort_pr_low_permission_probe.json"
+        result = write_low_permission_pr_degradation_probe(args.pr_url, output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR low-permission probe status: {result['status']}")
+            print(f"Write denied: {result['summary']['permission_denied']}")
+            print(f"Output: {output}")
+        return 0 if result["status"] == "permission_denied_degraded" else 1
     if args.command == "cross-project-replay":
         result = build_cross_project_replay(args.project)
         if args.output:

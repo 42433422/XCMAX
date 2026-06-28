@@ -317,16 +317,23 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_patch_closure_patch_generated_count={patch_summary.get('patch_generated_count', '')}",
         f"employee_patch_closure_patch_applied_count={patch_summary.get('patch_applied_count', '')}",
         f"employee_patch_closure_gate_passed_count={patch_summary.get('gate_passed_count', '')}",
+        f"employee_patch_closure_gate_expected_to_pass={patch_summary.get('gate_expected_to_pass_passed_count', '')}/{patch_summary.get('gate_expected_to_pass_count', '')}",
         f"employee_patch_closure_rollback_verified_count={patch_summary.get('rollback_verified_count', '')}",
+        f"employee_patch_closure_expected_failure_count={patch_summary.get('expected_failure_case_count', '')}",
+        f"employee_patch_closure_expected_failure_rollback_count={patch_summary.get('expected_failure_rollback_count', '')}",
+        f"employee_patch_closure_unexpected_gate_failure_count={patch_summary.get('unexpected_gate_failure_count', '')}",
         f"employee_patch_closure_success_case_verified={patch_summary.get('success_case_verified', '')}",
+        f"employee_patch_closure_existing_file_update_verified={patch_summary.get('existing_file_update_verified', '')}",
         f"employee_patch_closure_failure_case_rolled_back={patch_summary.get('failure_case_rolled_back', '')}",
         f"employee_patch_closure_multi_file_case_verified={patch_summary.get('multi_file_case_verified', '')}",
+        f"employee_patch_closure_policy_state_case_verified={patch_summary.get('policy_state_case_verified', '')}",
         f"employee_patch_closure_multi_file_changed_file_count={patch_summary.get('multi_file_changed_file_count', '')}",
         f"employee_patch_closure_secondary_review_status={patch_summary.get('secondary_review_status', '')}",
         f"employee_patch_closure_successful_repairs_re_reviewed={patch_summary.get('successful_repairs_re_reviewed', '')}",
         f"employee_patch_closure_retry_case_verified={patch_summary.get('retry_case_verified', '')}",
         f"employee_patch_closure_retry_first_failure_rolled_back={patch_summary.get('retry_first_failure_rolled_back', '')}",
         f"employee_patch_closure_retry_second_patch_passed={patch_summary.get('retry_second_patch_passed', '')}",
+        f"employee_patch_closure_all_expected_outcomes_verified={patch_summary.get('all_expected_outcomes_verified', '')}",
     ]
 
 

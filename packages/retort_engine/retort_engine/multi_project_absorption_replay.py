@@ -7,7 +7,7 @@ from typing import Any
 from retort_engine.real_absorption_run_proof import per_run_code_graph_proof_missing
 
 
-def build_multi_project_absorption_replay(project: str | Path, *, min_projects: int = 2, output: str | Path = "") -> dict[str, Any]:
+def build_multi_project_absorption_replay(project: str | Path, *, min_projects: int = 5, output: str | Path = "") -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     candidates = _latest_successful_runs_by_source(root)
     projects = [_project_replay(root, run) for run in candidates[: max(min_projects, 1)]]
