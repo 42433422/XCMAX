@@ -300,8 +300,33 @@ def _write_config(data: dict[str, Any]) -> None:
     _CONFIG_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def register_desktop_relay(*, host: str, port: int, label: str = "") -> dict[str, Any] | None:
-    """Register this desktop with the public relay and start the poller."""
+def register_desktop_relay(
+    *, host: str, port: int, label: str = "", force_new: bool = False
+) -> dict[str, Any] | None:
+    """Register this desktop with the public relay and start the poller.
+
+    根治 relay 身份漂移：桌面只要本地已存有效身份（relay_id + desktop_token），默认**复用**它并
+    起 poller，**绝不重新向服务器注册**。否则每次启动 / 每次点「出配对码」都会申请一个全新 relay_id
+    覆盖本地，把已和手机配对好的旧身份丢弃——任务仍派给旧（离线）relay、新 relay 又是 pending 领不到，
+    超级员工任务永远卡「排队中」。仅当本地无身份、或调用方显式 ``force_new=True``（用户主动重新配对）
+    时才注册新身份。
+    """
+    if not force_new:
+        existing = _read_config()
+        has_identity = bool(
+            str(existing.get("relay_id") or "").strip()
+            and str(existing.get("desktop_token") or "").strip()
+        )
+        valid_payload = _public_payload_from_config(existing)
+        # 已配对的身份必须复用（即便配对码过期，配对关系仍在服务端）；未配对但配对码仍有效时也复用
+        # （同一配对窗口内重复出码，不该换 relay_id）。仅「未配对且配对码已过期」才落到下面注册新身份。
+        if has_identity and (existing.get("paired") or valid_payload):
+            start_desktop_relay_poller()
+            return valid_payload or {
+                "relay_id": str(existing.get("relay_id") or ""),
+                "relay_base_url": str(existing.get("relay_base_url") or "") or _relay_base_url(),
+                "paired": bool(existing.get("paired")),
+            }
     base_url = _relay_base_url()
     device_label = label.strip() or f"XCAGI 桌面执行端 - {socket.gethostname()}"
     body = {
@@ -489,6 +514,17 @@ def _poll_once() -> None:
         body = resp.json()
         data = body.get("data") if isinstance(body, dict) else {}
         tasks = data.get("tasks") if isinstance(data, dict) else []
+    # poll 成功且服务端已把本 relay 配对到某手机账号时，持久化 paired 标志：register 据此复用本身份、
+    # 绝不再换新 relay_id（即便配对码早已过期），根治「重启/出码即丢配对」。
+    desktop = data.get("desktop") if isinstance(data, dict) else None
+    if isinstance(desktop, dict):
+        is_paired = (
+            str(desktop.get("status") or "") == "paired"
+            or int(desktop.get("mobile_user_id") or 0) > 0
+        )
+        if is_paired and not config.get("paired"):
+            config["paired"] = True
+            _write_config(config)
     if not isinstance(tasks, list):
         return
     for task in tasks:
