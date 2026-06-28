@@ -83,6 +83,9 @@ def _capability_audit_evidence(audit: dict[str, Any], refactor_execution: dict[s
             f"employee_worker_review_file_count={worker_review.get('file_count', '')}",
             f"employee_worker_review_comment_count={worker_review.get('comment_count', '')}",
             f"employee_worker_review_artifact_exists={worker_review.get('artifact_exists', False)}",
+            f"employee_worker_pid_isolation_verified={worker_review.get('pid_isolation_verified', False)}",
+            f"employee_worker_unique_process_ids={worker_review.get('unique_process_id_count', '')}",
+            f"employee_worker_process_traces={worker_review.get('worker_process_trace_count', '')}",
             f"external_project_count={audit.get('external_project_count', '')}",
             f"core_refactor_execution_status={refactor_execution.get('status')}",
             f"core_refactor_implemented_tasks={refactor_execution.get('implemented_task_count')}/{refactor_execution.get('task_count')}",
@@ -295,6 +298,15 @@ def _report_evidence(project: Path) -> list[str]:
         f"multi_project_absorption_replay_status={multi_absorption_report.get('status', '')}",
         f"multi_project_absorption_replay_ready_count={multi_absorption_summary.get('ready_project_count', '')}",
         f"multi_project_absorption_replay_distinct_sources={multi_absorption_summary.get('distinct_source_count', '')}",
+        f"multi_project_absorption_replay_source_family_count={multi_absorption_summary.get('source_family_count', '')}",
+        f"multi_project_absorption_replay_source_families={','.join(multi_absorption_summary.get('source_families') or []) if isinstance(multi_absorption_summary.get('source_families'), list) else ''}",
+        f"multi_project_absorption_replay_heterogeneous_verified={multi_absorption_summary.get('heterogeneous_absorption_verified', '')}",
+        f"multi_project_absorption_replay_historical_source_family_count={multi_absorption_summary.get('historical_source_family_count', '')}",
+        f"multi_project_absorption_replay_historical_non_ts_sources={multi_absorption_summary.get('historical_non_ts_source_count', '')}",
+        f"multi_project_absorption_replay_historical_architecture_sources={multi_absorption_summary.get('historical_architecture_source_count', '')}",
+        f"multi_project_absorption_replay_historical_benchmark_sources={multi_absorption_summary.get('historical_benchmark_source_count', '')}",
+        f"multi_project_absorption_replay_historical_security_sources={multi_absorption_summary.get('historical_security_source_count', '')}",
+        f"multi_project_absorption_replay_historical_heterogeneous_verified={multi_absorption_summary.get('historical_heterogeneous_absorption_verified', '')}",
         f"multi_project_absorption_replay_all_behavior_diff={multi_absorption_summary.get('all_have_behavior_diff', '')}",
         f"multi_project_absorption_replay_all_employee_results={multi_absorption_summary.get('all_have_employee_results', '')}",
         f"multi_project_absorption_replay_all_code_graph_proof={multi_absorption_summary.get('all_have_per_run_code_graph_proof', '')}",
@@ -370,6 +382,11 @@ def _report_evidence(project: Path) -> list[str]:
         f"external_advantage_matrix_extension_policy_cases={external_matrix_summary.get('extension_policy_case_count', '')}",
         f"external_advantage_matrix_per_case_before_after={external_matrix_summary.get('per_case_before_after', '')}",
         f"external_advantage_matrix_all_improved={external_matrix_summary.get('all_advantages_improved', '')}",
+        f"external_advantage_matrix_regression_status={external_matrix_summary.get('regression_status', '')}",
+        f"external_advantage_matrix_regression_cases={external_matrix_summary.get('passed_regression_case_count', '')}/{external_matrix_summary.get('regression_case_count', '')}",
+        f"external_advantage_matrix_all_delta_regressions_verified={external_matrix_summary.get('all_delta_regressions_verified', '')}",
+        f"external_advantage_matrix_regression_verifier={(external_matrix.get('evidence') or {}).get('regression_verifier', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
+        f"external_advantage_matrix_regression_test_module={(external_matrix.get('evidence') or {}).get('regression_test_module', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
         f"external_advantage_repeat_status={external_repeat.get('status', '')}",
         f"external_advantage_repeat_ready={external_repeat_summary.get('ready_repeat_count', '')}/{external_repeat_summary.get('repeat_count', '')}",
         f"external_advantage_repeat_total_case_evaluations={external_repeat_summary.get('total_case_evaluation_count', '')}",
@@ -386,6 +403,9 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_scheduler_stress_round_count={stress_summary.get('round_count', '')}",
         f"employee_scheduler_stress_workers_per_round={stress_summary.get('workers_per_round', '')}",
         f"employee_scheduler_stress_process_invocation_count={stress_summary.get('process_invocation_count', '')}",
+        f"employee_scheduler_stress_unique_process_ids={stress_summary.get('unique_process_id_count', '')}",
+        f"employee_scheduler_stress_successful_process_ids={stress_summary.get('unique_successful_process_id_count', '')}",
+        f"employee_scheduler_stress_pid_isolation_verified={stress_summary.get('pid_isolation_verified', '')}",
         f"employee_scheduler_stress_queued_task_count={stress_summary.get('queued_task_count', '')}",
         f"employee_scheduler_stress_completed_result_count={stress_summary.get('completed_result_count', '')}",
         f"employee_scheduler_stress_history_result_count={stress_summary.get('history_task_result_count', '')}",
@@ -475,6 +495,7 @@ def _employee_result_evidence(project: Path) -> list[str]:
     runtime = payload.get("runtime_evidence") if isinstance(payload.get("runtime_evidence"), dict) else {}
     review = runtime.get("worker_review") if isinstance(runtime.get("worker_review"), dict) else {}
     multi_worker = runtime.get("multi_worker") if isinstance(runtime.get("multi_worker"), dict) else {}
+    process_isolation = multi_worker.get("process_isolation") if isinstance(multi_worker.get("process_isolation"), dict) else {}
     patch = runtime.get("employee_patch_closure") if isinstance(runtime.get("employee_patch_closure"), dict) else {}
     patch_summary = patch.get("summary") if isinstance(patch.get("summary"), dict) else {}
     return [
@@ -483,6 +504,7 @@ def _employee_result_evidence(project: Path) -> list[str]:
         f"employee_runtime_worker_review={review.get('status', '')}; comments={review.get('comment_count', '')}; artifact={review.get('artifact', '')}",
         f"employee_runtime_worker_review_files={review.get('file_count', '')}; task_groups={review.get('task_group_count', '')}; worker_reviews={review.get('worker_review_count', '')}",
         f"employee_runtime_multi_worker_verified={multi_worker.get('verified', '')}; workers={multi_worker.get('worker_count', '')}; independent_workers={multi_worker.get('independent_worker_count', '')}; result_paths={multi_worker.get('result_path_count', '')}",
+        f"employee_runtime_pid_isolation_verified={process_isolation.get('pid_isolation_verified', '')}; unique_pids={process_isolation.get('unique_process_id_count', '')}; traces={process_isolation.get('worker_process_trace_count', '')}",
         f"employee_runtime_patch_closure={patch.get('status', '')}; success_case={patch_summary.get('success_case_verified', '')}; rollback_case={patch_summary.get('failure_case_rolled_back', '')}",
     ]
 
@@ -531,6 +553,9 @@ def _latest_run_evidence(project: Path) -> list[str]:
                 f"latest_absorption_worker_review_files={summary.get('worker_review_file_count', '')}",
                 f"latest_absorption_worker_review_comments={summary.get('worker_review_comment_count', '')}",
                 f"latest_absorption_worker_review_task_groups={summary.get('worker_review_task_group_count', '')}",
+                f"latest_absorption_pid_isolation_verified={summary.get('pid_isolation_verified', '')}",
+                f"latest_absorption_unique_process_ids={summary.get('unique_process_id_count', '')}",
+                f"latest_absorption_worker_process_traces={summary.get('worker_process_trace_count', '')}",
             ]
     return []
 

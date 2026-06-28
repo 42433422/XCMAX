@@ -58,6 +58,7 @@ def record_post_absorption_hardening_run(
     aggregate_results = aggregate_payload.get("results") if isinstance(aggregate_payload.get("results"), list) else []
     multi_worker = aggregate_payload.get("runtime_evidence", {}).get("multi_worker") if isinstance(aggregate_payload.get("runtime_evidence"), dict) else {}
     worker_review = aggregate_payload.get("runtime_evidence", {}).get("worker_review") if isinstance(aggregate_payload.get("runtime_evidence"), dict) else {}
+    process_isolation = multi_worker.get("process_isolation") if isinstance(multi_worker.get("process_isolation"), dict) else {}
     result = {
         "run_id": run_id,
         "status": "applied" if changed_files else "noop",
@@ -76,6 +77,9 @@ def record_post_absorption_hardening_run(
             "worker_review_file_count": int(worker_review.get("file_count") or 0),
             "worker_review_comment_count": int(worker_review.get("comment_count") or 0),
             "worker_review_task_group_count": int(worker_review.get("task_group_count") or 0),
+            "pid_isolation_verified": bool(process_isolation.get("pid_isolation_verified")),
+            "unique_process_id_count": int(process_isolation.get("unique_process_id_count") or 0),
+            "worker_process_trace_count": int(process_isolation.get("worker_process_trace_count") or 0),
             "duration_sec": round(time.monotonic() - started, 3),
         },
         "changed_files": changed_files,
@@ -92,6 +96,7 @@ def record_post_absorption_hardening_run(
             "records_committed_post_merge_behavior": True,
             "employee_runtime_worker_subprocess": bool(employee_gate.get("ok")),
             "multi_worker_verified": bool(multi_worker.get("verified")),
+            "pid_isolation_verified": bool(process_isolation.get("pid_isolation_verified")),
         },
     }
     record_path = record_real_absorption_run(root, result)
@@ -251,7 +256,19 @@ def _run_worker_processes(root: Path, python_executable: str, payload_paths: lis
     processes = []
     for payload_path in payload_paths:
         command = [python_executable, "-m", "retort_engine.employee_runtime_worker", "--payload-file", str(payload_path)]
-        processes.append({"payload_path": payload_path, "command": command, "process": subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)})
+        started_at = datetime.now(timezone.utc).isoformat()
+        started_monotonic = time.monotonic()
+        process = subprocess.Popen(command, cwd=root, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        processes.append(
+            {
+                "payload_path": payload_path,
+                "command": command,
+                "process": process,
+                "pid": process.pid,
+                "started_at": started_at,
+                "started_monotonic": started_monotonic,
+            }
+        )
     results = []
     for item in processes:
         process = item["process"]
@@ -266,6 +283,10 @@ def _run_worker_processes(root: Path, python_executable: str, payload_paths: lis
             {
                 "payload_path": str(item["payload_path"]),
                 "command": item["command"],
+                "pid": int(item.get("pid") or 0),
+                "started_at": str(item.get("started_at") or ""),
+                "ended_at": datetime.now(timezone.utc).isoformat(),
+                "duration_sec": round(time.monotonic() - float(item.get("started_monotonic") or time.monotonic()), 3),
                 "returncode": returncode,
                 "stdout": (stdout or "")[-2000:],
                 "stderr": (stderr or "")[-2000:],
@@ -303,7 +324,13 @@ def _aggregate_worker_results(
     }
     aggregate_review_path.write_text(json.dumps({"reviews": reviews, "summary": aggregate_review}, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     successful_processes = [item for item in worker_results if _returncode(item) == 0]
-    verified = len(successful_processes) == len(payloads) and len(reviews) == len(payloads) and len(combined_results) >= len(payloads)
+    process_isolation = _process_isolation_evidence(payloads, worker_results)
+    verified = (
+        len(successful_processes) == len(payloads)
+        and len(reviews) == len(payloads)
+        and len(combined_results) >= len(payloads)
+        and bool(process_isolation["pid_isolation_verified"])
+    )
     aggregate = {
         "run_id": run_id,
         "execution_mode": "employee_runtime_worker_multi_process",
@@ -317,11 +344,12 @@ def _aggregate_worker_results(
             "multi_worker": {
                 "verified": verified,
                 "worker_count": len(payloads),
-                "independent_worker_count": len(successful_processes),
+                "independent_worker_count": int(process_isolation["unique_successful_process_id_count"]),
                 "result_path_count": sum(1 for item in result_paths if item.is_file()),
                 "worker_review_count": len(reviews),
                 "task_result_count": len(combined_results),
                 "result_paths": [str(item) for item in result_paths],
+                "process_isolation": process_isolation,
             },
         },
         "status": "completed" if verified else "partial",
@@ -336,6 +364,51 @@ def _returncode(result: dict[str, Any]) -> int:
         return int(result.get("returncode", 1))
     except (TypeError, ValueError):
         return 1
+
+
+def _process_isolation_evidence(payloads: list[dict[str, Any]], worker_results: list[dict[str, Any]]) -> dict[str, Any]:
+    process_ids = [int(item["pid"]) for item in worker_results if isinstance(item.get("pid"), int) and int(item["pid"]) > 0]
+    successful_ids = [int(item["pid"]) for item in worker_results if _returncode(item) == 0 and isinstance(item.get("pid"), int) and int(item["pid"]) > 0]
+    payload_paths = [str(item.get("payload_path") or "") for item in payloads]
+    result_paths = [str(item.get("output_path") or "") for item in payloads]
+    traces = []
+    for payload, result in zip(payloads, worker_results, strict=False):
+        command = [str(part) for part in result.get("command") or []]
+        traces.append(
+            {
+                "pid": int(result.get("pid") or 0),
+                "payload_path": str(payload.get("payload_path") or result.get("payload_path") or ""),
+                "result_path": str(payload.get("output_path") or ""),
+                "returncode": _returncode(result),
+                "started_at": str(result.get("started_at") or ""),
+                "ended_at": str(result.get("ended_at") or ""),
+                "duration_sec": float(result.get("duration_sec") or 0.0),
+                "uses_payload_file": "--payload-file" in command,
+            }
+        )
+    expected_count = len(payloads)
+    unique_ids = sorted(set(process_ids))
+    unique_successful_ids = sorted(set(successful_ids))
+    return {
+        "worker_process_trace_count": len(traces),
+        "process_id_count": len(process_ids),
+        "unique_process_id_count": len(unique_ids),
+        "successful_process_id_count": len(successful_ids),
+        "unique_successful_process_id_count": len(unique_successful_ids),
+        "payload_path_count": len(set(payload_paths)),
+        "result_path_count": len(set(result_paths)),
+        "all_payload_paths_unique": len(set(payload_paths)) == expected_count,
+        "all_result_paths_unique": len(set(result_paths)) == expected_count,
+        "all_process_ids_unique": len(unique_ids) == expected_count,
+        "all_successful_process_ids_unique": len(unique_successful_ids) == expected_count,
+        "pid_isolation_verified": expected_count > 1
+        and len(unique_successful_ids) == expected_count
+        and len(set(payload_paths)) == expected_count
+        and len(set(result_paths)) == expected_count
+        and all(item["uses_payload_file"] and item["returncode"] == 0 for item in traces),
+        "process_ids": unique_ids,
+        "traces": traces,
+    }
 
 
 def _worker_pythonpath(root: Path) -> str:

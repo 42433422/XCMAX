@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from retort_engine.external_advantage_regression import verify_external_advantage_rows
 from retort_engine.pr_review import review_diff
 
 
@@ -81,6 +82,8 @@ def build_external_advantage_matrix(
     baseline_average = round(sum(int(row["baseline"]["score"]) for row in rows) / len(rows), 2) if rows else 0.0
     retort_average = round(sum(int(row["retort"]["score"]) for row in rows) / len(rows), 2) if rows else 0.0
     delta = round(retort_average - baseline_average, 2)
+    regression = verify_external_advantage_rows(rows)
+    regression_summary = regression.get("summary") if isinstance(regression.get("summary"), dict) else {}
     summary = {
         "case_count": len(rows),
         "min_case_count": min_cases,
@@ -95,6 +98,10 @@ def build_external_advantage_matrix(
         "extension_policy_case_count": sum(1 for row in rows if row["retort"].get("extension_policy_known_count", 0) > 0),
         "per_case_before_after": all("baseline" in row and "retort" in row for row in rows),
         "all_advantages_improved": bool(rows) and all(int(row["behavior_delta"]) > 0 for row in rows),
+        "regression_status": regression.get("status", ""),
+        "regression_case_count": regression_summary.get("regression_case_count", 0),
+        "passed_regression_case_count": regression_summary.get("passed_regression_case_count", 0),
+        "all_delta_regressions_verified": regression_summary.get("all_delta_regressions_verified", False),
     }
     ready = (
         summary["case_count"] >= min_cases
@@ -103,6 +110,7 @@ def build_external_advantage_matrix(
         and summary["absorbed_signal_count"] >= min_cases
         and summary["score_delta"] >= 35
         and summary["all_advantages_improved"]
+        and summary["all_delta_regressions_verified"]
     )
     result = {
         "status": "ready" if ready else "needs_more_evidence",
@@ -115,7 +123,10 @@ def build_external_advantage_matrix(
             "comparison": "same_external_advantage_cases_replayed_before_after_absorption",
             "source_projects": source_projects,
             "absorbed_signals": absorbed_signals,
+            "regression_verifier": "retort_engine.external_advantage_regression.verify_external_advantage_rows",
+            "regression_test_module": "tests/test_external_advantage_regression.py",
         },
+        "regression": regression,
     }
     if output:
         output_path = Path(output)

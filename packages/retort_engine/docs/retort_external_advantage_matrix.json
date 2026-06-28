@@ -10,6 +10,8 @@
     ],
     "baseline_model": "pre_absorption_keyword_review_without_context_groups_publish_anchors_or_extension_policy",
     "comparison": "same_external_advantage_cases_replayed_before_after_absorption",
+    "regression_test_module": "tests/test_external_advantage_regression.py",
+    "regression_verifier": "retort_engine.external_advantage_regression.verify_external_advantage_rows",
     "retort_model": "retort_engine.pr_review.review_diff",
     "source_projects": [
       "mopemope/pr-ai-review-bot",
@@ -40,7 +42,7 @@
       "external_advantage": "PR agent style secret review should surface credential leaks as publishable blockers.",
       "ready": true,
       "retort": {
-        "comment_count": 1,
+        "comment_count": 2,
         "context_matched": true,
         "extension_policy_contexts": [
           "runtime"
@@ -48,12 +50,14 @@
         "extension_policy_known_count": 1,
         "model": "retort_current_review_diff",
         "observed_contexts": [
+          "config",
           "security"
         ],
         "observed_severities": [
-          "high"
+          "high",
+          "medium"
         ],
-        "publishable_comment_count": 1,
+        "publishable_comment_count": 2,
         "score": 85,
         "severity_matched": true,
         "task_group_count": 0
@@ -118,7 +122,7 @@
       "external_advantage": "Benchmark harness changes must reject placeholder oracles before claiming quality.",
       "ready": true,
       "retort": {
-        "comment_count": 1,
+        "comment_count": 2,
         "context_matched": true,
         "extension_policy_contexts": [
           "runtime"
@@ -126,12 +130,14 @@
         "extension_policy_known_count": 1,
         "model": "retort_current_review_diff",
         "observed_contexts": [
-          "runtime"
+          "runtime",
+          "tests"
         ],
         "observed_severities": [
-          "medium"
+          "medium",
+          "low"
         ],
-        "publishable_comment_count": 1,
+        "publishable_comment_count": 2,
         "score": 85,
         "severity_matched": true,
         "task_group_count": 0
@@ -257,18 +263,137 @@
     }
   ],
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "regression": {
+    "cases": [
+      {
+        "absorbed_signal": "security_ranked_pr_review",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "pr-agent-secret-context",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "qodo-ai/pr-agent"
+      },
+      {
+        "absorbed_signal": "ci_review_publisher_safety",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "reviewdog-workflow-token",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "reviewdog/reviewdog"
+      },
+      {
+        "absorbed_signal": "evaluation_harness_oracle",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "swe-bench-oracle-placeholder",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "swe-bench/SWE-bench"
+      },
+      {
+        "absorbed_signal": "architecture_contract_guard",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "import-linter-contract-bypass",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "seddonym/import-linter"
+      },
+      {
+        "absorbed_signal": "context_packaging_noise_control",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "repomix-context-package-clean",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "yamadashy/repomix"
+      },
+      {
+        "absorbed_signal": "typescript_diff_hunk_review",
+        "baseline_score": 40,
+        "behavior_delta": 45,
+        "case_id": "mopemope-typescript-diff-review",
+        "checks": {
+          "before_after_scores": true,
+          "expected_context": true,
+          "expected_severity": true,
+          "positive_delta": true,
+          "publishable_output": true
+        },
+        "passed": true,
+        "retort_score": 85,
+        "source_project": "mopemope/pr-ai-review-bot"
+      }
+    ],
+    "evidence": {
+      "model": "same_rows_replayed_as_behavior_regression_contract",
+      "verifier": "retort_engine.external_advantage_regression.verify_external_advantage_rows"
+    },
+    "status": "ready",
+    "summary": {
+      "all_delta_regressions_verified": true,
+      "all_have_before_after_scores": true,
+      "all_have_positive_delta": true,
+      "all_have_publishable_output": true,
+      "all_match_expected_context": true,
+      "all_match_expected_severity": true,
+      "passed_regression_case_count": 6,
+      "regression_case_count": 6
+    }
+  },
   "status": "ready",
   "summary": {
     "absorbed_signal_count": 6,
     "all_advantages_improved": true,
+    "all_delta_regressions_verified": true,
     "baseline_average_score": 40.0,
     "behavior_delta_count": 6,
     "case_count": 6,
     "extension_policy_case_count": 6,
     "min_case_count": 6,
+    "passed_regression_case_count": 6,
     "per_case_before_after": true,
     "publishable_case_count": 6,
     "ready_case_count": 6,
+    "regression_case_count": 6,
+    "regression_status": "ready",
     "retort_average_score": 85.0,
     "score_delta": 45.0,
     "source_project_count": 6

@@ -22,6 +22,8 @@ def test_external_advantage_matrix_compares_baseline_to_current_behavior(tmp_pat
     assert result["summary"]["score_delta"] >= 35
     assert result["summary"]["per_case_before_after"] is True
     assert result["summary"]["all_advantages_improved"] is True
+    assert result["summary"]["all_delta_regressions_verified"] is True
+    assert result["summary"]["passed_regression_case_count"] == result["summary"]["case_count"]
     assert all(row["retort"]["score"] > row["baseline"]["score"] for row in result["matrix"])
     assert all(row["retort"]["publishable_comment_count"] > 0 for row in result["matrix"])
     assert validate_contract("external_advantage_matrix_result", result)["valid"] is True

@@ -9,9 +9,9 @@ from retort_engine.service import RetortService
 
 
 def test_multi_project_absorption_replay_requires_distinct_ready_projects(tmp_path: Path) -> None:
-    _write_run(tmp_path, "run-a", "github/a", True)
+    _write_run(tmp_path, "run-a", "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent", True)
     _write_employee_result(tmp_path, "run-a")
-    _write_run(tmp_path, "run-b", "github/b", True)
+    _write_run(tmp_path, "run-b", "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot", True)
     _write_employee_result(tmp_path, "run-b")
 
     result = build_multi_project_absorption_replay(tmp_path, min_projects=2)
@@ -24,6 +24,8 @@ def test_multi_project_absorption_replay_requires_distinct_ready_projects(tmp_pa
     assert result["summary"]["all_have_employee_results"] is True
     assert result["summary"]["all_have_per_run_code_graph_proof"] is True
     assert result["summary"]["latest_project_differs_from_previous"] is True
+    assert result["summary"]["source_family_count"] == 2
+    assert result["summary"]["heterogeneous_absorption_verified"] is True
     assert validate_contract("multi_project_absorption_replay_result", result)["valid"] is True
 
 
@@ -38,14 +40,38 @@ def test_multi_project_absorption_replay_fails_without_second_project(tmp_path: 
 
 
 def test_service_exposes_multi_project_absorption_replay(tmp_path: Path) -> None:
-    _write_run(tmp_path, "run-a", "github/a", True)
+    _write_run(tmp_path, "run-a", "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent", True)
     _write_employee_result(tmp_path, "run-a")
-    _write_run(tmp_path, "run-b", "github/b", True)
+    _write_run(tmp_path, "run-b", "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot", True)
     _write_employee_result(tmp_path, "run-b")
 
     result = RetortService().multi_project_absorption_replay({"project": str(tmp_path), "min_projects": 2})
 
     assert result["status"] == "ready"
+
+
+def test_multi_project_absorption_replay_reports_historical_heterogeneous_families(tmp_path: Path) -> None:
+    sources = [
+        "retort://post-absorption-hardening/abc123",
+        "packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
+        "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+        "https://github.com/seddonym/import-linter",
+        "https://github.com/EleutherAI/lm-evaluation-harness",
+        "https://github.com/semgrep/semgrep",
+    ]
+    for index, source in enumerate(sources, start=1):
+        run_id = f"run-{index:02d}"
+        _write_run(tmp_path, run_id, source, True)
+        _write_employee_result(tmp_path, run_id)
+
+    result = build_multi_project_absorption_replay(tmp_path, min_projects=5)
+
+    assert result["status"] == "ready"
+    assert result["summary"]["historical_heterogeneous_absorption_verified"] is True
+    assert result["summary"]["historical_architecture_source_count"] >= 1
+    assert result["summary"]["historical_benchmark_source_count"] >= 1
+    assert result["summary"]["historical_security_source_count"] >= 1
+    assert result["summary"]["historical_source_family_count"] >= 5
 
 
 def _write_run(root: Path, run_id: str, source: str, gates_passed: bool) -> None:

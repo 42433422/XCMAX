@@ -18,6 +18,8 @@ def test_employee_scheduler_stress_verifies_queue_result_history(tmp_path: Path)
     assert result["summary"]["failed_process_count"] == 0
     assert result["summary"]["queue_result_history_consistent"] is True
     assert result["summary"]["independent_process_verified"] is True
+    assert result["summary"]["pid_isolation_verified"] is True
+    assert result["summary"]["unique_process_id_count"] == result["summary"]["process_invocation_count"]
     assert validate_contract("employee_scheduler_stress_result", result)["valid"] is True
 
 
@@ -30,6 +32,8 @@ def test_employee_scheduler_stress_verifies_concurrent_workers(tmp_path: Path) -
     assert result["summary"]["completed_result_count"] == 40
     assert result["summary"]["history_task_result_count"] == 40
     assert result["summary"]["process_invocation_count"] == 20
+    assert result["summary"]["unique_process_id_count"] == 20
+    assert result["summary"]["pid_isolation_verified"] is True
     assert result["summary"]["failed_process_count"] == 0
     assert result["summary"]["queue_result_history_consistent"] is True
     assert result["summary"]["independent_process_verified"] is True
@@ -45,3 +49,4 @@ def test_employee_scheduler_stress_service_passes_concurrent_worker_count(tmp_pa
     assert result["status"] == "ready"
     assert result["summary"]["workers_per_round"] == 3
     assert result["summary"]["concurrent_workers_verified"] is True
+    assert result["summary"]["pid_isolation_verified"] is True
