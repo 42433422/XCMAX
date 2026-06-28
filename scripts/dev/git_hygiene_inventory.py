@@ -406,9 +406,9 @@ def main() -> int:
         }
         args.json_out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     if args.markdown_out:
-        args.markdown_out.write_text(markdown + "\n")
+        args.markdown_out.write_text(markdown.rstrip() + "\n")
     if not args.json_out and not args.markdown_out:
-        print(markdown)
+        print(markdown.rstrip())
     return 0
 
 
