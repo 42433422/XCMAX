@@ -10,12 +10,15 @@ from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
+from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
 from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
+from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
+from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
 from retort_engine.external_merge_landing import build_external_merge_landing
@@ -187,6 +190,13 @@ class RetortService:
             min_cases=int(payload.get("min_cases") or 6),
         )
 
+    def external_advantage_ci_regression(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_external_advantage_ci_regression(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 6),
+            min_blind_delta=int(payload.get("min_blind_delta") or 80),
+        )
+
     def external_advantage_repeat(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_advantage_repeat(
             str(payload.get("project") or payload.get("project_path") or "."),
@@ -206,8 +216,24 @@ class RetortService:
             min_domains=int(payload.get("min_domains") or 10),
         )
 
+    def cross_domain_end_to_end(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_cross_domain_end_to_end(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_domains=int(payload.get("min_domains") or 10),
+        )
+
     def contract_runtime_rehearsal(self, payload: dict[str, Any]) -> dict[str, Any]:
-        return build_contract_runtime_rehearsal(str(payload.get("project") or payload.get("project_path") or "."))
+        return build_contract_runtime_rehearsal(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            concurrent_workers=int(payload.get("concurrent_workers") or 120),
+        )
+
+    def contract_stability_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_contract_stability_stress(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            rounds=int(payload.get("rounds") or 2),
+            concurrent_workers=int(payload.get("concurrent_workers") or 120),
+        )
 
     def review_family_behavior_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_review_family_behavior_replay(
@@ -380,6 +406,10 @@ def create_app() -> Any:
     def external_advantage_matrix_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_matrix(payload)
 
+    @app.post("/external-advantage-ci-regression")
+    def external_advantage_ci_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.external_advantage_ci_regression(payload)
+
     @app.post("/external-advantage-repeat")
     def external_advantage_repeat_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_repeat(payload)
@@ -392,9 +422,17 @@ def create_app() -> Any:
     def cross_domain_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.cross_domain_absorption_replay(payload)
 
+    @app.post("/cross-domain-end-to-end")
+    def cross_domain_end_to_end_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.cross_domain_end_to_end(payload)
+
     @app.post("/contract-runtime-rehearsal")
     def contract_runtime_rehearsal_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.contract_runtime_rehearsal(payload)
+
+    @app.post("/contract-stability-stress")
+    def contract_stability_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.contract_stability_stress(payload)
 
     @app.post("/review-family-behavior-replay")
     def review_family_behavior_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

@@ -42,6 +42,9 @@ def build_operator_journey_replay(project: str | Path, *, output: str | Path = "
         "frontend_operation_replay_ready": bool((live_probes.get("blackhole_ui_operation_replay") or {}).get("ready")),
         "architecture_contract_ready": bool((live_probes.get("architecture_contracts") or {}).get("ready")),
         "codebase_graph_ready": bool((live_probes.get("codebase_graph") or {}).get("ready")),
+        "external_advantage_ci_ready": _report_ready(root, "retort_external_advantage_ci_regression.json"),
+        "contract_stability_ready": _report_ready(root, "retort_contract_stability_stress.json"),
+        "cross_domain_end_to_end_ready": _report_ready(root, "retort_cross_domain_end_to_end.json"),
         "manifest_path": str(manifest_path),
         "single_command_surface": True,
         "duration_sec": round(time.monotonic() - started, 3),
@@ -91,6 +94,9 @@ def _journey_stages(
     publish_dry_run = artifact_by_name.get("pr_publish_dry_run", {})
     readonly_probe = artifact_by_name.get("pr_readonly_degradation_probe", {})
     low_permission_probe = artifact_by_name.get("pr_low_permission_probe", {})
+    external_ci = artifact_by_name.get("external_advantage_ci_regression", {})
+    contract_stability = artifact_by_name.get("contract_stability_stress", {})
+    cross_domain_e2e = artifact_by_name.get("cross_domain_end_to_end", {})
     return [
         _stage(
             "select_external_source",
@@ -164,6 +170,16 @@ def _journey_stages(
             ],
         ),
         _stage(
+            "sustained_depth_gates",
+            "持续深度门禁",
+            external_ci.get("exists") is True and contract_stability.get("exists") is True and cross_domain_e2e.get("exists") is True,
+            [
+                f"external_advantage_ci_sha={external_ci.get('sha256', '')}",
+                f"contract_stability_sha={contract_stability.get('sha256', '')}",
+                f"cross_domain_end_to_end_sha={cross_domain_e2e.get('sha256', '')}",
+            ],
+        ),
+        _stage(
             "release_decision",
             "最终发布输入",
             _release_inputs_ready(root),
@@ -192,10 +208,13 @@ def _artifact_manifest(root: Path, latest_run: dict[str, Any]) -> list[dict[str,
         ("production_recovery_drill", docs / "retort_production_recovery_drill.json", "source_report", ("status", "summary", "scenarios")),
         ("review_quality_benchmark", docs / "retort_review_quality_benchmark.json", "source_report", ("status", "summary", "samples")),
         ("external_advantage_matrix", docs / "retort_external_advantage_matrix.json", "source_report", ("status", "summary", "matrix")),
+        ("external_advantage_ci_regression", docs / "retort_external_advantage_ci_regression.json", "source_report", ("status", "summary", "cases")),
         ("external_advantage_repeat", docs / "retort_external_advantage_repeat.json", "source_report", ("status", "summary", "runs")),
         ("heterogeneous_absorption_replay", docs / "retort_heterogeneous_absorption_replay.json", "source_report", ("status", "summary", "cases")),
         ("cross_domain_absorption_replay", docs / "retort_cross_domain_absorption_replay.json", "source_report", ("status", "summary", "cases")),
+        ("cross_domain_end_to_end", docs / "retort_cross_domain_end_to_end.json", "source_report", ("status", "summary", "stages")),
         ("contract_runtime_rehearsal", docs / "retort_contract_runtime_rehearsal.json", "source_report", ("status", "summary", "cases")),
+        ("contract_stability_stress", docs / "retort_contract_stability_stress.json", "source_report", ("status", "summary", "runs")),
         ("review_family_behavior_replay", docs / "retort_review_family_behavior_replay.json", "source_report", ("status", "summary", "cases")),
         ("external_merge_landing", docs / "retort_external_merge_landing.json", "source_report", ("status", "summary", "cases")),
         ("review_adjudication_calibration", docs / "retort_review_adjudication_calibration.json", "source_report", ("status", "summary", "cases")),
@@ -325,10 +344,13 @@ def _release_inputs_ready(root: Path) -> bool:
     patch = _read_json(docs / "retort_employee_patch_closure.json")
     benchmark = _read_json(docs / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(docs / "retort_external_advantage_matrix.json")
+    external_ci = _read_json(docs / "retort_external_advantage_ci_regression.json")
     external_repeat = _read_json(docs / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(docs / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(docs / "retort_cross_domain_absorption_replay.json")
+    cross_domain_e2e = _read_json(docs / "retort_cross_domain_end_to_end.json")
     contract_runtime = _read_json(docs / "retort_contract_runtime_rehearsal.json")
+    contract_stability = _read_json(docs / "retort_contract_stability_stress.json")
     review_family = _read_json(docs / "retort_review_family_behavior_replay.json")
     external_merge_landing = _read_json(docs / "retort_external_merge_landing.json")
     return (
@@ -345,6 +367,9 @@ def _release_inputs_ready(root: Path) -> bool:
         and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0
         and external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted") is True
         and int(external_matrix.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 65
+        and external_ci.get("status") == "ready"
+        and external_ci.get("summary", {}).get("all_cases_have_ci_acceptance") is True
+        and int(external_ci.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 80
         and external_repeat.get("status") == "ready"
         and external_repeat.get("summary", {}).get("stable_case_set") is True
         and external_repeat.get("summary", {}).get("stable_score_delta") is True
@@ -355,11 +380,17 @@ def _release_inputs_ready(root: Path) -> bool:
         and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
         and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
         and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 10
+        and cross_domain_e2e.get("status") == "ready"
+        and cross_domain_e2e.get("summary", {}).get("all_stages_chained") is True
+        and cross_domain_e2e.get("summary", {}).get("all_stage_outputs_consumed") is True
         and contract_runtime.get("status") == "ready"
         and contract_runtime.get("summary", {}).get("all_violations_rejected") is True
         and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True
         and contract_runtime.get("summary", {}).get("all_concurrent_violations_rejected") is True
         and contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified") is True
+        and contract_stability.get("status") == "ready"
+        and contract_stability.get("summary", {}).get("concurrency_floor_exceeded") is True
+        and int(contract_stability.get("summary", {}).get("state_leak_count") or 0) == 0
         and review_family.get("status") == "ready"
         and review_family.get("summary", {}).get("all_direct_review_outputs_verified") is True
         and review_family.get("summary", {}).get("independent_all_cases_accepted") is True
@@ -367,6 +398,10 @@ def _release_inputs_ready(root: Path) -> bool:
         and external_merge_landing.get("summary", {}).get("all_branch_diff_merge_tests_passed") is True
         and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 10
     )
+
+
+def _report_ready(root: Path, name: str) -> bool:
+    return _read_json(root / "docs" / name).get("status") == "ready"
 
 
 def _write_manifest(path: Path, result: dict[str, Any]) -> None:

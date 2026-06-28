@@ -207,6 +207,27 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_external_advantage_ci_regression.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 6,
+                    "passed_case_count": 6,
+                    "source_project_count": 6,
+                    "matrix_status": "ready",
+                    "blind_third_party_minimum_delta": 80,
+                    "blind_delta_floor": 80,
+                    "blind_delta_floor_met": True,
+                    "all_direct_review_regressions_verified": True,
+                    "all_cases_have_ci_acceptance": True,
+                },
+                "cases": [],
+                "evidence": {"ci_gate": "all_cases_direct_replay_and_blind_delta_at_or_above_80"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_heterogeneous_absorption_replay.json").write_text(
         json.dumps(
             {
@@ -279,6 +300,30 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_cross_domain_end_to_end.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "linked_stage_count": 10,
+                    "linked_domain_count": 10,
+                    "linked_direct_module_count": 10,
+                    "integrated_review_status": "reviewed",
+                    "integrated_review_comment_count": 4,
+                    "integrated_review_task_group_count": 2,
+                    "all_stages_chained": True,
+                    "all_stage_outputs_consumed": True,
+                    "output_assertions_passed": True,
+                },
+                "stages": [],
+                "review": {},
+                "assertions": {},
+                "artifacts": {},
+                "evidence": {"integrated_runtime": "retort_engine.pr_review.review_diff"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_contract_runtime_rehearsal.json").write_text(
         json.dumps(
             {
@@ -303,6 +348,26 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "runtime_guard": "retort_engine.contracts.validate_contract",
                     "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
                 },
+            }
+        ),
+        encoding="utf-8",
+    )
+    (docs / "retort_contract_stability_stress.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "round_count": 2,
+                    "ready_round_count": 2,
+                    "concurrent_worker_count": 120,
+                    "concurrency_floor_exceeded": True,
+                    "total_fault_injection_count": 720,
+                    "total_concurrent_violation_rejected_count": 720,
+                    "total_concurrent_rollback_verified_count": 720,
+                    "state_leak_count": 0,
+                },
+                "runs": [],
+                "evidence": {"acceptance": ">100 concurrent workers across repeated rounds with zero state leaks"},
             }
         ),
         encoding="utf-8",
@@ -397,8 +462,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "ready_stage_count": 8,
-                    "stage_count": 8,
+                    "ready_stage_count": 9,
+                    "stage_count": 9,
                     "hashed_artifact_count": 15,
                     "real_absorption_run_present": True,
                     "real_absorption_gates_passed": True,
@@ -408,6 +473,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "frontend_operation_replay_ready": True,
                     "architecture_contract_ready": True,
                     "codebase_graph_ready": True,
+                    "external_advantage_ci_ready": True,
+                    "contract_stability_ready": True,
+                    "cross_domain_end_to_end_ready": True,
                     "manifest_path": ".retort/operator_journey_replays/run.manifest.json",
                     "single_command_surface": True,
                 },
@@ -592,6 +660,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "external_advantage_matrix_blind_third_party_delta_floor=True" in evidence
     assert "external_advantage_matrix_blind_third_party_score_fields_consumed=False" in evidence
     assert "external_advantage_matrix_blind_third_party_boundary=redacted_structural_facts_only_no_baseline_or_retort_score_fields" in evidence
+    assert "external_advantage_ci_regression_status=ready" in evidence
+    assert "external_advantage_ci_regression_cases=6/6" in evidence
+    assert "external_advantage_ci_regression_min_blind_delta=80" in evidence
+    assert "external_advantage_ci_regression_delta_floor_met=True" in evidence
+    assert "external_advantage_ci_regression_all_direct_review=True" in evidence
+    assert "external_advantage_ci_regression_all_ci_acceptance=True" in evidence
     assert "heterogeneous_absorption_replay_status=ready" in evidence
     assert "heterogeneous_absorption_replay_ready_cases=6/6" in evidence
     assert "heterogeneous_absorption_replay_cached_sources=6" in evidence
@@ -609,6 +683,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "cross_domain_absorption_replay_direct_execution=True" in evidence
     assert "cross_domain_absorption_replay_output_assertions=True" in evidence
     assert "cross_domain_absorption_replay_claim_boundary=direct_core_modules_not_pr_review_manifest" in evidence
+    assert "cross_domain_end_to_end_status=ready" in evidence
+    assert "cross_domain_end_to_end_domains=10" in evidence
+    assert "cross_domain_end_to_end_integrated_review=reviewed" in evidence
+    assert "cross_domain_end_to_end_all_stages_chained=True" in evidence
+    assert "cross_domain_end_to_end_all_outputs_consumed=True" in evidence
+    assert "cross_domain_end_to_end_runtime=retort_engine.pr_review.review_diff" in evidence
     assert "contract_runtime_rehearsal_status=ready" in evidence
     assert "contract_runtime_rehearsal_ready_cases=3/3" in evidence
     assert "contract_runtime_rehearsal_violations_rejected=3" in evidence
@@ -619,6 +699,11 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "contract_runtime_rehearsal_all_concurrent_rollbacks=True" in evidence
     assert "contract_runtime_rehearsal_fault_model=threaded_invalid_payload_workers_with_per_worker_state_rollback" in evidence
     assert "contract_runtime_rehearsal_guard=retort_engine.contracts.validate_contract" in evidence
+    assert "contract_stability_stress_status=ready" in evidence
+    assert "contract_stability_stress_rounds=2/2" in evidence
+    assert "contract_stability_stress_workers=120" in evidence
+    assert "contract_stability_stress_faults=720" in evidence
+    assert "contract_stability_stress_state_leaks=0" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
     assert "review_family_behavior_replay_language_families=python,typescript" in evidence
@@ -676,7 +761,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_readonly_degradation_probe_real_network=True" in evidence
     assert "pr_readonly_degradation_probe_artifact_ready=True" in evidence
     assert "operator_journey_replay_status=ready" in evidence
-    assert "operator_journey_replay_ready_stages=8/8" in evidence
+    assert "operator_journey_replay_ready_stages=9/9" in evidence
     assert "operator_journey_replay_cross_domain_ready=True" in evidence
     assert "operator_journey_replay_frontend_operation_replay_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence

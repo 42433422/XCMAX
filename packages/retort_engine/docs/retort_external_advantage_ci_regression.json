@@ -1,0 +1,141 @@
+{
+  "cases": [
+    {
+      "absorbed_signal": "security_ranked_pr_review",
+      "behavior_delta": 60,
+      "case_id": "pr-agent-secret-context",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "qodo-ai/pr-agent"
+    },
+    {
+      "absorbed_signal": "ci_review_publisher_safety",
+      "behavior_delta": 60,
+      "case_id": "reviewdog-workflow-token",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "reviewdog/reviewdog"
+    },
+    {
+      "absorbed_signal": "evaluation_harness_oracle",
+      "behavior_delta": 60,
+      "case_id": "swe-bench-oracle-placeholder",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "swe-bench/SWE-bench"
+    },
+    {
+      "absorbed_signal": "architecture_contract_guard",
+      "behavior_delta": 60,
+      "case_id": "import-linter-contract-bypass",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "seddonym/import-linter"
+    },
+    {
+      "absorbed_signal": "context_packaging_noise_control",
+      "behavior_delta": 60,
+      "case_id": "repomix-context-package-clean",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "yamadashy/repomix"
+    },
+    {
+      "absorbed_signal": "typescript_diff_hunk_review",
+      "behavior_delta": 60,
+      "case_id": "mopemope-typescript-diff-review",
+      "checks": {
+        "direct_context_matched": true,
+        "direct_severity_matched": true,
+        "extension_policy_applied": true,
+        "positive_behavior_delta": true,
+        "publishable_comment": true,
+        "ready": true,
+        "task_group_materialized": true
+      },
+      "minimum_blind_delta_required": 80,
+      "passed": true,
+      "source_project": "mopemope/pr-ai-review-bot"
+    }
+  ],
+  "evidence": {
+    "blind_adjudicator": "retort_engine.external_advantage_adjudicator.blind_third_party_adjudicate_external_advantages",
+    "ci_gate": "all_cases_direct_replay_and_blind_delta_at_or_above_80",
+    "review_runtime": "retort_engine.pr_review.review_diff",
+    "source": "retort_engine.external_advantage_matrix.build_external_advantage_matrix",
+    "style": "ci_replayed_external_advantage_delta_gate"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_cases_have_ci_acceptance": true,
+    "all_direct_review_regressions_verified": true,
+    "blind_delta_floor": 80,
+    "blind_delta_floor_met": true,
+    "blind_score_fields_consumed": false,
+    "blind_third_party_minimum_delta": 80,
+    "case_count": 6,
+    "ci_command": "retort external-advantage-ci-regression --project <project>",
+    "duration_sec": 0.015,
+    "matrix_case_count": 6,
+    "matrix_ready_cases": 6,
+    "matrix_score_delta": 60.0,
+    "matrix_status": "ready",
+    "min_case_count": 6,
+    "passed_case_count": 6,
+    "source_project_count": 6,
+    "source_projects": [
+      "mopemope/pr-ai-review-bot",
+      "qodo-ai/pr-agent",
+      "reviewdog/reviewdog",
+      "seddonym/import-linter",
+      "swe-bench/SWE-bench",
+      "yamadashy/repomix"
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+{
+  "evidence": {
+    "acceptance": ">100 concurrent workers across repeated rounds with zero state leaks",
+    "fault_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+    "runtime_guard": "retort_engine.contracts.validate_contract",
+    "style": "repeated_120_worker_contract_fault_injection"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "runs": [
+    {
+      "evidence": {
+        "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+        "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-stability-round-01",
+        "runtime_guard": "retort_engine.contracts.validate_contract",
+        "stress_boundary": "default_120_workers_exceeds_deep_review_100_concurrency_floor",
+        "style": "runtime_contract_violation_rejected_then_rollback"
+      },
+      "index": 1,
+      "status": "ready",
+      "summary": {
+        "all_concurrent_rollbacks_verified": true,
+        "all_concurrent_violations_rejected": true,
+        "all_rollbacks_verified": true,
+        "all_valid_payloads_accepted": true,
+        "all_violations_rejected": true,
+        "case_count": 3,
+        "concurrency_fault_injection_count": 360,
+        "concurrent_rollback_verified_count": 360,
+        "concurrent_violation_rejected_count": 360,
+        "concurrent_worker_count": 120,
+        "contract_names": [
+          "cross_domain_absorption_replay_result",
+          "operator_journey_replay_result",
+          "pr_review_result"
+        ],
+        "ready_case_count": 3,
+        "rollback_verified_count": 3,
+        "run_id": "contract-stability-round-01",
+        "valid_payload_accepted_count": 3,
+        "violation_rejected_count": 3
+      }
+    },
+    {
+      "evidence": {
+        "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+        "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-stability-round-02",
+        "runtime_guard": "retort_engine.contracts.validate_contract",
+        "stress_boundary": "default_120_workers_exceeds_deep_review_100_concurrency_floor",
+        "style": "runtime_contract_violation_rejected_then_rollback"
+      },
+      "index": 2,
+      "status": "ready",
+      "summary": {
+        "all_concurrent_rollbacks_verified": true,
+        "all_concurrent_violations_rejected": true,
+        "all_rollbacks_verified": true,
+        "all_valid_payloads_accepted": true,
+        "all_violations_rejected": true,
+        "case_count": 3,
+        "concurrency_fault_injection_count": 360,
+        "concurrent_rollback_verified_count": 360,
+        "concurrent_violation_rejected_count": 360,
+        "concurrent_worker_count": 120,
+        "contract_names": [
+          "cross_domain_absorption_replay_result",
+          "operator_journey_replay_result",
+          "pr_review_result"
+        ],
+        "ready_case_count": 3,
+        "rollback_verified_count": 3,
+        "run_id": "contract-stability-round-02",
+        "valid_payload_accepted_count": 3,
+        "violation_rejected_count": 3
+      }
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_rounds_rejected_violations": true,
+    "all_rounds_valid_payloads_accepted": true,
+    "all_rounds_verified_rollbacks": true,
+    "concurrency_floor": 100,
+    "concurrency_floor_exceeded": true,
+    "concurrent_worker_count": 120,
+    "duration_sec": 0.359,
+    "ready_round_count": 2,
+    "round_count": 2,
+    "state_leak_count": 0,
+    "total_concurrent_rollback_verified_count": 720,
+    "total_concurrent_violation_rejected_count": 720,
+    "total_fault_injection_count": 720
+  }
+}

@@ -16,10 +16,13 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
+    external_ci_regression = _read_json(root / "docs" / "retort_external_advantage_ci_regression.json")
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
+    cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
     contract_runtime = _read_json(root / "docs" / "retort_contract_runtime_rehearsal.json")
+    contract_stability = _read_json(root / "docs" / "retort_contract_stability_stress.json")
     review_family = _read_json(root / "docs" / "retort_review_family_behavior_replay.json")
     external_merge_landing = _read_json(root / "docs" / "retort_external_merge_landing.json")
     operator_journey = _read_json(root / "docs" / "retort_operator_journey_replay.json")
@@ -58,6 +61,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["external_advantage_matrix"],
         ),
         _decision(
+            "prove_external_advantage_ci_regression",
+            "comparative_analysis_depth",
+            external_ci_regression.get("status") == "ready"
+            and external_ci_regression.get("summary", {}).get("all_cases_have_ci_acceptance") is True
+            and external_ci_regression.get("summary", {}).get("all_direct_review_regressions_verified") is True
+            and int(external_ci_regression.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 80,
+            ["external_advantage_ci_regression"],
+        ),
+        _decision(
             "prove_repeatable_external_advantage",
             "comparative_analysis_depth",
             external_repeat.get("status") == "ready"
@@ -83,6 +95,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["cross_domain_absorption_replay"],
         ),
         _decision(
+            "prove_cross_domain_end_to_end_absorption",
+            "cross_domain_absorption",
+            cross_domain_end_to_end.get("status") == "ready"
+            and cross_domain_end_to_end.get("summary", {}).get("all_stages_chained") is True
+            and cross_domain_end_to_end.get("summary", {}).get("all_stage_outputs_consumed") is True
+            and int(cross_domain_end_to_end.get("summary", {}).get("linked_domain_count") or 0) >= 10,
+            ["cross_domain_end_to_end"],
+        ),
+        _decision(
             "reject_contract_runtime_violations",
             "api_contract_quality",
             contract_runtime.get("status") == "ready"
@@ -91,6 +112,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             and contract_runtime.get("summary", {}).get("all_concurrent_violations_rejected") is True
             and contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified") is True,
             ["contract_runtime_rehearsal"],
+        ),
+        _decision(
+            "prove_contract_stability_under_load",
+            "api_contract_quality",
+            contract_stability.get("status") == "ready"
+            and contract_stability.get("summary", {}).get("concurrency_floor_exceeded") is True
+            and int(contract_stability.get("summary", {}).get("state_leak_count") or 0) == 0
+            and int(contract_stability.get("summary", {}).get("total_fault_injection_count") or 0) >= 600,
+            ["contract_stability_stress"],
         ),
         _decision(
             "prove_review_family_core_behavior",
@@ -145,6 +175,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
         "external_advantage_blind_third_party_ready": external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted", ""),
         "external_advantage_blind_third_party_min_delta": external_matrix.get("summary", {}).get("blind_third_party_minimum_delta", ""),
+        "external_advantage_ci_regression_ready": external_ci_regression.get("status") == "ready",
+        "external_advantage_ci_regression_cases": external_ci_regression.get("summary", {}).get("passed_case_count", ""),
+        "external_advantage_ci_regression_min_delta": external_ci_regression.get("summary", {}).get("blind_third_party_minimum_delta", ""),
         "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
         "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
@@ -154,11 +187,18 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "cross_domain_absorption_domains": cross_domain_replay.get("summary", {}).get("non_pr_domain_count", ""),
         "cross_domain_absorption_direct_modules": cross_domain_replay.get("summary", {}).get("direct_module_count", ""),
         "cross_domain_absorption_output_assertions": cross_domain_replay.get("summary", {}).get("all_output_assertions_passed", ""),
+        "cross_domain_end_to_end_ready": cross_domain_end_to_end.get("status") == "ready",
+        "cross_domain_end_to_end_domains": cross_domain_end_to_end.get("summary", {}).get("linked_domain_count", ""),
+        "cross_domain_end_to_end_review_status": cross_domain_end_to_end.get("summary", {}).get("integrated_review_status", ""),
         "contract_runtime_rehearsal_ready": contract_runtime.get("status") == "ready",
         "contract_runtime_rehearsal_rejected": contract_runtime.get("summary", {}).get("violation_rejected_count", ""),
         "contract_runtime_rehearsal_rollback": contract_runtime.get("summary", {}).get("all_rollbacks_verified", ""),
         "contract_runtime_rehearsal_concurrent_rejected": contract_runtime.get("summary", {}).get("concurrent_violation_rejected_count", ""),
         "contract_runtime_rehearsal_concurrent_rollback": contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified", ""),
+        "contract_stability_stress_ready": contract_stability.get("status") == "ready",
+        "contract_stability_stress_workers": contract_stability.get("summary", {}).get("concurrent_worker_count", ""),
+        "contract_stability_stress_faults": contract_stability.get("summary", {}).get("total_fault_injection_count", ""),
+        "contract_stability_stress_state_leaks": contract_stability.get("summary", {}).get("state_leak_count", ""),
         "review_family_behavior_ready": review_family.get("status") == "ready",
         "review_family_behavior_typescript_cases": review_family.get("summary", {}).get("typescript_case_count", ""),
         "review_family_behavior_python_cases": review_family.get("summary", {}).get("python_case_count", ""),
@@ -187,10 +227,13 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_employee_patch_closure.json",
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
+                "retort_external_advantage_ci_regression.json",
                 "retort_external_advantage_repeat.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
+                "retort_cross_domain_end_to_end.json",
                 "retort_contract_runtime_rehearsal.json",
+                "retort_contract_stability_stress.json",
                 "retort_review_family_behavior_replay.json",
                 "retort_external_merge_landing.json",
                 "retort_operator_journey_replay.json",

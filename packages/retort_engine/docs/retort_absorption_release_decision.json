@@ -51,6 +51,15 @@
       "action": "allow",
       "dimension": "comparative_analysis_depth",
       "evidence": [
+        "external_advantage_ci_regression"
+      ],
+      "name": "prove_external_advantage_ci_regression",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "comparative_analysis_depth",
+      "evidence": [
         "external_advantage_repeat"
       ],
       "name": "prove_repeatable_external_advantage",
@@ -76,11 +85,29 @@
     },
     {
       "action": "allow",
+      "dimension": "cross_domain_absorption",
+      "evidence": [
+        "cross_domain_end_to_end"
+      ],
+      "name": "prove_cross_domain_end_to_end_absorption",
+      "ready": true
+    },
+    {
+      "action": "allow",
       "dimension": "api_contract_quality",
       "evidence": [
         "contract_runtime_rehearsal"
       ],
       "name": "reject_contract_runtime_violations",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "api_contract_quality",
+      "evidence": [
+        "contract_stability_stress"
+      ],
+      "name": "prove_contract_stability_under_load",
       "ready": true
     },
     {
@@ -140,10 +167,13 @@
       "retort_employee_patch_closure.json",
       "retort_review_quality_benchmark.json",
       "retort_external_advantage_matrix.json",
+      "retort_external_advantage_ci_regression.json",
       "retort_external_advantage_repeat.json",
       "retort_heterogeneous_absorption_replay.json",
       "retort_cross_domain_absorption_replay.json",
+      "retort_cross_domain_end_to_end.json",
       "retort_contract_runtime_rehearsal.json",
+      "retort_contract_stability_stress.json",
       "retort_review_family_behavior_replay.json",
       "retort_external_merge_landing.json",
       "retort_operator_journey_replay.json"
@@ -155,20 +185,30 @@
   "summary": {
     "all_core_decisions_ready": true,
     "blocking_decision_count": 0,
-    "contract_runtime_rehearsal_concurrent_rejected": 18,
+    "contract_runtime_rehearsal_concurrent_rejected": 360,
     "contract_runtime_rehearsal_concurrent_rollback": true,
     "contract_runtime_rehearsal_ready": true,
     "contract_runtime_rehearsal_rejected": 3,
     "contract_runtime_rehearsal_rollback": true,
+    "contract_stability_stress_faults": 720,
+    "contract_stability_stress_ready": true,
+    "contract_stability_stress_state_leaks": 0,
+    "contract_stability_stress_workers": 120,
     "core_decision_path_count": 11,
     "cross_domain_absorption_direct_modules": 10,
     "cross_domain_absorption_domains": 10,
     "cross_domain_absorption_output_assertions": true,
     "cross_domain_absorption_ready": true,
-    "decision_count": 14,
+    "cross_domain_end_to_end_domains": 10,
+    "cross_domain_end_to_end_ready": true,
+    "cross_domain_end_to_end_review_status": "reviewed",
+    "decision_count": 17,
     "employee_patch_ready": true,
     "external_advantage_blind_third_party_min_delta": 80,
     "external_advantage_blind_third_party_ready": true,
+    "external_advantage_ci_regression_cases": 6,
+    "external_advantage_ci_regression_min_delta": 80,
+    "external_advantage_ci_regression_ready": true,
     "external_advantage_matrix_delta": 60.0,
     "external_advantage_matrix_ready": true,
     "external_advantage_repeat_ready": true,
@@ -185,7 +225,7 @@
     "operator_journey_cross_domain_ready": true,
     "operator_journey_ready": true,
     "quality_gate_all_passed": true,
-    "ready_decision_count": 14,
+    "ready_decision_count": 17,
     "recovery_ready": true,
     "review_family_behavior_outputs": true,
     "review_family_behavior_python_cases": 1,

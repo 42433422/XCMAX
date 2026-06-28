@@ -1,0 +1,620 @@
+{
+  "artifacts": {
+    "integrated_diff": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_end_to_end/cross-domain-e2e-20260628T071414Z-9c01795e/integrated_diff.patch",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_end_to_end/cross-domain-e2e-20260628T071414Z-9c01795e",
+    "linked_review": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_end_to_end/cross-domain-e2e-20260628T071414Z-9c01795e/linked_review.json",
+    "source_replay": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_end_to_end/cross-domain-e2e-20260628T071414Z-9c01795e/source_replay.json"
+  },
+  "assertions": {
+    "all_stage_outputs_consumed": true,
+    "all_stages_chained": true,
+    "domain_floor_met": true,
+    "publishable_review_output": true,
+    "review_runtime_executed": true,
+    "review_task_groups_created": true,
+    "security_static_analysis_reached_review": true,
+    "source_replay_ready": true
+  },
+  "evidence": {
+    "claim_boundary": "direct_module_outputs_chained_before_single_integrated_review",
+    "integrated_runtime": "retort_engine.pr_review.review_diff",
+    "source_replay": "retort_engine.cross_domain_absorption_replay.build_cross_domain_absorption_replay",
+    "style": "ten_cross_domain_modules_linked_into_single_review_runtime"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "review": {
+    "comment_count": 6,
+    "comments": [
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "hunk_semantic_review",
+        "comment_anchor": {
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 4,
+        "line_text_excerpt": "    subprocess.run(payload['command'], shell=True, check=False)",
+        "message": "新增外部进程或网络调用没有 timeout，会让员工执行链路卡死。",
+        "publish_payload": {
+          "body": "新增外部进程或网络调用没有 timeout，会让员工执行链路卡死。",
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 1,
+        "rank_reason": "medium:runtime:hunk_semantic_review:bias=55:policy=45:calibration=35:feedback=0:semantic=86",
+        "rank_score": 678,
+        "review_context": "runtime",
+        "review_stage": "classify_risk",
+        "semantic_added_evidence": [
+          "    subprocess.run(payload['command'], shell=True, check=False)"
+        ],
+        "semantic_confidence": 86,
+        "semantic_finding_type": "missing_timeout",
+        "semantic_removed_evidence": [],
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "static_analysis",
+        "comment_anchor": {
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 4,
+        "line_text_excerpt": "    subprocess.run(payload['command'], shell=True, check=False)",
+        "message": "新增 shell=True 命令执行，需改为参数数组并补注入测试。 [subprocess-shell-true]",
+        "publish_payload": {
+          "body": "新增 shell=True 命令执行，需改为参数数组并补注入测试。 [subprocess-shell-true]",
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 2,
+        "rank_reason": "high:runtime:static_analysis:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
+        "rank_score": 660,
+        "review_context": "runtime",
+        "review_stage": "classify_risk",
+        "severity": "high",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "static_analysis",
+        "comment_anchor": {
+          "line": 5,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 5,
+        "line_text_excerpt": "    yaml.load(payload.get('contract_yaml'))",
+        "message": "新增 yaml.load，需改为 safe_load 或显式 SafeLoader。 [unsafe-yaml-load]",
+        "publish_payload": {
+          "body": "新增 yaml.load，需改为 safe_load 或显式 SafeLoader。 [unsafe-yaml-load]",
+          "line": 5,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 3,
+        "rank_reason": "high:runtime:static_analysis:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
+        "rank_score": 660,
+        "review_context": "runtime",
+        "review_stage": "classify_risk",
+        "severity": "high",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "cross_language_transfer",
+        "comment_anchor": {
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 4,
+        "line_text_excerpt": "    subprocess.run(payload['command'], shell=True, check=False)",
+        "message": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+        "publish_payload": {
+          "body": "跨语言异步评审入口需要映射到 Retort worker 超时、重试和结果落盘语义。 [async_review_entrypoint]",
+          "line": 4,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 4,
+        "rank_reason": "medium:runtime:cross_language_transfer:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
+        "rank_score": 610,
+        "review_context": "runtime",
+        "review_stage": "classify_risk",
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 55,
+        "absorbed_policy_rank_weight": 45,
+        "calibration_rank_weight": 35,
+        "capability": "review_pipeline",
+        "comment_anchor": {
+          "line": 2,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": true,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 2,
+        "line_text_excerpt": "    # TODO: remove placeholder orchestration before claiming cross-domain depth",
+        "message": "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。",
+        "publish_payload": {
+          "body": "新增 TODO/FIXME 会把吸收任务停在占位状态，需要落成可验证实现或任务记录。",
+          "line": 2,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 5,
+        "rank_reason": "medium:runtime:review_pipeline:bias=55:policy=45:calibration=35:feedback=0:semantic=0",
+        "rank_score": 515,
+        "review_context": "runtime",
+        "review_stage": "reflect_before_publish",
+        "severity": "medium",
+        "strategy": "diff_hunk_review"
+      },
+      {
+        "absorbed_context_rank_weight": 40,
+        "absorbed_policy_rank_weight": 40,
+        "calibration_rank_weight": 40,
+        "capability": "cross_language_transfer",
+        "comment_anchor": {
+          "line": 7,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "employee_actionable": false,
+        "feedback_rank_weight": 0,
+        "file": "retort_engine/absorption_orchestrator.py",
+        "hunk_header": "@@ -0,0 +1,17 @@",
+        "line": 7,
+        "line_text_excerpt": "        'benchmark_harness:retort_engine.swe_bench_oracle.build_issue_patch_benchmark',",
+        "message": "外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。 [test_harness_signal]",
+        "publish_payload": {
+          "body": "外部测试/基准信号应转为 Retort 行为矩阵或回归门禁，而不是只记录为素材。 [test_harness_signal]",
+          "line": 7,
+          "path": "retort_engine/absorption_orchestrator.py",
+          "side": "RIGHT"
+        },
+        "publishable": true,
+        "rank_position": 6,
+        "rank_reason": "low:tests:cross_language_transfer:bias=40:policy=40:calibration=40:feedback=0:semantic=0",
+        "rank_score": 465,
+        "review_context": "tests",
+        "review_stage": "classify_risk",
+        "severity": "low",
+        "strategy": "diff_hunk_review"
+      }
+    ],
+    "status": "reviewed",
+    "summary": {
+      "absorbed_context_rank_weights": {
+        "ci_config": 40,
+        "config": 20,
+        "docs": 20,
+        "frontend": 0,
+        "other": 0,
+        "runtime": 55,
+        "security": 50,
+        "tests": 40
+      },
+      "absorbed_context_signal_strength": 100,
+      "absorbed_file_grouping": true,
+      "absorbed_policy_rank_weights": {
+        "ci_config": 15,
+        "config": 15,
+        "docs": 15,
+        "frontend": 0,
+        "other": 0,
+        "runtime": 45,
+        "security": 25,
+        "tests": 40
+      },
+      "absorbed_review_policy": {
+        "enabled": true,
+        "max_context_weight": 45,
+        "run_id": "20260628002727-95b76ebf47",
+        "signal_count": 8,
+        "source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+        "weighted_context_count": 6
+      },
+      "absorbed_review_source": "packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
+      "actionable_task_group_count": 2,
+      "calibration_policy": {
+        "adjudication_pass_rate": 1.0,
+        "adjudication_ready": true,
+        "enabled": true,
+        "holdout_distinct_repo_count": 20,
+        "holdout_ready": true,
+        "holdout_reviewed_pr_count": 24,
+        "max_context_weight": 40,
+        "rollback_ready": true,
+        "rollback_verified_count": 5,
+        "weighted_context_count": 7
+      },
+      "calibration_rank_weights": {
+        "ci_config": 40,
+        "config": 25,
+        "docs": 10,
+        "frontend": 10,
+        "other": 0,
+        "runtime": 35,
+        "security": 35,
+        "tests": 40
+      },
+      "candidate_comment_count": 6,
+      "capabilities": [
+        "review_pipeline",
+        "file_grouping",
+        "safety_policy",
+        "diff_hunk_review",
+        "semantic_index"
+      ],
+      "comment_count": 6,
+      "comment_ranking_model": "severity_context_transfer_publishability_v4_hunk_semantics",
+      "core_review_score": {
+        "cross_language_core_behavior_active": true,
+        "cross_language_max_rank_score": 610,
+        "cross_language_ranked_comment_count": 2,
+        "cross_language_top_ranked": false,
+        "hunk_semantic_core_behavior_active": true,
+        "hunk_semantic_max_rank_score": 678,
+        "hunk_semantic_ranked_comment_count": 1,
+        "hunk_semantic_top_ranked": true,
+        "max_rank_score": 678,
+        "min_rank_score": 465,
+        "model": "severity_context_transfer_publishability_v4_hunk_semantics",
+        "ranked_comment_count": 6
+      },
+      "cross_language_transfer": {
+        "cross_language_core_mapping": false,
+        "finding_count": 2,
+        "language_families": [
+          "python"
+        ],
+        "language_family_count": 1,
+        "pattern_count": 2,
+        "review_context_count": 2,
+        "review_contexts": [
+          "runtime",
+          "tests"
+        ],
+        "severity_counts": {
+          "high": 0,
+          "low": 1,
+          "medium": 1
+        }
+      },
+      "deep_review_pipeline": true,
+      "employee_feedback_context_weights": {},
+      "employee_feedback_ranked": false,
+      "extension_policy": {
+        "file_count": 1,
+        "known_extension_count": 1,
+        "known_extension_ratio": 1.0,
+        "language_families": [
+          "python"
+        ],
+        "language_family_count": 1,
+        "policy_source": "retort_holdout_extension_policy_v1",
+        "review_context_count": 1,
+        "review_contexts": [
+          "runtime"
+        ],
+        "risk_tag_count": 2,
+        "risk_tags": [
+          "runtime_logic",
+          "typing"
+        ],
+        "unknown_extension_count": 0
+      },
+      "file_count": 1,
+      "file_summary_count": 1,
+      "hunk_count": 1,
+      "hunk_semantic_analysis": {
+        "core_behavior_active": true,
+        "finding_count": 1,
+        "finding_types": [
+          "missing_timeout"
+        ],
+        "hunk_analysis_count": 1,
+        "max_confidence": 86,
+        "review_contexts": [
+          "runtime"
+        ],
+        "status": "active"
+      },
+      "incremental": false,
+      "intent_alignment": {
+        "aligned": true,
+        "changed_file_count": 1,
+        "changed_keyword_count": 66,
+        "issue_keyword_count": 120,
+        "overlap_keyword_count": 44
+      },
+      "large_diff_chunk_count": 1,
+      "large_diff_chunking": false,
+      "large_diff_context_balancing": false,
+      "line_anchor_policy": "RIGHT-side added lines only; file-level fallback is marked non-publishable",
+      "primary_review_contexts": [
+        "runtime"
+      ],
+      "publishable_comment_count": 6,
+      "ready_for_employee_tasking": true,
+      "review_context_group_count": 1,
+      "reviewed_new_change_count": 17,
+      "risk_counts": {
+        "high": 2,
+        "info": 0,
+        "low": 1,
+        "medium": 3
+      },
+      "skipped_existing_change_count": 0,
+      "stage_count": 5,
+      "static_analysis": {
+        "finding_count": 2,
+        "high_count": 2,
+        "low_count": 0,
+        "medium_count": 0,
+        "rule_count": 5
+      },
+      "suppressed_comment_count": 0,
+      "task_group_count": 2
+    }
+  },
+  "stages": [
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.swe_bench_oracle.build_issue_patch_benchmark",
+      "domain": "benchmark_harness",
+      "expected_behavior": "reject_no_patch_then_accept_fail_to_pass_patch_without_regression",
+      "index": 1,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "average_patch_overlap": 1.0,
+        "case_count": 1,
+        "fail_to_pass_pass_rate": 1.0,
+        "no_patch_count": 0,
+        "pass_to_pass_pass_rate": 1.0,
+        "regression_count": 0,
+        "resolved_count": 1,
+        "unresolved_count": 0
+      },
+      "previous_stage": "",
+      "source_project": "EleutherAI/lm-evaluation-harness",
+      "stage_id": "benchmark_oracle"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.architecture_contracts.evaluate_architecture_contracts",
+      "domain": "architecture_governance",
+      "expected_behavior": "detect_forbidden_import_boundary_violation",
+      "index": 2,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "contract_count": 1,
+        "graph_status": "ready",
+        "import_edge_count": 1,
+        "include_tests": true,
+        "violation_count": 1
+      },
+      "previous_stage": "benchmark_oracle",
+      "source_project": "seddonym/import-linter",
+      "stage_id": "architecture_contract"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.codebase_graph.build_codebase_graph",
+      "domain": "codebase_graph",
+      "expected_behavior": "materialize_import_call_and_dependency_edges",
+      "index": 3,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "call_edge_count": 1,
+        "define_edge_count": 2,
+        "dependency_cycle_count": 0,
+        "edge_count": 5,
+        "file_count": 3,
+        "hotspot_count": 4,
+        "import_edge_count": 1,
+        "include_tests": true,
+        "local_dependency_edge_count": 1,
+        "node_count": 5,
+        "parse_error_count": 0
+      },
+      "previous_stage": "architecture_contract",
+      "source_project": "pahen/madge",
+      "stage_id": "code_graph"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.context_packager.build_context_pack",
+      "domain": "context_packaging",
+      "expected_behavior": "rank_focused_runtime_context_above_noise_within_budget",
+      "index": 4,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "candidate_file_count": 2,
+        "focus_term_count": 4,
+        "graph_status": "ready",
+        "max_chars": 2000,
+        "max_files": 3,
+        "selected_file_count": 1,
+        "used_chars": 89
+      },
+      "previous_stage": "code_graph",
+      "source_project": "yamadashy/repomix",
+      "stage_id": "context_pack"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.license_gate.license_gate",
+      "domain": "license_policy",
+      "expected_behavior": "block_incompatible_license_before_absorption",
+      "index": 5,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "detected_license": "GNU Affero General Public License v3.0",
+        "message": "license-incompatible risk: blocked license detected: GNU Affero General Public License v3.0",
+        "status": "blocked"
+      },
+      "previous_stage": "context_pack",
+      "source_project": "github/licensee",
+      "stage_id": "license_gate"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.static_analysis_gate.scan_static_analysis_findings",
+      "domain": "static_analysis_security",
+      "expected_behavior": "block_high_risk_added_lines_with_rule_ids",
+      "index": 6,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "finding_count": 2,
+        "high_count": 2,
+        "low_count": 0,
+        "medium_count": 0,
+        "rule_count": 5
+      },
+      "previous_stage": "license_gate",
+      "source_project": "PyCQA/bandit",
+      "stage_id": "static_analysis"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.intent_alignment.assess_change_intent_alignment",
+      "domain": "intent_alignment",
+      "expected_behavior": "verify_changed_paths_and_added_lines_overlap_issue_intent",
+      "index": 7,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "aligned": true,
+        "changed_file_count": 1,
+        "changed_keyword_count": 8,
+        "issue_keyword_count": 7,
+        "overlap_keyword_count": 5
+      },
+      "previous_stage": "static_analysis",
+      "source_project": "Review-scope/ReviewScope",
+      "stage_id": "intent_alignment"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.task_prioritization.build_task_prioritization_report",
+      "domain": "employee_task_graph",
+      "expected_behavior": "prioritize_employee_followups_from_queue_and_failed_feedback",
+      "index": 8,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "all_tasks_have_acceptance": true,
+        "completed_result_count": 2,
+        "employee_feedback_applied": true,
+        "employee_result_count": 2,
+        "feedback_driven_priority_count": 2,
+        "prioritized_dimension_count": 2,
+        "queued_task_count": 3,
+        "ready_employee_task_count": 2
+      },
+      "previous_stage": "intent_alignment",
+      "source_project": "OpenHands/benchmarks",
+      "stage_id": "task_prioritization"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.task_dispatch_plan.build_task_dispatch_plan",
+      "domain": "employee_dispatch",
+      "expected_behavior": "convert_deep_review_tasks_into_employee_queue_records",
+      "index": 9,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "all_tasks_have_acceptance": true,
+        "all_tasks_have_evidence_required": true,
+        "all_tasks_have_owner": true,
+        "dispatch_task_count": 2,
+        "enqueue": true,
+        "queued_dispatch_count": 2,
+        "ready_task_count": 2,
+        "source_llm_task_count": 2
+      },
+      "previous_stage": "task_prioritization",
+      "source_project": "aryanbrite/openrabbit",
+      "stage_id": "task_dispatch"
+    },
+    {
+      "consumes_previous_stage": true,
+      "direct_module": "retort_engine.architecture_refactor.build_core_refactor_plan",
+      "domain": "core_architecture_refactor",
+      "expected_behavior": "turn_architecture_memory_into_ready_core_module_refactor_tasks",
+      "index": 10,
+      "output_consumed_by_integrated_review": true,
+      "post_absorption_summary": {
+        "blocked_task_count": 0,
+        "code_graph_hotspot_task_count": 0,
+        "ready_component_count": 1,
+        "ready_task_count": 1,
+        "source_count": 4,
+        "task_count": 1
+      },
+      "previous_stage": "task_dispatch",
+      "source_project": "thebjorn/pydeps",
+      "stage_id": "core_refactor_plan"
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_direct_modules_contributed_to_review_context": true,
+    "all_domains_contributed_to_review_context": true,
+    "all_stage_outputs_consumed": true,
+    "all_stages_chained": true,
+    "duration_sec": 0.015,
+    "integrated_review_comment_count": 6,
+    "integrated_review_publishable_comment_count": 6,
+    "integrated_review_status": "reviewed",
+    "integrated_review_task_group_count": 2,
+    "linked_direct_module_count": 10,
+    "linked_domain_count": 10,
+    "linked_stage_count": 10,
+    "min_domain_count": 10,
+    "output_assertions_passed": true,
+    "run_id": "cross-domain-e2e-20260628T071414Z-9c01795e",
+    "source_replay_status": "ready"
+  }
+}
