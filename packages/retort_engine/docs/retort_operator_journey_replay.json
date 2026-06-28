@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "5e2211b710f34a3b6e4a09cc634a315bc43ed52842fe94bc133fb9047388d28e"
+      "sha256": "c81e6d31a028b16c1619a59a76327ba2714dafecac873b151285d03996366a0f"
     },
     {
       "bytes": 9906,
@@ -316,7 +316,28 @@
       "sha256": "d0fc1c311db2bfc518e1d6a36f23c21b01f285df12079512f1eaabad03d9716d"
     },
     {
-      "bytes": 43377,
+      "bytes": 12576,
+      "exists": true,
+      "kind": "source_report",
+      "name": "heterogeneous_absorption_replay",
+      "path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_heterogeneous_absorption_replay.json",
+      "relative_path": "docs/retort_heterogeneous_absorption_replay.json",
+      "required_field_count": 3,
+      "required_fields": [
+        "status",
+        "summary",
+        "cases"
+      ],
+      "required_fields_present": [
+        "status",
+        "summary",
+        "cases"
+      ],
+      "required_fields_ready": true,
+      "sha256": "434b1beb78fe7f272b0c57c322535760690e77511a4cbd8eaba80de88d8bffbd"
+    },
+    {
+      "bytes": 59591,
       "exists": true,
       "kind": "source_report",
       "name": "review_adjudication_calibration",
@@ -334,7 +355,7 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "1fe3fc48c78ce61dd6d3e8b509c6b0fc9852c0769db83b6c2d42b0cf3e3b6767"
+      "sha256": "2c4891ee4295e87d04885dd54e61c5f937caddda0d789ca5b32e6c876bd36015"
     },
     {
       "bytes": 46042,
@@ -379,6 +400,7 @@
       "docs/retort_review_quality_benchmark.json",
       "docs/retort_external_advantage_matrix.json",
       "docs/retort_external_advantage_repeat.json",
+      "docs/retort_heterogeneous_absorption_replay.json",
       "docs/retort_review_adjudication_calibration.json"
     ],
     "style": "operator_end_to_end_absorption_journey_replay"
@@ -399,8 +421,8 @@
       "ready": true
     },
     "codebase_graph": {
-      "edge_count": 4778,
-      "file_count": 154,
+      "edge_count": 4851,
+      "file_count": 156,
       "hotspot_count": 12,
       "ready": true,
       "status": "ready"
@@ -416,7 +438,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T042541Z-a238e9d0.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T050342Z-30c70d98.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -448,7 +470,7 @@
       "evidence": [
         "changed_files=80",
         "gates_passed=True",
-        "quality_gate_sha=5e2211b710f34a3b6e4a09cc634a315bc43ed52842fe94bc133fb9047388d28e"
+        "quality_gate_sha=c81e6d31a028b16c1619a59a76327ba2714dafecac873b151285d03996366a0f"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -512,21 +534,21 @@
   "status": "ready",
   "summary": {
     "architecture_contract_ready": true,
-    "artifact_count": 17,
+    "artifact_count": 18,
     "codebase_graph_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 1.589,
+    "duration_sec": 1.398,
     "failed_stage_count": 0,
     "frontend_structure_ready": true,
-    "hashed_artifact_count": 17,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T042541Z-a238e9d0.manifest.json",
+    "hashed_artifact_count": 18,
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T050342Z-30c70d98.manifest.json",
     "per_run_code_graph_proved": true,
     "ready_stage_count": 8,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T042541Z-a238e9d0",
+    "run_id": "operator-journey-20260628T050342Z-30c70d98",
     "single_command_surface": true,
-    "source_report_count": 16,
+    "source_report_count": 17,
     "stage_count": 8
   }
 }

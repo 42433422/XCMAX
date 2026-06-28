@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -12,9 +13,11 @@ from retort_engine.pr_review import review_diff
 
 
 def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
-    payload = json.loads(Path(payload_file).read_text(encoding="utf-8"))
+    payload_path = Path(payload_file).expanduser().resolve()
+    payload = json.loads(payload_path.read_text(encoding="utf-8"))
     output_path = Path(str(payload["output_path"]))
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    process_boundary = _process_boundary(payload, payload_path, output_path)
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     gates_passed = bool(payload.get("gates_passed"))
     worker_review = _write_worker_review_artifact(payload, output_path)
@@ -34,6 +37,10 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"changed_files={','.join(str(item) for item in payload.get('changed_files') or [])}",
                     f"gates_passed={gates_passed}",
                     f"worker_payload={payload_file}",
+                    f"worker_pid={process_boundary['worker_pid']}",
+                    f"worker_parent_pid={process_boundary['parent_pid']}",
+                    f"runtime_boundary_verified={process_boundary['runtime_boundary_verified']}",
+                    f"payload_nonce={process_boundary['payload_nonce']}",
                     f"worker_review_status={worker_review.get('status')}",
                     f"worker_review_artifact={worker_review.get('artifact', '')}",
                     f"worker_review_comment_count={worker_review.get('comment_count', 0)}",
@@ -50,11 +57,12 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
         "execution_mode": "employee_runtime_worker",
         "runtime_evidence": {
             "independent_process": True,
-            "worker_payload": str(payload_file),
+            "worker_payload": str(payload_path),
             "queue_path": str(payload.get("queue_path") or ""),
             "history_store": str(payload.get("history_store") or ""),
             "result_path": str(output_path),
             "task_result_count": len(task_results),
+            "process_boundary": process_boundary,
             "worker_review": worker_review,
             "employee_patch_closure": patch_closure,
         },
@@ -75,6 +83,34 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                 )
             )
     return result
+
+
+def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: Path) -> dict[str, Any]:
+    expected_parent_pid = int(payload.get("parent_pid") or 0)
+    worker_pid = os.getpid()
+    parent_pid = os.getppid()
+    payload_nonce = str(payload.get("runtime_context_nonce") or "")
+    expected_payload_path = Path(str(payload.get("payload_path") or payload_path)).expanduser().resolve()
+    expected_output_path = Path(str(payload.get("output_path") or output_path)).expanduser().resolve()
+    payload_path_verified = payload_path == expected_payload_path and payload_path.is_file()
+    result_path_verified = output_path.expanduser().resolve() == expected_output_path
+    return {
+        "runtime_boundary": "subprocess_payload_file_contract",
+        "worker_pid": worker_pid,
+        "parent_pid": parent_pid,
+        "expected_parent_pid": expected_parent_pid,
+        "pid_differs_from_parent": worker_pid != expected_parent_pid,
+        "parent_pid_matches_launcher": expected_parent_pid == 0 or parent_pid == expected_parent_pid,
+        "payload_path": str(payload_path),
+        "expected_payload_path": str(expected_payload_path),
+        "payload_path_verified": payload_path_verified,
+        "result_path": str(output_path),
+        "expected_result_path": str(expected_output_path),
+        "result_path_verified": result_path_verified,
+        "payload_nonce": payload_nonce,
+        "payload_nonce_verified": bool(payload_nonce),
+        "runtime_boundary_verified": payload_path_verified and result_path_verified and bool(payload_nonce) and worker_pid != expected_parent_pid,
+    }
 
 
 def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:

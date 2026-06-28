@@ -184,6 +184,34 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_heterogeneous_absorption_replay.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "case_count": 6,
+                    "ready_case_count": 6,
+                    "cached_source_count": 6,
+                    "language_family_count": 5,
+                    "language_families": ["go", "jvm", "python", "rust", "typescript"],
+                    "source_family_count": 5,
+                    "pre_absorption_failure_count": 6,
+                    "post_absorption_pass_count": 6,
+                    "all_before_failed_after_passed": True,
+                    "minimum_behavior_delta": 70,
+                    "average_behavior_delta": 73.33,
+                    "independent_adjudication_status": "ready",
+                    "independent_adjudicated_case_count": 6,
+                    "independent_accepted_case_count": 6,
+                    "independent_all_cases_accepted": True,
+                    "cross_language_absorption_verified": True,
+                },
+                "cases": [],
+                "evidence": {"adjudicator": "retort_engine.heterogeneous_absorption_replay._adjudicate_rows"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_pr_readonly_degradation_probe.json").write_text(
         json.dumps(
             {
@@ -212,8 +240,16 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "summary": {
                     "human_label_count": 50,
                     "pass_rate": 0.98,
+                    "pre_calibration_pass_rate": 0.62,
+                    "post_calibration_pass_rate": 0.98,
+                    "calibration_improvement_delta": 0.36,
                     "false_positive_count": 1,
                     "false_negative_count": 0,
+                    "pre_calibration_false_positive_count": 5,
+                    "pre_calibration_false_negative_count": 14,
+                    "false_positive_reduction": 4,
+                    "false_negative_reduction": 14,
+                    "feedback_recalibration_applied": True,
                     "context_count": 5,
                 },
                 "cases": [],
@@ -306,7 +342,20 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                         "worker_review_count": 5,
                         "artifact": "review.json",
                     },
-                    "multi_worker": {"verified": True, "worker_count": 5, "independent_worker_count": 5, "result_path_count": 5},
+                    "multi_worker": {
+                        "verified": True,
+                        "worker_count": 5,
+                        "independent_worker_count": 5,
+                        "result_path_count": 5,
+                        "process_isolation": {
+                            "pid_isolation_verified": True,
+                            "runtime_boundary_verified": True,
+                            "unique_process_id_count": 5,
+                            "worker_process_trace_count": 5,
+                            "runtime_boundary_verified_count": 5,
+                            "pid_cross_check_count": 5,
+                        },
+                    },
                     "employee_patch_closure": {
                         "status": "ready",
                         "summary": {"success_case_verified": True, "failure_case_rolled_back": True},
@@ -350,6 +399,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "employee_runtime_worker_review=reviewed; comments=60; artifact=review.json" in evidence
     assert "employee_runtime_worker_review_files=45; task_groups=15; worker_reviews=5" in evidence
     assert "employee_runtime_multi_worker_verified=True; workers=5; independent_workers=5; result_paths=5" in evidence
+    assert "employee_worker_pid_isolation_verified=True" in evidence
+    assert "employee_worker_runtime_boundary_verified=True" in evidence
+    assert "employee_worker_unique_process_ids=5" in evidence
+    assert "employee_worker_process_traces=5" in evidence
+    assert "employee_worker_runtime_boundary_verified_count=5" in evidence
+    assert "employee_worker_pid_cross_check_count=5" in evidence
     assert "employee_runtime_patch_closure=ready; success_case=True; rollback_case=True" in evidence
     assert "employee_patch_closure_status=ready" in evidence
     assert "employee_patch_closure_success_case_verified=True" in evidence
@@ -380,11 +435,29 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "external_advantage_matrix_extension_policy_cases=6" in evidence
     assert "external_advantage_matrix_per_case_before_after=True" in evidence
     assert "external_advantage_matrix_all_improved=True" in evidence
+    assert "heterogeneous_absorption_replay_status=ready" in evidence
+    assert "heterogeneous_absorption_replay_ready_cases=6/6" in evidence
+    assert "heterogeneous_absorption_replay_cached_sources=6" in evidence
+    assert "heterogeneous_absorption_replay_language_families=5" in evidence
+    assert "heterogeneous_absorption_replay_language_family_list=go,jvm,python,rust,typescript" in evidence
+    assert "heterogeneous_absorption_replay_before_after=True" in evidence
+    assert "heterogeneous_absorption_replay_min_delta=70" in evidence
+    assert "heterogeneous_absorption_replay_independent_adjudication=ready" in evidence
+    assert "heterogeneous_absorption_replay_independent_accepted=6/6" in evidence
+    assert "heterogeneous_absorption_replay_cross_language_verified=True" in evidence
     assert "pr_review_cross_language_transfer_source=True" in evidence
     assert "pr_review_cross_language_transfer_status=mapped" in evidence
     assert "pr_review_cross_language_transfer_core_mapping=True" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
+    assert "review_adjudication_pre_calibration_pass_rate=0.62" in evidence
+    assert "review_adjudication_post_calibration_pass_rate=0.98" in evidence
+    assert "review_adjudication_improvement_delta=0.36" in evidence
+    assert "review_adjudication_pre_false_positive_count=5" in evidence
+    assert "review_adjudication_pre_false_negative_count=14" in evidence
+    assert "review_adjudication_false_positive_reduction=4" in evidence
+    assert "review_adjudication_false_negative_reduction=14" in evidence
+    assert "review_adjudication_feedback_recalibration_applied=True" in evidence
     assert "pr_holdout_blind_eval_status=ready" in evidence
     assert "pr_holdout_blind_eval_reviewed=20/20" in evidence
     assert "pr_holdout_blind_eval_accepted=20/20" in evidence

@@ -1,0 +1,396 @@
+{
+  "cases": [
+    {
+      "absorbed_signal": "cross_language_security_rule",
+      "before_failed_after_passed": true,
+      "behavior_delta": 70,
+      "cached_source_present": true,
+      "case_id": "semgrep-java-secret",
+      "expected_context": "security",
+      "expected_severity": "high",
+      "language_family": "jvm",
+      "post_absorption": {
+        "comment_count": 2,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime",
+          "security"
+        ],
+        "observed_severities": [
+          "high",
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 2,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "high",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 30,
+        "severity_matched": true
+      },
+      "ready": true,
+      "source_family": "security_static_analysis",
+      "source_project": "semgrep/semgrep"
+    },
+    {
+      "absorbed_signal": "publisher_runtime_review",
+      "before_failed_after_passed": true,
+      "behavior_delta": 90,
+      "cached_source_present": true,
+      "case_id": "reviewdog-go-token",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "language_family": "go",
+      "post_absorption": {
+        "comment_count": 2,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "info",
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 2,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "high",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 10,
+        "severity_matched": false
+      },
+      "ready": true,
+      "source_family": "go_ci_review_publisher",
+      "source_project": "reviewdog/reviewdog"
+    },
+    {
+      "absorbed_signal": "graph_contract_guard",
+      "before_failed_after_passed": true,
+      "behavior_delta": 70,
+      "cached_source_present": true,
+      "case_id": "codegraph-rust-contract-bypass",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "language_family": "rust",
+      "post_absorption": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 1,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 30,
+        "severity_matched": true
+      },
+      "ready": true,
+      "source_family": "rust_code_graph",
+      "source_project": "sunerpy/codegraph-rust"
+    },
+    {
+      "absorbed_signal": "benchmark_oracle_validation",
+      "before_failed_after_passed": true,
+      "behavior_delta": 70,
+      "cached_source_present": true,
+      "case_id": "lm-eval-python-oracle",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "language_family": "python",
+      "post_absorption": {
+        "comment_count": 2,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 2,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 30,
+        "severity_matched": true
+      },
+      "ready": true,
+      "source_family": "benchmark_harness",
+      "source_project": "EleutherAI/lm-evaluation-harness"
+    },
+    {
+      "absorbed_signal": "dependency_graph_cycle_guard",
+      "before_failed_after_passed": true,
+      "behavior_delta": 70,
+      "cached_source_present": true,
+      "case_id": "madge-ts-dependency-cycle",
+      "expected_context": "runtime",
+      "expected_severity": "medium",
+      "language_family": "typescript",
+      "post_absorption": {
+        "comment_count": 1,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 1,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "medium",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 30,
+        "severity_matched": true
+      },
+      "ready": true,
+      "source_family": "typescript_dependency_graph",
+      "source_project": "pahen/madge"
+    },
+    {
+      "absorbed_signal": "unsafe_deserialization_rule",
+      "before_failed_after_passed": true,
+      "behavior_delta": 70,
+      "cached_source_present": true,
+      "case_id": "bandit-python-yaml-load",
+      "expected_context": "runtime",
+      "expected_severity": "high",
+      "language_family": "python",
+      "post_absorption": {
+        "comment_count": 2,
+        "context_matched": true,
+        "extension_policy_known_count": 1,
+        "model": "retort_current_review_diff",
+        "observed_contexts": [
+          "runtime"
+        ],
+        "observed_severities": [
+          "high",
+          "medium"
+        ],
+        "passed_expected_behavior": true,
+        "publishable_comment_count": 2,
+        "score": 100,
+        "severity_matched": true
+      },
+      "pre_absorption": {
+        "context_matched": false,
+        "detected_severity": "high",
+        "extension_policy_known_count": 0,
+        "failed_expected_behavior": true,
+        "model": "pre_absorption_keyword_without_context_or_publishability",
+        "passed_expected_behavior": false,
+        "publishable_comment_count": 0,
+        "score": 30,
+        "severity_matched": true
+      },
+      "ready": true,
+      "source_family": "security_static_analysis",
+      "source_project": "PyCQA/bandit"
+    }
+  ],
+  "evidence": {
+    "adjudicator": "retort_engine.heterogeneous_absorption_replay._adjudicate_rows",
+    "after_model": "retort_engine.pr_review.review_diff",
+    "before_model": "pre_absorption_keyword_without_context_or_publishability",
+    "source_cache_root": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github",
+    "source_projects": [
+      "EleutherAI/lm-evaluation-harness",
+      "PyCQA/bandit",
+      "pahen/madge",
+      "reviewdog/reviewdog",
+      "semgrep/semgrep",
+      "sunerpy/codegraph-rust"
+    ],
+    "style": "heterogeneous_before_failure_after_absorption_replay"
+  },
+  "independent_adjudication": {
+    "adjudications": [
+      {
+        "accepted": true,
+        "case_id": "semgrep-java-secret",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "jvm",
+        "recomputed_delta": 70,
+        "source_project": "semgrep/semgrep"
+      },
+      {
+        "accepted": true,
+        "case_id": "reviewdog-go-token",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "go",
+        "recomputed_delta": 90,
+        "source_project": "reviewdog/reviewdog"
+      },
+      {
+        "accepted": true,
+        "case_id": "codegraph-rust-contract-bypass",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "rust",
+        "recomputed_delta": 70,
+        "source_project": "sunerpy/codegraph-rust"
+      },
+      {
+        "accepted": true,
+        "case_id": "lm-eval-python-oracle",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "python",
+        "recomputed_delta": 70,
+        "source_project": "EleutherAI/lm-evaluation-harness"
+      },
+      {
+        "accepted": true,
+        "case_id": "madge-ts-dependency-cycle",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "typescript",
+        "recomputed_delta": 70,
+        "source_project": "pahen/madge"
+      },
+      {
+        "accepted": true,
+        "case_id": "bandit-python-yaml-load",
+        "checks": {
+          "cached_source_present": true,
+          "language_family_present": true,
+          "positive_delta": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "language_family": "python",
+        "recomputed_delta": 70,
+        "source_project": "PyCQA/bandit"
+      }
+    ],
+    "evidence": {
+      "independence_boundary": "recomputes_from_serialized_before_after_rows_without_calling_review_diff"
+    },
+    "status": "ready",
+    "summary": {
+      "accepted_case_count": 6,
+      "adjudicated_case_count": 6,
+      "all_cases_accepted": true,
+      "language_family_count": 5
+    }
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_before_failed_after_passed": true,
+    "average_behavior_delta": 73.33,
+    "cached_source_count": 6,
+    "case_count": 6,
+    "cross_language_absorption_verified": true,
+    "independent_accepted_case_count": 6,
+    "independent_adjudicated_case_count": 6,
+    "independent_adjudication_status": "ready",
+    "independent_all_cases_accepted": true,
+    "language_families": [
+      "go",
+      "jvm",
+      "python",
+      "rust",
+      "typescript"
+    ],
+    "language_family_count": 5,
+    "min_case_count": 6,
+    "minimum_behavior_delta": 70,
+    "post_absorption_pass_count": 6,
+    "pre_absorption_failure_count": 6,
+    "ready_case_count": 6,
+    "source_families": [
+      "benchmark_harness",
+      "go_ci_review_publisher",
+      "rust_code_graph",
+      "security_static_analysis",
+      "typescript_dependency_graph"
+    ],
+    "source_family_count": 5,
+    "source_project_count": 6
+  }
+}
