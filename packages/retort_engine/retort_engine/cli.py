@@ -12,6 +12,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
 from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
@@ -23,6 +24,7 @@ from retort_engine.employee_scheduler_stress import run_employee_scheduler_stres
 from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
+from retort_engine.external_process_adjudication import build_external_process_adjudication
 from retort_engine.external_merge_landing import build_external_merge_landing
 from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
 from retort_engine.pr_dry_run import review_pr_url
@@ -44,6 +46,7 @@ from retort_engine.similar_project_loop import build_absorption_saturation_repor
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
 from retort_engine.real_absorption import apply_real_absorption
+from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 from retort_engine.ui_server import run_ui_server
 
 
@@ -228,12 +231,29 @@ def main(argv: list[str] | None = None) -> int:
     external_ci.add_argument("--min-blind-delta", type=int, default=80)
     external_ci.add_argument("--output", default="")
     external_ci.add_argument("--json", action="store_true")
+    external_process = sub.add_parser("external-process-adjudication")
+    external_process.add_argument("--project", default=".")
+    external_process.add_argument("--min-cases", type=int, default=6)
+    external_process.add_argument("--min-delta", type=int, default=80)
+    external_process.add_argument("--output", default="")
+    external_process.add_argument("--json", action="store_true")
     external_repeat = sub.add_parser("external-advantage-repeat")
     external_repeat.add_argument("--project", default=".")
     external_repeat.add_argument("--repeats", type=int, default=2)
     external_repeat.add_argument("--min-cases", type=int, default=6)
     external_repeat.add_argument("--output", default="")
     external_repeat.add_argument("--json", action="store_true")
+    upstream_pr_ci = sub.add_parser("upstream-pr-ci-probe")
+    upstream_pr_ci.add_argument("--project", default=".")
+    upstream_pr_ci.add_argument("--repo", default="psf/requests")
+    upstream_pr_ci.add_argument("--pr-number", type=int, default=7539)
+    upstream_pr_ci.add_argument("--output", default="")
+    upstream_pr_ci.add_argument("--json", action="store_true")
+    competitor_runtime = sub.add_parser("competitor-runtime-comparison")
+    competitor_runtime.add_argument("--project", default=".")
+    competitor_runtime.add_argument("--competitor-root", default="")
+    competitor_runtime.add_argument("--output", default="")
+    competitor_runtime.add_argument("--json", action="store_true")
     heterogeneous_replay = sub.add_parser("heterogeneous-absorption-replay")
     heterogeneous_replay.add_argument("--project", default=".")
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
@@ -690,6 +710,16 @@ def main(argv: list[str] | None = None) -> int:
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
+    if args.command == "external-process-adjudication":
+        result = build_external_process_adjudication(args.project, min_cases=args.min_cases, min_delta=args.min_delta, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort external process adjudication status: {result['status']}")
+            print(f"Accepted: {result['summary']['external_accepted_case_count']}/{result['summary']['external_adjudicated_case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "external-advantage-repeat":
         result = build_external_advantage_repeat(args.project, repeat_count=args.repeats, min_cases=args.min_cases, output=args.output)
         if args.json:
@@ -697,6 +727,26 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort external advantage repeat status: {result['status']}")
             print(f"Repeats: {result['summary']['ready_repeat_count']}/{result['summary']['repeat_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "upstream-pr-ci-probe":
+        result = build_upstream_pr_ci_probe(args.project, repo=args.repo, pr_number=args.pr_number, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort upstream PR CI probe status: {result['status']}")
+            print(f"Check runs: {result['summary']['successful_check_run_count']}/{result['summary']['check_run_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "competitor-runtime-comparison":
+        result = build_competitor_runtime_comparison(args.project, competitor_root=args.competitor_root, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort competitor runtime comparison status: {result['status']}")
+            print(f"Competitor hunks: {result['summary']['competitor_hunk_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

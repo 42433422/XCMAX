@@ -9,6 +9,7 @@ from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
+from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.context_packager import build_context_pack
 from retort_engine.contract_stability_stress import build_contract_stability_stress
 from retort_engine.contract_runtime_rehearsal import build_contract_runtime_rehearsal
@@ -22,6 +23,7 @@ from retort_engine.external_advantage_ci_regression import build_external_advant
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
 from retort_engine.external_advantage_repeat import build_external_advantage_repeat
 from retort_engine.external_merge_landing import build_external_merge_landing
+from retort_engine.external_process_adjudication import build_external_process_adjudication
 from retort_engine.heterogeneous_absorption_replay import build_heterogeneous_absorption_replay
 from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
@@ -42,6 +44,7 @@ from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 
 
 class RetortService:
@@ -197,11 +200,31 @@ class RetortService:
             min_blind_delta=int(payload.get("min_blind_delta") or 80),
         )
 
+    def external_process_adjudication(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_external_process_adjudication(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_cases=int(payload.get("min_cases") or 6),
+            min_delta=int(payload.get("min_delta") or 80),
+        )
+
     def external_advantage_repeat(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_advantage_repeat(
             str(payload.get("project") or payload.get("project_path") or "."),
             repeat_count=int(payload.get("repeat_count") or payload.get("repeats") or 2),
             min_cases=int(payload.get("min_cases") or 6),
+        )
+
+    def upstream_pr_ci_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_upstream_pr_ci_probe(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            repo=str(payload.get("repo") or "psf/requests"),
+            pr_number=int(payload.get("pr_number") or 7539),
+        )
+
+    def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_competitor_runtime_comparison(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            competitor_root=str(payload.get("competitor_root") or ""),
         )
 
     def heterogeneous_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -410,9 +433,21 @@ def create_app() -> Any:
     def external_advantage_ci_regression_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_ci_regression(payload)
 
+    @app.post("/external-process-adjudication")
+    def external_process_adjudication_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.external_process_adjudication(payload)
+
     @app.post("/external-advantage-repeat")
     def external_advantage_repeat_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.external_advantage_repeat(payload)
+
+    @app.post("/upstream-pr-ci-probe")
+    def upstream_pr_ci_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.upstream_pr_ci_probe(payload)
+
+    @app.post("/competitor-runtime-comparison")
+    def competitor_runtime_comparison_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.competitor_runtime_comparison(payload)
 
     @app.post("/heterogeneous-absorption-replay")
     def heterogeneous_absorption_replay_route(payload: dict[str, Any]) -> dict[str, Any]:

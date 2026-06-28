@@ -190,7 +190,18 @@ def _contract_fixtures() -> dict[str, dict[str, Any]]:
         "review_quality_benchmark_result": {"status": "ready", "project": "p", "summary": {}, "samples": [], "evidence": {}},
         "external_advantage_matrix_result": {"status": "ready", "project": "p", "summary": {}, "matrix": [], "evidence": {}},
         "external_advantage_ci_regression_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
+        "external_process_adjudication_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "artifacts": {}, "evidence": {}},
         "external_advantage_repeat_result": {"status": "ready", "project": "p", "summary": {}, "runs": [], "evidence": {}},
+        "upstream_pr_ci_probe_result": {"status": "ready", "project": "p", "summary": {}, "pull_request": {}, "check_runs": [], "evidence": {}},
+        "competitor_runtime_comparison_result": {
+            "status": "ready",
+            "project": "p",
+            "summary": {},
+            "competitor_output": {},
+            "retort_output": {},
+            "artifacts": {},
+            "evidence": {},
+        },
         "heterogeneous_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "cross_domain_absorption_replay_result": {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}},
         "cross_domain_end_to_end_result": {

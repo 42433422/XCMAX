@@ -17,7 +17,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_ci_regression = _read_json(root / "docs" / "retort_external_advantage_ci_regression.json")
+    external_process_adjudication = _read_json(root / "docs" / "retort_external_process_adjudication.json")
     external_repeat = _read_json(root / "docs" / "retort_external_advantage_repeat.json")
+    upstream_pr_ci = _read_json(root / "docs" / "retort_upstream_pr_ci_probe.json")
+    competitor_runtime = _read_json(root / "docs" / "retort_competitor_runtime_comparison.json")
     heterogeneous_replay = _read_json(root / "docs" / "retort_heterogeneous_absorption_replay.json")
     cross_domain_replay = _read_json(root / "docs" / "retort_cross_domain_absorption_replay.json")
     cross_domain_end_to_end = _read_json(root / "docs" / "retort_cross_domain_end_to_end.json")
@@ -70,12 +73,38 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             ["external_advantage_ci_regression"],
         ),
         _decision(
+            "prove_external_process_adjudication",
+            "comparative_analysis_depth",
+            external_process_adjudication.get("status") == "ready"
+            and external_process_adjudication.get("summary", {}).get("external_all_cases_accepted") is True
+            and external_process_adjudication.get("summary", {}).get("script_imports_retort_engine") is False
+            and int(external_process_adjudication.get("summary", {}).get("external_minimum_delta") or 0) >= 80,
+            ["external_process_adjudication"],
+        ),
+        _decision(
             "prove_repeatable_external_advantage",
             "comparative_analysis_depth",
             external_repeat.get("status") == "ready"
             and external_repeat.get("summary", {}).get("stable_case_set") is True
             and external_repeat.get("summary", {}).get("stable_score_delta") is True,
             ["external_advantage_repeat"],
+        ),
+        _decision(
+            "prove_upstream_pr_ci",
+            "branch_absorption_workflow",
+            upstream_pr_ci.get("status") == "ready"
+            and upstream_pr_ci.get("summary", {}).get("merged") is True
+            and upstream_pr_ci.get("summary", {}).get("all_check_runs_successful") is True
+            and int(upstream_pr_ci.get("summary", {}).get("check_run_count") or 0) > 0,
+            ["upstream_pr_ci_probe"],
+        ),
+        _decision(
+            "prove_competitor_runtime_comparison",
+            "comparative_analysis_depth",
+            competitor_runtime.get("status") == "ready"
+            and competitor_runtime.get("summary", {}).get("side_by_side_output_materialized") is True
+            and competitor_runtime.get("summary", {}).get("retort_exceeds_patch_parser_by_semantic_comments") is True,
+            ["competitor_runtime_comparison"],
         ),
         _decision(
             "prove_heterogeneous_absorption",
@@ -178,8 +207,17 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "external_advantage_ci_regression_ready": external_ci_regression.get("status") == "ready",
         "external_advantage_ci_regression_cases": external_ci_regression.get("summary", {}).get("passed_case_count", ""),
         "external_advantage_ci_regression_min_delta": external_ci_regression.get("summary", {}).get("blind_third_party_minimum_delta", ""),
+        "external_process_adjudication_ready": external_process_adjudication.get("status") == "ready",
+        "external_process_adjudication_min_delta": external_process_adjudication.get("summary", {}).get("external_minimum_delta", ""),
+        "external_process_adjudication_imports_retort": external_process_adjudication.get("summary", {}).get("script_imports_retort_engine", ""),
         "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
         "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
+        "upstream_pr_ci_ready": upstream_pr_ci.get("status") == "ready",
+        "upstream_pr_ci_check_runs": upstream_pr_ci.get("summary", {}).get("check_run_count", ""),
+        "upstream_pr_ci_all_successful": upstream_pr_ci.get("summary", {}).get("all_check_runs_successful", ""),
+        "competitor_runtime_ready": competitor_runtime.get("status") == "ready",
+        "competitor_runtime_hunks": competitor_runtime.get("summary", {}).get("competitor_hunk_count", ""),
+        "competitor_runtime_retort_comments": competitor_runtime.get("summary", {}).get("retort_comment_count", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
         "heterogeneous_absorption_languages": heterogeneous_replay.get("summary", {}).get("language_family_count", ""),
         "heterogeneous_absorption_before_after": heterogeneous_replay.get("summary", {}).get("all_before_failed_after_passed", ""),
@@ -228,7 +266,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_ci_regression.json",
+                "retort_external_process_adjudication.json",
                 "retort_external_advantage_repeat.json",
+                "retort_upstream_pr_ci_probe.json",
+                "retort_competitor_runtime_comparison.json",
                 "retort_heterogeneous_absorption_replay.json",
                 "retort_cross_domain_absorption_replay.json",
                 "retort_cross_domain_end_to_end.json",
