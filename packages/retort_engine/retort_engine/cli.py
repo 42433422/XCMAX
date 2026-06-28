@@ -20,6 +20,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
+from retort_engine.employee_patch_stress import build_employee_patch_stress
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
@@ -306,6 +307,11 @@ def main(argv: list[str] | None = None) -> int:
     patch_closure.add_argument("--project", default=".")
     patch_closure.add_argument("--output", default="")
     patch_closure.add_argument("--json", action="store_true")
+    patch_stress = sub.add_parser("employee-patch-stress")
+    patch_stress.add_argument("--project", default=".")
+    patch_stress.add_argument("--concurrent-workers", type=int, default=120)
+    patch_stress.add_argument("--output", default="")
+    patch_stress.add_argument("--json", action="store_true")
     recovery_drill = sub.add_parser("production-recovery-drill")
     recovery_drill.add_argument("--project", default=".")
     recovery_drill.add_argument("--output", default="")
@@ -856,6 +862,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort employee patch closure status: {result['status']}")
             print(f"Patch cases: {result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "employee-patch-stress":
+        result = build_employee_patch_stress(args.project, concurrent_workers=args.concurrent_workers, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort employee patch stress status: {result['status']}")
+            print(f"Workers: {result['summary']['ready_worker_count']}/{result['summary']['worker_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

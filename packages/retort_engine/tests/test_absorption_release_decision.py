@@ -14,7 +14,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     result = build_absorption_release_decision(tmp_path)
 
     assert result["status"] == "ready"
-    assert result["summary"]["ready_decision_count"] == 20
+    assert result["summary"]["ready_decision_count"] == 21
     assert result["summary"]["core_decision_path_count"] == 11
     assert result["summary"]["all_core_decisions_ready"] is True
     assert result["summary"]["holdout_blind_eval_ready"] is True
@@ -29,6 +29,7 @@ def test_absorption_release_decision_combines_core_product_gates(tmp_path: Path)
     assert result["summary"]["cross_domain_end_to_end_ready"] is True
     assert result["summary"]["contract_runtime_rehearsal_ready"] is True
     assert result["summary"]["contract_stability_stress_ready"] is True
+    assert result["summary"]["employee_patch_stress_ready"] is True
     assert result["summary"]["review_family_behavior_ready"] is True
     assert result["summary"]["external_merge_landing_ready"] is True
     assert result["summary"]["failure_rollback_ready"] is True
@@ -151,6 +152,15 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_pr_failure_rollback_replay.json": {"status": "ready", "summary": {"all_failures_rolled_back": True}},
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}},
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {"all_expected_outcomes_verified": True}},
+        "retort_employee_patch_stress.json": {
+            "status": "ready",
+            "summary": {
+                "concurrency_floor_exceeded": True,
+                "worker_count": 120,
+                "rollback_verified_count": 120,
+                "all_post_rollback_gates_passed": True,
+            },
+        },
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}},
         "retort_external_advantage_matrix.json": {
             "status": "ready",
@@ -181,7 +191,14 @@ def _write_decision_inputs(root: Path) -> None:
         },
         "retort_competitor_runtime_comparison.json": {
             "status": "ready",
-            "summary": {"side_by_side_output_materialized": True, "retort_exceeds_patch_parser_by_semantic_comments": True},
+            "summary": {
+                "side_by_side_output_materialized": True,
+                "multi_competitor_side_by_side": True,
+                "ready_competitor_project_count": 3,
+                "competitor_project_count": 3,
+                "all_external_processes_successful": True,
+                "retort_exceeds_patch_parser_by_semantic_comments": True,
+            },
         },
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",

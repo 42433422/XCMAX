@@ -303,11 +303,20 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                 "status": "ready",
                 "summary": {
                     "competitor_project": "mopemope/pr-ai-review-bot",
+                    "competitor_projects": ["mopemope/pr-ai-review-bot", "qodo-ai/pr-agent", "reviewdog/reviewdog"],
+                    "competitor_project_count": 3,
+                    "ready_competitor_project_count": 3,
+                    "real_cached_project_count": 3,
+                    "external_process_success_count": 3,
+                    "external_process_count": 3,
+                    "all_external_processes_successful": True,
+                    "multi_competitor_side_by_side": True,
                     "competitor_source_exists": True,
                     "competitor_source_sha256": "123",
                     "competitor_hunk_count": 2,
                     "retort_comment_count": 4,
                     "side_by_side_output_materialized": True,
+                    "retort_exceeds_all_competitors_by_semantic_comments": True,
                 },
                 "competitor_output": {},
                 "retort_output": {},
@@ -433,6 +442,27 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_employee_patch_stress.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "worker_count": 120,
+                    "ready_worker_count": 120,
+                    "concurrent_worker_count": 120,
+                    "concurrency_floor_exceeded": True,
+                    "failed_gate_count": 120,
+                    "rollback_verified_count": 120,
+                    "post_rollback_gate_passed_count": 120,
+                    "state_leak_count": 0,
+                    "all_rollbacks_verified": True,
+                },
+                "workers": [],
+                "evidence": {"acceptance": ">100 concurrent failed employee patches, all rolled back with post-rollback gate pass"},
+            }
+        ),
+        encoding="utf-8",
+    )
     (docs / "retort_review_family_behavior_replay.json").write_text(
         json.dumps(
             {
@@ -523,8 +553,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
             {
                 "status": "ready",
                 "summary": {
-                    "ready_stage_count": 10,
-                    "stage_count": 10,
+                    "ready_stage_count": 11,
+                    "stage_count": 11,
                     "hashed_artifact_count": 15,
                     "real_absorption_run_present": True,
                     "real_absorption_gates_passed": True,
@@ -538,6 +568,7 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
                     "external_process_adjudication_ready": True,
                     "upstream_pr_ci_ready": True,
                     "competitor_runtime_ready": True,
+                    "employee_patch_stress_ready": True,
                     "contract_stability_ready": True,
                     "cross_domain_end_to_end_ready": True,
                     "manifest_path": ".retort/operator_journey_replays/run.manifest.json",
@@ -752,9 +783,14 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "upstream_pr_ci_probe_all_successful=True" in evidence
     assert "competitor_runtime_comparison_status=ready" in evidence
     assert "competitor_runtime_comparison_project=mopemope/pr-ai-review-bot" in evidence
+    assert "competitor_runtime_comparison_project_count=3" in evidence
+    assert "competitor_runtime_comparison_ready_projects=3" in evidence
+    assert "competitor_runtime_comparison_external_processes=3/3" in evidence
+    assert "competitor_runtime_comparison_multi_side_by_side=True" in evidence
     assert "competitor_runtime_comparison_hunks=2" in evidence
     assert "competitor_runtime_comparison_retort_comments=4" in evidence
     assert "competitor_runtime_comparison_side_by_side=True" in evidence
+    assert "competitor_runtime_comparison_retort_exceeds_all=True" in evidence
     assert "cross_domain_absorption_replay_status=ready" in evidence
     assert "cross_domain_absorption_replay_ready_cases=10/10" in evidence
     assert "cross_domain_absorption_replay_non_pr_domains=10" in evidence
@@ -783,6 +819,12 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "contract_stability_stress_workers=120" in evidence
     assert "contract_stability_stress_faults=720" in evidence
     assert "contract_stability_stress_state_leaks=0" in evidence
+    assert "employee_patch_stress_status=ready" in evidence
+    assert "employee_patch_stress_workers=120/120" in evidence
+    assert "employee_patch_stress_concurrent_workers=120" in evidence
+    assert "employee_patch_stress_rollbacks=120" in evidence
+    assert "employee_patch_stress_state_leaks=0" in evidence
+    assert "employee_patch_stress_all_rollbacks=True" in evidence
     assert "review_family_behavior_replay_status=ready" in evidence
     assert "review_family_behavior_replay_ready_cases=3/3" in evidence
     assert "review_family_behavior_replay_language_families=python,typescript" in evidence
@@ -840,12 +882,13 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "pr_readonly_degradation_probe_real_network=True" in evidence
     assert "pr_readonly_degradation_probe_artifact_ready=True" in evidence
     assert "operator_journey_replay_status=ready" in evidence
-    assert "operator_journey_replay_ready_stages=10/10" in evidence
+    assert "operator_journey_replay_ready_stages=11/11" in evidence
     assert "operator_journey_replay_cross_domain_ready=True" in evidence
     assert "operator_journey_replay_frontend_operation_replay_ready=True" in evidence
     assert "operator_journey_replay_external_process_adjudication_ready=True" in evidence
     assert "operator_journey_replay_upstream_pr_ci_ready=True" in evidence
     assert "operator_journey_replay_competitor_runtime_ready=True" in evidence
+    assert "operator_journey_replay_employee_patch_stress_ready=True" in evidence
     assert "operator_journey_replay_single_command=True" in evidence
 
 

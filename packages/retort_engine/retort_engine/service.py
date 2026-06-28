@@ -17,6 +17,7 @@ from retort_engine.core import RetortService as LLMRetortService
 from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.cross_domain_end_to_end import build_cross_domain_end_to_end
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
+from retort_engine.employee_patch_stress import build_employee_patch_stress
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.evolution_map import build_evolution_map
 from retort_engine.external_advantage_ci_regression import build_external_advantage_ci_regression
@@ -285,6 +286,12 @@ class RetortService:
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_patch_closure_suite(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def employee_patch_stress(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_employee_patch_stress(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            concurrent_workers=int(payload.get("concurrent_workers") or payload.get("workers") or 120),
+        )
+
     def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_production_recovery_drill(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -488,6 +495,10 @@ def create_app() -> Any:
     @app.post("/employee-patch-closure")
     def employee_patch_closure_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.employee_patch_closure(payload)
+
+    @app.post("/employee-patch-stress")
+    def employee_patch_stress_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.employee_patch_stress(payload)
 
     @app.post("/production-recovery-drill")
     def production_recovery_drill_route(payload: dict[str, Any]) -> dict[str, Any]:

@@ -14,6 +14,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
     failure_rollback = _read_json(root / "docs" / "retort_pr_failure_rollback_replay.json")
     recovery = _read_json(root / "docs" / "retort_production_recovery_drill.json")
     patch = _read_json(root / "docs" / "retort_employee_patch_closure.json")
+    patch_stress = _read_json(root / "docs" / "retort_employee_patch_stress.json")
     benchmark = _read_json(root / "docs" / "retort_review_quality_benchmark.json")
     external_matrix = _read_json(root / "docs" / "retort_external_advantage_matrix.json")
     external_ci_regression = _read_json(root / "docs" / "retort_external_advantage_ci_regression.json")
@@ -41,6 +42,15 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "employee_execution",
             patch.get("status") == "ready" and patch.get("summary", {}).get("all_expected_outcomes_verified") is True,
             ["employee_patch_closure"],
+        ),
+        _decision(
+            "stress_employee_patch_rollback",
+            "employee_execution",
+            patch_stress.get("status") == "ready"
+            and patch_stress.get("summary", {}).get("concurrency_floor_exceeded") is True
+            and int(patch_stress.get("summary", {}).get("rollback_verified_count") or 0) >= 100
+            and patch_stress.get("summary", {}).get("all_post_rollback_gates_passed") is True,
+            ["employee_patch_stress"],
         ),
         _decision(
             "publish_or_degrade_review",
@@ -103,6 +113,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "comparative_analysis_depth",
             competitor_runtime.get("status") == "ready"
             and competitor_runtime.get("summary", {}).get("side_by_side_output_materialized") is True
+            and competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side") is True
+            and int(competitor_runtime.get("summary", {}).get("ready_competitor_project_count") or 0) >= 3
+            and competitor_runtime.get("summary", {}).get("all_external_processes_successful") is True
             and competitor_runtime.get("summary", {}).get("retort_exceeds_patch_parser_by_semantic_comments") is True,
             ["competitor_runtime_comparison"],
         ),
@@ -199,6 +212,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "long_run_ready": long_run.get("status") == "ready",
         "recovery_ready": recovery.get("status") == "ready",
         "employee_patch_ready": patch.get("status") == "ready",
+        "employee_patch_stress_ready": patch_stress.get("status") == "ready",
+        "employee_patch_stress_workers": patch_stress.get("summary", {}).get("worker_count", ""),
+        "employee_patch_stress_rollbacks": patch_stress.get("summary", {}).get("rollback_verified_count", ""),
+        "employee_patch_stress_post_rollback_gates": patch_stress.get("summary", {}).get("post_rollback_gate_passed_count", ""),
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
         "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
@@ -216,6 +233,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "upstream_pr_ci_check_runs": upstream_pr_ci.get("summary", {}).get("check_run_count", ""),
         "upstream_pr_ci_all_successful": upstream_pr_ci.get("summary", {}).get("all_check_runs_successful", ""),
         "competitor_runtime_ready": competitor_runtime.get("status") == "ready",
+        "competitor_runtime_project_count": competitor_runtime.get("summary", {}).get("competitor_project_count", ""),
+        "competitor_runtime_ready_projects": competitor_runtime.get("summary", {}).get("ready_competitor_project_count", ""),
+        "competitor_runtime_multi_side_by_side": competitor_runtime.get("summary", {}).get("multi_competitor_side_by_side", ""),
         "competitor_runtime_hunks": competitor_runtime.get("summary", {}).get("competitor_hunk_count", ""),
         "competitor_runtime_retort_comments": competitor_runtime.get("summary", {}).get("retort_comment_count", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
@@ -263,6 +283,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
                 "retort_pr_failure_rollback_replay.json",
                 "retort_production_recovery_drill.json",
                 "retort_employee_patch_closure.json",
+                "retort_employee_patch_stress.json",
                 "retort_review_quality_benchmark.json",
                 "retort_external_advantage_matrix.json",
                 "retort_external_advantage_ci_regression.json",
