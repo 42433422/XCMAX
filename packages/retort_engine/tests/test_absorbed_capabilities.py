@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from retort_engine.absorbed_capabilities import absorbed_capability_plan, absorption_quality_gate, advantage_diff_map, capability_progress_from_execution, deferred_breadth_queue, depth_absorption_plan, depth_first_task_queue, explain_missing_absorption_evidence, marketplace_candidate_queue, multi_project_reproduction_index, ranked_capabilities, review_strategy_for_file
 
-EXPECTED_ABSORPTION_SOURCE = 'https://github.com/RitzwiK/ACRS-v2'
-EXPECTED_ABSORPTION_RUN_ID = '20260628171438-780d913b68'
+EXPECTED_ABSORPTION_SOURCE = 'https://github.com/hypothesisworks/hypothesis'
+EXPECTED_ABSORPTION_RUN_ID = '20260628172341-a5eb9a1b2f'
 
 
 def test_absorbed_capability_plan_has_ranked_behavior_signals() -> None:
