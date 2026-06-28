@@ -43,8 +43,10 @@ def test_score_dimensions_include_calibrated_overall_and_capability_absorption()
 def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
     evidence = [
         "unimportant=1",
+        *[f"pr_holdout_blind_eval_total_comments={index}" for index in range(100)],
         "operator_journey_replay_status=ready",
         "operator_journey_replay_ready_stages=8/8",
+        "absorption_release_decision_operator_journey_ready=True",
         "release_decision_self_reference=False",
     ]
 
@@ -52,4 +54,5 @@ def test_operator_journey_evidence_is_prioritized_for_deep_review() -> None:
 
     assert "operator_journey_replay_status=ready" in selected
     assert "operator_journey_replay_ready_stages=8/8" in selected
+    assert "absorption_release_decision_operator_journey_ready=True" in selected
     assert "release_decision_self_reference=False" in selected
