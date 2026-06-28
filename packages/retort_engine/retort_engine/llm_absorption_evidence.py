@@ -180,6 +180,8 @@ def _report_evidence(project: Path) -> list[str]:
     quality_summary = quality_report.get("summary") if isinstance(quality_report.get("summary"), dict) else {}
     recovery_report = read_json(project / "docs" / "retort_production_recovery_drill.json")
     recovery_summary = recovery_report.get("summary") if isinstance(recovery_report.get("summary"), dict) else {}
+    release_decision = read_json(project / "docs" / "retort_absorption_release_decision.json")
+    release_summary = release_decision.get("summary") if isinstance(release_decision.get("summary"), dict) else {}
     return [
         f"quality_gate_bundle_status={quality_report.get('status', '')}",
         f"quality_gate_bundle_all_passed={quality_summary.get('all_gates_passed', '')}",
@@ -351,6 +353,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"production_recovery_drill_real_network_denial={recovery_summary.get('real_network_denial_verified', '')}",
         f"production_recovery_drill_rollback_scenarios={recovery_summary.get('rollback_scenario_count', '')}",
         f"production_recovery_drill_degradation_scenarios={recovery_summary.get('degradation_scenario_count', '')}",
+        f"absorption_release_decision_status={release_decision.get('status', '')}",
+        f"absorption_release_decision_ready={release_summary.get('ready_decision_count', '')}/{release_summary.get('decision_count', '')}",
+        f"absorption_release_decision_core_paths={release_summary.get('core_decision_path_count', '')}",
+        f"absorption_release_decision_all_ready={release_summary.get('all_core_decisions_ready', '')}",
+        f"absorption_release_decision_long_run_ready={release_summary.get('long_run_ready', '')}",
+        f"absorption_release_decision_recovery_ready={release_summary.get('recovery_ready', '')}",
     ]
 
 
