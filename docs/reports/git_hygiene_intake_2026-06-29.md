@@ -1,14 +1,14 @@
 # Git Hygiene Intake Report
 
-- Generated: 2026-06-28 20:31:10 UTC
+- Generated: 2026-06-28 20:35:37 UTC
 - Repository: `/private/tmp/xcmax-git-hygiene`
 - Baseline: `main`
 - Branches listed: 134
-- Feature-bearing branches in this report: 99
+- Feature-bearing branches in this report: 100
 - Active dirty branch worktrees detected: 7
-- Dirty files in report-generation worktree: 4
+- Dirty files in report-generation worktree: 1
 - Dirty files in report-generation worktree classified as runtime/test artifacts: 0
-- High-confidence tracked runtime candidates: 356
+- High-confidence tracked runtime candidates: 0
 
 ## Policy
 
@@ -21,8 +21,6 @@
 
 | module | files |
 | --- | ---: |
-| `docs` | 2 |
-| `root` | 1 |
 | `scripts` | 1 |
 
 ## Active Dirty Worktrees
@@ -30,96 +28,16 @@
 | branch | dirty files | runtime-like | top modules | path | sample |
 | --- | ---: | ---: | --- | --- | --- |
 | `evaluate-project-level-5sethe` | 312 | 0 | fhd-other:163, fhd-backend:149 | `/Users/a4243342/.trae-cn/worktrees/XCMAX/evaluate-project-level-5sethe` | `FHD/.venv311/bin/Activate.ps1`<br>`FHD/.venv311/bin/activate`<br>`FHD/.venv311/bin/activate.csh`<br>`FHD/.venv311/bin/activate.fish`<br>`FHD/.venv311/bin/alembic`<br>`FHD/.venv311/bin/bandit` |
-| `retort/absorb-test-fix` | 94 | 1 | modstore-deploy:57, yuangon:8, fhd-mobile-android:7, fhd-other:6 | `/Users/a4243342/Desktop/XCMAX` | `.github/workflows/modstore-build-desktop.yml`<br>`FHD/MODstore/modstore_server/digest_vibe_prep.py`<br>`FHD/MODstore/modstore_server/duty_roster.py`<br>`FHD/app/application/modstore_local_client.py`<br>`FHD/app/fastapi_routes/mobile_api_extensions.py`<br>`FHD/config/duty_roster.json` |
+| `retort/absorb-test-fix` | 88 | 1 | modstore-deploy:57, yuangon:8, fhd-mobile-android:7, fhd-other:6 | `/Users/a4243342/Desktop/XCMAX` | `.github/workflows/modstore-build-desktop.yml`<br>`FHD/MODstore/modstore_server/digest_vibe_prep.py`<br>`FHD/MODstore/modstore_server/duty_roster.py`<br>`FHD/app/application/modstore_local_client.py`<br>`FHD/app/fastapi_routes/mobile_api_extensions.py`<br>`FHD/config/duty_roster.json` |
 | `main` | 76 | 15 | modstore-deploy:25, retort-engine:23, fhd-mobile-android:14, fhd-backend:10 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9` | `FHD/app/application/im_app_service.py`<br>`FHD/app/db/init_db.py`<br>`FHD/app/db/models/__init__.py`<br>`FHD/app/fastapi_routes/mobile_api_extensions.py`<br>`FHD/app/infrastructure/auth/dependencies.py`<br>`FHD/app/infrastructure/session/session_manager.py` |
 | `claude/sharp-dhawan-6d68fa` | 19 | 0 | fhd-other:19 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/cov90-rebase` | `FHD/dataset_rag/datasets.json`<br>`FHD/metrics/sla-snapshot.json`<br>`FHD/mods/attendance-industry/backend/__init__.py`<br>`FHD/mods/attendance-industry/backend/blueprints.py`<br>`FHD/mods/attendance-industry/backend/database.py`<br>`FHD/mods/attendance-industry/backend/taiyangniao_attendance/__init__.py` |
-| `codex/git-hygiene-intake` | 4 | 0 | docs:2, root:1, scripts:1 | `/private/tmp/xcmax-git-hygiene` | `.gitignore`<br>`docs/reports/git_hygiene_intake_2026-06-29.json`<br>`docs/reports/git_hygiene_intake_2026-06-29.md`<br>`scripts/dev/git_hygiene_inventory.py` |
 | `retort/absorb-quality-hypothesis-581401` | 4 | 4 | runtime-retort:4 | `/Users/a4243342/.codex/worktrees/retort-live/XCMAX` | `packages/retort_engine/.retort/absorption_state.json`<br>`packages/retort_engine/.retort/employee_queue.jsonl`<br>`packages/retort_engine/.retort/llm_reviews.jsonl`<br>`packages/retort_engine/.retort/retort_history.sqlite` |
+| `codex/git-hygiene-intake` | 1 | 0 | scripts:1 | `/private/tmp/xcmax-git-hygiene` | `scripts/dev/git_hygiene_inventory.py` |
 | `claude/musing-roentgen-affc4b` | 1 | 0 | fhd-other:1 | `/Users/a4243342/Desktop/XCMAX/.claude/worktrees/musing-roentgen-affc4b` | `FHD/data/` |
 
 ## High-Confidence Tracked Runtime Candidates
 
-- `.hvigor/outputs/build-logs/build.log`
-- `packages/retort_engine/.retort/absorption_state.json`
-- `packages/retort_engine/.retort/cache/github/alibaba/open-code-review`
-- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/competitor_output.json`
-- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/input.patch`
-- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/mopemope_patch_runtime.js`
-- `packages/retort_engine/.retort/competitor_runtime_comparisons/competitor-runtime-20260628T073042Z-1abcc986/retort_output.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_01_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_01_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_02_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_02_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_03_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_03_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_04_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_04_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_05_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_05_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_06_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_06_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_01_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_01_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_02_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_02_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_03_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_03_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_04_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_04_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_05_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_05_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_06_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_06_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_01_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_01_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_02_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_02_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_03_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_03_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_04_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_04_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_05_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_05_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_06_result.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_06_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_payload.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/producer_state.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_check.json`
-- `packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_payload.json`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/contract.json`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/post_output.json`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/__init__.py`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/codebase_graph.py`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/project/retort_engine/core.py`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_input.json`
-- `packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_output.json`
-- ... 276 more
+- None detected.
 
 ## Branch Intake Queue
 
@@ -141,7 +59,7 @@
 | `retort/absorb-https-github-com-sunerpy-codegraph-rust-20260627194948` | 88 | 182 | 83 | retort-feature-candidate | retort-engine:53, runtime-retort:30 | no | intake by cherry-pick/squash after Retort review | 33ae98eb1 Retort absorb https://github.com/sunerpy/codegraph-rust |
 | `retort/absorb-https-github-com-openautocoder-agentless-20260627194517` | 84 | 182 | 79 | retort-feature-candidate | retort-engine:53, runtime-retort:26 | no | intake by cherry-pick/squash after Retort review | 758f0111d Retort absorb https://github.com/openautocoder/agentless |
 | `retort/absorb-https-github-com-swe-bench-swe-bench-20260627193402` | 79 | 182 | 75 | retort-feature-candidate | retort-engine:53, runtime-retort:22 | no | intake by cherry-pick/squash after Retort review | 7bb0d036b fix(retort): map SWE-bench oracle to benchmark quality gate |
-| `retort/absorb-test-fix` | 74 | 182 | 166 | active-dirty-feature | retort-engine:115, fhd-other:18, modstore-deploy:7, fhd-backend:6 | yes | preserve; split local edits first | 045485b8e Add mobile tri-platform SSOT |
+| `retort/absorb-test-fix` | 75 | 182 | 168 | active-dirty-feature | retort-engine:117, fhd-other:18, modstore-deploy:7, fhd-backend:6 | yes | preserve; split local edits first | 520d5a1f1 retort: bind absorption run proof |
 | `retort/absorb-https-github-com-nedbat-coveragepy` | 69 | 182 | 131 | large-feature-candidate | retort-engine:92, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 997458b51 Retort absorb https://github.com/nedbat/coveragepy |
 | `retort/absorb-https-github-com-bobbyroe-threejs-earth-20260627192506` | 69 | 182 | 66 | retort-feature-candidate | retort-engine:48, runtime-retort:18 | no | intake by cherry-pick/squash after Retort review | 4c10823dc Retort absorb https://github.com/bobbyroe/threejs-earth |
 | `retort/absorb-https-github-com-a1dancole-openai-code-r` | 66 | 182 | 128 | large-feature-candidate | retort-engine:89, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | needs branch-level intake, likely squash/cherry-pick | 65c4a4fc0 Merge retort/absorb-https-github-com-ionelmc-pytest-benchmar |
@@ -207,6 +125,7 @@
 | `super-employee/codex/docs-relay-deliver-proo-26486-c8e489` | 5 | 307 | 498 | large-feature-candidate | fhd-other:403, 成都修茈科技有限公司:75, modstore-deploy:15, fhd-frontend:2 | no | needs branch-level intake, likely squash/cherry-pick | d690127df 超级员工-Codex: 新增文件 docs/RELAY_DELIVER_PROOF.md，写一行：relay 真实交付验证。完成后说明改了哪个文 |
 | `retort/absorb-reviewscope-20260628` | 5 | 182 | 59 | small-feature-candidate | retort-engine:20, fhd-other:14, modstore-deploy:7, fhd-backend:6 | no | candidate for direct review/cherry-pick | 43a394079 retort: strengthen review context scoring and absorption proof workflows |
 | `retort/absorb-openreview` | 4 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | 907b607fa Retort absorb https://github.com/vercel-labs/openreview |
+| `codex/git-hygiene-intake` | 3 | 0 | 360 | active-dirty-feature | runtime-retort:354, docs:2, root:1, .hvigor:1 | yes | preserve; split local edits first | 75b408708 Untrack stray MODstore runtime database |
 | `retort/absorb-codebase-digest` | 2 | 182 | 13 | retort-feature-candidate | retort-engine:13 | no | intake by cherry-pick/squash after Retort review | e8e7e8b78 Retort absorb https://github.com/kamilstanuch/codebase-digest |
 | `devfleet/codex/sub-1-3960d3` | 1 | 307 | 7 | agent-feature-candidate | modstore-deploy:6, fhd-other:1 | no | inspect and cherry-pick useful commits | 66a738e59 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. MANDATORY: Before reasoning from scratch, you MUST che |
 | `devfleet/codex/sub-1-045852` | 1 | 307 | 5 | agent-feature-candidate | modstore-deploy:4, fhd-other:1 | no | inspect and cherry-pick useful commits | 5193d2594 devfleet: code: Run a real MODstore self-maintenance improvement task. Use the previous loop memory and current evidence gaps to fix the highest-value executable gap in the self-maintenance loop. Before reasoning from scratch, check SELF_EVOLUTION_CO |
@@ -229,7 +148,6 @@
 | `claude/musing-blackwell-e87e0c` | 0 | 1 | 0 | already-contained | - | no | do-not-merge | b6126732d feat(phase-d): bidirectional human Q&A loop for employees |
 | `claude/musing-roentgen-affc4b` | 0 | 192 | 0 | already-contained | - | yes | do-not-merge | c63f96be7 feat(cs): real enterprise customer-service IM channel + admin inbox + push |
 | `claude/pedantic-leakey-5611d9` | 0 | 186 | 0 | already-contained | - | no | do-not-merge | 043248e73 Merge retort/absorb-https-github-com-evalops-diffscope |
-| `codex/git-hygiene-intake` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform SSOT |
 | `evaluate-project-level-5sethe` | 0 | 902 | 0 | already-contained | - | yes | do-not-merge | 10e40d4ad chore: update taiyangniao_pro binary database file |
 | `main` | 0 | 0 | 0 | already-contained | - | yes | do-not-merge | 196dc3705 Add mobile tri-platform SSOT |
 | `retort/absorb-20260627` | 0 | 259 | 0 | already-contained | - | no | do-not-merge | c29d117fd feat(retort): close external absorption evolution loop |
@@ -266,4 +184,3 @@
 2. Split dirty active worktrees by module before branch intake.
 3. Promote small feature candidates into an integration branch using cherry-pick or squash.
 4. Keep large Retort absorption branches as source material until reviewed.
-
