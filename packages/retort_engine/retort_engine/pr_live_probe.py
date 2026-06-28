@@ -145,6 +145,63 @@ def run_readonly_pr_degradation_probe(pr_url: str, *, transport: Transport | Non
     }
 
 
+def run_low_permission_pr_degradation_probe(pr_url: str, *, transport: Transport | None = None) -> dict[str, Any]:
+    owner, repo, number = _parse_pr_url(pr_url)
+    if transport is None:
+        repo_status, _repo_payload = _github_public_request("GET", f"https://api.github.com/repos/{owner}/{repo}", None, "")
+        pull_status, pull_payload = _github_public_request("GET", f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}", None, "")
+        create_status, created = _github_request("POST", f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments", {"body": "Retort low-permission probe should not be created."}, "")
+        transport_name = "github_rest_public_read_then_unauthorized_write"
+    else:
+        repo_status, _repo_payload = transport("GET", f"https://api.github.com/repos/{owner}/{repo}", None, "")
+        pull_status, pull_payload = transport("GET", f"https://api.github.com/repos/{owner}/{repo}/pulls/{number}", None, "")
+        create_status, created = transport("POST", f"https://api.github.com/repos/{owner}/{repo}/issues/{number}/comments", {"body": "Retort low-permission probe should not be created."}, "")
+        transport_name = "injected_transport"
+    target_found = repo_status < 400 and pull_status < 400 and bool(pull_payload.get("number"))
+    permission_denied = create_status in {401, 403}
+    degraded_without_write = bool(target_found and permission_denied)
+    return {
+        "status": "permission_denied_degraded" if degraded_without_write else "blocked",
+        "pr_url": f"https://github.com/{owner}/{repo}/pull/{number}",
+        "summary": {
+            "target_repo": f"{owner}/{repo}",
+            "pull_number": int(number),
+            "repo_status": repo_status,
+            "pull_status": pull_status,
+            "token_present": False,
+            "permission_admin": False,
+            "permission_maintain": False,
+            "permission_push": False,
+            "created_comment_count": 0,
+            "rolled_back_comment_count": 0,
+            "rollback_verified": degraded_without_write,
+            "live_github_write": False,
+            "permission_denied": permission_denied,
+            "degraded_without_write": degraded_without_write,
+            "write_attempt_status": create_status,
+        },
+        "created_receipts": [],
+        "rollback_receipts": [{"created": False, "status_code": create_status, "response": created}],
+        "evidence": {
+            "api": "GitHub REST issues comments",
+            "target_is_pull_request": bool(pull_payload.get("number")),
+            "head_ref": str((pull_payload.get("head") or {}).get("ref") or ""),
+            "base_ref": str((pull_payload.get("base") or {}).get("ref") or ""),
+            "token_redacted": True,
+            "real_network": transport is None,
+            "transport": transport_name,
+            "required_permission": "issues:write or pull_requests:write",
+            "degradation": "write_attempt_denied_no_comment_created" if degraded_without_write else "target_not_readable_or_write_unexpectedly_allowed",
+            "degradation_artifact": {
+                "kind": "permission_denied_publish_attempt",
+                "target": f"{owner}/{repo}#{number}",
+                "write_attempt_status": create_status,
+                "next_step": "request_write_token_or_export_review_payload",
+            },
+        },
+    }
+
+
 def _blocked(pr_url: str, reason: str) -> dict[str, Any]:
     return {
         "status": "blocked",
@@ -245,6 +302,16 @@ def write_readonly_pr_degradation_probe(pr_url: str, output: str | Path) -> dict
     started = time.monotonic()
     result = run_readonly_pr_degradation_probe(pr_url)
     result["summary"]["duration_sec"] = round(time.monotonic() - started, 3)
+    path = Path(output)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+    return result
+
+
+def write_low_permission_pr_degradation_probe(pr_url: str, output: str | Path) -> dict[str, Any]:
+    started = time.monotonic()
+    result = run_low_permission_pr_degradation_probe(pr_url)
+    result.setdefault("summary", {})["duration_sec"] = round(time.monotonic() - started, 3)
     path = Path(output)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")

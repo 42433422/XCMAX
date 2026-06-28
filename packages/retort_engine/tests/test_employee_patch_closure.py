@@ -66,15 +66,23 @@ def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Pat
 
     assert result["status"] == "ready"
     assert result["summary"]["success_case_verified"] is True
+    assert result["summary"]["existing_file_update_verified"] is True
     assert result["summary"]["failure_case_rolled_back"] is True
-    assert result["summary"]["patch_generated_count"] == 4
-    assert result["summary"]["patch_applied_count"] == 4
-    assert result["summary"]["gate_passed_count"] == 3
+    assert result["summary"]["patch_generated_count"] == 6
+    assert result["summary"]["patch_applied_count"] == 6
+    assert result["summary"]["gate_passed_count"] == 5
+    assert result["summary"]["gate_expected_to_pass_count"] == 5
+    assert result["summary"]["gate_expected_to_pass_passed_count"] == 5
     assert result["summary"]["rollback_verified_count"] == 2
+    assert result["summary"]["expected_failure_case_count"] == 1
+    assert result["summary"]["expected_failure_rollback_count"] == 1
+    assert result["summary"]["unexpected_gate_failure_count"] == 0
     assert result["summary"]["multi_file_case_verified"] is True
+    assert result["summary"]["policy_state_case_verified"] is True
     assert result["summary"]["successful_repairs_re_reviewed"] is True
     assert result["summary"]["retry_case_verified"] is True
     assert result["summary"]["retry_first_failure_rolled_back"] is True
+    assert result["summary"]["all_expected_outcomes_verified"] is True
     assert output.is_file()
     assert validate_contract("employee_patch_closure_result", result)["valid"] is True
 
@@ -122,9 +130,12 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     patch = result["runtime_evidence"]["employee_patch_closure"]
     assert patch["status"] == "ready"
     assert patch["summary"]["success_case_verified"] is True
+    assert patch["summary"]["existing_file_update_verified"] is True
     assert patch["summary"]["failure_case_rolled_back"] is True
     assert patch["summary"]["multi_file_case_verified"] is True
+    assert patch["summary"]["policy_state_case_verified"] is True
     assert patch["summary"]["retry_case_verified"] is True
+    assert patch["summary"]["unexpected_gate_failure_count"] == 0
     assert result["results"][0]["status"] == "completed"
     assert any("employee_patch_closure_status=ready" in item for item in result["results"][0]["evidence"])
 
@@ -134,4 +145,5 @@ def test_service_exposes_employee_patch_closure(tmp_path: Path) -> None:
 
     assert result["status"] == "ready"
     assert result["summary"]["success_case_verified"] is True
+    assert result["summary"]["existing_file_update_verified"] is True
     assert result["summary"]["failure_case_rolled_back"] is True
