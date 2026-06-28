@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from retort_engine.absorption_release_decision import build_absorption_release_decision
 from retort_engine.absorption_continuity_probe import build_absorption_continuity_probe
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
 from retort_engine.codebase_graph import build_codebase_graph
@@ -161,6 +162,9 @@ class RetortService:
     def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_production_recovery_drill(str(payload.get("project") or payload.get("project_path") or "."))
 
+    def absorption_release_decision(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_absorption_release_decision(str(payload.get("project") or payload.get("project_path") or "."))
+
     def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_quality_gate_bundle(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -295,6 +299,10 @@ def create_app() -> Any:
     @app.post("/production-recovery-drill")
     def production_recovery_drill_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.production_recovery_drill(payload)
+
+    @app.post("/absorption-release-decision")
+    def absorption_release_decision_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.absorption_release_decision(payload)
 
     @app.post("/quality-gates")
     def quality_gate_bundle_route(payload: dict[str, Any]) -> dict[str, Any]:

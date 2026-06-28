@@ -1,0 +1,66 @@
+{
+  "decisions": [
+    {
+      "action": "allow",
+      "dimension": "absorption_depth",
+      "evidence": [
+        "quality_gate_bundle",
+        "absorption_continuity_probe"
+      ],
+      "name": "run_absorption",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "employee_execution",
+      "evidence": [
+        "employee_patch_closure"
+      ],
+      "name": "dispatch_employee_patch",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "product_operability",
+      "evidence": [
+        "pr_long_run_review",
+        "production_recovery_drill"
+      ],
+      "name": "publish_or_degrade_review",
+      "ready": true
+    },
+    {
+      "action": "allow",
+      "dimension": "feedback_loop_closure",
+      "evidence": [
+        "review_quality_benchmark"
+      ],
+      "name": "claim_absorbed_quality_gain",
+      "ready": true
+    }
+  ],
+  "evidence": {
+    "source_reports": [
+      "retort_quality_gate_bundle.json",
+      "retort_absorption_continuity_probe.json",
+      "retort_pr_long_run_review.json",
+      "retort_production_recovery_drill.json",
+      "retort_employee_patch_closure.json",
+      "retort_review_quality_benchmark.json"
+    ],
+    "style": "core_product_decision_gate"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_core_decisions_ready": true,
+    "blocking_decision_count": 0,
+    "core_decision_path_count": 4,
+    "decision_count": 4,
+    "employee_patch_ready": true,
+    "long_run_ready": true,
+    "quality_gate_all_passed": true,
+    "ready_decision_count": 4,
+    "recovery_ready": true
+  }
+}

@@ -233,6 +233,7 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "employee_runtime_patch_closure=",
         "employee_patch_closure_",
         "production_recovery_drill_",
+        "absorption_release_decision_",
         "review_adjudication_",
         "pr_live_publish_probe_status=",
         "pr_low_permission_probe_status=",
