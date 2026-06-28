@@ -1,8 +1,8 @@
 # 仓库全覆盖归属表（Single Source of Truth）
 
-> 版本：2.0.0 · 更新：2026-06-20  
+> 版本：2.2.0 · 更新：2026-06-28  
 > 目标：`E:\成都修茈科技有限公司` 下的**每一个文件/目录**都必须有一名 AI 员工或一条「显式忽略」规则覆盖，没有真空地带。
-> 当前编制：52 名；完整性、依赖 DAG 与文件覆盖以 [`COVERAGE_REPORT.md`](COVERAGE_REPORT.md) 的自动审计结果为准。
+> 当前编制：55 名；完整性、依赖 DAG 与文件覆盖以 [`COVERAGE_REPORT.md`](COVERAGE_REPORT.md) 的自动审计结果为准。
 
 本表与 [`yuangon/**/employee.yaml`](.) 的 `scope_globs` / `forbidden_globs` 保持一致；
 任何新增目录/文件**先**登记到本表，再扩 yaml，再跑 `push-update-context-officer.skill-yuangon-resync`
@@ -20,6 +20,7 @@
 | `_local_secrets/**`、`.cursor_admin_token.txt`、`alipay_package/**` | `security-secrets-guard` | 密钥与凭据 |
 | `setup-alipay.sh`、`stop_ports.py`、`deploy/**`、`scripts/**`、`docker/**`、`dist/**` | `deploy-release-officer` | 发布与部署 |
 | `.github/**`、`.gitignore`、`.gitleaks.toml`、`*.code-workspace`（如 `成都修茈科技有限公司.code-workspace`） | `push-update-context-officer` | 仓库元数据 + CI / 密钥扫描配置 |
+| `.github/dependabot.yml`、`.github/workflows/gitleaks.yml`、`.github/workflows/codeql.yml`、`.github/gitleaks-config.toml` | `github-pr-gatekeeper` | GitHub PR 审查相关细分（覆盖 `.github/**` 默认归属） |
 | `playwright.config.ts`、`.pre-commit-config.yaml` | `test-qa-runner` | 测试编排 |
 | `.cursor_*_log.txt`、`coverage/**`、`playwright-report/**`、`test-results/**` | `log-monitor-incident`（读）+ `retention-officer`（清理） | 日志/产物 |
 | `__tmp_xcemp/**`、`__tmp_emp_*.json`、`.cursor_inspect_purge.py`、`MODstore_deploy.zip`、`xiu-ci.com_nginx.zip`（仅清理）、`3月31日 (5)(*).mp4`、`test_image.jpg`、`new/**`、`site/**`、`taiyangniao-pro/**` | `retention-officer` | 历史/临时归档 |
@@ -50,6 +51,7 @@
 | `modstore_server/eventing/intake/**`、`api/intake_api.py`、`webhook_events/intake/**` | `intake-dispatcher` | 接入层 |
 | `modstore_server/eventing/router/**`、`api/router_api.py`、`scripts/build_routing_table.py`、`docs/routing-table.md` | `task-router-officer` | 派发层 |
 | `modstore_server/api/change_request_api.py`、`eventing/audit/**`、`scripts/audit_*.py`、`docs/runbooks/change-request-audit.md` | `change-request-auditor` | 评审层 |
+| `modstore_server/auto_fix_loop.py`、`modstore_server/telemetry_backlog_loop.py` | `github-pr-gatekeeper` | GitHub PR 守门员入口（auto_fix / telemetry_backlog 调用本岗） |
 | `modstore_server/script_agent/**`、`services/**`、`tools/**`、`application/**`、`domain/**`、`infrastructure/**`、`integrations/**`（除上面已点名的） | `modstore-backend-api` | 后端通用代码（默认归 backend-api） |
 | `modstore_server/workbench_script_runs/**`、`webhook_events/**`、`market_files/.tmp_chunks/**` | `retention-officer` | 临时/沙箱产物 |
 | `modstore_server/library/**`、`catalog_data/**`、`vector_data/**`、`data/**` | **用户数据 / 显式禁区**（所有员工 forbidden） | 任何代码改动都必须经 admin 显式授权 |
@@ -130,3 +132,5 @@ MODstore_deploy/market/tmp_tsc.log
 | 2026-05-08 | 初版：全仓库 25 名员工 + 显式忽略表 | admin |
 | 2026-05-08 | v1.1：新增 `marketing-site-builder`；§五 扩充租户/运行时显式忽略（Phase2） | admin |
 | 2026-05-08 | §一 补充 `.gitleaks.toml`；§四 访谈员范围含 `tasks/**` | admin |
+| 2026-06-28 | v2.1：补编 `llm-ops-engineer`（server-and-ops，LLM 资源管理）+ `mobile-harmony-release-officer`（platform-core，鸿蒙发版专岗），编制 52 → 54 | admin |
+| 2026-06-28 | v2.2：补编 `github-pr-gatekeeper`（platform-core · build-release，GitHub 原生 PR 审查专岗，与 change-request-auditor 分工：外部 PR vs 内部 CR），编制 54 → 55；§一/§二 同步登记 `.github/dependabot.yml` 等细分 scope | admin |

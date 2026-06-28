@@ -1,20 +1,20 @@
 # Yuangon 覆盖率与编制契约审计报告
 
-> 生成时间（UTC）：`2026-06-19T17:07:41.178168+00:00`  
-> 仓库根：`/Users/a4243342/Desktop/XCMAX/成都修茈科技有限公司`  
-> 员工数量：**52**
+> 生成时间（UTC）：`2026-06-28T12:16:06.313667+00:00`  
+> 仓库根：`/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/成都修茈科技有限公司`  
+> 员工数量：**55**
 
 ## 总览
 
 | 指标 | 值 |
 |---|---:|
-| 扫描文件数 | 3035 |
-| 忽略构建/缓存文件数 | 35829 |
-| 有写入责任人 | 3035 |
-| 无写入责任人 | 0 |
-| 覆盖率 | 100.00% |
-| 多员工可写 | 1445 |
-| 同员工 scope/forbidden 冲突 | 47 |
+| 扫描文件数 | 2703 |
+| 忽略构建/缓存文件数 | 91 |
+| 有写入责任人 | 2682 |
+| 无写入责任人 | 21 |
+| 覆盖率 | 99.22% |
+| 多员工可写 | 1285 |
+| scope 被 forbidden 收窄（forbidden 优先） | 47 |
 | 编制契约错误 | 0 |
 | 依赖循环节点 | 0 |
 
@@ -24,7 +24,27 @@
 
 ## 无写入责任人（前 200 项）
 
-- 无
+- `marketing-assets/xc-brand-film/assets/logo-glow.png`
+- `marketing-assets/xc-brand-film/assets/logo-source.png`
+- `marketing-assets/xc-brand-film/assets/scene-02-workbench.png`
+- `marketing-assets/xc-brand-film/assets/scene-03-document.png`
+- `marketing-assets/xc-brand-film/assets/scene-03-report.png`
+- `marketing-assets/xc-brand-film/assets/scene-03-support.png`
+- `marketing-assets/xc-brand-film/assets/scene-04-founder-team.png`
+- `marketing-assets/xc-brand-film/assets/website-qr.png`
+- `marketing-assets/xc-brand-film/build.sh`
+- `marketing-assets/xc-brand-film/output/render-brand-film`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-01.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-02.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-03a.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-03b.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-03c.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-04.png`
+- `marketing-assets/xc-brand-film/output/verification-frames/scene-05.png`
+- `marketing-assets/xc-brand-film/output/verify-film`
+- `marketing-assets/xc-brand-film/output/xc-brand-film-poster.png`
+- `marketing-assets/xc-brand-film/output/xc-brand-film-soundtrack.wav`
+- `privacy.html`
 
 ## 多员工可写（前 200 项）
 
@@ -83,10 +103,6 @@
 - `MODstore_deploy/docs/runbooks/chaos-game-day.md`：doc-knowledge-curator, log-monitor-incident
 - `MODstore_deploy/docs/runbooks/disaster-recovery.md`：doc-knowledge-curator, log-monitor-incident
 - `MODstore_deploy/docs/runbooks/exercises/2026-05-04/EXERCISE.md`：doc-knowledge-curator, log-monitor-incident
-- `MODstore_deploy/docs/runbooks/exercises/2026-05-04/chaos-api-restart-dryrun.log`：doc-knowledge-curator, log-monitor-incident
-- `MODstore_deploy/docs/runbooks/exercises/2026-05-04/chaos-payment-restart-dryrun.log`：doc-knowledge-curator, log-monitor-incident
-- `MODstore_deploy/docs/runbooks/exercises/2026-05-04/chaos-redis-stop-dryrun.log`：doc-knowledge-curator, log-monitor-incident
-- `MODstore_deploy/docs/runbooks/exercises/2026-05-04/dr-restore-postgres-dryrun.log`：doc-knowledge-curator, log-monitor-incident
 - `MODstore_deploy/docs/runbooks/exercises/README.md`：doc-knowledge-curator, log-monitor-incident
 - `MODstore_deploy/docs/runbooks/file-retention.md`：doc-knowledge-curator, retention-officer
 - `MODstore_deploy/docs/runbooks/incident-response.md`：doc-knowledge-curator, log-monitor-incident
@@ -100,136 +116,140 @@
 - `MODstore_deploy/java_payment_service/src/main/java/com/modstore/repository/OrderRepository.java`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
 - `MODstore_deploy/java_payment_service/src/main/java/com/modstore/service/OrderService.java`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
 - `MODstore_deploy/java_payment_service/src/test/java/com/modstore/service/OrderServiceTest.java`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
-- `MODstore_deploy/java_payment_service/target/classes/com/modstore/model/Order.class`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
-- `MODstore_deploy/java_payment_service/target/classes/com/modstore/repository/OrderRepository.class`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
-- `MODstore_deploy/java_payment_service/target/classes/com/modstore/service/OrderService.class`：payment-billing-reconciler, ecosystem-revenue-share-reconciler
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/AlipayConfig.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/AlipayConfig.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/OpenApiConfig.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/OpenApiConfig.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/SecurityConfig.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/SecurityConfig.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.config/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/AlipayController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/AlipayController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/AuthController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/AuthController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/PaymentController$1.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/PaymentController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/PaymentController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/RefundController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/RefundController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WalletController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WalletController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WebhookAdminController$ReplayWebhookRequest.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WebhookAdminController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WebhookAdminController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WebhookController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WebhookController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WechatPayController.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/WechatPayController.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.controller/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.event/EventContracts.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.event/EventContracts.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.event/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.event/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.job/PendingOrderCleanupScheduler.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.job/PendingOrderCleanupScheduler.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.job/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.job/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/AccountExperienceLedger.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/AccountExperienceLedger.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/CatalogItem.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/CatalogItem.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Entitlement.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Entitlement.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Order.html`：payment-billing-reconciler, ecosystem-revenue-share-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Order.java.html`：payment-billing-reconciler, ecosystem-revenue-share-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/PlanTemplate.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/PlanTemplate.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Purchase.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Purchase.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Quota.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Quota.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Refund.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Refund.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Transaction.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Transaction.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/User.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/User.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/UserPlan.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/UserPlan.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Wallet.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/Wallet.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/WalletHold.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/WalletHold.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.model/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/AuthenticatedUser.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/AuthenticatedUser.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/JwtAuthenticationFilter.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/JwtAuthenticationFilter.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.security/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/AccountLevelService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/AccountLevelService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/AlipayService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/AlipayService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/CurrentUserService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/CurrentUserService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/EntitlementService$1.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/EntitlementService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/EntitlementService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/OrderService.html`：payment-billing-reconciler, ecosystem-revenue-share-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/OrderService.java.html`：payment-billing-reconciler, ecosystem-revenue-share-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/RefundService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/RefundService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/SecurityService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/SecurityService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WalletService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WalletService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WebhookDispatcher.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WebhookDispatcher.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WechatPayService$1.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WechatPayService$2.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WechatPayService.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/WechatPayService.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.service/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/LevelProfileBuilder$Threshold.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/LevelProfileBuilder.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/LevelProfileBuilder.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/MoneyUtils.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/MoneyUtils.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore.util/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore/Application.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore/Application.java.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/com.modstore/index.source.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/index.html`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/branchfc.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/branchnc.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/branchpc.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/bundle.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/class.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/down.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/greenbar.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/group.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/method.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/package.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/prettify.css`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/prettify.js`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/redbar.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/report.css`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/report.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/session.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/sort.gif`：payment-billing-reconciler, retention-officer
-- `MODstore_deploy/java_payment_service/target/site/jacoco/jacoco-resources/sort.js`：payment-billing-reconciler, retention-officer
+- `MODstore_deploy/market/nginx.conf`：deploy-release-officer, nginx-config-engineer
+- `MODstore_deploy/market/src/App.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/api.ts`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/api/admin.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/auth.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/catalog.test.ts`：ecosystem-joint-catalog-officer, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/catalog.ts`：ecosystem-joint-catalog-officer, daily-orchestrator
+- `MODstore_deploy/market/src/api/developer.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/employees.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/llm.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/mods.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/shared.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/wallet.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/workbench-employee.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/workbench.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/api/workflow.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/analyticsApi.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/authApi.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/catalogApi.test.ts`：ecosystem-joint-catalog-officer, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/catalogApi.ts`：ecosystem-joint-catalog-officer, daily-orchestrator
+- `MODstore_deploy/market/src/application/openApiConnectorsApi.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/paymentApi.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/application/sandboxApi.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/components/AppConfirmDialog.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/AppToastHost.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/admin/AdminDigestUnlockModal.vue`：workbench-ux-stylist, ecosystem-investor-portal-officer, daily-orchestrator
+- `MODstore_deploy/market/src/components/admin/AdminDutyEmployeeGraph.vue`：workbench-ux-stylist, ecosystem-investor-portal-officer, daily-orchestrator
+- `MODstore_deploy/market/src/components/catalog/CatalogCreatorProfile.vue`：market-frontend-dev, ecosystem-joint-catalog-officer, daily-orchestrator
+- `MODstore_deploy/market/src/components/customer-service/CustomerServiceActionCard.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AdminAgentSkillMarket.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentActionPreview.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentChatHistory.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentMessageBubble.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentPermissionDialog.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentStatusBar.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentSuggestionToast.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/AgentVoiceInput.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/ButlerFilesDrawer.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/ButlerProgressOverlay.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/CorpContactIntakeModal.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/CorpWelcomeBoard.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/FloatingAgentBall.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/FloatingAgentPanel.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/floating-agent/FloatingAgentRoot.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/llm/LlmPricingAdminPanel.test.ts`：market-frontend-dev, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/components/llm/LlmPricingAdminPanel.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/store/EmployeePackTypeIcon.vue`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/AgentMarket.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/BalanceBadge.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/ChatSidebar.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/ConsumptionTierControl.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/EmployeeAiDraftReview.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/EmployeePanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/EmployeeSixDimModal.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/EmployeeSixDimPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/GlobalSidebar.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/JarvisCore.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/MediaGenPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/MessageActions.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/MessageBody.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/OpenApiConnectorsPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/OrbitRings.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/PersonalSettings.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/RepositoryPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/RightPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/SidebarUserMenu.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/SiriOrb.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/SkillToolbar.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/ThinkingRow.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/VibeCodeSkillPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/VoicePhoneModal.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/VoiceWorkPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/WorkbenchStarterProgress.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/WorkflowPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/direct/DirectChatView.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/direct/DirectFlowPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/direct/DirectGeneratedFileStack.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/direct/DirectMediaSettingsRail.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/make/MakeFlowView.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/sidebar/WorkbenchSidebar.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/voice/VoiceDock.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/voice/VoiceFlowPanel.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/voice/VoicePlanView.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/components/workbench/voice/VoiceTaskPanels.vue`：market-frontend-dev, workbench-ux-stylist, daily-orchestrator
+- `MODstore_deploy/market/src/composables/agent/skills/corpIntakeSkill.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/skills/corpSiteSkill.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/useActionExecutor.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/useAgentEngine.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/useCorpAgentEngine.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/usePageAnalyzer.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/agent/usePrivacyManager.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/llmCatalogModelHelpers.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/mergeAsrLiveText.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/normalizeVoiceAsrText.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useAdminDigestUnlock.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useEmployeePublishFlow.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useEmployeeWorkbenchState.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useHostConnection.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useLlmPricingDisplay.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useManifestDiff.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useSpeechRecognition.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useStreamingTts.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/useVoiceContinuousChat.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/voiceEndpointLogic.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/voiceSessionAgent.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/voiceSpeculativeMatch.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/voiceUserTurnCoalesce.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/composables/voiceUtteranceRouter.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/constants/officeEmployeePack.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/content/siteKnowledge.corpWelcome.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/content/siteKnowledge.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/contracts/authSession.contract.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/contracts/catalogApi.contract.test.ts`：ecosystem-joint-catalog-officer, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/contracts/walletCheckout.contract.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/accountLevel.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/butlerEmployeeProfile.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/catalog/types.ts`：ecosystem-joint-catalog-officer, daily-orchestrator
+- `MODstore_deploy/market/src/domain/clientWorkshops.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/employeeDraftPipeline.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/llm/defaultEmployeeLlm.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/domain/yuangonDutyRoster.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/e2e/app.spec.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/e2e/direct-composer-mobile.spec.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/features/mod-authoring/composables/useModAuthoringWizard.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/infrastructure/http/client.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/infrastructure/http/client.ts`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/infrastructure/storage/fhdMarketHandoff.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/infrastructure/storage/tokenStore.test.ts`：daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/router/aiTestRoutes.test.ts`：market-frontend-dev, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/router/guards.test.ts`：market-frontend-dev, daily-orchestrator, test-qa-runner
+- `MODstore_deploy/market/src/router/guards.ts`：market-frontend-dev, daily-orchestrator
+- `MODstore_deploy/market/src/router/index.test.ts`：market-frontend-dev, daily-orchestrator, test-qa-runner
 
-## 同员工 scope/forbidden 冲突（前 200 项）
+## scope 被 forbidden 收窄（前 200 项）
 
 - `MODstore_deploy/docs/adr/0003-artifacts-bundles-employee-packs.md`：doc-knowledge-curator
 - `MODstore_deploy/docs/employee_publish_wizard.md`：doc-knowledge-curator
