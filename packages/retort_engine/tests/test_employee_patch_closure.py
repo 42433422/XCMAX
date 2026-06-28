@@ -75,7 +75,13 @@ def test_employee_patch_closure_suite_records_success_and_rollback(tmp_path: Pat
     assert result["summary"]["gate_passed_count"] == 5
     assert result["summary"]["gate_expected_to_pass_count"] == 5
     assert result["summary"]["gate_expected_to_pass_passed_count"] == 5
-    assert result["summary"]["rollback_verified_count"] == 4
+    assert result["summary"]["primary_rollback_verified_count"] == 4
+    assert result["summary"]["rollback_verified_count"] == 8
+    assert result["summary"]["rollback_scope"] == "per_primary_case_failure_injection"
+    assert result["summary"]["failure_rehearsal_count"] == 8
+    assert result["summary"]["failure_rehearsal_rollback_count"] == 8
+    assert result["summary"]["full_path_rollback_verified"] is True
+    assert result["summary"]["all_cases_have_failure_rollback_rehearsal"] is True
     assert result["summary"]["expected_failure_case_count"] == 3
     assert result["summary"]["expected_failure_rollback_count"] == 3
     assert result["summary"]["unexpected_gate_failure_count"] == 0
@@ -143,6 +149,8 @@ def test_employee_runtime_worker_embeds_patch_closure_evidence(tmp_path: Path) -
     assert patch["summary"]["multi_file_case_verified"] is True
     assert patch["summary"]["policy_state_case_verified"] is True
     assert patch["summary"]["retry_case_verified"] is True
+    assert patch["summary"]["rollback_verified_count"] == 8
+    assert patch["summary"]["full_path_rollback_verified"] is True
     assert patch["summary"]["unexpected_gate_failure_count"] == 0
     assert result["results"][0]["status"] == "completed"
     assert boundary["runtime_boundary_verified"] is True

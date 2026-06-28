@@ -1,0 +1,288 @@
+{
+  "cases": [
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/pre_input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/benchmark_oracle/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "benchmark_oracle",
+      "direct_module": "retort_engine.swe_bench_oracle.build_issue_patch_benchmark",
+      "domain": "benchmark_harness",
+      "expected_behavior": "reject_no_patch_then_accept_fail_to_pass_patch_without_regression",
+      "output_assertions": {
+        "no_regression": true,
+        "patch_overlap": true,
+        "resolved": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "average_patch_overlap": 1.0,
+          "case_count": 1,
+          "fail_to_pass_pass_rate": 1.0,
+          "no_patch_count": 0,
+          "pass_to_pass_pass_rate": 1.0,
+          "regression_count": 0,
+          "resolved_count": 1,
+          "unresolved_count": 0
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "average_patch_overlap": 0.0,
+          "case_count": 1,
+          "fail_to_pass_pass_rate": 0.0,
+          "no_patch_count": 1,
+          "pass_to_pass_pass_rate": 1.0,
+          "regression_count": 0,
+          "resolved_count": 0,
+          "unresolved_count": 1
+        }
+      },
+      "ready": true,
+      "source_project": "EleutherAI/lm-evaluation-harness"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/contract.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/architecture_contract/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "architecture_contract",
+      "direct_module": "retort_engine.architecture_contracts.evaluate_architecture_contracts",
+      "domain": "architecture_governance",
+      "expected_behavior": "detect_forbidden_import_boundary_violation",
+      "output_assertions": {
+        "contract_name_returned": true,
+        "violation_count": true,
+        "violation_detected": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "contract_count": 1,
+          "graph_status": "ready",
+          "import_edge_count": 1,
+          "include_tests": true,
+          "violation_count": 1
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "status": "pre_absorption_no_architecture_contract_runtime",
+          "violation_detected": false
+        }
+      },
+      "ready": true,
+      "source_project": "seddonym/import-linter"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/code_graph/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "code_graph",
+      "direct_module": "retort_engine.codebase_graph.build_codebase_graph",
+      "domain": "codebase_graph",
+      "expected_behavior": "materialize_import_call_and_dependency_edges",
+      "output_assertions": {
+        "calls_seen": true,
+        "graph_ready": true,
+        "hotspot_or_dependency_seen": true,
+        "imports_seen": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "call_edge_count": 1,
+          "define_edge_count": 2,
+          "dependency_cycle_count": 0,
+          "edge_count": 5,
+          "file_count": 3,
+          "hotspot_count": 4,
+          "import_edge_count": 1,
+          "include_tests": true,
+          "local_dependency_edge_count": 1,
+          "node_count": 5,
+          "parse_error_count": 0
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "edge_count": 0,
+          "status": "pre_absorption_no_code_graph_runtime"
+        }
+      },
+      "ready": true,
+      "source_project": "pahen/madge"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640/context_pack/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "context_pack",
+      "direct_module": "retort_engine.context_packager.build_context_pack",
+      "domain": "context_packaging",
+      "expected_behavior": "rank_focused_runtime_context_above_noise_within_budget",
+      "output_assertions": {
+        "bounded_output": true,
+        "focused_runtime_selected": true,
+        "pack_ready": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "candidate_file_count": 2,
+          "focus_term_count": 4,
+          "graph_status": "ready",
+          "max_chars": 2000,
+          "max_files": 3,
+          "selected_file_count": 1,
+          "used_chars": 89
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "selected_file_count": 0,
+          "status": "pre_absorption_no_context_pack_runtime"
+        }
+      },
+      "ready": true,
+      "source_project": "yamadashy/repomix"
+    }
+  ],
+  "evidence": {
+    "claim_boundary": "direct_core_modules_not_pr_review_manifest",
+    "domains": [
+      "architecture_governance",
+      "benchmark_harness",
+      "codebase_graph",
+      "context_packaging"
+    ],
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T055707Z-85eb1640",
+    "source_projects": [
+      "EleutherAI/lm-evaluation-harness",
+      "pahen/madge",
+      "seddonym/import-linter",
+      "yamadashy/repomix"
+    ],
+    "style": "non_pr_domain_input_output_absorption_replay"
+  },
+  "independent_adjudication": {
+    "adjudications": [
+      {
+        "accepted": true,
+        "case_id": "benchmark_oracle",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "benchmark_harness"
+      },
+      {
+        "accepted": true,
+        "case_id": "architecture_contract",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "architecture_governance"
+      },
+      {
+        "accepted": true,
+        "case_id": "code_graph",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "codebase_graph"
+      },
+      {
+        "accepted": true,
+        "case_id": "context_pack",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "context_packaging"
+      }
+    ],
+    "evidence": {
+      "independence_boundary": "recomputes_from_case_assertions_and_materialized_artifacts_without_pr_review"
+    },
+    "status": "ready",
+    "summary": {
+      "accepted_case_count": 4,
+      "adjudicated_case_count": 4,
+      "all_cases_accepted": true
+    }
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "status": "ready",
+  "summary": {
+    "all_before_failed_after_passed": true,
+    "all_direct_modules_executed": true,
+    "all_output_assertions_passed": true,
+    "case_count": 4,
+    "direct_module_count": 4,
+    "direct_modules": [
+      "retort_engine.architecture_contracts.evaluate_architecture_contracts",
+      "retort_engine.codebase_graph.build_codebase_graph",
+      "retort_engine.context_packager.build_context_pack",
+      "retort_engine.swe_bench_oracle.build_issue_patch_benchmark"
+    ],
+    "independent_accepted_case_count": 4,
+    "independent_adjudication_status": "ready",
+    "independent_all_cases_accepted": true,
+    "min_domain_count": 4,
+    "non_pr_domain_count": 4,
+    "non_pr_domains": [
+      "architecture_governance",
+      "benchmark_harness",
+      "codebase_graph",
+      "context_packaging"
+    ],
+    "post_absorption_pass_count": 4,
+    "pre_absorption_failure_count": 4,
+    "ready_case_count": 4,
+    "run_id": "cross-domain-20260628T055707Z-85eb1640",
+    "source_project_count": 4,
+    "source_projects": [
+      "EleutherAI/lm-evaluation-harness",
+      "pahen/madge",
+      "seddonym/import-linter",
+      "yamadashy/repomix"
+    ]
+  }
+}

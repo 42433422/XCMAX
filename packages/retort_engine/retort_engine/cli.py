@@ -14,6 +14,7 @@ from retort_engine.comparative_replay import build_cross_project_replay
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
 from retort_engine.core import RetortService, absorb, record_closed_loop_proof
+from retort_engine.cross_domain_absorption_replay import build_cross_domain_absorption_replay
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.external_advantage_matrix import build_external_advantage_matrix
@@ -227,6 +228,11 @@ def main(argv: list[str] | None = None) -> int:
     heterogeneous_replay.add_argument("--min-cases", type=int, default=6)
     heterogeneous_replay.add_argument("--output", default="")
     heterogeneous_replay.add_argument("--json", action="store_true")
+    cross_domain_replay = sub.add_parser("cross-domain-absorption-replay")
+    cross_domain_replay.add_argument("--project", default=".")
+    cross_domain_replay.add_argument("--min-domains", type=int, default=4)
+    cross_domain_replay.add_argument("--output", default="")
+    cross_domain_replay.add_argument("--json", action="store_true")
     external_merge_landing = sub.add_parser("external-merge-landing")
     external_merge_landing.add_argument("--project", default=".")
     external_merge_landing.add_argument("--min-cases", type=int, default=2)
@@ -659,6 +665,17 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort heterogeneous absorption replay status: {result['status']}")
             print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
             print(f"Language families: {result['summary']['language_family_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "cross-domain-absorption-replay":
+        result = build_cross_domain_absorption_replay(args.project, min_domains=args.min_domains, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort cross-domain absorption replay status: {result['status']}")
+            print(f"Ready cases: {result['summary']['ready_case_count']}/{result['summary']['case_count']}")
+            print(f"Non-PR domains: {result['summary']['non_pr_domain_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

@@ -139,6 +139,15 @@ def _write_docs(root: Path) -> None:
             "summary": {"all_before_failed_after_passed": True, "cross_language_absorption_verified": True},
             "cases": [],
         },
+        "retort_cross_domain_absorption_replay.json": {
+            "status": "ready",
+            "summary": {
+                "all_before_failed_after_passed": True,
+                "all_output_assertions_passed": True,
+                "non_pr_domain_count": 4,
+            },
+            "cases": [],
+        },
         "retort_external_merge_landing.json": {
             "status": "ready",
             "summary": {"all_branch_diff_merge_tests_passed": True, "merge_commit_count": 2, "post_merge_test_passed_count": 2},

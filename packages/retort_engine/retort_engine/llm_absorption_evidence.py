@@ -215,6 +215,8 @@ def _report_evidence(project: Path) -> list[str]:
     external_repeat_summary = external_repeat.get("summary") if isinstance(external_repeat.get("summary"), dict) else {}
     heterogeneous_replay = read_json(project / "docs" / "retort_heterogeneous_absorption_replay.json")
     heterogeneous_summary = heterogeneous_replay.get("summary") if isinstance(heterogeneous_replay.get("summary"), dict) else {}
+    cross_domain_replay = read_json(project / "docs" / "retort_cross_domain_absorption_replay.json")
+    cross_domain_summary = cross_domain_replay.get("summary") if isinstance(cross_domain_replay.get("summary"), dict) else {}
     external_merge_landing = read_json(project / "docs" / "retort_external_merge_landing.json")
     external_merge_summary = external_merge_landing.get("summary") if isinstance(external_merge_landing.get("summary"), dict) else {}
     adjudication_report = read_json(project / "docs" / "retort_review_adjudication_calibration.json")
@@ -403,8 +405,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"external_advantage_matrix_all_improved={external_matrix_summary.get('all_advantages_improved', '')}",
         f"external_advantage_matrix_regression_status={external_matrix_summary.get('regression_status', '')}",
         f"external_advantage_matrix_regression_cases={external_matrix_summary.get('passed_regression_case_count', '')}/{external_matrix_summary.get('regression_case_count', '')}",
+        f"external_advantage_matrix_direct_regression_cases={external_matrix_summary.get('direct_regression_case_count', '')}/{external_matrix_summary.get('regression_case_count', '')}",
+        f"external_advantage_matrix_all_direct_execution={external_matrix_summary.get('all_use_direct_review_execution', '')}",
         f"external_advantage_matrix_all_delta_regressions_verified={external_matrix_summary.get('all_delta_regressions_verified', '')}",
         f"external_advantage_matrix_regression_verifier={(external_matrix.get('evidence') or {}).get('regression_verifier', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
+        f"external_advantage_matrix_regression_runtime={(external_matrix.get('evidence') or {}).get('regression_runtime', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
+        f"external_advantage_matrix_regression_model={(external_matrix.get('evidence') or {}).get('regression_model', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
         f"external_advantage_matrix_regression_test_module={(external_matrix.get('evidence') or {}).get('regression_test_module', '') if isinstance(external_matrix.get('evidence'), dict) else ''}",
         f"external_advantage_matrix_independent_adjudication={external_matrix_summary.get('independent_adjudication_status', '')}",
         f"external_advantage_matrix_independent_accepted={external_matrix_summary.get('independent_accepted_case_count', '')}/{external_matrix_summary.get('independent_adjudicated_case_count', '')}",
@@ -433,6 +439,17 @@ def _report_evidence(project: Path) -> list[str]:
         f"heterogeneous_absorption_replay_all_independent_accepted={heterogeneous_summary.get('independent_all_cases_accepted', '')}",
         f"heterogeneous_absorption_replay_cross_language_verified={heterogeneous_summary.get('cross_language_absorption_verified', '')}",
         f"heterogeneous_absorption_replay_adjudicator={(heterogeneous_replay.get('evidence') or {}).get('adjudicator', '') if isinstance(heterogeneous_replay.get('evidence'), dict) else ''}",
+        f"cross_domain_absorption_replay_status={cross_domain_replay.get('status', '')}",
+        f"cross_domain_absorption_replay_ready_cases={cross_domain_summary.get('ready_case_count', '')}/{cross_domain_summary.get('case_count', '')}",
+        f"cross_domain_absorption_replay_non_pr_domains={cross_domain_summary.get('non_pr_domain_count', '')}",
+        f"cross_domain_absorption_replay_domain_list={','.join(cross_domain_summary.get('non_pr_domains') or []) if isinstance(cross_domain_summary.get('non_pr_domains'), list) else ''}",
+        f"cross_domain_absorption_replay_direct_modules={cross_domain_summary.get('direct_module_count', '')}",
+        f"cross_domain_absorption_replay_direct_module_list={','.join(cross_domain_summary.get('direct_modules') or []) if isinstance(cross_domain_summary.get('direct_modules'), list) else ''}",
+        f"cross_domain_absorption_replay_before_after={cross_domain_summary.get('all_before_failed_after_passed', '')}",
+        f"cross_domain_absorption_replay_direct_execution={cross_domain_summary.get('all_direct_modules_executed', '')}",
+        f"cross_domain_absorption_replay_output_assertions={cross_domain_summary.get('all_output_assertions_passed', '')}",
+        f"cross_domain_absorption_replay_independent_accepted={cross_domain_summary.get('independent_accepted_case_count', '')}/{cross_domain_summary.get('case_count', '')}",
+        f"cross_domain_absorption_replay_claim_boundary={(cross_domain_replay.get('evidence') or {}).get('claim_boundary', '') if isinstance(cross_domain_replay.get('evidence'), dict) else ''}",
         f"external_merge_landing_status={external_merge_landing.get('status', '')}",
         f"external_merge_landing_ready_cases={external_merge_summary.get('ready_case_count', '')}/{external_merge_summary.get('case_count', '')}",
         f"external_merge_landing_branch_diffs={external_merge_summary.get('branch_diff_count', '')}",
@@ -477,6 +494,12 @@ def _report_evidence(project: Path) -> list[str]:
         f"employee_patch_closure_gate_passed_count={patch_summary.get('gate_passed_count', '')}",
         f"employee_patch_closure_gate_expected_to_pass={patch_summary.get('gate_expected_to_pass_passed_count', '')}/{patch_summary.get('gate_expected_to_pass_count', '')}",
         f"employee_patch_closure_rollback_verified_count={patch_summary.get('rollback_verified_count', '')}",
+        f"employee_patch_closure_primary_rollback_verified_count={patch_summary.get('primary_rollback_verified_count', '')}",
+        f"employee_patch_closure_rollback_scope={patch_summary.get('rollback_scope', '')}",
+        f"employee_patch_closure_failure_rehearsal_count={patch_summary.get('failure_rehearsal_count', '')}",
+        f"employee_patch_closure_failure_rehearsal_rollback_count={patch_summary.get('failure_rehearsal_rollback_count', '')}",
+        f"employee_patch_closure_full_path_rollback_verified={patch_summary.get('full_path_rollback_verified', '')}",
+        f"employee_patch_closure_all_cases_have_failure_rollback_rehearsal={patch_summary.get('all_cases_have_failure_rollback_rehearsal', '')}",
         f"employee_patch_closure_expected_failure_count={patch_summary.get('expected_failure_case_count', '')}",
         f"employee_patch_closure_expected_failure_rollback_count={patch_summary.get('expected_failure_rollback_count', '')}",
         f"employee_patch_closure_unexpected_gate_failure_count={patch_summary.get('unexpected_gate_failure_count', '')}",
@@ -519,6 +542,9 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_holdout_ready={release_summary.get('holdout_blind_eval_ready', '')}",
         f"absorption_release_decision_failure_rollback_ready={release_summary.get('failure_rollback_ready', '')}",
         f"absorption_release_decision_recovery_ready={release_summary.get('recovery_ready', '')}",
+        f"absorption_release_decision_cross_domain_ready={release_summary.get('cross_domain_absorption_ready', '')}",
+        f"absorption_release_decision_cross_domain_domains={release_summary.get('cross_domain_absorption_domains', '')}",
+        f"absorption_release_decision_cross_domain_assertions={release_summary.get('cross_domain_absorption_output_assertions', '')}",
         f"absorption_release_decision_operator_journey_ready={release_summary.get('operator_journey_ready', '')}",
         f"absorption_release_decision_operator_cross_domain_ready={release_summary.get('operator_journey_cross_domain_ready', '')}",
     ]
