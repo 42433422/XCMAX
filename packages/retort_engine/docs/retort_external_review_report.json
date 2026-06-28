@@ -1,52 +1,44 @@
 {
   "absorbed_signals": [
-    "plugin_surface"
+    "review_pipeline",
+    "file_grouping",
+    "benchmarking",
+    "plugin_surface",
+    "multi_provider"
   ],
-  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/pre-commit/pre-commit",
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview",
   "external_snapshot": {
-    "file_count": 205,
-    "git_revision": "1553b465fd7ea42321ae0d04d1b41e706b89ae45",
+    "file_count": 180,
+    "git_revision": "672deb21e70e471e0536d5ad7a67c14b8359e97e",
     "suffix_counts": {
-      ".cfg": 1,
-      ".gemspec": 1,
-      ".go": 1,
-      ".gz": 3,
-      ".ini": 1,
-      ".jpg": 3,
-      ".json": 1,
+      ".css": 1,
+      ".ico": 1,
+      ".json": 6,
+      ".jsonc": 1,
       ".lock": 1,
-      ".md": 3,
-      ".mod": 1,
-      ".npmignore": 1,
-      ".pl": 1,
-      ".py": 134,
-      ".r": 1,
-      ".renv": 1,
-      ".rockspec": 1,
-      ".rs": 1,
-      ".sh": 13,
-      ".toml": 1,
-      ".txt": 1,
-      ".yaml": 19,
-      ".yml": 4,
-      "<none>": 11
+      ".md": 136,
+      ".mjs": 1,
+      ".png": 1,
+      ".ts": 28,
+      ".tsx": 3,
+      "<none>": 1
     }
   },
-  "generated_at": "2026-06-28T17:25:32Z",
+  "generated_at": "2026-06-28T17:30:28Z",
   "license_review": {
-    "detected_license": "Copyright (c) 2014 pre-commit dev team: Anthony Sottile, Ken Struys",
-    "message": "Allowed license detected: Copyright (c) 2014 pre-commit dev team: Anthony Sottile, Ken Struys",
-    "status": "passed"
+    "detected_license": "",
+    "message": "license-incompatible risk: no LICENSE file detected",
+    "status": "blocked"
   },
   "replay": {
-    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/pre-commit/pre-commit --run-local-gates --branch-workflow --merge-after"
+    "command": "retort absorb --own-project <main-project> --external-path /Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/vercel-labs/openreview --run-local-gates --branch-workflow --merge-after"
   },
   "review_pipeline": {
     "benchmark": {
       "component_gap_count": 0,
-      "minimum_expected_behavior_tests": 3,
+      "minimum_expected_behavior_tests": 5,
       "prioritized_component_count": 0,
-      "task_dimension_count": 3
+      "task_dimension_count": 5
     },
     "component_gaps": [],
     "depth_absorption_workflow": {
@@ -56,7 +48,11 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md"
+            "README.md",
+            ".agents/skills/next-best-practices/rsc-boundaries.md",
+            ".agents/skills/next-best-practices/debug-tricks.md",
+            ".agents/skills/vercel-react-best-practices/AGENTS.md",
+            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
           ],
           "status": "closed_until_similarity_saturation"
         },
@@ -65,15 +61,30 @@
           "next_open_condition": "Retort finishes absorbing same-direction projects and core depth gates stay green.",
           "reason": "early_phase_retort_self_deepening_only",
           "source_files": [
-            "CHANGELOG.md",
-            "pre_commit/languages/ruby.py",
-            "pre_commit/commands/autoupdate.py",
-            "tests/parse_shebang_test.py"
+            "tsconfig.json",
+            "app/components/readme.tsx",
+            ".agents/skills/vercel-react-native-skills/README.md",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md"
           ],
           "status": "closed_until_similarity_saturation"
         }
       ],
       "employee_tasks": [
+        {
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-review-pipeline",
+          "title": "Deepen review_pipeline"
+        },
         {
           "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
           "dimension": "comparative_analysis_depth",
@@ -86,6 +97,34 @@
           "priority": "P0",
           "task_id": "retort-depth-file-grouping",
           "title": "Deepen file_grouping"
+        },
+        {
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "dimension": "comparative_analysis_depth",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P0",
+          "task_id": "retort-depth-diff-hunk-review",
+          "title": "Deepen diff_hunk_review"
+        },
+        {
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "dimension": "feedback_loop_closure",
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "precision or false-positive benchmark counters"
+          ],
+          "owner_hint": "fhd-core-maintainer",
+          "priority": "P1",
+          "task_id": "retort-depth-benchmark-eval",
+          "title": "Deepen benchmark_eval"
         },
         {
           "acceptance": "Retort has executable, tested safety_policy behavior in the absorption or PR-review path.",
@@ -117,6 +156,43 @@
       "focus_mode": "similar_function_depth_only",
       "focused_components": [
         {
+          "absorption_goal": "turn external review stages into Retort discovery, localization, reflection, and task dispatch",
+          "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+          "component": "review_pipeline",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested review_pipeline behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-review-pipeline",
+            "title": "Deepen review_pipeline"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 90,
+          "own_marker_hits": 3175,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "package.json",
+            "app/layout.tsx",
+            ".agents/skills/web-design-guidelines/SKILL.md",
+            ".agents/skills/next-best-practices/functions.md"
+          ]
+        },
+        {
           "absorption_goal": "group related changed files before expensive reasoning so depth is spent on the same feature area",
           "acceptance": "Retort has executable, tested file_grouping behavior in the absorption or PR-review path.",
           "component": "file_grouping",
@@ -140,11 +216,82 @@
             "gate output"
           ],
           "external_marker_hits": 1,
-          "own_marker_hits": 116,
+          "own_marker_hits": 118,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md"
+            "lib/agent.ts"
+          ]
+        },
+        {
+          "absorption_goal": "make each changed hunk produce scoped risk evidence and publishable comments",
+          "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+          "component": "diff_hunk_review",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested diff_hunk_review behavior in the absorption or PR-review path.",
+            "dimension": "comparative_analysis_depth",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "review JSON with stages and comments"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P0",
+            "task_id": "retort-depth-diff-hunk-review",
+            "title": "Deepen diff_hunk_review"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "review JSON with stages and comments"
+          ],
+          "external_marker_hits": 3,
+          "own_marker_hits": 21,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            "README.md",
+            "lib/agent.ts"
+          ]
+        },
+        {
+          "absorption_goal": "measure whether absorbed review behavior improves precision instead of just increasing comments",
+          "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+          "component": "benchmark_eval",
+          "depth_gap": 0,
+          "employee_task": {
+            "acceptance": "Retort has executable, tested benchmark_eval behavior in the absorption or PR-review path.",
+            "dimension": "feedback_loop_closure",
+            "evidence_required": [
+              "source diff",
+              "behavior test",
+              "gate output",
+              "precision or false-positive benchmark counters"
+            ],
+            "owner_hint": "fhd-core-maintainer",
+            "priority": "P1",
+            "task_id": "retort-depth-benchmark-eval",
+            "title": "Deepen benchmark_eval"
+          },
+          "evidence_required": [
+            "source diff",
+            "behavior test",
+            "gate output",
+            "precision or false-positive benchmark counters"
+          ],
+          "external_marker_hits": 54,
+          "own_marker_hits": 663,
+          "priority": "P0",
+          "similarity_score": 100,
+          "source_files": [
+            ".agents/skills/vercel-react-native-skills/AGENTS.md",
+            ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+            ".agents/skills/next-best-practices/self-hosting.md",
+            ".agents/skills/next-best-practices/data-patterns.md",
+            ".agents/skills/vercel-react-best-practices/README.md"
           ]
         },
         {
@@ -170,16 +317,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 23,
-          "own_marker_hits": 328,
+          "external_marker_hits": 210,
+          "own_marker_hits": 321,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md",
-            "pre_commit/store.py",
-            "pre_commit/staged_files_only.py",
-            "pre_commit/languages/docker.py",
-            "tests/staged_files_only_test.py"
+            "README.md",
+            "package.json",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md",
+            ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md"
           ]
         },
         {
@@ -205,16 +352,16 @@
             "behavior test",
             "gate output"
           ],
-          "external_marker_hits": 1658,
-          "own_marker_hits": 3888,
+          "external_marker_hits": 514,
+          "own_marker_hits": 3634,
           "priority": "P0",
           "similarity_score": 100,
           "source_files": [
-            "CHANGELOG.md",
-            ".pre-commit-config.yaml",
+            ".oxlintrc.json",
             "README.md",
-            "CONTRIBUTING.md",
-            "pre_commit/store.py"
+            "package.json",
+            "components.json",
+            "tsconfig.json"
           ]
         }
       ],
@@ -223,7 +370,7 @@
       "quality_gate": {
         "all_employee_tasks_have_acceptance": true,
         "deferred_breadth_component_count": 2,
-        "focused_component_count": 3,
+        "focused_component_count": 6,
         "kept_breadth_component_count": 0,
         "marketplace_candidate_count": 0,
         "marketplace_candidates_enabled": false,
@@ -234,75 +381,139 @@
       "rejected_breadth_components": [
         {
           "component": "provider_surface",
-          "external_marker_hits": 1,
+          "external_marker_hits": 153,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md"
+            "README.md",
+            ".agents/skills/next-best-practices/rsc-boundaries.md",
+            ".agents/skills/next-best-practices/debug-tricks.md",
+            ".agents/skills/vercel-react-best-practices/AGENTS.md",
+            ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
           ]
         },
         {
           "component": "plugin_surface",
-          "external_marker_hits": 8,
+          "external_marker_hits": 20,
           "reason": "breadth_only_for_current_phase",
           "source_files": [
-            "CHANGELOG.md",
-            "pre_commit/languages/ruby.py",
-            "pre_commit/commands/autoupdate.py",
-            "tests/parse_shebang_test.py"
+            "tsconfig.json",
+            "app/components/readme.tsx",
+            ".agents/skills/vercel-react-native-skills/README.md",
+            ".agents/skills/vercel-react-native-skills/SKILL.md",
+            ".agents/skills/vercel-react-native-skills/AGENTS.md"
           ]
         }
       ]
     },
     "external_file_groups": {
+      "benchmark_eval": {
+        "files": [
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+          ".agents/skills/next-best-practices/self-hosting.md",
+          ".agents/skills/next-best-practices/data-patterns.md",
+          ".agents/skills/vercel-react-best-practices/README.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/client-swr-dedup.md",
+          ".agents/skills/vercel-react-best-practices/rules/rendering-svg-precision.md",
+          ".agents/skills/next-cache-components/SKILL.md",
+          ".claude/CLAUDE.md"
+        ],
+        "marker_hits": 54
+      },
+      "diff_hunk_review": {
+        "files": [
+          "README.md",
+          "lib/agent.ts"
+        ],
+        "marker_hits": 3
+      },
       "file_grouping": {
         "files": [
-          "CHANGELOG.md"
+          "lib/agent.ts"
         ],
         "marker_hits": 1
       },
       "plugin_surface": {
         "files": [
-          "CHANGELOG.md",
-          "pre_commit/languages/ruby.py",
-          "pre_commit/commands/autoupdate.py",
-          "tests/parse_shebang_test.py"
+          "tsconfig.json",
+          "app/components/readme.tsx",
+          ".agents/skills/vercel-react-native-skills/README.md",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md",
+          ".agents/skills/vercel-react-native-skills/rules/fonts-config-plugin.md"
         ],
-        "marker_hits": 8
+        "marker_hits": 20
       },
       "provider_surface": {
         "files": [
-          "CHANGELOG.md"
+          "README.md",
+          ".agents/skills/next-best-practices/rsc-boundaries.md",
+          ".agents/skills/next-best-practices/debug-tricks.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md",
+          ".agents/skills/vercel-react-best-practices/rules/rerender-move-effect-to-event.md",
+          ".agents/skills/vercel-react-best-practices/rules/js-tosorted-immutable.md",
+          ".agents/skills/vercel-composition-patterns/README.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/AGENTS.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-decouple-implementation.md"
         ],
-        "marker_hits": 1
+        "marker_hits": 153
+      },
+      "review_pipeline": {
+        "files": [
+          "README.md",
+          "package.json",
+          "app/layout.tsx",
+          ".agents/skills/web-design-guidelines/SKILL.md",
+          ".agents/skills/next-best-practices/functions.md",
+          ".agents/skills/next-best-practices/SKILL.md",
+          ".agents/skills/next-upgrade/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".agents/skills/vercel-composition-patterns/AGENTS.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-context-interface.md",
+          ".agents/skills/vercel-composition-patterns/rules/state-lift-state.md"
+        ],
+        "marker_hits": 90
       },
       "safety_policy": {
         "files": [
-          "CHANGELOG.md",
-          "pre_commit/store.py",
-          "pre_commit/staged_files_only.py",
-          "pre_commit/languages/docker.py",
-          "tests/staged_files_only_test.py",
-          "tests/languages/docker_test.py",
-          "tests/languages/r_test.py"
+          "README.md",
+          "package.json",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-expo-image.md",
+          ".agents/skills/vercel-react-best-practices/SKILL.md",
+          ".agents/skills/vercel-react-best-practices/AGENTS.md",
+          ".agents/skills/vercel-react-best-practices/rules/async-defer-await.md",
+          ".agents/skills/vercel-react-best-practices/rules/server-auth-actions.md",
+          ".agents/skills/vercel-composition-patterns/SKILL.md",
+          ".claude/CLAUDE.md",
+          "workflow/index.ts"
         ],
-        "marker_hits": 23
+        "marker_hits": 210
       },
       "workflow_ci": {
         "files": [
-          "CHANGELOG.md",
-          ".pre-commit-config.yaml",
+          ".oxlintrc.json",
           "README.md",
-          "CONTRIBUTING.md",
-          "pre_commit/store.py",
-          "pre_commit/util.py",
-          "pre_commit/hook.py",
-          "pre_commit/file_lock.py",
-          "pre_commit/lang_base.py",
-          "pre_commit/clientlib.py",
-          "pre_commit/main.py",
-          "pre_commit/repository.py"
+          "package.json",
+          "components.json",
+          "tsconfig.json",
+          "next.config.ts",
+          ".agents/skills/vercel-react-native-skills/README.md",
+          ".agents/skills/vercel-react-native-skills/SKILL.md",
+          ".agents/skills/vercel-react-native-skills/AGENTS.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-styling.md",
+          ".agents/skills/vercel-react-native-skills/rules/ui-pressable.md",
+          ".agents/skills/vercel-react-native-skills/rules/rendering-no-falsy-and.md"
         ],
-        "marker_hits": 1658
+        "marker_hits": 514
       }
     },
     "own_file_groups": {
@@ -321,7 +532,7 @@
           "retort_engine/self_evolution.py",
           "retort_engine/task_dispatch_plan.py"
         ],
-        "marker_hits": 734
+        "marker_hits": 663
       },
       "diff_hunk_review": {
         "files": [
@@ -342,13 +553,15 @@
           "retort_engine/pr_review.py",
           "retort_engine/core.py",
           "retort_engine/review_context_bias.py",
+          "retort_engine/absorbed_capabilities.py",
           "retort_engine/real_absorption.py",
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py",
           "tests/test_review_pipeline.py",
-          "docs/retort_absorption_log.md"
+          "docs/retort_absorption_log.md",
+          "docs/retort_external_review_report.json"
         ],
-        "marker_hits": 116
+        "marker_hits": 118
       },
       "plugin_surface": {
         "files": [
@@ -365,7 +578,7 @@
           "retort_engine/frontend/app.js",
           "tests/test_retort_engine.py"
         ],
-        "marker_hits": 781
+        "marker_hits": 773
       },
       "provider_surface": {
         "files": [
@@ -382,7 +595,7 @@
           "retort_engine/runtime_adapter.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 324
+        "marker_hits": 312
       },
       "review_pipeline": {
         "files": [
@@ -399,7 +612,7 @@
           "retort_engine/paibi_llm.py",
           "retort_engine/pr_review.py"
         ],
-        "marker_hits": 3253
+        "marker_hits": 3175
       },
       "safety_policy": {
         "files": [
@@ -416,7 +629,7 @@
           "retort_engine/review_context_bias.py",
           "retort_engine/absorption_quality.py"
         ],
-        "marker_hits": 328
+        "marker_hits": 321
       },
       "workflow_ci": {
         "files": [
@@ -433,7 +646,7 @@
           "retort_engine/employee_scheduler_stress.py",
           "retort_engine/employee_runtime_worker.py"
         ],
-        "marker_hits": 3888
+        "marker_hits": 3634
       }
     },
     "pipeline_stages": [
@@ -447,53 +660,67 @@
     ],
     "prioritized_absorptions": []
   },
-  "run_id": "20260628172525-816b17b4f6",
+  "run_id": "20260628173022-5782efe19c",
   "semantic_review": {
     "external": {
-      "classes": 73,
-      "cli_markers": 6,
-      "functions": 1206,
-      "source_files": 163,
-      "test_markers": 837,
-      "workflow_markers": 12
+      "classes": 67,
+      "cli_markers": 0,
+      "functions": 668,
+      "source_files": 174,
+      "test_markers": 36,
+      "workflow_markers": 122
     },
     "gaps": [
       {
-        "external_advantage": 24,
+        "external_advantage": 18,
         "metric": "classes"
       },
       {
-        "external_advantage": 435,
-        "metric": "functions"
-      },
-      {
-        "external_advantage": 19,
+        "external_advantage": 29,
         "metric": "source_files"
-      },
-      {
-        "external_advantage": 612,
-        "metric": "test_markers"
       }
     ],
     "own": {
       "classes": 49,
       "cli_markers": 29,
       "functions": 771,
-      "source_files": 144,
+      "source_files": 145,
       "test_markers": 225,
-      "workflow_markers": 4092
+      "workflow_markers": 3987
     }
   },
   "signal_evidence": {
+    "benchmarking": [
+      ".agents/skills/vercel-react-native-skills/rules/scroll-position-no-state.md",
+      ".agents/skills/next-best-practices/self-hosting.md",
+      ".agents/skills/next-best-practices/data-patterns.md",
+      ".agents/skills/vercel-react-best-practices/README.md",
+      ".agents/skills/vercel-react-best-practices/SKILL.md"
+    ],
+    "file_grouping": [
+      "lib/agent.ts"
+    ],
+    "multi_provider": [
+      "README.md",
+      ".agents/skills/next-best-practices/rsc-boundaries.md",
+      ".agents/skills/next-best-practices/debug-tricks.md",
+      ".agents/skills/vercel-react-best-practices/AGENTS.md",
+      ".agents/skills/vercel-react-best-practices/rules/bundle-preload.md"
+    ],
     "plugin_surface": [
-      "pre_commit/store.py",
-      "pre_commit/main.py",
-      "pre_commit/repository.py",
-      "pre_commit/languages/r.py",
-      "pre_commit/languages/ruby.py"
+      "README.md",
+      "tsconfig.json",
+      "app/components/readme.tsx",
+      ".agents/skills/vercel-react-native-skills/README.md",
+      ".agents/skills/vercel-react-native-skills/SKILL.md"
+    ],
+    "review_pipeline": [
+      "README.md",
+      "app/layout.tsx",
+      "lib/agent.ts"
     ]
   },
-  "source": "https://github.com/pre-commit/pre-commit",
+  "source": "https://github.com/vercel-labs/openreview",
   "tasks": [
     {
       "dimension": "comparative_analysis_depth",
@@ -501,7 +728,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-depth",
       "title": "Absorb stronger implementation depth",
-      "why": "Compare implementation patterns from https://github.com/pre-commit/pre-commit."
+      "why": "Compare implementation patterns from https://github.com/vercel-labs/openreview."
     },
     {
       "dimension": "product_operability",
@@ -509,7 +736,7 @@
       "priority": "P1",
       "task_id": "retort-absorb-ux",
       "title": "Absorb better user experience",
-      "why": "Extract usable UX improvements from https://github.com/pre-commit/pre-commit."
+      "why": "Extract usable UX improvements from https://github.com/vercel-labs/openreview."
     },
     {
       "dimension": "operational_readiness",
@@ -517,7 +744,31 @@
       "priority": "P2",
       "task_id": "retort-absorb-ops",
       "title": "Absorb better operational gates",
-      "why": "Adapt CI and release checks from https://github.com/pre-commit/pre-commit."
+      "why": "Adapt CI and release checks from https://github.com/vercel-labs/openreview."
+    },
+    {
+      "dimension": "comparative_analysis_depth",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-review-pipeline",
+      "title": "Adopt deterministic review pipeline stages",
+      "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."
+    },
+    {
+      "dimension": "external_ingestion",
+      "owner_hint": "fhd-core-maintainer",
+      "priority": "P1",
+      "task_id": "retort-absorb-file-grouping",
+      "title": "Add external file grouping before deep comparison",
+      "why": "External project suggests grouping changed or related files before expensive reasoning, improving depth without broad noisy scans."
+    },
+    {
+      "dimension": "feedback_loop_closure",
+      "owner_hint": "test-qa-runner",
+      "priority": "P2",
+      "task_id": "retort-absorb-benchmarking",
+      "title": "Add absorption quality benchmark counters",
+      "why": "External project has benchmark or precision/recall signals; Retort should measure whether absorbed tasks actually improve later scores."
     },
     {
       "dimension": "product_operability",
