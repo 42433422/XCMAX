@@ -343,3 +343,36 @@ def test_llm_absorption_evidence_read_json_fails_closed(tmp_path: Path) -> None:
     path.write_text("[1, 2, 3]", encoding="utf-8")
 
     assert read_json(path) == {}
+
+
+def test_llm_absorption_evidence_includes_extension_policy_runtime_signals(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "retort_engine.llm_absorption_evidence.pr_review_runtime_evidence",
+        lambda project: {
+            "runtime": True,
+            "cli": True,
+            "api": True,
+            "contract": True,
+            "test_function_count": 12,
+            "sample_comment_count": 3,
+            "publishable_comment_count": 3,
+            "comment_ranking_model": "severity_context_publishability_v1",
+            "extension_policy_known_count": 9,
+            "extension_policy_unknown_count": 0,
+            "extension_policy_language_family_count": 8,
+            "extension_policy_review_context_count": 5,
+            "extension_policy_review_contexts": ["ci_config", "config", "docs", "frontend", "runtime"],
+            "extension_policy_language_families": ["cpp", "dotnet", "go", "rust", "typescript"],
+            "extension_policy_source": "retort_holdout_extension_policy_v1",
+        },
+    )
+
+    evidence = llm_absorption_evidence(tmp_path)
+
+    assert "pr_review_extension_policy_known=9" in evidence
+    assert "pr_review_extension_policy_unknown=0" in evidence
+    assert "pr_review_extension_policy_language_family_count=8" in evidence
+    assert "pr_review_extension_policy_review_context_count=5" in evidence
+    assert "pr_review_extension_policy_review_contexts=ci_config,config,docs,frontend,runtime" in evidence
+    assert "pr_review_extension_policy_language_families=cpp,dotnet,go,rust,typescript" in evidence
+    assert "pr_review_extension_policy_source=retort_holdout_extension_policy_v1" in evidence

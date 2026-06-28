@@ -889,6 +889,7 @@ def test_paibi_parallel_review_dispatches_independent_subtasks(tmp_path: Path, m
     project.mkdir()
     (project / "README.md").write_text("# Own\n", encoding="utf-8")
     calls: list[dict[str, object]] = []
+    _clear_paibi_tool_preference(monkeypatch)
 
     def fake_request(self: PaibiLLMClient, method: str, path: str, *, token: str = "", json_body: dict[str, object] | None = None) -> dict[str, object]:
         if path == "/api/health":
@@ -936,6 +937,7 @@ def test_paibi_parallel_review_uses_same_device_multi_tool_slots(tmp_path: Path,
     project.mkdir()
     (project / "README.md").write_text("# Own\n", encoding="utf-8")
     calls: list[dict[str, object]] = []
+    _clear_paibi_tool_preference(monkeypatch)
 
     def fake_request(self: PaibiLLMClient, method: str, path: str, *, token: str = "", json_body: dict[str, object] | None = None) -> dict[str, object]:
         if path == "/api/health":
@@ -1002,6 +1004,11 @@ def test_paibi_parallel_status_reports_unblock_tasks(monkeypatch) -> None:
     assert "executor_missing" in kinds
     assert "worker_capacity_limit" in kinds
     assert {item["owner_hint"] for item in result["unblock_tasks"]} == {"runtime"}
+
+
+def _clear_paibi_tool_preference(monkeypatch) -> None:
+    for key in ("RETORT_PAIBI_TOOL", "RETORT_PAIBI_TOOL_NAME", "RETORT_PAIBI_PREFERRED_TOOL"):
+        monkeypatch.delenv(key, raising=False)
 
 
 def test_service_assess_uses_llm_scores_when_wait_returns_json(tmp_path: Path, monkeypatch) -> None:

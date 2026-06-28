@@ -140,6 +140,13 @@ def _pr_runtime_evidence(project: Path) -> list[str]:
         f"pr_review_core_large_diff_context_balancing={pr_review.get('core_large_diff_context_balancing')}",
         f"pr_review_employee_feedback_changes_ranking={pr_review.get('employee_feedback_changes_ranking')}",
         f"pr_review_employee_feedback_rank_context={pr_review.get('employee_feedback_rank_context')}",
+        f"pr_review_extension_policy_known={pr_review.get('extension_policy_known_count')}",
+        f"pr_review_extension_policy_unknown={pr_review.get('extension_policy_unknown_count')}",
+        f"pr_review_extension_policy_language_family_count={pr_review.get('extension_policy_language_family_count')}",
+        f"pr_review_extension_policy_review_context_count={pr_review.get('extension_policy_review_context_count')}",
+        f"pr_review_extension_policy_review_contexts={','.join(pr_review.get('extension_policy_review_contexts') or [])}",
+        f"pr_review_extension_policy_language_families={','.join(pr_review.get('extension_policy_language_families') or [])}",
+        f"pr_review_extension_policy_source={pr_review.get('extension_policy_source')}",
     ]
 
 
