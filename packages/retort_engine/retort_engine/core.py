@@ -53,6 +53,7 @@ from retort_engine.llm_scoring import llm_external_reference as _scoring_llm_ext
 from retort_engine.llm_scoring import maybe_request_llm_review as _scoring_maybe_request_llm_review
 from retort_engine.paibi_llm import fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, record_paibi_llm_deep_result, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import run_live_pr_comment_probe
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
@@ -331,6 +332,16 @@ class RetortService:
             pr_urls=urls or None,
             max_comments=int(payload.get("max_comments") or 20),
             max_bytes=int(payload.get("max_bytes") or 800000),
+        )
+
+    def pr_holdout_blind_eval(self, payload: dict[str, Any]) -> dict[str, Any]:
+        urls = [str(item) for item in payload.get("pr_urls") or [] if str(item).strip()]
+        return build_pr_holdout_blind_eval(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            pr_urls=urls or None,
+            target_prs=int(payload.get("target_prs") or 20),
+            max_comments=int(payload.get("max_comments") or 12),
+            max_bytes=int(payload.get("max_bytes") or 400000),
         )
 
     def task_prioritization_report(self, payload: dict[str, Any]) -> dict[str, Any]:

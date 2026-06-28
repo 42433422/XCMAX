@@ -188,6 +188,28 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
         ),
         encoding="utf-8",
     )
+    (docs / "retort_pr_holdout_blind_eval.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "summary": {
+                    "target_pr_count": 20,
+                    "reviewed_pr_count": 20,
+                    "accepted_pr_count": 20,
+                    "distinct_repo_count": 20,
+                    "distinct_extension_count": 9,
+                    "total_comment_count": 55,
+                    "total_reviewed_new_change_count": 120,
+                    "overlap_with_prior_long_run_count": 0,
+                    "blind_against_prior_reports": True,
+                    "holdout_label_count": 20,
+                },
+                "cases": [],
+                "evidence": {},
+            }
+        ),
+        encoding="utf-8",
+    )
     result_dir = tmp_path / ".retort" / "employee_results"
     result_dir.mkdir(parents=True)
     (result_dir / "result.json").write_text(
@@ -239,6 +261,10 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "review_adjudication_calibration_status=ready" in evidence
     assert "review_adjudication_human_label_count=50" in evidence
     assert "review_adjudication_pass_rate=0.98" in evidence
+    assert "pr_holdout_blind_eval_status=ready" in evidence
+    assert "pr_holdout_blind_eval_reviewed=20/20" in evidence
+    assert "pr_holdout_blind_eval_accepted=20/20" in evidence
+    assert "pr_holdout_blind_eval_blind_prior=True" in evidence
     assert "merge_cross_check=True" in evidence
     assert "pr_live_publish_probe_status=permission_denied_degraded" in evidence
     assert "pr_live_publish_probe_permission_denied=True" in evidence

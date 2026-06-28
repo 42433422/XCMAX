@@ -153,6 +153,8 @@ def _report_evidence(project: Path) -> list[str]:
     readonly_summary = readonly_probe.get("summary") if isinstance(readonly_probe.get("summary"), dict) else {}
     long_run_report = read_json(project / "docs" / "retort_pr_long_run_review.json")
     long_run_summary = long_run_report.get("summary") if isinstance(long_run_report.get("summary"), dict) else {}
+    holdout_report = read_json(project / "docs" / "retort_pr_holdout_blind_eval.json")
+    holdout_summary = holdout_report.get("summary") if isinstance(holdout_report.get("summary"), dict) else {}
     replay_report = read_json(project / "docs" / "retort_cross_project_replay.json")
     replay_summary = replay_report.get("summary") if isinstance(replay_report.get("summary"), dict) else {}
     replay_checks = [item for item in replay_report.get("checks") or [] if isinstance(item, dict)]
@@ -237,6 +239,16 @@ def _report_evidence(project: Path) -> list[str]:
         f"pr_long_run_review_total_comments={long_run_summary.get('total_comment_count', '')}",
         f"pr_long_run_review_total_reviewed_changes={long_run_summary.get('total_reviewed_new_change_count', '')}",
         f"pr_long_run_review_publish_safety_ready={long_run_summary.get('publish_safety_matrix_ready', '')}",
+        f"pr_holdout_blind_eval_status={holdout_report.get('status', '')}",
+        f"pr_holdout_blind_eval_reviewed={holdout_summary.get('reviewed_pr_count', '')}/{holdout_summary.get('target_pr_count', '')}",
+        f"pr_holdout_blind_eval_accepted={holdout_summary.get('accepted_pr_count', '')}/{holdout_summary.get('target_pr_count', '')}",
+        f"pr_holdout_blind_eval_distinct_repos={holdout_summary.get('distinct_repo_count', '')}",
+        f"pr_holdout_blind_eval_distinct_extensions={holdout_summary.get('distinct_extension_count', '')}",
+        f"pr_holdout_blind_eval_total_comments={holdout_summary.get('total_comment_count', '')}",
+        f"pr_holdout_blind_eval_total_reviewed_changes={holdout_summary.get('total_reviewed_new_change_count', '')}",
+        f"pr_holdout_blind_eval_overlap_prior={holdout_summary.get('overlap_with_prior_long_run_count', '')}",
+        f"pr_holdout_blind_eval_blind_prior={holdout_summary.get('blind_against_prior_reports', '')}",
+        f"pr_holdout_blind_eval_holdout_labels={holdout_summary.get('holdout_label_count', '')}",
         f"cross_project_replay_status={replay_report.get('status', '')}",
         f"cross_project_replay_external_project_count={replay_summary.get('external_project_count', '')}",
         f"cross_project_replay_distinct_signal_count={replay_summary.get('distinct_signal_count', '')}",
@@ -358,6 +370,7 @@ def _report_evidence(project: Path) -> list[str]:
         f"absorption_release_decision_core_paths={release_summary.get('core_decision_path_count', '')}",
         f"absorption_release_decision_all_ready={release_summary.get('all_core_decisions_ready', '')}",
         f"absorption_release_decision_long_run_ready={release_summary.get('long_run_ready', '')}",
+        f"absorption_release_decision_holdout_ready={release_summary.get('holdout_blind_eval_ready', '')}",
         f"absorption_release_decision_recovery_ready={release_summary.get('recovery_ready', '')}",
     ]
 

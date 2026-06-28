@@ -16,6 +16,7 @@ from retort_engine.core import RetortService, absorb, record_closed_loop_proof
 from retort_engine.employee_patch_closure import run_employee_patch_closure_suite
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
+from retort_engine.pr_holdout_blind_eval import build_pr_holdout_blind_eval
 from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_low_permission_pr_degradation_probe, write_readonly_pr_degradation_probe
 from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
@@ -148,6 +149,14 @@ def main(argv: list[str] | None = None) -> int:
     long_run.add_argument("--min-prs", type=int, default=10)
     long_run.add_argument("--output", default="")
     long_run.add_argument("--json", action="store_true")
+    holdout_eval = sub.add_parser("pr-holdout-blind-eval")
+    holdout_eval.add_argument("--project", default=".")
+    holdout_eval.add_argument("--pr-url", action="append", default=[])
+    holdout_eval.add_argument("--target-prs", type=int, default=20)
+    holdout_eval.add_argument("--max-comments", type=int, default=12)
+    holdout_eval.add_argument("--max-bytes", type=int, default=400000)
+    holdout_eval.add_argument("--output", default="")
+    holdout_eval.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
@@ -444,6 +453,23 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort PR long-run review status: {result['status']}")
             print(f"Reviewed PRs: {result['summary']['reviewed_pr_count']}/{result['summary']['target_pr_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "pr-holdout-blind-eval":
+        result = build_pr_holdout_blind_eval(
+            args.project,
+            pr_urls=args.pr_url or None,
+            target_prs=args.target_prs,
+            max_comments=args.max_comments,
+            max_bytes=args.max_bytes,
+            output=args.output,
+        )
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR holdout blind eval status: {result['status']}")
+            print(f"Accepted PRs: {result['summary']['accepted_pr_count']}/{result['summary']['target_pr_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
