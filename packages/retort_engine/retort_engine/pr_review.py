@@ -111,6 +111,8 @@ def review_diff(
         "candidate_comment_count": len(candidate_comments),
         "suppressed_comment_count": max(0, len(candidate_comments) - len(comments)),
         "publishable_comment_count": sum(1 for comment in comments if comment.get("publishable")),
+        "task_group_count": len(task_groups),
+        "actionable_task_group_count": sum(1 for group in task_groups if int(group.get("publishable_comment_count") or 0) > 0),
         "capabilities": capabilities[:5],
         "stage_count": len(REVIEW_STAGES),
         "file_summary_count": len(file_summaries),

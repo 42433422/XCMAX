@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "b304df1137491f688d9e1c3b048dc169db8281cad7d18c9810e6506cbbd8aa52"
+      "sha256": "74ac4d367907e6d11c184c766161cb00ffd82d20406e249831e92bf576e872a5"
     },
     {
       "bytes": 10384,
@@ -64,7 +64,7 @@
       "sha256": "390b2c6b3780411247d35cc826c2b756e8af744a200c1e3f16f22264b87ca059"
     },
     {
-      "bytes": 10867,
+      "bytes": 16334,
       "exists": true,
       "kind": "source_report",
       "name": "multi_project_absorption_replay",
@@ -82,7 +82,7 @@
         "projects"
       ],
       "required_fields_ready": true,
-      "sha256": "b0a8dde75153a4b93425011fb37571b45af9843d69d57cb3d4bbf05ef1694168"
+      "sha256": "c50f44e7cd506edb0ddbe9209e7e2c78ca142b1620463fae52f0d99e3785fb0b"
     },
     {
       "bytes": 16349,
@@ -274,7 +274,7 @@
       "sha256": "de8fb2356f076adab1eed6a22e4b4d19fd1433c58b59f41602a997e5a7ac0fe4"
     },
     {
-      "bytes": 20432,
+      "bytes": 24988,
       "exists": true,
       "kind": "source_report",
       "name": "external_advantage_matrix",
@@ -292,7 +292,7 @@
         "matrix"
       ],
       "required_fields_ready": true,
-      "sha256": "8d767e98db77a440d05228dfe9ffc3be78de96245620df797f5c12091a7b22cb"
+      "sha256": "fee17c8c292c7d5a4e1c0312d051c0b2d8527fce589c79d6cd5949d173ad1775"
     },
     {
       "bytes": 3147,
@@ -337,7 +337,7 @@
       "sha256": "434b1beb78fe7f272b0c57c322535760690e77511a4cbd8eaba80de88d8bffbd"
     },
     {
-      "bytes": 14209,
+      "bytes": 23517,
       "exists": true,
       "kind": "source_report",
       "name": "cross_domain_absorption_replay",
@@ -355,10 +355,10 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "f2d4c804d525a9d79daf100c6956228c93f9e462ded51a59b5a9364d76d2cd17"
+      "sha256": "c482e3320d7d89bfd6b64dc77be27bb2e95c8878ff49cdda0648db3637de3836"
     },
     {
-      "bytes": 5956,
+      "bytes": 15834,
       "exists": true,
       "kind": "source_report",
       "name": "contract_runtime_rehearsal",
@@ -376,7 +376,7 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "274ee3a28b0b940e00c13c1f3b5dd8b72e6d625a130bc20c1410a524ad081bae"
+      "sha256": "61cc448ef5f6af47c684db9253cbcea90dcb3280c878224c63646c2327f783d2"
     },
     {
       "bytes": 8130,
@@ -400,7 +400,7 @@
       "sha256": "c341e37d3af675574ae3e2280aad62dbea2dbfebc67062030671d988e2428a8b"
     },
     {
-      "bytes": 7503,
+      "bytes": 32976,
       "exists": true,
       "kind": "source_report",
       "name": "external_merge_landing",
@@ -418,7 +418,7 @@
         "cases"
       ],
       "required_fields_ready": true,
-      "sha256": "6abfa975ab9c8b307747a20cf1ba430999caa39cbf05d37ef287b69f0f6a990c"
+      "sha256": "6c2609dcb891562a77e663d9b3b5e292014b462df242450a5c304f2f20acc64c"
     },
     {
       "bytes": 59591,
@@ -508,8 +508,16 @@
       "missing_count": 0,
       "ready": true
     },
+    "blackhole_ui_operation_replay": {
+      "absorbed_project_click_bound": true,
+      "action_count": 6,
+      "all_actions_bound": true,
+      "ready": true,
+      "ready_action_count": 6,
+      "status": "ready"
+    },
     "codebase_graph": {
-      "edge_count": 5195,
+      "edge_count": 5265,
       "file_count": 166,
       "hotspot_count": 12,
       "ready": true,
@@ -526,7 +534,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T061912Z-943d4ca4.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T065710Z-d2e9f5cc.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -558,7 +566,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=b304df1137491f688d9e1c3b048dc169db8281cad7d18c9810e6506cbbd8aa52"
+        "quality_gate_sha=74ac4d367907e6d11c184c766161cb00ffd82d20406e249831e92bf576e872a5"
       ],
       "name": "absorb_and_gate",
       "ready": true,
@@ -601,7 +609,8 @@
       "evidence": [
         "codebase_graph_ready=True",
         "architecture_contract_ready=True",
-        "blackhole_ui_ready=True"
+        "blackhole_ui_ready=True",
+        "blackhole_ui_operation_replay_ready=True"
       ],
       "name": "cross_domain_live_probe",
       "ready": true,
@@ -625,16 +634,17 @@
     "artifact_count": 22,
     "codebase_graph_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 1.44,
+    "duration_sec": 3.113,
     "failed_stage_count": 0,
+    "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
     "hashed_artifact_count": 22,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T061912Z-943d4ca4.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T065710Z-d2e9f5cc.manifest.json",
     "per_run_code_graph_proved": true,
     "ready_stage_count": 8,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T061912Z-943d4ca4",
+    "run_id": "operator-journey-20260628T065710Z-d2e9f5cc",
     "single_command_surface": true,
     "source_report_count": 21,
     "stage_count": 8

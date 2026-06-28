@@ -26,6 +26,10 @@ def test_external_advantage_matrix_compares_baseline_to_current_behavior(tmp_pat
     assert result["summary"]["passed_regression_case_count"] == result["summary"]["case_count"]
     assert result["summary"]["independent_all_cases_accepted"] is True
     assert result["summary"]["independent_minimum_recomputed_delta"] > 0
+    assert result["summary"]["blind_third_party_all_cases_accepted"] is True
+    assert result["summary"]["blind_third_party_minimum_delta"] >= 65
+    assert result["summary"]["blind_third_party_delta_floor_passed"] is True
+    assert result["summary"]["blind_third_party_score_fields_consumed"] is False
     assert all(row["retort"]["score"] > row["baseline"]["score"] for row in result["matrix"])
     assert all(row["retort"]["publishable_comment_count"] > 0 for row in result["matrix"])
     assert validate_contract("external_advantage_matrix_result", result)["valid"] is True

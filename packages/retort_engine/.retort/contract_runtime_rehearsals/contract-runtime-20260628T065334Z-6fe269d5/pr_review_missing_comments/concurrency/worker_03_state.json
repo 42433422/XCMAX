@@ -1,0 +1,12 @@
+{
+  "contract": "pr_review_result",
+  "last_valid_payload": {
+    "comments": [],
+    "files": [],
+    "incremental": {},
+    "status": "reviewed",
+    "summary": {},
+    "task_groups": []
+  },
+  "worker": 3
+}

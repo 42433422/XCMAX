@@ -2,9 +2,9 @@
   "cases": [
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/benchmark_oracle/pre_input.json",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/benchmark_oracle/post_input.json",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/benchmark_oracle/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/benchmark_oracle/pre_input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/benchmark_oracle/post_input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/benchmark_oracle/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "benchmark_oracle",
@@ -49,8 +49,8 @@
     },
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/architecture_contract/contract.json",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/architecture_contract/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/architecture_contract/contract.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/architecture_contract/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "architecture_contract",
@@ -86,7 +86,7 @@
     },
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/code_graph/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/code_graph/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "code_graph",
@@ -129,7 +129,7 @@
     },
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/context_pack/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/context_pack/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "context_pack",
@@ -167,7 +167,7 @@
     },
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/license_gate/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/license_gate/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "license_gate",
@@ -201,8 +201,8 @@
     },
     {
       "artifacts": [
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/static_analysis/input.json",
-        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733/static_analysis/post_output.json"
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/static_analysis/input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/static_analysis/post_output.json"
       ],
       "before_failed_after_passed": true,
       "case_id": "static_analysis",
@@ -235,6 +235,163 @@
       },
       "ready": true,
       "source_project": "PyCQA/bandit"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/intent_alignment/input.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/intent_alignment/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "intent_alignment",
+      "direct_module": "retort_engine.intent_alignment.assess_change_intent_alignment",
+      "domain": "intent_alignment",
+      "expected_behavior": "verify_changed_paths_and_added_lines_overlap_issue_intent",
+      "output_assertions": {
+        "aligned": true,
+        "overlap_seen": true,
+        "source_boundary": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "aligned": true,
+          "changed_file_count": 1,
+          "changed_keyword_count": 8,
+          "issue_keyword_count": 7,
+          "overlap_keyword_count": 5
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "overlap_keyword_count": 0,
+          "status": "pre_absorption_no_intent_alignment_gate"
+        }
+      },
+      "ready": true,
+      "source_project": "Review-scope/ReviewScope"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization/.retort/employee_queue.jsonl",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization/.retort/employee_results/zz-results.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_prioritization/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "task_prioritization",
+      "direct_module": "retort_engine.task_prioritization.build_task_prioritization_report",
+      "domain": "employee_task_graph",
+      "expected_behavior": "prioritize_employee_followups_from_queue_and_failed_feedback",
+      "output_assertions": {
+        "feedback_driven": true,
+        "prioritized": true,
+        "ready": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "all_tasks_have_acceptance": true,
+          "completed_result_count": 2,
+          "employee_feedback_applied": true,
+          "employee_result_count": 2,
+          "feedback_driven_priority_count": 2,
+          "prioritized_dimension_count": 2,
+          "queued_task_count": 3,
+          "ready_employee_task_count": 2
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "prioritized_dimension_count": 0,
+          "status": "pre_absorption_no_feedback_task_graph"
+        }
+      },
+      "ready": true,
+      "source_project": "OpenHands/benchmarks"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_dispatch/.retort/llm_reviews.jsonl",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_dispatch/.retort/employee_queue.jsonl",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/task_dispatch/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "task_dispatch",
+      "direct_module": "retort_engine.task_dispatch_plan.build_task_dispatch_plan",
+      "domain": "employee_dispatch",
+      "expected_behavior": "convert_deep_review_tasks_into_employee_queue_records",
+      "output_assertions": {
+        "evidence_required": true,
+        "queued": true,
+        "ready": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "all_tasks_have_acceptance": true,
+          "all_tasks_have_evidence_required": true,
+          "all_tasks_have_owner": true,
+          "dispatch_task_count": 2,
+          "enqueue": true,
+          "queued_dispatch_count": 2,
+          "ready_task_count": 2,
+          "source_llm_task_count": 2
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "queued_dispatch_count": 0,
+          "status": "pre_absorption_no_llm_task_dispatch"
+        }
+      },
+      "ready": true,
+      "source_project": "aryanbrite/openrabbit"
+    },
+    {
+      "artifacts": [
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/core_refactor_plan/memory.json",
+        "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3/core_refactor_plan/post_output.json"
+      ],
+      "before_failed_after_passed": true,
+      "case_id": "core_refactor_plan",
+      "direct_module": "retort_engine.architecture_refactor.build_core_refactor_plan",
+      "domain": "core_architecture_refactor",
+      "expected_behavior": "turn_architecture_memory_into_ready_core_module_refactor_tasks",
+      "output_assertions": {
+        "contract_present": true,
+        "ready": true,
+        "ready_task": true
+      },
+      "post_absorption": {
+        "direct_module_executed": true,
+        "output_assertions_passed": true,
+        "passed_expected_behavior": true,
+        "summary": {
+          "blocked_task_count": 0,
+          "code_graph_hotspot_task_count": 0,
+          "ready_component_count": 1,
+          "ready_task_count": 1,
+          "source_count": 4,
+          "task_count": 1
+        }
+      },
+      "pre_absorption": {
+        "failed_expected_behavior": true,
+        "summary": {
+          "ready_task_count": 0,
+          "status": "pre_absorption_no_core_refactor_oracle"
+        }
+      },
+      "ready": true,
+      "source_project": "thebjorn/pydeps"
     }
   ],
   "evidence": {
@@ -244,16 +401,24 @@
       "benchmark_harness",
       "codebase_graph",
       "context_packaging",
+      "core_architecture_refactor",
+      "employee_dispatch",
+      "employee_task_graph",
+      "intent_alignment",
       "license_policy",
       "static_analysis_security"
     ],
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T061633Z-a80c9733",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cross_domain_absorption_replays/cross-domain-20260628T065334Z-d7ca96b3",
     "source_projects": [
       "EleutherAI/lm-evaluation-harness",
+      "OpenHands/benchmarks",
       "PyCQA/bandit",
+      "Review-scope/ReviewScope",
+      "aryanbrite/openrabbit",
       "github/licensee",
       "pahen/madge",
       "seddonym/import-linter",
+      "thebjorn/pydeps",
       "yamadashy/repomix"
     ],
     "style": "non_pr_domain_input_output_absorption_replay"
@@ -337,6 +502,58 @@
           "pre_absorption_failed": true
         },
         "domain": "static_analysis_security"
+      },
+      {
+        "accepted": true,
+        "case_id": "intent_alignment",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "intent_alignment"
+      },
+      {
+        "accepted": true,
+        "case_id": "task_prioritization",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "employee_task_graph"
+      },
+      {
+        "accepted": true,
+        "case_id": "task_dispatch",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "employee_dispatch"
+      },
+      {
+        "accepted": true,
+        "case_id": "core_refactor_plan",
+        "checks": {
+          "artifacts_materialized": true,
+          "direct_module_present": true,
+          "non_pr_domain": true,
+          "output_assertions_passed": true,
+          "post_absorption_passed": true,
+          "pre_absorption_failed": true
+        },
+        "domain": "core_architecture_refactor"
       }
     ],
     "evidence": {
@@ -344,8 +561,8 @@
     },
     "status": "ready",
     "summary": {
-      "accepted_case_count": 6,
-      "adjudicated_case_count": 6,
+      "accepted_case_count": 10,
+      "adjudicated_case_count": 10,
       "all_cases_accepted": true
     }
   },
@@ -355,40 +572,52 @@
     "all_before_failed_after_passed": true,
     "all_direct_modules_executed": true,
     "all_output_assertions_passed": true,
-    "case_count": 6,
-    "direct_module_count": 6,
+    "case_count": 10,
+    "direct_module_count": 10,
     "direct_modules": [
       "retort_engine.architecture_contracts.evaluate_architecture_contracts",
+      "retort_engine.architecture_refactor.build_core_refactor_plan",
       "retort_engine.codebase_graph.build_codebase_graph",
       "retort_engine.context_packager.build_context_pack",
+      "retort_engine.intent_alignment.assess_change_intent_alignment",
       "retort_engine.license_gate.license_gate",
       "retort_engine.static_analysis_gate.scan_static_analysis_findings",
-      "retort_engine.swe_bench_oracle.build_issue_patch_benchmark"
+      "retort_engine.swe_bench_oracle.build_issue_patch_benchmark",
+      "retort_engine.task_dispatch_plan.build_task_dispatch_plan",
+      "retort_engine.task_prioritization.build_task_prioritization_report"
     ],
-    "independent_accepted_case_count": 6,
+    "independent_accepted_case_count": 10,
     "independent_adjudication_status": "ready",
     "independent_all_cases_accepted": true,
-    "min_domain_count": 6,
-    "non_pr_domain_count": 6,
+    "min_domain_count": 10,
+    "non_pr_domain_count": 10,
     "non_pr_domains": [
       "architecture_governance",
       "benchmark_harness",
       "codebase_graph",
       "context_packaging",
+      "core_architecture_refactor",
+      "employee_dispatch",
+      "employee_task_graph",
+      "intent_alignment",
       "license_policy",
       "static_analysis_security"
     ],
-    "post_absorption_pass_count": 6,
-    "pre_absorption_failure_count": 6,
-    "ready_case_count": 6,
-    "run_id": "cross-domain-20260628T061633Z-a80c9733",
-    "source_project_count": 6,
+    "post_absorption_pass_count": 10,
+    "pre_absorption_failure_count": 10,
+    "ready_case_count": 10,
+    "run_id": "cross-domain-20260628T065334Z-d7ca96b3",
+    "source_project_count": 10,
     "source_projects": [
       "EleutherAI/lm-evaluation-harness",
+      "OpenHands/benchmarks",
       "PyCQA/bandit",
+      "Review-scope/ReviewScope",
+      "aryanbrite/openrabbit",
       "github/licensee",
       "pahen/madge",
       "seddonym/import-linter",
+      "thebjorn/pydeps",
       "yamadashy/repomix"
     ]
   }

@@ -2,13 +2,76 @@
   "cases": [
     {
       "artifacts": {
-        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_check.json",
-        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/invalid_payload.json",
-        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/producer_state.json",
-        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_check.json",
-        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/pr_review_missing_comments/valid_payload.json"
+        "concurrency_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency",
+        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_check.json",
+        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/invalid_payload.json",
+        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/producer_state.json",
+        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_check.json",
+        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/valid_payload.json"
       },
       "case_id": "pr_review_missing_comments",
+      "concurrency_fault_injections": [
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_01_state.json",
+          "worker": 1
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_02_state.json",
+          "worker": 2
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_03_state.json",
+          "worker": 3
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_04_state.json",
+          "worker": 4
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_05_state.json",
+          "worker": 5
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "comments"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/pr_review_missing_comments/concurrency/worker_06_state.json",
+          "worker": 6
+        }
+      ],
       "contract": "pr_review_result",
       "invalid_rejected": true,
       "missing_fields": [
@@ -24,13 +87,76 @@
     },
     {
       "artifacts": {
-        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_check.json",
-        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/invalid_payload.json",
-        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/producer_state.json",
-        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_check.json",
-        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/operator_journey_missing_replay/valid_payload.json"
+        "concurrency_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency",
+        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_check.json",
+        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/invalid_payload.json",
+        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/producer_state.json",
+        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_check.json",
+        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/valid_payload.json"
       },
       "case_id": "operator_journey_missing_replay",
+      "concurrency_fault_injections": [
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_01_state.json",
+          "worker": 1
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_02_state.json",
+          "worker": 2
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_03_state.json",
+          "worker": 3
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_04_state.json",
+          "worker": 4
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_05_state.json",
+          "worker": 5
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "replay"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/operator_journey_missing_replay/concurrency/worker_06_state.json",
+          "worker": 6
+        }
+      ],
       "contract": "operator_journey_replay_result",
       "invalid_rejected": true,
       "missing_fields": [
@@ -46,13 +172,76 @@
     },
     {
       "artifacts": {
-        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_check.json",
-        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/invalid_payload.json",
-        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/producer_state.json",
-        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_check.json",
-        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88/cross_domain_missing_cases/valid_payload.json"
+        "concurrency_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency",
+        "invalid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_check.json",
+        "invalid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/invalid_payload.json",
+        "state": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/producer_state.json",
+        "valid_check": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_check.json",
+        "valid_payload": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/valid_payload.json"
       },
       "case_id": "cross_domain_missing_cases",
+      "concurrency_fault_injections": [
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_01_state.json",
+          "worker": 1
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_02_state.json",
+          "worker": 2
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_03_state.json",
+          "worker": 3
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_04_state.json",
+          "worker": 4
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_05_state.json",
+          "worker": 5
+        },
+        {
+          "invalid_rejected": true,
+          "missing_fields": [
+            "cases"
+          ],
+          "rollback_performed": true,
+          "rollback_verified": true,
+          "state_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5/cross_domain_missing_cases/concurrency/worker_06_state.json",
+          "worker": 6
+        }
+      ],
       "contract": "cross_domain_absorption_replay_result",
       "invalid_rejected": true,
       "missing_fields": [
@@ -68,17 +257,24 @@
     }
   ],
   "evidence": {
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T061635Z-d52cae88",
+    "fault_injection_model": "threaded_invalid_payload_workers_with_per_worker_state_rollback",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/contract_runtime_rehearsals/contract-runtime-20260628T065334Z-6fe269d5",
     "runtime_guard": "retort_engine.contracts.validate_contract",
     "style": "runtime_contract_violation_rejected_then_rollback"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
+    "all_concurrent_rollbacks_verified": true,
+    "all_concurrent_violations_rejected": true,
     "all_rollbacks_verified": true,
     "all_valid_payloads_accepted": true,
     "all_violations_rejected": true,
     "case_count": 3,
+    "concurrency_fault_injection_count": 18,
+    "concurrent_rollback_verified_count": 18,
+    "concurrent_violation_rejected_count": 18,
+    "concurrent_worker_count": 6,
     "contract_names": [
       "cross_domain_absorption_replay_result",
       "operator_journey_replay_result",
@@ -86,7 +282,7 @@
     ],
     "ready_case_count": 3,
     "rollback_verified_count": 3,
-    "run_id": "contract-runtime-20260628T061635Z-d52cae88",
+    "run_id": "contract-runtime-20260628T065334Z-6fe269d5",
     "valid_payload_accepted_count": 3,
     "violation_rejected_count": 3
   }

@@ -24,13 +24,61 @@ DEFAULT_EXTERNAL_MERGE_CASES: tuple[dict[str, str], ...] = (
         "family": "typescript_pr_bot",
         "absorbed_rule": "diff_hunk_context_grouping_and_publishable_anchor",
     },
+    {
+        "source": "reviewdog/reviewdog",
+        "source_path": ".retort/cache/github/reviewdog/reviewdog",
+        "family": "go_ci_review_publisher",
+        "absorbed_rule": "ci_annotation_publish_and_permission_degradation",
+    },
+    {
+        "source": "EleutherAI/lm-evaluation-harness",
+        "source_path": ".retort/cache/github/EleutherAI/lm-evaluation-harness",
+        "family": "benchmark_harness",
+        "absorbed_rule": "evaluation_oracle_and_fail_to_pass_regression_gate",
+    },
+    {
+        "source": "seddonym/import-linter",
+        "source_path": ".retort/cache/github/seddonym/import-linter",
+        "family": "architecture_governance",
+        "absorbed_rule": "forbidden_import_contract_before_core_refactor",
+    },
+    {
+        "source": "PyCQA/bandit",
+        "source_path": ".retort/cache/github/PyCQA/bandit",
+        "family": "security_static_analysis",
+        "absorbed_rule": "static_security_finding_blocks_high_risk_absorption",
+    },
+    {
+        "source": "yamadashy/repomix",
+        "source_path": ".retort/cache/github/yamadashy/repomix",
+        "family": "context_packager",
+        "absorbed_rule": "bounded_context_package_focus_for_deep_review",
+    },
+    {
+        "source": "pahen/madge",
+        "source_path": ".retort/cache/github/pahen/madge",
+        "family": "architecture_graph",
+        "absorbed_rule": "dependency_graph_hotspot_prioritizes_refactor_target",
+    },
+    {
+        "source": "semgrep/semgrep",
+        "source_path": ".retort/cache/github/semgrep/semgrep",
+        "family": "security_static_analysis",
+        "absorbed_rule": "rule_id_based_security_regression_contract",
+    },
+    {
+        "source": "openautocoder/agentless",
+        "source_path": ".retort/cache/github/openautocoder/agentless",
+        "family": "agentic_benchmark",
+        "absorbed_rule": "agentless_issue_patch_replay_with_before_after_oracle",
+    },
 )
 
 
 def build_external_merge_landing(
     project: str | Path,
     *,
-    min_cases: int = 2,
+    min_cases: int = 10,
     output: str | Path = "",
     cases: list[dict[str, str]] | tuple[dict[str, str], ...] | None = None,
 ) -> dict[str, Any]:

@@ -2,7 +2,7 @@
   "cases": [
     {
       "branch": "absorb/qodo-ai-pr-agent-1",
-      "branch_commit": "3407d4fdaa79bb84008144e3ea91aade39b4d2ea",
+      "branch_commit": "f79193ec15a5c6a954a2e920cb0b0c20f59b0a32",
       "branch_diff_files": [
         "retort_engine/review_policy.py",
         "tests/test_review_policy.py"
@@ -15,7 +15,7 @@
             "add",
             "."
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
@@ -28,11 +28,11 @@
             "-m",
             "absorb qodo-ai/pr-agent review rule"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "[absorb/qodo-ai-pr-agent-1 3407d4f] absorb qodo-ai/pr-agent review rule\n 2 files changed, 5 insertions(+), 5 deletions(-)\n"
+          "stdout": "[absorb/qodo-ai-pr-agent-1 f79193e] absorb qodo-ai/pr-agent review rule\n 2 files changed, 5 insertions(+), 5 deletions(-)\n"
         },
         {
           "command": [
@@ -40,7 +40,7 @@
             "checkout",
             "main"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "Switched to branch 'main'\n",
@@ -55,7 +55,7 @@
             "-m",
             "merge absorbed qodo-ai/pr-agent rule"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
@@ -65,7 +65,7 @@
       "external_source_exists": true,
       "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/qodo-ai/pr-agent",
       "family": "python_pr_agent",
-      "merge_commit": "44180959b273339f4913677dcf7aef4228dfbbde",
+      "merge_commit": "6b7b4a34f7865051f51b95efea30d26487ecf83a",
       "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.07s\n",
       "post_merge_tests_passed": true,
       "ready": true,
@@ -74,7 +74,7 @@
     },
     {
       "branch": "absorb/mopemope-pr-ai-review-bot-2",
-      "branch_commit": "ce7fa401796cc0eff91c64468482ba4922562bbf",
+      "branch_commit": "46a2e4fadd1835d99cd1c03fef7ac1278c71a30e",
       "branch_diff_files": [
         "retort_engine/review_policy.py",
         "tests/test_review_policy.py"
@@ -87,7 +87,7 @@
             "add",
             "."
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
@@ -100,11 +100,11 @@
             "-m",
             "absorb mopemope/pr-ai-review-bot review rule"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
-          "stdout": "[absorb/mopemope-pr-ai-review-bot-2 ce7fa40] absorb mopemope/pr-ai-review-bot review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+          "stdout": "[absorb/mopemope-pr-ai-review-bot-2 46a2e4f] absorb mopemope/pr-ai-review-bot review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
         },
         {
           "command": [
@@ -112,7 +112,7 @@
             "checkout",
             "main"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "Switched to branch 'main'\n",
@@ -127,7 +127,7 @@
             "-m",
             "merge absorbed mopemope/pr-ai-review-bot rule"
           ],
-          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
           "ok": true,
           "returncode": 0,
           "stderr": "",
@@ -137,39 +137,622 @@
       "external_source_exists": true,
       "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/mopemope/pr-ai-review-bot",
       "family": "typescript_pr_bot",
-      "merge_commit": "b4b911b8706e2380b44631bcbcaeffadbd8db3cf",
+      "merge_commit": "739d194b8c3a70567ca5b6be28be943673fb5744",
       "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
       "post_merge_tests_passed": true,
       "ready": true,
       "source": "mopemope/pr-ai-review-bot",
       "source_fingerprint": "files=40;sample=.devcontainer/devcontainer.json,.env.example,.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample"
+    },
+    {
+      "branch": "absorb/reviewdog-reviewdog-3",
+      "branch_commit": "017f5dce65182e65fbbdcca7176c6e27ac469501",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb reviewdog/reviewdog review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/reviewdog-reviewdog-3 017f5dc] absorb reviewdog/reviewdog review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/reviewdog-reviewdog-3",
+            "-m",
+            "merge absorbed reviewdog/reviewdog rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/reviewdog/reviewdog",
+      "family": "go_ci_review_publisher",
+      "merge_commit": "ecc0b6b0b2575758da3dc1c79c394c493e728bd9",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "reviewdog/reviewdog",
+      "source_fingerprint": "files=40;sample=.circleci/config.yml,.codecov.yml,.config/binstaller.yml,.git/HEAD,.git/config,.git/description"
+    },
+    {
+      "branch": "absorb/eleutherai-lm-evaluation-harness-4",
+      "branch_commit": "97cb762d9c1f7aa6b224a7e67d9f220dda43ebd4",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb EleutherAI/lm-evaluation-harness review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/eleutherai-lm-evaluation-harness-4 97cb762] absorb EleutherAI/lm-evaluation-harness review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/eleutherai-lm-evaluation-harness-4",
+            "-m",
+            "merge absorbed EleutherAI/lm-evaluation-harness rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/EleutherAI/lm-evaluation-harness",
+      "family": "benchmark_harness",
+      "merge_commit": "89a05cb825c58cc89f30947349bd46faa1a8fc93",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "EleutherAI/lm-evaluation-harness",
+      "source_fingerprint": "files=40;sample=.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample,.git/hooks/commit-msg.sample,.git/hooks/fsmonitor-watchman.sample"
+    },
+    {
+      "branch": "absorb/seddonym-import-linter-5",
+      "branch_commit": "884a119e034797ca57ceebb7d47f70e144bd156a",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb seddonym/import-linter review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/seddonym-import-linter-5 884a119] absorb seddonym/import-linter review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/seddonym-import-linter-5",
+            "-m",
+            "merge absorbed seddonym/import-linter rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/seddonym/import-linter",
+      "family": "architecture_governance",
+      "merge_commit": "f3cc141832295be080e503741cd88b0d126c9e45",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "seddonym/import-linter",
+      "source_fingerprint": "files=40;sample=.coveragerc,.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample,.git/hooks/commit-msg.sample"
+    },
+    {
+      "branch": "absorb/pycqa-bandit-6",
+      "branch_commit": "77ca8544beae17f74e80dbb77cbf1dffbfa8d281",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb PyCQA/bandit review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/pycqa-bandit-6 77ca854] absorb PyCQA/bandit review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/pycqa-bandit-6",
+            "-m",
+            "merge absorbed PyCQA/bandit rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/PyCQA/bandit",
+      "family": "security_static_analysis",
+      "merge_commit": "a33a733a2fd3ab22a1b15df088e7890cd0ea91e9",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.06s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "PyCQA/bandit",
+      "source_fingerprint": "files=40;sample=.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample,.git/hooks/commit-msg.sample,.git/hooks/fsmonitor-watchman.sample"
+    },
+    {
+      "branch": "absorb/yamadashy-repomix-7",
+      "branch_commit": "b44f7d6a6f54b14cbb045afee11ab18e831648db",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb yamadashy/repomix review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/yamadashy-repomix-7 b44f7d6] absorb yamadashy/repomix review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/yamadashy-repomix-7",
+            "-m",
+            "merge absorbed yamadashy/repomix rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/yamadashy/repomix",
+      "family": "context_packager",
+      "merge_commit": "96281bd23c2794cdb466eddbc0cc19601c9dba30",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "yamadashy/repomix",
+      "source_fingerprint": "files=40;sample=.agents/agents/reviewer-code-quality.md,.agents/agents/reviewer-conventions.md,.agents/agents/reviewer-holistic.md,.agents/agents/reviewer-performance.md,.agents/agents/reviewer-security.md,.agents/agents/reviewer-test-coverage.md"
+    },
+    {
+      "branch": "absorb/pahen-madge-8",
+      "branch_commit": "ea69435be41b9f5fc35f13a005c62872e90d0da8",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb pahen/madge review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/pahen-madge-8 ea69435] absorb pahen/madge review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/pahen-madge-8",
+            "-m",
+            "merge absorbed pahen/madge rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/pahen/madge",
+      "family": "architecture_graph",
+      "merge_commit": "a6695e0a30aef5eb9a82179ff17e7d9f63dc5d14",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "pahen/madge",
+      "source_fingerprint": "files=40;sample=.editorconfig,.eslintrc,.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample"
+    },
+    {
+      "branch": "absorb/semgrep-semgrep-9",
+      "branch_commit": "d3cc728030f80923492d94b6bb1aae985bc08a83",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb semgrep/semgrep review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/semgrep-semgrep-9 d3cc728] absorb semgrep/semgrep review rule\n 2 files changed, 3 insertions(+), 3 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/semgrep-semgrep-9",
+            "-m",
+            "merge absorbed semgrep/semgrep rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 4 ++--\n 2 files changed, 3 insertions(+), 3 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/semgrep/semgrep",
+      "family": "security_static_analysis",
+      "merge_commit": "4a004e6ed75179e9a81cb2a8d0296797985553c8",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "semgrep/semgrep",
+      "source_fingerprint": "files=40;sample=.codemapignore,.dockerignore,.envrc,.git/HEAD,.git/config,.git/description"
+    },
+    {
+      "branch": "absorb/openautocoder-agentless-10",
+      "branch_commit": "fa2191d3b2c2de1f7f665f37626564499bb382e4",
+      "branch_diff_files": [
+        "retort_engine/review_policy.py",
+        "tests/test_review_policy.py"
+      ],
+      "branch_diff_verified": true,
+      "commands": [
+        {
+          "command": [
+            "git",
+            "add",
+            "."
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "commit",
+            "-m",
+            "absorb openautocoder/agentless review rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[absorb/openautocoder-agentless-10 fa2191d] absorb openautocoder/agentless review rule\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        },
+        {
+          "command": [
+            "git",
+            "checkout",
+            "main"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "Switched to branch 'main'\n",
+          "stdout": ""
+        },
+        {
+          "command": [
+            "git",
+            "merge",
+            "--no-ff",
+            "absorb/openautocoder-agentless-10",
+            "-m",
+            "merge absorbed openautocoder/agentless rule"
+          ],
+          "cwd": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "Merge made by the 'ort' strategy.\n retort_engine/review_policy.py | 2 +-\n tests/test_review_policy.py    | 6 +++---\n 2 files changed, 4 insertions(+), 4 deletions(-)\n"
+        }
+      ],
+      "external_source_exists": true,
+      "external_source_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/cache/github/openautocoder/agentless",
+      "family": "agentic_benchmark",
+      "merge_commit": "ac4ca33f6a8745470c68f2aabdf3494111718ee4",
+      "post_merge_test_stdout_tail": ".                                                                        [100%]\n1 passed in 0.05s\n",
+      "post_merge_tests_passed": true,
+      "ready": true,
+      "source": "openautocoder/agentless",
+      "source_fingerprint": "files=40;sample=.git/HEAD,.git/config,.git/description,.git/hooks/applypatch-msg.sample,.git/hooks/commit-msg.sample,.git/hooks/fsmonitor-watchman.sample"
     }
   ],
   "evidence": {
-    "repo": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing/retort-merge-proof",
-    "run_id": "20260628053330-merge-landing",
+    "repo": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing/retort-merge-proof",
+    "run_id": "20260628065447-merge-landing",
     "style": "real_external_branch_diff_merge_landing",
     "verifier": "git_branch_diff_plus_no_ff_merge_plus_post_merge_pytest",
-    "workspace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628053330-merge-landing"
+    "workspace": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/external_merge_landings/20260628065447-merge-landing"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
   "status": "ready",
   "summary": {
     "all_branch_diff_merge_tests_passed": true,
-    "branch_diff_count": 2,
-    "cached_source_count": 2,
-    "case_count": 2,
-    "duration_sec": 0.858,
-    "merge_commit_count": 2,
-    "min_case_count": 2,
-    "post_merge_test_passed_count": 2,
-    "ready_case_count": 2,
+    "branch_diff_count": 10,
+    "cached_source_count": 10,
+    "case_count": 10,
+    "duration_sec": 4.341,
+    "merge_commit_count": 10,
+    "min_case_count": 10,
+    "post_merge_test_passed_count": 10,
+    "ready_case_count": 10,
     "real_git_repo_count": 1,
-    "run_id": "20260628053330-merge-landing",
+    "run_id": "20260628065447-merge-landing",
     "source_families": [
+      "agentic_benchmark",
+      "architecture_governance",
+      "architecture_graph",
+      "benchmark_harness",
+      "context_packager",
+      "go_ci_review_publisher",
       "python_pr_agent",
+      "security_static_analysis",
       "typescript_pr_bot"
     ],
-    "source_family_count": 2
+    "source_family_count": 9
   }
 }

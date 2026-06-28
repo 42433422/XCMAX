@@ -12,7 +12,7 @@ from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, f
 from retort_engine.proof import rollback_rehearsal
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
-from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_structure
+from retort_engine.ui_features import blackhole_ui_detected, blackhole_ui_operation_replay, blackhole_ui_structure
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -87,6 +87,17 @@ def test_blackhole_ui_assets_exist() -> None:
     assert blackhole_ui_detected(root.parents[1]) is True
     assert structure["missing_ids"] == []
     assert structure["missing_functions"] == []
+
+
+def test_blackhole_ui_operation_replay_binds_operator_actions() -> None:
+    root = RetortUIServer().static_root
+    replay = blackhole_ui_operation_replay(root.parents[1])
+
+    assert replay["status"] == "ready"
+    assert replay["summary"]["ready_action_count"] == replay["summary"]["action_count"]
+    assert replay["summary"]["absorbed_project_click_bound"] is True
+    assert replay["summary"]["deep_review_button_bound"] is True
+    assert replay["summary"]["absorption_button_bound"] is True
 
 
 def test_absorption_lights_returns_real_absorbed_project_sources(tmp_path: Path) -> None:

@@ -51,7 +51,10 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         _decision(
             "prove_external_advantage_matrix",
             "comparative_analysis_depth",
-            external_matrix.get("status") == "ready" and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0,
+            external_matrix.get("status") == "ready"
+            and int(external_matrix.get("summary", {}).get("score_delta") or 0) > 0
+            and external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted") is True
+            and int(external_matrix.get("summary", {}).get("blind_third_party_minimum_delta") or 0) >= 65,
             ["external_advantage_matrix"],
         ),
         _decision(
@@ -76,7 +79,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             cross_domain_replay.get("status") == "ready"
             and cross_domain_replay.get("summary", {}).get("all_before_failed_after_passed") is True
             and cross_domain_replay.get("summary", {}).get("all_output_assertions_passed") is True
-            and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 6,
+            and int(cross_domain_replay.get("summary", {}).get("non_pr_domain_count") or 0) >= 10,
             ["cross_domain_absorption_replay"],
         ),
         _decision(
@@ -84,7 +87,9 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "api_contract_quality",
             contract_runtime.get("status") == "ready"
             and contract_runtime.get("summary", {}).get("all_violations_rejected") is True
-            and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True,
+            and contract_runtime.get("summary", {}).get("all_rollbacks_verified") is True
+            and contract_runtime.get("summary", {}).get("all_concurrent_violations_rejected") is True
+            and contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified") is True,
             ["contract_runtime_rehearsal"],
         ),
         _decision(
@@ -101,7 +106,7 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
             "branch_absorption_workflow",
             external_merge_landing.get("status") == "ready"
             and external_merge_landing.get("summary", {}).get("all_branch_diff_merge_tests_passed") is True
-            and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 2,
+            and int(external_merge_landing.get("summary", {}).get("merge_commit_count") or 0) >= 10,
             ["external_merge_landing"],
         ),
         _decision(
@@ -138,6 +143,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "holdout_blind_eval_ready": holdout.get("status") == "ready",
         "external_advantage_matrix_ready": external_matrix.get("status") == "ready",
         "external_advantage_matrix_delta": external_matrix.get("summary", {}).get("score_delta", ""),
+        "external_advantage_blind_third_party_ready": external_matrix.get("summary", {}).get("blind_third_party_all_cases_accepted", ""),
+        "external_advantage_blind_third_party_min_delta": external_matrix.get("summary", {}).get("blind_third_party_minimum_delta", ""),
         "external_advantage_repeat_ready": external_repeat.get("status") == "ready",
         "external_advantage_repeat_total_cases": external_repeat.get("summary", {}).get("total_case_evaluation_count", ""),
         "heterogeneous_absorption_ready": heterogeneous_replay.get("status") == "ready",
@@ -150,6 +157,8 @@ def build_absorption_release_decision(project: str | Path, *, output: str | Path
         "contract_runtime_rehearsal_ready": contract_runtime.get("status") == "ready",
         "contract_runtime_rehearsal_rejected": contract_runtime.get("summary", {}).get("violation_rejected_count", ""),
         "contract_runtime_rehearsal_rollback": contract_runtime.get("summary", {}).get("all_rollbacks_verified", ""),
+        "contract_runtime_rehearsal_concurrent_rejected": contract_runtime.get("summary", {}).get("concurrent_violation_rejected_count", ""),
+        "contract_runtime_rehearsal_concurrent_rollback": contract_runtime.get("summary", {}).get("all_concurrent_rollbacks_verified", ""),
         "review_family_behavior_ready": review_family.get("status") == "ready",
         "review_family_behavior_typescript_cases": review_family.get("summary", {}).get("typescript_case_count", ""),
         "review_family_behavior_python_cases": review_family.get("summary", {}).get("python_case_count", ""),

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from retort_engine.external_advantage_adjudicator import adjudicate_external_advantage_rows
+from retort_engine.external_advantage_adjudicator import adjudicate_external_advantage_rows, blind_third_party_adjudicate_external_advantages
 from retort_engine.external_advantage_regression import verify_external_advantage_rows
 from retort_engine.pr_review import review_diff
 
@@ -87,6 +87,8 @@ def build_external_advantage_matrix(
     regression_summary = regression.get("summary") if isinstance(regression.get("summary"), dict) else {}
     adjudication = adjudicate_external_advantage_rows(rows)
     adjudication_summary = adjudication.get("summary") if isinstance(adjudication.get("summary"), dict) else {}
+    blind_adjudication = blind_third_party_adjudicate_external_advantages(rows)
+    blind_summary = blind_adjudication.get("summary") if isinstance(blind_adjudication.get("summary"), dict) else {}
     summary = {
         "case_count": len(rows),
         "min_case_count": min_cases,
@@ -112,6 +114,14 @@ def build_external_advantage_matrix(
         "independent_accepted_case_count": adjudication_summary.get("accepted_case_count", 0),
         "independent_minimum_recomputed_delta": adjudication_summary.get("minimum_recomputed_delta", 0),
         "independent_all_cases_accepted": adjudication_summary.get("all_cases_accepted", False),
+        "blind_third_party_status": blind_adjudication.get("status", ""),
+        "blind_third_party_adjudicated_case_count": blind_summary.get("adjudicated_case_count", 0),
+        "blind_third_party_accepted_case_count": blind_summary.get("accepted_case_count", 0),
+        "blind_third_party_minimum_delta": blind_summary.get("minimum_blind_recomputed_delta", 0),
+        "blind_third_party_average_delta": blind_summary.get("average_blind_recomputed_delta", 0),
+        "blind_third_party_all_cases_accepted": blind_summary.get("all_cases_accepted", False),
+        "blind_third_party_delta_floor_passed": blind_summary.get("all_delta_at_least_65", False),
+        "blind_third_party_score_fields_consumed": blind_summary.get("score_fields_consumed", True),
     }
     ready = (
         summary["case_count"] >= min_cases
@@ -122,6 +132,9 @@ def build_external_advantage_matrix(
         and summary["all_advantages_improved"]
         and summary["all_delta_regressions_verified"]
         and summary["independent_all_cases_accepted"]
+        and summary["blind_third_party_all_cases_accepted"]
+        and summary["blind_third_party_delta_floor_passed"]
+        and summary["blind_third_party_score_fields_consumed"] is False
     )
     result = {
         "status": "ready" if ready else "needs_more_evidence",
@@ -139,9 +152,12 @@ def build_external_advantage_matrix(
             "regression_model": "executable_input_output_diff_replay",
             "regression_test_module": "tests/test_external_advantage_regression.py",
             "independent_adjudicator": "retort_engine.external_advantage_adjudicator.adjudicate_external_advantage_rows",
+            "blind_third_party_adjudicator": "retort_engine.external_advantage_adjudicator.blind_third_party_adjudicate_external_advantages",
+            "blind_third_party_boundary": "redacted_structural_facts_only_no_baseline_or_retort_score_fields",
         },
         "regression": regression,
         "independent_adjudication": adjudication,
+        "blind_third_party_adjudication": blind_adjudication,
     }
     if output:
         output_path = Path(output)

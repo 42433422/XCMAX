@@ -7,17 +7,21 @@ from pathlib import Path
 from typing import Any
 
 from retort_engine.architecture_contracts import evaluate_architecture_contracts
+from retort_engine.architecture_refactor import build_core_refactor_plan
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.context_packager import build_context_pack
+from retort_engine.intent_alignment import assess_change_intent_alignment
 from retort_engine.license_gate import license_gate
 from retort_engine.static_analysis_gate import scan_static_analysis_findings
 from retort_engine.swe_bench_oracle import build_issue_patch_benchmark
+from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.task_prioritization import build_task_prioritization_report
 
 
 def build_cross_domain_absorption_replay(
     project: str | Path,
     *,
-    min_domains: int = 6,
+    min_domains: int = 10,
     output: str | Path = "",
     run_id: str = "",
 ) -> dict[str, Any]:
@@ -32,6 +36,10 @@ def build_cross_domain_absorption_replay(
         _context_pack_case(lab),
         _license_gate_case(lab),
         _static_analysis_case(lab),
+        _intent_alignment_case(lab),
+        _task_prioritization_case(lab),
+        _task_dispatch_case(lab),
+        _core_refactor_plan_case(lab),
     ]
     adjudication = _adjudicate_cases(cases)
     domains = sorted({str(case["domain"]) for case in cases if case.get("domain")})
@@ -297,6 +305,185 @@ def _static_analysis_case(lab: Path) -> dict[str, Any]:
         output_assertions=assertions,
         artifacts=[case_lab / "input.json", case_lab / "post_output.json"],
         pre_summary={"status": "pre_absorption_no_static_analysis_runtime", "finding_count": 0},
+        post_summary=result["summary"],
+    )
+
+
+def _intent_alignment_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "intent_alignment"
+    case_lab.mkdir(parents=True, exist_ok=True)
+    files = [
+        {
+            "path": "billing/invoice_retry.py",
+            "hunks": [
+                {
+                    "changes": [
+                        {"type": "add", "line": 10, "text": "def retry_invoice_payment(invoice_id):"},
+                        {"type": "add", "line": 11, "text": "    return schedule_billing_retry(invoice_id)"},
+                    ]
+                }
+            ],
+        }
+    ]
+    result = assess_change_intent_alignment(files, issue_context="billing invoice retry must schedule payment recovery", pr_body="Implements invoice retry flow")
+    _write_json(case_lab / "input.json", {"files": files, "issue_context": "billing invoice retry must schedule payment recovery"})
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "aligned": result["status"] == "aligned",
+        "overlap_seen": int(result["summary"]["overlap_keyword_count"]) >= 2,
+        "source_boundary": result["evidence"]["source"] == "ReviewScope issue-mismatch rule",
+    }
+    return _case(
+        case_id="intent_alignment",
+        domain="intent_alignment",
+        source_project="Review-scope/ReviewScope",
+        direct_module="retort_engine.intent_alignment.assess_change_intent_alignment",
+        expected_behavior="verify_changed_paths_and_added_lines_overlap_issue_intent",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[case_lab / "input.json", case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_intent_alignment_gate", "overlap_keyword_count": 0},
+        post_summary=result["summary"],
+    )
+
+
+def _task_prioritization_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "task_prioritization"
+    queue_dir = case_lab / ".retort"
+    result_dir = queue_dir / "employee_results"
+    result_dir.mkdir(parents=True, exist_ok=True)
+    queue_items = [
+        {"task": {"dimension": "api_contract_quality"}},
+        {"task": {"dimension": "api_contract_quality"}},
+        {"task": {"dimension": "product_operability"}},
+    ]
+    (queue_dir / "employee_queue.jsonl").write_text("\n".join(json.dumps(item, sort_keys=True) for item in queue_items) + "\n", encoding="utf-8")
+    _write_json(
+        result_dir / "zz-results.json",
+        {
+            "results": [
+                {"status": "completed", "task": {"dimension": "api_contract_quality"}, "notes": "missing concurrency blocker fixed"},
+                {"status": "completed", "task": {"dimension": "product_operability"}, "notes": "frontend replay risk closed"},
+            ]
+        },
+    )
+    result = build_task_prioritization_report(case_lab)
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "ready": result["status"] == "ready",
+        "prioritized": int(result["summary"]["prioritized_dimension_count"]) >= 2,
+        "feedback_driven": result["summary"]["employee_feedback_applied"] is True,
+    }
+    return _case(
+        case_id="task_prioritization",
+        domain="employee_task_graph",
+        source_project="OpenHands/benchmarks",
+        direct_module="retort_engine.task_prioritization.build_task_prioritization_report",
+        expected_behavior="prioritize_employee_followups_from_queue_and_failed_feedback",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[queue_dir / "employee_queue.jsonl", result_dir / "zz-results.json", case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_feedback_task_graph", "prioritized_dimension_count": 0},
+        post_summary=result["summary"],
+    )
+
+
+def _task_dispatch_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "task_dispatch"
+    retort_dir = case_lab / ".retort"
+    retort_dir.mkdir(parents=True, exist_ok=True)
+    _write_json(
+        retort_dir / "llm_reviews.jsonl",
+        {},
+    )
+    (retort_dir / "llm_reviews.jsonl").write_text(
+        json.dumps(
+            {
+                "json_result": {
+                    "employee_tasks": [
+                        {
+                            "title": "Contract concurrency injection",
+                            "owner_hint": "runtime",
+                            "acceptance": "all concurrent violations rejected",
+                            "evidence_required": "rollback trace",
+                        },
+                        {
+                            "title": "Frontend operation replay",
+                            "owner_hint": "product-runtime",
+                            "acceptance": "operator actions replay green",
+                            "evidence_required": "ui replay artifact",
+                        },
+                    ]
+                }
+            },
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = build_task_dispatch_plan(case_lab, enqueue=True)
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "ready": result["status"] == "ready",
+        "queued": int(result["summary"]["queued_dispatch_count"]) == 2,
+        "evidence_required": result["summary"]["all_tasks_have_evidence_required"] is True,
+    }
+    return _case(
+        case_id="task_dispatch",
+        domain="employee_dispatch",
+        source_project="aryanbrite/openrabbit",
+        direct_module="retort_engine.task_dispatch_plan.build_task_dispatch_plan",
+        expected_behavior="convert_deep_review_tasks_into_employee_queue_records",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[retort_dir / "llm_reviews.jsonl", retort_dir / "employee_queue.jsonl", case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_llm_task_dispatch", "queued_dispatch_count": 0},
+        post_summary=result["summary"],
+    )
+
+
+def _core_refactor_plan_case(lab: Path) -> dict[str, Any]:
+    case_lab = lab / "core_refactor_plan"
+    project = case_lab / "project"
+    (project / "retort_engine").mkdir(parents=True, exist_ok=True)
+    (project / "tests").mkdir(parents=True, exist_ok=True)
+    for rel in ("retort_engine/review_pipeline.py", "retort_engine/pr_review.py", "tests/test_review_pipeline.py", "tests/test_pr_review.py"):
+        (project / rel).write_text("VALUE = 1\n", encoding="utf-8")
+    memory = {
+        "summary": {"source_count": 4, "ready_component_count": 1},
+        "component_index": {
+            "review_pipeline": {
+                "ready_for_deep_refactor": True,
+                "source_count": 3,
+                "gate_pass_rate": 1.0,
+                "architecture_depth_score": 92,
+                "code_graph_proof_count": 2,
+            }
+        },
+        "deep_architecture_tasks": [{"task_id": "retort-architecture-review-pipeline", "priority": "P0"}],
+    }
+    result = build_core_refactor_plan(memory, project_root=project, max_tasks=4)
+    _write_json(case_lab / "memory.json", memory)
+    _write_json(case_lab / "post_output.json", result)
+    assertions = {
+        "ready": result["gate"]["status"] == "ready",
+        "ready_task": int(result["summary"]["ready_task_count"]) >= 1,
+        "contract_present": bool(result["tasks"][0]["contract"]) if result.get("tasks") else False,
+    }
+    return _case(
+        case_id="core_refactor_plan",
+        domain="core_architecture_refactor",
+        source_project="thebjorn/pydeps",
+        direct_module="retort_engine.architecture_refactor.build_core_refactor_plan",
+        expected_behavior="turn_architecture_memory_into_ready_core_module_refactor_tasks",
+        pre_failed=True,
+        post_passed=all(assertions.values()),
+        output_assertions=assertions,
+        artifacts=[case_lab / "memory.json", case_lab / "post_output.json"],
+        pre_summary={"status": "pre_absorption_no_core_refactor_oracle", "ready_task_count": 0},
         post_summary=result["summary"],
     )
 

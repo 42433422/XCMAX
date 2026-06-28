@@ -146,7 +146,10 @@ def _write_decision_inputs(root: Path) -> None:
         "retort_production_recovery_drill.json": {"status": "ready", "summary": {}},
         "retort_employee_patch_closure.json": {"status": "ready", "summary": {"all_expected_outcomes_verified": True}},
         "retort_review_quality_benchmark.json": {"status": "ready", "summary": {"post_absorption_score_delta": 10}},
-        "retort_external_advantage_matrix.json": {"status": "ready", "summary": {"score_delta": 50}},
+        "retort_external_advantage_matrix.json": {
+            "status": "ready",
+            "summary": {"score_delta": 50, "blind_third_party_all_cases_accepted": True, "blind_third_party_minimum_delta": 65},
+        },
         "retort_external_advantage_repeat.json": {"status": "ready", "summary": {"stable_case_set": True, "stable_score_delta": True, "total_case_evaluation_count": 12}},
         "retort_heterogeneous_absorption_replay.json": {
             "status": "ready",
@@ -157,13 +160,20 @@ def _write_decision_inputs(root: Path) -> None:
             "summary": {
                 "all_before_failed_after_passed": True,
                 "all_output_assertions_passed": True,
-                "non_pr_domain_count": 6,
-                "direct_module_count": 6,
+                "non_pr_domain_count": 10,
+                "direct_module_count": 10,
             },
         },
         "retort_contract_runtime_rehearsal.json": {
             "status": "ready",
-            "summary": {"all_violations_rejected": True, "all_rollbacks_verified": True, "violation_rejected_count": 3},
+            "summary": {
+                "all_violations_rejected": True,
+                "all_rollbacks_verified": True,
+                "all_concurrent_violations_rejected": True,
+                "all_concurrent_rollbacks_verified": True,
+                "violation_rejected_count": 3,
+                "concurrent_violation_rejected_count": 18,
+            },
         },
         "retort_review_family_behavior_replay.json": {
             "status": "ready",
@@ -171,7 +181,7 @@ def _write_decision_inputs(root: Path) -> None:
         },
         "retort_external_merge_landing.json": {
             "status": "ready",
-            "summary": {"all_branch_diff_merge_tests_passed": True, "merge_commit_count": 2, "post_merge_test_passed_count": 2},
+            "summary": {"all_branch_diff_merge_tests_passed": True, "merge_commit_count": 10, "post_merge_test_passed_count": 10},
         },
         "retort_operator_journey_replay.json": {"status": "ready", "summary": {"cross_domain_live_probe_ready": True}},
     }

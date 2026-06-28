@@ -144,7 +144,7 @@ class RetortService:
     def multi_project_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_multi_project_absorption_replay(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_projects=int(payload.get("min_projects") or 5),
+            min_projects=int(payload.get("min_projects") or 10),
         )
 
     def absorption_continuity_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -203,7 +203,7 @@ class RetortService:
     def cross_domain_absorption_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_domain_absorption_replay(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_domains=int(payload.get("min_domains") or 6),
+            min_domains=int(payload.get("min_domains") or 10),
         )
 
     def contract_runtime_rehearsal(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -218,7 +218,7 @@ class RetortService:
     def external_merge_landing(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_external_merge_landing(
             str(payload.get("project") or payload.get("project_path") or "."),
-            min_cases=int(payload.get("min_cases") or 2),
+            min_cases=int(payload.get("min_cases") or 10),
             cases=payload.get("cases") if isinstance(payload.get("cases"), list) else None,
         )
 
