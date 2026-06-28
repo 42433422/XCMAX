@@ -13,6 +13,8 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     save_absorption_state(
         tmp_path,
         {
+            "active": False,
+            "status": "closed_loop_verified",
             "source": "https://github.com/owner/repo",
             "external_path": str(external),
             "closed_loop_proof": {
@@ -801,6 +803,9 @@ def test_llm_absorption_evidence_collects_state_reports_and_audit_without_local_
     assert "absorption_source=https://github.com/owner/repo" in evidence
     assert f"external_materialized_path={external}; exists=True" in evidence
     assert "closed_loop_five_proofs_verified=True" in evidence
+    assert "absorption_state_active=False" in evidence
+    assert "absorption_state_status=closed_loop_verified" in evidence
+    assert "absorption_state_closed_loop_completed_by_design=True" in evidence
     assert "latest_absorption_source=https://github.com/owner/repo" in evidence
     assert "capability_absorption_local_score_removed=True" in evidence
     assert "capability_absorption_latest_scope=latest_real_absorption_run" in evidence

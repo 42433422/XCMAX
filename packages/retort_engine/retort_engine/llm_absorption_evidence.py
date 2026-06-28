@@ -17,11 +17,14 @@ def llm_absorption_evidence(project: Path) -> list[str]:
     proof = closed_loop_proof(project)
     if state.get("source"):
         evidence.append(f"absorption_source={state.get('source')}")
+    evidence.append(f"absorption_state_active={state.get('active', '')}")
+    evidence.append(f"absorption_state_status={state.get('status', '')}")
     if state.get("external_path"):
         external_path = Path(str(state.get("external_path")))
         evidence.append(f"external_materialized_path={state.get('external_path')}; exists={external_path.is_dir()}")
     if proof.get("verified"):
         evidence.append("closed_loop_five_proofs_verified=True")
+    evidence.append(f"absorption_state_closed_loop_completed_by_design={state.get('active') is False and state.get('status') == 'closed_loop_verified' and proof.get('verified') is True}")
     evidence.extend(_latest_run_evidence(project))
     evidence.append(f"contract_schema_count={len(contract_names())}")
 
