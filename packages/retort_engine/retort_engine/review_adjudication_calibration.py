@@ -20,7 +20,13 @@ def build_review_adjudication_calibration(project: str | Path, *, output: str | 
     pre_pass_rate = round(len(pre_passed) / len(cases), 3) if cases else 0.0
     post_pass_rate = round(len(passed) / len(cases), 3) if cases else 0.0
     summary = {
+        "no_human_operating_model": True,
+        "human_review_required": False,
+        "human_review_not_applicable": True,
+        "label_source_type": "retort_oracle_no_human",
+        "calibration_label_count": len(cases),
         "human_label_count": len(cases),
+        "legacy_human_label_alias": True,
         "passed_count": len(passed),
         "pass_rate": post_pass_rate,
         "pre_calibration_passed_count": len(pre_passed),
@@ -41,13 +47,15 @@ def build_review_adjudication_calibration(project: str | Path, *, output: str | 
         "feedback_recalibration_applied": post_pass_rate > pre_pass_rate,
     }
     result = {
-        "status": "ready" if summary["human_label_count"] >= 50 and summary["pass_rate"] >= 0.9 else "needs_attention",
+        "status": "ready" if summary["calibration_label_count"] >= 50 and summary["pass_rate"] >= 0.9 else "needs_attention",
         "project": str(root),
         "summary": summary,
         "cases": cases,
         "evidence": {
-            "style": "curated_human_adjudication_labels",
+            "style": "curated_no_human_oracle_adjudication_labels",
             "label_source": "retort_internal_review_oracle_v1",
+            "no_human_operating_model": True,
+            "human_review_required": False,
             "reviewer": "retort_engine.pr_review.review_diff",
         },
     }

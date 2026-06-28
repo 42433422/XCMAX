@@ -917,7 +917,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             print(f"Retort review adjudication calibration status: {result['status']}")
-            print(f"Human labels: {result['summary']['human_label_count']}")
+            print(f"Calibration labels: {result['summary']['calibration_label_count']}")
             print(f"Pass rate: {result['summary']['pass_rate']}")
             if args.output:
                 print(f"Output: {args.output}")

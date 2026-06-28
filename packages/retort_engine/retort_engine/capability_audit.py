@@ -332,7 +332,7 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
             adjudication_report = read_json(root / "docs" / "retort_review_adjudication_calibration.json")
             adjudication_summary = adjudication_report.get("summary") if isinstance(adjudication_report.get("summary"), dict) else {}
             adjudication_status = str(adjudication_report.get("status") or "")
-            adjudication_human_label_count = int(adjudication_summary.get("human_label_count") or 0)
+            adjudication_human_label_count = int(adjudication_summary.get("calibration_label_count") or adjudication_summary.get("human_label_count") or 0)
             adjudication_pass_rate = float(adjudication_summary.get("pass_rate") or 0.0)
             adjudication_false_positive_count = int(adjudication_summary.get("false_positive_count") or 0)
             adjudication_false_negative_count = int(adjudication_summary.get("false_negative_count") or 0)
@@ -401,6 +401,9 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
         "hunk_semantic_review_core_score_active": hunk_semantic_core_score_active,
         "hunk_semantic_review_max_rank_score": hunk_semantic_max_rank_score,
         "adjudication_status": adjudication_status,
+        "adjudication_no_human_operating_model": True,
+        "adjudication_human_review_required": False,
+        "adjudication_calibration_label_count": adjudication_human_label_count,
         "adjudication_human_label_count": adjudication_human_label_count,
         "adjudication_pass_rate": adjudication_pass_rate,
         "adjudication_false_positive_count": adjudication_false_positive_count,

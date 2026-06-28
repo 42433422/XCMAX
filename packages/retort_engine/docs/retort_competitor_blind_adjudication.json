@@ -1,9 +1,9 @@
 {
   "artifacts": {
-    "input": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_input.json",
-    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df",
-    "output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_output.json",
-    "script": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T085824Z-0c4ab0df/blind_adjudicator.py"
+    "input": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T101818Z-bec18d5b/blind_input.json",
+    "lab_dir": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T101818Z-bec18d5b",
+    "output": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T101818Z-bec18d5b/blind_output.json",
+    "script": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/competitor_blind_adjudications/competitor-blind-adjudication-20260628T101818Z-bec18d5b/blind_adjudicator.py"
   },
   "cases": [
     {
@@ -44,7 +44,9 @@
     "acceptance": "independent_process_labels_retort_wins_against_each_competitor_without_score_fields",
     "boundary": "generated_subprocess_script_imports_no_retort_engine_modules",
     "comparison_source": "retort_competitor_runtime_comparison_artifacts_not_summary_scores",
+    "human_review_required": false,
     "human_reviewed": false,
+    "no_human_operating_model": true,
     "style": "out_of_package_blind_competitor_artifact_adjudication"
   },
   "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
@@ -58,7 +60,7 @@
     "comparison_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_competitor_runtime_comparison.json",
     "comparison_status": "ready",
     "competitor_count": 3,
-    "duration_sec": 0.023,
+    "duration_sec": 0.028,
     "external_process_returncode": 0,
     "external_process_stderr_tail": "",
     "external_process_stdout_tail": "",

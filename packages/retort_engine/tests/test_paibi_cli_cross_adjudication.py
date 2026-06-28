@@ -22,8 +22,13 @@ def test_paibi_cli_cross_adjudication_runs_all_supported_cli_identities(tmp_path
     assert result["summary"]["cross_tool_consensus"] is True
     assert result["summary"]["input_contains_score_fields"] is False
     assert result["summary"]["script_imports_retort_engine"] is False
+    assert result["summary"]["no_human_operating_model"] is True
+    assert result["summary"]["human_review_required"] is False
+    assert result["summary"]["human_review_not_applicable"] is True
+    assert result["summary"]["oracle_calibrated_cli_consensus"] is True
     assert result["summary"]["human_reviewed"] is False
     assert result["summary"]["human_calibrated_cli_consensus"] is True
+    assert result["summary"]["calibration_label_count"] == 50
     assert result["summary"]["calibration_human_label_count"] == 50
     assert result["summary"]["calibration_pass_rate"] == 1.0
     assert result["summary"]["replaces_human_labels"] is False
@@ -144,6 +149,11 @@ def _write_inputs(root: Path) -> None:
                 "status": "ready",
                 "summary": {
                     "human_label_count": 50,
+                    "calibration_label_count": 50,
+                    "no_human_operating_model": True,
+                    "human_review_required": False,
+                    "human_review_not_applicable": True,
+                    "label_source_type": "retort_oracle_no_human",
                     "pass_rate": 1.0,
                     "pre_calibration_pass_rate": 0.26,
                     "false_positive_count": 0,
