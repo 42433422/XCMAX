@@ -16,8 +16,10 @@ from retort_engine.absorption import run_absorption
 from retort_engine.feedback import feedback_ingest
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import run_live_pr_comment_probe, run_low_permission_pr_degradation_probe, run_readonly_pr_degradation_probe
+from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
@@ -100,6 +102,12 @@ class RetortService:
     def publish_pr_low_permission_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_low_permission_pr_degradation_probe(str(payload.get("pr_url") or payload.get("url") or ""))
 
+    def pr_long_run_review(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_pr_long_run_review(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            min_prs=int(payload.get("min_prs") or 10),
+        )
+
     def cross_project_replay(self, payload: dict[str, Any]) -> dict[str, Any]:
         return build_cross_project_replay(str(payload.get("project") or payload.get("project_path") or "."))
 
@@ -149,6 +157,9 @@ class RetortService:
 
     def employee_patch_closure(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_employee_patch_closure_suite(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def production_recovery_drill(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_production_recovery_drill(str(payload.get("project") or payload.get("project_path") or "."))
 
     def quality_gate_bundle(self, payload: dict[str, Any]) -> dict[str, Any]:
         return run_quality_gate_bundle(str(payload.get("project") or payload.get("project_path") or "."))
@@ -237,6 +248,10 @@ def create_app() -> Any:
     def publish_pr_low_permission_probe_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.publish_pr_low_permission_probe(payload)
 
+    @app.post("/pr-long-run-review")
+    def pr_long_run_review_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.pr_long_run_review(payload)
+
     @app.post("/cross-project-replay")
     def cross_project_replay_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.cross_project_replay(payload)
@@ -276,6 +291,10 @@ def create_app() -> Any:
     @app.post("/employee-patch-closure")
     def employee_patch_closure_route(payload: dict[str, Any]) -> dict[str, Any]:
         return service.employee_patch_closure(payload)
+
+    @app.post("/production-recovery-drill")
+    def production_recovery_drill_route(payload: dict[str, Any]) -> dict[str, Any]:
+        return service.production_recovery_drill(payload)
 
     @app.post("/quality-gates")
     def quality_gate_bundle_route(payload: dict[str, Any]) -> dict[str, Any]:

@@ -16,8 +16,10 @@ from retort_engine.employee_patch_closure import run_employee_patch_closure_suit
 from retort_engine.employee_scheduler_stress import run_employee_scheduler_stress
 from retort_engine.pr_dry_run import review_pr_url
 from retort_engine.pr_live_probe import write_live_pr_comment_probe, write_low_permission_pr_degradation_probe, write_readonly_pr_degradation_probe
+from retort_engine.pr_long_run_review import build_pr_long_run_review
 from retort_engine.pr_publish import build_publish_dry_run, run_publish_sandbox
 from retort_engine.pr_review import review_diff
+from retort_engine.production_recovery_drill import build_production_recovery_drill
 from retort_engine.multi_project_absorption_replay import build_multi_project_absorption_replay
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
@@ -140,6 +142,11 @@ def main(argv: list[str] | None = None) -> int:
     low_permission_probe.add_argument("--pr-url", required=True)
     low_permission_probe.add_argument("--output", default="")
     low_permission_probe.add_argument("--json", action="store_true")
+    long_run = sub.add_parser("pr-long-run-review")
+    long_run.add_argument("--project", default=".")
+    long_run.add_argument("--min-prs", type=int, default=10)
+    long_run.add_argument("--output", default="")
+    long_run.add_argument("--json", action="store_true")
     replay = sub.add_parser("cross-project-replay")
     replay.add_argument("--project", default=".")
     replay.add_argument("--output", default="")
@@ -191,6 +198,10 @@ def main(argv: list[str] | None = None) -> int:
     patch_closure.add_argument("--project", default=".")
     patch_closure.add_argument("--output", default="")
     patch_closure.add_argument("--json", action="store_true")
+    recovery_drill = sub.add_parser("production-recovery-drill")
+    recovery_drill.add_argument("--project", default=".")
+    recovery_drill.add_argument("--output", default="")
+    recovery_drill.add_argument("--json", action="store_true")
     quality_gates = sub.add_parser("quality-gates")
     quality_gates.add_argument("--project", default=".")
     quality_gates.add_argument("--output", default="")
@@ -421,6 +432,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Write denied: {result['summary']['permission_denied']}")
             print(f"Output: {output}")
         return 0 if result["status"] == "permission_denied_degraded" else 1
+    if args.command == "pr-long-run-review":
+        result = build_pr_long_run_review(args.project, min_prs=args.min_prs, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort PR long-run review status: {result['status']}")
+            print(f"Reviewed PRs: {result['summary']['reviewed_pr_count']}/{result['summary']['target_pr_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "cross-project-replay":
         result = build_cross_project_replay(args.project)
         if args.output:
@@ -544,6 +565,16 @@ def main(argv: list[str] | None = None) -> int:
         else:
             print(f"Retort employee patch closure status: {result['status']}")
             print(f"Patch cases: {result['summary']['case_count']}")
+            if args.output:
+                print(f"Output: {args.output}")
+        return 0 if result["status"] == "ready" else 1
+    if args.command == "production-recovery-drill":
+        result = build_production_recovery_drill(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort production recovery status: {result['status']}")
+            print(f"Recovered: {result['summary']['recovered_count']}/{result['summary']['scenario_count']}")
             if args.output:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1

@@ -128,6 +128,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     quality_gate_source = root / "retort_engine" / "quality_gate_bundle.py"
     multi_absorption_source = root / "retort_engine" / "multi_project_absorption_replay.py"
     continuity_source = root / "retort_engine" / "absorption_continuity_probe.py"
+    pr_long_run_source = root / "retort_engine" / "pr_long_run_review.py"
+    recovery_drill_source = root / "retort_engine" / "production_recovery_drill.py"
     test = root / "tests" / "test_pr_review.py"
     dry_test = root / "tests" / "test_pr_dry_run.py"
     publish_test = root / "tests" / "test_pr_publish.py"
@@ -145,6 +147,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
     quality_gate_test = root / "tests" / "test_quality_gate_bundle.py"
     multi_absorption_test = root / "tests" / "test_multi_project_absorption_replay.py"
     continuity_test = root / "tests" / "test_absorption_continuity_probe.py"
+    pr_long_run_test = root / "tests" / "test_pr_long_run_review.py"
+    recovery_drill_test = root / "tests" / "test_production_recovery_drill.py"
     cli = root / "retort_engine" / "cli.py"
     ui_server = root / "retort_engine" / "ui_server.py"
     contracts = root / "retort_engine" / "contracts.py"
@@ -323,6 +327,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("retort_engine/quality_gate_bundle.py", quality_gate_source.is_file()),
                 ("retort_engine/multi_project_absorption_replay.py", multi_absorption_source.is_file()),
                 ("retort_engine/absorption_continuity_probe.py", continuity_source.is_file()),
+                ("retort_engine/pr_long_run_review.py", pr_long_run_source.is_file()),
+                ("retort_engine/production_recovery_drill.py", recovery_drill_source.is_file()),
             )
             if exists
         ],
@@ -346,6 +352,8 @@ def pr_review_runtime_evidence(root: Path) -> dict[str, Any]:
                 ("tests/test_quality_gate_bundle.py", quality_gate_test.is_file()),
                 ("tests/test_multi_project_absorption_replay.py", multi_absorption_test.is_file()),
                 ("tests/test_absorption_continuity_probe.py", continuity_test.is_file()),
+                ("tests/test_pr_long_run_review.py", pr_long_run_test.is_file()),
+                ("tests/test_production_recovery_drill.py", recovery_drill_test.is_file()),
             )
             if exists
         ],

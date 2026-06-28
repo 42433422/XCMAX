@@ -1,0 +1,75 @@
+{
+  "evidence": {
+    "no_secret_material": true,
+    "source_reports": [
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_readonly_degradation_probe.json",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_low_permission_probe.json",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_publish_sandbox.json",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_employee_patch_closure.json",
+      "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_quality_gate_bundle.json"
+    ],
+    "style": "production_fault_injection_recovery_matrix"
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "scenarios": [
+    {
+      "degraded_without_write": true,
+      "live_github_write": false,
+      "name": "readonly_degradation",
+      "real_network": true,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_readonly_degradation_probe.json",
+      "rollback_verified": true,
+      "status": "read_only_degraded"
+    },
+    {
+      "degraded_without_write": true,
+      "live_github_write": false,
+      "name": "low_permission_write_denied",
+      "real_network": true,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_low_permission_probe.json",
+      "rollback_verified": true,
+      "status": "permission_denied_degraded"
+    },
+    {
+      "degraded_without_write": false,
+      "live_github_write": false,
+      "name": "sandbox_write_rollback",
+      "real_network": false,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_pr_publish_sandbox.json",
+      "rollback_verified": true,
+      "status": "sandbox_rolled_back"
+    },
+    {
+      "degraded_without_write": false,
+      "live_github_write": false,
+      "name": "employee_gate_failure_rollback",
+      "real_network": false,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_employee_patch_closure.json",
+      "rollback_verified": true,
+      "status": "ready"
+    },
+    {
+      "degraded_without_write": false,
+      "live_github_write": false,
+      "name": "quality_gate_recovery",
+      "real_network": false,
+      "recovered": true,
+      "report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_quality_gate_bundle.json",
+      "rollback_verified": false,
+      "status": "ready"
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_recovered": true,
+    "degradation_scenario_count": 2,
+    "real_network_denial_verified": true,
+    "recovered_count": 5,
+    "rollback_scenario_count": 4,
+    "scenario_count": 5
+  }
+}

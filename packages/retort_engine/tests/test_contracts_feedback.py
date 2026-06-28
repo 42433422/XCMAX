@@ -18,6 +18,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "pr_publish_sandbox_result" in contract_names()
     assert "pr_live_publish_probe_result" in contract_names()
     assert "pr_readonly_degradation_probe_result" in contract_names()
+    assert "pr_long_run_review_result" in contract_names()
     assert "cross_project_replay_result" in contract_names()
     assert "multi_project_absorption_replay_result" in contract_names()
     assert "absorption_continuity_probe_result" in contract_names()
@@ -30,6 +31,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert "architecture_contract_result" in contract_names()
     assert "employee_scheduler_stress_result" in contract_names()
     assert "employee_patch_closure_result" in contract_names()
+    assert "production_recovery_drill_result" in contract_names()
     assert "quality_gate_bundle_result" in contract_names()
     valid = validate_contract("execution_result", {"status": "applied", "changed_files": [], "gates": [], "gates_passed": True, "review_report_path": "report.json", "employee_results_path": "result.json"})
     review_valid = validate_contract("pr_review_result", {"status": "reviewed", "summary": {}, "files": [], "comments": [], "task_groups": [], "incremental": {}})
@@ -38,6 +40,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     sandbox_valid = validate_contract("pr_publish_sandbox_result", {"status": "sandbox_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": []})
     live_probe_valid = validate_contract("pr_live_publish_probe_result", {"status": "live_rolled_back", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": [], "evidence": {}})
     readonly_probe_valid = validate_contract("pr_readonly_degradation_probe_result", {"status": "read_only_degraded", "pr_url": "u", "summary": {}, "created_receipts": [], "rollback_receipts": [], "evidence": {}})
+    long_run_valid = validate_contract("pr_long_run_review_result", {"status": "ready", "project": "p", "summary": {}, "pull_requests": [], "publish_safety_matrix": {}, "evidence": {}})
     replay_valid = validate_contract("cross_project_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "checks": []})
     multi_replay_valid = validate_contract("multi_project_absorption_replay_result", {"status": "ready", "project": "p", "summary": {}, "projects": [], "evidence": {}})
     continuity_valid = validate_contract("absorption_continuity_probe_result", {"status": "ready", "project": "p", "summary": {}, "runs": [], "latest_closed_loop": {}, "evidence": {}})
@@ -51,6 +54,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     architecture_contract_valid = validate_contract("architecture_contract_result", {"status": "passed", "project": "p", "summary": {}, "contracts": [], "violations": [], "evidence": {}})
     stress_valid = validate_contract("employee_scheduler_stress_result", {"status": "ready", "project": "p", "summary": {}, "rounds": [], "evidence": {}})
     patch_closure_valid = validate_contract("employee_patch_closure_result", {"status": "ready", "project": "p", "summary": {}, "cases": [], "evidence": {}})
+    recovery_valid = validate_contract("production_recovery_drill_result", {"status": "ready", "project": "p", "summary": {}, "scenarios": [], "evidence": {}})
     quality_gate_valid = validate_contract("quality_gate_bundle_result", {"status": "ready", "project": "p", "summary": {}, "gates": [], "evidence": {}})
     invalid = validate_contract("review_report", {"run_id": "run"})
 
@@ -61,6 +65,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert sandbox_valid["valid"] is True
     assert live_probe_valid["valid"] is True
     assert readonly_probe_valid["valid"] is True
+    assert long_run_valid["valid"] is True
     assert replay_valid["valid"] is True
     assert multi_replay_valid["valid"] is True
     assert continuity_valid["valid"] is True
@@ -74,6 +79,7 @@ def test_contract_schemas_validate_required_outputs() -> None:
     assert architecture_contract_valid["valid"] is True
     assert stress_valid["valid"] is True
     assert patch_closure_valid["valid"] is True
+    assert recovery_valid["valid"] is True
     assert quality_gate_valid["valid"] is True
     assert invalid["valid"] is False
     assert "license_review" in invalid["missing"]

@@ -1,0 +1,249 @@
+{
+  "evidence": {
+    "reviewer": "retort_engine.pr_dry_run.review_pr_url",
+    "scope": "external_public_pull_request_long_run",
+    "source_report": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/docs/retort_complex_pr_replay.json",
+    "source_status": "ready",
+    "stores_summaries_only": true
+  },
+  "project": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine",
+  "publish_safety_matrix": {
+    "checks": {
+      "live_write_rolled_back": true,
+      "low_permission_degraded": true,
+      "readonly_degraded": true,
+      "sandbox_rolled_back": true
+    },
+    "ready": true,
+    "reports": {
+      "live": "live_rolled_back",
+      "low_permission": "permission_denied_degraded",
+      "readonly": "read_only_degraded",
+      "sandbox": "sandbox_rolled_back"
+    }
+  },
+  "pull_requests": [
+    {
+      "comment_count": 3,
+      "complex_enough": false,
+      "fetched_bytes": 1693,
+      "file_count": 2,
+      "hunk_count": 3,
+      "language_extensions": [
+        "rst"
+      ],
+      "pr_url": "https://github.com/python/cpython/pull/152462",
+      "reviewed_new_change_count": 8,
+      "severity_counts": {
+        "high": 0,
+        "info": 3,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 6,
+      "complex_enough": true,
+      "fetched_bytes": 3820,
+      "file_count": 2,
+      "hunk_count": 6,
+      "language_extensions": [
+        "go"
+      ],
+      "pr_url": "https://github.com/golang/go/pull/80180",
+      "reviewed_new_change_count": 42,
+      "severity_counts": {
+        "high": 0,
+        "info": 6,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 2,
+      "complex_enough": false,
+      "fetched_bytes": 1580,
+      "file_count": 2,
+      "hunk_count": 2,
+      "language_extensions": [
+        "js"
+      ],
+      "pr_url": "https://github.com/nodejs/node/pull/64174",
+      "reviewed_new_change_count": 15,
+      "severity_counts": {
+        "high": 0,
+        "info": 2,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 7,
+      "complex_enough": true,
+      "fetched_bytes": 5268,
+      "file_count": 5,
+      "hunk_count": 7,
+      "language_extensions": [
+        "js",
+        "json",
+        "ts"
+      ],
+      "pr_url": "https://github.com/react/react/pull/36892",
+      "reviewed_new_change_count": 110,
+      "severity_counts": {
+        "high": 0,
+        "info": 7,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 3,
+      "complex_enough": false,
+      "fetched_bytes": 1975,
+      "file_count": 1,
+      "hunk_count": 3,
+      "language_extensions": [
+        "go"
+      ],
+      "pr_url": "https://github.com/kubernetes/kubernetes/pull/140057",
+      "reviewed_new_change_count": 3,
+      "severity_counts": {
+        "high": 0,
+        "info": 2,
+        "low": 1,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 20,
+      "complex_enough": true,
+      "fetched_bytes": 20679,
+      "file_count": 10,
+      "hunk_count": 31,
+      "language_extensions": [
+        "md",
+        "rs",
+        "stderr"
+      ],
+      "pr_url": "https://github.com/rust-lang/rust/pull/158504",
+      "reviewed_new_change_count": 38,
+      "severity_counts": {
+        "high": 0,
+        "info": 20,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 2,
+      "complex_enough": false,
+      "fetched_bytes": 1835,
+      "file_count": 1,
+      "hunk_count": 2,
+      "language_extensions": [
+        "html"
+      ],
+      "pr_url": "https://github.com/django/django/pull/21562",
+      "reviewed_new_change_count": 8,
+      "severity_counts": {
+        "high": 0,
+        "info": 1,
+        "low": 1,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 3,
+      "complex_enough": true,
+      "fetched_bytes": 3273,
+      "file_count": 3,
+      "hunk_count": 3,
+      "language_extensions": [
+        "ts"
+      ],
+      "pr_url": "https://github.com/vitejs/vite/pull/22792",
+      "reviewed_new_change_count": 56,
+      "severity_counts": {
+        "high": 0,
+        "info": 3,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 4,
+      "complex_enough": true,
+      "fetched_bytes": 2830,
+      "file_count": 4,
+      "hunk_count": 4,
+      "language_extensions": [
+        "c",
+        "py",
+        "src"
+      ],
+      "pr_url": "https://github.com/numpy/numpy/pull/31787",
+      "reviewed_new_change_count": 31,
+      "severity_counts": {
+        "high": 0,
+        "info": 4,
+        "low": 0,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    },
+    {
+      "comment_count": 2,
+      "complex_enough": false,
+      "fetched_bytes": 768,
+      "file_count": 1,
+      "hunk_count": 1,
+      "language_extensions": [
+        "ts"
+      ],
+      "pr_url": "https://github.com/microsoft/TypeScript/pull/63591",
+      "reviewed_new_change_count": 6,
+      "severity_counts": {
+        "high": 0,
+        "info": 0,
+        "low": 2,
+        "medium": 0
+      },
+      "status": "reviewed",
+      "truncated": false
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "all_reviewed": true,
+    "complex_pr_count": 5,
+    "distinct_extension_count": 12,
+    "distinct_repo_count": 10,
+    "external_pr_count": 10,
+    "long_run_ready": true,
+    "publish_safety_matrix_ready": true,
+    "reviewed_pr_count": 10,
+    "target_pr_count": 10,
+    "total_comment_count": 52,
+    "total_file_count": 31,
+    "total_hunk_count": 62,
+    "total_reviewed_new_change_count": 317
+  }
+}
