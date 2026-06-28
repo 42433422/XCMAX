@@ -209,6 +209,11 @@ def project_digest(root: Path, *, snippet_limit: int = 18, snippet_chars: int = 
 
 
 def prioritized_evidence(evidence: list[str]) -> list[str]:
+    must_keep_prefixes = (
+        "operator_journey_replay_",
+        "absorption_release_decision_operator_",
+        "release_decision_self_reference=",
+    )
     prefixes = (
         "absorption_source=",
         "latest_absorption_",
@@ -249,8 +254,9 @@ def prioritized_evidence(evidence: list[str]) -> list[str]:
         "multi_project_absorption_replay_",
         "absorption_continuity_",
     )
-    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes)]
-    return selected[:80]
+    must_keep = [item for item in evidence if any(str(item).startswith(prefix) for prefix in must_keep_prefixes)]
+    selected = [item for item in evidence if any(str(item).startswith(prefix) for prefix in prefixes) and item not in must_keep]
+    return [*must_keep, *selected][:80]
 
 
 def scoring_audit(metadata: dict[str, Any]) -> dict[str, Any]:
