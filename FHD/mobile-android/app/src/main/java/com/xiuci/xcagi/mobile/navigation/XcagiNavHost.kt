@@ -666,6 +666,28 @@ fun XcagiNavHost(
                             onOpenChat = { conversationId ->
                                 nav.navigate(Routes.conversationChat(conversationId))
                             },
+                            onOpenQuestions = { nav.navigate(Routes.employeeQuestions(employeeId)) },
+                    )
+                }
+                composable(
+                        route = Routes.EMPLOYEE_QUESTIONS,
+                        arguments =
+                                listOf(
+                                        navArgument("employeeId") { type = NavType.StringType },
+                                ),
+                ) { backStackEntry ->
+                    val employeeId = backStackEntry.arguments?.getString("employeeId").orEmpty()
+                    EmployeeQuestionsScreen(
+                            vm = vm,
+                            employeeId = employeeId,
+                            onBack = { nav.popBackStack() },
+                    )
+                }
+                composable(Routes.EMPLOYEE_QUESTIONS_ALL) {
+                    EmployeeQuestionsScreen(
+                            vm = vm,
+                            employeeId = null,
+                            onBack = { nav.popBackStack() },
                     )
                 }
                 composable(

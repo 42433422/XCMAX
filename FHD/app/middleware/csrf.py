@@ -53,6 +53,12 @@ def _csrf_exempt_aiopen(scope: Scope) -> bool:
     return path.startswith("/api/aiopen") or path.startswith("/api/ai/qclaw")
 
 
+def _csrf_exempt_internal_api(scope: Scope) -> bool:
+    """内部跨进程 endpoint：MODstore → FHD HTTP 桥接，无浏览器会话，安全由 X-Internal-Api-Key 承担。"""
+    path = (scope.get("path") or "").rstrip("/")
+    return path.startswith("/api/internal/")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -94,6 +100,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_aiopen(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_internal_api(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")

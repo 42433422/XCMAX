@@ -982,6 +982,56 @@ def ensure_neuro_event_log_bootstrap(
         raise
 
 
+def ensure_sqlite_im_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """桌面 SQLite：补齐 IM 三张表 + AI 员工虚拟用户档案表。
+
+    IM 表（im_conversations / im_conversation_members / im_messages）和
+    ai_employee_profiles 在 Alembic 迁移链里建；SQLite 桌面模式不跑 Alembic，
+    需要这里显式建出来，否则员工主动 IM 推送链路会因缺表 500。
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.ai_employee import AiEmployeeProfile
+    from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None or real_engine.dialect.name != "sqlite":
+        return
+    try:
+        insp = inspect(real_engine)
+        tables = set(insp.get_table_names() or [])
+        needed = {
+            "im_conversations",
+            "im_conversation_members",
+            "im_messages",
+            "ai_employee_profiles",
+        }
+        missing = needed - tables
+        if missing:
+            logger.info("SQLite 缺少 IM/员工档案表 %s，正在通过 ORM 创建 …", sorted(missing))
+            Base.metadata.create_all(
+                real_engine,
+                tables=[
+                    ImConversation.__table__,
+                    ImConversationMember.__table__,
+                    ImMessage.__table__,
+                    AiEmployeeProfile.__table__,
+                ],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_sqlite_im_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -1025,6 +1075,11 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_sqlite_im_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
         ensure_user_preferences_bootstrap(
@@ -1033,6 +1088,11 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_neuro_event_log_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_sqlite_im_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,
