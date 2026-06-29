@@ -52,7 +52,7 @@ server-api = [
     "opentelemetry-exporter-otlp>=1.24.0",
 ]
 ml = [
-    "torch>=2.0.0",
+    "torch>=2.12.1",
     "transformers>=4.35.0",
     # ML 运行时依赖（音频/视频/预测/加速）
     "accelerate>=0.25.0",
