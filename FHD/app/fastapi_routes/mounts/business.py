@@ -163,6 +163,11 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "internal_im",
+        lambda: __import__("app.fastapi_routes.internal_im", fromlist=["router"]).router,
+    )
+    _mount(
+        registry,
         "production_line_event",
         lambda: (
             __import__(

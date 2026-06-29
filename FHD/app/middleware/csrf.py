@@ -103,6 +103,11 @@ class CSRFMiddleware:
             if path.startswith("/api/mobile/v1/relay/"):
                 await self.app(scope, receive, send)
                 return
+            # 内部服务端调用（带 X-Internal-Api-Key，如 MODstore→FHD 员工 IM 投递）：非浏览器请求，
+            # 由端点自身的 API-Key 鉴权保护，免 CSRF 双提交。
+            if path.startswith("/api/internal/") and request.headers.get("x-internal-api-key"):
+                await self.app(scope, receive, send)
+                return
 
             auth_header = request.headers.get("authorization", "")
             if auth_header.startswith("Bearer "):
