@@ -33,17 +33,20 @@ def open_industry_seed_mod_ids() -> list[str]:
     packages = (
         doc.get("industry_packages") if isinstance(doc.get("industry_packages"), dict) else {}
     )
+    from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
+
+    host_foundation_ids = set(MINIMAL_HOST_MOD_IDS) | set(GENERIC_HOST_MOD_IDS)
     out: list[str] = []
     for iid in open_ids:
         row = packages.get(iid) if isinstance(packages.get(iid), dict) else {}
         mid = str(row.get("mod_id") or "").strip()
-        if mid:
+        if mid and mid not in host_foundation_ids:
             out.append(mid)
     for row in packages.values():
         if not isinstance(row, dict):
             continue
         mid = str(row.get("mod_id") or "").strip()
-        if mid.endswith("-industry"):
+        if mid.endswith("-industry") and mid not in host_foundation_ids:
             out.append(mid)
     return _dedupe(out)
 

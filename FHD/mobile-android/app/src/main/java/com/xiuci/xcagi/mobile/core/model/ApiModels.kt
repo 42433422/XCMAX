@@ -356,6 +356,10 @@ data class WorkflowEmployeeInfo(
     val market_license_scope: String = "",
     val market_security_level: String = "",
     val market_avatar: String? = null,
+    val im_conv_id: Int = 0,
+    val im_unread_count: Int = 0,
+    val im_last_message: String = "",
+    val im_last_message_at: String = "",
 )
 
 data class ModMenuItem(
@@ -406,6 +410,10 @@ data class AdminMobileEmployeeInfo(
     val market_license_scope: String = "",
     val market_security_level: String = "",
     val market_avatar: String? = null,
+    val im_conv_id: Int = 0,
+    val im_unread_count: Int = 0,
+    val im_last_message: String = "",
+    val im_last_message_at: String = "",
 )
 
 data class AdminMobileFeature(
@@ -426,4 +434,24 @@ data class AdminMobileHomeData(
     val market_connected: Boolean = false,
     val market_profile_count: Int = 0,
     val market_error: String = "",
+)
+
+/** 员工 Phase-D 主动提问（待老板回答）。 */
+data class EmployeePendingQuestion(
+    val id: Int = 0,
+    val employee_id: String = "",
+    val task: String = "",
+    val question: String = "",
+    val status: String = "pending",  // pending | answered | expired
+    val answer: String = "",
+    val asked_at: String = "",
+    val answered_at: String = "",
+    val expires_at: String = "",
+)
+
+/** /admin/employee-pending-questions 响应 data。 */
+data class EmployeePendingQuestionsData(
+    val items: List<EmployeePendingQuestion> = emptyList(),
+    val count: Int = 0,
+    val market_connected: Boolean = false,
 )

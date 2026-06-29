@@ -48,7 +48,12 @@ def test_projects_only_report_threads(monkeypatch):
         ],
         messages_by_tid={
             5: [
-                {"id": 12, "sender_employee_id": "fhd-core-maintainer", "content": "今日行动条目 共 2 项", "created_at": "2026-06-22T08:10:00Z"},
+                {
+                    "id": 12,
+                    "sender_employee_id": "fhd-core-maintainer",
+                    "content": "今日行动条目 共 2 项",
+                    "created_at": "2026-06-22T08:10:00Z",
+                },
                 {"id": 13, "sender_employee_id": "", "content": "无主，应跳过"},
             ],
             9: [{"id": 99, "sender_employee_id": "x", "content": "不该被扫到"}],
@@ -66,7 +71,9 @@ def test_dedupe_counts_zero_when_exists(monkeypatch):
     calls = _install(
         monkeypatch,
         threads=[{"id": 5, "title": "[员工交流圈] 公司大会 / 编排 · dept=company"}],
-        messages_by_tid={5: [{"id": 7, "sender_employee_id": "meeting-chair", "content": "每日员工大会纪要"}]},
+        messages_by_tid={
+            5: [{"id": 7, "sender_employee_id": "meeting-chair", "content": "每日员工大会纪要"}]
+        },
         upsert_returns=None,  # 已存在
     )
     out = asyncio.run(sync.sync_modstore_reports(force=True))

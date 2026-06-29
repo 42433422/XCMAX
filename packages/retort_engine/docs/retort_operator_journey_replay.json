@@ -22,7 +22,7 @@
       "sha256": "3e233564781026388005173bcdf0adf21ab16166863e3f99988b5a4645443267"
     },
     {
-      "bytes": 3504,
+      "bytes": 3630,
       "exists": true,
       "kind": "source_report",
       "name": "quality_gate_bundle",
@@ -40,7 +40,7 @@
         "gates"
       ],
       "required_fields_ready": true,
-      "sha256": "530fb53e07f17ad5b2b3aece9a71c1c1ed99e57277d00edd6e243e48285a066a"
+      "sha256": "a660a3d482cd8750c52fc91a5c33337bb2a788ad58b7aabf14b99121fad88d74"
     },
     {
       "bytes": 3435,
@@ -400,7 +400,7 @@
       "sha256": "d0fc1c311db2bfc518e1d6a36f23c21b01f285df12079512f1eaabad03d9716d"
     },
     {
-      "bytes": 332721,
+      "bytes": 389104,
       "exists": true,
       "kind": "source_report",
       "name": "upstream_pr_ci_probe",
@@ -418,10 +418,10 @@
         "check_runs"
       ],
       "required_fields_ready": true,
-      "sha256": "e1400581d655cfa36cb0854008ce00b4becd6d743036938b28b4c97280fb8d4f"
+      "sha256": "4a204d1429f27b612e01ec53e2b1d3c74a8f070925f4d00fda104e4b45d65259"
     },
     {
-      "bytes": 25090,
+      "bytes": 29109,
       "exists": true,
       "kind": "source_report",
       "name": "competitor_runtime_comparison",
@@ -439,7 +439,7 @@
         "competitor_output"
       ],
       "required_fields_ready": true,
-      "sha256": "3395e5df77d9c4195f93d982556b66090efe8e0904fd1983c725bdff20a58833"
+      "sha256": "72fe65df0953def765b426a3d36dfbd794687b7b319badcbe46926c753945d73"
     },
     {
       "bytes": 3685,
@@ -484,7 +484,7 @@
       "sha256": "3cb3e5e48a7ae9605c21d9ae89d225f46f000cb0f3f153d443efcbaa8e092a1a"
     },
     {
-      "bytes": 8198,
+      "bytes": 8645,
       "exists": true,
       "kind": "source_report",
       "name": "paibi_cli_cross_adjudication",
@@ -502,7 +502,7 @@
         "tool_results"
       ],
       "required_fields_ready": true,
-      "sha256": "f2921fd22bbb4a2a5f25c21bacd4345624e4f365e28196ea5a8b52d373179a20"
+      "sha256": "ef57a2b36cde1f3904e2dec56e6c9e96169b20c3e0081860284acaf054633a84"
     },
     {
       "bytes": 12576,
@@ -774,14 +774,14 @@
     },
     "blackhole_ui_operation_replay": {
       "absorbed_project_click_bound": true,
-      "action_count": 6,
+      "action_count": 8,
       "all_actions_bound": true,
       "ready": true,
-      "ready_action_count": 6,
+      "ready_action_count": 8,
       "status": "ready"
     },
     "codebase_graph": {
-      "edge_count": 5932,
+      "edge_count": 5985,
       "file_count": 190,
       "hotspot_count": 12,
       "ready": true,
@@ -798,7 +798,7 @@
       "--output",
       "docs/retort_operator_journey_replay.json"
     ],
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T101831Z-a42bb3a5.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T112624Z-204d0872.manifest.json",
     "minimal_evidence_pack": true,
     "replay_model": "hash_bound_reports_plus_live_cross_domain_probes"
   },
@@ -830,7 +830,7 @@
       "evidence": [
         "changed_files=92",
         "gates_passed=True",
-        "quality_gate_sha=530fb53e07f17ad5b2b3aece9a71c1c1ed99e57277d00edd6e243e48285a066a",
+        "quality_gate_sha=a660a3d482cd8750c52fc91a5c33337bb2a788ad58b7aabf14b99121fad88d74",
         "product_mainline_sha=2a05a82c203386dd47d0ac9378b150ab59b385b2824211ff7dfcb6e4da4397fe"
       ],
       "name": "absorb_and_gate",
@@ -895,11 +895,11 @@
     {
       "evidence": [
         "external_process_sha=924645e5cfece4b3ab87605b405545681b931f274e87b475869ae1231244c6a5",
-        "upstream_pr_ci_sha=e1400581d655cfa36cb0854008ce00b4becd6d743036938b28b4c97280fb8d4f",
-        "competitor_runtime_sha=3395e5df77d9c4195f93d982556b66090efe8e0904fd1983c725bdff20a58833",
+        "upstream_pr_ci_sha=4a204d1429f27b612e01ec53e2b1d3c74a8f070925f4d00fda104e4b45d65259",
+        "competitor_runtime_sha=72fe65df0953def765b426a3d36dfbd794687b7b319badcbe46926c753945d73",
         "competitor_blind_sha=cdda0222b77ff48373a04ca9faf1e8aa6ca72f0f257719df551719cb3b306bb9",
         "competitor_behavior_sha=3cb3e5e48a7ae9605c21d9ae89d225f46f000cb0f3f153d443efcbaa8e092a1a",
-        "paibi_cli_cross_sha=f2921fd22bbb4a2a5f25c21bacd4345624e4f365e28196ea5a8b52d373179a20"
+        "paibi_cli_cross_sha=ef57a2b36cde1f3904e2dec56e6c9e96169b20c3e0081860284acaf054633a84"
       ],
       "name": "external_independence_probe",
       "ready": true,
@@ -941,7 +941,7 @@
     "cross_domain_ci_regression_ready": true,
     "cross_domain_end_to_end_ready": true,
     "cross_domain_live_probe_ready": true,
-    "duration_sec": 2.524,
+    "duration_sec": 1.937,
     "employee_patch_stress_ready": true,
     "external_advantage_ci_ready": true,
     "external_process_adjudication_ready": true,
@@ -949,14 +949,14 @@
     "frontend_operation_replay_ready": true,
     "frontend_structure_ready": true,
     "hashed_artifact_count": 34,
-    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T101831Z-a42bb3a5.manifest.json",
+    "manifest_path": "/Users/a4243342/Desktop/XCMAX/.claude/worktrees/pedantic-leakey-5611d9/packages/retort_engine/.retort/operator_journey_replays/operator-journey-20260628T112624Z-204d0872.manifest.json",
     "paibi_cli_cross_adjudication_ready": true,
     "per_run_code_graph_proved": true,
     "product_mainline_absorption_ready": true,
     "ready_stage_count": 11,
     "real_absorption_gates_passed": true,
     "real_absorption_run_present": true,
-    "run_id": "operator-journey-20260628T101831Z-a42bb3a5",
+    "run_id": "operator-journey-20260628T112624Z-204d0872",
     "single_command_surface": true,
     "source_report_count": 33,
     "stage_count": 11,

@@ -31,6 +31,22 @@ val injectedVersionName: String =
         ?: System.getenv("XCAGI_ANDROID_VERSION_NAME")?.takeIf { it.isNotBlank() }
         ?: "10.0.0"
 
+val localProperties = Properties().apply {
+    val propsFile = rootProject.file("local.properties")
+    if (propsFile.isFile) {
+        propsFile.inputStream().use { load(it) }
+    }
+}
+
+fun androidStringConfig(localKey: String, envKey: String, defaultValue: String): String =
+    (project.findProperty(localKey) as String?)?.trim()?.takeIf { it.isNotBlank() }
+        ?: localProperties.getProperty(localKey)?.trim()?.takeIf { it.isNotBlank() }
+        ?: System.getenv(envKey)?.trim()?.takeIf { it.isNotBlank() }
+        ?: defaultValue
+
+fun quotedBuildConfig(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
 android {
     namespace = "com.xiuci.xcagi.mobile"
     compileSdk = 35
@@ -45,8 +61,28 @@ android {
         manifestPlaceholders["JPUSH_CHANNEL"] = "developer-default"
         manifestPlaceholders["JPUSH_APPKEY"] = "placeholder_replace_in_local_properties"
         buildConfigField("int", "FHD_DEFAULT_PORT", "17500")
-        buildConfigField("String", "MODSTORE_BASE_URL", "\"https://xiu-ci.com\"")
-        buildConfigField("String", "ENTERPRISE_FHD_BASE_URL", "\"https://xiu-ci.com/fhd-api\"")
+        buildConfigField(
+            "String",
+            "MODSTORE_BASE_URL",
+            quotedBuildConfig(
+                androidStringConfig(
+                    "modstoreBaseUrl",
+                    "XCAGI_ANDROID_MODSTORE_BASE_URL",
+                    "https://xiu-ci.com",
+                ),
+            ),
+        )
+        buildConfigField(
+            "String",
+            "ENTERPRISE_FHD_BASE_URL",
+            quotedBuildConfig(
+                androidStringConfig(
+                    "enterpriseFhdBaseUrl",
+                    "XCAGI_ANDROID_ENTERPRISE_FHD_BASE_URL",
+                    "https://xiu-ci.com/fhd-api",
+                ),
+            ),
+        )
         buildConfigField("String", "COMPANY_NAME", "\"成都修茈科技有限公司\"")
     }
 

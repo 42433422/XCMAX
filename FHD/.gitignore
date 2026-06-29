@@ -44,6 +44,8 @@ ENV/
 *.swo
 *.bak
 *~
+mobile_relay_desktop.json
+mobile_relay_desktop.json.bak-*
 
 # ============================================================================
 # Testing & coverage caches (NOTE: do NOT ignore tests/ directory itself)

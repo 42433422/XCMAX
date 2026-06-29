@@ -350,6 +350,12 @@ def _register_payment_routes(app: FastAPI) -> None:
 
     _mount_router(
         app,
+        "app.fastapi_routes.employee_im_internal_api",
+        log_name="employee_im_internal (/api/internal/employee-im/*)",
+    )
+
+    _mount_router(
+        app,
         "app.fastapi_routes.sales_contract_api",
         log_name="sales_contract (/api/sales-contract/*)",
     )

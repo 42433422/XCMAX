@@ -61,7 +61,7 @@ def test_review_diff_returns_line_comments_and_groups() -> None:
     assert result["summary"]["calibration_policy"]["enabled"] is True
     assert result["summary"]["calibration_rank_weights"]["runtime"] > 0
     assert result["summary"]["risk_counts"]["high"] >= 1
-    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v4_hunk_semantics"
+    assert result["summary"]["comment_ranking_model"] == "severity_context_transfer_publishability_v5_external_diagnostics"
     assert result["summary"]["publishable_comment_count"] == len(result["comments"])
     assert result["summary"]["task_group_count"] == len(result["task_groups"])
     assert result["summary"]["actionable_task_group_count"] >= 1
@@ -265,6 +265,59 @@ diff --git a/retort_engine/review_bridge.py b/retort_engine/review_bridge.py
     assert result["summary"]["core_review_score"]["hunk_semantic_core_behavior_active"] is True
     assert result["summary"]["core_review_score"]["hunk_semantic_top_ranked"] is True
     assert result["cross_language_transfer"]["evidence"]["source"] == "absorbed_pr_bot_cross_language_transfer"
+
+
+def test_review_diff_ingests_reviewdog_style_external_diagnostics_into_core_ranking() -> None:
+    diff = """diff --git a/.github/workflows/reviewdog.yml b/.github/workflows/reviewdog.yml
+--- a/.github/workflows/reviewdog.yml
++++ b/.github/workflows/reviewdog.yml
+@@ -0,0 +1,4 @@
++on: pull_request_target
++permissions:
++  contents: write
++  pull-requests: write
+diff --git a/src/reviewer.go b/src/reviewer.go
+--- a/src/reviewer.go
++++ b/src/reviewer.go
+@@ -0,0 +1,2 @@
++func publish() { createReviewComment() }
++func ignore() {}
+"""
+
+    result = review_diff(
+        diff,
+        max_comments=8,
+        external_diagnostics=[
+            {
+                "source_project": "reviewdog/reviewdog",
+                "path": ".github/workflows/reviewdog.yml",
+                "line": 3,
+                "rule_id": "reviewdog:github-token-write-scope",
+                "severity": "error",
+                "message": "reviewdog reporter would publish from a broad token scope",
+            },
+            {
+                "source_project": "reviewdog/reviewdog",
+                "path": "src/reviewer.go",
+                "line": 99,
+                "rule_id": "reviewdog:stale-diagnostic",
+                "severity": "warning",
+                "message": "this should be dropped because it is outside the added diff",
+            },
+        ],
+    )
+
+    external = [comment for comment in result["comments"] if comment["capability"] == "external_diagnostic_ingestion"]
+
+    assert result["summary"]["external_diagnostic_ingestion"]["accepted_count"] == 1
+    assert result["summary"]["external_diagnostic_ingestion"]["dropped_count"] == 1
+    assert result["summary"]["external_diagnostic_ingestion"]["diff_line_anchor_enforced"] is True
+    assert result["summary"]["core_review_score"]["external_diagnostic_core_behavior_active"] is True
+    assert external
+    assert external[0]["publishable"] is True
+    assert external[0]["line"] == 3
+    assert external[0]["external_diagnostic_source"] == "reviewdog/reviewdog"
+    assert external[0]["rank_score"] >= 600
 
 
 def test_review_diff_uses_hunk_semantics_for_validation_regression() -> None:

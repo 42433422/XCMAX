@@ -1,2 +1,8 @@
 ## Copy to local.properties (not committed)
 sdk.dir=C\:\\Users\\YOUR_USER\\AppData\\Local\\Android\\Sdk
+
+## Optional local backend overrides for debug builds.
+## On an Android emulator, use http://10.0.2.2:17500 to reach the host machine.
+## On a physical device, use the host LAN IP, for example http://192.168.1.10:17500.
+# modstoreBaseUrl=http://10.0.2.2:17500
+# enterpriseFhdBaseUrl=http://10.0.2.2:17500

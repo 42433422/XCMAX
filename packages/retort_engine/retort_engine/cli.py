@@ -259,6 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     competitor_runtime.add_argument("--project", default=".")
     competitor_runtime.add_argument("--competitor-root", default="")
     competitor_runtime.add_argument("--live-upstream", action="store_true")
+    competitor_runtime.add_argument("--force-live-refresh", action="store_true")
     competitor_runtime.add_argument("--output", default="")
     competitor_runtime.add_argument("--json", action="store_true")
     competitor_blind = sub.add_parser("competitor-blind-adjudication")
@@ -783,7 +784,13 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"Output: {args.output}")
         return 0 if result["status"] == "ready" else 1
     if args.command == "competitor-runtime-comparison":
-        result = build_competitor_runtime_comparison(args.project, competitor_root=args.competitor_root, live_upstream=args.live_upstream, output=args.output)
+        result = build_competitor_runtime_comparison(
+            args.project,
+            competitor_root=args.competitor_root,
+            live_upstream=args.live_upstream,
+            force_live_refresh=args.force_live_refresh,
+            output=args.output,
+        )
         if args.json:
             print(json.dumps(result, ensure_ascii=False, indent=2))
         else:

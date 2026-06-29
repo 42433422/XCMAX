@@ -489,4 +489,55 @@ def human_questions_stats(
     }
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# 员工成绩单（10 项成熟度要求第 8 项 — 会承担结果）
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/scorecard/{employee_id}")
+def get_employee_scorecard_api(
+    employee_id: str,
+    days: int = Query(7, ge=1, le=90, description="回看多少天"),
+    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。
+
+    GET /api/admin/employee-autonomy/scorecard/{employee_id}?days=7&human_friendly=false
+    """
+    from modstore_server.employee_scorecard import (
+        build_human_friendly_scorecard_text,
+        get_employee_scorecard,
+    )
+
+    if human_friendly:
+        return {
+            "ok": True,
+            "employee_id": employee_id,
+            "text": build_human_friendly_scorecard_text(employee_id, days=days),
+        }
+    return get_employee_scorecard(employee_id, days=days)
+
+
+@router.get("/scorecard")
+def list_employee_scorecards_api(
+    days: int = Query(7, ge=1, le=90),
+    sort_by: str = Query(
+        "total_tasks",
+        description="total_tasks|success_rate|avg_duration_ms|failure_count|total_llm_tokens",
+    ),
+    top_n: int = Query(50, ge=1, le=200),
+    _admin_user: User = Depends(require_admin),
+) -> Dict[str, Any]:
+    """全部员工成绩汇总（按 sort_by 排序）。
+
+    GET /api/admin/employee-autonomy/scorecard?days=7&sort_by=total_tasks&top_n=50
+
+    用于老板「一览谁在干活、谁在拖后腿」。
+    """
+    from modstore_server.employee_scorecard import list_all_employee_scorecards
+
+    return list_all_employee_scorecards(days=days, sort_by=sort_by, top_n=top_n)
+
+
 __all__ = ["router"]

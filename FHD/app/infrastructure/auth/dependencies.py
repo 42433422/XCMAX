@@ -85,6 +85,11 @@ def require_identified_user(
 
 
 def session_id_from_request(request: Request) -> str:
+    # 移动端 AuthInterceptor 显式发 X-Session-ID；优先用，避免把 JWT 当 session_id 解析失败。
+    x_sid_raw = request.headers.get("X-Session-ID") or ""
+    x_sid = x_sid_raw.strip() if isinstance(x_sid_raw, str) else ""
+    if x_sid:
+        return x_sid
     auth_raw = request.headers.get("Authorization") or ""
     auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):

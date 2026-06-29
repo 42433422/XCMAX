@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from app.application.im_cs_inbox import CsInboxMixin
+from app.application.im_employee_mixin import ImEmployeeMixin
 from app.application.im_employee_peer import EmployeePeerMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
@@ -27,7 +27,7 @@ def ensure_im_tables(engine) -> None:
     init_im_tables(engine)
 
 
-class ImApplicationService(EmployeePeerMixin, CsInboxMixin):
+class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     def __init__(self, db: Session):
         self._db = db
 

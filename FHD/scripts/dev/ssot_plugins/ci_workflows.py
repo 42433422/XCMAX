@@ -26,7 +26,7 @@ GENERATED_PREFIX = "fhd-"
 EXTRA_GENERATED = ("modstore-",)  # 这些前缀的根 workflow 应为生成件
 # 有意的 root-only 独立 workflow：无 FHD 源、不经 publisher 生成（文件头自述
 # "直接编辑此处"），故按命名约定豁免 CI SSOT 生成头检查，避免假阳性漂移。
-STANDALONE_WORKFLOWS = frozenset({"fhd-alembic-ssot.yml"})
+STANDALONE_WORKFLOWS = frozenset({"fhd-alembic-ssot.yml", "modstore-prod-deploy.yml"})
 
 
 def _is_generated_workflow(path: Path) -> bool:

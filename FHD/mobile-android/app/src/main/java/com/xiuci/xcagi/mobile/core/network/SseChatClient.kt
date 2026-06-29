@@ -194,4 +194,96 @@ class SseChatClient @Inject constructor(
             lower.contains("504") ||
             lower.contains("上游")
     }
+
+    /**
+     * 员工 chat 流式接口（手机端）。
+     *
+     * POST /api/mobile/v1/employees/{employeeId}/chat/stream
+     * 后端同步跑员工 agent loop，然后把结果按句号 chunk emit 成 SSE token 流（伪流式）。
+     *
+     * 注意：员工 chat 不做重试 —— 后端 agent loop 有副作用（可能改文件、跑测试、调接口），
+     * 重试会重复执行员工任务。失败即报错给用户。
+     */
+    suspend fun streamEmployeeChat(
+        message: String,
+        employeeId: String,
+        modId: String,
+        conversationId: String,
+        bearer: String,
+        userId: Int,
+        onToken: (String) -> Unit,
+        onDone: (String) -> Unit,
+        onError: (String) -> Unit,
+    ) = withContext(Dispatchers.IO) {
+        val url = "${serverRouter.fhdBaseUrl()}api/mobile/v1/employees/$employeeId/chat/stream"
+        val bodyMap = mapOf(
+            "message" to message,
+            "conversation_id" to conversationId,
+            "mod_id" to modId,
+            "employee_id" to employeeId,
+        )
+        val bodyJson = gson.toJson(bodyMap)
+        val reqBuilder = Request.Builder()
+            .url(url)
+            .post(bodyJson.toRequestBody("application/json".toMediaType()))
+            .header("Accept", "text/event-stream")
+            .header("X-XCAGI-Client", "android")
+        if (bearer.isNotBlank()) {
+            reqBuilder.header("Authorization", bearer)
+        }
+        if (userId > 0) {
+            reqBuilder.header("X-User-ID", userId.toString())
+        }
+        val req = reqBuilder.build()
+
+        val buf = StringBuilder()
+        try {
+            okHttp.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    onError("员工对话 HTTP ${resp.code}")
+                    return@withContext
+                }
+                val reader = BufferedReader(InputStreamReader(resp.body!!.byteStream()))
+                var line: String?
+                while (reader.readLine().also { line = it } != null) {
+                    val l = line!!.trim()
+                    if (!l.startsWith("data:")) continue
+                    val payload = l.removePrefix("data:").trim()
+                    if (payload.isBlank() || payload == "[DONE]") continue
+                    try {
+                        val json = JsonParser.parseString(payload).asJsonObject
+                        val eventType = json.get("type")?.asString
+                        when (eventType) {
+                            "token" -> {
+                                val t = json.get("text")?.asString ?: ""
+                                if (t.isNotEmpty()) {
+                                    buf.append(t)
+                                    onToken(t)
+                                }
+                            }
+                            "done" -> {
+                                val result = json.get("result")
+                                val finalText = when {
+                                    result == null -> buf.toString()
+                                    result.isJsonObject -> result.asJsonObject.get("response")?.asString ?: buf.toString()
+                                    else -> result.asString
+                                }
+                                onDone(finalText.ifBlank { buf.toString() })
+                                return@withContext
+                            }
+                            "error" -> {
+                                val errMsg = json.get("message")?.asString ?: "员工对话流错误"
+                                onError(errMsg)
+                                return@withContext
+                            }
+                        }
+                    } catch (_: Exception) {
+                    }
+                }
+                onDone(buf.toString().ifBlank { "（员工未回复）" })
+            }
+        } catch (e: Exception) {
+            onError(e.message ?: "员工对话连接失败")
+        }
+    }
 }

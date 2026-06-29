@@ -5,7 +5,12 @@
     "sz-qsm-pro": "coating-industry"
   },
   "industry_to_canonical_mod_id": {
+    "通用": "xcagi-planner-bridge",
     "考勤": "attendance-industry",
-    "涂料": "coating-industry"
+    "涂料": "coating-industry",
+    "批发": "xcagi-erp-domain-bridge",
+    "电商": "xcagi-customer-service-bridge",
+    "餐饮": "xcagi-erp-domain-bridge",
+    "物流": "xcagi-erp-domain-bridge"
   }
 }

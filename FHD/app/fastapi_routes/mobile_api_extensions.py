@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -17,8 +18,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
@@ -118,7 +119,8 @@ extension_router = APIRouter(tags=["mobile-api-ext"])
 
 
 def _mobile_session_id_from_request(request: Request) -> str:
-    auth_hdr = request.headers.get("Authorization") or ""
+    auth_raw = request.headers.get("Authorization") or ""
+    auth_hdr = auth_raw if isinstance(auth_raw, str) else ""
     if auth_hdr.startswith("Bearer "):
         try:
             from app.security.mobile_jwt import verify_mobile_jwt
@@ -129,7 +131,8 @@ def _mobile_session_id_from_request(request: Request) -> str:
                 return sid
         except OPERATIONAL_ERRORS:
             logger.exception("mobile session id parse failed")
-    return str(request.headers.get("X-Session-ID") or "").strip()
+    sid_raw = request.headers.get("X-Session-ID") or ""
+    return sid_raw.strip() if isinstance(sid_raw, str) else ""
 
 
 def _mobile_market_authorization(request: Request, user: Any | None = None) -> str:
@@ -615,6 +618,7 @@ def _admin_employee_items(
     market_profiles: dict[str, dict[str, Any]] | None = None,
     *,
     market_connected: bool = False,
+    im_summary: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for raw in _admin_duty_records_from_roster():
@@ -652,6 +656,10 @@ def _admin_employee_items(
                 if profile:
                     break
         _apply_market_profile(item, profile, market_connected=market_connected)
+        if im_summary:
+            summary = im_summary.get(employee_id)
+            if summary:
+                item.update(summary)
         items.append(item)
     return items
 
@@ -1411,7 +1419,26 @@ async def mobile_admin_employees(request: Request, user=Depends(get_mobile_user)
     if err is not None:
         return err
     market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
-    items = _admin_employee_items(market_profiles, market_connected=market_connected)
+    uid = _mobile_request_user_id(request, user)
+    im_summary: dict[str, dict[str, Any]] = {}
+    if uid > 0:
+        try:
+            from app.application.im_app_service import ImApplicationService
+            from app.db import SessionLocal
+
+            db = SessionLocal()
+            try:
+                raw_items = _admin_employee_items(
+                    market_profiles, market_connected=market_connected
+                )
+                im_summary = ImApplicationService(db).employee_im_summary(uid, raw_items)
+            finally:
+                db.close()
+        except RECOVERABLE_ERRORS:
+            logger.debug("employee_im_summary skipped for /admin/employees", exc_info=True)
+    items = _admin_employee_items(
+        market_profiles, market_connected=market_connected, im_summary=im_summary
+    )
     return format_mobile_response(
         data={
             "items": items,
@@ -1543,6 +1570,26 @@ async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
         return err
     market_profiles, market_connected, market_error = await _load_market_ai_employee_profile_index()
     employees = _admin_employee_items(market_profiles, market_connected=market_connected)
+    # 把员工与老板的 direct IM 会话摘要合并进员工项，让 App 在现有员工列表里直接看到/点进 IM 会话。
+    # employee_im_summary 会自动为尚无 IM 用户/会话的员工 ensure 虚拟用户 + 创建空 direct 会话，
+    # 确保老板首次点击员工聊天页时 im_conv_id > 0，前端能正常走 IM 消息通道。
+    uid = _mobile_request_user_id(request, user)
+    im_summary: dict[str, dict[str, Any]] = {}
+    if uid > 0 and employees:
+        try:
+            from app.application.im_app_service import ImApplicationService
+            from app.db import SessionLocal
+
+            db = SessionLocal()
+            try:
+                im_summary = ImApplicationService(db).employee_im_summary(uid, employees)
+            finally:
+                db.close()
+        except RECOVERABLE_ERRORS:
+            logger.debug("employee_im_summary skipped", exc_info=True)
+    employees = _admin_employee_items(
+        market_profiles, market_connected=market_connected, im_summary=im_summary
+    )
     return format_mobile_response(
         data={
             "account_kind": meta.get("account_kind") or "admin",
@@ -3802,4 +3849,291 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
             "synced": balance_val is not None,
             "market_base_url": _market_base_url(),
         }
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 员工任务中心：手机端拉员工 Phase-D 主动提问 + 老板回答
+# 通过 httpx 代理调 MODstore 后端 admin_employee_autonomy_api：
+#   GET  /api/admin/employee-autonomy/questions
+#   POST /api/admin/employee-autonomy/questions/{id}/answer
+# 认证：MODSTORE_AUTH_TOKEN 环境变量（与 ModstoreAdapter 一致）
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _modstore_platform_base() -> str:
+    """获取 MODstore 后端 base url（如 http://127.0.0.1:8765）。"""
+    return os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000").rstrip("/")
+
+
+def _modstore_admin_token() -> str:
+    """获取调 MODstore admin API 用的 Bearer token。"""
+    return os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
+
+
+async def _modstore_admin_proxy(
+    method: str,
+    path: str,
+    *,
+    params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
+    timeout: float = 10.0,
+) -> dict[str, Any]:
+    """通用代理：调 MODstore 后端 admin API。
+
+    返回 {"ok": bool, "status": int, "data": ..., "error": str}。
+    """
+    import httpx
+
+    url = f"{_modstore_platform_base()}{path}"
+    headers = {"Accept": "application/json"}
+    token = _modstore_admin_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.request(method, url, params=params, json=json_body, headers=headers)
+        try:
+            data = resp.json()
+        except Exception:  # noqa: BLE001
+            data = {"raw": resp.text[:500]}
+        if resp.is_success:
+            return {"ok": True, "status": resp.status_code, "data": data}
+        return {
+            "ok": False,
+            "status": resp.status_code,
+            "error": str(data.get("detail") or data.get("error") or resp.text[:200])[:300],
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "status": 0,
+            "error": f"无法连接 MODstore 后端：{_compact_text(exc)[:200]}",
+        }
+
+
+@extension_router.get("/admin/employee-pending-questions")
+async def mobile_admin_employee_pending_questions(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    include_history: bool = Query(default=False),
+    employee_id: str | None = Query(default=None),
+    user=Depends(get_mobile_user),
+):
+    """拉员工 Phase-D 主动提问列表（pending 优先）。
+
+    GET /api/mobile/v1/admin/employee-pending-questions
+      ?limit=50&include_history=false&employee_id=llm-ops-engineer
+
+    返回 {"items": [...], "count": N, "market_connected": bool}
+    每个 item 含：id / employee_id / task / question / status / asked_at / answer / answered_at
+    """
+    meta, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+
+    params: dict[str, Any] = {"limit": limit, "include_expired": bool(include_history)}
+    if employee_id:
+        params["employee_id"] = employee_id
+
+    out = await _modstore_admin_proxy(
+        "GET",
+        "/api/admin/employee-autonomy/questions",
+        params=params,
+    )
+    if not out.get("ok"):
+        return format_mobile_response(
+            None,
+            f"拉员工提问失败：{out.get('error') or '未知错误'}",
+            success=False,
+            code=out.get("status") or 502,
+        )
+    data = out.get("data") if isinstance(out.get("data"), dict) else {}
+    items = data.get("items") if isinstance(data.get("items"), list) else []
+    return format_mobile_response(
+        data={
+            "items": items,
+            "count": int(data.get("count") or len(items)),
+            "market_connected": bool(out.get("ok")),
+        }
+    )
+
+
+@extension_router.post("/admin/employee-pending-questions/{question_id}/answer")
+async def mobile_admin_employee_pending_question_answer(
+    question_id: int,
+    body: dict[str, Any],
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    """老板回答员工的 Phase-D 提问。
+
+    POST /api/mobile/v1/admin/employee-pending-questions/{id}/answer
+    body: {"answer": "先做 A，因为..."}
+
+    成功后员工执行管道被阻塞的 ask_human_blocking() 会拿到答案继续执行。
+    """
+    meta, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+
+    answer_text = str((body or {}).get("answer") or "").strip()
+    if not answer_text:
+        return format_mobile_response(None, "answer 字段不能为空", success=False, code=400)
+
+    out = await _modstore_admin_proxy(
+        "POST",
+        f"/api/admin/employee-autonomy/questions/{int(question_id)}/answer",
+        json_body={"answer": answer_text},
+    )
+    if not out.get("ok"):
+        return format_mobile_response(
+            None,
+            f"回答失败：{out.get('error') or '未知错误'}",
+            success=False,
+            code=out.get("status") or 502,
+        )
+    data = out.get("data") if isinstance(out.get("data"), dict) else {}
+    return format_mobile_response(data=data)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 员工 chat（手机端流式）：让老板在 app 里直接和员工对话
+# ──────────────────────────────────────────────────────────────────────
+
+
+def _sse_line(payload: dict) -> bytes:
+    """构造 SSE event line：data: {json}\\n\\n"""
+    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+
+def _chunk_employee_reply(text: str) -> list[str]:
+    """把员工完整回复切成 SSE chunk（按句号/换行，每块 <= 120 字）。"""
+    if not text:
+        return []
+    parts = re.split(r"(?<=[。！？!?\n])", text)
+    chunks: list[str] = []
+    buf = ""
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        if len(buf) + len(p) > 120:
+            if buf:
+                chunks.append(buf)
+            if len(p) > 120:
+                chunks.append(p)
+                buf = ""
+            else:
+                buf = p
+        else:
+            buf += p
+    if buf:
+        chunks.append(buf)
+    return chunks or [text]
+
+
+def _extract_employee_reply_text(result: dict) -> str:
+    """从 execute_employee_task_local 返回值里提取回复文本。
+
+    返回结构（参考 executor.py 范式）：{success: bool, result: {outputs: [...]}}
+    """
+    if not isinstance(result, dict):
+        return ""
+    if not result.get("success"):
+        msg = result.get("message") or result.get("error")
+        return f"⚠️ 员工执行失败：{msg or '未知错误'}"
+    r = result.get("result") or {}
+    if not isinstance(r, dict):
+        return str(r) if r else ""
+    outputs = r.get("outputs") or []
+    if isinstance(outputs, list):
+        for out in outputs:
+            if not isinstance(out, dict):
+                continue
+            text = out.get("output") or out.get("summary") or out.get("text")
+            if text:
+                return str(text)
+    for k in ("response", "output", "message", "text", "answer"):
+        v = r.get(k)
+        if v:
+            return str(v)
+    return str(r) if r else ""
+
+
+@extension_router.post("/employees/{employee_id}/chat/stream")
+async def mobile_employee_chat_stream(
+    employee_id: str,
+    request: Request,
+    user=Depends(get_mobile_user),
+    body: dict[str, Any] = Body(default_factory=dict),
+):
+    """员工 chat 流式接口（手机端）。
+
+    POST /api/mobile/v1/employees/{employee_id}/chat/stream
+    body: {"message": "...", "conversation_id": "employee:modId:employeeId"}
+
+    内部调 execute_employee_task_local 跑员工 agent loop，
+    然后把完整结果按句号 chunk emit 成 SSE token 流（伪流式）。
+    """
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse(
+            format_mobile_response(None, "employee_id 必填", success=False, code=400),
+            status_code=400,
+        )
+    message = str((body or {}).get("message") or "").strip()
+    if not message:
+        return JSONResponse(
+            format_mobile_response(None, "message 必填", success=False, code=400),
+            status_code=400,
+        )
+
+    user_id = 0
+    try:
+        user_id = int(getattr(user, "id", 0) or 0)
+    except (TypeError, ValueError):
+        user_id = 0
+
+    conversation_id = str((body or {}).get("conversation_id") or "").strip()
+    payload = {
+        "trigger": "mobile_chat",
+        "source": "mobile",
+        "conversation_id": conversation_id,
+        "client_surface": "mobile",
+    }
+
+    async def sse_gen():
+        try:
+            yield _sse_line({"type": "token", "text": f"已连接员工 {pid}，正在思考..."})
+            from app.application.employee_runtime.executor import execute_employee_task_local
+
+            result = await asyncio.to_thread(
+                execute_employee_task_local,
+                pid,
+                message,
+                payload,
+                user_id=user_id,
+                workspace_root=None,
+                session_id=f"mobile_chat_{user_id}",
+            )
+            final_text = _extract_employee_reply_text(result)
+            if not final_text:
+                final_text = "（员工未返回内容）"
+            for chunk in _chunk_employee_reply(final_text):
+                yield _sse_line({"type": "token", "text": chunk})
+                await asyncio.sleep(0.05)
+            yield _sse_line({"type": "done", "result": {"response": final_text}})
+        except Exception as exc:
+            logger.exception("mobile_employee_chat_stream failed: %s", exc)
+            yield _sse_line({"type": "error", "message": f"员工对话失败：{exc}"})
+
+    return StreamingResponse(
+        sse_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )

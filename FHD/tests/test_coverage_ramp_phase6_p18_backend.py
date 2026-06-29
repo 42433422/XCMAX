@@ -2690,15 +2690,28 @@ class TestMobileExtCsRoutes:
         mock_user = MagicMock()
         mock_user.id = 1
         mock_request = MagicMock()
-        result = await ext_mod.post_cs_message(
-            request=mock_request, body={"body": "hello"}, user=mock_user
-        )
+        mock_db = MagicMock()
+        mock_db.__enter__ = MagicMock(return_value=mock_db)
+        mock_db.__exit__ = MagicMock(return_value=False)
+        mock_svc = MagicMock()
+        mock_svc._ensure_enterprise_dedicated_cs_user.return_value = SimpleNamespace(id=99)
+        mock_svc.get_or_create_direct.return_value = {"id": 7}
+        mock_svc.send_message.return_value = {
+            "message": {"id": 42, "created_at": "2026-06-29T00:00:00Z"}
+        }
+        with (
+            patch("app.db.session.get_db", return_value=mock_db),
+            patch("app.application.im_app_service.ImApplicationService", return_value=mock_svc),
+        ):
+            result = await ext_mod.post_cs_message(
+                request=mock_request, body={"body": "hello"}, user=mock_user
+            )
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
             data = result
         assert data.get("success") is True
-        assert "message_id" in data["data"]
+        assert data["data"]["message_id"] == "42"
 
     @pytest.mark.asyncio
     async def test_cs_get_messages_success(self, ext_mod):

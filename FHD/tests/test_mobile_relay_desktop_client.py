@@ -40,12 +40,16 @@ def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
 
     monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
     monkeypatch.delenv("XCAGI_DEVICE_ID", raising=False)
-    monkeypatch.setattr(relay, "_CONFIG_FILE", tmp_path / "mobile_relay_desktop.json")
+    config_file = tmp_path / "mobile_relay_desktop.json"
+    monkeypatch.setattr(relay, "_CONFIG_FILE", config_file)
+    monkeypatch.setattr(relay, "_LEGACY_CONFIG_FILE", tmp_path / "legacy_mobile_relay_desktop.json")
+    monkeypatch.setattr(relay, "_LEGACY_MIGRATION_DONE", False)
     monkeypatch.setattr(relay.httpx, "Client", FakeClient)
     monkeypatch.setattr(relay, "start_desktop_relay_poller", lambda: True)
     device_identity._cached = None
 
     relay.register_desktop_relay(host="192.168.0.38", port=17500)
+    config_file.unlink()
     device_identity._cached = None
     relay.register_desktop_relay(host="192.168.0.38", port=17501)
 

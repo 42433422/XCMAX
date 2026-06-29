@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -46,6 +47,7 @@ def build_competitor_runtime_comparison(
     run_id: str = "",
     competitor_root: str | Path = "",
     live_upstream: bool = False,
+    force_live_refresh: bool = False,
 ) -> dict[str, Any]:
     root = Path(project).expanduser().resolve()
     started = time.monotonic()
@@ -55,7 +57,18 @@ def build_competitor_runtime_comparison(
     patch = _sample_patch()
     patch_path = lab / "input.patch"
     patch_path.write_text(patch, encoding="utf-8")
-    runtimes = [_run_competitor_profile(root, lab, patch_path, profile, competitor_root=competitor_root, live_upstream=live_upstream) for profile in COMPETITOR_PROFILES]
+    runtimes = [
+        _run_competitor_profile(
+            root,
+            lab,
+            patch_path,
+            profile,
+            competitor_root=competitor_root,
+            live_upstream=live_upstream,
+            force_live_refresh=force_live_refresh,
+        )
+        for profile in COMPETITOR_PROFILES
+    ]
     primary_runtime = runtimes[0] if runtimes else {}
     primary_output = primary_runtime.get("output") if isinstance(primary_runtime.get("output"), dict) else {}
     competitor_output_path = lab / "competitor_outputs.json"
@@ -67,7 +80,13 @@ def build_competitor_runtime_comparison(
         "runtimes": runtimes,
     }
     competitor_output_path.write_text(json.dumps(competitor_output, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-    retort_output = review_diff(_full_diff(patch), issue_context="Compare external PR bot patch parsing with Retort review output", max_comments=8)
+    external_diagnostics = _external_diagnostics_from_runtimes(runtimes)
+    retort_output = review_diff(
+        _full_diff(patch),
+        issue_context="Compare external PR bot patch parsing with Retort review output",
+        external_diagnostics=external_diagnostics,
+        max_comments=8,
+    )
     retort_output_path.write_text(json.dumps(retort_output, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     retort_summary = retort_output.get("summary") if isinstance(retort_output.get("summary"), dict) else {}
     comments = [item for item in retort_output.get("comments") or [] if isinstance(item, dict)]
@@ -77,6 +96,7 @@ def build_competitor_runtime_comparison(
     external_zero = [item for item in runtimes if int(item.get("external_process_returncode", -1)) == 0]
     live_verified = [item for item in runtimes if (item.get("live_upstream") or {}).get("verified")]
     live_materialized = [item for item in runtimes if (item.get("live_upstream") or {}).get("materialized")]
+    live_refresh_used = [item for item in runtimes if item.get("source_mode") == "live_materialized"]
     max_competitor_findings = max((int(item.get("finding_count") or 0) for item in runtimes), default=0)
     summary = {
         "competitor_project": "mopemope/pr-ai-review-bot",
@@ -89,14 +109,18 @@ def build_competitor_runtime_comparison(
         "all_external_processes_successful": len(external_zero) == len(runtimes) and bool(runtimes),
         "all_competitor_sources_exist": len(source_present) == len(runtimes) and bool(runtimes),
         "live_upstream_requested": live_upstream,
+        "force_live_refresh": force_live_refresh,
         "live_upstream_probe_count": len(runtimes) if live_upstream else 0,
         "live_upstream_verified_count": len(live_verified),
         "live_upstream_materialized_count": len(live_materialized),
+        "live_refresh_used_count": len(live_refresh_used),
+        "all_runtime_sources_from_live_refresh": bool(force_live_refresh) and len(live_refresh_used) == len(runtimes) and bool(runtimes),
         "all_live_upstream_sources_verified": bool(live_upstream) and len(live_verified) == len(runtimes) and bool(runtimes),
         "all_live_upstream_sources_materialized": bool(live_upstream) and len(live_materialized) == len(runtimes) and bool(runtimes),
         "live_upstream_projects": [str(item.get("project", "")) for item in live_verified],
         "competitor_root": str(primary_runtime.get("root", "")),
         "competitor_source_exists": bool(primary_runtime.get("source_exists")),
+        "competitor_source_mode": str(primary_runtime.get("source_mode", "")),
         "competitor_source_sha256": str(primary_runtime.get("source_sha256", "")),
         "external_process_returncode": int(primary_runtime.get("external_process_returncode", -1)),
         "external_process_stdout_tail": str(primary_runtime.get("external_process_stdout_tail", "")),
@@ -104,6 +128,7 @@ def build_competitor_runtime_comparison(
         "competitor_hunk_count": len(hunks),
         "competitor_added_line_count": int(primary_output.get("added_line_count") or 0),
         "competitor_finding_count": sum(int(item.get("finding_count") or 0) for item in runtimes),
+        "external_diagnostic_count": len(external_diagnostics),
         "retort_review_status": retort_output.get("status", ""),
         "retort_comment_count": len(comments),
         "retort_task_group_count": int(retort_summary.get("task_group_count") or 0),
@@ -119,6 +144,7 @@ def build_competitor_runtime_comparison(
         and summary["ready_competitor_project_count"] >= 3
         and summary["all_external_processes_successful"]
         and summary["all_competitor_sources_exist"]
+        and (not force_live_refresh or summary["all_runtime_sources_from_live_refresh"])
         and summary["competitor_hunk_count"] >= 2
         and summary["retort_review_status"] == "reviewed"
         and summary["side_by_side_output_materialized"]
@@ -144,10 +170,12 @@ def build_competitor_runtime_comparison(
             "retort_output": str(retort_output_path),
         },
         "evidence": {
-            "style": "multi_cached_competitor_runtime_side_by_side_output",
+            "style": "multi_live_or_cached_competitor_runtime_side_by_side_output",
             "competitor_sources": [str(item.get("source", "")) for item in runtimes],
+            "competitor_source_modes": [str(item.get("source_mode", "")) for item in runtimes],
             "competitor_boundary": "external_node_and_python_processes_no_retort_engine_imports",
             "retort_runtime": "retort_engine.pr_review.review_diff",
+            "diagnostic_bridge": "reviewdog_style_external_diagnostics_to_review_diff",
         },
     }
     if output:
@@ -183,12 +211,25 @@ def _full_diff(patch: str) -> str:
     return f"diff --git a/src/main.ts b/src/main.ts\n--- a/src/main.ts\n+++ b/src/main.ts\n{patch}"
 
 
-def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: dict[str, str], *, competitor_root: str | Path = "", live_upstream: bool = False) -> dict[str, Any]:
+def _run_competitor_profile(
+    root: Path,
+    lab: Path,
+    patch_path: Path,
+    profile: dict[str, str],
+    *,
+    competitor_root: str | Path = "",
+    live_upstream: bool = False,
+    force_live_refresh: bool = False,
+) -> dict[str, Any]:
     if competitor_root and profile["project"] == "mopemope/pr-ai-review-bot":
         competitor = Path(competitor_root).expanduser().resolve()
     else:
         competitor = root / profile["cache_path"]
     source = competitor / profile["source"]
+    live = _probe_live_source(profile, lab=lab) if live_upstream else {"requested": False, "verified": False, "materialized": False}
+    live_source = Path(str(live.get("materialized_path") or "")) if live.get("materialized") else Path()
+    effective_source = live_source if force_live_refresh and live_source.is_file() else source
+    source_mode = "live_materialized" if effective_source == live_source and live_source.is_file() else "cache"
     runner_path = lab / profile["runner"]
     output_path = lab / f"{profile['project'].replace('/', '__')}_output.json"
     runner_source, command = _runner_for_profile(profile, runner_path, patch_path, output_path)
@@ -204,14 +245,15 @@ def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: di
     )
     output = _read_json(output_path)
     finding_count = int(output.get("finding_count") or len(output.get("findings") or []) or len(output.get("diagnostics") or []))
-    live = _probe_live_source(profile, lab=lab) if live_upstream else {"requested": False, "verified": False, "materialized": False}
     return {
         "project": profile["project"],
         "kind": profile["kind"],
         "root": str(competitor),
-        "source": str(source),
-        "source_exists": source.is_file(),
-        "source_sha256": _sha256(source) if source.is_file() else "",
+        "source": str(effective_source),
+        "cached_source": str(source),
+        "source_mode": source_mode,
+        "source_exists": effective_source.is_file(),
+        "source_sha256": _sha256(effective_source) if effective_source.is_file() else "",
         "runner_path": str(runner_path),
         "output_path": str(output_path),
         "external_process_returncode": completed.returncode,
@@ -219,17 +261,53 @@ def _run_competitor_profile(root: Path, lab: Path, patch_path: Path, profile: di
         "external_process_stderr_tail": completed.stderr[-300:],
         "finding_count": finding_count,
         "live_upstream": live,
-        "ready": source.is_file() and completed.returncode == 0 and output_path.is_file(),
+        "ready": effective_source.is_file() and completed.returncode == 0 and output_path.is_file(),
         "output": output,
     }
 
 
 def _runner_for_profile(profile: dict[str, str], runner_path: Path, patch_path: Path, output_path: Path) -> tuple[str, list[str]]:
     if profile["kind"] == "node_patch_parser":
-        return _NODE_PATCH_RUNTIME, ["node", str(runner_path), str(patch_path), str(output_path)]
+        return _NODE_PATCH_RUNTIME, [_node_executable(), str(runner_path), str(patch_path), str(output_path)]
     if profile["kind"] == "python_review_signal_counter":
         return _PYTHON_REVIEW_SIGNAL_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
     return _PYTHON_DIFF_DIAGNOSTIC_RUNTIME, [sys.executable, str(runner_path), str(patch_path), str(output_path)]
+
+
+def _node_executable() -> str:
+    found = shutil.which("node")
+    if found:
+        return found
+    for candidate in (
+        "/opt/homebrew/bin/node",
+        "/usr/local/bin/node",
+        "/usr/bin/node",
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    return "node"
+
+
+def _external_diagnostics_from_runtimes(runtimes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    diagnostics: list[dict[str, Any]] = []
+    for runtime in runtimes:
+        output = runtime.get("output") if isinstance(runtime.get("output"), dict) else {}
+        project = str(runtime.get("project") or "external")
+        kind = str(runtime.get("kind") or "external_runtime")
+        for item in output.get("diagnostics") or []:
+            if not isinstance(item, dict):
+                continue
+            diagnostics.append(
+                {
+                    "source_project": project,
+                    "path": str(item.get("path") or ""),
+                    "line": int(item.get("line") or 0),
+                    "rule_id": f"{kind}:diagnostic",
+                    "severity": "warning",
+                    "message": str(item.get("message") or "external diagnostic mapped from competitor runtime"),
+                }
+            )
+    return diagnostics
 
 
 def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
@@ -273,7 +351,7 @@ def _probe_live_source(profile: dict[str, str], *, lab: Path) -> dict[str, Any]:
 def _gh_api(endpoint: str) -> dict[str, Any]:
     try:
         completed = subprocess.run(
-            ["gh", "api", endpoint],
+            [_gh_executable(), "api", endpoint],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
@@ -287,6 +365,20 @@ def _gh_api(endpoint: str) -> dict[str, Any]:
     except json.JSONDecodeError:
         payload = {}
     return {"returncode": completed.returncode, "json": payload if isinstance(payload, dict) else {}, "stderr_tail": completed.stderr[-300:]}
+
+
+def _gh_executable() -> str:
+    found = shutil.which("gh")
+    if found:
+        return found
+    for candidate in (
+        "/opt/homebrew/bin/gh",
+        "/usr/local/bin/gh",
+        "/usr/bin/gh",
+    ):
+        if Path(candidate).is_file():
+            return candidate
+    return "gh"
 
 
 def _read_json(path: Path) -> dict[str, Any]:

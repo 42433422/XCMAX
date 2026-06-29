@@ -1,5 +1,0 @@
-diff --git a/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py
---- /dev/null
-+++ b/.retort/employee_patch_closures/employee-patch-20260628T055707Z-bb9bc7de/policy_patch.py
-@@ -0,0 +1 @@
-+ALLOWED_STATE = {'write': False, 'reason': 'readonly-degraded'}

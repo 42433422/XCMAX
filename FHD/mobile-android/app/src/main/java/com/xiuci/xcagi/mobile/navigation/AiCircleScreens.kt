@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -527,6 +528,7 @@ fun AiEmployeeProfileScreen(
     onBack: () -> Unit,
     onOpenCircle: () -> Unit,
     onOpenChat: (String) -> Unit,
+    onOpenQuestions: () -> Unit = {},
 ) {
     val modInfos by vm.modInfos.collectAsState()
     val employees = remember(modInfos) { modInfos.aiEmployeeProfiles() }
@@ -595,6 +597,15 @@ fun AiEmployeeProfileScreen(
                     text = "发消息",
                     icon = Icons.AutoMirrored.Filled.Chat,
                     onClick = { onOpenChat("employee:${employee.modId}:${employee.employeeId}") },
+                )
+            }
+
+            item {
+                Spacer(Modifier.height(8.dp))
+                AiProfileActionRow(
+                    text = "问他/她的待回答问题",
+                    icon = Icons.Outlined.QuestionAnswer,
+                    onClick = onOpenQuestions,
                 )
             }
 

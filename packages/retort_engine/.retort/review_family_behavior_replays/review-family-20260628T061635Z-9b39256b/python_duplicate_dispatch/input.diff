@@ -1,7 +1,0 @@
-diff --git a/pr_agent/reviewer.py b/pr_agent/reviewer.py
---- a/pr_agent/reviewer.py
-+++ b/pr_agent/reviewer.py
-@@ -0,0 +1,3 @@
-+def run_review(diff):
-+    publish_comment(diff)
-+    publish_comment(diff)

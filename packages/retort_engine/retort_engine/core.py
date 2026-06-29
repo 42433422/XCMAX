@@ -33,6 +33,7 @@ from retort_engine.capability_audit import latest_absorption_run as _audit_lates
 from retort_engine.capability_audit import pr_review_runtime_evidence as _audit_pr_review_runtime_evidence
 from retort_engine.codebase_graph import build_codebase_graph
 from retort_engine.comparative_replay import build_cross_project_replay
+from retort_engine.competitor_runtime_comparison import build_competitor_runtime_comparison
 from retort_engine.complex_pr_replay import build_complex_pr_replay_report
 from retort_engine.context_packager import build_context_pack
 from retort_engine.devour_session import assessment_file_count as _devour_assessment_file_count
@@ -68,6 +69,7 @@ from retort_engine.review_quality_benchmark import build_review_quality_benchmar
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
+from retort_engine.upstream_pr_ci_probe import build_upstream_pr_ci_probe
 
 
 @dataclass(frozen=True)
@@ -430,6 +432,21 @@ class RetortService:
         return build_absorption_saturation_report(
             str(payload.get("project") or payload.get("project_path") or "."),
             recent_limit=int(payload.get("recent_limit") or 3),
+        )
+
+    def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_competitor_runtime_comparison(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            competitor_root=str(payload.get("competitor_root") or ""),
+            live_upstream=bool(payload.get("live_upstream")),
+            force_live_refresh=bool(payload.get("force_live_refresh")),
+        )
+
+    def upstream_pr_ci_probe(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_upstream_pr_ci_probe(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            repo=str(payload.get("repo") or ""),
+            pr_number=int(payload.get("pr_number") or 0),
         )
 
     def llm_review(self, payload: dict[str, Any]) -> dict[str, Any]:

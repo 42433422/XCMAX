@@ -1,11 +1,13 @@
 package com.xiuci.xcagi.mobile.core.im
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.xiuci.xcagi.mobile.BuildConfig
 import com.xiuci.xcagi.mobile.core.db.ImMessageCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ImReadStateEntity
 import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
@@ -45,15 +47,32 @@ class ImRepository @Inject constructor(
         wsAttached = true
         scope.launch {
             imWebSocket.events.collectLatest { event ->
+                if (BuildConfig.DEBUG) {
+                    Log.d(TAG, "ws event recv type=${event.optString("type")}")
+                }
                 when (val parsed = ImWebSocketClient.parseEvent(event)) {
                     is ImWsEvent.Message -> {
+                        if (BuildConfig.DEBUG) {
+                            Log.d(
+                                TAG,
+                                "parsed Message conv=${parsed.conversationId} msgId=${parsed.messageId}",
+                            )
+                        }
                         upsertMessage(parsed.toEntity(), parsed.updatedAtMs)
                         requestPullHint()
                     }
                     is ImWsEvent.Read -> {
+                        if (BuildConfig.DEBUG) {
+                            Log.d(
+                                TAG,
+                                "parsed Read conv=${parsed.conversationId} lastRead=${parsed.lastReadMessageId}",
+                            )
+                        }
                         upsertReadState(parsed.conversationId, parsed.lastReadMessageId, parsed.updatedAtMs)
                     }
-                    null -> Unit
+                    null -> if (BuildConfig.DEBUG) {
+                        Log.w(TAG, "parseEvent returned null type=${event.optString("type")}")
+                    }
                 }
             }
         }
@@ -162,6 +181,8 @@ class ImRepository @Inject constructor(
     }
 
     companion object {
+        private const val TAG = "XcagiImRepo"
+
         fun parseTimestampMs(value: Any?): Long? {
             return when (value) {
                 is Number -> value.toLong()

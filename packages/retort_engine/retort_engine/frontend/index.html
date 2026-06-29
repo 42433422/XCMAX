@@ -21,6 +21,8 @@
         <button id="radarBtn">同类雷达</button>
         <button id="loopBtn">连续吸收</button>
         <button id="saturationBtn">饱和判定</button>
+        <button id="liveRuntimeBtn">实时对照</button>
+        <button id="upstreamCiBtn">上游CI</button>
       </section>
       <section class="stage"><canvas id="blackholeCanvas" data-visual="blackhole-accretion-field"></canvas><div class="readout"><span id="statusText">待命</span><strong id="coreScore">--</strong><small>核心分</small><div id="deepProgress" class="deep-progress idle" aria-live="polite"><div class="progress-head"><b id="progressTitle">等待深评</b><strong id="progressPercent">0%</strong></div><div class="progress-track"><i id="progressFill"></i></div><div id="progressSteps" class="progress-steps"><span data-step="evidence">证据</span><span data-step="dispatch">派发</span><span data-step="reasoning">推理</span><span data-step="scoring">评分</span><span data-step="record">记录</span></div><div class="progress-meta"><span id="progressElapsed">耗时 0s</span><span id="progressEta">点击深评后开始</span></div></div></div><div id="eventList" class="timeline"></div></section>
       <section class="rail flow-panel" aria-label="吞噬流程">
@@ -29,7 +31,7 @@
         <article class="flow-step" data-step="02"><h2>吞噬前双深评</h2><div id="dualReviewPanel" class="dual-review"><div class="empty">未运行</div></div><div class="flow-sub"><h2>外部项目评分</h2><div id="externalScoreGrid"><div class="empty">未运行</div></div></div></article>
         <article class="flow-step" data-step="03"><h2>专项对比</h2><div id="comparisonPanel" class="evidence">未运行</div><div class="flow-sub"><h2>代码图定位</h2><div id="codeGraphFocusPanel" class="evidence">等待图谱</div></div></article>
         <article class="flow-step" data-step="04"><h2>吸收执行</h2><div id="executionState" class="evidence">未运行</div><div class="flow-sub"><h2>分支</h2><div id="branchState" class="evidence">未运行</div></div><div class="flow-sub"><h2>吸收证据</h2><div id="evidenceState" class="evidence">未运行</div></div></article>
-        <article class="flow-step" data-step="05"><h2>提升证明</h2><div id="proofPanel" class="evidence">未运行</div><div class="flow-sub"><h2>代码图证明</h2><div id="codeGraphProofPanel" class="evidence">未运行</div></div></article>
+        <article class="flow-step" data-step="05"><h2>提升证明</h2><div id="proofPanel" class="evidence">未运行</div><div class="flow-sub"><h2>代码图证明</h2><div id="codeGraphProofPanel" class="evidence">未运行</div></div><div class="flow-sub"><h2>实时竞品对照</h2><div id="liveRuntimePanel" class="evidence">等待真实拉取</div></div><div class="flow-sub"><h2>跨语言上游CI</h2><div id="upstreamCiPanel" class="evidence">等待探针</div></div></article>
         <article class="flow-step" data-step="06"><h2>排比 LLM</h2><div id="llmState" class="evidence">未请求</div></article>
         <article class="flow-step" data-step="07"><h2>最终深评</h2><div id="finalReviewPanel" class="evidence">未运行</div><div class="flow-sub"><h2>主项目评分</h2><div id="scoreGrid"></div></div></article>
         <article class="flow-step" data-step="08"><h2>能力审计</h2><div id="capabilityState" class="evidence">未运行</div><div class="flow-sub"><h2>核心拆分优先级</h2><div id="refactorPriorityPanel" class="evidence">等待图谱</div></div></article>
