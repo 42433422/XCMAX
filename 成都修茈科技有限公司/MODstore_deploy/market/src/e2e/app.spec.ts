@@ -145,9 +145,9 @@ test('workbench shell target tabs switch between employee, workflow, mod and ski
   // Shell renders with employee target tab active
   await expect(page).toHaveURL(/\/workbench\/shell\/employee/)
 
-  // Legacy unified redirect still works
+  // Unified workbench remains available as its own authenticated route.
   await page.goto('/workbench/unified')
-  await expect(page).toHaveURL(/\/workbench\/shell/)
+  await expect(page).toHaveURL(/\/workbench\/unified/)
 
   // /workbench/home 仍渲染原主界面
   await page.goto('/workbench/home')
