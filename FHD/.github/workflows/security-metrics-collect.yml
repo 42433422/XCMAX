@@ -30,6 +30,10 @@ jobs:
       - name: Ensure metrics dir exists
         run: mkdir -p metrics
 
+      - name: Compute metrics date
+        id: metrics-date
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
       # gitleaks: 密钥泄漏扫描（SARIF v2.1.0）
       # continue-on-error=true：本 job 是指标采集，发现泄漏不应中止后续 Trivy/commit；
       # 门禁语义由 gitleaks.yml（PR-only）负责。
@@ -65,7 +69,7 @@ jobs:
           scan-type: fs
           scan-ref: .
           format: json
-          output: metrics/trivy-$(date -u +%Y-%m-%d).json
+          output: metrics/trivy-${{ steps.metrics-date.outputs.date }}.json
           severity: CRITICAL,HIGH,MEDIUM
           ignore-unfixed: true
           exit-code: "0"

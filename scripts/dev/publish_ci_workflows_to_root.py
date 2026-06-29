@@ -123,6 +123,7 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     content = content.replace("path: mobile-ios/build/", "path: FHD/mobile-ios/build/")
     content = re.sub(r"(?m)^([ \t]+)(dist/deploy/)", r"\1FHD/\2", content)
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
+    content = content.replace("output: metrics/", "output: FHD/metrics/")
     content = content.replace(
         "path: build/ci-sunbird-artifact/**",
         "path: FHD/build/ci-sunbird-artifact/**",
