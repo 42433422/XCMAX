@@ -42,7 +42,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.13.0'
           cache: 'npm'
           cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json
 
@@ -53,7 +53,7 @@ jobs:
         run: npm run lint
 
       - name: Type check
-        run: npm run typecheck
+        run: npm run typecheck:ci
 
       - name: Unit tests + coverage
         run: npm run test:coverage

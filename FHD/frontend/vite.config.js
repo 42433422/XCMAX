@@ -155,7 +155,10 @@ export default defineConfig(({ mode }) => {
     build: createBuildOptions(),
     optimizeDeps: {
       include: ['vue'],
-      exclude: []
+      exclude: [],
+      esbuildOptions: {
+        target: 'esnext',
+      },
     },
     css: {
       devSourcemap: true

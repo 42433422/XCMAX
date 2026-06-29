@@ -503,7 +503,7 @@ async function refreshOfficeAuxNavBadge() {
       false,
       OFFICE_AUX_PACK_1_COLLECTION,
     )
-    let list = ((res.items || []) as AiStoreItem[]).filter((it) => isOfficeAuxPack1Pkg(it.pkg_id))
+    const list = ((res.items || []) as AiStoreItem[]).filter((it) => isOfficeAuxPack1Pkg(it.pkg_id))
     officeAuxNavBadge.value = String(list.length)
   } catch {
     officeAuxNavBadge.value = '0'

@@ -13,7 +13,7 @@
     "typecheck": "vue-tsc --noEmit",
     "typecheck:baseline": "vue-tsc --noEmit -p tsconfig.strict-baseline.json",
     "typecheck:strict": "vue-tsc --noEmit -p tsconfig.strict.json",
-    "typecheck:ci": "vue-tsc --noEmit",
+    "typecheck:ci": "node scripts/typecheck-ci.mjs",
     "test": "npm run test:unit",
     "install:native": "node scripts/install-native-bindings.mjs",
     "postinstall": "node scripts/install-native-bindings.mjs",
@@ -54,7 +54,6 @@
     "js-cookie": "3.0.7",
     "js-yaml": "4.2.0",
     "uuid": "11.1.1",
-    "brace-expansion": "5.0.6",
     "ws": "8.21.0"
   },
   "devDependencies": {

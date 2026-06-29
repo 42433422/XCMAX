@@ -140,18 +140,34 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
 
 
 def _prefix_mod_paths(content: str, out_name: str) -> str:
+    mod_root = "成都修茈科技有限公司/MODstore_deploy"
+
     def repl_path(m: re.Match[str]) -> str:
         raw = m.group(1)
         if raw.startswith(("成都", ".github/", "scripts/")):
             return f'- "{raw}"'
         if raw.startswith("FHD/"):
             return f'- "{raw}"'
-        return f'- "成都修茈科技有限公司/MODstore_deploy/{raw}"'
+        return f'- "{mod_root}/{raw}"'
 
     content = re.sub(r'-\s+"([^"]+)"', repl_path, content)
     content = content.replace(
         ".github/workflows/ci-backend-python.yml",
         f".github/workflows/{out_name}",
+    )
+    # GitHub resolves action inputs and job-level working directories from the
+    # repository root, not from workflow-level defaults.run.working-directory.
+    content = content.replace(
+        "working-directory: market",
+        f"working-directory: {mod_root}/market",
+    )
+    content = content.replace(
+        "cache-dependency-path: market/package-lock.json",
+        f"cache-dependency-path: {mod_root}/market/package-lock.json",
+    )
+    content = content.replace(
+        "path: market/playwright-report/",
+        f"path: {mod_root}/market/playwright-report/",
     )
     return content
 

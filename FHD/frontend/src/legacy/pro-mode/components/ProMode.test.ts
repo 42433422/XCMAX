@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { mount } from '@vue/test-utils'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, enableAutoUnmount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { ref, nextTick } from 'vue'
 
@@ -13,6 +13,8 @@ vi.mock('@/composables/useProMode', () => ({
 }))
 
 import ProMode from '@/legacy/pro-mode/components/ProMode.vue'
+
+enableAutoUnmount(afterEach)
 
 function mountComponent(propsOverrides = {}) {
   return mount(ProMode, {

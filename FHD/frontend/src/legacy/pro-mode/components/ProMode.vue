@@ -304,6 +304,7 @@ const cleanupProModeResidualUi = () => {
 }
 
 const detectLegacyRuntime = () => {
+  if (typeof window === 'undefined') return false
   const legacyToggle = window.__legacyToggleProMode || window.toggleProMode;
   return typeof legacyToggle === 'function'
 }

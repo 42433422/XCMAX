@@ -59,10 +59,44 @@ function installEventSourceMock() {
   })
 }
 
+function installAnimationFrameMock() {
+  const requestFrame = (callback: FrameRequestCallback) => window.setTimeout(() => {
+    callback(window.performance?.now?.() ?? Date.now())
+  }, 16)
+  const cancelFrame = (handle: number) => window.clearTimeout(handle)
+
+  if (typeof window.requestAnimationFrame !== 'function' || typeof globalThis.requestAnimationFrame !== 'function') {
+    Object.defineProperty(window, 'requestAnimationFrame', {
+      writable: true,
+      configurable: true,
+      value: requestFrame,
+    })
+    Object.defineProperty(globalThis, 'requestAnimationFrame', {
+      writable: true,
+      configurable: true,
+      value: requestFrame,
+    })
+  }
+
+  if (typeof window.cancelAnimationFrame !== 'function' || typeof globalThis.cancelAnimationFrame !== 'function') {
+    Object.defineProperty(window, 'cancelAnimationFrame', {
+      writable: true,
+      configurable: true,
+      value: cancelFrame,
+    })
+    Object.defineProperty(globalThis, 'cancelAnimationFrame', {
+      writable: true,
+      configurable: true,
+      value: cancelFrame,
+    })
+  }
+}
+
 beforeEach(() => {
   setActivePinia(createPinia())
   installMatchMediaMock()
   installEventSourceMock()
+  installAnimationFrameMock()
 })
 
 afterEach(() => {

@@ -8197,9 +8197,9 @@ describe('WorkbenchHomeView remaining branch pressure', () => {
       writeWorkbenchBinding(wrapper, key, value)
     }
     let touchBindings = () => touchWorkbenchBindings(wrapper)
-    let state = getSetupState(wrapper) as Record<string, any>
-    let rawState = getRawSetupState(wrapper) as Record<string, any>
-    let coverageHooks = getExposedCoverage(wrapper) || {}
+    const state = getSetupState(wrapper) as Record<string, any>
+    const rawState = getRawSetupState(wrapper) as Record<string, any>
+    const coverageHooks = getExposedCoverage(wrapper) || {}
     state.__coverage = { ...(state.__coverage || {}), ...coverageHooks }
     let send = state.__coverage.sendDirectChat || state.sendDirectChat || rawState.sendDirectChat || globalHooks.sendDirectChat
     if (typeof send !== 'function') {

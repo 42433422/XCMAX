@@ -121,11 +121,20 @@ describe('voice and link utility coverage', () => {
     vi.spyOn(document, 'createElement').mockReturnValue({
       getContext: () => null,
     } as unknown as HTMLElement)
+    Object.defineProperty(navigator, 'userAgent', {
+      value: 'Mozilla/5.0',
+      configurable: true,
+    })
+    Object.defineProperty(navigator, 'userAgentData', {
+      value: { architecture: 'arm' },
+      configurable: true,
+    })
+    expect(detectMacDownloadArch()).toBe('arm64')
     Object.defineProperty(navigator, 'userAgentData', {
       value: { architecture: 'x86' },
       configurable: true,
     })
-    expect(detectMacDownloadArch()).toBe('arm64')
+    expect(detectMacDownloadArch()).toBe('x64')
 
     expect(desktopOpsDeepLink()).toBe('xcagi://ops/duty')
     expect(desktopOpsDeepLink(' emp 1 ')).toBe('xcagi://ops/duty?employee=emp%201')
