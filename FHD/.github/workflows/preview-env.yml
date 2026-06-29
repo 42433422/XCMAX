@@ -185,6 +185,7 @@ jobs:
 
       - name: Configure kubeconfig
         id: kube
+        working-directory: .
         env:
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
