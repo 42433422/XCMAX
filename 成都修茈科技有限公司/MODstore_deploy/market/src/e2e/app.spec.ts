@@ -96,17 +96,19 @@ test('protected pages redirect anonymous users to login', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '登录' })).toBeVisible()
 })
 
-test('top navigation stays inside the market router', async ({ page }) => {
+test('authenticated sidebar navigation stays inside the market router', async ({ page }) => {
   await stubCommonApis(page)
   await page.addInitScript(() => localStorage.setItem('modstore_token', 'token-e2e'))
 
   await page.goto('/plans')
 
-  await expect(page.getByRole('link', { name: 'XC AGI' })).toHaveAttribute('href', /\/workbench\/home$/)
-  await expect(page.getByRole('link', { name: '工作台' })).toHaveAttribute('href', /\/workbench\/home$/)
-  await expect(page.getByRole('link', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
+  await expect(page.getByRole('navigation', { name: '工作台侧边栏' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'AI 市场' })).toHaveAttribute('href', /\/ai-store$/)
-  await expect(page.getByRole('link', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
+
+  await page.getByRole('button', { name: 'tester 菜单' }).click()
+
+  await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
+  await expect(page.getByRole('menuitem', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
 })
 
 test('plan purchase creates a checkout order for authenticated users', async ({ page }) => {
