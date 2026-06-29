@@ -8,6 +8,8 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
+from app.application.im_cs_inbox import CsInboxMixin
+from app.application.im_employee_peer import EmployeePeerMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -25,7 +27,7 @@ def ensure_im_tables(engine) -> None:
     init_im_tables(engine)
 
 
-class ImApplicationService:
+class ImApplicationService(EmployeePeerMixin, CsInboxMixin):
     def __init__(self, db: Session):
         self._db = db
 
@@ -89,85 +91,6 @@ class ImApplicationService:
             self._db.commit()
             self._db.refresh(row)
         return row
-
-    # ── 员工作为 IM 对端（Phase-D 双向问答接入 IM）──
-    # IM 通道是用户↔用户；AI 员工以「合成 User」形态成为 1:1 对端，复用 dedicated-cs 同款做法，
-    # 从而每个员工拥有自己的聊天页、消息走 im-sync 实时多端同步 + 推送。
-
-    @staticmethod
-    def employee_im_username(employee_id: str) -> str:
-        return f"emp:{str(employee_id or '').strip()[:120]}"
-
-    def _ensure_employee_im_user(self, employee_id: str, display_name: str = "") -> User | None:
-        eid = str(employee_id or "").strip()
-        if not eid:
-            return None
-        uname = self.employee_im_username(eid)
-        nice = str(display_name or "").strip() or eid
-        row = (
-            self._db.execute(select(User).where(User.username == uname).limit(1)).scalars().first()
-        )
-        if row is None:
-            row = User(
-                username=uname,
-                password="!",  # 合成账号不可登录
-                display_name=nice,
-                email="",
-                role="employee",
-                is_active=True,
-                created_at=utc_now_naive(),
-            )
-            self._db.add(row)
-            self._db.commit()
-            self._db.refresh(row)
-            return row
-        if display_name and str(row.display_name or "").strip() != nice:
-            row.display_name = nice
-            self._db.commit()
-            self._db.refresh(row)
-        return row
-
-    def post_employee_message(
-        self,
-        *,
-        boss_user_id: int,
-        employee_id: str,
-        body: str,
-        display_name: str = "",
-    ) -> dict[str, Any] | None:
-        """以某 AI 员工的身份，向老板的 1:1 IM 会话发一条消息。
-
-        用于「员工主动提问/汇报」出现在该员工的聊天页（出站半边）。返回 conversation_id + message，
-        发送自动经 send_message 走 im-sync 变更记录 + 推送。``boss_user_id`` 必须是真实人类用户。
-        """
-        if int(boss_user_id or 0) <= 0:
-            return None
-        emp_user = self._ensure_employee_im_user(employee_id, display_name)
-        if emp_user is None or int(emp_user.id) == int(boss_user_id):
-            return None
-        conv = self.get_or_create_direct(int(boss_user_id), int(emp_user.id))
-        conv_id = int(conv["id"])
-        sent = self.send_message(conv_id, int(emp_user.id), body)
-        return {
-            "conversation_id": conv_id,
-            "employee_user_id": int(emp_user.id),
-            "employee_id": str(employee_id or "").strip(),
-            **sent,
-        }
-
-    def employee_id_for_conversation(self, conversation_id: int, boss_user_id: int) -> str | None:
-        """若该 1:1 会话的对端是某 AI 员工合成 User，返回其 employee_id；否则 None。
-
-        入站回流用：老板在某会话回复后，据此判断是否是「回复某员工」，是则把回复回流为该员工的答案。
-        """
-        peer_id = self._direct_peer_id(conversation_id, int(boss_user_id))
-        if not peer_id:
-            return None
-        peer = self._db.get(User, int(peer_id))
-        uname = str(getattr(peer, "username", "") or "")
-        if uname.startswith("emp:"):
-            return uname[len("emp:") :].strip() or None
-        return None
 
     @staticmethod
     def _contact_dict(user: User, *, dedicated_cs: bool = False) -> dict[str, Any]:
@@ -529,68 +452,6 @@ class ImApplicationService:
             )
         ).all()
         return [int(r[0]) for r in rows]
-
-    # ── 运营者(管理端)客服收件箱:企业客户↔企业专属客服 ──
-
-    def enterprise_cs_user_id(self) -> int | None:
-        cs = self._ensure_enterprise_dedicated_cs_user()
-        return int(cs.id) if cs is not None else None
-
-    def list_cs_inbox(self) -> list[dict[str, Any]]:
-        """运营者客服收件箱:所有「企业客户↔企业专属客服」会话(含手机端/桌面端,同一张 IM 表)。"""
-        cs_id = self.enterprise_cs_user_id()
-        if cs_id is None:
-            return []
-        conv_ids = [
-            int(r[0])
-            for r in self._db.execute(
-                select(ImConversationMember.conversation_id).where(
-                    ImConversationMember.user_id == cs_id
-                )
-            ).all()
-        ]
-        if not conv_ids:
-            return []
-        rows = (
-            self._db.execute(
-                select(ImConversation)
-                .where(ImConversation.id.in_(conv_ids), ImConversation.is_direct.is_(True))
-                .order_by(desc(ImConversation.last_message_at))
-            )
-            .scalars()
-            .all()
-        )
-        out: list[dict[str, Any]] = []
-        for conv in rows:
-            customer_id = self._direct_peer_id(int(conv.id), cs_id)
-            if not customer_id:
-                continue
-            out.append(
-                {
-                    "id": int(conv.id),
-                    "customer_user_id": int(customer_id),
-                    "customer_name": self._display_name(int(customer_id)),
-                    "last_message_at": conv.last_message_at.isoformat()
-                    if conv.last_message_at
-                    else "",
-                    "unread_count": self._count_unread(int(conv.id), cs_id),
-                }
-            )
-        return out
-
-    def cs_inbox_messages(self, conversation_id: int) -> list[dict[str, Any]]:
-        """运营者读某客服会话历史(以 enterprise-cs 成员身份)。"""
-        cs_id = self.enterprise_cs_user_id()
-        if cs_id is None:
-            return []
-        return self.list_messages(conversation_id, cs_id, limit=100)
-
-    def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
-        """运营者以「企业专属客服」身份回复客户。"""
-        cs_id = self.enterprise_cs_user_id()
-        if cs_id is None:
-            raise ValueError("客服通道不可用")
-        return self.send_message(conversation_id, cs_id, body)
 
     @staticmethod
     def _message_dict(m: ImMessage, sender_name: str | None = None) -> dict[str, Any]:
