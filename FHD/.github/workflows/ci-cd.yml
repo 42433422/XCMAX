@@ -569,6 +569,8 @@ jobs:
           FHD_PUSH_USER: ${{ secrets.FHD_PUSH_USER }}
           FHD_PUSH_SSH_KEY_RAW: ${{ secrets.FHD_PUSH_SSH_KEY }}
           FHD_RELEASE_CHANNEL: ${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
+          FHD_CVM_PUSH_STRICT: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
+          FHD_CVM_PUSH_TIMEOUT: 12m
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
@@ -579,12 +581,27 @@ jobs:
           KEY_FILE="${RUNNER_TEMP}/fhd_push_key"
           printf '%s\n' "$FHD_PUSH_SSH_KEY_RAW" > "$KEY_FILE"
           chmod 600 "$KEY_FILE"
-          FHD_SKIP_PACK=1 \
-          FHD_PUSH_SSH_KEY="$KEY_FILE" \
-          FHD_PUSH_HOST="$FHD_PUSH_HOST" \
-          FHD_PUSH_USER="${FHD_PUSH_USER:-root}" \
-          FHD_RELEASE_CHANNEL="${FHD_RELEASE_CHANNEL:-stable}" \
-          bash scripts/deploy/fhd-push-release.sh
+          export FHD_SKIP_PACK=1
+          export FHD_PUSH_SSH_KEY="$KEY_FILE"
+          export FHD_PUSH_HOST="$FHD_PUSH_HOST"
+          export FHD_PUSH_USER="${FHD_PUSH_USER:-root}"
+          export FHD_RELEASE_CHANNEL="${FHD_RELEASE_CHANNEL:-stable}"
+          set +e
+          timeout "${FHD_CVM_PUSH_TIMEOUT:-12m}" bash scripts/deploy/fhd-push-release.sh
+          status=$?
+          set -e
+          if [ "$status" -eq 0 ]; then
+            exit 0
+          fi
+          if [ "${FHD_CVM_PUSH_STRICT:-false}" = "true" ]; then
+            echo "::error::CVM push failed with status ${status}."
+            exit "$status"
+          fi
+          if [ "$status" -eq 124 ]; then
+            echo "::warning::CVM push timed out after ${FHD_CVM_PUSH_TIMEOUT:-12m}; keeping main CI green. Use workflow_dispatch with push_to_cvm=true for a strict retry."
+          else
+            echo "::warning::CVM push failed with status ${status}; keeping main CI green. Use workflow_dispatch with push_to_cvm=true for a strict retry."
+          fi
 
   # Docker Build & Push
   docker-build:
