@@ -102,10 +102,11 @@ test('authenticated sidebar navigation stays inside the market router', async ({
 
   await page.goto('/plans')
 
-  await expect(page.getByRole('navigation', { name: '工作台侧边栏' })).toBeVisible()
-  await expect(page.getByRole('link', { name: 'AI 市场' })).toHaveAttribute('href', /\/ai-store$/)
+  const sidebar = page.getByRole('navigation', { name: '工作台侧边栏' })
+  await expect(sidebar).toBeVisible()
+  await expect(sidebar.locator('.wb-sidebar-nav-links a[href="/ai-store"]')).toHaveAttribute('href', /\/ai-store$/)
 
-  await page.getByRole('button', { name: 'tester 菜单' }).click()
+  await page.locator('.wb-user-menu__trigger').click()
 
   await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
   await expect(page.getByRole('menuitem', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
