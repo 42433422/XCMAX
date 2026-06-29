@@ -129,7 +129,9 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     return int(user.id)
 
 
-async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body: str) -> None:
+async def _notify_offline_im_members(
+    member_ids: list[int], sender_id: int, body: str, *, title: str = "新消息"
+) -> None:
     try:
         from app.infrastructure.im import ws_hub as ws_hub_module
 
@@ -151,7 +153,7 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
             try:
                 notify_mobile_user(
                     uid,
-                    title="新消息",
+                    title=title,
                     body=preview,
                     data={"channel": "xcagi_im", "type": "im_message"},
                 )
