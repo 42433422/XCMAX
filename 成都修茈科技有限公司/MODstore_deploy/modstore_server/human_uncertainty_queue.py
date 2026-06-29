@@ -166,7 +166,11 @@ def ask_human_blocking(
     from modstore_server.models import PendingHumanQuestion, get_session_factory
 
     timeout = timeout_seconds if timeout_seconds is not None else _default_timeout_seconds()
-    poll = poll_interval_seconds if poll_interval_seconds is not None else _default_poll_interval_seconds()
+    poll = (
+        poll_interval_seconds
+        if poll_interval_seconds is not None
+        else _default_poll_interval_seconds()
+    )
     poll = max(1, poll)
 
     fp = _fingerprint(
@@ -237,7 +241,11 @@ def ask_human_blocking(
                 .first()
             )
             if not row:
-                return {"status": "error", "reason": "question row vanished", "question_id": question_id}
+                return {
+                    "status": "error",
+                    "reason": "question row vanished",
+                    "question_id": question_id,
+                }
             if row.status == "answered":
                 return {
                     "status": "answered",
