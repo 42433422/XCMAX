@@ -155,7 +155,14 @@ async def _notify_offline_im_members(
                     uid,
                     title=title,
                     body=preview,
-                    data={"channel": "xcagi_im", "type": "im_message"},
+                    # channel 必须是 App 已注册的通知渠道(NotificationChannels:
+                    # xcagi_chat/sync/approval/system)。原值 "xcagi_im" 未注册,
+                    # Android O+ 会直接丢弃整条通知(所有 IM 离线通知都不弹的真因之一)。
+                    data={
+                        "channel": "xcagi_chat",
+                        "type": "im_message",
+                        "route": "xcagi://chat",
+                    },
                 )
             except Exception:
                 logger.exception("im offline push user %s failed", uid)
