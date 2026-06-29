@@ -24,4 +24,4 @@ images:
   - name: __DEPLOY_BACKEND_IMAGE__
     # lowercase: GHCR repo paths must be lowercase (repo is 42433422/XCMAX).
     newName: ghcr.io/42433422/xcmax/xcagi-fhd-api
-    newTag: staging
+    newTag: sha-6c9e70f
