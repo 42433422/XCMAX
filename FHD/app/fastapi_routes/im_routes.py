@@ -342,9 +342,17 @@ def im_list_messages(
     uid = _uid_for_request(request, user)
     db = HostSessionLocal()
     try:
-        messages = ImApplicationService(db).list_messages(
-            conversation_id, uid, limit=limit, before_id=before_id
-        )
+        svc = ImApplicationService(db)
+        messages = svc.list_messages(conversation_id, uid, limit=limit, before_id=before_id)
+        # 打开会话(首屏,非分页上拉)即视为已读:推进当前用户的已读游标,清未读角标。
+        # 安卓 FhdApi 没有独立 /read 端点,IM 会话(员工/普通)的未读全靠这里清。
+        if before_id is None and messages:
+            try:
+                last_id = int(messages[-1].get("id") or 0)
+                if last_id > 0:
+                    svc.mark_read(conversation_id, uid, last_id)
+            except Exception:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+                logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)

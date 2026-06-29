@@ -661,6 +661,7 @@ class AiGroupChatService:
     # ── 公开 API ──
 
     def list_groups(self, *, user_id: int, include_hidden: bool = False) -> list[dict[str, Any]]:
+        self._compact_groups_file_if_needed()
         groups = self._user_groups(user_id)
         if not groups:
             groups = self._seed_department_groups(user_id)
@@ -3804,7 +3805,78 @@ class AiGroupChatService:
         return previews
 
     def _user_groups(self, user_id: int) -> list[dict[str, Any]]:
-        return [g for g in self._all_groups() if int(g.get("user_id") or 0) == int(user_id)]
+        rows = [g for g in self._all_groups() if int(g.get("user_id") or 0) == int(user_id)]
+        return self._dedupe_groups_by_id(rows)
+
+    @staticmethod
+    def _dedupe_groups_by_id(groups: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """同一 group id 仅保留一条(合并成员去重 + 置顶/关注取或)。
+
+        历史上 ``_append_group`` 纯追加,部门群 seed 多次会在 JSONL 里累积同 id 重复条目,
+        移动端 LazyColumn 用 ``"group:{id}"`` 作 key、重复 key 会直接抛
+        ``IllegalArgumentException`` 整个 App 闪退。读取路径统一去重,保证对外永不出现重复 id。
+        """
+        out: list[dict[str, Any]] = []
+        index: dict[str, int] = {}
+        for g in groups:
+            if not isinstance(g, dict):
+                continue
+            gid = str(g.get("id") or "")
+            if not gid:
+                out.append(g)
+                continue
+            if gid not in index:
+                index[gid] = len(out)
+                out.append(g)
+                continue
+            keep = out[index[gid]]
+            seen_m = {
+                str(m.get("employee_id") or "")
+                for m in keep.get("members", [])
+                if isinstance(m, dict)
+            }
+            for m in g.get("members", []) or []:
+                if isinstance(m, dict) and str(m.get("employee_id") or "") not in seen_m:
+                    keep.setdefault("members", []).append(m)
+                    seen_m.add(str(m.get("employee_id") or ""))
+            if g.get("is_pinned"):
+                keep["is_pinned"] = True
+            if g.get("is_followed"):
+                keep["is_followed"] = True
+        return out
+
+    def _compact_groups_file_if_needed(self) -> None:
+        """groups 存储出现同 (user_id, id) 重复条目时,去重重写文件(自愈历史脏数据)。"""
+        all_groups = self._all_groups()
+        seen: set[tuple[int, str]] = set()
+        has_dup = False
+        for g in all_groups:
+            if not isinstance(g, dict):
+                continue
+            gid = str(g.get("id") or "")
+            if not gid:
+                continue
+            key = (int(g.get("user_id") or 0), gid)
+            if key in seen:
+                has_dup = True
+                break
+            seen.add(key)
+        if not has_dup:
+            return
+        by_user: dict[int, list[dict[str, Any]]] = {}
+        order: list[int] = []
+        for g in all_groups:
+            if not isinstance(g, dict):
+                continue
+            uid = int(g.get("user_id") or 0)
+            if uid not in by_user:
+                by_user[uid] = []
+                order.append(uid)
+            by_user[uid].append(g)
+        compacted: list[dict[str, Any]] = []
+        for uid in order:
+            compacted.extend(self._dedupe_groups_by_id(by_user[uid]))
+        self._rewrite_groups(compacted)
 
     def _all_groups(self) -> list[dict[str, Any]]:
         return self._read_jsonl(self._groups_path)
