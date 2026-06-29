@@ -100,7 +100,7 @@ test('authenticated sidebar navigation stays inside the market router', async ({
   await stubCommonApis(page)
   await page.addInitScript(() => localStorage.setItem('modstore_token', 'token-e2e'))
 
-  await page.goto('/plans')
+  await page.goto('/workbench/home')
 
   const sidebar = page.getByRole('navigation', { name: '工作台侧边栏' })
   await expect(sidebar).toBeVisible()
