@@ -11,7 +11,13 @@ from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 FORBIDDEN_BASENAMES = {"_find_zero.py", "_analyze_coverage.py"}
-TEMP_PREFIXES = ("fix_", "check_", "final_")
+TEMP_PREFIXES = ("fix_", "check_", "final_", "recover_")
+OPS_THROWAWAY_PATTERNS = (
+    re.compile(r"^collect_\d+days?\.sh$"),
+    re.compile(r"^collect_.*_k8s\.sh$"),
+    re.compile(r"^migrate-mods-\d{4}-\d{2}-\d{2}\.sh$"),
+    re.compile(r"^(deploy|uninstall)_.*_staging.*\.sh$"),
+)
 
 
 def _git(*args: str) -> list[str]:
@@ -49,6 +55,9 @@ def _is_allowed_temp_home(path: str) -> bool:
             "tools/",
             "archive/",
             "scripts/launchers/",
+            "scripts/ops/",
+            "scripts/deploy/",
+            "scripts/ci/",
         )
     )
 
@@ -68,13 +77,16 @@ def _is_new_throwaway(path: str) -> bool:
         return True
     if basename.endswith(".v1_backup"):
         return True
-    if not basename.endswith(".py") or not basename.startswith(TEMP_PREFIXES):
+    is_temp_prefixed = basename.endswith((".py", ".sh")) and basename.startswith(
+        TEMP_PREFIXES
+    )
+    if not is_temp_prefixed and not any(p.match(basename) for p in OPS_THROWAWAY_PATTERNS):
         return False
     if "/" not in rel:
         return True
-    if re.match(r"scripts/[^/]+\.py$", rel):
+    if re.match(r"scripts/[^/]+\.(py|sh)$", rel):
         return True
-    return bool(re.match(r"(.*/)?产品文件夹/[^/]+\.py$", rel))
+    return bool(re.match(r"(.*/)?产品文件夹/[^/]+\.(py|sh)$", rel))
 
 
 def _read_stdin_paths() -> list[str]:
