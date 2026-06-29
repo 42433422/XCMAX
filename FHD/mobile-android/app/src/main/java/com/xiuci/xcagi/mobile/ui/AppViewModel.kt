@@ -418,8 +418,10 @@ constructor(
     /** 拉取员工 IM 会话并刷新消息列表（best-effort，失败保持原状）。 */
     fun refreshImConversations() =
             viewModelScope.launch {
+                // 仅在拿到非空结果时更新：repo 失败/网络抖动返回空表，不应清空已绑定的员工 IM 会话，
+                // 否则会出现「员工聊天页 IM 内容闪一下又变回普通空页」。
                 val convs = repo.imConversations()
-                if (convs.isNotEmpty() || _imConversations.value.isNotEmpty()) {
+                if (convs.isNotEmpty()) {
                     _imConversations.value = convs
                 }
             }
@@ -1849,7 +1851,12 @@ constructor(
                 }
                 // 员工双向 IM：该员工若有 IM 会话（主动发过消息/待办问答），在**原聊天页**里加载并显示
                 // 这些消息（员工→assistant 左气泡，我→user 右气泡），后续 sendChat 也走该 IM 会话。
-                val imConv = imConvForEmployeeConversation(conversationId)
+                var imConv = imConvForEmployeeConversation(conversationId)
+                if (imConv == null && conversationId?.startsWith("employee:") == true) {
+                    // IM 会话列表可能尚未加载完：先同步刷新再判定，避免「先显示普通空页、再跳 IM」的闪烁。
+                    refreshImConversations().join()
+                    imConv = imConvForEmployeeConversation(conversationId)
+                }
                 val imConvId = (imConv?.get("id") as? Number)?.toInt()
                 if (imConvId != null) {
                     _activeImConversationId.value = imConvId
@@ -1864,6 +1871,9 @@ constructor(
                             )
                         }
                     }
+                    // 进会话即标记已读→清未读角标，并刷新会话列表使角标即时更新。
+                    repo.imMarkRead(imConvId)
+                    refreshImConversations()
                     return@launch
                 }
                 val sessionId = conversationId ?: "default"

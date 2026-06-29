@@ -247,3 +247,32 @@ def im_post_message(
     if emp_id:
         _relay_employee_answer(uid, emp_id, text)
     return {"success": True, **result}
+
+
+@router.post("/api/mobile/v1/im/conversations/{conversation_id}/read")
+def im_mark_read(
+    conversation_id: int,
+    body: dict = Body(default_factory=dict),
+    user: Any = Depends(get_mobile_user),
+) -> Any:
+    """标记会话已读（清未读角标）。不带 last_message_id 时标记到最新（全部已读）。"""
+    uid = _mobile_uid(user)
+    if uid <= 0:
+        return JSONResponse({"success": False, "message": "未授权"}, status_code=401)
+    try:
+        last_id = int(body.get("last_message_id") or 0)
+    except (TypeError, ValueError):
+        last_id = 0
+    if last_id <= 0:
+        last_id = 2_147_483_647  # 标记到最新，清空未读
+    ensure_im_tables(get_host_engine())
+    db = HostSessionLocal()
+    try:
+        return {"success": True, **ImApplicationService(db).mark_read(conversation_id, uid, last_id)}
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except RECOVERABLE_ERRORS:
+        logger.exception("im_mark_read")
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
+    finally:
+        db.close()
