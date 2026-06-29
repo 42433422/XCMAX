@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse
 
 from app.application.ai_group_chat_service import AiGroupChatService
@@ -19,6 +28,7 @@ from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
+    get_current_user,
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
@@ -44,6 +54,29 @@ def _uid(user: CurrentUser) -> int:
     if user.user_id is None:
         raise ValueError("user_id required")
     return int(user.user_id)
+
+
+def _uid_for_request(request: Request, user: CurrentUser) -> int:
+    """从 session 用户或手机 JWT Bearer 解析当前 uid。
+
+    IM 端点同时被管理端(session 鉴权)和手机端(手机 JWT Bearer)调用，而
+    require_identified_user 只认 session，手机 Bearer 会回落到匿名(uid 0)→
+    会话成员校验 403。手机 Bearer 存在时优先用它解出的真实 uid。无硬编码。
+    """
+    try:
+        from app.security.mobile_jwt import user_id_from_mobile_bearer
+
+        bearer_uid = user_id_from_mobile_bearer(request.headers.get("Authorization"))
+        if bearer_uid:
+            return int(bearer_uid)
+    except (ImportError, ValueError, TypeError):
+        pass
+    if user is not None and user.user_id is not None:
+        return int(user.user_id)
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "user_id_required", "message": "请先登录后再执行此操作。"},
+    )
 
 
 def _is_admin_customer_service_session(request: Request, db) -> bool:
@@ -297,13 +330,14 @@ def im_create_direct(
 
 @router.get("/api/im/conversations/{conversation_id}/messages")
 def im_list_messages(
+    request: Request,
     conversation_id: int,
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
     before_id: int | None = Query(default=None),
 ):
     _ensure_schema()
-    uid = _uid(user)
+    uid = _uid_for_request(request, user)
     db = HostSessionLocal()
     try:
         messages = ImApplicationService(db).list_messages(
@@ -321,12 +355,13 @@ def im_list_messages(
 
 @router.post("/api/im/conversations/{conversation_id}/messages")
 async def im_send_message(
+    request: Request,
     conversation_id: int,
     body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
 ):
     _ensure_schema()
-    uid = _uid(user)
+    uid = _uid_for_request(request, user)
     db = HostSessionLocal()
     try:
         result = ImApplicationService(db).send_message(
@@ -363,12 +398,13 @@ async def im_send_message(
 
 @router.post("/api/im/conversations/{conversation_id}/read")
 async def im_mark_read(
+    request: Request,
     conversation_id: int,
     body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
 ):
     _ensure_schema()
-    uid = _uid(user)
+    uid = _uid_for_request(request, user)
     last_id = int(body.get("last_message_id") or 0)
     db = HostSessionLocal()
     try:
