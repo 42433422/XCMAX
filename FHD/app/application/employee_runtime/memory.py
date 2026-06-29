@@ -18,7 +18,6 @@ from datetime import datetime
 from typing import Any
 
 from app.domain.employee.memory_scope import MemoryScope
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +83,7 @@ class EmployeeMemoryManager:
             from app.services.conversation_service import ConversationService
 
             rows = ConversationService().get_session_messages(sid, limit=50)
-        except RECOVERABLE_ERRORS:
+        except Exception:
             logger.debug("short-term recall skipped (session=%s)", sid, exc_info=True)
             return []
         out: list[dict[str, str]] = []
@@ -134,7 +133,7 @@ class EmployeeMemoryManager:
                 return "", []
             prompt = rag.format_for_prompt(index_ns, query_text, hits)
             return prompt, hits
-        except RECOVERABLE_ERRORS:
+        except Exception:
             logger.debug("long-term recall skipped (ns=%s)", index_ns, exc_info=True)
             return "", []
 
@@ -178,7 +177,7 @@ class EmployeeMemoryManager:
                     intent=self.scope.employee_id,
                     metadata=meta,
                 )
-        except RECOVERABLE_ERRORS:
+        except Exception:
             logger.debug("short-term remember skipped (session=%s)", sid, exc_info=True)
 
     def _remember_long_term(self, task: str, summary: str, *, user_id: Any, success: bool) -> None:
@@ -205,7 +204,7 @@ class EmployeeMemoryManager:
                 },
             )
             get_user_memory_vector_ingest_app_service().ingest_chunks(index_ns, [chunk])
-        except RECOVERABLE_ERRORS:
+        except Exception:
             logger.debug("long-term remember skipped (ns=%s)", index_ns, exc_info=True)
 
 
