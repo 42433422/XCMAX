@@ -80,7 +80,7 @@
 
 ### P1-6 README / 入口文档去重
 - [x] T43：建"仓库根 → 子项目"索引表
-- [x] T44：FHD/MODstore/README.md 加 redirect
+- [x] T44：旧 FHD 内 MODstore README redirect 后续升级为物理删除；当前唯一活跃源码为 `成都修茈科技有限公司/MODstore_deploy/`
 - [x] T45：FHD-个人/ 移到仓外 — 已迁至 [`FHD/docs/_archive/FHD-个人/`](../FHD/docs/_archive/FHD-个人/)；仓根 stub：[`FHD-个人/README.md`](../FHD-个人/README.md) — **W23**：[`specs/FHD-个人-MIGRATION.md`](FHD-个人-MIGRATION.md) 交叉核对
 - [x] T46：仓根 README 顶部加"项目状态表"
 

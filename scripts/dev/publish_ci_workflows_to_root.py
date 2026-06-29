@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish FHD / MODstore GitHub Actions to XCMAX root .github/workflows/ (CI SSOT)."""
+"""Publish FHD and MODstore_deploy GitHub Actions to XCMAX root workflows."""
 
 from __future__ import annotations
 
@@ -35,7 +35,6 @@ WORKFLOW_RENAMES = {
     "release-orchestrator.yml": "fhd-release-orchestrator.yml",
     "performance-smoke.yml": "fhd-performance-smoke.yml",
     "neuro_migration_check.yml": "fhd-neuro-migration-check.yml",
-    "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
     "preview-env.yml": "fhd-preview-env.yml",
@@ -45,6 +44,10 @@ MOD_RENAMES = {
     "ci-backend-python.yml": "modstore-ci-backend-python.yml",
     "build-desktop.yml": "modstore-build-desktop.yml",
     "market-e2e.yml": "modstore-market-e2e.yml",
+}
+
+STALE_ROOT_WORKFLOWS = {
+    "fhd-modstore-tests.yml",
 }
 
 
@@ -202,11 +205,24 @@ def publish_mod() -> list[str]:
     return written
 
 
+def remove_stale_root_workflows() -> list[str]:
+    removed: list[str] = []
+    for name in sorted(STALE_ROOT_WORKFLOWS):
+        path = OUT / name
+        if path.exists():
+            path.unlink()
+            removed.append(name)
+    return removed
+
+
 def main() -> None:
     fhd = publish_fhd()
     mod = publish_mod()
+    stale = remove_stale_root_workflows()
     print("FHD:", ", ".join(fhd))
     print("MODstore:", ", ".join(mod))
+    if stale:
+        print("Removed stale:", ", ".join(stale))
 
 
 if __name__ == "__main__":

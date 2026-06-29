@@ -6,7 +6,7 @@ SSOT（单一真相源）:
   - FHD/mods/_employees/*/manifest.json 员工元数据（name / description / area）
 
 派生文件（由本脚本生成，禁止人手修改）:
-  1. FHD/MODstore/modstore_server/duty_roster.py        (marker 区块)
+  1. 成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py (marker 区块)
   2. FHD/frontend/src/domain/yuangonDutyRoster.ts       (整体生成)
   3. FHD/app/infrastructure/mods/catalog_visibility.py  (改为运行时派生)
   4. FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets (marker 区块)
@@ -33,11 +33,12 @@ from typing import Any
 # ── 路径常量 ──────────────────────────────────────────────────────────────
 ROOT = Path(__file__).resolve().parents[2]
 FHD = ROOT / "FHD"
+MODSTORE_DEPLOY = ROOT / "成都修茈科技有限公司" / "MODstore_deploy"
 SSOT_JSON = FHD / "config" / "duty_roster.json"
 MANIFESTS_DIR = FHD / "mods" / "_employees"
 
 TARGETS = {
-    "modstore": FHD / "MODstore" / "modstore_server" / "duty_roster.py",
+    "modstore": MODSTORE_DEPLOY / "modstore_server" / "duty_roster.py",
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
     "mobile": FHD / "mobile-harmony" / "entry" / "src" / "main" / "ets" / "models" / "MobileModels.ets",
