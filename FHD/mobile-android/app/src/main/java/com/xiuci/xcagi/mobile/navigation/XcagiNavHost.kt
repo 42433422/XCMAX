@@ -472,7 +472,14 @@ fun XcagiNavHost(
                                 else nav.navigate(Routes.CS_CHAT)
                             },
                             onOpenConversation = { conversationId ->
-                                nav.navigate(Routes.conversationChat(conversationId))
+                                val imId = conversationId.removePrefix("im:").toIntOrNull()
+                                        ?.takeIf { conversationId.startsWith("im:") }
+                                if (imId != null) {
+                                    vm.setImInitialConversationId(imId)
+                                    nav.navigate(Routes.IM)
+                                } else {
+                                    nav.navigate(Routes.conversationChat(conversationId))
+                                }
                             },
                             onOpenScan = { nav.navigate(Routes.SCAN_QR) },
                             onOpenEmployees = {
