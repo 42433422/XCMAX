@@ -200,3 +200,19 @@ domains:
     mode: lint
     check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
     sync: null
+
+  - name: neuro-bus-events
+    owner: neuro-platform
+    enabled: false  # Phase A: advisory only. Flip to true in Phase B (CI gate activation).
+    # NeuroBus 事件契约 SSOT:统一三流(NeuroBus 域事件 + AgentRun 事件 + 应用桥接)。
+    # canonical 命名 = code 中实际 emit 的字符串(dataclass 默认值即 canonical);
+    # 派生 Python 常量(非 Enum,字节级零破坏 string-equality 调用) + TS 类型 + OpenAPI schema。
+    # check 含 4 道校验:派生一致 + dataclass 默认值在 SSOT + orchestrator 字符串在 SSOT + OpenAPI schema 一致。
+    ssot: FHD/config/neuro_bus_events.yaml
+    derived:
+      - FHD/app/neuro_bus/event_types_generated.py
+      - FHD/frontend/src/types/agentRunEvents.generated.ts
+      - FHD/contracts/openapi.json#components.schemas.AgentRunEvent
+    mode: generate+verify
+    check: python scripts/dev/neuro_bus_events_ssot.py check
+    sync: python scripts/dev/neuro_bus_events_ssot.py generate --apply
