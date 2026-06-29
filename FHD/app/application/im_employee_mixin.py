@@ -197,8 +197,10 @@ class ImEmployeeMixin:
             out[eid] = {
                 "im_conv_id": conv.id,
                 "im_last_message": (last_msg.body[:120] if last_msg else ""),
+                # 注意：移动端 WorkflowEmployeeInfo.im_last_message_at 是非空 String，
+                # 返回 null 会让 Gson 把 null 灌进非空字段、构造时 NPE 崩溃。统一用 ""。
                 "im_last_message_at": (
-                    conv.last_message_at.isoformat() if conv.last_message_at else None
+                    conv.last_message_at.isoformat() if conv.last_message_at else ""
                 ),
                 "im_unread_count": self._count_unread(conv.id, boss_uid_int),
             }
@@ -211,7 +213,7 @@ class ImEmployeeMixin:
                         out[eid] = {
                             "im_conv_id": conv_id,
                             "im_last_message": "",
-                            "im_last_message_at": None,
+                            "im_last_message_at": "",
                             "im_unread_count": 0,
                         }
                 except Exception:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
