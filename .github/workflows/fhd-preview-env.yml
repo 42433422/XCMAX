@@ -38,6 +38,7 @@ jobs:
 
       - name: Configure kubeconfig
         id: kube
+        working-directory: .
         env:
           KUBE_CONFIG_B64: ${{ secrets.KUBE_CONFIG_B64 }}
           KUBE_CONFIG: ${{ secrets.KUBE_CONFIG }}
@@ -208,5 +209,6 @@ jobs:
 
       - name: Delete preview namespace
         if: steps.kube.outputs.configured == '1'
+        working-directory: .
         run: |
           kubectl delete namespace "xcagi-pr-${{ github.event.pull_request.number }}" --ignore-not-found=true
