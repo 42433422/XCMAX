@@ -1,0 +1,197 @@
+# CI SSOT: NeuroBus event-contract registry — three streams unified.
+# Source of truth for: (a) NeuroBus domain events (dataclass event_type defaults),
+#   (b) AgentRun events (run.add_event string literals),
+#   (c) application bridge events (publish_neuro_event static literals).
+# Generator: scripts/dev/neuro_bus_events_ssot.py
+# Do NOT edit derived: app/neuro_bus/event_types_generated.py,
+#   frontend/src/types/agentRunEvents.generated.ts
+#
+# Field conventions:
+#   type             (str, required)  canonical emit string; matches code literal byte-for-byte
+#   const            (str, required)  Python constant name (UPPER_SNAKE)
+#   terminal         (bool, optional) AgentRun terminates after this event (default false)
+#   sla_tier         (str, optional)  reflex | subconscious | conscious — documentation only,
+#                                     does NOT change sla_controller.py substring routing
+#   payload_fields   (list, optional) documentation only, NOT validated by publish()
+#
+# Invariant: canonical = whatever code emits today. No deprecated_aliases in Phase A
+# (verified 2026-06-29: dataclass defaults == domain emit strings; no dot-vs-underscore
+# conflict in actual emit sites).
+version: 1
+
+streams:
+  agent_run:
+    description: |
+      Events appended via run.add_event(); exposed at GET /api/agent/runs/{id}/events.
+      Producers: app/application/agent_orchestrator/orchestrator.py + chat_trace.py +
+      artifact_ingestion.py. Frontend consumer: composables/useAgentRunEvents.ts.
+    categories:
+      run:
+        - { type: "run.created",           const: RUN_CREATED,           sla_tier: conscious }
+        - { type: "run.completed",         const: RUN_COMPLETED,         sla_tier: conscious, terminal: true }
+        - { type: "run.failed",            const: RUN_FAILED,            sla_tier: conscious, terminal: true }
+        - { type: "run.continue_ignored",  const: RUN_CONTINUE_IGNORED }
+      planner:
+        - { type: "planner.started",        const: PLANNER_STARTED }
+        - { type: "planner.completed",      const: PLANNER_COMPLETED }
+        - { type: "planner.blocked",        const: PLANNER_BLOCKED,      terminal: true }
+      step:
+        - { type: "step.blocked",          const: STEP_BLOCKED }
+        - { type: "step.waiting_user",      const: STEP_WAITING_USER }
+        - { type: "step.approved",         const: STEP_APPROVED }
+        - { type: "step.repair_applied",    const: STEP_REPAIR_APPLIED }
+        - { type: "step.retry_scheduled",   const: STEP_RETRY_SCHEDULED }
+        - { type: "step.llm_repair_requested", const: STEP_LLM_REPAIR_REQUESTED }
+        - { type: "step.llm_repair_failed",    const: STEP_LLM_REPAIR_FAILED }
+        - { type: "step.repair_rejected",  const: STEP_REPAIR_REJECTED }
+      tool:
+        - { type: "tool.started",          const: TOOL_STARTED }
+        - { type: "tool.completed",        const: TOOL_COMPLETED }
+        - { type: "tool.failed",           const: TOOL_FAILED }
+      llm:
+        - { type: "llm.completed",         const: LLM_COMPLETED }
+        - { type: "llm.failed",            const: LLM_FAILED }
+      billing:
+        - { type: "billing.debited",               const: BILLING_DEBITED }
+        - { type: "billing.insufficient_balance",  const: BILLING_INSUFFICIENT_BALANCE }
+        - { type: "billing.debit_failed",          const: BILLING_DEBIT_FAILED }
+        - { type: "billing.recorded",              const: BILLING_RECORDED }
+        - { type: "billing.record_failed",         const: BILLING_RECORD_FAILED }
+        - { type: "billing.refunded",               const: BILLING_REFUNDED }
+        - { type: "billing.refund_pending",        const: BILLING_REFUND_PENDING }
+        - { type: "billing.refund_recorded",       const: BILLING_REFUND_RECORDED }
+        - { type: "billing.refund_failed",         const: BILLING_REFUND_FAILED }
+      budget:
+        - { type: "budget.exceeded",       const: BUDGET_EXCEEDED,     terminal: true }
+      observation:
+        - { type: "observation.recorded",  const: OBSERVATION_RECORDED }
+      artifact:
+        - { type: "artifact.attached",     const: ARTIFACT_ATTACHED }
+      rag:
+        - { type: "rag.retrieved",         const: RAG_RETRIEVED }
+        - { type: "rag.failed",             const: RAG_FAILED }
+      memory:
+        - { type: "memory.recalled",       const: MEMORY_RECALLED }
+        - { type: "memory.failed",         const: MEMORY_FAILED }
+      dataset:
+        - { type: "dataset.ingested",      const: DATASET_INGESTED }
+        - { type: "dataset.ingest_failed", const: DATASET_INGEST_FAILED }
+
+  neuro_bus:
+    description: |
+      bus.publish(NeuroEvent(...)) domain events. Producers: app/neuro_bus/events/*.py
+      dataclass event_type defaults. Consumers: app/neuro_bus/handlers/*.py + MODs.
+      Canonical naming = snake_case action verb within domain (e.g. wechat.message_received,
+      ai.intent_recognized, inventory.stock_in) — matches dataclass defaults byte-for-byte.
+    domains:
+      shipment:
+        - { type: "shipment.created",           const: SHIPMENT_CREATED }
+        - { type: "shipment.item_added",        const: SHIPMENT_ITEM_ADDED }
+        - { type: "shipment.printed",           const: SHIPMENT_PRINTED }
+        - { type: "shipment.cancelled",         const: SHIPMENT_CANCELLED }
+        - { type: "shipment.deleted",           const: SHIPMENT_DELETED }
+        - { type: "shipment.exported",          const: SHIPMENT_EXPORTED }
+        - { type: "shipment.inventory_deducted", const: SHIPMENT_INVENTORY_DEDUCTED }
+      inventory:
+        - { type: "inventory.stock_changed",   const: INVENTORY_STOCK_CHANGED }
+        - { type: "inventory.low_stock_alert",  const: INVENTORY_LOW_STOCK_ALERT }
+        - { type: "inventory.stock_in",         const: INVENTORY_STOCK_IN }
+        - { type: "inventory.stock_out",        const: INVENTORY_STOCK_OUT }
+        - { type: "inventory.transfer",         const: INVENTORY_TRANSFER }
+        - { type: "inventory.check_completed",  const: INVENTORY_CHECK_COMPLETED }
+      order:
+        - { type: "order.submitted",           const: ORDER_SUBMITTED }
+        - { type: "order.paid",                const: ORDER_PAID }
+        - { type: "order.payment_failed",      const: ORDER_PAYMENT_FAILED }
+        - { type: "order.fulfilled",           const: ORDER_FULFILLED }
+        - { type: "order.shipped",             const: ORDER_SHIPPED }
+        - { type: "order.cancelled",           const: ORDER_CANCELLED }
+        - { type: "order.refunded",            const: ORDER_REFUNDED }
+        - { type: "order.item_updated",        const: ORDER_ITEM_UPDATED }
+        - { type: "order.status_changed",      const: ORDER_STATUS_CHANGED }
+      product:
+        - { type: "product.created",           const: PRODUCT_CREATED }
+        - { type: "product.updated",           const: PRODUCT_UPDATED }
+        - { type: "product.deleted",           const: PRODUCT_DELETED }
+        - { type: "product.imported",          const: PRODUCT_IMPORTED }
+        - { type: "product.price_changed",     const: PRODUCT_PRICE_CHANGED }
+        - { type: "product.cache_invalidated",  const: PRODUCT_CACHE_INVALIDATED }
+      material:
+        - { type: "material.created",          const: MATERIAL_CREATED }
+        - { type: "material.updated",          const: MATERIAL_UPDATED }
+        - { type: "material.stock_in",          const: MATERIAL_STOCK_IN }
+        - { type: "material.stock_out",         const: MATERIAL_STOCK_OUT }
+        - { type: "material.low_stock_alert",   const: MATERIAL_LOW_STOCK_ALERT }
+        - { type: "material.supplier_changed",  const: MATERIAL_SUPPLIER_CHANGED }
+      ai:
+        - { type: "ai.intent_recognized",       const: AI_INTENT_RECOGNIZED,    sla_tier: reflex }
+        - { type: "ai.response_generated",      const: AI_RESPONSE_GENERATED,  sla_tier: subconscious }
+        - { type: "ai.conversation_started",    const: AI_CONVERSATION_STARTED }
+        - { type: "ai.conversation_ended",      const: AI_CONVERSATION_ENDED }
+        - { type: "ai.feedback_received",       const: AI_FEEDBACK_RECEIVED }
+        - { type: "ai.context_updated",         const: AI_CONTEXT_UPDATED }
+      auth:
+        - { type: "auth.user_login",            const: AUTH_USER_LOGIN }
+        - { type: "auth.user_logout",           const: AUTH_USER_LOGOUT }
+        - { type: "auth.user_registered",       const: AUTH_USER_REGISTERED }
+        - { type: "auth.password_changed",      const: AUTH_PASSWORD_CHANGED }
+        - { type: "auth.permission_granted",    const: AUTH_PERMISSION_GRANTED }
+        - { type: "auth.permission_revoked",   const: AUTH_PERMISSION_REVOKED }
+        - { type: "auth.login_failed",          const: AUTH_LOGIN_FAILED }
+        - { type: "auth.token_refreshed",      const: AUTH_TOKEN_REFRESHED }
+      ocr:
+        - { type: "ocr.task_submitted",         const: OCR_TASK_SUBMITTED }
+        - { type: "ocr.task_started",           const: OCR_TASK_STARTED }
+        - { type: "ocr.task_completed",         const: OCR_TASK_COMPLETED }
+        - { type: "ocr.task_failed",            const: OCR_TASK_FAILED }
+        - { type: "ocr.result_validated",       const: OCR_RESULT_VALIDATED }
+        - { type: "ocr.batch_completed",        const: OCR_BATCH_COMPLETED }
+      print:
+        - { type: "print.job_submitted",        const: PRINT_JOB_SUBMITTED }
+        - { type: "print.job_started",          const: PRINT_JOB_STARTED }
+        - { type: "print.job_completed",        const: PRINT_JOB_COMPLETED }
+        - { type: "print.job_failed",           const: PRINT_JOB_FAILED }
+        - { type: "print.printer_status_changed", const: PRINT_PRINTER_STATUS_CHANGED }
+        - { type: "print.label_requested",     const: PRINT_LABEL_REQUESTED }
+      conversation:
+        - { type: "conversation.created",       const: CONVERSATION_CREATED }
+        - { type: "conversation.message_added", const: CONVERSATION_MESSAGE_ADDED }
+        - { type: "conversation.ended",         const: CONVERSATION_ENDED }
+        - { type: "conversation.assigned",     const: CONVERSATION_ASSIGNED }
+        - { type: "conversation.tagged",        const: CONVERSATION_TAGGED }
+        - { type: "conversation.exported",      const: CONVERSATION_EXPORTED }
+      wechat:
+        - { type: "wechat.message_received",    const: WECHAT_MESSAGE_RECEIVED, payload_fields: ["message_id","from_user","message_type","content"] }
+        - { type: "wechat.message_sent",        const: WECHAT_MESSAGE_SENT,     payload_fields: ["message_id","to_user","message_type","status"] }
+        - { type: "wechat.contact_added",       const: WECHAT_CONTACT_ADDED }
+        - { type: "wechat.contact_updated",     const: WECHAT_CONTACT_UPDATED }
+        - { type: "wechat.task_created",        const: WECHAT_TASK_CREATED }
+        - { type: "wechat.task_completed",      const: WECHAT_TASK_COMPLETED }
+        - { type: "wechat.login_status_changed", const: WECHAT_LOGIN_STATUS_CHANGED }
+      customer:
+        - { type: "customer.registered",            const: CUSTOMER_REGISTERED }
+        - { type: "customer.updated",               const: CUSTOMER_UPDATED }
+        - { type: "customer.deactivated",           const: CUSTOMER_DEACTIVATED }
+        - { type: "customer.purchase_unit_bound",   const: CUSTOMER_PURCHASE_UNIT_BOUND }
+        - { type: "customer.preference_updated",    const: CUSTOMER_PREFERENCE_UPDATED }
+        - { type: "customer.credit_limit_changed",  const: CUSTOMER_CREDIT_LIMIT_CHANGED }
+      payment:
+        - { type: "payment.created",           const: PAYMENT_CREATED }
+        - { type: "payment.completed",         const: PAYMENT_COMPLETED }
+        - { type: "payment.failed",            const: PAYMENT_FAILED }
+        - { type: "payment.refunded",          const: PAYMENT_REFUNDED }
+        - { type: "payment.method_changed",    const: PAYMENT_METHOD_CHANGED }
+        - { type: "payment.notification_sent", const: PAYMENT_NOTIFICATION_SENT }
+
+  application_bridge:
+    description: |
+      publish_neuro_event(event_type, payload, domain) — HTTP entrypoint bridge.
+      Static producers: app/middleware/neuro_http_trace.py (3 http.* events).
+      Dynamic producer: app/neuro_bus/route_event_publisher.py emits f"{event_type}.started"
+      / .completed / .failed for any route in the registry — NOT enumerated here (Phase B
+      will scan route registry and add to SSOT). MOD bridge mods/xcagi-neuro-bus-bridge/
+      passes through arbitrary event_type from MOD authors — also NOT enumerated.
+    events:
+      - { type: "http.request.started",    const: HTTP_REQUEST_STARTED }
+      - { type: "http.request.completed",  const: HTTP_REQUEST_COMPLETED }
+      - { type: "http.request.failed",     const: HTTP_REQUEST_FAILED }
