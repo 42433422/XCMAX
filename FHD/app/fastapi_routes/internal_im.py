@@ -268,7 +268,10 @@ def im_mark_read(
     ensure_im_tables(get_host_engine())
     db = HostSessionLocal()
     try:
-        return {"success": True, **ImApplicationService(db).mark_read(conversation_id, uid, last_id)}
+        return {
+            "success": True,
+            **ImApplicationService(db).mark_read(conversation_id, uid, last_id),
+        }
     except PermissionError:
         return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
     except RECOVERABLE_ERRORS:
