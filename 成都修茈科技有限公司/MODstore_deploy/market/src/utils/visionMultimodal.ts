@@ -50,7 +50,7 @@ export async function compressImageFileToDataUrl(
 
   const bitmap = await createImageBitmap(file)
   try {
-    let { width, height } = bitmap
+    const { width, height } = bitmap
     const scale = Math.min(1, maxEdge / Math.max(width, height))
     const tw = Math.max(1, Math.round(width * scale))
     const th = Math.max(1, Math.round(height * scale))

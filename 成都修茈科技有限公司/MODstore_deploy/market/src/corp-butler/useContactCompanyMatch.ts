@@ -92,7 +92,7 @@ export function normalizeCompanyMatchPayload(data: CompanyMatchPayload | null): 
     seen.add(key)
     suggestions.push(item!)
   }
-  let matched = data.matched ? cleanItem(data.matched) : null
+  const matched = data.matched ? cleanItem(data.matched) : null
   if (matched?.name && !suggestions.some((s) => s.name === matched!.name)) {
     suggestions.unshift(matched)
   }

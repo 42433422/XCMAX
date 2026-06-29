@@ -277,7 +277,7 @@ export class StreamingTtsPlayer {
       }
 
       this.state.value = 'synthesizing'
-      let blobPromise = this.prefetchMap.get(sentence)
+      const blobPromise = this.prefetchMap.get(sentence)
       if (blobPromise) {
         this.prefetchMap.delete(sentence)
       }

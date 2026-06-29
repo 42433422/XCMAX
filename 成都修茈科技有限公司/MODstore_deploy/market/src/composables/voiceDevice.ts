@@ -19,7 +19,7 @@ export function isIOSVoiceDevice(): boolean {
 /** 移动端底部安全区 + 工作台底栏高度（与 WorkbenchView tabbar 对齐） */
 export function mobileVoiceBottomInsetPx(): number {
   if (!isMobileVoiceDevice()) return 0
-  let inset = 56
+  const inset = 56
   if (typeof CSS !== 'undefined' && CSS.supports('padding-bottom: env(safe-area-inset-bottom)')) {
     /* env() 由 CSS 处理，JS 仅预留 tabbar 主体高度 */
   }

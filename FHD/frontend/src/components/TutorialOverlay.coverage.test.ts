@@ -192,6 +192,7 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
       currentWrapper.unmount()
       currentWrapper = null
     }
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
@@ -816,6 +817,8 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
     }
     await nextTick()
     await flushPromises()
+    await vi.runOnlyPendingTimersAsync()
+    await flushPromises()
     // 立即执行一次 tick
     expect(storeContainer.state.refreshHighlight).toHaveBeenCalled()
     vi.useRealTimers()
@@ -829,6 +832,8 @@ describe('TutorialOverlay.vue 覆盖率补齐测试', () => {
       id: 'starter-pack-demo-3-start-print', title: '开始打印', description: '描述', actionType: 'observe',
     }
     await nextTick()
+    await flushPromises()
+    await vi.runOnlyPendingTimersAsync()
     await flushPromises()
     storeContainer.state.refreshHighlight.mockClear()
     // 教程失活
@@ -1013,6 +1018,7 @@ describe('TutorialOverlay.vue TTS 路径测试', () => {
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     vi.unstubAllGlobals()
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
