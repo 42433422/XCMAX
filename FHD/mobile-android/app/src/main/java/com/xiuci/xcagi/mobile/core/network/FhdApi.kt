@@ -347,6 +347,9 @@ interface FhdApi {
     @GET("api/mobile/v1/im/conversations")
     suspend fun imListConversations(): Map<String, Any?>
 
+    @POST("api/mobile/v1/im/conversations/{id}/read")
+    suspend fun imMarkRead(@Path("id") conversationId: Int): Map<String, Any?>
+
     @POST("api/mobile/v1/im/conversations/direct")
     suspend fun imCreateDirect(@Body body: ImDirectBody): Map<String, Any?>
 
