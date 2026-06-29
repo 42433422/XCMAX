@@ -166,7 +166,11 @@ def ask_human_blocking(
     from modstore_server.models import PendingHumanQuestion, get_session_factory
 
     timeout = timeout_seconds if timeout_seconds is not None else _default_timeout_seconds()
-    poll = poll_interval_seconds if poll_interval_seconds is not None else _default_poll_interval_seconds()
+    poll = (
+        poll_interval_seconds
+        if poll_interval_seconds is not None
+        else _default_poll_interval_seconds()
+    )
     poll = max(1, poll)
 
     fp = _fingerprint(
@@ -237,7 +241,11 @@ def ask_human_blocking(
                 .first()
             )
             if not row:
-                return {"status": "error", "reason": "question row vanished", "question_id": question_id}
+                return {
+                    "status": "error",
+                    "reason": "question row vanished",
+                    "question_id": question_id,
+                }
             if row.status == "answered":
                 return {
                     "status": "answered",
@@ -330,6 +338,49 @@ def answer_pending_question(
             "ok": True,
             "question_id": question_id,
             "employee_id": row.employee_id,
+            "status": "answered",
+        }
+
+
+def answer_latest_pending_for_employee(
+    *,
+    user_id: int,
+    employee_id: str,
+    answer: str,
+) -> Dict[str, Any]:
+    """按 (老板 user_id, 员工 employee_id) 回答其**最近一条** pending 问题。
+
+    入站回流入口：老板在某员工 IM 聊天页直接回复时，无需知道 question_id，由本函数定位该员工
+    向该老板提出的最新待答问题并写入答案 → 阻塞中的 ``ask_human_blocking`` 轮询到 answered 后解阻塞继续。
+    """
+    eid = str(employee_id or "").strip()
+    if int(user_id or 0) <= 0 or not eid:
+        return {"ok": False, "reason": "bad_args"}
+    from modstore_server.models import PendingHumanQuestion, get_session_factory
+
+    sf = get_session_factory()
+    with sf() as session:
+        row = (
+            session.query(PendingHumanQuestion)
+            .filter(
+                PendingHumanQuestion.user_id == int(user_id),
+                PendingHumanQuestion.employee_id == eid,
+                PendingHumanQuestion.status == "pending",
+            )
+            .order_by(PendingHumanQuestion.asked_at.desc())
+            .first()
+        )
+        if not row:
+            return {"ok": False, "reason": "no_pending"}
+        row.status = "answered"
+        row.answer = answer
+        row.answered_by_user_id = int(user_id)
+        row.answered_at = datetime.now(timezone.utc)
+        session.commit()
+        return {
+            "ok": True,
+            "question_id": int(row.id),
+            "employee_id": eid,
             "status": "answered",
         }
 

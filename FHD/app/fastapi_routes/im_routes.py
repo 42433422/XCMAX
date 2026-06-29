@@ -329,9 +329,9 @@ async def im_send_message(
     uid = _uid(user)
     db = HostSessionLocal()
     try:
-        result = ImApplicationService(db).send_message(
-            conversation_id, uid, str(body.get("body") or "")
-        )
+        svc = ImApplicationService(db)
+        text = str(body.get("body") or "")
+        result = svc.send_message(conversation_id, uid, text)
         legacy_payload = {
             "type": "message",
             "conversation_id": conversation_id,
@@ -348,7 +348,7 @@ async def im_send_message(
             if member_id != uid:
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        await _notify_offline_im_members(member_ids, uid, str(body.get("body") or ""))
+        await _notify_offline_im_members(member_ids, uid, text)
         return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
