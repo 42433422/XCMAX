@@ -331,7 +331,17 @@ class ImEmployeeMixin:
         cs_id = self.enterprise_cs_user_id()
         if cs_id is None:
             return []
-        return self.list_messages(conversation_id, cs_id, limit=100)
+        messages = self.list_messages(conversation_id, cs_id, limit=100)
+        # 运营者读取即视为已读:推进共享客服用户 cs_id 的已读游标,清掉收件箱未读红点。
+        # 客服未读按虚拟客服用户 cs_id 计(list_cs_inbox 的 _count_unread(conv, cs_id)),
+        # 标准 im_mark_read 标的是运营者自己的 uid、标不到这里,故必须在读取时显式标 cs_id。
+        try:
+            last_id = int(messages[-1].get("id") or 0) if messages else 0
+            if last_id > 0:
+                self.mark_read(conversation_id, int(cs_id), last_id)
+        except Exception:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+            logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
+        return messages
 
     def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
         """Reply as the dedicated enterprise CS user."""
