@@ -168,7 +168,7 @@ test('wallet shows stub balance for logged-in users', async ({ page }) => {
   await page.goto('/wallet')
 
   await expect(page.getByRole('heading', { name: '资金与记录' })).toBeVisible()
-  await expect(page.getByText('¥0.00')).toBeVisible()
+  await expect(page.getByRole('main').getByText('¥0.00')).toBeVisible()
 })
 
 test('customer service page renders hero for logged-in users', async ({ page }) => {
