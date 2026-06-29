@@ -1677,6 +1677,32 @@ def _actions_real(
             )
         else:
             outputs.append({"handler": str(handler), "error": "unknown handler"})
+    # 员工干完后主动把汇报推给老板 IM。此处是所有 handler（agent/直答/llm_md 等）的汇合点，
+    # 比认知 hook 更可靠（认知 hook 只在部分路径触发，会漏掉 agent loop 的最终产出）。
+    try:
+        _rep_body = ""
+        for _o in outputs:
+            if not isinstance(_o, dict):
+                continue
+            _cand = str(_o.get("answer") or _o.get("summary") or _o.get("output") or "").strip()
+            if not _cand:
+                continue
+            # agent 的 summary 有时是 {"thought":..,"answer":..} JSON，抽出 answer 当人话
+            if _cand[:1] == "{" and '"answer"' in _cand:
+                try:
+                    _ans = (json.loads(_cand) or {}).get("answer")
+                    if _ans and str(_ans).strip():
+                        _cand = str(_ans).strip()
+                except (ValueError, TypeError):
+                    pass
+            _rep_body = _cand
+            break
+        if _rep_body:
+            _emp_im_notify_boss(
+                employee_id, config if isinstance(config, dict) else {}, _rep_body, "report"
+            )
+    except Exception:
+        logger.debug("actions_real report im hook skipped employee_id=%s", employee_id, exc_info=True)
     return {
         "task": task,
         "handlers": handlers,
