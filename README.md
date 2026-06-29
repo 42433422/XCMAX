@@ -16,7 +16,6 @@
 | **AI 员工商店** | [`成都修茈科技有限公司/`](成都修茈科技有限公司/) | **P1 商业化线** — 员工 / Mod 目录、授权、支付、下载、更新 | [`MODstore_deploy/docs/developer/README.md`](成都修茈科技有限公司/MODstore_deploy/docs/developer/README.md) | [`modstore-ci-backend-python.yml`](.github/workflows/modstore-ci-backend-python.yml) |
 | **移动 AI 协同 App** | [`FHD/mobile-android/`](FHD/mobile-android/) | **P2 配套线** — Kotlin Compose · 登录 / 扫码 / 对话 / 审批 / 通知 | [`FHD/docs/guides/MOBILE_ANDROID.md`](FHD/docs/guides/MOBILE_ANDROID.md) | [`.github/workflows/android-build.yml`](.github/workflows/android-build.yml) |
 | **技术债与计划** | [`specs/`](specs/) | **活跃** — 规范与 checklist | [`specs/plan-2026-06.md`](specs/plan-2026-06.md) | — |
-| **FHD 历史副本** | [`FHD/MODstore/`](FHD/MODstore/) | **废弃** — 仅保留防断引用 | 见 redirect README | 勿在此开发 |
 | **个人版** | [`FHD/docs/_archive/FHD-个人/`](FHD/docs/_archive/FHD-个人/) | **冻结** — 暂停新增投入，仅保留兼容、归档和未来恢复入口 | [`FHD/docs/_archive/FHD-个人/ARCHIVED.md`](FHD/docs/_archive/FHD-个人/ARCHIVED.md) | 不进入当前版本目标 |
 | **工作区归档** | [`_archive/`](_archive/) | **只读** | 各目录 `ARCHIVED.md` | — |
 
@@ -63,6 +62,7 @@ make -f Makefile.win dev
 - SKU 拆仓外壳：[`_archive/sku-repos-20260527/`](_archive/sku-repos-20260527/)（`xcagi-enterprise`、`xcagi-personal`、`xcagi-offline`）
 - 历史 core 快照：`xcagi-core-20260526-223646`
 - 并行实例 / 副本：`FHD-个人`、`_personal_sync_bak`、`面试区域`
+- 旧 FHD 内 MODstore 历史副本已物理移除；MODstore 唯一活跃源码为 `成都修茈科技有限公司/MODstore_deploy/`。
 
 **禁止**：对归档树执行 `build-enterprise.ps1` 等 overlay 复制后再提交 core。
 

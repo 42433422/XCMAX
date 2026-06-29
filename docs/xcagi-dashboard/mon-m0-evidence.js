@@ -188,7 +188,7 @@
       <div class="mon-evidence-section">
         <div class="mon-evidence-section-head">
           <h3>Mod 商家试点四图 · M0 #2 · ${statusLabel(mod.status)}</h3>
-          <code>bash FHD/MODstore/scripts/mod-pilot-checklist.sh --verify</code>
+          <code>历史试点证据来自已移除的旧 FHD 内 MODstore 副本；当前 MODstore SSOT 为 成都修茈科技有限公司/MODstore_deploy</code>
         </div>
         <div class="mon-evidence-grid mod">${(mod.steps || []).map((s) => renderModCard(s, mod.status)).join('')}</div>
       </div>
