@@ -61,7 +61,15 @@ fun ImMessengerScreen(
 ) {
     val scope = rememberCoroutineScope()
     var peerIdText by remember { mutableStateOf("") }
-    var conversationId by remember { mutableStateOf<Int?>(null) }
+    // 从消息列表点击员工 IM 会话进入时，直接打开对应会话（否则停在「新会话」表单）。
+    val initialConvId by vm.imInitialConversationId.collectAsState()
+    var conversationId by remember { mutableStateOf<Int?>(initialConvId) }
+    LaunchedEffect(initialConvId) {
+        if (initialConvId != null) {
+            conversationId = initialConvId
+            vm.setImInitialConversationId(null)
+        }
+    }
     var draft by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val cid = conversationId
@@ -82,7 +90,8 @@ fun ImMessengerScreen(
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-        WeTopBar(title = "IM 消息", onBack = onBack, showRightSearch = false, showRightAdd = false)
+        val topTitle = cid?.let { vm.imConversationTitle(it) } ?: "IM 消息"
+        WeTopBar(title = topTitle, onBack = onBack, showRightSearch = false, showRightAdd = false)
 
         if (conversationId == null) {
             WeSectionCaption("新会话")
@@ -125,6 +134,7 @@ fun ImMessengerScreen(
             }
             ImErrorText(error)
         } else {
+            val peerName = cid?.let { vm.imConversationTitle(it) } ?: "会话"
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = Spacing.lg, vertical = Spacing.sm),
                 verticalAlignment = Alignment.CenterVertically,
@@ -137,7 +147,7 @@ fun ImMessengerScreen(
                 }
                 Spacer(Modifier.width(Spacing.sm))
                 Column(Modifier.weight(1f)) {
-                    Text("会话 #${conversationId}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(peerName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text("WebSocket 已连接，消息实时同步", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.outline)
                 }
             }
@@ -152,6 +162,7 @@ fun ImMessengerScreen(
                 items(messages, key = { it.message_id }) { message ->
                     ImMessageBubble(
                         message = message,
+                        peerName = peerName,
                         onReply = { draft = "引用「" + message.body.take(60) + "」\n" + draft },
                         onDelete = {
                             conversationId?.let { vm.deleteImMessage(it, message.message_id) }
@@ -221,6 +232,7 @@ private fun EmptyConversationHint() {
 @Composable
 private fun ImMessageBubble(
     message: ImMessageCacheEntity,
+    peerName: String = "",
     onReply: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
@@ -239,7 +251,7 @@ private fun ImMessageBubble(
             ) {
                 Column(Modifier.padding(horizontal = 12.dp, vertical = 9.dp)) {
                     Text(
-                        "用户 ${message.sender_user_id}",
+                        if (mine) "我" else peerName.ifBlank { "员工" },
                         style = MaterialTheme.typography.labelSmall,
                         color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.72f) else MaterialTheme.colorScheme.outline,
                         maxLines = 1,

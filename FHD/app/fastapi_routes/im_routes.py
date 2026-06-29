@@ -208,7 +208,9 @@ def im_cs_inbox(request: Request, user: CurrentUser = Depends(require_identified
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         items = ImApplicationService(db).list_cs_inbox()
         return {"success": True, "conversations": items}
     except RECOVERABLE_ERRORS as exc:
@@ -229,7 +231,9 @@ def im_cs_inbox_messages(
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         messages = ImApplicationService(db).cs_inbox_messages(conversation_id)
         return {"success": True, "messages": messages}
     except RECOVERABLE_ERRORS as exc:
@@ -251,7 +255,9 @@ def im_cs_inbox_reply(
     db = HostSessionLocal()
     try:
         if not _is_admin_customer_service_session(request, db):
-            return JSONResponse({"success": False, "message": "需要管理端客服会话"}, status_code=403)
+            return JSONResponse(
+                {"success": False, "message": "需要管理端客服会话"}, status_code=403
+            )
         text = str(body.get("body") or "").strip()
         if not text:
             return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
@@ -343,14 +349,6 @@ async def im_send_message(
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
         await _notify_offline_im_members(member_ids, uid, text)
-        # 入站回流：若老板是在「某员工」的聊天页回复，把回复回流为该员工最新 pending 问题的答案，
-        # 让阻塞中的员工解阻塞继续（无 pending 问题时静默忽略，普通闲聊不受影响）。
-        try:
-            emp_id = svc.employee_id_for_conversation(conversation_id, uid)
-            if emp_id:
-                _relay_employee_answer(uid, emp_id, text)
-        except RECOVERABLE_ERRORS:
-            logger.debug("employee answer relay skipped", exc_info=True)
         return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
@@ -358,124 +356,6 @@ async def im_send_message(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_send_message")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
-    finally:
-        db.close()
-
-
-def _im_internal_api_key() -> str:
-    import os
-
-    return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
-        or ""
-    ).strip()
-
-
-def _modstore_internal_base() -> str:
-    import os
-
-    return (
-        (
-            os.environ.get("XCAGI_MODSTORE_INTERNAL_URL")
-            or os.environ.get("MODSTORE_INTERNAL_BASE_URL")
-            or os.environ.get("MODSTORE_PUBLIC_API_BASE")
-            or "http://127.0.0.1:9999"
-        )
-        .strip()
-        .rstrip("/")
-    )
-
-
-def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> None:
-    """入站回流：老板在某员工 IM 聊天页回复 → 回流成该员工最新 pending 问题的答案（best-effort）。
-
-    调 MODstore 内部端点 ``/api/admin/employee-autonomy/internal/answer-latest``，使阻塞中的
-    ``ask_human_blocking`` 轮询到 answered 后解阻塞继续。无 pending 问题时静默忽略（普通闲聊不触发）。
-    """
-    key = _im_internal_api_key()
-    text = (answer or "").strip()
-    if not key or int(boss_user_id or 0) <= 0 or not str(employee_id or "").strip() or not text:
-        return
-    try:
-        import httpx
-
-        with httpx.Client(timeout=5) as client:
-            client.post(
-                f"{_modstore_internal_base()}/api/admin/employee-autonomy/internal/answer-latest",
-                headers={"X-Internal-Api-Key": key},
-                json={
-                    "user_id": int(boss_user_id),
-                    "employee_id": str(employee_id),
-                    "answer": text,
-                },
-            )
-    except Exception as exc:  # noqa: BLE001 - 回流失败不影响 IM 主流程
-        logger.warning("relay_employee_answer failed: %s", exc)
-
-
-@router.post("/api/internal/im/employee-message")
-async def im_internal_employee_message(
-    request: Request,
-    body: dict = Body(default_factory=dict),
-):
-    """内部端点：以某 AI 员工身份，把一条消息投递进老板的 1:1 IM 会话。
-
-    打通「员工→IM 聊天页」出站半边：phase-D 员工不确定性提问（MODstore）经此让问题作为
-    该员工发来的 IM 消息出现在其聊天页，并实时推送给老板。仅限内部服务经 ``X-Internal-Api-Key``
-    调用。Body: ``{boss_user_id, employee_id, body, display_name?, question_id?}``。
-    """
-    expected = _im_internal_api_key()
-    provided = (request.headers.get("X-Internal-Api-Key") or "").strip()
-    if not expected or provided != expected:
-        return JSONResponse({"success": False, "message": "unauthorized"}, status_code=401)
-    try:
-        boss_user_id = int(body.get("boss_user_id") or body.get("user_id") or 0)
-    except (TypeError, ValueError):
-        boss_user_id = 0
-    employee_id = str(body.get("employee_id") or "").strip()
-    text = str(body.get("body") or body.get("text") or "").strip()
-    display_name = str(body.get("display_name") or "").strip()
-    if boss_user_id <= 0 or not employee_id or not text:
-        return JSONResponse(
-            {"success": False, "message": "boss_user_id/employee_id/body required"},
-            status_code=400,
-        )
-    _ensure_schema()
-    db = HostSessionLocal()
-    try:
-        result = ImApplicationService(db).post_employee_message(
-            boss_user_id=boss_user_id,
-            employee_id=employee_id,
-            body=text,
-            display_name=display_name,
-        )
-        if not result:
-            return JSONResponse({"success": False, "message": "post failed"}, status_code=400)
-        conversation_id = int(result["conversation_id"])
-        legacy_payload = {
-            "type": "message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-        }
-        sync_payload = {
-            "type": "im.message",
-            "conversation_id": conversation_id,
-            "message": result["message"],
-            "updated_at_ms": result.get("updated_at_ms"),
-        }
-        await im_ws_hub.send_to_user(int(boss_user_id), legacy_payload)
-        await im_ws_hub.send_to_user(int(boss_user_id), sync_payload)
-        try:
-            await _notify_offline_im_members(
-                [int(boss_user_id)], int(result["employee_user_id"]), text
-            )
-        except RECOVERABLE_ERRORS:
-            logger.debug("employee im offline push skipped", exc_info=True)
-        return {"success": True, **result}
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("im_internal_employee_message")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()

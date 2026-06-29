@@ -37,6 +37,42 @@ def _mobile_uid(user: Any) -> int:
     return 0
 
 
+def _modstore_internal_base() -> str:
+    return (
+        (
+            os.environ.get("XCAGI_MODSTORE_INTERNAL_URL")
+            or os.environ.get("MODSTORE_INTERNAL_BASE_URL")
+            or os.environ.get("MODSTORE_PUBLIC_API_BASE")
+            or "http://127.0.0.1:9999"
+        )
+        .strip()
+        .rstrip("/")
+    )
+
+
+def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> None:
+    """入站回流：老板在员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工（best-effort）。"""
+    key = _internal_api_key()
+    text = (answer or "").strip()
+    if not key or int(boss_user_id or 0) <= 0 or not str(employee_id or "").strip() or not text:
+        return
+    try:
+        import httpx
+
+        with httpx.Client(timeout=5) as client:
+            client.post(
+                f"{_modstore_internal_base()}/api/admin/employee-autonomy/internal/answer-latest",
+                headers={"X-Internal-Api-Key": key},
+                json={
+                    "user_id": int(boss_user_id),
+                    "employee_id": str(employee_id),
+                    "answer": text,
+                },
+            )
+    except Exception:  # noqa: BLE001 - 回流失败不影响 IM 主流程
+        logger.debug("relay_employee_answer failed", exc_info=True)
+
+
 def _internal_api_key() -> str:
     return (
         os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
@@ -107,15 +143,15 @@ async def internal_employee_message(
         except RECOVERABLE_ERRORS:
             logger.debug("internal employee-message ws push skipped", exc_info=True)
         return {"success": True, **result}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("internal_employee_message")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
 
 
 # ── 手机 IM 屏所需端点（精简 router 内置，绕开 im_routes 依赖链，保证陈旧部署可用）──
 
 
-@router.get("/api/im/conversations")
+@router.get("/api/mobile/v1/im/conversations")
 def im_list_conversations(user: Any = Depends(get_mobile_user)) -> Any:
     uid = _mobile_uid(user)
     if uid <= 0:
@@ -124,14 +160,14 @@ def im_list_conversations(user: Any = Depends(get_mobile_user)) -> Any:
     db = HostSessionLocal()
     try:
         return {"success": True, "conversations": ImApplicationService(db).list_conversations(uid)}
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("im_list_conversations")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
 
-@router.post("/api/im/conversations/direct")
+@router.post("/api/mobile/v1/im/conversations/direct")
 def im_create_direct(
     body: dict = Body(default_factory=dict), user: Any = Depends(get_mobile_user)
 ) -> Any:
@@ -144,17 +180,20 @@ def im_create_direct(
     ensure_im_tables(get_host_engine())
     db = HostSessionLocal()
     try:
-        return {"success": True, "conversation": ImApplicationService(db).get_or_create_direct(uid, peer)}
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+        return {
+            "success": True,
+            "conversation": ImApplicationService(db).get_or_create_direct(uid, peer),
+        }
+    except ValueError:
+        return JSONResponse({"success": False, "message": "请求参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_create_direct")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
 
-@router.get("/api/im/conversations/{conversation_id}/messages")
+@router.get("/api/mobile/v1/im/conversations/{conversation_id}/messages")
 def im_list_messages(
     conversation_id: int,
     user: Any = Depends(get_mobile_user),
@@ -170,16 +209,16 @@ def im_list_messages(
             "success": True,
             "messages": ImApplicationService(db).list_messages(conversation_id, uid, limit=limit),
         }
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except RECOVERABLE_ERRORS as exc:
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_list_messages")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
 
 
-@router.post("/api/im/conversations/{conversation_id}/messages")
+@router.post("/api/mobile/v1/im/conversations/{conversation_id}/messages")
 def im_post_message(
     conversation_id: int,
     body: dict = Body(default_factory=dict),
@@ -188,19 +227,23 @@ def im_post_message(
     uid = _mobile_uid(user)
     if uid <= 0:
         return JSONResponse({"success": False, "message": "未授权"}, status_code=401)
+    text = str(body.get("body") or "")
     ensure_im_tables(get_host_engine())
     db = HostSessionLocal()
     try:
-        result = ImApplicationService(db).send_message(
-            conversation_id, uid, str(body.get("body") or "")
-        )
-        return {"success": True, **result}
-    except PermissionError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
-    except ValueError as exc:
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
+        svc = ImApplicationService(db)
+        result = svc.send_message(conversation_id, uid, text)
+        emp_id = svc.employee_id_for_conversation(conversation_id, uid)
+    except PermissionError:
+        return JSONResponse({"success": False, "message": "无权访问该会话"}, status_code=403)
+    except ValueError:
+        return JSONResponse({"success": False, "message": "请求参数无效"}, status_code=400)
+    except RECOVERABLE_ERRORS:
         logger.exception("im_post_message")
-        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+        return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)
     finally:
         db.close()
+    # 入站回流：老板在某员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工。
+    if emp_id:
+        _relay_employee_answer(uid, emp_id, text)
+    return {"success": True, **result}
