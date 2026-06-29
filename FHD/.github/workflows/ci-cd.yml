@@ -478,9 +478,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # GitOps 声明式回写：main 构建成功 → 把 staging overlay 镜像 tag 设为 sha-<gitsha> 并提交回 main，
-  # ArgoCD 自动 sync（FHD/gitops/apps/fhd-api-staging.yaml）。opt-in：仅当仓库变量
-  # GITOPS_BUMP_ENABLE=1 时启用——main 受保护或集群未接 ArgoCD 时保持关闭，避免直推被拒。
+  # GitOps 声明式晋级：main 构建成功 → 把 staging overlay 镜像 tag 设为 sha-<gitsha>，
+  # 并创建/复用 promotion PR；main 受保护时不再由 workflow 直推主干。
   # 生产 overlay 走 fhd-release-orchestrator / 人工 `bump_image.sh production <tag> --commit` 晋级。
   gitops-image-bump:
     needs: [docker-build-fhd-api]
@@ -492,6 +491,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     concurrency:
       group: gitops-bump-main
       cancel-in-progress: false
@@ -512,30 +512,34 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # run steps default to working-directory: FHD (injected by publish) → FHD-relative path.
           bash scripts/gitops/bump_image.sh staging "${IMAGE_TAG}" --commit
-      - name: Push gitops commit to main
+      - name: Open GitOps promotion PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IMAGE_TAG: ${{ needs.docker-build-fhd-api.outputs.image_tag }}
         run: |
           set -euo pipefail
-          # GITHUB_TOKEN pushes do NOT retrigger workflows (built-in loop guard); commit also [skip ci].
-          git pull --rebase --autostash origin main || true
-          if ! git push origin HEAD:main; then
-            echo "::warning::gitops push to main rejected (branch protection?). Enable ArgoCD Image Updater or promote via orchestrator instead."
+          SAFE_TAG="$(printf '%s' "${IMAGE_TAG}" | tr -c 'A-Za-z0-9._-' '-')"
+          BRANCH="automation/gitops-staging-${SAFE_TAG}"
+
+          if git diff --quiet origin/main...HEAD; then
+            echo "::notice::No GitOps changes to promote."
+            exit 0
           fi
-      - name: Emit GitOps deploy event (DORA)
-        if: success()
-        run: |
-          python3 scripts/observability/emit_deploy_event.py \
-            --status success \
-            --source-workflow fhd-ci-cd-gitops-image-bump \
-            --environment staging \
-            --git-sha "${{ github.sha }}"
-      - name: Commit GitOps deploy event (DORA)
-        if: success()
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add metrics/deploy_events.jsonl || true
-          git diff --staged --quiet || git commit -m "chore(metrics): gitops staging bump [skip ci]"
-          git push || true
+
+          git push --force origin "HEAD:${BRANCH}"
+
+          PR_URL="$(gh pr list --head "${BRANCH}" --base main --state open --json url --jq '.[0].url // ""')"
+          if [ -n "${PR_URL}" ]; then
+            echo "::notice::GitOps promotion PR already open: ${PR_URL}"
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head "${BRANCH}" \
+            --title "chore(gitops): promote staging ${IMAGE_TAG}" \
+            --body "Automated staging GitOps promotion for ${IMAGE_TAG} from ${GITHUB_SHA}.\n\nThis PR keeps main branch protection intact instead of pushing directly from CI." \
+            || echo "::warning::GitOps promotion branch pushed but PR creation failed. Check repository Actions pull-request permissions and open ${BRANCH} manually."
 
   # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
   cvm-push-release:
@@ -548,6 +552,7 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) && 'staging' || 'production' }}
     steps:
       - uses: actions/checkout@v4
@@ -647,4 +652,3 @@ jobs:
       - name: SSOT drift gate
         working-directory: FHD
         run: python scripts/dev/ssot_cli.py gate
-
