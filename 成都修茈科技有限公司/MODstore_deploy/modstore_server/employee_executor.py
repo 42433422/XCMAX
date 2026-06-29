@@ -2039,23 +2039,10 @@ def execute_employee_task(
                     )
                 except Exception as _tc_exc:
                     logger.debug("task_classifier failed employee_id=%s err=%s", employee_id, _tc_exc)
-                # perception hook：员工像真人一样跟老板说"收到任务"——给老板
-                # 一条「正在处理」的实时反馈，避免老板以为员工没动静。
-                # 只在任务正文非空且短（<=200 字）时推，避免长 payload 干扰。
-                try:
-                    _task_preview = str(task or "").strip()
-                    if _task_preview and len(_task_preview) <= 200:
-                        _perceived_kind = ""
-                        if isinstance(perceived, dict):
-                            _perceived_kind = str(perceived.get("type") or "").strip()
-                        _perception_body = f"📋 收到任务：{_task_preview}"
-                        if _perceived_kind:
-                            _perception_body = f"{_perception_body}\n类型：{_perceived_kind}"
-                        _emp_im_notify_boss(
-                            employee_id, manifest, _perception_body, "perception"
-                        )
-                except Exception:
-                    logger.debug("perception im hook skipped", exc_info=True)
+                # 注意：原 perception hook 会把「📋 收到任务：{task}」(即任务提示词)当成
+                # 一条 IM 消息推给老板，导致老板看到的是"提示词"而不是员工产出的内容。
+                # 已移除——员工只在干完后由下方 report hook(_actions_real 汇合点)推送
+                # LLM 生成的真实答案/汇报，不再把输入 prompt 当回复发出去。
                 file_path_fast = (
                     isinstance(payload, dict)
                     and str(payload.get("file_path") or payload.get("path") or "").strip()
@@ -2172,8 +2159,9 @@ def execute_employee_task(
                                 reasoning["human_answer"] = _resp.get("answer", "")
                         except Exception as _exc:
                             reasoning["_human_answer_error"] = str(_exc)
-                # cognition hook：让员工像真人一样在 IM 里主动汇报思考结果给老板。
-                # 触发 Phase-D 时推"问老板：X"；否则推 cognition summary（如有）。
+                # cognition hook：仅在员工真有问题要问老板时(Phase-D)推一条「问老板：X」。
+                # 不再推中间 cognition summary/reasoning——那是思考过程、不是给老板的内容回复，
+                # 最终内容由下方 report hook(_actions_real 汇合点)在干完后统一推送真实答案。
                 try:
                     _im_body = ""
                     if reasoning.get("_phase_d_triggered"):
@@ -2183,12 +2171,6 @@ def execute_employee_task(
                                 f"🤔 我有个问题想问你：{_im_q}\n\n"
                                 "（已通过任务中心发起，等你在那里回复）"
                             )
-                    if not _im_body and isinstance(_parsed_llm, dict):
-                        _im_body = str(
-                            _parsed_llm.get("summary") or _parsed_llm.get("reasoning") or ""
-                        ).strip()
-                    if not _im_body and isinstance(reasoning, dict):
-                        _im_body = str(reasoning.get("summary") or "").strip()
                     if _im_body:
                         _emp_im_notify_boss(employee_id, manifest, _im_body, "cognition")
                 except Exception:
