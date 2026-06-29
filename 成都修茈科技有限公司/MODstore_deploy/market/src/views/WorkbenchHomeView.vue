@@ -3625,9 +3625,6 @@ async function forcePauseVoiceSession() {
     } catch {
       /* ignore */
     }
-  } else if (inlineVoiceTarget === 'voice') {
-    inlineAsr.abort()
-    inlineVoiceTarget = null
   }
 
   voiceListening.value = false

@@ -19,11 +19,12 @@ const ignores = {
     '**/*.min.js',
     '**/*.min.css',
     'public/**',
+    'src/views/_fix_refs.cjs',
   ],
 }
 
 const baseRules = {
-  files: ['**/*.{js,ts,tsx,vue}'],
+  files: ['**/*.{cjs,js,mjs,ts,tsx,vue}'],
   rules: {
     'no-console': ['warn', { allow: ['warn', 'error'] }],
     'no-debugger': 'error',
@@ -33,6 +34,9 @@ const baseRules = {
     ],
     '@typescript-eslint/no-explicit-any': 'warn',
     '@typescript-eslint/no-unused-expressions': 'off',
+    '@typescript-eslint/no-this-alias': 'warn',
+    '@typescript-eslint/no-unnecessary-type-constraint': 'warn',
+    '@typescript-eslint/no-unsafe-function-type': 'warn',
     'vue/multi-word-component-names': 'off',
     'vue/no-v-html': 'off',
     'prettier/prettier': 'off',
@@ -45,11 +49,12 @@ const baseRules = {
     // 历史代码中存在少量空 catch / 模板转义；先降为 warning，后续清理 PR 中再收紧。
     'no-empty': 'warn',
     'no-useless-escape': 'warn',
+    'prefer-const': 'warn',
   },
 }
 
 const languageOptions = {
-  files: ['**/*.{js,ts,tsx,vue}'],
+  files: ['**/*.{cjs,js,mjs,ts,tsx,vue}'],
   languageOptions: {
     globals: {
       ...globals.browser,
