@@ -464,7 +464,9 @@ constructor(
                 val badgeText = if (adminMode) "管理端" else "已安装"
                 val badgeColor = if (adminMode) BadgeAdminColor else BadgeInstalledColor
                 val employees = employeeConversationItems(mods, badgeText, badgeColor, timestamps, previews)
-                fixedItems + employees
+                // 微信风格：固定置顶项(小C/超级员工/客服)保持声明顺序在最上，
+                // 员工会话按最新消息时间倒序冒泡——谁刚发消息谁排前面。
+                fixedItems + employees.sortedByDescending { it.timestamp }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _chatAction = MutableStateFlow<ChatAction?>(null)
@@ -1248,16 +1250,21 @@ constructor(
                         val avatarUrl = employee.market_avatar?.takeIf { it.isNotBlank() }
                             ?: mod.avatar_url?.takeIf { it.isNotBlank() }
                         val conversationId = "employee:${mod.id}:$employeeId"
-                        // 微信风格：有最新消息预览时显示预览，否则显示介绍词
-                        val subtitle = cachedConversationPreview(conversationId, previews)
+                        // 微信风格：优先用 IM 直连会话(employee_im_summary)的最新消息预览/时间/未读，
+                        // 让员工会话按活跃时间冒泡顶置 + 显示未读红点，回退到本地缓存/介绍词。
+                        val imLastAtMs = ImRepository.parseTimestampMs(employee.im_last_message_at) ?: 0L
+                        val timestamp = maxOf(imLastAtMs, cachedConversationTimestamp(conversationId, timestamps))
+                        val subtitle = employee.im_last_message.trim()
+                            .ifBlank { cachedConversationPreview(conversationId, previews) }
                             .ifBlank { employee.contactSubtitle(source) }
                         ConversationItem(
                                 id = conversationId,
                                 type = ConversationType.AI_TASK,
                                 title = title,
                                 subtitle = subtitle,
-                                timestamp = cachedConversationTimestamp(conversationId, timestamps),
+                                timestamp = timestamp,
                                 avatarUrl = avatarUrl,
+                                unreadCount = employee.im_unread_count,
                         )
                     }
                 }
