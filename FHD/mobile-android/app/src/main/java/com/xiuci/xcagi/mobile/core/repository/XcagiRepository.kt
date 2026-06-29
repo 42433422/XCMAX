@@ -19,6 +19,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMessageDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupPostData
 import com.xiuci.xcagi.mobile.core.model.ClaudeSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.CodexSuperEmployeeMobileMessageBody
+import com.xiuci.xcagi.mobile.core.model.EmployeePendingQuestionsData
 import com.xiuci.xcagi.mobile.core.model.CursorSuperEmployeeMobileMessageBody
 import com.xiuci.xcagi.mobile.core.model.GitBranchDto
 import com.xiuci.xcagi.mobile.core.model.ListItem
@@ -1227,6 +1228,28 @@ class XcagiRepository @Inject constructor(
         syncRouterFromStore()
         cacheChatMessage(sessionId = sessionId, role = "user", text = message)
         val acc = StringBuilder()
+
+        // 员工 chat：conversationId 形如 employee:modId:employeeId → 走专用流式 endpoint
+        val employeeRef = SuperEmployeeRoutingPolicy.parseEmployeeRef(conversationId)
+        if (employeeRef != null) {
+            val (modId, empId) = employeeRef
+            sseChat.streamEmployeeChat(
+                message = message,
+                employeeId = empId,
+                modId = modId,
+                conversationId = conversationId ?: "",
+                bearer = authHeaderForChat(),
+                userId = userId(),
+                onToken = { t -> acc.append(t); onToken(t) },
+                onDone = { full -> onDone(full) },
+                onError = onError,
+            )
+            val finalText = acc.toString()
+            if (finalText.isNotBlank()) {
+                cacheChatMessage(sessionId = sessionId, role = "assistant", text = finalText)
+            }
+            return
+        }
 
         val superEmployeeRelayKind = SuperEmployeeRoutingPolicy.relayKindForConversation(conversationId)
         if (superEmployeeRelayKind != null) {
@@ -2567,6 +2590,48 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    /** 拉员工 Phase-D 主动提问列表（pending 优先）。 */
+    suspend fun loadEmployeePendingQuestions(
+        limit: Int = 50,
+        includeHistory: Boolean = false,
+        employeeId: String? = null,
+    ): Result<EmployeePendingQuestionsData> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().listEmployeePendingQuestions(
+            limit = limit,
+            includeHistory = includeHistory,
+            employeeId = employeeId,
+        )
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "员工提问列表加载失败" }))
+        } else {
+            Result.success(res.data ?: EmployeePendingQuestionsData())
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    /** 老板回答员工的 Phase-D 提问。 */
+    suspend fun answerEmployeePendingQuestion(
+        questionId: Int,
+        answer: String,
+    ): Result<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val res = fhd().answerEmployeePendingQuestion(
+            questionId,
+            mapOf("answer" to answer),
+        )
+        if (!res.success) {
+            Result.failure(Exception(res.message.ifBlank { "回答失败" }))
+        } else {
+            Result.success(res.data ?: emptyMap<String, Any?>())
+        }
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     suspend fun loadAdminModInfos(): Result<List<ModInfo>> =
         loadAdminMobileHome().map { home ->
             AdminDutyRosterNormalizer.normalize(listOf(home.toAdminModInfo()))
@@ -3165,6 +3230,10 @@ class XcagiRepository @Inject constructor(
             market_license_scope = textValue("market_license_scope"),
             market_security_level = textValue("market_security_level"),
             market_avatar = textValue("market_avatar").ifBlank { null },
+            im_conv_id = (this["im_conv_id"] as? Number)?.toInt() ?: 0,
+            im_unread_count = (this["im_unread_count"] as? Number)?.toInt() ?: 0,
+            im_last_message = textValue("im_last_message"),
+            im_last_message_at = textValue("im_last_message_at"),
         )
     }
 
@@ -3235,6 +3304,10 @@ class XcagiRepository @Inject constructor(
                         market_license_scope = employee.market_license_scope,
                         market_security_level = employee.market_security_level,
                         market_avatar = employee.market_avatar,
+                        im_conv_id = employee.im_conv_id,
+                        im_unread_count = employee.im_unread_count,
+                        im_last_message = employee.im_last_message,
+                        im_last_message_at = employee.im_last_message_at,
                     )
                 },
         )

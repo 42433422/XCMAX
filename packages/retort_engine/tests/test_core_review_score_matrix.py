@@ -5830,7 +5830,7 @@ def test_core_review_score_summary_proves_cross_language_transfer_is_top_ranked(
 
     summary = _core_review_score_summary([cross_language_comment, static_comment])
 
-    assert summary["model"] == "severity_context_transfer_publishability_v4_hunk_semantics"
+    assert summary["model"] == "severity_context_transfer_publishability_v5_external_diagnostics"
     assert summary["max_rank_score"] == 612
     assert summary["min_rank_score"] == 560
     assert summary["ranked_comment_count"] == 2

@@ -5,6 +5,7 @@ import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AiCircleListData
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
 import com.xiuci.xcagi.mobile.core.model.DeviceRegisterBody
+import com.xiuci.xcagi.mobile.core.model.EmployeePendingQuestionsData
 import com.xiuci.xcagi.mobile.core.model.PendingNotificationsData
 import com.xiuci.xcagi.mobile.core.model.ChatRequest
 import com.xiuci.xcagi.mobile.core.model.DiscoverHintData
@@ -385,6 +386,20 @@ interface FhdApi {
     @POST(ApiEndpoints.ADMIN_CS_INBOX_REPLY)
     suspend fun replyAdminCs(
         @Path("id") conversationId: Int,
+        @Body body: Map<String, String>,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    // ── 员工任务中心：Phase-D 主动提问 + 老板回答 ──
+    @GET(ApiEndpoints.ADMIN_EMPLOYEE_PENDING_QUESTIONS)
+    suspend fun listEmployeePendingQuestions(
+        @Query("limit") limit: Int = 50,
+        @Query("include_history") includeHistory: Boolean = false,
+        @Query("employee_id") employeeId: String? = null,
+    ): MobileEnvelope<EmployeePendingQuestionsData>
+
+    @POST(ApiEndpoints.ADMIN_EMPLOYEE_PENDING_QUESTION_ANSWER)
+    suspend fun answerEmployeePendingQuestion(
+        @Path("questionId") questionId: Int,
         @Body body: Map<String, String>,
     ): MobileEnvelope<Map<String, Any?>>
 

@@ -162,3 +162,25 @@ domains:
     mode: verify
     check: python ../scripts/guard_alembic_single_head.py
     sync: null
+
+  - name: mobile-tri-platform
+    owner: mobile-platform
+    enabled: true
+    # 移动三端统一 SSOT：Android 主线、KMM 共享边界、设计 token、端侧性能监控。
+    ssot: FHD/docs/mobile_tri_platform_ssot.md
+    derived:
+      - FHD/config/mobile_design_tokens.json
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt
+      - FHD/mobile-ios/PARITY_MATRIX.md
+      - FHD/mobile-ios/project.yml
+      - FHD/mobile-ios/XCAGIMobile/DesignSystem/Theme.swift
+      - FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift
+      - FHD/mobile-harmony/docs/PARITY_MATRIX.md
+      - FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets
+      - FHD/mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets
+    mode: lint
+    check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
+    sync: null

@@ -62,6 +62,11 @@ object Routes {
     const val AI_GROUP_CREATE = "ai_group_create"
     const val AI_EMPLOYEE_PROFILE = "ai_employee/{modId}/{employeeId}"
     fun aiEmployeeProfile(modId: String, employeeId: String) = "ai_employee/$modId/$employeeId"
+    /** 员工任务中心：Phase-D 主动提问列表 + 老板回答 */
+    const val EMPLOYEE_QUESTIONS = "employee_questions/{employeeId}"
+    fun employeeQuestions(employeeId: String) = "employee_questions/$employeeId"
+    /** 员工任务中心（全部员工，不带 employeeId 过滤） */
+    const val EMPLOYEE_QUESTIONS_ALL = "employee_questions_all"
     /** 智慧分析（Kitten Analyzer） */
     const val SMART_ANALYSIS = "smart_analysis"
     /** AIOPEN 开放智控 */

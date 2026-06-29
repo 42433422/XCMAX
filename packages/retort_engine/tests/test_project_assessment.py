@@ -14,6 +14,7 @@ def test_project_assessment_collects_structured_evidence_without_local_scores(tm
         <canvas id="blackholeCanvas" data-visual="blackhole-accretion-field"></canvas>
         <div id="deepProgress"></div><div id="progressFill"></div><div id="progressSteps"></div>
         <div id="eventList"></div><div id="sessionState"></div><div id="proofPanel"></div>
+        <div id="liveRuntimePanel"></div><div id="upstreamCiPanel"></div>
         <script src="/app.js"></script>
         """,
         encoding="utf-8",
@@ -24,6 +25,8 @@ def test_project_assessment_collects_structured_evidence_without_local_scores(tm
         function drawAbsorptionScene() {}
         function drawAbsorptionPlanet() {}
         function renderDevourSession() {}
+        function renderLiveRuntimePanel() {}
+        function renderUpstreamCiPanel() {}
         function beginAbsorption() {}
         function draw() { requestAnimationFrame(draw); }
         """,

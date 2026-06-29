@@ -665,8 +665,10 @@ class TestAiEmployeeMarketProfiles:
     def test_admin_employee_items_uses_duty_roster_as_ssot(self, ext_mod):
         items = ext_mod._admin_employee_items()
         ids = {str(item.get("id") or "") for item in items}
-        assert len(items) == 54
-        assert len(ids) == 54
+        roster_ids = set(ext_mod._admin_roster_ids_by_department_order())
+        assert len(roster_ids) == 55
+        assert len(items) == len(roster_ids)
+        assert ids == roster_ids
         assert "llm-ops-engineer" in ids
         assert "mobile-harmony-release-officer" in ids
 

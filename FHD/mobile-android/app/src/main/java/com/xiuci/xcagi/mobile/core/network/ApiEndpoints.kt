@@ -126,4 +126,8 @@ object ApiEndpoints {
     const val PAYMENT_PLANS = "$BASE/payment/plans"
     const val PAYMENT_CHECKOUT = "$BASE/payment/checkout"
     const val PAYMENT_QUERY = "$BASE/payment/query/{outTradeNo}"
+
+    // 员工任务中心：Phase-D 主动提问 + 老板回答
+    const val ADMIN_EMPLOYEE_PENDING_QUESTIONS = "$BASE/admin/employee-pending-questions"
+    const val ADMIN_EMPLOYEE_PENDING_QUESTION_ANSWER = "$BASE/admin/employee-pending-questions/{questionId}/answer"
 }

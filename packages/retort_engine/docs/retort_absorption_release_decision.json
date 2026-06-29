@@ -302,7 +302,7 @@
     "competitor_runtime_project_count": 3,
     "competitor_runtime_ready": true,
     "competitor_runtime_ready_projects": 3,
-    "competitor_runtime_retort_comments": 3,
+    "competitor_runtime_retort_comments": 4,
     "contract_runtime_rehearsal_concurrent_rejected": 360,
     "contract_runtime_rehearsal_concurrent_rollback": true,
     "contract_runtime_rehearsal_ready": true,
@@ -379,11 +379,11 @@
     "review_family_behavior_typescript_cases": 2,
     "upstream_pr_ci_all_successful": true,
     "upstream_pr_ci_all_targets_successful": true,
-    "upstream_pr_ci_check_runs": 30,
+    "upstream_pr_ci_check_runs": 19,
     "upstream_pr_ci_distinct_repos": 5,
     "upstream_pr_ci_ready": true,
     "upstream_pr_ci_ready_targets": 5,
     "upstream_pr_ci_target_count": 5,
-    "upstream_pr_ci_total_check_runs": 130
+    "upstream_pr_ci_total_check_runs": 174
   }
 }

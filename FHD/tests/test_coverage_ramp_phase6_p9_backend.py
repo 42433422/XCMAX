@@ -96,10 +96,18 @@ def test_resolve_planner_mod_dir_manager_hit(tmp_path: Path) -> None:
 
 def test_resolve_planner_mod_dir_manager_returns_none_falls_through_to_repo(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     # manager returns None → 走 env / repo fallback；repo_mods 存在 → 返回 repo 路径
     monkeypatch.delenv("XCAGI_MODS_ROOT", raising=False)
     monkeypatch.delenv("XCAGI_MODS_DIR", raising=False)
+    fake_module = tmp_path / "FHD" / "app" / "mod_sdk" / "planner_tools.py"
+    fake_module.parent.mkdir(parents=True)
+    fake_module.write_text("", encoding="utf-8")
+    repo_mod = tmp_path / "FHD" / "mods" / PLANNER_FACADE_MOD_ID
+    repo_mod.mkdir(parents=True)
+    (repo_mod / "manifest.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(planner_tools, "__file__", str(fake_module))
 
     mock_mgr = MagicMock()
     mock_mgr.get_mod.return_value = None
@@ -113,9 +121,7 @@ def test_resolve_planner_mod_dir_manager_returns_none_falls_through_to_repo(
         patch("app.shell.xcagi_mods_discover.mods_dir", return_value=None),
     ):
         result = _resolve_planner_mod_dir()
-    # repo_mods (FHD/mods/xcagi-planner-bridge) 存在 → 返回该路径
-    assert result is not None
-    assert result.name == PLANNER_FACADE_MOD_ID
+    assert result == repo_mod
 
 
 def test_resolve_planner_mod_dir_all_paths_miss_returns_none(

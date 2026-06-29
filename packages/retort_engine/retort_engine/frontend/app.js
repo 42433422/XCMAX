@@ -117,6 +117,8 @@ const statusText = {
   no_candidates: "无候选",
   saturated: "已饱和",
   not_saturated: "未饱和",
+  needs_competitor_runtime_evidence: "缺少竞品运行证据",
+  needs_upstream_pr_ci_evidence: "缺少上游 PR/CI 证据",
   needs_attention: "需要处理",
   absorption_failed: "吸收失败",
   final_deep_review_scored: "最终深评已评分",
@@ -890,6 +892,48 @@ function renderProofPanel(proof) {
   appendLabeledChips(target, "已有支撑能力", proof.support_behavior_source_files || [], 5);
 }
 
+function renderLiveRuntimePanel(result) {
+  const target = $("liveRuntimePanel");
+  if (!target) return;
+  target.textContent = "";
+  if (!result) {
+    target.textContent = "等待真实拉取";
+    return;
+  }
+  const summary = result.summary || {};
+  renderKV(target, [
+    ["状态", labelOf(result.status)],
+    ["实时拉取", `${summary.live_upstream_verified_count || 0}/${summary.live_upstream_probe_count || 0}`],
+    ["现场物化", `${summary.live_upstream_materialized_count || 0}/${summary.live_upstream_probe_count || 0}`],
+    ["实时源码", `${summary.live_refresh_used_count || 0}/${summary.competitor_project_count || 0}`],
+    ["外部进程", `${summary.external_process_success_count || 0}/${summary.external_process_count || 0}`],
+    ["Retort 评论", summary.retort_comment_count || 0],
+  ]);
+  appendLabeledChips(target, "对照项目", summary.competitor_projects || [], 5);
+  appendLabeledChips(target, "实时来源", summary.live_upstream_projects || [], 5);
+}
+
+function renderUpstreamCiPanel(result) {
+  const target = $("upstreamCiPanel");
+  if (!target) return;
+  target.textContent = "";
+  if (!result) {
+    target.textContent = "等待探针";
+    return;
+  }
+  const summary = result.summary || {};
+  renderKV(target, [
+    ["状态", labelOf(result.status)],
+    ["目标", `${summary.ready_target_count || 0}/${summary.target_count || 0}`],
+    ["语言", `${summary.language_family_count || 0}`],
+    ["成功检查", `${summary.total_successful_check_run_count || 0}/${summary.total_check_run_count || 0}`],
+    ["阻断失败", summary.total_blocking_check_run_count || 0],
+    ["跨语言", summary.cross_language_ci_generalization ? "已证明" : "待证明"],
+  ]);
+  appendLabeledChips(target, "语言族", summary.target_language_families || [], 5);
+  appendLabeledChips(target, "上游仓库", summary.target_repositories || [], 5);
+}
+
 function renderFinalReviewPanel(finalReview) {
   const target = $("finalReviewPanel");
   if (!target) return;
@@ -1203,6 +1247,42 @@ async function saturationReport() {
     $("statusText").textContent = "已阻断";
     $("branchState").textContent = `错误：${e.message}`;
     pushEvent("饱和判定失败", e.message, "bad");
+  } finally {
+    setRunning(false);
+  }
+}
+
+async function liveRuntimeComparison() {
+  setRunning(true, "实时竞品对照中");
+  pushEvent("实时对照", "现场拉取竞品源码并运行外部对照", "info");
+  try {
+    const r = await api("/api/competitor-runtime-comparison", {project: $("ownProjectFolder").value.trim(), live_upstream: true, force_live_refresh: true});
+    renderLiveRuntimePanel(r);
+    $("statusText").textContent = labelOf(r.status);
+    $("branchState").textContent = `实时源码 ${r.summary?.live_refresh_used_count || 0}/${r.summary?.competitor_project_count || 0}`;
+    pushEvent("实时对照完成", `拉取 ${r.summary?.live_upstream_materialized_count || 0}/${r.summary?.live_upstream_probe_count || 0}`, r.status === "ready" ? "ok" : "warn");
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("实时对照失败", e.message, "bad");
+  } finally {
+    setRunning(false);
+  }
+}
+
+async function upstreamCiProbe() {
+  setRunning(true, "跨语言上游 CI 探针");
+  pushEvent("上游CI", "读取真实 GitHub PR 与 check-runs", "info");
+  try {
+    const r = await api("/api/upstream-pr-ci-probe", {project: $("ownProjectFolder").value.trim()});
+    renderUpstreamCiPanel(r);
+    $("statusText").textContent = labelOf(r.status);
+    $("branchState").textContent = `语言 ${r.summary?.language_family_count || 0} · 检查 ${r.summary?.total_successful_check_run_count || 0}/${r.summary?.total_check_run_count || 0}`;
+    pushEvent("上游CI完成", `目标 ${r.summary?.ready_target_count || 0}/${r.summary?.target_count || 0}`, r.status === "ready" ? "ok" : "warn");
+  } catch (e) {
+    $("statusText").textContent = "已阻断";
+    $("branchState").textContent = `错误：${e.message}`;
+    pushEvent("上游CI失败", e.message, "bad");
   } finally {
     setRunning(false);
   }
@@ -1820,6 +1900,8 @@ $("evolveBtn").onclick = evolve;
 $("radarBtn").onclick = similarRadar;
 $("loopBtn").onclick = similarLoop;
 $("saturationBtn").onclick = saturationReport;
+$("liveRuntimeBtn").onclick = liveRuntimeComparison;
+$("upstreamCiBtn").onclick = upstreamCiProbe;
 
 async function loadDefaultProject() {
   try {
@@ -1836,5 +1918,7 @@ async function loadDefaultProject() {
 resetProgress();
 externalScores(null);
 renderDevourSession(null);
+renderLiveRuntimePanel(null);
+renderUpstreamCiPanel(null);
 loadDefaultProject();
 draw();

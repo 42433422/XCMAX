@@ -9,18 +9,29 @@
     "lint": "eslint static/js/"
   },
   "devDependencies": {
-    "jest": "^29.7.0",
     "@babel/preset-env": "^7.23.0",
-    "eslint": "^8.56.0"
+    "eslint": "^8.56.0",
+    "jest": "^29.7.0"
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "moduleFileExtensions": ["js", "json"],
-    "testMatch": ["**/tests/**/*.test.js"],
+    "moduleFileExtensions": [
+      "js",
+      "json"
+    ],
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
     "coverageDirectory": "coverage",
     "collectCoverageFrom": [
       "static/js/**/*.js",
       "!static/js/**/*.test.js"
     ]
+  },
+  "overrides": {
+    "@babel/core": "7.29.6",
+    "@babel/plugin-transform-modules-systemjs": "7.29.4",
+    "js-yaml": "4.2.0",
+    "brace-expansion": "5.0.6"
   }
 }
