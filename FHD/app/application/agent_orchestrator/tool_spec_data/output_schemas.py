@@ -411,6 +411,16 @@ _SPECIAL_OUTPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "data": {"type": "object"},
         },
     },
+    ("excel_import", "import_roster_file"): {
+        "type": "object",
+        "required": ["success"],
+        "properties": {
+            "success": {"type": "boolean"},
+            "message": {"type": "string"},
+            "imported_count": {"type": "integer"},
+            "data": {"type": "object"},
+        },
+    },
     ("unit_products_import", "execute_import"): {
         "type": "object",
         "required": ["success"],

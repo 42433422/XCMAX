@@ -155,3 +155,112 @@ def test_roster_aliases_accepted(tmp_path, import_type):
         )
     )
     assert res["import_type"] == "attendance_roster"
+
+
+# ---- 聊天「规则入库捷径」侧：探测 + 计划路由 + 注册执行器 ----
+
+
+def _bare_chat_service():
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    svc = AIChatApplicationService.__new__(AIChatApplicationService)
+    svc._pending_workflows = {}
+    return svc
+
+
+def test_probe_attendance_roster_import_hits(tmp_path):
+    xlsx = tmp_path / "考勤报表.xlsx"
+    _write_dingtalk_style_xlsx(xlsx)
+    svc = _bare_chat_service()
+    params = svc._probe_attendance_roster_import({"excel_file_path": str(xlsx)}, {"fields": []})
+    assert params is not None
+    assert params["file_path"] == str(xlsx)
+
+
+def test_probe_attendance_roster_import_rejects_quote_file(tmp_path):
+    xlsx = tmp_path / "报价单.xlsx"
+    _write_quote_style_xlsx(xlsx)
+    svc = _bare_chat_service()
+    assert (
+        svc._probe_attendance_roster_import({"excel_file_path": str(xlsx)}, {"fields": []}) is None
+    )
+
+
+def test_dynamic_workflow_routes_roster_plan(tmp_path, monkeypatch):
+    xlsx = tmp_path / "考勤报表.xlsx"
+    _write_dingtalk_style_xlsx(xlsx)
+    svc = _bare_chat_service()
+
+    captured: dict = {}
+
+    def _fake_start(**kwargs):
+        captured.update(kwargs)
+        return {"success": True, "message": "处理完成", "data": {}}
+
+    monkeypatch.setattr(svc, "_start_deterministic_import_agent_run", _fake_start)
+
+    res = svc._try_handle_dynamic_workflow(
+        "u1",
+        "一键导入数据库",
+        "pro",
+        {
+            "excel_analysis": {
+                "file_path": str(xlsx),
+                "summary": "钉钉考勤导出：打卡时间等 4 个工作表",
+            }
+        },
+        {},
+    )
+    assert res is not None and res["success"] is True
+    plan = captured["plan"]
+    node = plan.nodes[0]
+    assert node.tool_id == "excel_import"
+    assert node.action == "import_roster_file"
+    assert node.params["file_path"] == str(xlsx)
+    assert plan.intent == "attendance_roster_import_to_db"
+
+
+def test_registered_router_import_roster_file(tmp_path, monkeypatch):
+    xlsx = tmp_path / "考勤报表.xlsx"
+    _write_dingtalk_style_xlsx(xlsx)
+
+    added_products: list[dict] = []
+    created_customers: list[dict] = []
+
+    class _FakeProducts:
+        def batch_add_products(self, records):
+            added_products.extend(records)
+            return {"success": True, "data": {"success_count": len(records), "failed_count": 0}}
+
+    class _FakeCustomers:
+        def create(self, record):
+            created_customers.append(record)
+            return {"success": True}
+
+    import app.bootstrap as bootstrap
+    import app.services.unified_query_service as uqs
+
+    monkeypatch.setattr(bootstrap, "get_products_service", lambda: _FakeProducts())
+    monkeypatch.setattr(bootstrap, "get_customer_app_service", lambda: _FakeCustomers())
+    monkeypatch.setattr(uqs, "find_purchase_unit", lambda **kw: None)
+
+    from app.services.tools_workflow_registered import execute_registered_workflow_tool
+
+    res = execute_registered_workflow_tool(
+        "excel_import",
+        "import_roster_file",
+        {"file_path": str(xlsx), "_runtime_context": {"workspace_root": str(tmp_path)}},
+    )
+    assert res["success"] is True
+    assert res["imported_count"] == 2
+    assert len(added_products) == 2
+    assert {c["customer_name"] for c in created_customers} == {"董事会", "公司-财务部"}
+
+
+def test_tool_spec_accepts_import_roster_file():
+    from app.application.agent_orchestrator.tool_spec import validate_tool_call
+
+    ok = validate_tool_call("excel_import", "import_roster_file", {"file_path": "x.xlsx"})
+    assert ok.ok is True
+    missing = validate_tool_call("excel_import", "import_roster_file", {})
+    assert missing.ok is False
