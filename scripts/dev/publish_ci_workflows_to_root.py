@@ -157,6 +157,22 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
         f".github/workflows/{out_name}",
     )
     content = content.replace(
+        ".github/workflows/market-e2e.yml",
+        f".github/workflows/{out_name}",
+    )
+    content = content.replace(
+        "working-directory: market",
+        "working-directory: 成都修茈科技有限公司/MODstore_deploy/market",
+    )
+    content = content.replace(
+        "cache-dependency-path: market/package-lock.json",
+        "cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json",
+    )
+    content = content.replace(
+        "path: market/playwright-report/",
+        "path: 成都修茈科技有限公司/MODstore_deploy/market/playwright-report/",
+    )
+    content = content.replace(
         "working-directory: desktop-shell",
         "working-directory: 成都修茈科技有限公司/MODstore_deploy/desktop-shell",
     )

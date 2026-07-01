@@ -7,11 +7,11 @@ on:
   push:
     paths:
       - "成都修茈科技有限公司/MODstore_deploy/market/**"
-      - ".github/workflows/market-e2e.yml"
+      - ".github/workflows/modstore-market-e2e.yml"
   pull_request:
     paths:
       - "成都修茈科技有限公司/MODstore_deploy/market/**"
-      - ".github/workflows/market-e2e.yml"
+      - ".github/workflows/modstore-market-e2e.yml"
 
 
 defaults:
@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: market
+        working-directory: 成都修茈科技有限公司/MODstore_deploy/market
     env:
       CI: "true"
     steps:
@@ -31,9 +31,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
-          cache-dependency-path: market/package-lock.json
+          cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json
 
       - name: Install deps
         run: npm ci
@@ -49,5 +49,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: market-playwright-report
-          path: market/playwright-report/
+          path: 成都修茈科技有限公司/MODstore_deploy/market/playwright-report/
           retention-days: 7
