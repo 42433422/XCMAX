@@ -24,7 +24,7 @@ test.describe('direct chat composer mobile width', () => {
       }
       await route.continue()
     })
-    await page.goto('/market/workbench/home')
+    await page.goto('/workbench/home')
     const input = page.locator('#wb-home-input')
     await expect(input).toBeVisible({ timeout: 20000 })
     const box = await input.boundingBox()

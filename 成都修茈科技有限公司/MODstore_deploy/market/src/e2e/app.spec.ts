@@ -96,17 +96,18 @@ test('protected pages redirect anonymous users to login', async ({ page }) => {
   await expect(page.getByRole('heading', { name: '登录' })).toBeVisible()
 })
 
-test('top navigation stays inside the market router', async ({ page }) => {
+test('authenticated sidebar navigation stays inside the market router', async ({ page }) => {
   await stubCommonApis(page)
   await page.addInitScript(() => localStorage.setItem('modstore_token', 'token-e2e'))
 
-  await page.goto('/plans')
+  await page.goto('/workbench/home')
 
-  await expect(page.getByRole('link', { name: 'XC AGI' })).toHaveAttribute('href', /\/workbench\/home$/)
-  await expect(page.getByRole('link', { name: '工作台' })).toHaveAttribute('href', /\/workbench\/home$/)
-  await expect(page.getByRole('link', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
+  await expect(page.getByRole('button', { name: '新对话' })).toBeVisible()
   await expect(page.getByRole('link', { name: 'AI 市场' })).toHaveAttribute('href', /\/ai-store$/)
-  await expect(page.getByRole('link', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
+
+  await page.getByRole('button', { name: 'tester 菜单' }).click()
+  await expect(page.getByRole('menuitem', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
+  await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
 })
 
 test('plan purchase creates a checkout order for authenticated users', async ({ page }) => {
@@ -142,9 +143,9 @@ test('workbench shell target tabs switch between employee, workflow, mod and ski
   // Shell renders with employee target tab active
   await expect(page).toHaveURL(/\/workbench\/shell\/employee/)
 
-  // Legacy unified redirect still works
+  // /workbench/unified remains the legacy unified workbench.
   await page.goto('/workbench/unified')
-  await expect(page).toHaveURL(/\/workbench\/shell/)
+  await expect(page).toHaveURL(/\/workbench\/unified/)
 
   // /workbench/home 仍渲染原主界面
   await page.goto('/workbench/home')
@@ -165,7 +166,7 @@ test('wallet shows stub balance for logged-in users', async ({ page }) => {
   await page.goto('/wallet')
 
   await expect(page.getByRole('heading', { name: '资金与记录' })).toBeVisible()
-  await expect(page.getByText('¥0.00')).toBeVisible()
+  await expect(page.getByRole('main').getByText('¥0.00')).toBeVisible()
 })
 
 test('customer service page renders hero for logged-in users', async ({ page }) => {
