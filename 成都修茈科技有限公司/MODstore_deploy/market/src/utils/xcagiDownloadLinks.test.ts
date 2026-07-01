@@ -42,16 +42,16 @@ describe('xcagiDownloadLinks', () => {
     const base = normalizeXcagiDownloadBase('https://dl.xiu-ci.com/xcagi-v8.1.0')
 
     expect(xcagiDownloadFileName('personal', 'mac', '8.1.0', '1.5.0', 'x64')).toBe(
-      'XCAGI-Personal-8.1.0-mac-x64.dmg',
+      'XCAGI-8.1.0-mac-x64.dmg',
     )
     expect(xcagiDownloadFileName('enterprise', 'mac', '8.1.0', '1.5.0', 'arm64')).toBe(
-      'XCAGI-Enterprise-8.1.0-mac-arm64.dmg',
+      'XCAGI-8.1.0-mac-arm64.dmg',
     )
     expect(xcagiDownloadUrl('personal', 'mac', base, '8.1.0', '1.5.0', 'arm64')).toBe(
-      'https://dl.xiu-ci.com/xcagi-v8.1.0/personal/XCAGI-Personal-8.1.0-mac-arm64.dmg',
+      'https://dl.xiu-ci.com/xcagi-v8.1.0/personal/XCAGI-8.1.0-mac-arm64.dmg',
     )
     expect(xcagiDownloadUrl('enterprise', 'mac', base, '8.1.0', '1.5.0', 'x64')).toBe(
-      'https://dl.xiu-ci.com/xcagi-v8.1.0/enterprise/XCAGI-Enterprise-8.1.0-mac-x64.dmg',
+      'https://dl.xiu-ci.com/xcagi-v8.1.0/enterprise/XCAGI-8.1.0-mac-x64.dmg',
     )
   })
 

@@ -340,7 +340,7 @@ SSOT 脚本：`FHD/frontend/package.json` → `test:e2e:p0`；编排见 `FHD/scr
 # 改 FHD 或 MODstore 下 workflow 后，重新发布到根
 python scripts/dev/publish_ci_workflows_to_root.py
 git add .github/workflows/
-git commit -m "ci: sync root workflows from FHD/MODstore sources"
+git commit -m "ci: sync root workflows from FHD and MODstore_deploy sources"
 ```
 
 根 workflow 文件头含 `# CI SSOT: generated from ...` 注释，标识生成来源。

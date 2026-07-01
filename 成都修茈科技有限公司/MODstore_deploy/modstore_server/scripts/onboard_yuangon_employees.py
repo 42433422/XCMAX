@@ -31,6 +31,37 @@ def _clean_list(values: Any) -> list[str]:
     return out
 
 
+def _clean_action_handlers(values: Any) -> list[str]:
+    """Clean explicit yuangon handlers without adding fallback handlers."""
+
+    allowed = {
+        "echo",
+        "llm_md",
+        "http_request",
+        "webhook",
+        "data_sync",
+        "direct_python",
+        "wechat_notify",
+        "openapi_tool",
+        "fhd_business",
+        "voice_output",
+        "agent",
+        "para_delegate",
+        "cursor_delegate",
+        "vibe_edit",
+        "vibe_heal",
+        "vibe_code",
+        "doc_sync",
+        "shell_exec",
+        "ssh_exec",
+    }
+    out: list[str] = []
+    for value in _clean_list(values):
+        if value in allowed and value not in out:
+            out.append(value)
+    return out
+
+
 def _manifest_from_employee_yaml(
     data: dict[str, Any],
     *,
@@ -40,7 +71,6 @@ def _manifest_from_employee_yaml(
     from modstore_server.employee_ai_scaffold import (
         _default_capabilities,
         _default_employee_config_v2,
-        _normalize_action_handlers,
     )
     from modstore_server.xcagi_host_profile import merge_workflow_employee_for_manifest
 
@@ -122,8 +152,11 @@ def _manifest_from_employee_yaml(
 
     actions_in = data.get("actions")
     if isinstance(actions_in, dict):
+        handlers = _clean_action_handlers(actions_in.get("handlers"))
+        if not handlers:
+            return None, "actions.handlers missing or unsupported"
         merged_actions = dict(actions_in)
-        merged_actions["handlers"] = _normalize_action_handlers(actions_in.get("handlers"))
+        merged_actions["handlers"] = handlers
         config_v2["actions"] = merged_actions
     else:
         # Yuangon roles without an explicit action are knowledge workers, not file

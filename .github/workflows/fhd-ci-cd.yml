@@ -656,7 +656,8 @@ jobs:
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
 
-  # SSOT drift gate (blocking; deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23)
+  # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
+  # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
   ssot-drift-gate:
     name: SSOT Drift Gate
     needs: guard-temp-scripts

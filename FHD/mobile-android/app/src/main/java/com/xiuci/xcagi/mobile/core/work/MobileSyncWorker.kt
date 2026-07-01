@@ -1,6 +1,7 @@
 package com.xiuci.xcagi.mobile.core.work
 
 import android.content.Context
+import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
@@ -25,8 +26,14 @@ class MobileSyncWorker @AssistedInject constructor(
         val mode = sessionStore.serverModeFlow.first()
         if (MobileSyncPolicy.shouldSkipAutoSync(host, mode)) return Result.success()
         return syncRepo.pullAndCache().fold(
-            onSuccess = { Result.success() },
-            onFailure = { Result.retry() },
+            onSuccess = {
+                Log.i("MobileSyncWorker", "pullAndCache ok circlePostCount=${it.circlePostCount}")
+                Result.success()
+            },
+            onFailure = {
+                Log.w("MobileSyncWorker", "pullAndCache failed", it)
+                Result.retry()
+            },
         )
     }
 }

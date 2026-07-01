@@ -25,7 +25,7 @@
       "docs/evidence/mod/03-payment.png",
       "docs/evidence/mod/04-activated.png"
     ],
-    "verify_script": "bash MODstore/scripts/mod-pilot-checklist.sh --verify"
+    "verify_script": "historical mod-pilot-checklist retired; active source is 成都修茈科技有限公司/MODstore_deploy"
   },
   "nodes": [
     {

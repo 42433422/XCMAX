@@ -199,9 +199,27 @@ async def _fetch_google(
         return [], str(e)
 
 
+def _model_id(value: Any) -> str:
+    if isinstance(value, dict):
+        for key in ("id", "name", "model"):
+            text = str(value.get(key) or "").strip()
+            if text:
+                return text
+        return ""
+    return str(value or "").strip()
+
+
 def _merge_fallback(provider: str, remote: List[str]) -> List[str]:
     fb = _load_fallback().get(provider) or []
-    return sorted(set(remote + fb))
+    models: List[str] = []
+    seen = set()
+    for item in list(remote or []) + list(fb or []):
+        mid = _model_id(item)
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        models.append(mid)
+    return sorted(models)
 
 
 async def get_models_for_provider(

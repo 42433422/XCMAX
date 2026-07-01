@@ -23,30 +23,56 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - name: Install deps
-        run: npm install --no-audit --no-fund
-      - name: Build Windows installer (NSIS · x64)
-        run: npx --no-install electron-builder --win --x64 --publish never
+        run: npm ci --no-audit --no-fund
+      - name: Build signed Windows installers (NSIS · x64)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path upload | Out-Null
+          foreach ($sku in @("personal", "enterprise")) {
+            Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
+            $env:XCAGI_PRODUCT_SKU = $sku
+            $env:XCAGI_REQUIRE_WINDOWS_SIGNING = "1"
+            if (-not $env:XCAGI_WINDOWS_PUBLISHER_NAME) {
+              $env:XCAGI_WINDOWS_PUBLISHER_NAME = "成都修茈科技有限公司"
+            }
+            npm run dist:win
+            $exe = Get-ChildItem dist -Filter "*.exe" | Select-Object -First 1
+            if (-not $exe) { throw "No installer produced for $sku" }
+            powershell -ExecutionPolicy Bypass -File scripts/verify-windows-signature.ps1 -Path $exe.FullName -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+            New-Item -ItemType Directory -Force -Path "upload/$sku" | Out-Null
+            Copy-Item dist/*.exe,dist/*.blockmap,dist/latest.yml -Destination "upload/$sku" -ErrorAction SilentlyContinue
+          }
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
       - name: List artifacts
-        shell: bash
-        run: ls -la dist/ || true
+        shell: pwsh
+        run: Get-ChildItem -Recurse upload
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-win
           path: |
-            desktop-shell/dist/*.exe
-            desktop-shell/dist/latest.yml
-            desktop-shell/dist/*.blockmap
+            成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/*.exe
+            成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/latest.yml
+            成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/*.blockmap
           if-no-files-found: error
 
   # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
   deploy:
     needs: windows
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -62,13 +88,17 @@ jobs:
         run: |
           set -e
           ls -la dist/
-          DEST=/var/www/update/releases/stable/personal
           SSH="ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
-          EXE=$(ls dist/*.exe | head -1); BASE=$(basename "$EXE")
-          # 原子上传：先传 .part，校验大小后 mv 到正式名，避免传输中被下载到半截文件
-          scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30 "$EXE" "root@119.27.178.147:$DEST/$BASE.part"
-          LOCAL_SZ=$(wc -c < "$EXE")
-          $SSH root@119.27.178.147 "REMOTE_SZ=\$(wc -c < '$DEST/$BASE.part'); if [ \"\$REMOTE_SZ\" = '$LOCAL_SZ' ]; then mv -f '$DEST/$BASE.part' '$DEST/$BASE'; echo OK_MOVED; else echo SIZE_MISMATCH \$REMOTE_SZ vs $LOCAL_SZ; exit 1; fi"
-          if [ -f dist/latest.yml ]; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no dist/latest.yml "root@119.27.178.147:$DEST/"; fi
-          if ls dist/*.blockmap >/dev/null 2>&1; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no dist/*.blockmap "root@119.27.178.147:$DEST/" || true; fi
-          $SSH root@119.27.178.147 "ls -lh $DEST/"
+          for sku in personal enterprise; do
+            src="dist/$sku"
+            test -d "$src" || { echo "missing artifact dir $src"; exit 1; }
+            DEST="/var/www/update/releases/stable/$sku"
+            EXE=$(ls "$src"/*.exe | head -1); BASE=$(basename "$EXE")
+            # 原子上传：先传 .part，校验大小后 mv 到正式名，避免传输中被下载到半截文件
+            scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30 "$EXE" "root@119.27.178.147:$DEST/$BASE.part"
+            LOCAL_SZ=$(wc -c < "$EXE")
+            $SSH root@119.27.178.147 "REMOTE_SZ=\$(wc -c < '$DEST/$BASE.part'); if [ \"\$REMOTE_SZ\" = '$LOCAL_SZ' ]; then mv -f '$DEST/$BASE.part' '$DEST/$BASE'; echo OK_MOVED $sku/$BASE; else echo SIZE_MISMATCH \$REMOTE_SZ vs $LOCAL_SZ; exit 1; fi"
+            if [ -f "$src/latest.yml" ]; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no "$src/latest.yml" "root@119.27.178.147:$DEST/"; fi
+            if ls "$src"/*.blockmap >/dev/null 2>&1; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no "$src"/*.blockmap "root@119.27.178.147:$DEST/" || true; fi
+            $SSH root@119.27.178.147 "ls -lh $DEST/"
+          done

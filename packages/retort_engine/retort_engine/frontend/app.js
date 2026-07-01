@@ -520,6 +520,32 @@ function scores(list) {
   $("coreScore").textContent = overall ? Math.round(overall.value) : (rows[0] ? Math.round(rows[0].value) : "--");
 }
 
+function setOpsMetric(id, value, tone = "") {
+  const target = $(id);
+  if (!target) return;
+  target.textContent = value == null || value === "" ? "--" : String(value);
+  target.dataset.tone = tone;
+}
+
+function renderOpsDashboard(payload = {}) {
+  const assessment = payload?.assessment || payload?.own_assessment || payload?.final_assessment || payload;
+  const audit = assessment?.metadata?.capability_absorption_audit || payload?.capability_absorption_audit || {};
+  const proof = audit.closed_loop_proof || assessment?.metadata?.absorption_state?.closed_loop_proof || payload?.closed_loop_proof || {};
+  const execution = payload?.execution || {};
+  const latest_test_to_source_ratio_status = audit.latest_test_to_source_ratio_status || audit.test_to_source_ratio_status || "unknown";
+  const ratio = audit.latest_test_to_source_ratio ?? audit.test_to_source_ratio;
+  const gatesPassed = execution.gates_passed === true || execution.status === "applied";
+  const gatesFailed = execution.gates_passed === false || execution.status === "failed";
+  const branchStatus = payload?.branch_workflow?.status || payload?.branch_status || "";
+  const llmStatus = assessment?.metadata?.score_source === "paibi_llm" ? "已评分" : (payload?.llm_review_status?.status || payload?.llm_review?.dispatch?.status || payload?.llm_review?.status || "待命");
+
+  setOpsMetric("opsLlm", labelOf(llmStatus) || llmStatus, llmStatus === "paibi_llm_completed" ? "ok" : "");
+  setOpsMetric("opsGates", gatesPassed ? "通过" : gatesFailed ? "失败" : "--", gatesPassed ? "ok" : gatesFailed ? "bad" : "");
+  setOpsMetric("opsProof", proof.verified ? "闭环" : (proof.missing || []).length ? `${proof.missing.length} 缺` : "--", proof.verified ? "ok" : "");
+  setOpsMetric("opsRatio", ratio == null ? labelOf(latest_test_to_source_ratio_status) || "--" : `${ratio} · ${labelOf(latest_test_to_source_ratio_status) || latest_test_to_source_ratio_status}`);
+  setOpsMetric("opsBranch", labelOf(branchStatus) || branchStatus || "--", branchStatus === "merged" ? "ok" : "");
+}
+
 function capabilityAudit(assessment) {
   const audit = assessment?.metadata?.capability_absorption_audit;
   const target = $("capabilityState");
@@ -527,8 +553,10 @@ function capabilityAudit(assessment) {
   target.textContent = "";
   if (!audit) {
     target.textContent = "未评估";
+    renderOpsDashboard({assessment});
     return;
   }
+  renderOpsDashboard({assessment});
   syncAbsorbedProjectsFromAssessment(assessment);
   const rows = [
     ["审计", labelOf(audit.status) || audit.status || "只审计不打分"],
@@ -1014,6 +1042,7 @@ function llm(review, status = null, assessment = null) {
   if (!review || review.enabled === false) {
     clearLlmSync();
     $("llmState").textContent = "排比 LLM 深评未完成，本次不保留评分";
+    setOpsMetric("opsLlm", "未完成", "warn");
     return;
   }
   const d = review.dispatch || review;
@@ -1030,14 +1059,17 @@ function llm(review, status = null, assessment = null) {
     const taskId = assessment?.metadata?.llm_task_id || status?.task_id || d.task_id || "";
     const level = status?.json_result?.level ? ` · ${status.json_result.level}` : "";
     $("llmState").textContent = `排比 LLM 深评完成${taskId ? `：${taskId}` : ""}${level}`;
+    setOpsMetric("opsLlm", "已评分", "ok");
     return;
   }
   if (status?.status) {
     $("llmState").textContent = `排比 LLM ${status.status}，未返回深评分；本次不保留评分`;
+    setOpsMetric("opsLlm", labelOf(status.status) || status.status, "warn");
     return;
   }
   const prefix = state.llmParallel ? `已派发并发排比 ${d.subtask_count || review.panels?.length || 0} 个面板` : "已派发排比任务";
   $("llmState").textContent = d.status === "accepted" ? `${prefix}：${d.task_id || "等待任务 ID"}` : `已写入排比待发箱：${d.reason || d.status || "等待调度"}`;
+  setOpsMetric("opsLlm", d.status === "accepted" ? "已派发" : labelOf(d.status) || d.status || "待调度", d.status === "accepted" ? "ok" : "warn");
   pushEvent("排比任务", d.task_id || d.reason || d.status || "已记录", d.status === "accepted" ? "ok" : "warn");
   if (d.status === "accepted" && d.task_id) scheduleLlmSync(3000);
 }
@@ -1146,6 +1178,7 @@ async function absorb() {
       throw new Error(r.error || labelOf(r.status) || "吸收未返回深评结构");
     }
     updateAbsorption(r);
+    renderOpsDashboard(r);
     renderDevourSession(r.devour_session);
     scores(r.own_assessment.scores);
     capabilityAudit(r.own_assessment);
@@ -1178,6 +1211,7 @@ async function evolve() {
   pushEvent("开始反问深评", "无限反问评分弱项");
   try {
     const r = await api("/api/self-evolve", {project: $("ownProjectFolder").value.trim(), run_local_gates: $("runGates").checked, use_llm: true, wait_llm_sec: DEEP_REVIEW_WAIT_SECONDS, require_deep_review: true});
+    renderOpsDashboard(r);
     llm(r.final_assessment?.llm_review || r.llm_review, r.final_assessment?.llm_review_status, r.final_assessment);
     assertDeepAssessment(r.final_assessment);
     scores(r.final_assessment.scores);
@@ -1920,5 +1954,6 @@ externalScores(null);
 renderDevourSession(null);
 renderLiveRuntimePanel(null);
 renderUpstreamCiPanel(null);
+renderOpsDashboard(null);
 loadDefaultProject();
 draw();

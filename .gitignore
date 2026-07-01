@@ -20,6 +20,7 @@ __pycache__/
 *.py[cod]
 .venv/
 .venv-*/
+.venv*/
 .coverage
 htmlcov/
 .idea/
@@ -116,3 +117,32 @@ FHD/1",
 # pytest 临时产物 DB（不应入库）
 .pytest_products.db
 *.pytest_products.db
+
+# ============================================================================
+# 根目录卫生补强（2026-06-30 清理后预防）
+# 目的：防止根目录再散落临时脚本/报告/数据快照
+# 正确位置：scripts/ops/ · scripts/deploy/ · archive/ops/ · docs/reports/
+# ============================================================================
+
+# 根目录临时运维脚本（应放 scripts/ops/ 或 archive/ops/）
+/collect_*.sh
+/deploy_*staging*.sh
+/fix_*.sh
+/recover_*.sh
+/uninstall_*.sh
+/migrate-mods-*.sh
+
+# 根目录临时报告（应放 docs/reports/ 或 docs/roadmap/）
+/FIXES.md
+/SECURITY_CLEANUP_REPORT.md
+/AI_PLATFORM_9_SCORE_ROADMAP.md
+
+# 根目录冗余数据快照（SSOT 在 FHD/config/ 或 docs/xcagi-dashboard/）
+/six_line_employee_map.json
+/xcmax_path_employee_map.json
+/branch-cleanup-record-*.txt
+
+# XCAGI HTML 仪表盘必须保留根目录（FastAPI static_mounts.py 依赖根目录位置）
+!XCAGI-Full-Pipeline.html
+!XCAGI-Five-Line.html
+!XCAGI-Architecture-Map.html
