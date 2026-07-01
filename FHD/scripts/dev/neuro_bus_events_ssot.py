@@ -163,6 +163,7 @@ def render_python(m: dict[str, Any]) -> str:
         "so existing string-equality call sites are unaffected.",
         '"""',
         "from __future__ import annotations",
+        "",
         "from typing import Literal",
         "",
     ]
@@ -237,17 +238,14 @@ def render_python(m: dict[str, Any]) -> str:
     lines.append("})")
     lines.append("")
 
-    # Literal TypeAlias(给 mypy/IDE 用)
-    lines.append("EventType = Literal[")
-    for t in all_types:
-        lines.append(f'    "{t}",')
-    lines.append("]")
+    # Literal TypeAlias(给 mypy/IDE 用). Keep compact so this generated module
+    # does not trip the app/ giant-file ratchet.
+    lines.append(f"EventType = Literal[{', '.join(json.dumps(t) for t in all_types)}]")
     lines.append("")
 
-    lines.append("AgentRunEventType = Literal[")
-    for t in ar_types:
-        lines.append(f'    "{t}",')
-    lines.append("]")
+    lines.append(
+        f"AgentRunEventType = Literal[{', '.join(json.dumps(t) for t in ar_types)}]"
+    )
     lines.append("")
 
     lines.append("def is_known_event_type(s: str) -> bool:")
@@ -270,7 +268,7 @@ def render_typescript(m: dict[str, Any]) -> str:
     lines = [JS_HEADER, ""]
     lines.append("export type AgentRunEventType =")
     for t in ar_types:
-        suffix = " |" if t != ar_types[-1] else ";"
+        suffix = ";" if t == ar_types[-1] else ""
         lines.append(f"  | '{t}'{suffix}")
     lines.append("")
     lines.append("export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([")

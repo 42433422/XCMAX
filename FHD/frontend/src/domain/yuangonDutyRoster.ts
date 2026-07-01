@@ -59,7 +59,6 @@ export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {
       'daily-orchestrator',
       'intake-dispatcher',
       'task-router-officer',
-      'github-pr-gatekeeper',
       'user-customer-service-officer',
       'enterprise-adoption-officer',
       'delivery-receipt-officer',

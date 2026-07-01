@@ -8,7 +8,7 @@ package com.xiuci.xcagi.mobile.core.model
  * /api/mobile/v1/admin/home 返回的服务端数据为主，本文件用于离线补齐、测试和漂移守卫。
  */
 object DutyRosterSsot {
-    const val PLANNED_EMPLOYEE_COUNT: Int = 55
+    const val PLANNED_EMPLOYEE_COUNT: Int = 54
 
     val PLANNED_EMPLOYEE_IDS: Set<String> = setOf(
         "site-content-editor",
@@ -38,7 +38,6 @@ object DutyRosterSsot {
         "daily-orchestrator",
         "intake-dispatcher",
         "task-router-officer",
-        "github-pr-gatekeeper",
         "user-customer-service-officer",
         "enterprise-adoption-officer",
         "delivery-receipt-officer",
@@ -116,7 +115,6 @@ object DutyRosterSsot {
             "daily-orchestrator",
             "intake-dispatcher",
             "task-router-officer",
-            "github-pr-gatekeeper",
             "user-customer-service-officer",
             "enterprise-adoption-officer",
             "delivery-receipt-officer",
@@ -181,7 +179,6 @@ object DutyRosterSsot {
         "daily-orchestrator" to "platform-core",
         "intake-dispatcher" to "platform-core",
         "task-router-officer" to "platform-core",
-        "github-pr-gatekeeper" to "platform-core",
         "user-customer-service-officer" to "platform-core",
         "enterprise-adoption-officer" to "platform-core",
         "delivery-receipt-officer" to "platform-core",
@@ -239,7 +236,6 @@ object DutyRosterSsot {
         "daily-orchestrator" to "每日编排员",
         "intake-dispatcher" to "需求接入员",
         "task-router-officer" to "任务派发员",
-        "github-pr-gatekeeper" to "GitHub PR 守门员",
         "user-customer-service-officer" to "用户客服员工",
         "enterprise-adoption-officer" to "企业使用跟踪员",
         "delivery-receipt-officer" to "交付签收员",
@@ -297,7 +293,6 @@ object DutyRosterSsot {
         "daily-orchestrator" to "每日编排员工包：实际执行由宿主 daily_orchestrator_job 注入 agent_runner 后完成；员工包本身只提供 echo / llm_md / webhook / agent 通用 handler。",
         "intake-dispatcher" to "把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。",
         "task-router-officer" to "把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。",
-        "github-pr-gatekeeper" to "通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。",
         "user-customer-service-officer" to "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
         "enterprise-adoption-officer" to "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
         "delivery-receipt-officer" to "O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。",
