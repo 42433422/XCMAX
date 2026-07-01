@@ -2,6 +2,7 @@ package com.xiuci.xcagi.mobile.navigation
 
 import com.xiuci.xcagi.mobile.core.model.ModInfo
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
+import com.xiuci.xcagi.mobile.ui.components.mobile.employeeAvatarFallback
 
 internal const val XIAOC_ASSISTANT_EMPLOYEE_ID = "xcagi-assistant"
 internal const val CODEX_SUPER_EMPLOYEE_ID = "codex-super-employee"
@@ -68,7 +69,7 @@ internal fun aiGroupMemberFallback(employeeId: String): AppAvatarFallback =
         CURSOR_SUPER_EMPLOYEE_ID -> AppAvatarFallback.CURSOR
         CLAUDE_SUPER_EMPLOYEE_ID -> AppAvatarFallback.CLAUDE
         TRAE_SUPER_EMPLOYEE_ID -> AppAvatarFallback.TRAE
-        else -> AppAvatarFallback.AI_EMPLOYEE
+        else -> employeeAvatarFallback(employeeId)
     }
 
 internal fun isRequiredAiGroupMember(employeeId: String): Boolean =

@@ -3,8 +3,8 @@
   "version_lock": "v10",
   "download_version": "10.0.0",
   "android_version": "10.0.0",
-  "win_installer_mb": 654,
+  "win_installer_mb": 212,
   "cos_base_url": "https://xiu-ci.com",
   "release_root": "https://xiu-ci.com/xcagi-v10.0.0",
-  "generated_at": "2026-06-06T13:22:04.096045+00:00"
+  "generated_at": "2026-07-01T18:17:37.000000+00:00"
 }

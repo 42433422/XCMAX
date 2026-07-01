@@ -581,6 +581,8 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     from app.application import get_user_app_service
     from app.application.auth_app_service import get_auth_app_service
     from app.fastapi_routes.market_account import (
+        ensure_market_enterprise_profile,
+        enterprise_mod_ids_for_industry,
         login_market_with_password,
         register_market_user,
         save_session_market_token,
@@ -625,6 +627,20 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
                 status_code=400,
             )
         email_market = _market_user_email_from_raw(market_reg.get("raw")) or email
+        enterprise_profile = await ensure_market_enterprise_profile(
+            market_reg.get("market_user_id"),
+            username=username,
+            company=email_market or email,
+            mod_ids=enterprise_mod_ids_for_industry(industry_id),
+        )
+        if not enterprise_profile.get("success"):
+            return JSONResponse(
+                error_envelope(
+                    MARKET_REGISTER_FAILED,
+                    enterprise_profile.get("message", "修茈市场企业标记失败"),
+                ),
+                status_code=502,
+            )
         _jit_create_local_user_for_enterprise(username, password, email_market)
         result = auth_app_service.login(username, password)
         if not result.get("success"):
@@ -708,6 +724,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
 
     # 单一真相源 + 自动派生：写入 tier/industry_id/budget_range/account_tier/entitled_industries
     from app.application.account_registration import apply_account_profile_on_register
+    from app.application.tenant_workspace_prefs import bind_selected_industry_for_username
 
     apply_account_profile_on_register(
         username,
@@ -715,6 +732,8 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
         industry_id=industry_id,
         budget_range=budget_range,
     )
+    if industry_id:
+        bind_selected_industry_for_username(username, industry_id)
 
     payload = {"success": True, **result}
     return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))
@@ -749,6 +768,13 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
     account_kind = normalize_account_kind(
         body.get("account_kind"),
         default="enterprise" if sku == "enterprise" else "personal",
+    )
+    logger.info(
+        "auth_login received username=%s sku=%s account_kind=%s has_password=%s",
+        username,
+        sku,
+        account_kind,
+        bool(password),
     )
     result, err = await run_market_first_login(
         username=username,

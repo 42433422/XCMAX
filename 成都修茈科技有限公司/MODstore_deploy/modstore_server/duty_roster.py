@@ -62,6 +62,7 @@ YUANGON_AREAS: Dict[str, Dict[str, object]] = {
             "enterprise-adoption-officer",
             "delivery-receipt-officer",
             "mobile-android-release-officer",
+            "mobile-harmony-release-officer",
             "mobile-ios-release-officer",
         ],
     },
@@ -244,6 +245,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
                 "deploy-release-officer",
                 "change-request-auditor",
                 "mobile-android-release-officer",
+                "mobile-harmony-release-officer",
                 "mobile-ios-release-officer",
             ]},
             "ota-monitor": {"label": "OTA 监控 P6-P7", "ids": [

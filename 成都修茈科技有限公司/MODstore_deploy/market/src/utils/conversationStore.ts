@@ -10,6 +10,7 @@ export interface ChatAttachmentMeta {
   size: number
   status: 'ready' | 'inline' | 'error' | 'skipped' | 'uploading'
   docId?: string
+  kind?: 'vision' | 'file'
 }
 
 /** OpenAI-compatible multimodal user message parts（与 /api/llm/chat 对齐）。 */

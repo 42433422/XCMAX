@@ -4,36 +4,169 @@ import SwiftUI
 // 聊天/会话共享组件(对标 Android ChatScreen / ConversationListScreen 的可复用片段)
 // ════════════════════════════════════════════════════════════════
 
+/// 固定联系人 ID 常量,对齐 Android `PinnedIds`。
+enum PinnedIds {
+    static let cs = "pinned:cs"
+    static let assistant = "pinned:assistant"
+    static let codex = "pinned:codex"
+    static let cursor = "pinned:cursor"
+    static let claude = "pinned:claude"
+    static let trae = "pinned:trae"
+}
+
+/// 会话类型,对齐 Android `ConversationType`。
+enum ConversationType: Hashable {
+    case pinnedCS
+    case pinnedAssistant
+    case pinnedCodex
+    case pinnedCursor
+    case pinnedClaude
+    case pinnedTrae
+    case aiTask
+    case systemNotification
+
+    var usesPinnedAvatar: Bool {
+        switch self {
+        case .pinnedCS, .pinnedAssistant, .pinnedCodex, .pinnedCursor, .pinnedClaude, .pinnedTrae:
+            return true
+        case .aiTask, .systemNotification:
+            return false
+        }
+    }
+
+    var avatarFallback: AppAvatarFallback {
+        switch self {
+        case .pinnedCS: return .customerService
+        case .pinnedAssistant: return .assistant
+        case .pinnedCodex: return .codex
+        case .pinnedCursor: return .cursor
+        case .pinnedClaude: return .claude
+        case .pinnedTrae: return .trae
+        case .aiTask, .systemNotification: return .aiEmployee
+        }
+    }
+
+    var defaultOnline: Bool {
+        switch self {
+        case .pinnedCS, .pinnedCodex, .pinnedCursor, .pinnedClaude, .pinnedTrae:
+            return true
+        case .pinnedAssistant, .aiTask, .systemNotification:
+            return false
+        }
+    }
+}
+
+func isCodexConversation(_ conversationId: String?) -> Bool {
+    conversationId?.trimmingCharacters(in: .whitespacesAndNewlines) == PinnedIds.codex
+}
+
+func isCursorConversation(_ conversationId: String?) -> Bool {
+    conversationId?.trimmingCharacters(in: .whitespacesAndNewlines) == PinnedIds.cursor
+}
+
+func isClaudeConversation(_ conversationId: String?) -> Bool {
+    conversationId?.trimmingCharacters(in: .whitespacesAndNewlines) == PinnedIds.claude
+}
+
+func isTraeConversation(_ conversationId: String?) -> Bool {
+    conversationId?.trimmingCharacters(in: .whitespacesAndNewlines) == PinnedIds.trae
+}
+
+func chatAvatarFallback(conversationId: String?, hasEmployeeProfile: Bool) -> AppAvatarFallback {
+    if isCodexConversation(conversationId) { return .codex }
+    if isCursorConversation(conversationId) { return .cursor }
+    if isClaudeConversation(conversationId) { return .claude }
+    if isTraeConversation(conversationId) { return .trae }
+    if hasEmployeeProfile { return .aiEmployee }
+    return .assistant
+}
+
+func aiGroupAvatarFallback(employeeId: String?, name: String = "", avatarKey: String = "") -> AppAvatarFallback {
+    let key = avatarKey.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let id = (employeeId ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let label = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let isXiaoc = id == "xcagi-assistant" || id == "xiaoc-assistant" || label.contains("小c") || label.contains("小 c")
+    if isXiaoc { return .assistant }
+    if key == "codex" || id.contains("codex") || label.contains("codex") { return .codex }
+    if key == "cursor" || id.contains("cursor") || label.contains("cursor") { return .cursor }
+    if key == "claude" || id.contains("claude") || label.contains("claude") { return .claude }
+    if key == "trae" || id.contains("trae") || label.contains("trae") { return .trae }
+    return .aiEmployee
+}
+
 /// 会话方头像语义(对标 Android `AppAvatarFallback` + `chatAvatarFallback`)。
 /// 用于把会话的 kind/route 解析成真实头像或品牌占位首字。
 enum ChatPeerKind: Hashable {
     case assistant            // 小C助理
     case customerService      // 专属客服
     case codex                // 超级员工-Codex
+    case cursor               // 超级员工-Cursor
     case claude               // 超级员工-Claude
+    case trae                 // 超级员工-Trae
     case employee             // 普通 AI 员工
     case user                 // 当前用户
 
-    /// 占位首字(无 url 时显示)。
+    var avatarFallback: AppAvatarFallback {
+        switch self {
+        case .assistant: return .assistant
+        case .customerService: return .customerService
+        case .codex: return .codex
+        case .cursor: return .cursor
+        case .claude: return .claude
+        case .trae: return .trae
+        case .employee: return .aiEmployee
+        case .user: return .user
+        }
+    }
+
+    var superTool: String? {
+        switch self {
+        case .codex: return "codex"
+        case .cursor: return "cursor"
+        case .claude: return "claude"
+        case .trae: return "trae"
+        case .assistant, .customerService, .employee, .user: return nil
+        }
+    }
+
+    var conversationType: ConversationType {
+        switch self {
+        case .assistant: return .pinnedAssistant
+        case .customerService: return .pinnedCS
+        case .codex: return .pinnedCodex
+        case .cursor: return .pinnedCursor
+        case .claude: return .pinnedClaude
+        case .trae: return .pinnedTrae
+        case .employee: return .aiTask
+        case .user: return .systemNotification
+        }
+    }
+
+    /// 兼容旧调用的身份短名;头像 fallback 不再使用随机文字。
     var fallbackInitial: String {
         switch self {
         case .assistant: return "C"
         case .customerService: return "客"
         case .codex: return "X"
+        case .cursor: return "Cursor"
         case .claude: return "C"
+        case .trae: return "Trae"
         case .employee: return "员"
         case .user: return "我"
         }
     }
 
     /// 由固定联系人/会话 id + kind 解析方头像语义(对标 Android isCodex/isClaude 判定)。
-    static func resolve(id: String, kind: String) -> ChatPeerKind {
-        let i = id.lowercased()
+    static func resolve(id: String, kind: String, title: String = "") -> ChatPeerKind {
+        let i = id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let k = kind.lowercased()
-        if i.contains("codex") || k.contains("codex") { return .codex }
-        if i.contains("claude") || k.contains("claude") { return .claude }
-        if k == "assistant" || i == "assistant" { return .assistant }
-        if k.contains("cs") || k.contains("service") || i == "dedicated_cs" { return .customerService }
+        let t = title.lowercased()
+        if i == PinnedIds.codex || i.contains("codex") || k.contains("codex") || t.contains("codex") { return .codex }
+        if i == PinnedIds.cursor || i.contains("cursor") || k.contains("cursor") || t.contains("cursor") { return .cursor }
+        if i == PinnedIds.claude || i.contains("claude") || k.contains("claude") || t.contains("claude") { return .claude }
+        if i == PinnedIds.trae || i.contains("trae") || k.contains("trae") || t.contains("trae") { return .trae }
+        if k == "assistant" || i == "assistant" || i == PinnedIds.assistant || t.contains("小c") || t.contains("小 c") { return .assistant }
+        if i == PinnedIds.cs || k.contains("cs") || k.contains("service") || i == "dedicated_cs" { return .customerService }
         return .employee
     }
 }
@@ -67,9 +200,12 @@ struct ChatBubble: View {
             if !isUser {
                 if showAvatar {
                     AvatarView(text: aiName.isEmpty ? peerKind.fallbackInitial : aiName,
-                               url: aiAvatarURL, size: 36)
+                               url: aiAvatarURL,
+                               fallback: peerKind.avatarFallback,
+                               size: MessageAvatarLayout.bubbleAvatarSize,
+                               cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius)
                 } else {
-                    Color.clear.frame(width: 36, height: 1)   // 同组占位对齐
+                    Color.clear.frame(width: MessageAvatarLayout.bubbleAvatarSize, height: 1)   // 同组占位对齐
                 }
             }
 
@@ -85,9 +221,15 @@ struct ChatBubble: View {
 
             if isUser {
                 if showAvatar {
-                    AvatarView(text: "我", url: userAvatarURL, size: 36)
+                    AvatarView(
+                        text: "我",
+                        url: userAvatarURL,
+                        fallback: .user,
+                        size: MessageAvatarLayout.bubbleAvatarSize,
+                        cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius
+                    )
                 } else {
-                    Color.clear.frame(width: 36, height: 1)
+                    Color.clear.frame(width: MessageAvatarLayout.bubbleAvatarSize, height: 1)
                 }
             }
 
@@ -274,7 +416,13 @@ struct ChatEmptyState: View {
 
     var body: some View {
         VStack(spacing: Theme.Space.sm) {
-            AvatarView(text: title, url: aiAvatarURL, size: 64)
+            AvatarView(
+                text: title,
+                url: aiAvatarURL,
+                fallback: peerKind.avatarFallback,
+                size: MessageAvatarLayout.emptyStateAvatarSize,
+                cornerRadius: MessageAvatarLayout.emptyStateAvatarCornerRadius
+            )
                 .padding(.top, 48)
             Text("你好,我是 \(title)")
                 .font(.headline)

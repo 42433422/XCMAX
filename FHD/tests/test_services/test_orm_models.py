@@ -426,7 +426,10 @@ class TestBulkOperations:
 
     def test_bulk_insert_products(self, test_session):
         """测试批量插入产品"""
-        products = [Product(name=f"产品_{i}", price=100.0 * i, is_active=1) for i in range(10)]
+        products = [
+            Product(name=f"产品_{i}", price=100.0 * i, is_active=1, tenant_id=1)
+            for i in range(10)
+        ]
         test_session.bulk_save_objects(products)
         test_session.commit()
 

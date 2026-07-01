@@ -37,6 +37,7 @@ SIX_LINE_TO_DISPATCH: Dict[str, str] = {
 APP_LANE_EMPLOYEE_IDS: frozenset[str] = frozenset(
     {
         "mobile-android-release-officer",
+        "mobile-harmony-release-officer",
         "mobile-ios-release-officer",
     }
 )
@@ -51,14 +52,48 @@ _LINE_LABEL = {
 _SECTION_RE = re.compile(r"(?ms)^## \[(?P<eid>[^\]]+)\][^\n]*\n(?P<body>.*?)(?=^## \[|\Z)")
 
 
-def _six_line_map_path() -> Path:
+def _candidate_fhd_config_dirs() -> List[Path]:
+    roots: List[Path] = []
     try:
         from modstore_server.integrations.ops_action_handlers import repo_root
 
-        root = Path(repo_root())
+        roots.append(Path(repo_root()))
     except Exception:
-        root = Path(__file__).resolve().parents[2]
-    return root / "FHD" / "config" / "six_line_employee_map.json"
+        pass
+
+    here = Path(__file__).resolve()
+    roots.extend([here.parents[3], here.parents[2], Path.cwd(), Path.cwd().parent])
+
+    seen: set[Path] = set()
+    dirs: List[Path] = []
+    for root in roots:
+        for cfg_dir in (root / "FHD" / "config", root / "config"):
+            try:
+                resolved = cfg_dir.resolve()
+            except OSError:
+                resolved = cfg_dir
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            dirs.append(cfg_dir)
+    return dirs
+
+
+def _fhd_config_path(filename: str) -> Path:
+    candidates = _candidate_fhd_config_dirs()
+    for cfg_dir in candidates:
+        path = cfg_dir / filename
+        if path.is_file():
+            return path
+    return candidates[0] / filename
+
+
+def _six_line_map_path() -> Path:
+    return _fhd_config_path("six_line_employee_map.json")
+
+
+def _duty_roster_path() -> Path:
+    return _fhd_config_path("duty_roster.json")
 
 
 def load_six_line_employee_map() -> Dict[str, Any]:
@@ -70,6 +105,42 @@ def load_six_line_employee_map() -> Dict[str, Any]:
     except Exception:
         logger.exception("load_six_line_employee_map failed path=%s", path)
         return {"lines": {}}
+
+
+def _collect_ids_from_roster_blocks(blocks: Dict[str, Any]) -> List[str]:
+    ids: List[str] = []
+    for block in blocks.values():
+        if not isinstance(block, dict):
+            continue
+        raw = block.get("ids")
+        if isinstance(raw, list):
+            ids.extend(str(x).strip() for x in raw if str(x).strip())
+        subzones = block.get("subzones")
+        if isinstance(subzones, dict):
+            ids.extend(_collect_ids_from_roster_blocks(subzones))
+    return ids
+
+
+def _load_planned_duty_employee_ids() -> set[str]:
+    path = _duty_roster_path()
+    if not path.is_file():
+        return set()
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.exception("load duty_roster failed path=%s", path)
+        return set()
+    if not isinstance(doc, dict):
+        return set()
+    ids: List[str] = []
+    areas = doc.get("areas") or {}
+    if isinstance(areas, dict):
+        ids.extend(_collect_ids_from_roster_blocks(areas))
+    if not ids:
+        departments = doc.get("departments") or {}
+        if isinstance(departments, dict):
+            ids.extend(_collect_ids_from_roster_blocks(departments))
+    return {eid for eid in ids if eid}
 
 
 def build_employee_dispatch_map(
@@ -89,6 +160,8 @@ def build_employee_dispatch_map(
                 eid_s = str(eid).strip()
                 if eid_s:
                     out[eid_s].add(dispatch)
+    for eid in _load_planned_duty_employee_ids():
+        out.setdefault(eid, {DISPATCH_PS})
     # 移动发布岗位强制归入 P-App（覆盖部门映射可能给到的 P-S/P-W）。
     for eid in APP_LANE_EMPLOYEE_IDS:
         out[eid] = {DISPATCH_APP}

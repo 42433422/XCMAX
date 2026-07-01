@@ -16,6 +16,12 @@ def test_handler_catalog_has_core_domains():
     ids = {h["domain_id"] for h in data.get("handlers", []) if isinstance(h, dict)}
     assert "product" in ids
     assert "shipment" in ids
+    managed = {
+        h["domain_id"]
+        for h in data.get("handlers", [])
+        if isinstance(h, dict) and h.get("managed_by") == "domain_registry"
+    }
+    assert {"order", "customer", "payment", "wechat"}.issubset(managed)
 
 
 def test_handler_providers_list_specs():
@@ -59,3 +65,7 @@ def test_register_all_domain_handlers_registers_existing_modules():
     assert result.get("handler_count", 0) >= 5
     assert "product" in result.get("registered", [])
     assert "shipment" in result.get("registered", [])
+    assert result.get("errors") == []
+    assert {"order", "customer", "payment", "wechat"}.issubset(
+        set(result.get("domain_managed", []))
+    )

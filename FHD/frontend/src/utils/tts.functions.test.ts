@@ -12,6 +12,7 @@ vi.mock('./offlineTts', () => ({
 }))
 
 vi.mock('./apiBase', () => ({
+  apiFetch: vi.fn(),
   getApiBase: vi.fn(() => ''),
 }))
 

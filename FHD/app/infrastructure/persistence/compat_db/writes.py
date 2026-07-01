@@ -27,6 +27,11 @@ from app.infrastructure.persistence.compat_db.base import (
 from app.infrastructure.persistence.compat_db.queries import (
     _customer_row_for_api,
 )
+from app.infrastructure.tenant_scope import (
+    TenantScopeError,
+    append_tenant_scope_where,
+    require_raw_sql_tenant_id,
+)
 from app.shell.mod_row_scope import (
     append_mod_scope_where,
     products_update_or_delete_mod_and,
@@ -35,6 +40,34 @@ from app.shell.mod_row_scope import (
 from app.utils.time import utc_now_naive
 
 logger = logging.getLogger(__name__)
+
+
+def _tenant_scope_http_error(exc: TenantScopeError) -> HTTPException:
+    return HTTPException(status_code=403, detail=str(exc))
+
+
+def _append_tenant_scope_or_raise(
+    where_parts: list[str],
+    bind: dict[str, object],
+    column_names: set[str] | dict[str, object],
+    *,
+    table_name: str,
+) -> None:
+    if not append_tenant_scope_where(where_parts, bind, column_names, table_name=table_name):
+        raise _tenant_scope_http_error(
+            TenantScopeError(f"{table_name} 缺少租户上下文或 tenant_id 列，拒绝业务写入")
+        )
+
+
+def _require_tenant_id_or_raise(
+    column_names: set[str] | dict[str, object],
+    *,
+    table_name: str,
+) -> int:
+    try:
+        return require_raw_sql_tenant_id(column_names, table_name=table_name)
+    except TenantScopeError as exc:
+        raise _tenant_scope_http_error(exc) from exc
 
 
 def _products_delete_by_unit_pg(eng, unit_name: str) -> int:
@@ -49,6 +82,7 @@ def _products_delete_by_unit_pg(eng, unit_name: str) -> int:
     prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": un}
+    _append_tenant_scope_or_raise(where_parts, params, pcols, table_name="products")
     append_mod_scope_where(where_parts, params, pcols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
@@ -73,6 +107,7 @@ def _purchase_units_delete_by_norm_unit_pg(eng, unit_name: str) -> int:
     prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": un}
+    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="purchase_units")
     append_mod_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
@@ -98,6 +133,7 @@ def _customers_delete_by_norm_name_pg(eng, insp, customer_name: str) -> int:
     prm = _pg_expr_norm_unit("CAST(:u AS TEXT)")
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"u": cn}
+    _append_tenant_scope_or_raise(where_parts, params, cols_names, table_name="customers")
     append_mod_scope_where(where_parts, params, cols_names)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
@@ -117,6 +153,7 @@ def _purchase_units_delete_by_id_pg(eng, customer_id: int) -> int:
         return 0
     where_parts = ["id = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
+    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="purchase_units")
     append_mod_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
@@ -136,6 +173,7 @@ def _customers_delete_by_id_pg(eng, insp, customer_id: int) -> int:
         return 0
     where_parts = [f"{_sql_ident(id_col)} = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
+    _append_tenant_scope_or_raise(where_parts, params, cols, table_name="customers")
     append_mod_scope_where(where_parts, params, cols)
     where_sql = " AND ".join(where_parts)
     with eng.begin() as conn:
@@ -159,6 +197,7 @@ def _products_unit_replace_pg(eng, old_name: str, new_name: str) -> None:
     prm = _pg_expr_norm_unit("CAST(:oo AS TEXT)")
     where_parts = [f"{col} = {prm}"]
     params: dict[str, object] = {"nn": n, "oo": o}
+    _append_tenant_scope_or_raise(where_parts, params, pcols, table_name="products")
     append_mod_scope_where(where_parts, params, pcols)
     where_sql = " AND ".join(where_parts)
     with eng.connect() as conn:
@@ -198,6 +237,7 @@ def _customer_pg_fetch_by_id(eng, insp, customer_id: int) -> dict:
     pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
     where_parts = ["id = :id"]
     params: dict[str, object] = {"id": int(customer_id)}
+    _append_tenant_scope_or_raise(where_parts, params, pu_cols, table_name="purchase_units")
     append_mod_scope_where(where_parts, params, pu_cols)
     where_sql = " AND ".join(where_parts)
     with eng.connect() as conn:
@@ -225,6 +265,9 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
     with eng.connect() as conn:
         dup_parts = ["unit_name = :n", _pg_purchase_unit_active_sql()]
         dup_bind: dict[str, object] = {"n": name}
+        _append_tenant_scope_or_raise(
+            dup_parts, dup_bind, pu_cols, table_name="purchase_units"
+        )
         append_mod_scope_where(dup_parts, dup_bind, pu_cols)
         dup_sql = " AND ".join(dup_parts)
         dup = conn.execute(
@@ -240,6 +283,9 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
             ("address", "addr"),
         ]
         bind: dict = {"un": name, "cp": cp, "ph": ph, "addr": addr}
+        tid = _require_tenant_id_or_raise(pu_cols, table_name="purchase_units")
+        col_pairs.append(("tenant_id", "tenant_id"))
+        bind["tenant_id"] = tid
         mid = scoped_mod_id()
         if "xcagi_mod_id" in pu_cols and mid:
             col_pairs.append(("xcagi_mod_id", "xmid"))
@@ -271,6 +317,9 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
     with eng.connect() as conn:
         prev_parts = ["id = :id", _pg_purchase_unit_active_sql()]
         prev_bind: dict[str, object] = {"id": int(customer_id)}
+        _append_tenant_scope_or_raise(
+            prev_parts, prev_bind, pu_cols, table_name="purchase_units"
+        )
         append_mod_scope_where(prev_parts, prev_bind, pu_cols)
         prev = (
             conn.execute(
@@ -295,6 +344,9 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             _pg_purchase_unit_active_sql(),
         ]
         clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
+        _append_tenant_scope_or_raise(
+            clash_parts, clash_bind, pu_cols, table_name="purchase_units"
+        )
         append_mod_scope_where(clash_parts, clash_bind, pu_cols)
         clash = conn.execute(
             text(_sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))),
@@ -310,6 +362,10 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             "addr": addr,
             "id": int(customer_id),
         }
+        upd_bind["tenant_id"] = _require_tenant_id_or_raise(
+            pu_cols, table_name="purchase_units"
+        )
+        tenant_and = " AND tenant_id = :tenant_id"
         mod_and = products_update_or_delete_mod_and(pu_cols, upd_bind)
         if "updated_at" in pu_cols:
             upd_bind["ua"] = now
@@ -317,6 +373,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
                 text(
                     "UPDATE purchase_units SET unit_name = :un, contact_person = :cp, "
                     "contact_phone = :ph, address = :addr, updated_at = :ua WHERE id = :id"
+                    + tenant_and
                     + mod_and
                 ),
                 upd_bind,
@@ -325,7 +382,9 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             conn.execute(
                 text(
                     "UPDATE purchase_units SET unit_name = :un, contact_person = :cp, "
-                    "contact_phone = :ph, address = :addr WHERE id = :id" + mod_and
+                    "contact_phone = :ph, address = :addr WHERE id = :id"
+                    + tenant_and
+                    + mod_and
                 ),
                 upd_bind,
             )
@@ -348,6 +407,7 @@ def _customer_pg_select_customers_name_by_id(eng, insp, customer_id: int) -> tup
         return None
     where_parts = [f"{_sql_ident(id_col)} = :id"]
     cbind: dict[str, object] = {"id": int(customer_id)}
+    _append_tenant_scope_or_raise(where_parts, cbind, cols, table_name="customers")
     append_mod_scope_where(where_parts, cbind, cols)
     where_clause = " AND ".join(where_parts)
     select_sql = (
@@ -382,6 +442,7 @@ def _customer_pg_delete_anywhere(customer_id: int) -> None:
         pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
         where_parts = ["id = :id"]
         pbind: dict[str, object] = {"id": cid}
+        _append_tenant_scope_or_raise(where_parts, pbind, pu_cols, table_name="purchase_units")
         append_mod_scope_where(where_parts, pbind, pu_cols)
         with eng.connect() as conn:
             r = conn.execute(
@@ -495,8 +556,14 @@ def products_pg_update_row(
     if not sets:
         raise HTTPException(status_code=400, detail="没有可更新的列")
 
+    params["tenant_id"] = _require_tenant_id_or_raise(col_names, table_name="products")
     mod_and = products_update_or_delete_mod_and(col_names, params)
-    sql = "UPDATE products SET " + ", ".join(sets) + " WHERE id = :pid" + mod_and
+    sql = (
+        "UPDATE products SET "
+        + ", ".join(sets)
+        + " WHERE id = :pid AND tenant_id = :tenant_id"
+        + mod_and
+    )
     with eng.begin() as conn:
         r = conn.execute(text(sql), params)
         if r.rowcount == 0:
@@ -557,6 +624,9 @@ def products_pg_insert_row(
         _add("is_active", ia)
     if not icols:
         raise HTTPException(status_code=500, detail="无法构造 INSERT 列")
+    tid = _require_tenant_id_or_raise(col_names, table_name="products")
+    icols.append("tenant_id")
+    params["tenant_id"] = tid
     mid = scoped_mod_id()
     if "xcagi_mod_id" in col_names and mid:
         icols.append("xcagi_mod_id")
@@ -572,9 +642,12 @@ def products_pg_insert_row(
 def products_pg_delete_row(pid: int) -> None:
     eng = get_sync_engine()
     pcols = _products_pg_col_names()
-    del_params: dict[str, object] = {"pid": pid}
+    del_params: dict[str, object] = {
+        "pid": pid,
+        "tenant_id": _require_tenant_id_or_raise(pcols, table_name="products"),
+    }
     mod_and = products_update_or_delete_mod_and(pcols, del_params)
-    sql = "DELETE FROM products WHERE id = :pid" + mod_and
+    sql = "DELETE FROM products WHERE id = :pid AND tenant_id = :tenant_id" + mod_and
     with eng.begin() as conn:
         r = conn.execute(text(sql), del_params)
         if r.rowcount == 0:
@@ -592,9 +665,12 @@ def products_pg_batch_delete_rows(raw_ids: list) -> tuple[int, list[str]]:
             if pid is None:
                 skipped.append(str(raw))
                 continue
-            del_params = {"pid": pid}
+            del_params = {
+                "pid": pid,
+                "tenant_id": _require_tenant_id_or_raise(pcols, table_name="products"),
+            }
             mod_and = products_update_or_delete_mod_and(pcols, del_params)
-            sql = "DELETE FROM products WHERE id = :pid" + mod_and
+            sql = "DELETE FROM products WHERE id = :pid AND tenant_id = :tenant_id" + mod_and
             r = conn.execute(text(sql), del_params)
             if r.rowcount:
                 deleted += 1

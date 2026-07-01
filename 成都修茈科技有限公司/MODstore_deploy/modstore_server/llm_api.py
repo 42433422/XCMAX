@@ -38,7 +38,12 @@ from modstore_server.llm_catalog import (
     get_models_for_provider,
     probe_first_matching_provider,
 )
-from modstore_server.llm_chat_proxy import chat_dispatch, chat_dispatch_stream, image_dispatch
+from modstore_server.llm_chat_proxy import (
+    chat_dispatch,
+    chat_dispatch_stream,
+    image_dispatch,
+    video_dispatch,
+)
 from modstore_server.llm_crypto import encrypt_secret, fernet_configured
 from modstore_server.llm_key_resolver import (
     KNOWN_PROVIDERS,
@@ -1053,6 +1058,14 @@ class LlmImageDTO(BaseModel):
     n: int = Field(1, ge=1, le=4)
 
 
+class LlmVideoDTO(BaseModel):
+    provider: str
+    model: str
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    size: str = Field("1280x720", max_length=32)
+    seconds: int = Field(5, ge=1, le=30)
+
+
 class LlmPptxDTO(BaseModel):
     title: str = Field("AI 生成 PPT", max_length=120)
     markdown: str = Field(..., min_length=1, max_length=60000)
@@ -1282,6 +1295,44 @@ async def llm_image(
         "provider": body.provider,
         "model": body.model,
         "key_source": key_source,
+    }
+
+
+@router.post("/video")
+async def llm_video(
+    body: LlmVideoDTO,
+    db: Session = Depends(get_db),
+    user: User = Depends(_get_current_user),
+):
+    if body.provider not in KNOWN_PROVIDERS:
+        raise HTTPException(400, "unknown provider")
+    api_key, key_source = resolve_api_key(db, user.id, body.provider)
+    if not api_key:
+        raise HTTPException(400, f"供应商「{body.provider}」未配置可用 API Key。")
+    base = (
+        resolve_base_url(db, user.id, body.provider)
+        if body.provider in OAI_COMPAT_OPENAI_STYLE_PROVIDERS
+        else None
+    )
+    result = await video_dispatch(
+        body.provider,
+        api_key=api_key,
+        base_url=base,
+        model=body.model.strip(),
+        prompt=body.prompt.strip(),
+        size=body.size.strip() or "1280x720",
+        seconds=body.seconds,
+    )
+    if not result.get("ok"):
+        raise HTTPException(502, result.get("error") or "video upstream error")
+    return {
+        "ok": True,
+        "provider": body.provider,
+        "model": body.model,
+        "key_source": key_source,
+        "job_id": result.get("job_id") or "",
+        "status": result.get("status") or "pending",
+        "preview_url": result.get("preview_url") or "",
     }
 
 

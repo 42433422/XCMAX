@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -322,11 +322,52 @@ class TestMarketIdentityFromPayloads:
         ent, admin, blob = ma._market_identity_from_payloads(*payloads)
         assert blob["username"] == "u"
 
+    def test_enterprise_from_auth_me_sibling_fields(self):
+        payload = {
+            "success": True,
+            "data": {
+                "user": {"id": 39, "username": "wuxinghua1", "role": "user"},
+                "tier": "enterprise",
+                "account_kind": "enterprise",
+                "market_is_enterprise": True,
+            },
+        }
+        ent, admin, blob = ma._market_identity_from_payloads(payload)
+        assert ent is True
+        assert admin is False
+        assert blob["username"] == "wuxinghua1"
+
+    def test_admin_from_auth_me_sibling_fields(self):
+        payload = {
+            "success": True,
+            "data": {
+                "user": {"id": 1, "username": "admin", "role": "admin"},
+                "account_kind": "admin",
+                "market_is_admin": True,
+            },
+        }
+        ent, admin, blob = ma._market_identity_from_payloads(payload)
+        assert ent is False
+        assert admin is True
+        assert blob["username"] == "admin"
+
     def test_empty_payloads(self):
         ent, admin, blob = ma._market_identity_from_payloads()
         assert ent is False
         assert admin is False
         assert blob == {}
+
+
+class TestMarketUserIdFromAuthPayload:
+    def test_nested_user_id(self):
+        payload = {"data": {"user": {"id": "61", "username": "wuxinghua1"}}}
+        assert ma._market_user_id_from_auth_payload(payload) == 61
+
+    def test_top_level_market_user_id(self):
+        assert ma._market_user_id_from_auth_payload({"market_user_id": 62}) == 62
+
+    def test_invalid(self):
+        assert ma._market_user_id_from_auth_payload({"user": {"id": "bad"}}) is None
 
 
 # ========================= _looks_like_verification_required ==================
@@ -612,11 +653,20 @@ class TestRegisterMarketUser:
     async def test_success(self, monkeypatch):
         monkeypatch.setenv("XCAGI_MARKET_BASE_URL", "http://localhost:8765")
         with patch.object(
-            ma, "_proxy_json", return_value={"data": {"access_token": "tok", "refresh_token": "rt"}}
+            ma,
+            "_proxy_json",
+            return_value={
+                "data": {
+                    "access_token": "tok",
+                    "refresh_token": "rt",
+                    "user": {"id": 61, "username": "user1"},
+                }
+            },
         ):
             result = await ma.register_market_user("user1", "pass123", "a@b.com")
             assert result["success"] is True
             assert result["token"] == "tok"
+            assert result["market_user_id"] == 61
 
     @pytest.mark.asyncio
     async def test_proxy_error(self, monkeypatch):
@@ -651,6 +701,92 @@ class TestRegisterMarketUser:
         with patch.object(ma, "_proxy_json", side_effect=mock_proxy):
             result = await ma.register_market_user("user1", "pass123", "a@b.com")
             assert result["success"] is True
+
+
+class TestEnsureMarketEnterpriseProfile:
+    @pytest.mark.asyncio
+    async def test_success(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "internal-key")
+
+        async def mock_proxy(method, path, **kwargs):
+            assert method == "POST"
+            assert path == "/api/internal/cs-intake/ensure-enterprise-profile"
+            assert kwargs["extra_headers"]["X-Internal-Api-Key"] == "internal-key"
+            assert kwargs["json_body"]["market_user_id"] == 61
+            assert kwargs["json_body"]["display_name"] == "wuxinghua1"
+            assert kwargs["json_body"]["mod_ids"] == ["coating-industry"]
+            return {
+                "ok": True,
+                "user_id": 61,
+                "username": "wuxinghua1",
+                "is_enterprise": True,
+                "mod_ids": ["coating-industry"],
+                "added_mod_ids": ["coating-industry"],
+            }
+
+        with patch.object(ma, "_proxy_json", new=AsyncMock(side_effect=mock_proxy)):
+            result = await ma.ensure_market_enterprise_profile(
+                61,
+                username="wuxinghua1",
+                company="wuxinghua1@auto.xiu-ci.com",
+                mod_ids=["coating-industry"],
+            )
+        assert result["success"] is True
+        assert result["market_user_id"] == 61
+        assert result["mod_ids"] == ["coating-industry"]
+        assert result["added_mod_ids"] == ["coating-industry"]
+
+    @pytest.mark.asyncio
+    async def test_missing_market_user_id(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "internal-key")
+        result = await ma.ensure_market_enterprise_profile(None, username="u")
+        assert result["success"] is False
+        assert "用户ID" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_missing_internal_key(self, monkeypatch):
+        monkeypatch.delenv("XCAGI_MARKET_INTERNAL_API_KEY", raising=False)
+        monkeypatch.delenv("XCAGI_CS_INTAKE_LINK_SECRET", raising=False)
+        result = await ma.ensure_market_enterprise_profile(61, username="u")
+        assert result["success"] is False
+        assert "XCAGI_MARKET_INTERNAL_API_KEY" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_proxy_error(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "internal-key")
+        error_payload = {
+            "__proxy_error__": True,
+            "status_code": 403,
+            "payload": {"detail": "invalid internal api key"},
+        }
+        with patch.object(ma, "_proxy_json", new=AsyncMock(return_value=error_payload)):
+            result = await ma.ensure_market_enterprise_profile(61, username="u")
+        assert result["success"] is False
+        assert result["status_code"] == 403
+
+
+class TestEnterpriseModIdsForIndustry:
+    def test_industry_grant_excludes_customer_delivery_legacy_mod(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.mod_sdk.industry_seed.industry_mod_id_for",
+            lambda industry_id: "coating-industry" if industry_id == "涂料" else "",
+        )
+        monkeypatch.setattr(
+            "app.mod_sdk.industry_mod_aliases.canonical_mod_id_for_industry",
+            lambda industry_id: "coating-industry" if industry_id == "涂料" else "",
+        )
+        monkeypatch.setattr(
+            "app.mod_sdk.customer_delivery.deliveries_for_industry",
+            lambda industry_id: [
+                {
+                    "industry_id": industry_id,
+                    "industry_mod_id": "coating-industry",
+                    "legacy_mod_id": "sz-qsm-pro",
+                }
+            ],
+        )
+
+        assert ma.enterprise_mod_ids_for_industry("涂料") == ["coating-industry"]
 
 
 # ========================= login_market_with_phone_code =======================

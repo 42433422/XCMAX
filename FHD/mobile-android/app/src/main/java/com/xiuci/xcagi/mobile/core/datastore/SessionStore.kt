@@ -402,6 +402,30 @@ constructor(
         context.dataStore.edit { it.clear() }
     }
 
+    suspend fun clearActiveAuth() {
+        context.dataStore.edit {
+            it.remove(fhdAccess)
+            it.remove(fhdRefresh)
+            it.remove(fhdSession)
+            it.remove(fhdUsername)
+            it.remove(marketToken)
+            it.remove(marketRefresh)
+            it.remove(accountKind)
+            it.remove(userIdKey)
+            it.remove(relayDesktopIdKey)
+            it.remove(relayBaseUrlKey)
+            it.remove(localBaseUrlKey)
+            it.remove(relaySessionTokenKey)
+            it.remove(relayAccountIdKey)
+            it.remove(relayTenantIdKey)
+            it.remove(relayPairedAtKey)
+            it.remove(inflightRelayTasksKey)
+            it.remove(walletBalanceJsonKey)
+            it[setupCompleteKey] = false
+            it[autoLoginKey] = false
+        }
+    }
+
     suspend fun accessToken(): String = fhdAccessFlow.first()
 
     suspend fun fhdSessionId(): String = context.dataStore.data.map { it[fhdSession] ?: "" }.first()

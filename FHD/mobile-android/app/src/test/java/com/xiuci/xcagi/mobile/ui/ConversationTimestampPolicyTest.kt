@@ -48,4 +48,16 @@ class ConversationTimestampPolicyTest {
         assertEquals("我: 打开 Mod", cachedConversationPreview("employee:mod:worker", previews))
         assertEquals("", cachedConversationPreview("pinned:cs", previews))
     }
+
+    @Test
+    fun `unread action marks existing unread conversation as read`() {
+        assertEquals(ConversationUnreadAction.MARK_READ, conversationUnreadAction(1))
+        assertEquals(ConversationUnreadAction.MARK_READ, conversationUnreadAction(99))
+    }
+
+    @Test
+    fun `unread action marks clean conversation as unread`() {
+        assertEquals(ConversationUnreadAction.MARK_UNREAD, conversationUnreadAction(0))
+        assertEquals(ConversationUnreadAction.MARK_UNREAD, conversationUnreadAction(-1))
+    }
 }

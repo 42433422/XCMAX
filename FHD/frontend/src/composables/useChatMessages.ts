@@ -12,6 +12,7 @@ import {
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
+const VOICE_PLAY_TIMEOUT_MS = 30_000
 
 // TTS 语音队列：按顺序播放，避免多条并发抢扬声器
 const voiceQueue: string[] = []
@@ -28,12 +29,17 @@ async function playNextVoice() {
   if (!text) { playNextVoice(); return }
 
   try {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     await Promise.race([
       speakText(text),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('TTS timeout')), 8000))
-    ])
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error('TTS timeout')), VOICE_PLAY_TIMEOUT_MS)
+      })
+    ]).finally(() => {
+      if (timeoutId) clearTimeout(timeoutId)
+    })
   } catch {
-    // swallow，继续播下一条
+    stopSpeaking()
   }
   // 短间隔让句子之间有呼吸
   setTimeout(() => playNextVoice(), 350)

@@ -83,6 +83,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
+import com.xiuci.xcagi.mobile.ui.components.mobile.employeeAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -161,7 +162,7 @@ fun ConversationListScreen(
                 title = item.title.ifBlank { "会话操作" },
                 onDismiss = { longPressItem = null },
                 actions = listOf(
-                        ConversationAction(if (item.unreadCount > 0) "标为已读" else "标为未读") { vm.toggleConversationUnread(item.id); longPressItem = null; haptics.tap() },
+                        ConversationAction(if (item.unreadCount > 0) "标为已读" else "标为未读") { vm.toggleConversationUnread(item.id, item.unreadCount); longPressItem = null; haptics.tap() },
                         ConversationAction(if (item.isPinned) "取消置顶" else "置顶聊天") { vm.toggleConversationPin(item.id); longPressItem = null; haptics.tap() },
                         ConversationAction(if (item.isFollowed) "不再关注" else "恢复关注") { vm.toggleConversationFollowed(item.id); longPressItem = null; haptics.tap() },
                         ConversationAction(if (item.isHidden) "显示该聊天" else "不显示该聊天") { vm.toggleConversationHidden(item.id); longPressItem = null; haptics.tap() },
@@ -874,7 +875,7 @@ private fun ConversationCell(
                 } else {
                     AppAvatar(
                         imageSource = item.avatarUrl,
-                        fallback = AppAvatarFallback.AI_EMPLOYEE,
+                        fallback = employeeAvatarFallback(item.id, item.title),
                         size = MessageAvatarLayout.conversationAvatarSize,
                         shape = MessageAvatarLayout.conversationAvatarShape(),
                         contentDescription = item.title,

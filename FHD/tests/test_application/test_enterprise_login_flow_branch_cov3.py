@@ -938,8 +938,8 @@ class TestRunMarketFirstLogin:
         assert err is None
 
     @pytest.mark.asyncio
-    async def test_enterprise_market_success_kind_mismatch_ignored(self):
-        """enterprise SKU + 市场成功 + kind 不匹配 → 仅记录日志，不拒绝。"""
+    async def test_enterprise_market_success_kind_mismatch_rejected(self):
+        """enterprise SKU + 市场成功 + kind 不匹配 → 拒绝创建本地会话。"""
         auth_svc = MagicMock()
         market = {
             "success": True,
@@ -976,8 +976,8 @@ class TestRunMarketFirstLogin:
                 jit_create_fn=MagicMock(),
                 market_user_email_from_raw=MagicMock(return_value=""),
             )
-        assert result is not None
-        assert err is None
+        assert result is None
+        assert err is not None
 
     @pytest.mark.asyncio
     async def test_enterprise_market_success_no_username_resolved(self):

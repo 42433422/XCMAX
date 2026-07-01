@@ -1095,6 +1095,17 @@ export const legacyApi = {
         n: opts.count || opts.n || 1,
       }),
     }),
+  llmGenerateVideo: (provider: string, model: string, prompt: string, opts: { size?: string; seconds?: number; durationSec?: number } = {}) =>
+    req('/api/llm/video', {
+      method: 'POST',
+      body: JSON.stringify({
+        provider,
+        model,
+        prompt,
+        size: opts.size || '1280x720',
+        seconds: opts.seconds || opts.durationSec || 5,
+      }),
+    }),
   llmGeneratePptxBlob: async (title: string, markdown: string, filename = 'ai-presentation.pptx') => {
     const headers = new Headers(authHeaders())
     headers.set('Content-Type', 'application/json')

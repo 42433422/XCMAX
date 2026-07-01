@@ -168,6 +168,9 @@ class TestProductsCompatStatusCode:
     def test_status_code_invalid_string(self):
         assert xp._products_compat_status_code({"success": False, "status_code": "bad"}) == 200
 
+    def test_status_code_none(self):
+        assert xp._products_compat_status_code({"success": False, "status_code": None}) == 200
+
     def test_status_code_600_outside_range(self):
         assert xp._products_compat_status_code({"success": False, "status_code": 600}) == 200
 

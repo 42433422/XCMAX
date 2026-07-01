@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { csrfHeaders, E2E_USER, E2E_PASSWORD } from './helpers';
+import { csrfHeaders, E2E_ACCOUNT_KIND, E2E_USER, E2E_PASSWORD } from './helpers';
 
 const skipUnlessFullStack = !process.env.E2E_FULL_STACK;
 
@@ -10,9 +10,11 @@ test.describe('plan2026 skeleton paths (full-stack only)', () => {
     const headers = await csrfHeaders(request);
     const resp = await request.post('/api/auth/login', {
       headers,
-      data: { username: E2E_USER, password: E2E_PASSWORD, account_kind: 'personal' },
+      data: { username: E2E_USER, password: E2E_PASSWORD, account_kind: E2E_ACCOUNT_KIND },
     });
-    expect(resp.status()).toBeLessThan(500);
+    expect(resp.status(), await resp.text()).toBeLessThan(500);
+    const body = await resp.json().catch(() => ({}));
+    expect(body?.success, `login response: ${JSON.stringify(body)}`).toBe(true);
   });
 
   test('skeleton order', async ({ request }) => {

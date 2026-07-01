@@ -3,20 +3,20 @@
 ## 页面行为（`SoftwareDownloadView.vue`）
 
 - 构建时注入 `VITE_XCAGI_DOWNLOAD_VERSION`（默认 `10.0.0`）、`VITE_XCAGI_DOWNLOAD_BASE_URL`。
-- 下载页为 **个人版 / 企业版** 两卡；普通浏览器点击 Windows / macOS / Android：通过隐藏 `<a download>` 跳转到
-  `{BASE}/{personal|enterprise}/{XCAGI-*-Setup|*-mac-x64.dmg|*-Android-*.apk}`。
+- 下载页只展示 **企业版** 安装包；普通浏览器点击 Windows / macOS / Android：通过隐藏 `<a download>` 跳转到
+  `{BASE}/enterprise/{XCAGI-Enterprise-Setup|*-mac-x64.dmg|XCAGI-Enterprise-Android-*.apk}`。
 - Electron 桌面壳内点击 Windows / macOS 安装包时，优先调用 `window.xcagiDesktop.downloadFile()`，由主进程弹原生保存对话框并写入用户 Downloads；用户取消则停止，IPC 失败才回退浏览器下载。
 - 仅 SKU 非法时才会 `alert`，不会出现「敬请期待」占位。
-- **Android APK** 不在该 Vue 页直链；由内部分发或应用商店提供，产物路径见主仓 `FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md`（`release/packages-v*/personal|enterprise/`）。
+- **Android APK** 不在该 Vue 页直链；由内部分发或应用商店提供，产物路径见主仓 `FHD/docs/guides/MOBILE_ANDROID_STORE_COMPLIANCE.md`（企业版 `release/packages-v*/enterprise/`）。
 
 ## 服务器 / COS 路径（与前端 `VITE_XCAGI_DOWNLOAD_BASE_URL` 一致）
 
 COS 桶 `xiuci-website-1374207682`（成都）对象前缀：
 
 ```
-xcagi-v8.1.0/{personal,enterprise}/XCAGI-*-Setup-8.1.0-x64.exe
-xcagi-v8.1.0/{personal,enterprise}/XCAGI-{Personal|Enterprise}-8.1.0-mac-x64.dmg
-xcagi-v8.1.0/{personal,enterprise}/XCAGI-{Personal|Enterprise}-8.1.0-mac-arm64.dmg
+xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe
+xcagi-v10.0.0/enterprise/XCAGI-10.0.0-mac-x64.dmg
+xcagi-v10.0.0/enterprise/XCAGI-10.0.0-mac-arm64.dmg
 ```
 
 下载页会按访客 Mac 架构（Apple Silicon / Intel）自动选择对应 `.dmg`；测试可用 `?macArch=arm64` 或 `?macArch=x64`。
@@ -27,10 +27,10 @@ xcagi-v8.1.0/{personal,enterprise}/XCAGI-{Personal|Enterprise}-8.1.0-mac-arm64.d
 https://xiu-ci.com/xcagi-v10.0.0
 ```
 
-nginx（`xiu-ci.com`）将 `/xcagi-v8.1.0/` alias 到本机安装包目录（与 COS 目录结构一致，CDN 接入前由 CVM 出文件）：
+nginx（`xiu-ci.com`）将 `/xcagi-v10.0.0/` alias 到本机安装包目录（与 COS 目录结构一致，CDN 接入前由 CVM 出文件）：
 
 ```
-/var/www/update/releases/stable/{personal,enterprise}/
+/var/www/update/releases/stable/enterprise/
 ```
 
 旧路径 `/releases/stable/offline/` 仅作历史只读，**勿再上传**新版本。旧路径 `/releases/stable/` 根下其它结构仍可用时按现网为准。
@@ -39,19 +39,16 @@ nginx（`xiu-ci.com`）将 `/xcagi-v8.1.0/` alias 到本机安装包目录（与
 
 ```bash
 # 域名 DNS 未切到本机时，HTTPS 会失败或 403（旧 IP）
-curl -sI https://update.xcagi.com/releases/stable/personal/XCAGI-Personal-Setup-8.1.0-x64.exe
-curl -sI https://update.xcagi.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-8.1.0-x64.exe
+curl -sI https://update.xcagi.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe
 
 # 本机文件（Host 或 IP 直链，HTTP）
-curl -sI -H "Host: update.xcagi.com" http://119.27.178.147/releases/stable/personal/XCAGI-Personal-Setup-8.1.0-x64.exe
-curl -sI -H "Host: update.xcagi.com" http://119.27.178.147/releases/stable/enterprise/XCAGI-Enterprise-Setup-8.1.0-x64.exe
+curl -sI -H "Host: update.xcagi.com" http://119.27.178.147/releases/stable/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe
 
 # 临时 HTTPS（xiu-ci.com 同机 alias，已配置）
-curl -sI https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-8.1.0-x64.exe
-curl -sI https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-8.1.0-x64.exe
+curl -sI https://xiu-ci.com/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe
 ```
 
-## 下载慢（~100 KB/s、654MB 需 1～2 小时）
+## 下载慢（~100 KB/s、约 212MB 仍会很慢）
 
 根因：`dl.xiu-ci.com` 若仍 **A 记录到 CVM**，走单机出站带宽（常 1～3 Mbps）。  
 **解决办法**：安装包上传 COS + `dl.xiu-ci.com` 改 **CDN CNAME**，见 [`deploy/docs/runbooks/xcagi-download-cdn.md`](../../deploy/docs/runbooks/xcagi-download-cdn.md) 与脚本 `deploy/scripts/sync-xcagi-releases-to-cos.sh`。
@@ -60,10 +57,10 @@ curl -sI https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-8.
 
 1. **DNS**：`update.xcagi.com` A 记录 → `119.27.178.147`（勿指向欠费/旧机 `170.33.12.185`）。
 2. **HTTPS（update 子域）**：`certbot certonly --nginx -d update.xcagi.com` 或扩展现有 `xiu-ci.com` 配置后 `nginx -t && systemctl reload nginx`。
-3. **前端**：生产 `.env` 设 `VITE_XCAGI_DOWNLOAD_VERSION=8.1.0`、`VITE_XCAGI_DOWNLOAD_BASE_URL=https://update.xcagi.com/releases/stable`（或继续用 `https://xiu-ci.com/releases/stable` 作过渡）。
+3. **前端**：生产 `.env` 设 `VITE_XCAGI_DOWNLOAD_VERSION=10.0.0`、`VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v10.0.0`。
 4. **重建 market**（见下）。
 
-发版全流程见主仓 `FHD/docs/guides/RELEASE_TWO_SKUS.md`。
+发版全流程见主仓 `FHD/docs/guides/RELEASE_TWO_SKUS.md`；当前官网下载页只展示企业版，个人版作为冻结兼容线不对客户展示。
 
 ## 重建 market
 

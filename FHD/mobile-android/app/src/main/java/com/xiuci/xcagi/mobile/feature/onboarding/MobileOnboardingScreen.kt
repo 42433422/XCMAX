@@ -16,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,7 +34,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -43,20 +41,7 @@ import com.xiuci.xcagi.mobile.core.model.ListItem
 import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileScaffold
 
-private val stepTitles = listOf("宿主", "行业", "能力", "支付")
-private val paymentChannels =
-        listOf(
-                PaymentChannel("mobile_h5", "手机网页", "统一收银台"),
-                PaymentChannel("alipay", "支付宝", "H5 / 跳转"),
-                PaymentChannel("wechat_h5", "微信支付", "H5 渠道"),
-        )
-private val rechargeAmounts = listOf("20", "50", "100", "200")
-
-private data class PaymentChannel(
-        val id: String,
-        val title: String,
-        val subtitle: String,
-)
+private val stepTitles = listOf("认识XC", "行业定型", "补基础线")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,15 +52,11 @@ fun MobileOnboardingScreen(
 ) {
     val industries by vm.onboardingIndustries.collectAsState()
     val industryStatus by vm.industryBootstrapStatus.collectAsState()
-    val paymentPlans by vm.paymentPlans.collectAsState()
-    val paymentStatus by vm.paymentStatus.collectAsState()
-    val uriHandler = LocalUriHandler.current
     var step by remember { mutableIntStateOf(0) }
     var selectedIndustryId by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
         vm.loadMobileOnboarding()
-        vm.loadPaymentPlans()
     }
     LaunchedEffect(industries) {
         if (selectedIndustryId.isBlank() && industries.isNotEmpty()) {
@@ -92,7 +73,6 @@ fun MobileOnboardingScreen(
             onBack = onBack,
             onRefresh = {
                 vm.loadMobileOnboarding()
-                vm.loadPaymentPlans()
             },
     ) { _ ->
         Column(
@@ -115,7 +95,9 @@ fun MobileOnboardingScreen(
                                 industries = industries,
                                 selectedIndustryId = effectiveIndustryId,
                                 onSelect = { selectedIndustryId = it },
-                                onNext = { step = 2 },
+                                onNext = {
+                                    vm.selectOnboardingIndustry(effectiveIndustryId) { step = 2 }
+                                },
                                 onReload = vm::loadMobileOnboarding,
                         )
                 2 ->
@@ -123,21 +105,8 @@ fun MobileOnboardingScreen(
                                 industryTitle = selectedIndustryTitle,
                                 status = industryStatus,
                                 onInstall = { vm.bootstrapIndustry(effectiveIndustryId) },
-                                onNext = { step = 3 },
+                                onNext = onFinish,
                                 onReload = vm::loadMobileOnboarding,
-                        )
-                else ->
-                        PaymentStep(
-                                plans = paymentPlans,
-                                status = paymentStatus,
-                                onCheckout = { planId, channel ->
-                                    vm.checkoutPayment(planId, channel) { url -> uriHandler.openUri(url) }
-                                },
-                                onRecharge = { amount, channel ->
-                                    vm.checkoutWalletRecharge(amount, channel) { url -> uriHandler.openUri(url) }
-                                },
-                                onRefresh = vm::refreshPaymentAndWallet,
-                                onFinish = onFinish,
                         )
             }
         }
@@ -234,93 +203,8 @@ private fun CapabilityStep(
     StatusBlock(status.ifBlank { "等待检查行业基础能力状态" })
     Button(onClick = onInstall, modifier = Modifier.fillMaxWidth()) { Text("装齐基础包") }
     OutlinedButton(onClick = onReload, modifier = Modifier.fillMaxWidth()) { Text("重新检查") }
-    OutlinedButton(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text("下一步") }
+    Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) { Text("进入应用") }
 }
-
-@Composable
-private fun PaymentStep(
-        plans: List<ListItem>,
-        status: String,
-        onCheckout: (String, String) -> Unit,
-        onRecharge: (String, String) -> Unit,
-        onRefresh: () -> Unit,
-        onFinish: () -> Unit,
-) {
-    var selectedChannel by remember { mutableStateOf(paymentChannels.first().id) }
-    var selectedAmount by remember { mutableStateOf(rechargeAmounts[1]) }
-
-    FlowBlock(
-            icon = Icons.Default.Payments,
-            title = "模型服务与支付",
-            body = "套餐购买、钱包充值和支付状态刷新走移动端独立接口。",
-    )
-    Text(
-            "手机充值渠道",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-    )
-    paymentChannels.forEach { channel ->
-        SelectableRow(
-                title = channel.title,
-                subtitle = channel.subtitle,
-                selected = selectedChannel == channel.id,
-                onClick = { selectedChannel = channel.id },
-        )
-    }
-    Text(
-            "钱包充值",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-    )
-    Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        rechargeAmounts.forEach { amount ->
-            Surface(
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(8.dp),
-                    color =
-                            if (selectedAmount == amount) MaterialTheme.colorScheme.primaryContainer
-                            else MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = { selectedAmount = amount },
-            ) {
-                Text(
-                        "¥$amount",
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        style = MaterialTheme.typography.labelLarge,
-                        color =
-                                if (selectedAmount == amount) MaterialTheme.colorScheme.onPrimaryContainer
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                )
-            }
-        }
-    }
-    Button(
-            onClick = { onRecharge(selectedAmount, selectedChannel) },
-            modifier = Modifier.fillMaxWidth(),
-    ) {
-        Text("用${paymentChannelTitle(selectedChannel)}充值 ¥$selectedAmount")
-    }
-    if (plans.isEmpty()) {
-        StatusBlock(status.ifBlank { "暂无可购买套餐，刷新后重试。" })
-    } else {
-        plans.take(4).forEach { plan ->
-            PaymentRow(
-                    plan = plan,
-                    status = status,
-                    channelTitle = paymentChannelTitle(selectedChannel),
-                    onCheckout = { onCheckout(plan.id, selectedChannel) },
-            )
-        }
-    }
-    OutlinedButton(onClick = onRefresh, modifier = Modifier.fillMaxWidth()) { Text("刷新支付状态") }
-    Button(onClick = onFinish, modifier = Modifier.fillMaxWidth()) { Text("进入应用") }
-}
-
-private fun paymentChannelTitle(id: String): String =
-        paymentChannels.firstOrNull { it.id == id }?.title ?: "手机网页"
 
 @Composable
 private fun FlowBlock(
@@ -377,44 +261,6 @@ private fun SelectableRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-@Composable
-private fun PaymentRow(
-        plan: ListItem,
-        status: String,
-        channelTitle: String,
-        onCheckout: () -> Unit,
-) {
-    Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-    ) {
-        Row(
-                modifier = Modifier.padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                        plan.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                        plan.subtitle.ifBlank { status.ifBlank { "$channelTitle 渠道" } },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                )
-            }
-            Button(onClick = onCheckout) { Text("购买") }
         }
     }
 }

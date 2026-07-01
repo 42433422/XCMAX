@@ -12,6 +12,7 @@ from app.infrastructure.persistence.compat_db.product_queries import (
     _load_products_all_for_export,
     _load_products_list_impl_pg,
 )
+from app.infrastructure.tenant_scope import tenant_scope
 
 # ---------------------------------------------------------------------------
 # _load_products_list_impl_pg — tested via mocking the DB engine
@@ -121,6 +122,7 @@ class TestLoadProductsListImplPg:
             {"name": "is_active"},
             {"name": "created_at"},
             {"name": "updated_at"},
+            {"name": "tenant_id"},
         ]
         mock_insp.get_columns.return_value = all_cols
 
@@ -157,6 +159,7 @@ class TestLoadProductsListImplPg:
         mock_conn.execute.return_value = mock_result
 
         with (
+            tenant_scope(7),
             patch(
                 "app.infrastructure.persistence.compat_db.product_queries.get_sync_engine",
                 return_value=mock_eng,

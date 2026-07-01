@@ -31,6 +31,7 @@ const mockContainer = vi.hoisted(() => ({
   markHostPackSkippedThisSession: vi.fn(),
   readBuildEdition: vi.fn(),
   isEnterpriseEdition: vi.fn(),
+  patchWorkspacePrefs: vi.fn(),
   // productFlow 工具
   setRuntimeOnboardingOpenIndustryIds: vi.fn(),
   readProductFlowCompleted: vi.fn(),
@@ -95,6 +96,10 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
 vi.mock('@/utils/hostPackOnboardingGate', () => ({
   invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
   markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
+}))
+
+vi.mock('@/utils/workspacePrefsApi', () => ({
+  patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,
 }))
 
 vi.mock('@/constants/productFlow', async () => {
@@ -278,6 +283,7 @@ async function mountComponent(options: {
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockResolvedValue([])
     mockContainer.appAlert.mockResolvedValue(undefined)
+    mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: true, data: {} })
     mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('dismissed')
     mockContainer.readProductFlowCompleted.mockReturnValue(false)
   }
@@ -496,6 +502,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ selected_industry_id: '涂料' }),
+    )
     expect(replaceSpy).toHaveBeenCalled()
     const callArg = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1][0]
     expect(callArg.query.step).toBe('host-pack')
@@ -533,6 +542,21 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await nextBtn.trigger('click')
     await flushPromises()
     expect(replaceSpy).toHaveBeenCalled()
+  })
+
+  it('industry 步骤：行业绑定失败时停留在当前步骤', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
+    await flushPromises()
+    mockContainer.patchWorkspacePrefs.mockRejectedValue(new Error('bind fail'))
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
+    await chip.trigger('click')
+    await flushPromises()
+    const nextBtn = wrapper.find('.actions .btn.primary')
+    await nextBtn.trigger('click')
+    await flushPromises()
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('bind fail')
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 
   it('industry 步骤：industryStore 已加载但行业不同时直接进入下一步（不再调用 switchIndustry）', async () => {

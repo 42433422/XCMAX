@@ -15,6 +15,8 @@ describe('directAttachments', () => {
     expect(directFileKindLabel(directFileKind('报价单.pdf'))).toBe('PDF')
     expect(directFileKind('README.md')).toBe('text')
     expect(directFileKind('data.json')).toBe('json')
+    expect(directFileKind('screen.png')).toBe('vision')
+    expect(directFileKind('upload.bin', 'image/jpeg')).toBe('vision')
   })
 
   it('keeps extracted xlsx sendable when knowledge indexing fails', () => {

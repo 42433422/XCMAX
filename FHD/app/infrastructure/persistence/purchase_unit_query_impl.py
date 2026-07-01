@@ -4,6 +4,7 @@ from app.application.ports.purchase_unit_query import PurchaseUnitQueryPort
 from app.db.models import PurchaseUnit
 from app.db.models.shipment import ShipmentRecord
 from app.db.session import get_db
+from app.infrastructure.tenant_scope import apply_tenant_filter
 
 
 class SQLAlchemyPurchaseUnitQuery(PurchaseUnitQueryPort):
@@ -11,7 +12,8 @@ class SQLAlchemyPurchaseUnitQuery(PurchaseUnitQueryPort):
 
     def list_purchase_units(self) -> list[str]:
         with get_db() as db:
-            rows = db.query(PurchaseUnit.unit_name).filter(PurchaseUnit.is_active == True).all()
+            query = apply_tenant_filter(db.query(PurchaseUnit.unit_name), PurchaseUnit)
+            rows = query.filter(PurchaseUnit.is_active == True).all()
             names: list[str] = [c[0] for c in rows if c and c[0]]
             seen = set()
             result: list[str] = []
@@ -27,7 +29,7 @@ class SQLAlchemyPurchaseUnitQuery(PurchaseUnitQueryPort):
     ) -> list[dict]:
         """获取出货记录列表"""
         with get_db() as db:
-            query = db.query(ShipmentRecord)
+            query = apply_tenant_filter(db.query(ShipmentRecord), ShipmentRecord)
             if unit_name:
                 query = query.filter(ShipmentRecord.purchase_unit == unit_name)
             records = query.order_by(ShipmentRecord.created_at.desc()).limit(limit).all()

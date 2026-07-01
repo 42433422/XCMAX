@@ -18,6 +18,7 @@ from app.infrastructure.persistence.compat_db.base import (
     _insp_table_exists,
     _sql_ident,
 )
+from app.infrastructure.tenant_scope import append_tenant_scope_where
 from app.shell.mod_row_scope import append_mod_scope_where
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -43,6 +44,7 @@ def _load_purchase_units_rows_pg() -> list[dict]:
     pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
     where_parts: list[str] = []
     bind: dict[str, object] = {}
+    append_tenant_scope_where(where_parts, bind, pu_cols, table_name="purchase_units")
     append_mod_scope_where(where_parts, bind, pu_cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     try:
@@ -100,6 +102,7 @@ def _distinct_units_from_products_db_pg() -> list[dict]:
         if "is_active" in col_names:
             where_parts.append("(is_active IS NULL OR CAST(is_active AS INTEGER) = 1)")
         bind: dict[str, object] = {}
+        append_tenant_scope_where(where_parts, bind, col_names, table_name="products")
         append_mod_scope_where(where_parts, bind, col_names)
         where_sql = "WHERE " + " AND ".join(where_parts)
         with eng.connect() as conn:
@@ -216,6 +219,7 @@ def _load_customers_pg_from_customers_table(eng, insp) -> list[dict]:
             + _sql_ident("is_active")
             + " AS INTEGER) = 1)"
         )
+    append_tenant_scope_where(where_parts, bind, cols, table_name="customers")
     append_mod_scope_where(where_parts, bind, cols)
     where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
     order = f"{_sql_ident(name_col)}, {_sql_ident(id_col)}"
@@ -249,6 +253,7 @@ def _load_customers_pg_from_purchase_units(eng) -> list[dict]:
         pu_cols = {c["name"] for c in insp.get_columns("purchase_units")}
         where_parts: list[str] = []
         bind: dict[str, object] = {}
+        append_tenant_scope_where(where_parts, bind, pu_cols, table_name="purchase_units")
         append_mod_scope_where(where_parts, bind, pu_cols)
         where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
         with eng.connect() as conn:

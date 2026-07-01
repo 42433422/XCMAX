@@ -30,6 +30,8 @@ __pycache__/
 .modrepo-config.json
 library/*
 !library/.gitkeep
+!library/avatar-generation-employee/
+!library/avatar-generation-employee/**
 debug_sandbox/
 web/node_modules/
 web/dist/
@@ -87,4 +89,3 @@ id_ed25519*
 *.smtp.local
 .env.smtp.local
 deploy-target.local.ps1
-

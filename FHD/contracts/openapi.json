@@ -566,6 +566,26 @@
         }
       }
     },
+    "/api/xcmax/admin/market/wallets": {
+      "get": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Admin List Wallets",
+        "description": "代理远端 ``/api/admin/wallets``，返回所有用户钱包余额。\n\n远端返回 ``{items: [{id, user_id, balance, updated_at}], total}``。",
+        "operationId": "admin_list_wallets_api_xcmax_admin_market_wallets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/xcmax/admin/market/users/{user_id}/mods": {
       "get": {
         "tags": [
@@ -800,6 +820,79 @@
         }
       }
     },
+    "/api/xcmax/admin/users/{user_id}/profile": {
+      "put": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Admin Set User Profile",
+        "description": "设置用户账号体系字段（本地 User 表持久化）。\n\nbody: {\n    username: str,\n    tier?: personal|enterprise|admin,\n    industry_id?: str,\n    account_tier?: normal|pro|max|ultra,   # 仅 enterprise 可设\n    budget_range?: str,\n    entitled_industries?: list[str],\n}\n校验：account_tier 仅企业可设；industry_id 必须 ∈ entitled_industries（显式提供时）。",
+        "operationId": "admin_set_user_profile_api_xcmax_admin_users__user_id__profile_put",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/xcmax/admin/users/profiles": {
+      "get": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Admin List User Profiles",
+        "description": "返回本地所有用户的账号体系字段映射（按 username 索引）。\n\n前端拿到远端用户列表后，调此端点合并本地 profile。",
+        "operationId": "admin_list_user_profiles_api_xcmax_admin_users_profiles_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/xcmax/admin/wechat/groups": {
       "get": {
         "tags": [
@@ -982,6 +1075,46 @@
         }
       }
     },
+    "/api/xcmax/admin/impersonate/activate-enterprise": {
+      "post": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Admin Activate Enterprise Impersonation",
+        "operationId": "admin_activate_enterprise_impersonation_api_xcmax_admin_impersonate_activate_enterprise_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/xcmax/admin/impersonate/end": {
       "post": {
         "tags": [
@@ -1055,6 +1188,91 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/xcmax/local/ops/self-maintenance/status": {
+      "get": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Local Self Maintenance Status",
+        "description": "本机自维护 loop runtime 状态（直连 MODstore :8788）。",
+        "operationId": "local_self_maintenance_status_api_xcmax_local_ops_self_maintenance_status_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 300,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/xcmax/local/ops/self-maintenance/governance-review": {
+      "post": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Local Self Maintenance Governance Review",
+        "description": "本机自维护 loop 治理审计复核。",
+        "operationId": "local_self_maintenance_governance_review_api_xcmax_local_ops_self_maintenance_governance_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -2628,6 +2846,26 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/xcmax/admin/token-usage": {
+      "get": {
+        "tags": [
+          "xcmax-admin"
+        ],
+        "summary": "Admin Token Usage",
+        "description": "Token 用量聚合：本地账本 + Cursor + Codex + Trae。",
+        "operationId": "admin_token_usage_api_xcmax_admin_token_usage_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           }
@@ -5815,6 +6053,869 @@
         }
       }
     },
+    "/api/admin/claude-super-employee/messages": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Claude Super Employee Messages",
+        "description": "管理端 Claude 超级员工软件内对话记录。",
+        "operationId": "claude_super_employee_messages_api_admin_claude_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Claude Super Employee Invoke",
+        "description": "管理端 Claude 超级员工软件内调用入口。",
+        "operationId": "claude_super_employee_invoke_api_admin_claude_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/factory/workspaces": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Factory Workspaces",
+        "description": "列出工厂可派工的项目 Workspace（仅平台管理端可见）。",
+        "operationId": "admin_factory_workspaces_api_admin_factory_workspaces_get",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/factory/employees": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Factory Employees",
+        "description": "列出工厂版超级员工身份（仅平台管理端可见；绝不进客户选人器）。\n\n每个工厂员工映射到底层工具的现有超级员工对话端点——管理端发消息时带\n``context.workspace_id`` 选项目，路由侧自动铸造工厂授权并对该 Workspace 派工。",
+        "operationId": "admin_factory_employees_api_admin_factory_employees_get",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/cursor-super-employee/messages": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Cursor Super Employee Messages",
+        "description": "管理端 Cursor 超级员工软件内对话记录。",
+        "operationId": "cursor_super_employee_messages_api_admin_cursor_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Cursor Super Employee Invoke",
+        "description": "管理端 Cursor 超级员工软件内调用入口。",
+        "operationId": "cursor_super_employee_invoke_api_admin_cursor_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/trae-super-employee/messages": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Trae Super Employee Messages",
+        "description": "管理端 Trae 超级员工软件内对话记录。",
+        "operationId": "trae_super_employee_messages_api_admin_trae_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Trae Super Employee Invoke",
+        "description": "管理端 Trae 超级员工软件内调用入口。",
+        "operationId": "trae_super_employee_invoke_api_admin_trae_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ai-groups": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Groups List",
+        "operationId": "admin_ai_groups_list_api_admin_ai_groups_get",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Groups Create",
+        "operationId": "admin_ai_groups_create_api_admin_ai_groups_post",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ai-groups/candidates": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Group Candidates",
+        "description": "可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。\n\n供手机端建群/加成员的选人列表使用，覆盖全部 AI 员工。",
+        "operationId": "admin_ai_group_candidates_api_admin_ai_groups_candidates_get",
+        "parameters": [
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ai-groups/{group_id}/messages": {
+      "get": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Group Messages",
+        "operationId": "admin_ai_group_messages_api_admin_ai_groups__group_id__messages_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 300,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Group Post",
+        "operationId": "admin_ai_group_post_api_admin_ai_groups__group_id__messages_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ai-groups/{group_id}/members": {
+      "post": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Group Add Member",
+        "operationId": "admin_ai_group_add_member_api_admin_ai_groups__group_id__members_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/ai-groups/{group_id}/members/{employee_id}": {
+      "delete": {
+        "tags": [
+          "im-v0"
+        ],
+        "summary": "Admin Ai Group Remove Member",
+        "operationId": "admin_ai_group_remove_member_api_admin_ai_groups__group_id__members__employee_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "X-User-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-User-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/inventory": {
       "get": {
         "tags": [
@@ -6661,6 +7762,50 @@
         }
       }
     },
+    "/api/mobile/v1/auth/register": {
+      "post": {
+        "tags": [
+          "mobile-api"
+        ],
+        "summary": "Mobile Auth Register",
+        "description": "移动端注册：复用桌面 ``/api/auth/register``，成功后直接签发 mobile JWT。",
+        "operationId": "mobile_auth_register_api_mobile_v1_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileRegisterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Mobile Auth Register Api Mobile V1 Auth Register Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/auth/login": {
       "post": {
         "tags": [
@@ -6766,6 +7911,58 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/auth/session/validate": {
+      "get": {
+        "tags": [
+          "mobile-api"
+        ],
+        "summary": "Mobile Auth Session Validate",
+        "description": "移动端冷启动会话校验：校验 mobile JWT 绑定的 FHD session 并刷新权益。",
+        "operationId": "mobile_auth_session_validate_api_mobile_v1_auth_session_validate_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Auth Session Validate Api Mobile V1 Auth Session Validate Get"
+                }
               }
             }
           },
@@ -7096,6 +8293,54 @@
         }
       }
     },
+    "/api/mobile/v1/employee-ssot": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Employee Ssot",
+        "operationId": "mobile_employee_ssot_api_mobile_v1_employee_ssot_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/devices/register": {
       "post": {
         "tags": [
@@ -7171,6 +8416,67 @@
               "type": "string",
               "minLength": 8,
               "title": "Fcm Token"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/notifications/pending": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Notifications Pending",
+        "description": "自建推送后台通道:返回未送达的离线通知并标记 delivered（客户端 WorkManager 轮询）。",
+        "operationId": "mobile_notifications_pending_api_mobile_v1_notifications_pending_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
             }
           },
           {
@@ -7351,6 +8657,192 @@
         }
       }
     },
+    "/api/mobile/v1/service-bridge/requests": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Service Bridge Requests",
+        "operationId": "mobile_service_bridge_requests_api_mobile_v1_service_bridge_requests_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "source_instance_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Instance Id"
+            }
+          },
+          {
+            "name": "request_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Request Type"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/service-bridge/requests/{request_id}/respond": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Service Bridge Request Respond",
+        "operationId": "mobile_service_bridge_request_respond_api_mobile_v1_service_bridge_requests__request_id__respond_put",
+        "parameters": [
+          {
+            "name": "request_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Request Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MobileServiceBridgeRespondBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/relay/desktop/register": {
       "post": {
         "tags": [
@@ -7482,6 +8974,64 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RelayMobileConfirmCodeBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/relay/mobile/bind-account": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Relay Bind Account",
+        "operationId": "mobile_relay_bind_account_api_mobile_v1_relay_mobile_bind_account_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RelayMobileBindAccountBody"
               }
             }
           }
@@ -8024,6 +9574,1765 @@
         }
       }
     },
+    "/api/mobile/v1/admin/claude-super-employee/messages": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Claude Super Employee Messages",
+        "description": "移动端管理员信息页的 Claude 超级员工对话记录。",
+        "operationId": "mobile_admin_claude_super_employee_messages_api_mobile_v1_admin_claude_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Claude Super Employee Invoke",
+        "description": "移动端管理员信息页的软件内 Claude 调用入口。",
+        "operationId": "mobile_admin_claude_super_employee_invoke_api_mobile_v1_admin_claude_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaudeSuperEmployeeMobileMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/admin/cursor-super-employee/messages": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Cursor Super Employee Messages",
+        "description": "移动端管理员信息页的 Cursor 超级员工对话记录。",
+        "operationId": "mobile_admin_cursor_super_employee_messages_api_mobile_v1_admin_cursor_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Cursor Super Employee Invoke",
+        "description": "移动端管理员信息页的软件内 Cursor 调用入口。",
+        "operationId": "mobile_admin_cursor_super_employee_invoke_api_mobile_v1_admin_cursor_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CursorSuperEmployeeMobileMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/admin/trae-super-employee/messages": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Trae Super Employee Messages",
+        "description": "移动端管理员信息页的 Trae 超级员工对话记录。",
+        "operationId": "mobile_admin_trae_super_employee_messages_api_mobile_v1_admin_trae_super_employee_messages_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 80,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Admin Trae Super Employee Invoke",
+        "description": "移动端管理员信息页的软件内 Trae 调用入口。",
+        "operationId": "mobile_admin_trae_super_employee_invoke_api_mobile_v1_admin_trae_super_employee_messages_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TraeSuperEmployeeMobileMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/git/branches": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Git Branches",
+        "description": "列出手机端可选工作分支：优先本地 repo，部署包无 .git 时退到远端 heads。",
+        "operationId": "mobile_git_branches_api_mobile_v1_git_branches_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Groups List",
+        "description": "列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。",
+        "operationId": "mobile_ai_groups_list_api_mobile_v1_ai_groups_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Groups Create",
+        "description": "创建自定义 AI 群聊。",
+        "operationId": "mobile_ai_groups_create_api_mobile_v1_ai_groups_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiGroupCreateBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/candidates": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Candidates",
+        "description": "可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。",
+        "operationId": "mobile_ai_group_candidates_api_mobile_v1_ai_groups_candidates_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/messages": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Messages",
+        "description": "拉取某个 AI 群聊的历史消息。",
+        "operationId": "mobile_ai_group_messages_api_mobile_v1_ai_groups__group_id__messages_get",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 300,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Post",
+        "description": "在 AI 群聊里发消息：群成员各回一条；@ 了具体成员则只有 TA 回复。",
+        "operationId": "mobile_ai_group_post_api_mobile_v1_ai_groups__group_id__messages_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiGroupMessageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/members": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Add Member",
+        "description": "把一个 AI 员工拉进群。",
+        "operationId": "mobile_ai_group_add_member_api_mobile_v1_ai_groups__group_id__members_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiGroupMemberBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/members/{employee_id}": {
+      "delete": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Remove Member",
+        "description": "把一个 AI 员工移出群。",
+        "operationId": "mobile_ai_group_remove_member_api_mobile_v1_ai_groups__group_id__members__employee_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "employee_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Employee Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/pin": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Toggle Pin",
+        "description": "切换群聊置顶状态。",
+        "operationId": "mobile_ai_group_toggle_pin_api_mobile_v1_ai_groups__group_id__pin_put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/mark-unread": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Mark Unread",
+        "description": "标为未读（显示小红点）。",
+        "operationId": "mobile_ai_group_mark_unread_api_mobile_v1_ai_groups__group_id__mark_unread_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/mark-read": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Mark Read",
+        "description": "清除未读标记。",
+        "operationId": "mobile_ai_group_mark_read_api_mobile_v1_ai_groups__group_id__mark_read_post",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/followed": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Toggle Followed",
+        "description": "切换是否关注（不再关注则不显示未读）。",
+        "operationId": "mobile_ai_group_toggle_followed_api_mobile_v1_ai_groups__group_id__followed_put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}/hidden": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Toggle Hidden",
+        "description": "切换是否隐藏（不显示/恢复显示该聊天）。",
+        "operationId": "mobile_ai_group_toggle_hidden_api_mobile_v1_ai_groups__group_id__hidden_put",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/ai-groups/{group_id}": {
+      "delete": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Group Delete",
+        "description": "删除群聊。",
+        "operationId": "mobile_ai_group_delete_api_mobile_v1_ai_groups__group_id__delete",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}/pin": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Toggle Pin",
+        "operationId": "mobile_conversation_toggle_pin_api_mobile_v1_conversations__conversation_id__pin_put",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}/mark-unread": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Mark Unread",
+        "operationId": "mobile_conversation_mark_unread_api_mobile_v1_conversations__conversation_id__mark_unread_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}/mark-read": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Mark Read",
+        "operationId": "mobile_conversation_mark_read_api_mobile_v1_conversations__conversation_id__mark_read_post",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}/followed": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Toggle Followed",
+        "operationId": "mobile_conversation_toggle_followed_api_mobile_v1_conversations__conversation_id__followed_put",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}/hidden": {
+      "put": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Toggle Hidden",
+        "operationId": "mobile_conversation_toggle_hidden_api_mobile_v1_conversations__conversation_id__hidden_put",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/conversations/{conversation_id}": {
+      "delete": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Conversation Delete",
+        "operationId": "mobile_conversation_delete_api_mobile_v1_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "name": "conversation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/circle/posts": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Circle Posts",
+        "operationId": "mobile_ai_circle_posts_api_mobile_v1_circle_posts_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Circle Create Post",
+        "operationId": "mobile_ai_circle_create_post_api_mobile_v1_circle_posts_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiCirclePostBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/circle/posts/{post_id}/like": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Circle Toggle Like",
+        "operationId": "mobile_ai_circle_toggle_like_api_mobile_v1_circle_posts__post_id__like_post",
+        "parameters": [
+          {
+            "name": "post_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Post Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/circle/posts/{post_id}/comments": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Ai Circle Add Comment",
+        "operationId": "mobile_ai_circle_add_comment_api_mobile_v1_circle_posts__post_id__comments_post",
+        "parameters": [
+          {
+            "name": "post_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Post Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AiCircleCommentBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/mods": {
       "get": {
         "tags": [
@@ -8120,6 +11429,451 @@
         }
       }
     },
+    "/api/mobile/v1/onboarding/industries": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Onboarding Industries",
+        "description": "返回移动端首次开通可选行业目录。",
+        "operationId": "mobile_onboarding_industries_api_mobile_v1_onboarding_industries_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Onboarding Industries Api Mobile V1 Onboarding Industries Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/onboarding/industry-baseline": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Industry Baseline",
+        "description": "返回指定行业的移动端初始化方案。",
+        "operationId": "mobile_industry_baseline_api_mobile_v1_onboarding_industry_baseline_get",
+        "parameters": [
+          {
+            "name": "industry_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "通用",
+              "title": "Industry Id"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Industry Baseline Api Mobile V1 Onboarding Industry Baseline Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/onboarding/select-industry": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Select Onboarding Industry",
+        "description": "Persist the mobile onboarding industry selection to the shared workspace SSOT.",
+        "operationId": "mobile_select_onboarding_industry_api_mobile_v1_onboarding_select_industry_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Select Onboarding Industry Api Mobile V1 Onboarding Select Industry Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/mod-store/install-host-foundation": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Install Host Foundation",
+        "description": "为移动端账号安装宿主基础能力包。",
+        "operationId": "mobile_install_host_foundation_api_mobile_v1_mod_store_install_host_foundation_post",
+        "parameters": [
+          {
+            "name": "edition",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Edition"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Install Host Foundation Api Mobile V1 Mod Store Install Host Foundation Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/mod-store/install-industry-seed": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Install Industry Seed",
+        "description": "按行业安装移动端初始化种子包。",
+        "operationId": "mobile_install_industry_seed_api_mobile_v1_mod_store_install_industry_seed_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Install Industry Seed Api Mobile V1 Mod Store Install Industry Seed Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/mod-store/install": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Install Mod",
+        "description": "从移动端安装指定市场 Mod。",
+        "operationId": "mobile_install_mod_api_mobile_v1_mod_store_install_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Install Mod Api Mobile V1 Mod Store Install Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/mod-store/install-customer-delivery-seed": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Install Customer Delivery Seed",
+        "description": "安装客户交付场景的移动端种子包。",
+        "operationId": "mobile_install_customer_delivery_seed_api_mobile_v1_mod_store_install_customer_delivery_seed_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Install Customer Delivery Seed Api Mobile V1 Mod Store Install Customer Delivery Seed Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/home": {
       "get": {
         "tags": [
@@ -8128,6 +11882,55 @@
         ],
         "summary": "Mobile Home",
         "operationId": "mobile_home_api_mobile_v1_home_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/nav-menu": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Nav Menu",
+        "description": "返回当前用户可见的侧栏菜单项（核心菜单 + Mod 菜单）。\n\n供手机端\"探索\"Tab 配对后动态渲染工具列表，与桌面端侧栏对齐。",
+        "operationId": "mobile_nav_menu_api_mobile_v1_nav_menu_get",
         "parameters": [
           {
             "name": "Authorization",
@@ -8520,6 +12323,55 @@
         }
       }
     },
+    "/api/mobile/v1/contacts/fixed": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Get Mobile Fixed Contacts",
+        "description": "返回手机端联系人固定区(按端 SSOT 派生)。\n\ntop/bottom 以平台员工为界:渲染顺序 = top + 平台员工(动态) + bottom。\n管理端不含专属客服(由 surface SSOT 自动 gating);两端均含小C与超级员工。",
+        "operationId": "get_mobile_fixed_contacts_api_mobile_v1_contacts_fixed_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mobile/v1/cs/info": {
       "get": {
         "tags": [
@@ -8654,6 +12506,235 @@
               "title": "Since"
             }
           },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/payment/plans": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Payment Plans",
+        "description": "返回移动端可购买套餐与支付渠道。",
+        "operationId": "mobile_payment_plans_api_mobile_v1_payment_plans_get",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Payment Plans Api Mobile V1 Payment Plans Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/payment/checkout": {
+      "post": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Payment Checkout",
+        "description": "创建移动端支付订单并返回渠道下单参数。",
+        "operationId": "mobile_payment_checkout_api_mobile_v1_payment_checkout_post",
+        "parameters": [
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Payment Checkout Api Mobile V1 Payment Checkout Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/payment/query/{out_trade_no}": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Payment Query",
+        "description": "查询移动端支付订单状态。",
+        "operationId": "mobile_payment_query_api_mobile_v1_payment_query__out_trade_no__get",
+        "parameters": [
+          {
+            "name": "out_trade_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Out Trade No"
+            }
+          },
+          {
+            "name": "Authorization",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Mobile Payment Query Api Mobile V1 Payment Query  Out Trade No  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mobile/v1/wallet/balance": {
+      "get": {
+        "tags": [
+          "mobile-api",
+          "mobile-api-ext"
+        ],
+        "summary": "Mobile Wallet Balance",
+        "description": "返回当前用户的市场钱包余额与会员信息（供移动端\"我\"页面展示）。\n\n数据来源：market ``/api/wallet/overview`` + ``/api/payment/my-plan``。\n任一上游不可用时返回降级空值，保持 200 以便客户端渲染占位 UI。",
+        "operationId": "mobile_wallet_balance_api_mobile_v1_wallet_balance_get",
+        "parameters": [
           {
             "name": "Authorization",
             "in": "header",
@@ -9969,6 +14050,26 @@
         "summary": "Platform Shell Employee Tools",
         "description": "已加载 employee_pack 工具摘要 + runtime 缺失警告。",
         "operationId": "platform_shell_employee_tools_api_platform_shell_employee_tools_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/platform-shell/employee-ssot": {
+      "get": {
+        "tags": [
+          "platform-shell"
+        ],
+        "summary": "Platform Shell Employee Ssot",
+        "description": "员工 & 部门系统单一真相源派生视图。\n\n一份数据源 ``config/duty_roster.json`` 自动派生：\n* ``admin``      —— 管理端 6 部门 + 上岗员工(编制 ∩ 已安装)。\n* ``enterprise`` —— 企业端 4 部门(层) + 上架(商店)/未上架(宿主入门定制)员工。",
+        "operationId": "platform_shell_employee_ssot_api_platform_shell_employee_ssot_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -13264,6 +17365,153 @@
         "deprecated": true
       }
     },
+    "/api/auth/mfa/setup": {
+      "post": {
+        "tags": [
+          "legacy-auth"
+        ],
+        "summary": "Auth Mfa Setup",
+        "description": "生成 TOTP 密钥（待验证；mfa_enabled 在 /enable 校验通过后才置 True）。",
+        "operationId": "auth_mfa_setup_api_auth_mfa_setup_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/auth/mfa/enable": {
+      "post": {
+        "tags": [
+          "legacy-auth"
+        ],
+        "summary": "Auth Mfa Enable",
+        "description": "校验 TOTP 后开启 MFA。",
+        "operationId": "auth_mfa_enable_api_auth_mfa_enable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/auth/mfa/disable": {
+      "post": {
+        "tags": [
+          "legacy-auth"
+        ],
+        "summary": "Auth Mfa Disable",
+        "description": "关闭 MFA（已开启时需校验当前 TOTP）。",
+        "operationId": "auth_mfa_disable_api_auth_mfa_disable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
+    "/api/auth/token/refresh": {
+      "post": {
+        "tags": [
+          "legacy-auth"
+        ],
+        "summary": "Auth Token Refresh",
+        "description": "无状态 JWT：用 refresh token 轮转出新的 access/refresh（一次性使用）。",
+        "operationId": "auth_token_refresh_api_auth_token_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "deprecated": true
+      }
+    },
     "/api/auth/session/validate": {
       "get": {
         "tags": [
@@ -14260,7 +18508,7 @@
           "system"
         ],
         "summary": "Set Industry Endpoint",
-        "description": "Set current industry",
+        "description": "Set current industry（仅限管理端 admin 账号）。",
         "operationId": "set_industry_endpoint_api_system_industry_post",
         "requestBody": {
           "content": {
@@ -14362,6 +18610,26 @@
         "summary": "Get Employee Registry Rules",
         "description": "副窗工作流员工注册规则（替代前端硬编码过滤）。",
         "operationId": "get_employee_registry_rules_api_system_employee_registry_rules_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/system/duty-roster": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "Get Duty Roster",
+        "description": "编制矩阵 SSOT 派生（替代前端硬编码 yuangonDutyRoster.ts）。\n\n单一真相源：FHD/config/duty_roster.json + mods/_employees/*/manifest.json\n运行时派生：areas / departments / employee_labels / employee_descriptions / all_planned_ids",
+        "operationId": "get_duty_roster_api_system_duty_roster_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -24381,6 +28649,91 @@
         }
       }
     },
+    "/api/mod/github-pr-gatekeeper/employees": {
+      "get": {
+        "tags": [
+          "emp-pack-github-pr-gatekeeper"
+        ],
+        "summary": "List Employees",
+        "operationId": "list_employees_api_mod_github_pr_gatekeeper_employees_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/github-pr-gatekeeper/employees/github-pr-gatekeeper/run": {
+      "post": {
+        "tags": [
+          "emp-pack-github-pr-gatekeeper"
+        ],
+        "summary": "Emp Run",
+        "operationId": "emp_run_api_mod_github_pr_gatekeeper_employees_github_pr_gatekeeper_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/github-pr-gatekeeper/employees/github-pr-gatekeeper/status": {
+      "get": {
+        "tags": [
+          "emp-pack-github-pr-gatekeeper"
+        ],
+        "summary": "Emp Status",
+        "operationId": "emp_status_api_mod_github_pr_gatekeeper_employees_github_pr_gatekeeper_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mod/hex-quality-assessor/employees": {
       "get": {
         "tags": [
@@ -24891,6 +29244,91 @@
         }
       }
     },
+    "/api/mod/llm-ops-engineer/employees": {
+      "get": {
+        "tags": [
+          "emp-pack-llm-ops-engineer"
+        ],
+        "summary": "List Employees",
+        "operationId": "list_employees_api_mod_llm_ops_engineer_employees_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/llm-ops-engineer/employees/llm-ops-engineer/run": {
+      "post": {
+        "tags": [
+          "emp-pack-llm-ops-engineer"
+        ],
+        "summary": "Emp Run",
+        "operationId": "emp_run_api_mod_llm_ops_engineer_employees_llm_ops_engineer_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/llm-ops-engineer/employees/llm-ops-engineer/status": {
+      "get": {
+        "tags": [
+          "emp-pack-llm-ops-engineer"
+        ],
+        "summary": "Emp Status",
+        "operationId": "emp_status_api_mod_llm_ops_engineer_employees_llm_ops_engineer_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/mod/log-monitor-incident/employees": {
       "get": {
         "tags": [
@@ -25304,6 +29742,91 @@
         ],
         "summary": "Emp Status",
         "operationId": "emp_status_api_mod_mobile_android_release_officer_employees_mobile_android_release_officer_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/mobile-harmony-release-officer/employees": {
+      "get": {
+        "tags": [
+          "emp-pack-mobile-harmony-release-officer"
+        ],
+        "summary": "List Employees",
+        "operationId": "list_employees_api_mod_mobile_harmony_release_officer_employees_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/mobile-harmony-release-officer/employees/mobile-harmony-release-officer/run": {
+      "post": {
+        "tags": [
+          "emp-pack-mobile-harmony-release-officer"
+        ],
+        "summary": "Emp Run",
+        "operationId": "emp_run_api_mod_mobile_harmony_release_officer_employees_mobile_harmony_release_officer_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/mod/mobile-harmony-release-officer/employees/mobile-harmony-release-officer/status": {
+      "get": {
+        "tags": [
+          "emp-pack-mobile-harmony-release-officer"
+        ],
+        "summary": "Emp Status",
+        "operationId": "emp_status_api_mod_mobile_harmony_release_officer_employees_mobile_harmony_release_officer_status_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -27698,6 +32221,131 @@
         ],
         "title": "ActivateResponse"
       },
+      "AiCircleCommentBody": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "AiCircleCommentBody"
+      },
+      "AiCirclePostBody": {
+        "properties": {
+          "body": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Body"
+          }
+        },
+        "type": "object",
+        "required": [
+          "body"
+        ],
+        "title": "AiCirclePostBody"
+      },
+      "AiGroupCreateBody": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Name",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "AiGroupCreateBody"
+      },
+      "AiGroupMemberBody": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Employee Id",
+            "default": ""
+          },
+          "mod_id": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Mod Id",
+            "default": ""
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Name",
+            "default": ""
+          },
+          "avatar": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Avatar",
+            "default": ""
+          },
+          "summary": {
+            "type": "string",
+            "maxLength": 280,
+            "title": "Summary",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "AiGroupMemberBody"
+      },
+      "AiGroupMessageBody": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Message",
+            "default": ""
+          },
+          "sender_name": {
+            "type": "string",
+            "maxLength": 60,
+            "title": "Sender Name",
+            "default": "我"
+          },
+          "mentions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Mentions"
+          },
+          "dispatch": {
+            "type": "boolean",
+            "title": "Dispatch",
+            "default": false
+          },
+          "branch_context": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Branch Context",
+            "default": ""
+          },
+          "branch": {
+            "type": "string",
+            "maxLength": 180,
+            "title": "Branch",
+            "default": ""
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "title": "AiGroupMessageBody"
+      },
       "AnalyzePipelineBody": {
         "properties": {
           "market_user_id": {
@@ -27984,6 +32632,29 @@
         ],
         "title": "ChangeRequestStatusBody"
       },
+      "ClaudeSuperEmployeeMobileMessageBody": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Message",
+            "default": ""
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Body",
+            "default": ""
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "title": "ClaudeSuperEmployeeMobileMessageBody"
+      },
       "CodexSuperEmployeeMobileMessageBody": {
         "properties": {
           "message": {
@@ -28144,6 +32815,29 @@
         },
         "type": "object",
         "title": "CrmInvoiceIssueBody"
+      },
+      "CursorSuperEmployeeMobileMessageBody": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Message",
+            "default": ""
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Body",
+            "default": ""
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "title": "CursorSuperEmployeeMobileMessageBody"
       },
       "DatasetDocumentIngestRequest": {
         "properties": {
@@ -29465,6 +34159,87 @@
         ],
         "title": "MobileRefreshRequest"
       },
+      "MobileRegisterRequest": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Password"
+          },
+          "email": {
+            "type": "string",
+            "maxLength": 256,
+            "title": "Email",
+            "default": ""
+          },
+          "verification_code": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Verification Code",
+            "default": ""
+          },
+          "industry_id": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Industry Id",
+            "default": "通用"
+          },
+          "budget_range": {
+            "type": "string",
+            "maxLength": 64,
+            "title": "Budget Range",
+            "default": ""
+          },
+          "account_kind": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Account Kind",
+            "default": "enterprise"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "MobileRegisterRequest"
+      },
+      "MobileServiceBridgeRespondBody": {
+        "properties": {
+          "response": {
+            "type": "string",
+            "title": "Response"
+          },
+          "responded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Responded By"
+          },
+          "status": {
+            "type": "string",
+            "maxLength": 32,
+            "title": "Status",
+            "default": "resolved"
+          }
+        },
+        "type": "object",
+        "required": [
+          "response"
+        ],
+        "title": "MobileServiceBridgeRespondBody"
+      },
       "ModStoreCatalogPayload": {
         "properties": {
           "installed": {
@@ -30286,7 +35061,7 @@
             "type": "string",
             "maxLength": 32,
             "title": "Status",
-            "default": "done"
+            "default": "completed"
           },
           "result": {
             "additionalProperties": true,
@@ -30358,6 +35133,21 @@
         },
         "type": "object",
         "title": "RelayDesktopRegisterBody"
+      },
+      "RelayMobileBindAccountBody": {
+        "properties": {
+          "relay_id": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 8,
+            "title": "Relay Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "relay_id"
+        ],
+        "title": "RelayMobileBindAccountBody"
       },
       "RelayMobileConfirmBody": {
         "properties": {
@@ -30666,6 +35456,29 @@
           "entity_id"
         ],
         "title": "SyncPushItem"
+      },
+      "TraeSuperEmployeeMobileMessageBody": {
+        "properties": {
+          "message": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Message",
+            "default": ""
+          },
+          "body": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Body",
+            "default": ""
+          },
+          "context": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "title": "TraeSuperEmployeeMobileMessageBody"
       },
       "UserRoleAssign": {
         "properties": {

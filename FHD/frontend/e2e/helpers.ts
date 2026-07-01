@@ -5,8 +5,12 @@ import type { APIRequestContext, Page } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-export const E2E_USER = process.env.E2E_USER || 'admin';
-export const E2E_PASSWORD = process.env.E2E_PASSWORD || 'admin123';
+export const E2E_USER = process.env.E2E_USER || 'xcagi-enterprise-demo';
+export const E2E_PASSWORD = process.env.E2E_PASSWORD || 'Demo@2026';
+export const E2E_ACCOUNT_KIND = process.env.E2E_ACCOUNT_KIND || 'enterprise';
+type BrowserCookie = Awaited<ReturnType<APIRequestContext['storageState']>>['cookies'][number];
+
+const loginCookieCache = new Map<string, Promise<BrowserCookie[]>>();
 
 export function isFullStack(): boolean {
   return process.env.E2E_FULL_STACK === '1';
@@ -71,9 +75,11 @@ export const installPersonalSkuMocks = installE2eShellMocks;
 /** 与 pytest ``_csrf_headers`` 一致：先打 health 拿 csrf_token cookie。 */
 export async function csrfHeaders(
   request: APIRequestContext,
-  extra: Record<string, string> = {}
+  extra: Record<string, string> = {},
+  apiBase = ''
 ): Promise<Record<string, string>> {
-  await request.get('/api/health', { timeout: 15_000 });
+  const base = apiBase.replace(/\/$/, '');
+  await request.get(`${base}/api/health`, { timeout: 15_000 });
   const state = await request.storageState();
   const csrf =
     state.cookies.find((c) => c.name === 'csrf_token')?.value ||
@@ -84,6 +90,35 @@ export async function csrfHeaders(
     ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
     ...extra,
   };
+}
+
+export async function loginBrowserSession(page: Page, apiBase = ''): Promise<void> {
+  const base = (apiBase || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(
+    /\/$/,
+    ''
+  );
+  let cookiePromise = loginCookieCache.get(base);
+  if (!cookiePromise) {
+    cookiePromise = (async () => {
+      const headers = await csrfHeaders(page.request, {}, base);
+      const resp = await page.request.post(`${base}/api/auth/login`, {
+        headers,
+        data: {
+          username: E2E_USER,
+          password: E2E_PASSWORD,
+          account_kind: E2E_ACCOUNT_KIND,
+        },
+        timeout: 20_000,
+      });
+      const body = await resp.json().catch(() => ({}));
+      if (resp.status() >= 500 || body?.success !== true) {
+        throw new Error(`E2E login failed: status=${resp.status()} body=${JSON.stringify(body)}`);
+      }
+      return (await page.request.storageState()).cookies;
+    })();
+    loginCookieCache.set(base, cookiePromise);
+  }
+  await page.context().addCookies(await cookiePromise);
 }
 
 export async function imUserHeaders(

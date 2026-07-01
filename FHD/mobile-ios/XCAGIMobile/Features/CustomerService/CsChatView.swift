@@ -215,7 +215,13 @@ private struct CsBubble: View {
         HStack(alignment: .top, spacing: Theme.Space.sm) {
             if isUser { Spacer(minLength: 40) }
             if !isUser {
-                AvatarView(text: "客", url: avatarUrl, size: 32)
+                AvatarView(
+                    text: "客",
+                    url: avatarUrl,
+                    fallback: .customerService,
+                    size: MessageAvatarLayout.customerServiceBubbleAvatarSize,
+                    cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius
+                )
             }
 
             HStack(alignment: .bottom, spacing: 2) {

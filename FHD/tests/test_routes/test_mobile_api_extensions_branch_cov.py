@@ -1874,6 +1874,80 @@ class TestMobileIndustryBaseline:
         assert result.status_code == 500
 
 
+class TestMobileSelectOnboardingIndustry:
+    @pytest.mark.asyncio
+    async def test_user_none_returns_401(self, m):
+        result = await m.mobile_select_onboarding_industry(body={}, request=MagicMock(), user=None)
+        assert result.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_missing_industry_id_returns_400(self, m):
+        result = await m.mobile_select_onboarding_industry(body={}, request=MagicMock(), user=_user())
+        assert result.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_success(self, m):
+        with (
+            patch(
+                "app.fastapi_routes.market_account.grant_market_enterprise_entitlements_for_session",
+                new=AsyncMock(return_value={"success": True, "mod_ids": ["coating-industry"]}),
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.bind_selected_industry_for_user",
+                return_value={"selected_industry_id": "涂料"},
+            ) as mock_bind,
+        ):
+            result = await m.mobile_select_onboarding_industry(
+                body={"industry_id": "涂料", "industry_mod_id": "coating-industry"},
+                request=MagicMock(),
+                user=_user(),
+            )
+        assert result["success"] is True
+        mock_bind.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_market_grant_failure_still_binds_industry(self, m):
+        with (
+            patch(
+                "app.fastapi_routes.market_account.grant_market_enterprise_entitlements_for_session",
+                new=AsyncMock(return_value={"success": False, "message": "market failed"}),
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.bind_selected_industry_for_user",
+                return_value={"selected_industry_id": "涂料"},
+            ) as mock_bind,
+        ):
+            result = await m.mobile_select_onboarding_industry(
+                body={"industry_id": "涂料"},
+                request=MagicMock(),
+                user=_user(),
+            )
+        assert result["success"] is True
+        assert result["data"]["selected_industry_id"] == "涂料"
+        assert result["data"]["market_entitlements"]["success"] is False
+        mock_bind.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_recoverable_error(self, m):
+        err_class = _err_class(m)
+        with (
+            patch(
+                "app.fastapi_routes.market_account.grant_market_enterprise_entitlements_for_session",
+                new=AsyncMock(return_value={"success": True, "mod_ids": ["coating-industry"]}),
+            ),
+            patch(
+                "app.application.tenant_workspace_prefs.bind_selected_industry_for_user",
+                side_effect=err_class("fail"),
+            ),
+        ):
+            result = await m.mobile_select_onboarding_industry(
+                body={"industry_id": "涂料"},
+                request=MagicMock(),
+                user=_user(),
+            )
+        assert result.status_code == 500
+
+
 class TestMobileInstallHostFoundation:
     @pytest.mark.asyncio
     async def test_user_none_returns_401(self, m):

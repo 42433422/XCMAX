@@ -1,0 +1,78 @@
+{
+  "brief": "头像生成员：覆盖人类常用头像类型，为 AI 员工生成头像方案、提示词和可选生图结果。",
+  "mode": "direct_python_avatar_generation",
+  "accepted_extensions": [
+    ".json",
+    ".txt"
+  ],
+  "default_action": "generate",
+  "default_output_relpath": "outputs/avatar_profile.json",
+  "default_template_relpath": "",
+  "runtime_kind": "avatar_generation",
+  "avatar_types": [
+    {
+      "id": "real_person",
+      "label": "真人头像"
+    },
+    {
+      "id": "relationship",
+      "label": "关系型头像"
+    },
+    {
+      "id": "anime_game",
+      "label": "动漫/游戏/虚拟角色"
+    },
+    {
+      "id": "illustrated_self",
+      "label": "插画化本人"
+    },
+    {
+      "id": "professional_brand",
+      "label": "职业/品牌型头像"
+    },
+    {
+      "id": "pet_mascot",
+      "label": "动物/宠物/吉祥物"
+    },
+    {
+      "id": "interest_symbol",
+      "label": "兴趣符号型"
+    },
+    {
+      "id": "abstract_mood",
+      "label": "抽象/氛围型"
+    },
+    {
+      "id": "minimal_default",
+      "label": "默认/极简型"
+    }
+  ],
+  "requirements": [
+    "Cover all common human avatar categories, not only anime.",
+    "Default recommendation for AI employee avatars is anime_game + professional_brand when the user likes anime.",
+    "Preset employee_avatar_sheet for 4x3 AI employee avatar batches.",
+    "Preset xiaoc_human_aquatic for Xiao C: human-like anime assistant with subtle fish/aquatic elements, not a fish mascot.",
+    "Preset mobile_contact_avatar for one polished mobile chat contact avatar.",
+    "Use one clear subject, strong silhouette, high contrast, and circular-crop safety.",
+    "Never imitate a specific copyrighted character, celebrity, or trademark.",
+    "Write outputs/avatar_profile.json even when image generation is unavailable."
+  ],
+  "prompt_presets": [
+    {
+      "id": "employee_avatar_sheet",
+      "label": "AI 员工批量头像表",
+      "usage": "一次生成 4x3 头像表，再裁成单张移动端头像。"
+    },
+    {
+      "id": "xiaoc_human_aquatic",
+      "label": "小 C 人形鱼系助理头像",
+      "usage": "小 C 助理专用：人形 AI 助理，鱼类元素做发饰/发色/水纹，不做鱼脸吉祥物。"
+    },
+    {
+      "id": "mobile_contact_avatar",
+      "label": "单员工移动端联系人头像",
+      "usage": "给单个 AI 员工生成可上架、可放聊天列表的头像。"
+    }
+  ],
+  "pack_id": "avatar-generation-employee"
+}

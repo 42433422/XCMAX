@@ -684,6 +684,16 @@ def _user_blob_from_market_payload(payload: Any) -> dict[str, Any]:
     return {}
 
 
+def _truthy_identity_flag(raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return raw != 0
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(raw)
+
+
 def _market_identity_from_payloads(*payloads: Any) -> tuple[bool, bool, dict[str, Any]]:
     """合并 login + /me 响应，得到 (is_enterprise, is_market_admin, user_blob)。"""
     is_enterprise = False
@@ -697,11 +707,62 @@ def _market_identity_from_payloads(*payloads: Any) -> tuple[bool, bool, dict[str
             continue
         if not user_blob:
             user_blob = blob
-        if "is_enterprise" in blob:
-            is_enterprise = bool(blob.get("is_enterprise"))
-        if "is_admin" in blob:
-            is_market_admin = bool(blob.get("is_admin"))
+        sources: list[dict[str, Any]] = []
+        if isinstance(payload, dict):
+            sources.append(payload)
+            data = payload.get("data")
+            if isinstance(data, dict):
+                sources.append(data)
+        sources.append(blob)
+        for source in sources:
+            tier = str(source.get("tier") or "").strip().lower()
+            account_kind = (
+                str(source.get("account_kind") or source.get("accountKind") or "").strip().lower()
+            )
+            role = str(source.get("role") or "").strip().lower()
+            if _truthy_identity_flag(source.get("is_enterprise")) or _truthy_identity_flag(
+                source.get("market_is_enterprise")
+            ):
+                is_enterprise = True
+            if tier == "enterprise" or account_kind == "enterprise":
+                is_enterprise = True
+            if _truthy_identity_flag(source.get("is_admin")) or _truthy_identity_flag(
+                source.get("market_is_admin")
+            ):
+                is_market_admin = True
+            if tier == "admin" or account_kind in {"admin", "admin_portal"}:
+                is_market_admin = True
+            if role in {"admin", "super_admin", "owner"}:
+                is_market_admin = True
     return is_enterprise, is_market_admin, user_blob
+
+
+def _market_user_id_from_auth_payload(payload: Any) -> int | None:
+    """Extract a positive market user id from login/register response shapes."""
+    candidates: list[Any] = []
+    blob = _user_blob_from_market_payload(payload)
+    if blob:
+        candidates.extend([blob.get("id"), blob.get("user_id"), blob.get("market_user_id")])
+    if isinstance(payload, dict):
+        candidates.extend(
+            [payload.get("id"), payload.get("user_id"), payload.get("market_user_id")]
+        )
+        data = payload.get("data")
+        if isinstance(data, dict):
+            candidates.extend([data.get("id"), data.get("user_id"), data.get("market_user_id")])
+            user = data.get("user")
+            if isinstance(user, dict):
+                candidates.extend([user.get("id"), user.get("user_id"), user.get("market_user_id")])
+    for raw in candidates:
+        if isinstance(raw, bool) or raw is None:
+            continue
+        try:
+            uid = int(str(raw).strip())
+        except (TypeError, ValueError):
+            continue
+        if uid > 0:
+            return uid
+    return None
 
 
 async def refresh_session_market_token(session_id: str) -> str:
@@ -901,6 +962,7 @@ async def register_market_user(
         "message": "",
         "token": token,
         "refresh_token": refresh,
+        "market_user_id": _market_user_id_from_auth_payload(payload),
         "raw": payload,
         "market_base_url": _market_base_url(),
     }
@@ -1031,6 +1093,15 @@ async def _normalize_market_auth_payload(
         "GET", "/api/auth/me", authorization=f"Bearer {token}", return_error_payload=True
     )
     is_enterprise, is_market_admin, user_blob = _market_identity_from_payloads(payload, me)
+    logger.info(
+        "market auth normalized base=%s success=True is_enterprise=%s is_market_admin=%s username=%s raw_keys=%s me_keys=%s",
+        market_base or _market_base_url(),
+        is_enterprise,
+        is_market_admin,
+        str(user_blob.get("username") or ""),
+        sorted(payload.keys()) if isinstance(payload, dict) else [],
+        sorted(me.keys()) if isinstance(me, dict) else [],
+    )
     raw_out = dict(payload) if isinstance(payload, dict) else {}
     if user_blob and not isinstance(raw_out.get("user"), dict):
         raw_out["user"] = user_blob
@@ -1089,6 +1160,180 @@ def _market_internal_api_key() -> str:
         or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
         or ""
     ).strip()
+
+
+async def ensure_market_enterprise_profile(
+    market_user_id: int | str | None,
+    *,
+    username: str = "",
+    company: str = "",
+    mod_ids: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any]:
+    """Mark a registered market account as enterprise through the internal market API."""
+    try:
+        uid = int(str(market_user_id or "").strip())
+    except (TypeError, ValueError):
+        uid = 0
+    if uid <= 0:
+        return {
+            "success": False,
+            "message": "修茈市场注册成功但未返回用户ID，无法标记企业账号",
+            "market_base_url": _market_base_url(),
+        }
+    internal_key = _market_internal_api_key()
+    if not internal_key:
+        return {
+            "success": False,
+            "message": "未配置 XCAGI_MARKET_INTERNAL_API_KEY，无法标记市场企业账号",
+            "market_base_url": _market_base_url(),
+        }
+    body: dict[str, Any] = {
+        "market_user_id": uid,
+        "company": (company or "").strip(),
+        "display_name": (username or "").strip(),
+    }
+    requested_mod_ids = _dedupe_mod_ids([str(x) for x in (mod_ids or [])])
+    if requested_mod_ids:
+        body["mod_ids"] = requested_mod_ids
+    payload = await _proxy_json(
+        "POST",
+        "/api/internal/cs-intake/ensure-enterprise-profile",
+        json_body=body,
+        extra_headers={"X-Internal-Api-Key": internal_key},
+        return_error_payload=True,
+    )
+    if isinstance(payload, JSONResponse):
+        return {
+            "success": False,
+            "message": "市场服务不可用，无法标记企业账号",
+            "status_code": int(getattr(payload, "status_code", 502) or 502),
+            "market_base_url": _market_base_url(),
+        }
+    if isinstance(payload, dict) and payload.get("__proxy_error__"):
+        status_code = int(payload.get("status_code") or 502)
+        raw = payload.get("payload")
+        return {
+            "success": False,
+            "message": _error_message(raw, status_code) or "市场企业标记失败",
+            "status_code": status_code,
+            "raw": raw,
+            "market_base_url": _market_base_url(),
+        }
+    if not isinstance(payload, dict):
+        return {
+            "success": False,
+            "message": "市场企业标记返回格式异常",
+            "raw": payload,
+            "market_base_url": _market_base_url(),
+        }
+    is_enterprise = _truthy_identity_flag(payload.get("is_enterprise")) or _truthy_identity_flag(
+        payload.get("market_is_enterprise")
+    )
+    if not (payload.get("ok") or payload.get("success")) or not is_enterprise:
+        return {
+            "success": False,
+            "message": str(payload.get("message") or payload.get("detail") or "市场企业标记失败"),
+            "raw": payload,
+            "market_base_url": _market_base_url(),
+        }
+    return {
+        "success": True,
+        "market_user_id": uid,
+        "username": str(payload.get("username") or username or "").strip(),
+        "is_enterprise": True,
+        "mod_ids": [
+            str(x).strip()
+            for x in (payload.get("mod_ids") or requested_mod_ids)
+            if str(x or "").strip()
+        ],
+        "added_mod_ids": [
+            str(x).strip() for x in (payload.get("added_mod_ids") or []) if str(x or "").strip()
+        ],
+        "raw": payload,
+        "market_base_url": _market_base_url(),
+    }
+
+
+def _dedupe_mod_ids(mod_ids: list[str]) -> list[str]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in mod_ids:
+        mid = str(raw or "").strip()
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        out.append(mid)
+    return out
+
+
+def enterprise_mod_ids_for_industry(industry_id: str) -> list[str]:
+    """Resolve the MODstore entitlements implied by a selected industry."""
+    iid = str(industry_id or "").strip()
+    if not iid:
+        return []
+    mod_ids: list[str] = []
+    try:
+        from app.mod_sdk.industry_seed import industry_mod_id_for
+
+        mid = str(industry_mod_id_for(iid) or "").strip()
+        if mid:
+            mod_ids.append(mid)
+    except RECOVERABLE_ERRORS:
+        logger.exception("enterprise_mod_ids_for_industry: industry_seed failed industry=%s", iid)
+    try:
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id_for_industry
+
+        mid = str(canonical_mod_id_for_industry(iid) or "").strip()
+        if mid:
+            mod_ids.append(mid)
+    except RECOVERABLE_ERRORS:
+        logger.exception("enterprise_mod_ids_for_industry: alias failed industry=%s", iid)
+    try:
+        from app.mod_sdk.customer_delivery import deliveries_for_industry
+
+        for row in deliveries_for_industry(iid):
+            if not isinstance(row, dict):
+                continue
+            mid = str(row.get("industry_mod_id") or "").strip()
+            if mid:
+                mod_ids.append(mid)
+    except RECOVERABLE_ERRORS:
+        logger.exception("enterprise_mod_ids_for_industry: delivery failed industry=%s", iid)
+    return _dedupe_mod_ids(mod_ids)
+
+
+async def grant_market_enterprise_entitlements_for_session(
+    session_id: str,
+    industry_id: str,
+) -> dict[str, Any]:
+    """Grant selected-industry MODstore entitlements for the current FHD session."""
+    sid = str(session_id or "").strip()
+    mod_ids = enterprise_mod_ids_for_industry(industry_id)
+    if not mod_ids:
+        return {"success": True, "mod_ids": [], "added_mod_ids": []}
+    if not sid:
+        return {"success": False, "message": "缺少登录会话，无法写入市场行业权限"}
+    market_user_id: int | None = None
+    try:
+        from app.application.session_account_meta import load_session_account_meta
+
+        meta = load_session_account_meta(sid) or {}
+        raw_uid = meta.get("market_user_id")
+        if raw_uid is not None:
+            market_user_id = int(raw_uid)
+    except (TypeError, ValueError):
+        market_user_id = None
+    except RECOVERABLE_ERRORS:
+        logger.exception("grant_market_enterprise_entitlements: load session meta failed")
+    if market_user_id is None:
+        token = await resolve_valid_market_access_token(sid)
+        market_user_id = _market_user_id_from_access_token(token)
+    if market_user_id is None:
+        return {"success": False, "message": "当前会话没有市场用户ID，无法写入市场行业权限"}
+    return await ensure_market_enterprise_profile(
+        market_user_id,
+        mod_ids=mod_ids,
+    )
 
 
 def _oidc_identity_from_profile(profile: dict[str, Any]) -> tuple[str, str, str]:

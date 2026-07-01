@@ -19,6 +19,9 @@ export const HOST_PACK_ONBOARDING_EXEMPT_ROUTE_NAMES = new Set([
   'login-forgot-password',
   'lan-gate',
   'mod-store',
+  'employee-workflow',
+  'workflow-employee-space',
+  'workflow-employee-stitch-full',
 ])
 
 let hostPackNeedsCache: { needs: boolean; at: number } | null = null

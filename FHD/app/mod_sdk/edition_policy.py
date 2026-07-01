@@ -20,6 +20,18 @@ logger = logging.getLogger(__name__)
 Edition = Literal["minimal", "generic", "full"]
 
 
+def _dedupe_mod_ids(mod_ids: tuple[str, ...]) -> tuple[str, ...]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for mod_id in mod_ids:
+        mid = str(mod_id or "").strip()
+        if not mid or mid in seen:
+            continue
+        seen.add(mid)
+        out.append(mid)
+    return tuple(out)
+
+
 def resolve_edition() -> Edition:
     """与 ``platform_shell._resolve_edition`` 一致，供路由与中间件共用。"""
     explicit = (os.environ.get("XCAGI_EDITION") or "").strip().lower()
@@ -63,7 +75,7 @@ def edition_mod_ids(edition: Edition | None = None) -> tuple[str, ...]:
         return MINIMAL_HOST_MOD_IDS
     if ed == "generic":
         return GENERIC_HOST_MOD_IDS
-    return (*MINIMAL_HOST_MOD_IDS, *GENERIC_HOST_MOD_IDS)
+    return _dedupe_mod_ids((*MINIMAL_HOST_MOD_IDS, *GENERIC_HOST_MOD_IDS))
 
 
 def configure_edition_defaults(*, desktop: bool = False) -> Edition:

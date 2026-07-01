@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import {
   isTutorialReplayQuery,
   readOnboardingReturnPath,
@@ -18,10 +18,16 @@ import {
   LS_PRODUCT_FLOW_COMPLETED,
   LS_PRODUCT_FLOW_HOST_ACK,
 } from './productFlow'
+import {
+  buildTenantScopedStorageKey,
+  invalidateTenantStorageScopeCache,
+  setTenantStorageScopeCache,
+} from '@/utils/tenantStorageScope'
 
 describe('productFlow', () => {
   beforeEach(() => {
     localStorage.clear()
+    invalidateTenantStorageScopeCache()
     setRuntimeOnboardingOpenIndustryIds(null)
   })
 
@@ -119,6 +125,14 @@ describe('productFlow', () => {
     expect(readProductFlowCompleted()).toBe(true)
   })
 
+  it('readProductFlowCompleted ignores global flag in tenant scope', () => {
+    setTenantStorageScopeCache('tenant:10')
+    localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+    expect(readProductFlowCompleted()).toBe(false)
+    localStorage.setItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_COMPLETED, 'tenant:10'), '1')
+    expect(readProductFlowCompleted()).toBe(true)
+  })
+
   it('readHostPackAcknowledged returns false when not set', () => {
     expect(readHostPackAcknowledged()).toBe(false)
   })
@@ -126,6 +140,14 @@ describe('productFlow', () => {
   it('markHostPackAcknowledged sets localStorage', () => {
     markHostPackAcknowledged()
     expect(localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK)).toBe('1')
+  })
+
+  it('readHostPackAcknowledged ignores global flag in tenant scope', () => {
+    setTenantStorageScopeCache('tenant:10')
+    localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+    expect(readHostPackAcknowledged()).toBe(false)
+    localStorage.setItem(buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK, 'tenant:10'), '1')
+    expect(readHostPackAcknowledged()).toBe(true)
   })
 
   it('resetProductFlowState clears both localStorage keys', () => {

@@ -9,18 +9,22 @@ from sqlalchemy.orm import Session
 from app.db.models.product import Product
 from app.infrastructure.tenant_scope import (
     apply_tenant_filter,
+    append_tenant_scope_where,
     current_tenant_id,
+    require_raw_sql_tenant_id,
     set_current_tenant_id,
+    TenantScopeError,
     tenant_scope,
 )
 
 
 @pytest.fixture()
-def session_with_products():
+def session_with_products(monkeypatch):
     """内存 sqlite：3 条产品分属 tenant=1 / tenant=2 / NULL。"""
     eng = create_engine("sqlite://")
     Product.__table__.create(bind=eng)
     with Session(eng) as db:
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE", "1")
         db.add_all(
             [
                 Product(name="t1-only", unit="个", is_active=1, tenant_id=1),
@@ -29,6 +33,7 @@ def session_with_products():
             ]
         )
         db.commit()
+        monkeypatch.delenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE")
         yield db
 
 
@@ -57,22 +62,23 @@ class TestTenantScopeContextVar:
 
 
 class TestApplyTenantFilter:
-    def test_no_tenant_sees_all(self, session_with_products):
-        # 当前租户为 None（管理员）→ 看全部
-        assert _names(session_with_products) == {"t1-only", "t2-only", "legacy-null"}
+    def test_no_tenant_sees_none(self, session_with_products):
+        # 当前租户为 None → 业务数据 fail-closed，避免未登录/上下文丢失时看全库
+        assert _names(session_with_products) == set()
 
-    def test_null_tolerant_default(self, session_with_products):
-        # 默认 NULL 容忍：tenant=1 看到本租户 + 未打标存量，看不到 tenant=2
-        with tenant_scope(1):
-            assert _names(session_with_products) == {"t1-only", "legacy-null"}
-        with tenant_scope(2):
-            assert _names(session_with_products) == {"t2-only", "legacy-null"}
-
-    def test_strict_mode(self, session_with_products, monkeypatch):
-        # 严格模式：只看本租户，不含 NULL 存量
-        monkeypatch.setenv("XCAGI_TENANT_STRICT", "1")
+    def test_strict_default(self, session_with_products):
+        # 默认严格：tenant=1 只看到本租户，看不到 tenant=2 / NULL 存量
         with tenant_scope(1):
             assert _names(session_with_products) == {"t1-only"}
+        with tenant_scope(2):
+            assert _names(session_with_products) == {"t2-only"}
+
+    def test_legacy_null_visible_requires_explicit_migration_flag(
+        self, session_with_products, monkeypatch
+    ):
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        with tenant_scope(1):
+            assert _names(session_with_products) == {"t1-only", "legacy-null"}
 
     def test_model_without_tenant_column_unchanged(self):
         class _NoTenant:
@@ -80,6 +86,22 @@ class TestApplyTenantFilter:
 
         sentinel = object()
         assert apply_tenant_filter(sentinel, _NoTenant) is sentinel
+
+
+class TestRawSqlTenantScope:
+    def test_append_where_missing_tenant_column_fail_closed(self):
+        where_parts: list[str] = []
+        bind: dict[str, object] = {}
+        with tenant_scope(1):
+            ok = append_tenant_scope_where(where_parts, bind, {"id"}, table_name="products")
+        assert ok is False
+        assert where_parts == ["1 = 0"]
+        assert bind == {}
+
+    def test_require_tenant_id_missing_column_raises(self):
+        with tenant_scope(1):
+            with pytest.raises(TenantScopeError):
+                require_raw_sql_tenant_id({"id"}, table_name="products")
 
 
 class TestGlobalTenantEvent:
@@ -97,7 +119,7 @@ class TestGlobalTenantEvent:
         with Session(eng) as session:
             yield session
 
-    def test_event_isolation_and_write_tag(self, db):
+    def test_event_isolation_and_write_tag(self, db, monkeypatch):
         from app.db.models.material import Material
 
         # 写入打标（before_flush）：scope 内不显式设 tenant_id
@@ -107,17 +129,28 @@ class TestGlobalTenantEvent:
         with tenant_scope(2):
             db.add(Material(material_code="b", name="t2", unit="个", quantity=0))
             db.commit()
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE", "1")
         db.add(Material(material_code="c", name="legacy", unit="个", quantity=0))
         db.commit()
+        monkeypatch.delenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE")
         db.expire_all()
 
         # 事件读过滤（Material 无手工接线，纯靠全局事件）
         with tenant_scope(1):
-            assert {m.name for m in db.query(Material).all()} == {"t1", "legacy"}
+            assert {m.name for m in db.query(Material).all()} == {"t1"}
         with tenant_scope(2):
-            assert {m.name for m in db.query(Material).all()} == {"t2", "legacy"}
-        # admin（无 scope）看全部
-        assert {m.name for m in db.query(Material).all()} == {"t1", "t2", "legacy"}
+            assert {m.name for m in db.query(Material).all()} == {"t2"}
+        # 无 scope 看不到业务数据
+        assert {m.name for m in db.query(Material).all()} == set()
+
+    def test_unscoped_write_rejected(self, db):
+        from app.db.models.material import Material
+        from app.infrastructure.tenant_scope import TenantScopeError
+
+        db.add(Material(material_code="c", name="legacy", unit="个", quantity=0))
+        with pytest.raises(TenantScopeError):
+            db.commit()
+        db.rollback()
 
     def test_auth_tables_not_filtered(self, db):
         # 关键：User 不继承 TenantScopedMixin → 即使在租户作用域内也不被过滤（登录安全）

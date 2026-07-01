@@ -172,8 +172,8 @@ private struct CircleHeader: View {
                             .font(.subheadline).fontWeight(.semibold)
                             .foregroundColor(.white)
                             .lineLimit(1)
-                        AvatarView(text: displayName.isEmpty ? "我" : displayName, size: 46)
-                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(.white, lineWidth: 2))
+                        AvatarView(text: displayName.isEmpty ? "我" : displayName, fallback: .user, size: 46, cornerRadius: 10)
+                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(.white, lineWidth: 2))
                     }
                 }
                 .padding(.horizontal, 20)

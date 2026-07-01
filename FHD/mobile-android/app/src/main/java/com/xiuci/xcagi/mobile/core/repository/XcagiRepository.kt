@@ -886,6 +886,7 @@ class XcagiRepository @Inject constructor(
                 is String -> raw.toIntOrNull() ?: 0
                 else -> 0
             }
+        rejectRelayAccountHijack(username, accountKind)
         val relayBaseUrl = data["relay_base_url"]?.toString()?.trim().orEmpty()
         val localBaseUrl = data["local_base_url"]?.toString()?.trim().orEmpty()
         val relaySessionToken =
@@ -907,6 +908,24 @@ class XcagiRepository @Inject constructor(
             username = username,
             userId = userId,
         )
+    }
+
+    private suspend fun rejectRelayAccountHijack(targetUsername: String, targetAccountKind: String) {
+        val target = targetUsername.trim()
+        if (target.isBlank()) return
+        val remembered = sessionStore.savedUsername().trim()
+        val current = sessionStore.fhdUsernameFlow.first().trim()
+        val anchor = current.ifBlank { remembered }
+        if (anchor.isBlank() || anchor.equals(target, ignoreCase = true)) return
+
+        val kind = targetAccountKind.trim().lowercase()
+        val targetIsAdmin = kind in setOf("admin", "admin_portal") || target.equals("admin", true)
+        val anchorLooksCustomer = remembered.isNotBlank() || !anchor.equals("admin", true)
+        if (targetIsAdmin && anchorLooksCustomer) {
+            throw IllegalStateException(
+                "设备绑定返回管理员账号 $target，与当前客户账号 $anchor 不一致；已阻止覆盖，请先切换账号再绑定"
+            )
+        }
     }
 
     private suspend fun persistRelayBindingMeta(
@@ -2888,10 +2907,22 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    suspend fun selectOnboardingIndustry(industryId: String): Result<Unit> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val industry = industryId.ifBlank { "通用" }
+        val res = fhd().mobileSelectOnboardingIndustry(mapOf("industry_id" to industry))
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "行业绑定失败" }))
+        else Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     suspend fun bootstrapIndustry(industryId: String): Result<String> = try {
         syncRouterFromStore()
         preferCloudIfLanUnreachable()
         val industry = industryId.ifBlank { "通用" }
+        selectOnboardingIndustry(industry).getOrThrow()
         val host = fhd().mobileInstallHostFoundation("generic")
         if (!host.success) {
             throw Exception(host.message.ifBlank { "宿主基础包安装失败" })
@@ -3056,7 +3087,7 @@ class XcagiRepository @Inject constructor(
     }
 
     suspend fun logout() {
-        sessionStore.clear()
+        sessionStore.clearActiveAuth()
         db.chatDao().clear()
         db.approvalDao().clear()
         db.shipmentDao().clear()

@@ -248,6 +248,7 @@ struct AiGroupMember: Decodable, Hashable {
     var modId: String?
     var name: String?
     var avatar: String?
+    var avatarKey: String?
     var summary: String?
 }
 

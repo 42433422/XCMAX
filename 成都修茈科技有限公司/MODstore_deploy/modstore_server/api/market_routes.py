@@ -47,6 +47,11 @@ from modstore_server.email_service import (
     generate_verification_code,
     send_verification_email,
 )
+from modstore_server.enterprise_entitlements import (
+    ENTERPRISE_ASSIGNABLE_MODS,
+    assert_enterprise_assignable_mod_id,
+    enterprise_assignable_mod_ids,
+)
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
@@ -67,29 +72,15 @@ router = APIRouter(prefix="/api", tags=["market"])
 _get_current_user = get_current_user
 _require_admin = require_admin
 
-# 企业版桌面：管理员可分配给用户的行业/客户 Mod（与 FHD protected_client_mod_ids 对齐）
-ENTERPRISE_ASSIGNABLE_MODS: dict[str, str] = {
-    "attendance-industry": "考勤行业包",
-    "coating-industry": "涂料行业包",
-    "taiyangniao-pro": "太阳鸟 PRO",
-    "sz-qsm-pro": "深圳国商茂 PRO",
-}
-
-
 def _enterprise_assignable_mod_ids() -> frozenset[str]:
-    return frozenset(ENTERPRISE_ASSIGNABLE_MODS.keys())
+    return enterprise_assignable_mod_ids()
 
 
 def _assert_enterprise_assignable_mod_id(mod_id: str) -> str:
-    mid = (mod_id or "").strip()
-    if not mid:
-        raise HTTPException(400, "mod_id 无效")
-    if mid not in _enterprise_assignable_mod_ids():
-        raise HTTPException(
-            400,
-            f"mod_id 不在可分配客户 Mod 列表内（允许: {', '.join(sorted(_enterprise_assignable_mod_ids()))}）",
-        )
-    return mid
+    try:
+        return assert_enterprise_assignable_mod_id(mod_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _user_mod_ids_map(user_ids: list[int]) -> dict[int, list[str]]:

@@ -1313,8 +1313,13 @@ class TestAuthRegisterAdditional:
                         "raw": {"user": {"email": "a@b.com"}},
                         "token": "tok",
                         "refresh_token": "rtok",
+                        "market_user_id": 61,
                     }
                 ),
+            ),
+            patch(
+                "app.fastapi_routes.market_account.ensure_market_enterprise_profile",
+                new=AsyncMock(return_value={"success": True}),
             ),
             patch(
                 "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",

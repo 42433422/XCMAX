@@ -95,7 +95,7 @@
             </div>
           </div>
           <div class="actions">
-            <button type="button" class="btn primary" :disabled="!canConfirmIndustry" @click="confirmIndustryAndNext">
+            <button type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
               下一步：看要补哪些侧栏基础线
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
@@ -315,6 +315,7 @@ import {
   markHostPackSkippedThisSession,
 } from '@/utils/hostPackOnboardingGate'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
+import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 
 const route = useRoute()
 const router = useRouter()
@@ -380,6 +381,12 @@ function industryPackageLabel(industryId) {
   if (chip?.productName) return chip.productName
   const preset = getIndustryPreset(id)
   return preset?.name ? `${preset.name}行业包` : ''
+}
+
+function industryPackageModId(industryId) {
+  const id = String(industryId || '').trim()
+  const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
+  return String(row?.mod_id || '').trim()
 }
 
 /** 行业 chip 第三行：去掉句末句号，避免行高不齐 */
@@ -677,9 +684,27 @@ async function confirmIndustryAndNext() {
       /* 离线仍允许继续 */
     }
   }
-  // 行业现在由后端 SSOT 决定（industryStore.switchIndustry 已删除）：
-  // 这里只确认用户选择的行业（pickedIndustryId），用于后续 host-pack 步骤
-  // 拉取对应行业的基础线与安装行业包；后端会在行业包装载后自动同步当前行业。
+  loading.value = true
+  try {
+    await patchWorkspacePrefs({
+      selected_industry_id: pickedIndustryId.value,
+      industry_mod_id: industryPackageModId(pickedIndustryId.value) || undefined,
+    })
+    clearDeliverableStatusCache()
+    try {
+      onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
+      if (onboardingCatalog.value?.open_industry_ids?.length) {
+        setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
+      }
+    } catch {
+      /* 绑定已完成，目录刷新失败不阻断下一步 */
+    }
+  } catch (err) {
+    await appAlert(err instanceof Error ? err.message : '行业绑定失败，请稍后重试')
+    return
+  } finally {
+    loading.value = false
+  }
   goStep('host-pack')
 }
 

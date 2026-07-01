@@ -57,6 +57,7 @@ def _user_public_dict(user) -> dict[str, Any]:
         "role": str(getattr(user, "role", "") or ""),
         "is_active": bool(getattr(user, "is_active", True)),
         "avatar_url": public_avatar_url(getattr(user, "wx_avatar_url", None)),
+        "tenant_id": getattr(user, "tenant_id", None),
     }
 
 
@@ -86,7 +87,18 @@ def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
         role=role,
         is_active=True,
         wx_avatar_url=None,
+        tenant_id=payload.get("tenant_id"),
     )
+
+
+def _bind_mobile_user_tenant_to_request(request: Request, user: Any | None) -> None:
+    if user is None:
+        return
+    try:
+        tid = getattr(user, "tenant_id", None)
+        request.state.tenant_id = int(tid) if tid is not None else None
+    except (TypeError, ValueError, AttributeError):
+        request.state.tenant_id = None
 
 
 async def get_mobile_user(
@@ -125,18 +137,24 @@ async def get_mobile_user(
                         user.email,
                         user.role,
                         user.is_active,
+                        getattr(user, "tenant_id", None),
                         getattr(user, "wx_avatar_url", None),
                     )
                     if hasattr(db, "expunge"):
                         db.expunge(user)
+                    _bind_mobile_user_tenant_to_request(request, user)
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
-        return _mobile_user_from_jwt_payload(jwt_payload or {})
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        _bind_mobile_user_tenant_to_request(request, fallback_user)
+        return fallback_user
 
     from app.infrastructure.auth.dependencies import resolve_session_user
 
-    return resolve_session_user(request)
+    user = resolve_session_user(request)
+    _bind_mobile_user_tenant_to_request(request, user)
+    return user
 
 
 def _parse_web_auth_login_response(web_resp: Any) -> tuple[dict[str, Any], int]:

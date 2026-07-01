@@ -21,7 +21,7 @@ bash FHD/scripts/dev/e2e-full.sh
 
 # 或手动
 cd FHD/frontend
-E2E_FULL_STACK=1 E2E_USER=admin E2E_PASSWORD=admin123 npm run test:e2e:p0
+E2E_FULL_STACK=1 E2E_USER=xcagi-enterprise-demo E2E_PASSWORD='Demo@2026' E2E_ACCOUNT_KIND=enterprise npm run test:e2e:p0
 ```
 
 ## node_modules 归档指针

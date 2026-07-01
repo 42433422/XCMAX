@@ -62,6 +62,10 @@ class TestCustomerModel:
         assert _has_column(Customer, "created_at")
         assert _has_column(Customer, "updated_at")
 
+    def test_inherits_tenant_scoped(self):
+        """Customer 应继承 TenantScopedMixin（tenant_id 列）。"""
+        assert _has_column(Customer, "tenant_id")
+
     def test_customer_name_not_nullable(self):
         """customer_name 是必填字段。"""
         assert _column_nullable(Customer, "customer_name") is False

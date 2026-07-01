@@ -56,28 +56,10 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] Shipment 领域注册失败: %s", e)
 
-    # 4. Order 领域
-    try:
-        # 如果存在 order 处理器，则注册
-        from app.neuro_bus.domains.order_domain_handlers import register_order_domain_handlers
-
-        register_order_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Order 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Order 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Order 领域注册失败: %s", e)
-
-    # 5. Customer 领域
-    try:
-        from app.neuro_bus.domains.customer_domain_handlers import register_customer_domain_handlers
-
-        register_customer_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Customer 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Customer 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Customer 领域注册失败: %s", e)
+    # 4/5. Order、Customer 领域的 *_domain_handlers 需要 NeuroDomain 实例；
+    # register_all_neuro_domains() 已经通过 DomainRegistry 完成注册，这里只注册 bus-style handlers。
+    logger.info("[NeuroDomainRegistration] Order 领域处理器由 DomainRegistry 管理，跳过重复注册")
+    logger.info("[NeuroDomainRegistration] Customer 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 6. Inventory 领域
     try:
@@ -92,16 +74,8 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] Inventory 领域注册失败: %s", e)
 
-    # 7. Payment 领域
-    try:
-        from app.neuro_bus.domains.payment_domain_handlers import register_payment_domain_handlers
-
-        register_payment_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] Payment 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] Payment 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] Payment 领域注册失败: %s", e)
+    # 7. Payment 领域同样由 DomainRegistry 管理。
+    logger.info("[NeuroDomainRegistration] Payment 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 8. OCR 领域
     try:
@@ -114,16 +88,8 @@ async def register_domain_handlers_only(bus: NeuroBus | None = None) -> None:
     except RECOVERABLE_ERRORS as e:
         logger.error("[NeuroDomainRegistration] OCR 领域注册失败: %s", e)
 
-    # 9. WeChat 领域
-    try:
-        from app.neuro_bus.domains.wechat_domain_handlers import register_wechat_domain_handlers
-
-        register_wechat_domain_handlers(bus)
-        logger.info("[NeuroDomainRegistration] WeChat 领域处理器注册完成")
-    except ImportError:
-        logger.info("[NeuroDomainRegistration] WeChat 领域处理器不存在，跳过")
-    except RECOVERABLE_ERRORS as e:
-        logger.error("[NeuroDomainRegistration] WeChat 领域注册失败: %s", e)
+    # 9. WeChat 领域同样由 DomainRegistry 管理。
+    logger.info("[NeuroDomainRegistration] WeChat 领域处理器由 DomainRegistry 管理，跳过重复注册")
 
     # 10. Print 领域
     try:
