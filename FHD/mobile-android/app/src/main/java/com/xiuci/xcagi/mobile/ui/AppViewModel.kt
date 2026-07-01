@@ -260,6 +260,7 @@ constructor(
     private suspend fun refreshConversationRuntime() {
         val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
         rebuildConversationItems(ProductSkuConfig.showsEnterpriseNav || adminMode)
+        refreshImConversations()
     }
 
     private val _navReady = MutableStateFlow(false)
@@ -273,6 +274,20 @@ constructor(
 
     private val _chatMessages = MutableStateFlow<List<ChatMsg>>(emptyList())
     val chatMessages: StateFlow<List<ChatMsg>> = _chatMessages.asStateFlow()
+
+    /** 当前员工聊天页绑定的 IM 会话 id；非空时 sendChat 走 IM（员工双向聊天），否则走 LLM 直答。 */
+    private val _activeImConversationId = MutableStateFlow<Int?>(null)
+
+    /** 若该员工会话已有 IM 会话（员工主动发过消息/待办问答），返回其会话数据。 */
+    private fun imConvForEmployeeConversation(conversationId: String?): Map<String, Any?>? {
+        val cid = conversationId?.trim() ?: return null
+        if (!cid.startsWith("employee:")) return null
+        val employeeId = cid.substringAfterLast(":").trim()
+        if (employeeId.isBlank()) return null
+        return _imConversations.value.firstOrNull {
+            (it["employee_id"] as? String)?.trim() == employeeId
+        }
+    }
 
     // 长按「引用」选中的被回复消息；非空时输入框上方显示引用预览，发送后清空。
     private val _replyTo = MutableStateFlow<ChatMsg?>(null)
@@ -439,6 +454,34 @@ constructor(
     private val _conversationsRefreshing = MutableStateFlow(false)
     val conversationsRefreshing: StateFlow<Boolean> = _conversationsRefreshing.asStateFlow()
 
+    // 员工经 IM 通道主动发来的 1:1 会话（员工长出嘴：主动汇报/问需求）。网络拉取后写入此 Flow，
+    // 与微信风格的 DB 派生列表合并显示。点击走 ImMessengerScreen 渲染。
+    private val _imConversations = MutableStateFlow<List<Map<String, Any?>>>(emptyList())
+    /** 点击 IM 会话项时暂存目标会话 id，供 ImMessengerScreen 直接打开。 */
+    private val _imInitialConversationId = MutableStateFlow<Int?>(null)
+    val imInitialConversationId: StateFlow<Int?> = _imInitialConversationId.asStateFlow()
+
+    fun setImInitialConversationId(id: Int?) { _imInitialConversationId.value = id }
+
+    /** 按 IM 会话 id 取对端（员工）显示名，供聊天页标题/发件人展示；取不到回退「会话 #id」。 */
+    fun imConversationTitle(id: Int): String =
+            _imConversations.value
+                    .firstOrNull { (it["id"] as? Number)?.toInt() == id }
+                    ?.let { (it["title"] as? String)?.trim() }
+                    ?.takeIf { it.isNotBlank() }
+                    ?: "会话 #$id"
+
+    /** 拉取员工 IM 会话并刷新消息列表（best-effort，失败保持原状）。 */
+    fun refreshImConversations() =
+            viewModelScope.launch {
+                // 仅在拿到非空结果时更新：repo 失败/网络抖动返回空表，不应清空已绑定的员工 IM 会话，
+                // 否则会出现「员工聊天页 IM 内容闪一下又变回普通空页」。
+                val convs = repo.imConversations()
+                if (convs.isNotEmpty()) {
+                    _imConversations.value = convs
+                }
+            }
+
     // 微信风格：conversations 从本地 DB Flow 派生，网络请求只写入 DB，不直接操作 UI 状态
     val conversations: StateFlow<List<ConversationItem>> =
             combine(
@@ -446,7 +489,8 @@ constructor(
                     sessionStore.accountKindFlow,
                     repo.observeConversationListTimestamps(),
                     repo.observeConversationListPreviews(),
-            ) { mods, kind, timestamps, previews ->
+                    _imConversations,
+            ) { mods, kind, timestamps, previews, imConvs ->
                 val adminMode = isAdminAccountKind(kind)
                 val isEnterprise = ProductSkuConfig.showsEnterpriseNav || adminMode
                 // 超级员工(Codex/Claude/Cursor/Trae)仅对管理端账号开放：
@@ -463,11 +507,50 @@ constructor(
                 )
                 val badgeText = if (adminMode) "管理端" else "已安装"
                 val badgeColor = if (adminMode) BadgeAdminColor else BadgeInstalledColor
-                val employees = employeeConversationItems(mods, badgeText, badgeColor, timestamps, previews)
+                // 员工 IM 会话按 employee_id 索引：用于把员工聊天页直接打通到其 IM 会话（根治绑定）。
+                val imByEmployeeId = imConvs
+                        .filter { it["is_enterprise_dedicated_cs"] != true }
+                        .mapNotNull { c ->
+                            (c["employee_id"] as? String)?.trim()?.takeIf { it.isNotBlank() }?.let { it to c }
+                        }
+                        .toMap()
+                val rosterEmployeeIds = mods.flatMap { it.workflow_employees }.map { it.id.trim() }.toSet()
+                val employees = employeeConversationItems(
+                        mods, badgeText, badgeColor, timestamps, previews, imByEmployeeId,
+                )
+                // 独立 IM 会话：未对应任何在册员工的（自定义 employee_id），仍作为单独条目显示，不丢消息。
+                val standaloneIm = imConversationItems(
+                        imConvs.filter {
+                            val eid = (it["employee_id"] as? String)?.trim().orEmpty()
+                            it["is_enterprise_dedicated_cs"] != true &&
+                                    (eid.isBlank() || eid !in rosterEmployeeIds)
+                        }
+                )
                 // 微信风格：固定置顶项(小C/超级员工/客服)保持声明顺序在最上，
-                // 员工会话按最新消息时间倒序冒泡——谁刚发消息谁排前面。
-                fixedItems + employees.sortedByDescending { it.timestamp }
+                // 员工/独立 IM 会话按最新消息时间倒序冒泡——谁刚发消息谁排前面。
+                fixedItems + (standaloneIm + employees).sortedByDescending { it.timestamp }
             }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 把员工 IM 会话映射成消息列表项；id 以 ``im:{convId}`` 前缀，点击时路由到 IM 渲染屏。 */
+    private fun imConversationItems(imConvs: List<Map<String, Any?>>): List<ConversationItem> =
+            imConvs.mapNotNull { c ->
+                val cid = (c["id"] as? Number)?.toInt() ?: return@mapNotNull null
+                // dedicated-cs 已由固定项「客户客服」单独展示，这里跳过，避免重复。
+                if (c["is_enterprise_dedicated_cs"] == true) return@mapNotNull null
+                val title = (c["title"] as? String)?.trim().orEmpty().ifBlank { "会话 #$cid" }
+                val preview = (c["last_message_preview"] as? String).orEmpty()
+                val unread = (c["unread_count"] as? Number)?.toInt() ?: 0
+                val ts = ImRepository.parseTimestampMs(c["last_message_at"]) ?: 0L
+                ConversationItem(
+                        id = "im:$cid",
+                        type = ConversationType.AI_TASK,
+                        title = title,
+                        subtitle = preview,
+                        timestamp = ts,
+                        unreadCount = unread,
+                        isOnline = true,
+                )
+            }
 
     private val _chatAction = MutableStateFlow<ChatAction?>(null)
     val chatAction: StateFlow<ChatAction?> = _chatAction.asStateFlow()
@@ -1173,6 +1256,9 @@ constructor(
      * 静默刷新（force=false）完全无感知，不触发 UI 状态变化。
      */
     fun loadConversations(isEnterprise: Boolean, force: Boolean = false) {
+        // 员工 IM 会话独立刷新：不受下面 mod 缓存 TTL / 账号类型早退影响，保证消息列表一显示就拉到
+        // 员工主动发来的会话（如「问需求」短信）。
+        refreshImConversations()
         conversationsLoadJob?.cancel()
         conversationsLoadJob = viewModelScope.launch {
             val adminMode = isAdminAccountKind(sessionStore.accountKindFlow.first())
@@ -1248,6 +1334,7 @@ constructor(
             badgeColor: androidx.compose.ui.graphics.Color,
             timestamps: Map<String, Long>,
             previews: Map<String, String>,
+            imByEmployeeId: Map<String, Map<String, Any?>> = emptyMap(),
     ): List<ConversationItem> =
             mods.flatMap { mod ->
                 mod.workflow_employees.mapNotNull { employee ->
@@ -1263,9 +1350,18 @@ constructor(
                         val conversationId = "employee:${mod.id}:$employeeId"
                         // 微信风格：优先用 IM 直连会话(employee_im_summary)的最新消息预览/时间/未读，
                         // 让员工会话按活跃时间冒泡顶置 + 显示未读红点，回退到本地缓存/介绍词。
+                        // 员工已有独立 IM 会话时（主动发过消息/待办问答），用客户端拉到的
+                        // IM 会话(imByEmployeeId)预览/未读兜底（根治绑定，两套来源取并集）。
+                        val imConv = imByEmployeeId[employeeId]
+                        val imPreview = (imConv?.get("last_message_preview") as? String).orEmpty()
+                        val imUnread = (imConv?.get("unread_count") as? Number)?.toInt() ?: 0
+                        val imConvTs = ImRepository.parseTimestampMs(imConv?.get("last_message_at")) ?: 0L
                         val imLastAtMs = ImRepository.parseTimestampMs(employee.im_last_message_at) ?: 0L
-                        val timestamp = maxOf(imLastAtMs, cachedConversationTimestamp(conversationId, timestamps))
+                        val timestamp = maxOf(
+                            imLastAtMs, imConvTs, cachedConversationTimestamp(conversationId, timestamps),
+                        )
                         val subtitle = employee.im_last_message.trim()
+                            .ifBlank { imPreview }
                             .ifBlank { cachedConversationPreview(conversationId, previews) }
                             .ifBlank { employee.contactSubtitle(source) }
                         ConversationItem(
@@ -1275,7 +1371,7 @@ constructor(
                                 subtitle = subtitle,
                                 timestamp = timestamp,
                                 avatarUrl = avatarUrl,
-                                unreadCount = employee.im_unread_count,
+                                unreadCount = maxOf(employee.im_unread_count, imUnread),
                         )
                     }
                 }
@@ -1805,6 +1901,7 @@ constructor(
                 _streaming.value = false
                 _chatAction.value = null
                 _chatMessages.value = emptyList()
+                _activeImConversationId.value = null
                 if (conversationId == PinnedIds.CODEX || conversationId == PinnedIds.CURSOR || conversationId == PinnedIds.CLAUDE) {
                     // relay/直答的回复存在本地缓存，云端历史接口里没有(且登录过期会 401)，
                     // 故 super-employee 会话以本地缓存为准；本地为空才取云端历史兜底。
@@ -1823,6 +1920,33 @@ constructor(
                     }
                     // 恢复上次未完成的中继任务：刷新/重进后续轮询，避免"任务状态丢了"。
                     resumeRelayChat(conversationId)
+                    return@launch
+                }
+                // 员工双向 IM：该员工若有 IM 会话（主动发过消息/待办问答），在**原聊天页**里加载并显示
+                // 这些消息（员工→assistant 左气泡，我→user 右气泡），后续 sendChat 也走该 IM 会话。
+                var imConv = imConvForEmployeeConversation(conversationId)
+                if (imConv == null && conversationId?.startsWith("employee:") == true) {
+                    // IM 会话列表可能尚未加载完：先同步刷新再判定，避免「先显示普通空页、再跳 IM」的闪烁。
+                    refreshImConversations().join()
+                    imConv = imConvForEmployeeConversation(conversationId)
+                }
+                val imConvId = (imConv?.get("id") as? Number)?.toInt()
+                if (imConvId != null) {
+                    _activeImConversationId.value = imConvId
+                    repo.imListMessages(imConvId).onSuccess { body ->
+                        @Suppress("UNCHECKED_CAST")
+                        val rawMsgs = (body["messages"] as? List<Map<String, Any?>>).orEmpty()
+                        _chatMessages.value = rawMsgs.map { m ->
+                            ChatMsg(
+                                role = if (m["is_self"] == true) "user" else "assistant",
+                                text = (m["body"] as? String).orEmpty(),
+                                ts = ImRepository.parseTimestampMs(m["created_at"]) ?: 0L,
+                            )
+                        }
+                    }
+                    // 进会话即标记已读→清未读角标，并刷新会话列表使角标即时更新。
+                    repo.imMarkRead(imConvId)
+                    refreshImConversations()
                     return@launch
                 }
                 val sessionId = conversationId ?: "default"
@@ -1952,6 +2076,12 @@ constructor(
     }
 
     fun sendChat(text: String, conversationId: String? = null) {
+        // 员工双向 IM 会话：在原聊天页里直接走 IM 发送（你的回复会回流成员工待办问题的答案，解阻塞员工），
+        // 不再走 LLM 直答、也不放占位「思考中」气泡——员工的回复来自其工作循环，会经 IM 实时同步回来。
+        _activeImConversationId.value?.let { imId ->
+            sendImChat(imId, text)
+            return
+        }
         val quoted = _replyTo.value
         _replyTo.value = null
         val now = System.currentTimeMillis()
@@ -1991,6 +2121,22 @@ constructor(
         _chatMessages.value = _chatMessages.value + userMsg +
                 ChatMsg("assistant", "", now, ChatStatus.SENDING)
         runChatStream(outgoing, text, conversationId)
+    }
+
+    private fun sendImChat(convId: Int, text: String) {
+        val quoted = _replyTo.value
+        _replyTo.value = null
+        val now = System.currentTimeMillis()
+        val mine = ChatMsg("user", text, now, ChatStatus.SENT, quote = quoted?.text?.take(120))
+        _chatMessages.value = _chatMessages.value + mine
+        val body = if (quoted != null) "引用「${quoted.text.take(200)}」\n\n$text" else text
+        viewModelScope.launch {
+            repo.imSendMessage(convId, body).onFailure { e ->
+                _chatMessages.value = _chatMessages.value.dropLast(1) +
+                        mine.copy(status = ChatStatus.FAILED)
+                snack(e.message ?: "发送失败", true)
+            }
+        }
     }
 
     /** 重发最后一条消息（失败气泡旁的「重发」）。 */

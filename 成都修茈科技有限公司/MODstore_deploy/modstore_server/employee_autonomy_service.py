@@ -312,6 +312,7 @@ def create_employee_suggestion(
         session.add(row)
         session.commit()
         sid = int(row.id)
+        boss_uid = _resolve_actor_user_id(session)
 
     payload_evt = {
         "suggestion_id": sid,
@@ -328,6 +329,19 @@ def create_employee_suggestion(
 
     if auto_dispatch and _suggestion_auto_dispatch_enabled():
         dispatch_suggestion(sid, approved_by_user_id=0, force_approve_if_needed=True)
+
+    # 员工主动发声：把新建议作为「该员工发来的 IM 消息」推给老板，出现在其聊天页（真正长出嘴，best-effort）。
+    try:
+        from modstore_server.notification_service import employee_message_to_boss
+
+        if boss_uid:
+            msg = f"💡 我有个建议：{(summary or '').strip()[:600]}"
+            d = (detail or "").strip()
+            if d:
+                msg += f"\n\n{d[:800]}"
+            employee_message_to_boss(boss_uid, src, msg)
+    except Exception as exc:  # noqa: BLE001 - 主动 IM 失败不影响建议主流程
+        logger.warning("employee suggestion IM DM failed: %s", exc)
 
     return {"ok": True, "suggestion_id": sid, "target_employee_ids": targets}
 

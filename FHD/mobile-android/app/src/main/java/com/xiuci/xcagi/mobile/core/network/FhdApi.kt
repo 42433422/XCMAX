@@ -345,16 +345,22 @@ interface FhdApi {
     @GET("api/finance/summary")
     suspend fun financeSummary(): Map<String, Any?>
 
-    @POST("api/im/conversations/direct")
+    @GET("api/mobile/v1/im/conversations")
+    suspend fun imListConversations(): Map<String, Any?>
+
+    @POST("api/mobile/v1/im/conversations/{id}/read")
+    suspend fun imMarkRead(@Path("id") conversationId: Int): Map<String, Any?>
+
+    @POST("api/mobile/v1/im/conversations/direct")
     suspend fun imCreateDirect(@Body body: ImDirectBody): Map<String, Any?>
 
-    @GET("api/im/conversations/{id}/messages")
+    @GET("api/mobile/v1/im/conversations/{id}/messages")
     suspend fun imListMessages(
         @Path("id") conversationId: Int,
         @Query("limit") limit: Int = 50,
     ): Map<String, Any?>
 
-    @POST("api/im/conversations/{id}/messages")
+    @POST("api/mobile/v1/im/conversations/{id}/messages")
     suspend fun imSendMessage(
         @Path("id") conversationId: Int,
         @Body body: ImSendBody,
