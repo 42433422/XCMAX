@@ -110,6 +110,10 @@ def im_client():
     app = FastAPI()
     app.include_router(im_routes.router)
     app.dependency_overrides[require_identified_user] = lambda: CurrentUser(1)
+    # list/send/mark_read 三端点已改依赖 get_current_user(手机 Bearer 兼容),一并 override
+    from app.infrastructure.auth.dependencies import get_current_user
+
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(1)
 
     mock_db = MagicMock()
     mock_svc = MagicMock()

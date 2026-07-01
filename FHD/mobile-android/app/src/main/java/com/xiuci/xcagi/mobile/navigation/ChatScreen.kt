@@ -34,7 +34,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -62,11 +62,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiuci.xcagi.mobile.ui.AppViewModel
@@ -190,6 +196,10 @@ fun ChatScreen(
     val listState = rememberLazyListState()
     var showToolPanel by remember { mutableStateOf(false) }
     var showVoiceSheet by remember { mutableStateOf(false) }
+    // 聊天记录搜索（顶栏放大镜进入；微信风格的"查找聊天记录"）
+    var showSearch by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var scrollTarget by remember { mutableStateOf<Int?>(null) }
     val context = LocalContext.current
 
     val recordPermissionLauncher =
@@ -255,7 +265,30 @@ fun ChatScreen(
     }
 
     LaunchedEffect(messages.size, streaming) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+        if (messages.isNotEmpty() && !showSearch) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    // 搜索命中：保留原始下标，便于点击后跳回消息列表对应位置
+    val searchResults =
+        remember(messages, searchQuery) {
+            val q = searchQuery.trim()
+            if (q.isBlank()) {
+                emptyList()
+            } else {
+                messages.mapIndexedNotNull { idx, m ->
+                    if (m.text.contains(q, ignoreCase = true)) ChatSearchHit(idx, m) else null
+                }.asReversed() // 最新命中在最上方
+            }
+        }
+
+    // 点击搜索结果后跳转到对应消息
+    LaunchedEffect(scrollTarget) {
+        scrollTarget?.let { idx ->
+            if (messages.isNotEmpty()) {
+                listState.animateScrollToItem(idx.coerceIn(0, messages.lastIndex))
+            }
+            scrollTarget = null
+        }
     }
 
     fun submitMessage() {
@@ -361,23 +394,42 @@ fun ChatScreen(
     Scaffold(
         containerColor = imChatBg(),
         topBar = {
-            ImTopBar(
-                title = resolvedTitle,
-                onBack = onBack,
-                onVideoCall = { vm.snack("视频通话功能即将上线") },
-                onMore = {
-                    val ref = employeeRef
-                    if (ref != null) {
-                        onOpenEmployeeProfile(ref.modId, ref.employeeId)
-                    } else if (onOpenProfile != null) {
-                        onOpenProfile.invoke()
-                    } else {
-                        showToolPanel = !showToolPanel
-                    }
-                },
-            )
+            if (showSearch) {
+                ImSearchBar(
+                    query = searchQuery,
+                    onQueryChange = { searchQuery = it },
+                    resultCount = searchResults.size,
+                    onClose = {
+                        showSearch = false
+                        searchQuery = ""
+                    },
+                )
+            } else {
+                ImTopBar(
+                    title = resolvedTitle,
+                    onBack = onBack,
+                    onSearch = {
+                        if (messages.isEmpty()) {
+                            vm.snack("还没有聊天记录")
+                        } else {
+                            showSearch = true
+                        }
+                    },
+                    onMore = {
+                        val ref = employeeRef
+                        if (ref != null) {
+                            onOpenEmployeeProfile(ref.modId, ref.employeeId)
+                        } else if (onOpenProfile != null) {
+                            onOpenProfile.invoke()
+                        } else {
+                            showToolPanel = !showToolPanel
+                        }
+                    },
+                )
+            }
         },
-        bottomBar = {
+        bottomBar = bottomBar@{
+            if (showSearch) return@bottomBar
             Column {
                 replyTo?.let { quoted ->
                     Surface(color = imBarBg(), modifier = Modifier.fillMaxWidth()) {
@@ -437,7 +489,22 @@ fun ChatScreen(
                 )
             }
         },
-    ) { padding ->
+    ) content@{ padding ->
+        if (showSearch) {
+            ImSearchResults(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                query = searchQuery.trim(),
+                results = searchResults,
+                onPick = { idx ->
+                    showSearch = false
+                    searchQuery = ""
+                    scrollTarget = idx
+                },
+            )
+            return@content
+        }
         Column(
             Modifier
                 .fillMaxSize()
@@ -580,7 +647,7 @@ private fun isUserOrFirstInGroup(messages: List<ChatMsg>, index: Int, role: Stri
 private fun ImTopBar(
     title: String,
     onBack: (() -> Unit)?,
-    onVideoCall: () -> Unit,
+    onSearch: () -> Unit,
     onMore: () -> Unit,
 ) {
     Surface(
@@ -618,14 +685,14 @@ private fun ImTopBar(
                     color = imTextPrimary(),
                     modifier = Modifier.weight(1f).padding(start = 4.dp),
                 )
-                // 视频通话
+                // 查找聊天记录
                 IconButton(
-                    onClick = onVideoCall,
+                    onClick = onSearch,
                     modifier = Modifier.size(44.dp),
                 ) {
                     Icon(
-                        Icons.Default.Videocam,
-                        contentDescription = "视频",
+                        Icons.Default.Search,
+                        contentDescription = "搜索聊天记录",
                         tint = imTextPrimary(),
                         modifier = Modifier.size(22.dp),
                     )
@@ -647,6 +714,168 @@ private fun ImTopBar(
             HorizontalDivider(thickness = 0.5.dp, color = imDivider())
         }
     }
+}
+
+// ══════════════════════════════════════════
+//  查找聊天记录（顶栏搜索态 + 命中结果列表）
+// ══════════════════════════════════════════
+/** 一条搜索命中：保留在原始消息列表中的下标，便于点击后跳回。 */
+private data class ChatSearchHit(val index: Int, val msg: ChatMsg)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ImSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    resultCount: Int,
+    onClose: () -> Unit,
+) {
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
+    Surface(color = imBarBg(), shadowElevation = 0.dp) {
+        Column {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(focusRequester),
+                    singleLine = true,
+                    placeholder = {
+                        Text("搜索聊天记录", style = MaterialTheme.typography.bodyMedium)
+                    },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { onQueryChange("") }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "清空",
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                        }
+                    },
+                )
+                Text(
+                    "取消",
+                    color = XcagiTheme.extra.brandBlue,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .clickable { onClose() }
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+            }
+            HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+        }
+    }
+}
+
+@Composable
+private fun ImSearchResults(
+    modifier: Modifier = Modifier,
+    query: String,
+    results: List<ChatSearchHit>,
+    onPick: (Int) -> Unit,
+) {
+    when {
+        query.isBlank() ->
+            Box(modifier, contentAlignment = Alignment.Center) {
+                Text(
+                    "输入关键词查找本会话的聊天记录",
+                    color = imTextSecondary(),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        results.isEmpty() ->
+            Box(modifier, contentAlignment = Alignment.Center) {
+                Text(
+                    "没有找到「$query」相关的消息",
+                    color = imTextSecondary(),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        else ->
+            Column(modifier) {
+                Text(
+                    "${results.size} 条相关消息",
+                    color = imTextSecondary(),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+                LazyColumn(Modifier.fillMaxSize()) {
+                    itemsIndexed(results) { _, hit ->
+                        ImSearchResultRow(query, hit) { onPick(hit.index) }
+                        HorizontalDivider(thickness = 0.5.dp, color = imDivider())
+                    }
+                }
+            }
+    }
+}
+
+@Composable
+private fun ImSearchResultRow(query: String, hit: ChatSearchHit, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (hit.msg.role == "user") "我" else "对方",
+                style = MaterialTheme.typography.labelMedium,
+                color = imTextSecondary(),
+            )
+            Spacer(Modifier.weight(1f))
+            val t = formatHitTime(hit.msg.ts)
+            if (t.isNotEmpty()) {
+                Text(t, style = MaterialTheme.typography.labelSmall, color = imTextSecondary())
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            highlightSnippet(hit.msg.text, query, XcagiTheme.extra.brandBlue),
+            style = MaterialTheme.typography.bodyMedium,
+            color = imTextPrimary(),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** 命中片段：以匹配处为中心截一段窗口，并高亮匹配的关键词。 */
+private fun highlightSnippet(text: String, query: String, highlight: Color): AnnotatedString {
+    val idx = if (query.isEmpty()) -1 else text.indexOf(query, ignoreCase = true)
+    if (idx < 0) return AnnotatedString(text)
+    val start = (idx - 12).coerceAtLeast(0)
+    return buildAnnotatedString {
+        if (start > 0) append("…")
+        append(text.substring(start, idx))
+        withStyle(SpanStyle(color = highlight, fontWeight = FontWeight.SemiBold)) {
+            append(text.substring(idx, idx + query.length))
+        }
+        append(text.substring(idx + query.length))
+    }
+}
+
+private fun formatHitTime(ts: Long): String {
+    if (ts <= 0L) return ""
+    return java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+        .format(java.util.Date(ts))
 }
 
 // ══════════════════════════════════════════
