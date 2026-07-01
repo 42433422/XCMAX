@@ -5,7 +5,7 @@
   "marketing_version": "10.0.0",
   "download_version": "10.0.0",
   "android_version": "10.0.0",
-  "win_installer_mb": 654,
+  "win_installer_mb": 212,
   "cos_base_url": "https://xiu-ci.com",
   "_cos_base_note": "下载主机：xiu-ci.com（nginx 别名 /xcagi-v{version}/ → /var/www/update/releases/stable/，本机直供）；dl.xiu-ci.com(COS) 当前为空，待 CI 上传后可切回。",
   "release_root_template": "{cos_base_url}/xcagi-v{download_version}",
@@ -32,11 +32,11 @@
     "mac": "latest-mac.yml"
   },
   "last_push": {
-    "at": null,
-    "release_train": null,
-    "release_kind": null,
-    "git_sha": null,
+    "at": "2026-07-01T18:18:20Z",
+    "release_train": "stable",
+    "release_kind": "desktop-enterprise-update-server",
+    "git_sha": "ac61d7cf554ae950c1d2f7068ae0fc0d69f99f02",
     "cos_uploaded": false,
-    "by": null
+    "by": "github-actions"
   }
 }
