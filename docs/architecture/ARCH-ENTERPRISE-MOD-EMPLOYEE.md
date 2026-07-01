@@ -34,7 +34,7 @@ flowchart TB
         FASTAPI_RT["fastapi_routes/<br/>HTTP 路由"]
     end
 
-    subgraph MODS["扩展层 mods/  (SSOT)"]
+    subgraph MODS["扩展层 mods/  (唯一编辑源)"]
         MOD_HOUSE1["Mod 房子 · 客户行业包<br/>taiyangniao-pro / sz-qsm-pro"]
         MOD_HOUSE2["Mod 房子 · 宿主桥接包<br/>xcagi-*-bridge / 9 个"]
         MOD_HOUSE3["Mod 房子 · 核心工作流<br/>xcagi-core-workflow-employees"]
