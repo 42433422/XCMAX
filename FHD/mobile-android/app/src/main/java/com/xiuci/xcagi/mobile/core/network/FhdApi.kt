@@ -218,6 +218,8 @@ interface FhdApi {
     suspend fun mobileBridgeRequests(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("status") status: String? = null,
+        @Query("request_type") requestType: String? = null,
     ): MobileEnvelope<Map<String, Any?>>
 
     @PUT(ApiEndpoints.SERVICE_BRIDGE_REQUESTS_RESPOND)
@@ -230,6 +232,8 @@ interface FhdApi {
     suspend fun bridgeRequests(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("status") status: String? = null,
+        @Query("request_type") requestType: String? = null,
     ): Map<String, Any?>
 
     @PUT("api/service-bridge/requests/{id}/respond")

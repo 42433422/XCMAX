@@ -1,0 +1,28 @@
+name: xcagi_flutter_poc
+description: Android-first Flutter POC for XCAGI mobile core flows.
+publish_to: "none"
+version: 10.0.0+10
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_mlkit_barcode_scanning: ^0.14.2
+  image_picker: ^1.2.2
+  mobile_scanner: ^7.2.0
+  speech_to_text: ^7.4.0
+  url_launcher: ^6.3.2
+  webview_flutter: ^4.14.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/avatars/
+    - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png

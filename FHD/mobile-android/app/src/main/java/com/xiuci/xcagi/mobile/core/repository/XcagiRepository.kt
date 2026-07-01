@@ -2433,16 +2433,22 @@ class XcagiRepository @Inject constructor(
             )
         }
 
-    private suspend fun bridgeRequestsFromMobile(): Result<List<ListItem>> {
-        val res = fhd().mobileBridgeRequests()
+    private suspend fun bridgeRequestsFromMobile(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> {
+        val res = fhd().mobileBridgeRequests(status = status, requestType = requestType)
         if (!res.success) {
             return Result.failure(Exception(res.message.ifBlank { "移动端服务桥接请求列表加载失败" }))
         }
         return Result.success(mapServiceBridgeRequestRows(res.data))
     }
 
-    private suspend fun bridgeRequestsFromLegacy(): Result<List<ListItem>> {
-        val res = fhd().bridgeRequests()
+    private suspend fun bridgeRequestsFromLegacy(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> {
+        val res = fhd().bridgeRequests(status = status, requestType = requestType)
         return Result.success(mapServiceBridgeRequestRows(res["data"]))
     }
 
@@ -2496,13 +2502,16 @@ class XcagiRepository @Inject constructor(
         val cached = cachedShipmentItems()
         return if (cached.isNotEmpty()) Result.success(cached) else remote
     }
-    suspend fun bridgeRequests(): Result<List<ListItem>> = try {
+    suspend fun bridgeRequests(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> = try {
         syncRouterFromStore()
-        bridgeRequestsFromMobile()
+        bridgeRequestsFromMobile(status = status, requestType = requestType)
     } catch (e: Exception) {
         if (e is HttpException && e.code() == 404) {
             try {
-                bridgeRequestsFromLegacy()
+                bridgeRequestsFromLegacy(status = status, requestType = requestType)
             } catch (legacyError: Exception) {
                 Result.failure(legacyError)
             }
@@ -2511,14 +2520,18 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun bridgeRespond(id: Int, text: String): Result<Unit> = try {
+    suspend fun bridgeRespond(
+        id: Int,
+        text: String,
+        respondedBy: String = "android",
+    ): Result<Unit> = try {
         syncRouterFromStore()
         try {
-            fhd().mobileBridgeRespond(id, BridgeRespondBody(text, "android"))
+            fhd().mobileBridgeRespond(id, BridgeRespondBody(text, respondedBy))
             Result.success(Unit)
         } catch (e: Exception) {
             if (e is HttpException && e.code() == 404) {
-                fhd().bridgeRespond(id, BridgeRespondBody(text, "android"))
+                fhd().bridgeRespond(id, BridgeRespondBody(text, respondedBy))
                 Result.success(Unit)
             } else {
                 Result.failure(e)

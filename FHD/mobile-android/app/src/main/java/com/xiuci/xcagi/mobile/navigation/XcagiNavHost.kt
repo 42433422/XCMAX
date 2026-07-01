@@ -116,6 +116,7 @@ import java.util.concurrent.TimeUnit
 import com.xiuci.xcagi.mobile.feature.about.AboutScreen
 import com.xiuci.xcagi.mobile.feature.auth.RegisterScreen
 import com.xiuci.xcagi.mobile.feature.bridge.BridgeScreen
+import com.xiuci.xcagi.mobile.feature.bridge.CUSTOMER_SERVICE_REQUEST_TYPE
 import com.xiuci.xcagi.mobile.feature.finance.LongTailScreen
 import com.xiuci.xcagi.mobile.feature.list.ListScreen
 import com.xiuci.xcagi.mobile.feature.market.MarketListScreen
@@ -525,6 +526,21 @@ fun XcagiNavHost(
                         popExitTransition = { slideOutHorizontally(tween(300)) { it } },
                 ) { backStackEntry ->
                     val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                    if (conversationId.substringAfterLast(":") == "user-customer-service-officer") {
+                        BridgeScreen(
+                                vm,
+                                title = "客户客服",
+                                sectionTitle = "客户消息",
+                                emptyTitle = "暂无客户消息",
+                                emptySubtitle = "企业客户通过专属客服发来的消息会同步到这里",
+                                replyTitle = "回复客户",
+                                replyPlaceholder = "输入给客户的回复",
+                                requestType = CUSTOMER_SERVICE_REQUEST_TYPE,
+                                respondedBy = "mobile-admin-customer-service",
+                                onBack = { nav.popBackStack() },
+                        )
+                        return@composable
+                    }
                     val pinnedPartnerKind = when (conversationId) {
                         PinnedIds.CODEX -> FixedPartnerKinds.CODEX
                         PinnedIds.CURSOR -> FixedPartnerKinds.CURSOR

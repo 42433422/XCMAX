@@ -1294,7 +1294,7 @@ constructor(
                 )
         }
 
-        // 3. 专属客服（仅企业客户账号；管理端账号不显示客服）
+        // 3. 专属客服（企业客户账号显示；管理端客户客服走 duty AI 员工）
         if (showCustomerService) {
             items.add(
                 ConversationItem(
@@ -1999,9 +1999,9 @@ constructor(
 
     fun loadShipments() = loadEnterpriseList { repo.shipments() }
 
-    fun loadBridge() =
+    fun loadBridge(requestType: String? = null) =
             viewModelScope.launch {
-                repo.bridgeRequests().onSuccess { _items.value = it }.onFailure {
+                repo.bridgeRequests(requestType = requestType).onSuccess { _items.value = it }.onFailure {
                     snack(it.message ?: "加载失败", true)
                 }
             }
@@ -2302,9 +2302,14 @@ constructor(
         return if (t.isBlank()) "" else "Bearer $t"
     }
 
-    fun bridgeRespond(id: Int, text: String, onDone: () -> Unit) =
+    fun bridgeRespond(
+            id: Int,
+            text: String,
+            respondedBy: String = "android",
+            onDone: () -> Unit,
+    ) =
             viewModelScope.launch {
-                repo.bridgeRespond(id, text)
+                repo.bridgeRespond(id, text, respondedBy = respondedBy)
                         .onSuccess {
                             snack("回复发送成功")
                             onDone()
