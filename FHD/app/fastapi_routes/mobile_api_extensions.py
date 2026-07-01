@@ -294,7 +294,7 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     except RECOVERABLE_ERRORS as exc:
         logger.warning("desktop relay registration skipped: %s", exc)
         return None
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - 配对端点不因中继注册意外失败而 5xx
         logger.warning("desktop relay registration skipped after unexpected failure: %s", exc)
         return None
     if not relay:
