@@ -652,6 +652,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1180,
     minHeight: 760,
     title: APP_NAME,
+    autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -669,6 +670,10 @@ async function createWindow(): Promise<void> {
   winOpts.show = false
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  if (process.platform !== 'darwin') {
+    mainWindow.setAutoHideMenuBar(true)
+    mainWindow.setMenuBarVisibility(false)
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -793,6 +798,8 @@ function createTray(): void {
     Menu.buildFromTemplate([
       { label: '显示 XCAGI', click: () => mainWindow?.show() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
+      { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
+      { label: '检查更新', click: () => void checkForUpdates() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }
     ])
