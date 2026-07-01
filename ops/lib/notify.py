@@ -40,6 +40,16 @@ DEFAULT_MODSTORE_ENV = "/root/XCMAX/成都修茈科技有限公司/MODstore_depl
 LEVELS = ("crit", "warn", "ok", "info")
 
 
+def _tls12_context():
+    """TLS 客户端上下文，强制最低 TLS1.2（老 python 退回禁用旧协议位）。"""
+    ctx = ssl.create_default_context()
+    try:
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    except AttributeError:  # py3.6
+        ctx.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+    return ctx
+
+
 def _read_env_file(path):
     """解析 KEY=VALUE 风格 env 文件（容忍 export 前缀 / 引号 / 注释）。"""
     data = {}
@@ -59,8 +69,8 @@ def _read_env_file(path):
     return data
 
 
-def smtp_config():
-    """SMTP 配置：OPS_SMTP_* 优先，缺项回落 MODstore .env 的 MODSTORE_SMTP_*。"""
+def _env_fallback():
+    """合并 env 回落源（MODstore .env / fhd-full.env）为一个 dict。"""
     fallback = {}
     for candidate in (
         os.environ.get("OPS_MODSTORE_ENV") or DEFAULT_MODSTORE_ENV,
@@ -70,24 +80,34 @@ def smtp_config():
             parsed = _read_env_file(candidate)
             for key in parsed:
                 fallback.setdefault(key, parsed[key])
+    return fallback
 
-    def pick(ops_key, mod_key, default=""):
-        return (
-            os.environ.get(ops_key)
-            or fallback.get(ops_key)
-            or fallback.get(mod_key)
-            or default
-        )
 
-    host = pick("OPS_SMTP_HOST", "MODSTORE_SMTP_HOST", "smtp.qq.com")
-    port_raw = pick("OPS_SMTP_PORT", "MODSTORE_SMTP_PORT", "465")
+def _pick(fallback, ops_key, mod_key, default=""):
+    return (
+        os.environ.get(ops_key)
+        or fallback.get(ops_key)
+        or fallback.get(mod_key)
+        or default
+    )
+
+
+def _smtp_password():
+    """SMTP 密码只经此函数按需取用，绝不进入任何会被打印/落盘的结构。"""
+    return _pick(_env_fallback(), "OPS_SMTP_PASSWORD", "MODSTORE_SMTP_PASSWORD")
+
+
+def smtp_config():
+    """SMTP 非敏感配置：OPS_SMTP_* 优先，缺项回落 MODSTORE_SMTP_*。不含密码。"""
+    fallback = _env_fallback()
+    host = _pick(fallback, "OPS_SMTP_HOST", "MODSTORE_SMTP_HOST", "smtp.qq.com")
+    port_raw = _pick(fallback, "OPS_SMTP_PORT", "MODSTORE_SMTP_PORT", "465")
     try:
         port = int(port_raw)
     except ValueError:
         port = 465
-    user = pick("OPS_SMTP_USER", "MODSTORE_SMTP_USER")
-    password = pick("OPS_SMTP_PASSWORD", "MODSTORE_SMTP_PASSWORD")
-    sender = pick("OPS_SMTP_SENDER", "MODSTORE_SENDER_EMAIL", user)
+    user = _pick(fallback, "OPS_SMTP_USER", "MODSTORE_SMTP_USER")
+    sender = _pick(fallback, "OPS_SMTP_SENDER", "MODSTORE_SENDER_EMAIL", user)
     to_addr = os.environ.get("OPS_ALERT_EMAIL_TO") or fallback.get(
         "OPS_ALERT_EMAIL_TO", DEFAULT_ALERT_TO
     )
@@ -95,10 +115,9 @@ def smtp_config():
         "host": host,
         "port": port,
         "user": user,
-        "password": password,
         "sender": sender or user,
         "to": to_addr,
-        "configured": bool(user and password),
+        "configured": bool(user and _smtp_password()),
     }
 
 
@@ -142,10 +161,11 @@ def send_smtp(level, title, body):
     msg["From"] = formataddr((str(Header("XCMAX 运维哨兵", "utf-8")), cfg["sender"]))
     msg["To"] = cfg["to"]
     try:
-        ctx = ssl.create_default_context()
-        server = smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=20, context=ctx)
+        server = smtplib.SMTP_SSL(
+            cfg["host"], cfg["port"], timeout=20, context=_tls12_context()
+        )
         try:
-            server.login(cfg["user"], cfg["password"])
+            server.login(cfg["user"], _smtp_password())
             server.sendmail(cfg["sender"], [cfg["to"]], msg.as_string())
         finally:
             server.quit()

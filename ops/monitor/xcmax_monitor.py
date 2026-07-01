@@ -369,6 +369,10 @@ def check_tls_expiry():
         return []
     try:
         ctx = ssl.create_default_context()
+        try:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        except AttributeError:  # py3.6
+            ctx.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
         with socket.create_connection((TLS_DOMAIN, 443), timeout=10) as sock:
             with ctx.wrap_socket(sock, server_hostname=TLS_DOMAIN) as tls:
                 cert = tls.getpeercert()
