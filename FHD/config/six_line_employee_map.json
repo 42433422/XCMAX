@@ -117,7 +117,12 @@
         "P3": {
           "name": "Mod 沙盒与测试",
           "primary": ["sandbox-tester", "code-validator", "self-checker"],
-          "support": ["test-qa-runner", "mods-and-eskill-curator"]
+          "support": [
+            "test-qa-runner",
+            "mods-and-eskill-curator",
+            "employee-interview-assistant",
+            "employee-pack-quality-interviewer"
+          ]
         },
         "P6": {
           "name": "Mod OTA",
@@ -147,7 +152,12 @@
         "P5": {
           "name": "渠道发布",
           "primary": ["deploy-release-officer", "change-request-auditor"],
-          "support": ["mobile-android-release-officer", "mobile-ios-release-officer"]
+          "support": [
+            "github-pr-gatekeeper",
+            "mobile-android-release-officer",
+            "mobile-harmony-release-officer",
+            "mobile-ios-release-officer"
+          ]
         },
         "P6": {
           "name": "客户端 OTA",
@@ -172,7 +182,7 @@
         "P10": {
           "name": "AI 自驱迭代",
           "primary": ["intake-dispatcher", "task-router-officer", "daily-orchestrator"],
-          "support": ["fhd-core-maintainer"]
+          "support": ["fhd-core-maintainer", "llm-ops-engineer"]
         }
       }
     },
