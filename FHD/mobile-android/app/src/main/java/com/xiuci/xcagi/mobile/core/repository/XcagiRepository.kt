@@ -3154,6 +3154,25 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    /** 标记 IM 会话已读（清未读角标）。失败静默。 */
+    suspend fun imMarkRead(conversationId: Int) {
+        try {
+            syncRouterFromStore()
+            fhd().imMarkRead(conversationId)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** 列出当前用户的 IM 会话（含员工主动发来的 1:1 会话）。失败返回空表，不打断消息列表。 */
+    suspend fun imConversations(): List<Map<String, Any?>> = try {
+        syncRouterFromStore()
+        val body = fhd().imListConversations()
+        @Suppress("UNCHECKED_CAST")
+        (body["conversations"] as? List<Map<String, Any?>>) ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     suspend fun imListMessages(conversationId: Int): Result<Map<String, Any?>> = try {
         syncRouterFromStore()
         Result.success(fhd().imListMessages(conversationId))

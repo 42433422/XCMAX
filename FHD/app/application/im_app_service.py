@@ -9,6 +9,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
 from app.application.im_employee_mixin import ImEmployeeMixin
+from app.application.im_employee_peer import EmployeePeerMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -26,7 +27,7 @@ def ensure_im_tables(engine) -> None:
     init_im_tables(engine)
 
 
-class ImApplicationService(ImEmployeeMixin):
+class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
     def __init__(self, db: Session):
         self._db = db
 
@@ -150,6 +151,8 @@ class ImApplicationService(ImEmployeeMixin):
             else:
                 peer = None
                 title = conv.title or f"会话 #{conv.id}"
+            peer_username = str(getattr(peer, "username", "") or "") if peer else ""
+            employee_id = peer_username[len("emp:") :] if peer_username.startswith("emp:") else ""
             item: dict[str, Any] = {
                 "id": conv.id,
                 "title": title,
@@ -159,6 +162,8 @@ class ImApplicationService(ImEmployeeMixin):
                 ),
                 "last_message_preview": (last_msg.body[:120] if last_msg else ""),
                 "unread_count": unread,
+                "peer_username": peer_username,
+                "employee_id": employee_id,
             }
             is_enterprise_dedicated_cs = conv.is_direct and self._is_enterprise_dedicated_cs_user(
                 peer
@@ -270,7 +275,13 @@ class ImApplicationService(ImEmployeeMixin):
         )
         rows = list(reversed(rows))
         names = self._display_name_map([m.sender_user_id for m in rows])
-        return [self._message_dict(m, names.get(int(m.sender_user_id))) for m in rows]
+        out: list[dict[str, Any]] = []
+        for m in rows:
+            d = self._message_dict(m, names.get(int(m.sender_user_id)))
+            # 标记是否本人发出，供前端把消息映射成「我(右) / 员工(左)」气泡。
+            d["is_self"] = int(m.sender_user_id) == int(user_id)
+            out.append(d)
+        return out
 
     def send_message(self, conversation_id: int, sender_user_id: int, body: str) -> dict[str, Any]:
         if not self._get_member(conversation_id, sender_user_id):
