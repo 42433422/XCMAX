@@ -1047,11 +1047,54 @@ def _handle_import_excel_to_database(
         columns = list(df.columns.astype(str))
         row_count = len(df)
 
+        roster_aliases = {
+            "employees",
+            "employee",
+            "roster",
+            "attendance_roster",
+            "人员",
+            "员工",
+            "花名册",
+        }
+        wants_roster = import_type.strip().lower() in roster_aliases
+
+        # 钉钉考勤报表前两行是标题行，默认表头会读成 Unnamed 列 → 先尝试重定位表头。
+        if (
+            wants_roster or import_type == "products"
+        ) and not _looks_like_attendance_roster_columns(columns):
+            retry_header = _autodetect_attendance_roster_header_row(
+                p, sheet_n, current_header_1based=header_1b, current_columns=columns
+            )
+            if retry_header is not None:
+                try:
+                    df_retry = _read_excel_dataframe(
+                        p, sheet_name=sheet_n, header_row_1based=retry_header
+                    )
+                    cols_retry = list(df_retry.columns.astype(str))
+                    if _looks_like_attendance_roster_columns(cols_retry):
+                        df, columns, header_1b, row_count = (
+                            df_retry,
+                            cols_retry,
+                            retry_header,
+                            len(df_retry),
+                        )
+                except RECOVERABLE_ERRORS:
+                    logger.debug("attendance roster header retry failed", exc_info=True)
+
         read_meta = {
             "sheet_name": sheet_n,
             "header_row": header_1b,
             "last_data_row_applied": last_data_i,
         }
+
+        # 花名册/考勤表：人员→products(人员管理)、部门→customers；
+        # 显式 import_type 指定，或 products 语义下命中花名册列特征时自动切换。
+        if wants_roster or (
+            import_type == "products" and _looks_like_attendance_roster_columns(columns)
+        ):
+            return _import_attendance_roster_preview_or_execute(
+                df, columns, confirm, row_count, read_meta=read_meta
+            )
 
         if import_type == "products":
             return _import_products_preview_or_execute(
@@ -1295,6 +1338,247 @@ def _looks_like_contract_or_footer_line(name: str) -> bool:
         if re.search(r"(以上|所送|数期|保质|验收|付款|月结|含税|施工|配套|货物)", rest):
             return True
     return False
+
+
+def _normalize_excel_col(col: Any) -> str:
+    return str(col).replace(" ", "").replace("　", "").strip()
+
+
+# 产品表信号列：命中则不按「人员花名册」处理（避免误吞报价单/出货单）
+_ROSTER_CONFLICT_SUBSTRINGS = (
+    "名称",
+    "品名",
+    "型号",
+    "价格",
+    "单价",
+    "金额",
+    "编号",
+    "编码",
+    "规格",
+)
+
+
+def _looks_like_attendance_roster_columns(columns: list[Any]) -> bool:
+    """判断表头是否为钉钉考勤/人员花名册类（姓名 + 部门/考勤组/工号…且无产品列）。"""
+    normed = [_normalize_excel_col(c) for c in columns]
+    if not any(c == "姓名" for c in normed):
+        return False
+    lowered = [c.lower() for c in normed]
+    has_dept = any("部门" in c for c in normed)
+    has_hr_signal = any(
+        any(s in c for s in ("考勤组", "工号", "职位", "岗位", "userid", "打卡", "考勤"))
+        for c in lowered
+    )
+    if not (has_dept or has_hr_signal):
+        return False
+    return not any(any(k in c for k in _ROSTER_CONFLICT_SUBSTRINGS) for c in normed)
+
+
+def _autodetect_attendance_roster_header_row(
+    p: Path,
+    sheet_name: Any,
+    *,
+    current_header_1based: int | None,
+    current_columns: list[Any],
+) -> int | None:
+    """当前表头大半为 Unnamed 时，在前 10 行内定位「姓名 + 部门」表头行（1-based）。
+
+    钉钉导出的考勤报表前两行是标题/生成时间，真实表头在第 3 行，
+    默认 header=首行会得到一堆 ``Unnamed:`` 列。
+    """
+    unnamed = sum(1 for c in current_columns if str(c).startswith("Unnamed"))
+    if current_columns and unnamed * 3 < len(current_columns):
+        return None
+    try:
+        kw: dict[str, Any] = {"header": None, "nrows": 10}
+        if p.suffix.lower() in (".xlsx", ".xlsm"):
+            kw["engine"] = "openpyxl"
+        if sheet_name:
+            kw["sheet_name"] = sheet_name
+        head = pd.read_excel(p, **kw)
+    except RECOVERABLE_ERRORS:
+        return None
+    if not isinstance(head, pd.DataFrame):
+        return None
+    for i in range(len(head)):
+        cells = [_normalize_excel_col(_excel_cell_as_clean_str(v)) for v in head.iloc[i].tolist()]
+        if any(c == "姓名" for c in cells) and any("部门" in c for c in cells):
+            row_1b = i + 1
+            if current_header_1based is not None and row_1b == current_header_1based:
+                return None
+            return row_1b
+    return None
+
+
+def _import_attendance_roster_preview_or_execute(
+    df,
+    columns,
+    confirm,
+    row_count,
+    *,
+    read_meta: dict[str, Any] | None = None,
+):
+    """人员花名册/考勤表导入：人员 → products（人员管理），部门 → customers。
+
+    字段约定与太阳鸟交付种子（sunbird_delivery_seed）一致：
+    ``Product.name=姓名 / unit=部门 / specification=考勤组(或职位) / model_number="部门::姓名"``，
+    考勤表转换等按「人员管理」名单重排的功能读取的正是这套字段。
+    """
+    _ = row_count
+    normed_map: dict[str, Any] = {}
+    for c in columns:
+        normed_map.setdefault(_normalize_excel_col(c), c)
+
+    def _find_col(*substrings: str, exact: tuple[str, ...] = ()) -> Any:
+        for k in exact:
+            if k in normed_map:
+                return normed_map[k]
+        for sub in substrings:
+            for cn, c in normed_map.items():
+                if sub in cn:
+                    return c
+        return None
+
+    name_col = _find_col("姓名", exact=("姓名",))
+    dept_col = _find_col("部门", exact=("部门", "主部门"))
+    group_col = _find_col("考勤组")
+    pos_col = _find_col("职位", "岗位")
+    no_col = _find_col("工号")
+
+    employees: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for _, row in df.iterrows():
+        name = _excel_cell_as_clean_str(row.get(name_col, "")) if name_col is not None else ""
+        if not name or name == "姓名" or len(name) > 32:
+            continue
+        dept = _excel_cell_as_clean_str(row.get(dept_col, "")) if dept_col is not None else ""
+        if dept in ("部门", "主部门", "-"):
+            dept = ""
+        key = (dept, name)
+        if key in seen:
+            continue
+        seen.add(key)
+        employees.append(
+            {
+                "name": name,
+                "dept": dept,
+                "group": (
+                    _excel_cell_as_clean_str(row.get(group_col, ""))
+                    if group_col is not None
+                    else ""
+                ),
+                "position": (
+                    _excel_cell_as_clean_str(row.get(pos_col, "")) if pos_col is not None else ""
+                ),
+                "employee_no": (
+                    _excel_cell_as_clean_str(row.get(no_col, "")) if no_col is not None else ""
+                ),
+            }
+        )
+
+    departments: list[str] = []
+    for emp in employees:
+        if emp["dept"] and emp["dept"] not in departments:
+            departments.append(emp["dept"])
+
+    if not employees:
+        return json.dumps(
+            {
+                "success": False,
+                "import_type": "attendance_roster",
+                "error": "未从表格中识别出人员（缺少非空「姓名」数据行）",
+            },
+            ensure_ascii=False,
+        )
+
+    if not confirm:
+        payload = {
+            "success": True,
+            "preview": True,
+            "import_type": "attendance_roster",
+            "row_count": len(employees),
+            "department_count": len(departments),
+            "sample_data": employees[:5],
+            "departments": departments[:20],
+            "message": (
+                f"识别到人员 {len(employees)} 名、部门 {len(departments)} 个。"
+                "确认后人员将写入「人员管理」，部门写入「客户/部门」。"
+                "当前为预览模式，传 confirm=true 或去掉 preview_only 可直接导入。"
+            ),
+        }
+        if read_meta:
+            payload["read_options"] = read_meta
+        return json.dumps(payload, ensure_ascii=False)
+
+    try:
+        from app.bootstrap import get_customer_app_service, get_products_service
+        from app.services.unified_query_service import find_purchase_unit
+
+        customer_service = get_customer_app_service()
+        dept_created = 0
+        for dept in departments:
+            if find_purchase_unit(unit_name=dept):
+                continue
+            res = customer_service.create(
+                {
+                    "customer_name": dept,
+                    "contact_person": None,
+                    "contact_phone": None,
+                    "contact_address": None,
+                }
+            )
+            if isinstance(res, dict) and res.get("success"):
+                dept_created += 1
+
+        records = []
+        for emp in employees:
+            records.append(
+                {
+                    "model_number": (
+                        f"{emp['dept']}::{emp['name']}" if emp["dept"] else emp["name"]
+                    ),
+                    "name": emp["name"],
+                    "specification": emp["group"] or emp["position"] or None,
+                    "price": 0.0,
+                    "unit": emp["dept"] or "个",
+                    "quantity": 0,
+                    "description": (f"工号:{emp['employee_no']}" if emp["employee_no"] else None),
+                }
+            )
+
+        products_service = get_products_service()
+        result = products_service.batch_add_products(records)
+
+        imported = 0
+        failed = 0
+        if isinstance(result, dict):
+            imported = int(result.get("success_count") or result.get("imported") or 0)
+            failed = int(result.get("failed_count") or result.get("failed") or 0)
+            if imported == 0 and failed == 0 and isinstance(result.get("data"), dict):
+                nested = result["data"]
+                imported = int(nested.get("success_count") or 0)
+                failed = int(nested.get("failed_count") or 0)
+
+        return json.dumps(
+            {
+                "success": True,
+                "preview": False,
+                "import_type": "attendance_roster",
+                "imported": imported,
+                "failed": failed,
+                "departments_created": dept_created,
+                "department_count": len(departments),
+                "message": (
+                    f"人员花名册导入完成：人员 {imported} 名已写入「人员管理」，"
+                    f"部门 {len(departments)} 个（新增 {dept_created} 个）已写入「客户/部门」。"
+                    + (f"失败 {failed} 条。" if failed else "")
+                ),
+            },
+            ensure_ascii=False,
+        )
+
+    except RECOVERABLE_ERRORS as e:
+        return json.dumps({"success": False, "error": f"导入失败: {str(e)}"}, ensure_ascii=False)
 
 
 def _import_products_preview_or_execute(
