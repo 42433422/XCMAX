@@ -71,6 +71,11 @@ def _ensure_sqlite_business_tables(db_path: Path) -> None:
             CREATE TABLE IF NOT EXISTS purchase_units (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 unit_name TEXT NOT NULL DEFAULT '',
+                contact_person TEXT,
+                contact_phone TEXT,
+                address TEXT,
+                is_active BOOLEAN DEFAULT 1,
+                tenant_id INTEGER,
                 unit_code TEXT NOT NULL DEFAULT '',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -85,6 +90,7 @@ def _ensure_sqlite_business_tables(db_path: Path) -> None:
                 model_number TEXT NOT NULL DEFAULT '',
                 unit TEXT NOT NULL DEFAULT '',
                 purchase_unit_id INTEGER,
+                tenant_id INTEGER,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -843,10 +849,11 @@ def ensure_sqlite_inventory_bootstrap(
     database_url: str | None = None,
     swallow_errors: bool = True,
 ) -> None:
-    """桌面 SQLite 基库：补齐库存相关表（/api/inventory/*）。"""
+    """桌面 SQLite 基库：补齐库存、采购、出货和财务汇总相关表。"""
     from sqlalchemy import inspect
 
     from app.db.base import Base
+    from app.db.models.finance import FinancialTransaction
     from app.db.models.inventory import (
         InventoryLedger,
         InventoryTransaction,
@@ -854,6 +861,14 @@ def ensure_sqlite_inventory_bootstrap(
         Warehouse,
     )
     from app.db.models.product import Product
+    from app.db.models.purchase import (
+        PurchaseInbound,
+        PurchaseInboundItem,
+        PurchaseOrder,
+        PurchaseOrderItem,
+        Supplier,
+    )
+    from app.db.models.shipment import ShipmentRecord
 
     real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
     if real_engine is None or real_engine.dialect.name != "sqlite":
@@ -861,8 +876,23 @@ def ensure_sqlite_inventory_bootstrap(
     try:
         insp = inspect(real_engine)
         tables = set(insp.get_table_names() or [])
-        if "warehouses" not in tables:
-            logger.info("SQLite 缺少库存表，正在通过 ORM 创建 …")
+        needed = {
+            "products",
+            "warehouses",
+            "storage_locations",
+            "inventory_ledger",
+            "inventory_transactions",
+            "suppliers",
+            "purchase_orders",
+            "purchase_order_items",
+            "purchase_inbounds",
+            "purchase_inbound_items",
+            "shipment_records",
+            "financial_transactions",
+        }
+        if not needed.issubset(tables):
+            missing = ", ".join(sorted(needed - tables))
+            logger.info("SQLite 缺少业务汇总表，正在通过 ORM 创建: %s", missing)
             Base.metadata.create_all(
                 real_engine,
                 tables=[
@@ -871,6 +901,13 @@ def ensure_sqlite_inventory_bootstrap(
                     StorageLocation.__table__,
                     InventoryLedger.__table__,
                     InventoryTransaction.__table__,
+                    Supplier.__table__,
+                    PurchaseOrder.__table__,
+                    PurchaseOrderItem.__table__,
+                    PurchaseInbound.__table__,
+                    PurchaseInboundItem.__table__,
+                    ShipmentRecord.__table__,
+                    FinancialTransaction.__table__,
                 ],
                 checkfirst=True,
             )
@@ -893,6 +930,7 @@ def ensure_sqlite_enterprise_business_bootstrap(
     from app.db.base import Base
     from app.db.models.customer import Customer
     from app.db.models.product import Product
+    from app.db.models.purchase_unit import PurchaseUnit
     from app.db.models.tenant import Tenant
 
     real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
@@ -901,12 +939,17 @@ def ensure_sqlite_enterprise_business_bootstrap(
     try:
         insp = inspect(real_engine)
         tables = set(insp.get_table_names() or [])
-        needed = {"tenants", "customers", "products"}
+        needed = {"tenants", "customers", "products", "purchase_units"}
         if not needed.issubset(tables):
             logger.info("SQLite 缺少企业业务基础表，正在通过 ORM 创建 …")
             Base.metadata.create_all(
                 real_engine,
-                tables=[Tenant.__table__, Product.__table__, Customer.__table__],
+                tables=[
+                    Tenant.__table__,
+                    Product.__table__,
+                    Customer.__table__,
+                    PurchaseUnit.__table__,
+                ],
                 checkfirst=True,
             )
     except RECOVERABLE_ERRORS as exc:
@@ -1493,10 +1536,7 @@ def ensure_business_tenant_id_columns(
     *,
     database_url: str | None = None,
 ) -> None:
-    """为业务表补齐 ``tenant_id`` 列（多租户数据隔离作用域；nullable）。
-
-    先覆盖核心业务表（products / purchase_units）；其余表按同一模式逐步纳入。
-    """
+    """为业务表补齐 ``tenant_id`` 列（多租户数据隔离作用域；nullable）。"""
     from sqlalchemy import inspect, text
 
     real_engine: Engine | None = None
@@ -1520,6 +1560,7 @@ def ensure_business_tenant_id_columns(
 
     business_tables = (
         "products",
+        "customers",
         "purchase_units",
         "materials",
         "shipment_records",
