@@ -606,79 +606,17 @@ docker-compose down
 
 ---
 
-## Kubernetes 部署
+## Kubernetes 部署（已退役）
 
-### 步骤 1: 创建 Kubernetes 配置
-
-参考项目中的 `k8s/` 目录：
-
-```yaml
-# k8s/deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: xcagi-backend
-  labels:
-    app: xcagi
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: xcagi
-  template:
-    metadata:
-      labels:
-        app: xcagi
-    spec:
-      containers:
-      - name: backend
-        image: your-registry/xcagi:10.0.0
-        ports:
-        - containerPort: 5000
-        env:
-        - name: DATABASE_URL
-          value: "sqlite:///app/products.db"
-        - name: REDIS_URL
-          value: "redis://redis:6379/0"
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "1Gi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /api/health
-            port: 5000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /api/health
-            port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-```
-
-### 步骤 2: 部署到 Kubernetes
-
-```bash
-# 创建命名空间
-kubectl create namespace xcagi
-
-# 部署应用
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/deployment.yaml
-kubectl apply -f k8s/service.yaml
-kubectl apply -f k8s/ingress.yaml
-
-# 查看状态
-kubectl get pods -n xcagi
-kubectl get services -n xcagi
-kubectl get ingress -n xcagi
-```
+> 2026-07-01 运维根治：`FHD/k8s/`、`FHD/helm/`、`FHD/gitops/` 及相关
+> workflow（fhd-deploy / fhd-preview-env / gitops-image-bump）已删除——
+> 它们从未指向任何真实集群。生产是单台腾讯云 CVM，唯一正道：
+>
+> `main/tag push → fhd-ci-cd cvm-push-release → 服务器 fhd-auto-update.sh`
+> （sha256 校验 → 备份 → 同步 → 健康门 → 失败自动回滚）
+>
+> 服务器侧安装与监控/备份/漂移检测见仓库根 [ops/README.md](../../ops/README.md)。
+> 未来真上集群时，从本次退役前的 git 历史取回清单再演进。
 
 ---
 
@@ -780,40 +718,10 @@ export default {
 
 ### 1. 应用监控
 
-使用 Prometheus + Grafana:
-
-```yaml
-# docker-compose.monitoring.yml
-version: '3.8'
-
-services:
-  prometheus:
-    image: prom/prometheus
-    volumes:
-      - ./k8s/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-    ports:
-      - "9090:9090"
-
-  grafana:
-    image: grafana/grafana
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-
-  loki:
-    image: grafana/loki:latest
-    ports:
-      - "3100:3100"
-
-  promtail:
-    image: grafana/promtail:latest
-    volumes:
-      - /var/log:/var/log
-    command: -config.file=/etc/promtail/config.yml
-```
+生产监控 = 仓库根 `ops/` 哨兵（cron + stdlib，无守护依赖）+ GitHub Actions
+站外拨测（`ops-uptime.yml`），检查项/告警/处置见 [ops/README.md](../../ops/README.md)。
+（原 Prometheus/Grafana/Loki compose 从未接真实告警，已随假 k8s 路径退役；
+MODstore 本地开发仍可用其 `monitoring/` compose profile。）
 
 ### 2. 日志收集
 
