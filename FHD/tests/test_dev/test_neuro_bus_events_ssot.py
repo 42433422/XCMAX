@@ -86,7 +86,7 @@ def test_all_dataclass_event_type_defaults_exist_in_ssot():
     # check 命令内部执行交叉校验,这里复用它
     result = _run_check()
     assert result.returncode == 0, (
-        f"check 交叉校验失败,可能有 dataclass 默认值未登记在 SSOT:\n"
+        "check 交叉校验失败,可能有 dataclass 默认值未登记在 SSOT:\n"
         + result.stderr
     )
 
@@ -97,7 +97,7 @@ def test_all_orchestrator_run_add_event_strings_exist_in_ssot():
     """
     result = _run_check()
     assert result.returncode == 0, (
-        f"check 交叉校验失败,可能有 orchestrator 字符串未登记在 SSOT:\n"
+        "check 交叉校验失败,可能有 orchestrator 字符串未登记在 SSOT:\n"
         + result.stderr
     )
 

@@ -277,7 +277,7 @@ export const YUANGON_AREAS: DutyAreaInfo[] = [
   {
     id: 'platform-core',
     label: '平台核心',
-    ids: ['fhd-core-maintainer', 'vibe-coding-maintainer', 'mods-and-eskill-curator', 'change-request-auditor', 'github-pr-gatekeeper', 'daily-orchestrator', 'intake-dispatcher', 'task-router-officer', 'user-customer-service-officer', 'enterprise-adoption-officer', 'delivery-receipt-officer', 'mobile-android-release-officer', 'mobile-ios-release-officer', 'mobile-harmony-release-officer']
+    ids: ['fhd-core-maintainer', 'vibe-coding-maintainer', 'mods-and-eskill-curator', 'change-request-auditor', 'github-pr-gatekeeper', 'daily-orchestrator', 'intake-dispatcher', 'task-router-officer', 'user-customer-service-officer', 'enterprise-adoption-officer', 'delivery-receipt-officer', 'mobile-android-release-officer', 'mobile-ios-release-officer']
   },
   {
     id: 'quality-and-docs',
