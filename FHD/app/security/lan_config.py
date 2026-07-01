@@ -136,6 +136,10 @@ DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/neuro",
     "/api/neurobus",
     "/api/ai",
+    # /api/im/* 放行原因：IM(员工/客服/群聊)是移动端面向用户的功能，移动端从公网/蜂窝
+    # 网络访问、无 LAN 许可 token，若不放行会被网段白名单 403(lan_blocked)。IM 端点本身
+    # 有 Bearer/会话 + 会话成员校验(见 im_routes._uid_for_request)做鉴权，不依赖 LAN 门。
+    "/api/im",
 )
 
 

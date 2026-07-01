@@ -1713,6 +1713,32 @@ def _actions_real(
             )
         else:
             outputs.append({"handler": str(handler), "error": "unknown handler"})
+    # 员工干完后主动把汇报推给老板 IM。此处是所有 handler（agent/直答/llm_md 等）的汇合点，
+    # 比认知 hook 更可靠（认知 hook 只在部分路径触发，会漏掉 agent loop 的最终产出）。
+    try:
+        _rep_body = ""
+        for _o in outputs:
+            if not isinstance(_o, dict):
+                continue
+            _cand = str(_o.get("answer") or _o.get("summary") or _o.get("output") or "").strip()
+            if not _cand:
+                continue
+            # agent 的 summary 有时是 {"thought":..,"answer":..} JSON，抽出 answer 当人话
+            if _cand[:1] == "{" and '"answer"' in _cand:
+                try:
+                    _ans = (json.loads(_cand) or {}).get("answer")
+                    if _ans and str(_ans).strip():
+                        _cand = str(_ans).strip()
+                except (ValueError, TypeError):
+                    pass
+            _rep_body = _cand
+            break
+        if _rep_body:
+            _emp_im_notify_boss(
+                employee_id, config if isinstance(config, dict) else {}, _rep_body, "report"
+            )
+    except Exception:
+        logger.debug("actions_real report im hook skipped employee_id=%s", employee_id, exc_info=True)
     return {
         "task": task,
         "handlers": handlers,
@@ -2070,21 +2096,10 @@ def execute_employee_task(
                     logger.debug(
                         "task_classifier failed employee_id=%s err=%s", employee_id, _tc_exc
                     )
-                # perception hook：员工像真人一样跟老板说"收到任务"——给老板
-                # 一条「正在处理」的实时反馈，避免老板以为员工没动静。
-                # 只在任务正文非空且短（<=200 字）时推，避免长 payload 干扰。
-                try:
-                    _task_preview = str(task or "").strip()
-                    if _task_preview and len(_task_preview) <= 200:
-                        _perceived_kind = ""
-                        if isinstance(perceived, dict):
-                            _perceived_kind = str(perceived.get("type") or "").strip()
-                        _perception_body = f"📋 收到任务：{_task_preview}"
-                        if _perceived_kind:
-                            _perception_body = f"{_perception_body}\n类型：{_perceived_kind}"
-                        _emp_im_notify_boss(employee_id, manifest, _perception_body, "perception")
-                except Exception:
-                    logger.debug("perception im hook skipped", exc_info=True)
+                # 注意：原 perception hook 会把「📋 收到任务：{task}」(即任务提示词)当成
+                # 一条 IM 消息推给老板，导致老板看到的是"提示词"而不是员工产出的内容。
+                # 已移除——员工只在干完后由下方 report hook(_actions_real 汇合点)推送
+                # LLM 生成的真实答案/汇报，不再把输入 prompt 当回复发出去。
                 file_path_fast = (
                     isinstance(payload, dict)
                     and str(payload.get("file_path") or payload.get("path") or "").strip()
@@ -2215,8 +2230,9 @@ def execute_employee_task(
                                 reasoning["human_answer"] = _resp.get("answer", "")
                         except Exception as _exc:
                             reasoning["_human_answer_error"] = str(_exc)
-                # cognition hook：让员工像真人一样在 IM 里主动汇报思考结果给老板。
-                # 触发 Phase-D 时推"问老板：X"；否则推 cognition summary（如有）。
+                # cognition hook：仅在员工真有问题要问老板时(Phase-D)推一条「问老板：X」。
+                # 不再推中间 cognition summary/reasoning——那是思考过程、不是给老板的内容回复，
+                # 最终内容由下方 report hook(_actions_real 汇合点)在干完后统一推送真实答案。
                 try:
                     _im_body = ""
                     if reasoning.get("_phase_d_triggered"):
@@ -2226,12 +2242,6 @@ def execute_employee_task(
                                 f"🤔 我有个问题想问你：{_im_q}\n\n"
                                 "（已通过任务中心发起，等你在那里回复）"
                             )
-                    if not _im_body and isinstance(_parsed_llm, dict):
-                        _im_body = str(
-                            _parsed_llm.get("summary") or _parsed_llm.get("reasoning") or ""
-                        ).strip()
-                    if not _im_body and isinstance(reasoning, dict):
-                        _im_body = str(reasoning.get("summary") or "").strip()
                     if _im_body:
                         _emp_im_notify_boss(employee_id, manifest, _im_body, "cognition")
                 except Exception:

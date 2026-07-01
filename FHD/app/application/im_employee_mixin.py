@@ -197,8 +197,10 @@ class ImEmployeeMixin:
             out[eid] = {
                 "im_conv_id": conv.id,
                 "im_last_message": (last_msg.body[:120] if last_msg else ""),
+                # 注意：移动端 WorkflowEmployeeInfo.im_last_message_at 是非空 String，
+                # 返回 null 会让 Gson 把 null 灌进非空字段、构造时 NPE 崩溃。统一用 ""。
                 "im_last_message_at": (
-                    conv.last_message_at.isoformat() if conv.last_message_at else None
+                    conv.last_message_at.isoformat() if conv.last_message_at else ""
                 ),
                 "im_unread_count": self._count_unread(conv.id, boss_uid_int),
             }
@@ -211,7 +213,7 @@ class ImEmployeeMixin:
                         out[eid] = {
                             "im_conv_id": conv_id,
                             "im_last_message": "",
-                            "im_last_message_at": None,
+                            "im_last_message_at": "",
                             "im_unread_count": 0,
                         }
                 except Exception:  # noqa: BLE001 - summary must tolerate one employee bootstrap failure
@@ -329,7 +331,17 @@ class ImEmployeeMixin:
         cs_id = self.enterprise_cs_user_id()
         if cs_id is None:
             return []
-        return self.list_messages(conversation_id, cs_id, limit=100)
+        messages = self.list_messages(conversation_id, cs_id, limit=100)
+        # 运营者读取即视为已读:推进共享客服用户 cs_id 的已读游标,清掉收件箱未读红点。
+        # 客服未读按虚拟客服用户 cs_id 计(list_cs_inbox 的 _count_unread(conv, cs_id)),
+        # 标准 im_mark_read 标的是运营者自己的 uid、标不到这里,故必须在读取时显式标 cs_id。
+        try:
+            last_id = int(messages[-1].get("id") or 0) if messages else 0
+            if last_id > 0:
+                self.mark_read(conversation_id, int(cs_id), last_id)
+        except Exception:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+            logger.debug("cs_inbox_messages mark_read skipped", exc_info=True)
+        return messages
 
     def cs_reply(self, conversation_id: int, body: str) -> dict[str, Any]:
         """Reply as the dedicated enterprise CS user."""
