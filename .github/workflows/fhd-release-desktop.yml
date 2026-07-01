@@ -96,7 +96,7 @@ jobs:
             python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
           done
       - name: Upload installers to update server
-        timeout-minutes: 10
+        timeout-minutes: 30
         working-directory: .
         env:
           # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
@@ -125,7 +125,15 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
+            timeout 1800 rsync -avz --timeout=120 \
+              --include='*/' \
+              --include='*.exe' \
+              --include='*.exe.blockmap' \
+              --include='*.dmg' \
+              --include='*.dmg.blockmap' \
+              --include='latest*.yml' \
+              --exclude='*' \
+              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   macos:
@@ -197,7 +205,7 @@ jobs:
             python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
           done
       - name: Upload macOS installers to update server
-        timeout-minutes: 10
+        timeout-minutes: 30
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
@@ -224,7 +232,15 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
+            timeout 1800 rsync -avz --timeout=120 \
+              --include='*/' \
+              --include='*.exe' \
+              --include='*.exe.blockmap' \
+              --include='*.dmg' \
+              --include='*.dmg.blockmap' \
+              --include='latest*.yml' \
+              --exclude='*' \
+              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   github-release:
