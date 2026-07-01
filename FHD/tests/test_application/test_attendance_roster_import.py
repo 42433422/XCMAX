@@ -209,17 +209,31 @@ def _bare_chat_service():
     return svc
 
 
-def test_probe_attendance_roster_import_hits(tmp_path):
-    xlsx = tmp_path / "考勤报表.xlsx"
+def _upload_dir(tmp_path, monkeypatch):
+    """探测只认上传目录内文件；测试统一落在 WORKSPACE_ROOT/uploads/chat。"""
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    d = tmp_path / "uploads" / "chat"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def test_probe_attendance_roster_import_hits(tmp_path, monkeypatch):
+    xlsx = _upload_dir(tmp_path, monkeypatch) / "考勤报表.xlsx"
     _write_dingtalk_style_xlsx(xlsx)
     svc = _bare_chat_service()
     params = svc._probe_attendance_roster_import({"excel_file_path": str(xlsx)}, {"fields": []})
     assert params is not None
-    assert params["file_path"] == str(xlsx)
+    assert params["file_path"] == str(xlsx.resolve())
+
+    # 相对 workspace root 的写法（chat 上传返回形态）同样命中
+    params_rel = svc._probe_attendance_roster_import(
+        {"excel_file_path": "uploads/chat/考勤报表.xlsx"}, {"fields": []}
+    )
+    assert params_rel is not None
 
 
-def test_probe_attendance_roster_import_rejects_quote_file(tmp_path):
-    xlsx = tmp_path / "报价单.xlsx"
+def test_probe_attendance_roster_import_rejects_quote_file(tmp_path, monkeypatch):
+    xlsx = _upload_dir(tmp_path, monkeypatch) / "报价单.xlsx"
     _write_quote_style_xlsx(xlsx)
     svc = _bare_chat_service()
     assert (
@@ -227,8 +241,27 @@ def test_probe_attendance_roster_import_rejects_quote_file(tmp_path):
     )
 
 
+def test_probe_rejects_file_outside_upload_roots(tmp_path, monkeypatch):
+    """安全边界：上传目录之外的文件（任意路径）不参与探测，杜绝任意 xlsx 读取。"""
+    _upload_dir(tmp_path, monkeypatch)
+    outside = tmp_path / "机密.xlsx"
+    _write_dingtalk_style_xlsx(outside)
+    svc = _bare_chat_service()
+    assert (
+        svc._probe_attendance_roster_import({"excel_file_path": str(outside)}, {"fields": []})
+        is None
+    )
+    # ../ 逃逸同样被拒
+    assert (
+        svc._probe_attendance_roster_import(
+            {"excel_file_path": "uploads/chat/../../机密.xlsx"}, {"fields": []}
+        )
+        is None
+    )
+
+
 def test_dynamic_workflow_routes_roster_plan(tmp_path, monkeypatch):
-    xlsx = tmp_path / "考勤报表.xlsx"
+    xlsx = _upload_dir(tmp_path, monkeypatch) / "考勤报表.xlsx"
     _write_dingtalk_style_xlsx(xlsx)
     svc = _bare_chat_service()
 
@@ -257,7 +290,7 @@ def test_dynamic_workflow_routes_roster_plan(tmp_path, monkeypatch):
     node = plan.nodes[0]
     assert node.tool_id == "excel_import"
     assert node.action == "import_roster_file"
-    assert node.params["file_path"] == str(xlsx)
+    assert node.params["file_path"] == str(xlsx.resolve())
     assert plan.intent == "attendance_roster_import_to_db"
 
 

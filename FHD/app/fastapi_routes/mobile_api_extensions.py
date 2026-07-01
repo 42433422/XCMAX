@@ -2814,9 +2814,9 @@ async def mobile_select_onboarding_industry(
                 _mobile_session_id_from_request(request),
                 industry_id,
             )
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             logger.exception("mobile select onboarding industry market sync failed")
-            market_entitlements = {"success": False, "message": str(exc)}
+            market_entitlements = {"success": False, "message": "市场权益同步暂不可用"}
         if not market_entitlements.get("success"):
             logger.warning(
                 "mobile onboarding industry saved while market entitlement sync failed: "
@@ -2828,10 +2828,10 @@ async def mobile_select_onboarding_industry(
             data={**(data or {}), "market_entitlements": market_entitlements},
             message="行业已绑定到当前账号",
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile select onboarding industry failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "行业绑定失败，请稍后重试", success=False, code=500),
             status_code=500,
         )
 

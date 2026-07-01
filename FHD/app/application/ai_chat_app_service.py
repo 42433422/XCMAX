@@ -1624,6 +1624,49 @@ class AIChatApplicationService:
             intent=intent,
         )
 
+    @staticmethod
+    def _resolve_roster_probe_path(file_path: str) -> Path | None:
+        """把探测文件路径钉死在上传目录内（app 数据 uploads / WORKSPACE_ROOT/uploads）。
+
+        探测会真实读取文件前 10 行，若放任任意绝对路径将构成服务器端任意 .xlsx 读取；
+        合法来源只有上传/分析端点落盘的文件，故越界一律拒绝（含 ../ 与符号链接逃逸）。
+        """
+        raw = str(file_path or "").strip()
+        if not raw:
+            return None
+        bases: list[Path] = []
+        try:
+            from app.utils.path_utils import get_upload_dir
+
+            bases.append(Path(get_upload_dir()).resolve())
+        except RECOVERABLE_ERRORS:
+            logger.debug("upload dir unavailable for roster probe", exc_info=True)
+        ws_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd()))
+        try:
+            bases.append((ws_root / "uploads").resolve())
+        except RECOVERABLE_ERRORS:
+            logger.debug("workspace uploads unavailable for roster probe", exc_info=True)
+        if not bases:
+            return None
+
+        candidate = Path(raw)
+        candidates: list[Path] = []
+        if candidate.is_absolute():
+            candidates.append(candidate)
+        else:
+            candidates.extend(base / raw for base in bases)
+            # 前端 chat 上传返回形如 uploads/chat/x.xlsx（相对 workspace root）
+            candidates.append(ws_root / raw)
+        for cand in candidates:
+            try:
+                resolved = cand.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue
+            for base in bases:
+                if resolved == base or base in resolved.parents:
+                    return resolved
+        return None
+
     def _probe_attendance_roster_import(
         self,
         context: dict[str, Any] | None,
@@ -1657,10 +1700,9 @@ class AIChatApplicationService:
                 _excel_cell_as_clean_str,
                 _looks_like_attendance_roster_columns,
             )
-            from app.application.tools.workflow_excel_paths import resolve_safe_excel_path
 
-            p = resolve_safe_excel_path(str(Path.cwd()), file_path)
-            if not p.exists() or p.suffix.lower() not in (".xlsx", ".xlsm", ".xls"):
+            p = self._resolve_roster_probe_path(file_path)
+            if p is None or p.suffix.lower() not in (".xlsx", ".xlsm", ".xls"):
                 return None
 
             sheet_name = ""
