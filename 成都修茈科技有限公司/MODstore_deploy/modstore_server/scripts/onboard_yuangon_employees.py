@@ -54,6 +54,7 @@ def _clean_action_handlers(values: Any) -> list[str]:
         "doc_sync",
         "shell_exec",
         "ssh_exec",
+        "specialized",
     }
     out: list[str] = []
     for value in _clean_list(values):

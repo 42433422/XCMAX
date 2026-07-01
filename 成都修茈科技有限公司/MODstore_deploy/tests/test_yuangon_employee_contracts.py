@@ -49,7 +49,7 @@ def _cycle_nodes(graph: dict[str, list[str]]) -> set[str]:
 
 def test_all_yuangon_employees_are_explicit_and_complete():
     rows = _employees()
-    assert len(rows) == 54
+    assert len(rows) == 55
     known = set(rows)
     for employee_id, (path, data) in rows.items():
         base = path.parent

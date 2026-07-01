@@ -80,6 +80,7 @@ _ALL_HANDS_COGNITION_SYSTEM_APPEND = """\
 【员工大会模式 — 覆盖日常 JSON 输出要求】
 当前任务为数字管家召集的「员工大会」汇报（非流水线执行、非工作台单次任务）。
 硬性要求：
+- 回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。
 - 只输出 **简体中文 Markdown**，严格按用户消息中的四段标题结构作答；**禁止**输出 JSON、禁止 ``warnings`` / ``status`` 字段。
 - 用 manifest / depends_on / handlers 与 input 中的节选说明职责；缺上游产物在待机模式下**属于正常**，不得写「输入不足」类流水线报错。
 - 不得编造 research_context / yuangon_pack_excerpt / recent_failures 中未出现的路径或版本号。"""
@@ -1036,6 +1037,31 @@ def _action_fhd_business(
         return {"handler": "fhd_business", "error": str(e), "url": url}
 
 
+def _merge_original_input_into_reasoning(
+    reasoning: Dict[str, Any], original_input: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Backfill action-critical input fields without overwriting cognition output."""
+    out = dict(reasoning or {})
+    current_input = out.get("input") if isinstance(out.get("input"), dict) else {}
+    merged_input = dict(current_input)
+    for key in (
+        "project_root",
+        "workspace_root",
+        "allow_medium_risk",
+        "allow_high_risk",
+        "priority",
+        "handler",
+        "handler_mode",
+        "delegate",
+        "multi_step",
+        "fallback_cursor",
+    ):
+        if key in original_input and key not in merged_input:
+            merged_input[key] = original_input[key]
+    out["input"] = merged_input
+    return out
+
+
 def _action_agent_runner(
     actions_cfg: Dict[str, Any],
     reasoning: Dict[str, Any],
@@ -1464,11 +1490,15 @@ def _filter_handlers_vibe_coding_maintainer(
     """按 payload 路由 vibe-coding-maintainer，避免每次任务跑完全部 handler。"""
     inp = reasoning.get("input") if isinstance(reasoning.get("input"), dict) else {}
     try:
-        from modstore_server.para_delegate_handler import para_delegate_enabled
+        from modstore_server.para_delegate_handler import (
+            para_delegate_enabled,
+            para_delegate_ready_for_dispatch,
+        )
     except Exception:
         para_delegate_enabled = lambda: False  # type: ignore[assignment]
+        para_delegate_ready_for_dispatch = lambda: False  # type: ignore[assignment]
 
-    if para_delegate_enabled():
+    if para_delegate_enabled() and para_delegate_ready_for_dispatch():
         return ["para_delegate"]
 
     requested = str(inp.get("handler") or "").strip()
@@ -1532,9 +1562,12 @@ def _actions_real(
     handlers = actions_cfg.get("handlers") or ["echo"]
     if employee_id in ("vibe-coding-maintainer", "change-request-auditor", "test-qa-runner"):
         try:
-            from modstore_server.para_delegate_handler import para_delegate_enabled
+            from modstore_server.para_delegate_handler import (
+                para_delegate_enabled,
+                para_delegate_ready_for_dispatch,
+            )
 
-            if para_delegate_enabled():
+            if para_delegate_enabled() and para_delegate_ready_for_dispatch():
                 handlers = ["para_delegate"]
         except Exception:
             pass
@@ -1646,6 +1679,15 @@ def _actions_real(
         elif handler == "llm_md":
             # Alias: llm_md is single-shot LLM already done via cognition; return it.
             outputs.append({"handler": "llm_md", "output": reasoning.get("reasoning", "")})
+        elif handler == "specialized":
+            outputs.append(
+                {
+                    "handler": "specialized",
+                    "ok": True,
+                    "output": reasoning.get("reasoning", ""),
+                    "note": "specialized handler uses the employee's declared package-specific capability boundary.",
+                }
+            )
         elif handler in ("vibe_edit", "vibe_heal", "vibe_code"):
             try:
                 from modstore_server.integrations.vibe_action_handlers import dispatch_vibe_handler
@@ -1875,6 +1917,21 @@ def _handlers_execution_ok(result: Dict[str, Any]) -> bool:
     return True
 
 
+def _handler_failure_detail(result: Dict[str, Any]) -> str:
+    """Return a compact, classifiable description for the first failed handler."""
+    outputs = result.get("outputs") if isinstance(result.get("outputs"), list) else []
+    for out in outputs:
+        if not isinstance(out, dict) or out.get("ok") is not False:
+            continue
+        parts = []
+        for key in ("handler", "status", "source", "error"):
+            value = str(out.get(key) or "").strip()
+            if value:
+                parts.append(f"{key}={value}")
+        return "handler failed: " + " ".join(parts) if parts else "handler returned ok=False"
+    return "one or more handlers returned ok=False"
+
+
 def execute_employee_task(
     employee_id: str,
     task: str,
@@ -2053,6 +2110,10 @@ def execute_employee_task(
                         task=task,
                         bench_llm_override=bench_llm_override,
                     )
+                reasoning = _merge_original_input_into_reasoning(
+                    reasoning if isinstance(reasoning, dict) else {},
+                    payload if isinstance(payload, dict) else {},
+                )
                 # Phase-D：员工 cognition 输出 requires_human=true 时阻塞等老板回答。
                 # LLM 实际输出在 reasoning["reasoning"]（字符串），需解析 JSON 才能取
                 # requires_human/human_question 等字段。旧实现直接读 reasoning 顶层 dict
@@ -2342,7 +2403,11 @@ def execute_employee_task(
                 llm_tokens = 0 if direct_only else _extract_token_count(reasoning)
                 handler_ok = _handlers_execution_ok(result if isinstance(result, dict) else {})
                 exec_status = "success" if handler_ok else "handler_failed"
-                metric_error = "" if handler_ok else "one or more handlers returned ok=False"
+                metric_error = (
+                    ""
+                    if handler_ok
+                    else _handler_failure_detail(result if isinstance(result, dict) else {})
+                )
                 metric_failure_kind = ""
                 # path_guard 越权 → 标记 blocked_by_path_guard 并附违规路径到 metric
                 _pg = result.get("path_guard") if isinstance(result, dict) else None

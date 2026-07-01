@@ -421,6 +421,7 @@ def _normalize_action_handlers(raw_handlers: Any) -> List[str]:
         "doc_sync",
         "shell_exec",
         "ssh_exec",
+        "specialized",
     }
     handlers: List[str] = []
     if isinstance(raw_handlers, list):
