@@ -1547,17 +1547,41 @@ def _import_attendance_roster_preview_or_execute(
             )
 
         products_service = get_products_service()
-        result = products_service.batch_add_products(records)
+
+        # 幂等：安装种子(sunbird-roster)或重复导入已写入同名人员时按 model_number 跳过
+        existing_models: set[str] = set()
+        get_products = getattr(products_service, "get_products", None)
+        if callable(get_products):
+            try:
+                existing = get_products(page=1, per_page=100000)
+                if isinstance(existing, dict) and existing.get("success"):
+                    for item in existing.get("data") or []:
+                        mn = str((item or {}).get("model_number") or "").strip()
+                        if mn:
+                            existing_models.add(mn)
+            except RECOVERABLE_ERRORS:
+                logger.debug("roster import existing products probe skipped", exc_info=True)
+        skipped_existing = 0
+        if existing_models:
+            fresh_records = []
+            for record in records:
+                if str(record.get("model_number") or "") in existing_models:
+                    skipped_existing += 1
+                else:
+                    fresh_records.append(record)
+            records = fresh_records
 
         imported = 0
         failed = 0
-        if isinstance(result, dict):
-            imported = int(result.get("success_count") or result.get("imported") or 0)
-            failed = int(result.get("failed_count") or result.get("failed") or 0)
-            if imported == 0 and failed == 0 and isinstance(result.get("data"), dict):
-                nested = result["data"]
-                imported = int(nested.get("success_count") or 0)
-                failed = int(nested.get("failed_count") or 0)
+        if records:
+            result = products_service.batch_add_products(records)
+            if isinstance(result, dict):
+                imported = int(result.get("success_count") or result.get("imported") or 0)
+                failed = int(result.get("failed_count") or result.get("failed") or 0)
+                if imported == 0 and failed == 0 and isinstance(result.get("data"), dict):
+                    nested = result["data"]
+                    imported = int(nested.get("success_count") or 0)
+                    failed = int(nested.get("failed_count") or 0)
 
         return json.dumps(
             {
@@ -1566,11 +1590,13 @@ def _import_attendance_roster_preview_or_execute(
                 "import_type": "attendance_roster",
                 "imported": imported,
                 "failed": failed,
+                "skipped_existing": skipped_existing,
                 "departments_created": dept_created,
                 "department_count": len(departments),
                 "message": (
                     f"人员花名册导入完成：人员 {imported} 名已写入「人员管理」，"
                     f"部门 {len(departments)} 个（新增 {dept_created} 个）已写入「客户/部门」。"
+                    + (f"已存在跳过 {skipped_existing} 名。" if skipped_existing else "")
                     + (f"失败 {failed} 条。" if failed else "")
                 ),
             },

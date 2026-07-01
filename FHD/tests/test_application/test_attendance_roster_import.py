@@ -114,6 +114,47 @@ def test_import_execute_writes_products_and_departments(tmp_path, monkeypatch):
     assert {c["customer_name"] for c in created_customers} == {"董事会", "公司-财务部"}
 
 
+def test_import_execute_skips_names_already_seeded(tmp_path, monkeypatch):
+    """安装种子(sunbird-roster)已灌入的人员，聊天再导入按 model_number 跳过不重复。"""
+    xlsx = tmp_path / "考勤报表.xlsx"
+    _write_dingtalk_style_xlsx(xlsx)
+
+    added_products: list[dict] = []
+
+    class _FakeProducts:
+        def get_products(self, page=1, per_page=100):
+            return {
+                "success": True,
+                "data": [{"model_number": "公司-财务部::白锐"}],
+            }
+
+        def batch_add_products(self, records):
+            added_products.extend(records)
+            return {"success": True, "data": {"success_count": len(records), "failed_count": 0}}
+
+    class _FakeCustomers:
+        def create(self, record):
+            return {"success": True}
+
+    import app.bootstrap as bootstrap
+    import app.services.unified_query_service as uqs
+
+    monkeypatch.setattr(bootstrap, "get_products_service", lambda: _FakeProducts())
+    monkeypatch.setattr(bootstrap, "get_customer_app_service", lambda: _FakeCustomers())
+    monkeypatch.setattr(uqs, "find_purchase_unit", lambda **kw: {"id": 1})
+
+    res = json.loads(
+        wf._handle_import_excel_to_database(
+            {"import_type": "employees", "file_path": "考勤报表.xlsx", "confirm": True},
+            workspace_root=str(tmp_path),
+        )
+    )
+    assert res["success"] is True
+    assert res["imported"] == 1
+    assert res["skipped_existing"] == 1
+    assert [r["name"] for r in added_products] == ["黄川平"]
+
+
 def test_quote_sheet_still_goes_products_path(tmp_path):
     xlsx = tmp_path / "报价单.xlsx"
     _write_quote_style_xlsx(xlsx)
