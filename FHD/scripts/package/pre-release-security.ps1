@@ -36,6 +36,45 @@ function Scan-SecretsInTree {
   }
 }
 
+function Assert-WindowsGuiSubsystem {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if (-not (Test-Path $Path)) {
+    Fail "$Label missing: $Path"
+  }
+
+  $stream = [System.IO.File]::OpenRead($Path)
+  $reader = New-Object System.IO.BinaryReader($stream)
+  try {
+    if ($reader.ReadUInt16() -ne 0x5A4D) {
+      Fail "$Label is not a PE executable: $Path"
+    }
+    $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $peOffset = $reader.ReadUInt32()
+    $stream.Seek($peOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+    if ($reader.ReadUInt32() -ne 0x00004550) {
+      Fail "$Label has invalid PE signature: $Path"
+    }
+    $stream.Seek(20, [System.IO.SeekOrigin]::Current) | Out-Null
+    $optionalHeaderOffset = $stream.Position
+    $magic = $reader.ReadUInt16()
+    if ($magic -ne 0x10B -and $magic -ne 0x20B) {
+      Fail "$Label has unsupported PE optional header: 0x$($magic.ToString('x'))"
+    }
+    $stream.Seek($optionalHeaderOffset + 68, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $subsystem = $reader.ReadUInt16()
+    if ($subsystem -ne 2) {
+      Fail "$Label must be Windows GUI subsystem (2), got $subsystem. Console subsystem builds show a terminal window."
+    }
+    Write-Host "OK $Label Windows GUI subsystem"
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
+  }
+}
+
 function Test-StagedSku {
   param([string]$Sku, [bool]$ExpectErp)
   & "$PSScriptRoot\stage-bundled-mods.ps1" -ProductSku $Sku | Out-Null
@@ -99,6 +138,7 @@ foreach ($sku in $skus) {
   if (-not (Test-Path $backendExe)) {
     Fail "$sku missing packaged backend executable: $backendExe"
   }
+  Assert-WindowsGuiSubsystem -Path $backendExe -Label "$sku packaged backend executable"
   $modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
   if (Test-Path $modsDir) {
     $verifyErrorCount = $Error.Count
