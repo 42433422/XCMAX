@@ -12,6 +12,7 @@ SSOT（单一真相源）:
   4. FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets (marker 区块)
   5. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
   6. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
+  7. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
 
 用法:
   python scripts/dev/sync_duty_roster.py --generate   # 生成所有派生文件
@@ -45,6 +46,7 @@ TARGETS = {
     "android": FHD / "mobile-android" / "app" / "src" / "main" / "java" / "com" / "xiuci" / "xcagi" / "mobile" / "core" / "model" / "DutyRosterSsot.kt",
     # 企业端四层 + 员工层归属/上架状态（marker 区块；前端解析器优先查此表）
     "enterprise": FHD / "frontend" / "src" / "constants" / "enterpriseWorkflowEstablishment.ts",
+    "flutter_poc": FHD / "mobile-flutter-poc" / "lib" / "src" / "data" / "duty_roster_ssot.dart",
 }
 
 # CI SSOT 标识
@@ -67,6 +69,15 @@ DEPARTMENT_COLORS = {
     "shared_retention": "#79c0ff",
 }
 CRAFT_SUBZONE_ID = "craft-pipeline"
+MOBILE_EMPLOYEE_LABEL_OVERRIDES = {
+    "user-customer-service-officer": "客户客服",
+}
+MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES = {
+    "user-customer-service-officer": "查看并回复企业客户的客服消息",
+}
+MOBILE_FIRST_EMPLOYEE_IDS = [
+    "user-customer-service-officer",
+]
 
 
 # ── SSOT 读取 ────────────────────────────────────────────────────────────
@@ -116,6 +127,22 @@ def _ts_quote(s: str) -> str:
 def _kt_quote(s: str) -> str:
     """Kotlin 字符串引号（双引号，转义内部双引号和换行符）。"""
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r") + '"'
+
+
+def _dart_quote(s: str) -> str:
+    """Dart 字符串引号（单引号，转义内部单引号、换行符和插值符号）。"""
+    return "'" + s.replace("\\", "\\\\").replace("$", "\\$").replace("'", "\\'").replace("\n", "\\n").replace("\r", "\\r") + "'"
+
+
+def _dart_named_arg(name: str, value: str, indent: int = 4) -> list[str]:
+    """生成 Dart named argument；超过 formatter 默认宽度时按 dart format 样式换行。"""
+    pad = " " * indent
+    cont = " " * (indent + 4)
+    quoted = _dart_quote(value)
+    one_line = f"{pad}{name}: {quoted},"
+    if len(one_line) <= 80:
+        return [one_line]
+    return [f"{pad}{name}:", f"{cont}{quoted},"]
 
 
 def _py_ids_list(ids: list[str], indent: int = 12) -> str:
@@ -554,7 +581,7 @@ def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[st
         ]
     )
     for eid in planned_ids:
-        label = manifests.get(eid, {}).get("name") or eid
+        label = MOBILE_EMPLOYEE_LABEL_OVERRIDES.get(eid) or manifests.get(eid, {}).get("name") or eid
         lines.append(f"        {_kt_quote(eid)} to {_kt_quote(label)},")
     lines.extend(
         [
@@ -564,9 +591,78 @@ def gen_android_duty_roster_kt(doc: dict[str, Any], manifests: dict[str, dict[st
         ]
     )
     for eid in planned_ids:
-        desc = manifests.get(eid, {}).get("description") or ""
+        desc = MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid) or manifests.get(eid, {}).get("description") or ""
         lines.append(f"        {_kt_quote(eid)} to {_kt_quote(desc)},")
     lines.extend(["    )", "}"])
+    return "\n".join(lines) + "\n"
+
+
+# ── 生成 Flutter POC duty_roster_ssot.dart（整体生成）─────────────────────
+def gen_flutter_poc_duty_roster_dart(doc: dict[str, Any], manifests: dict[str, dict[str, str]]) -> str:
+    areas = doc.get("areas") or {}
+    planned_ids: list[str] = []
+    for block in areas.values():
+        for eid in block.get("ids") or []:
+            sid = str(eid).strip()
+            if sid and sid not in planned_ids:
+                planned_ids.append(sid)
+    planned_ids = [
+        *[eid for eid in MOBILE_FIRST_EMPLOYEE_IDS if eid in planned_ids],
+        *[eid for eid in planned_ids if eid not in MOBILE_FIRST_EMPLOYEE_IDS],
+    ]
+
+    lines = [
+        SSOT_HEADER_TS,
+        "",
+        "import '../models/conversation.dart';",
+        "",
+        "class DutyRosterEmployee {",
+        "  const DutyRosterEmployee({",
+        "    required this.id,",
+        "    required this.label,",
+        "    required this.summary,",
+        "  });",
+        "",
+        "  final String id;",
+        "  final String label;",
+        "  final String summary;",
+        "}",
+        "",
+        "const adminDutyModId = 'admin-duty-employees';",
+        f"const plannedAdminEmployeeCount = {len(planned_ids)};",
+        "",
+        "const adminDutyRosterEmployees = <DutyRosterEmployee>[",
+    ]
+    for eid in planned_ids:
+        meta = manifests.get(eid, {})
+        label = MOBILE_EMPLOYEE_LABEL_OVERRIDES.get(eid) or meta.get("name") or eid
+        summary = MOBILE_EMPLOYEE_DESCRIPTION_OVERRIDES.get(eid) or meta.get("description") or ""
+        lines.extend(
+            [
+                "  DutyRosterEmployee(",
+            ]
+        )
+        lines.extend(_dart_named_arg("id", eid))
+        lines.extend(_dart_named_arg("label", label))
+        lines.extend(_dart_named_arg("summary", summary))
+        lines.append("  ),")
+    lines.extend(
+        [
+            "];",
+            "",
+            "List<ConversationItem> adminDutyRosterConversationItems() {",
+            "  return adminDutyRosterEmployees.map((employee) {",
+            "    return ConversationItem(",
+            "      id: 'employee:$adminDutyModId:${employee.id}',",
+            "      type: ConversationType.aiTask,",
+            "      title: employee.label,",
+            "      subtitle: employee.summary,",
+            "      timestampText: '',",
+            "    );",
+            "  }).toList(growable: false);",
+            "}",
+        ]
+    )
     return "\n".join(lines) + "\n"
 
 
@@ -635,6 +731,8 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
         content = path.read_text(encoding="utf-8")
         new_block = gen_enterprise_block(doc)
         return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
+    if target == "flutter_poc":
+        return gen_flutter_poc_duty_roster_dart(doc, manifests)
     raise ValueError(f"未知目标: {target}")
 
 
