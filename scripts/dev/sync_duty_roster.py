@@ -176,7 +176,10 @@ def gen_modstore_departments_block(doc: dict[str, Any]) -> str:
         for sz_key, sz in subzones.items():
             sz_label = sz.get("label") or sz_key
             sz_ids = sz.get("ids") or []
-            lines.append(f'            {_py_quote(sz_key)}: {{"label": {_py_quote(sz_label)}, "ids": {_py_ids_list(sz_ids, indent=16)}}},')
+            lines.append(f"            {_py_quote(sz_key)}: {{")
+            lines.append(f'                "label": {_py_quote(sz_label)},')
+            lines.append(f'                "ids": {_py_ids_list(sz_ids, indent=20)},')
+            lines.append("            },")
         lines.append("        },")
         lines.append("    },")
     lines.append("}")

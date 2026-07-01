@@ -10,6 +10,7 @@
   - _recent_failures: 最近 N 次失败任务的失败原因
   - _scope_summary: 自己管什么（scope_globs / forbidden_globs 列表）
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -63,19 +64,28 @@ def _scan_scope_files(
                 if rel in seen:
                     continue
                 # 跳过常见噪音目录
-                if any(seg in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"} for seg in p.parts):
+                if any(
+                    seg in {"node_modules", ".venv", ".git", "__pycache__", "dist", "build"}
+                    for seg in p.parts
+                ):
                     continue
                 if not fnmatch.fnmatch(rel, py_pattern):
                     continue
                 seen.add(rel)
                 try:
                     st = p.stat()
-                    candidates.append({
-                        "path": rel,
-                        "size_bytes": int(st.st_size),
-                        "mtime_iso": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
-                        "mtime_age_hours": round((datetime.now(timezone.utc).timestamp() - st.st_mtime) / 3600.0, 1),
-                    })
+                    candidates.append(
+                        {
+                            "path": rel,
+                            "size_bytes": int(st.st_size),
+                            "mtime_iso": datetime.fromtimestamp(
+                                st.st_mtime, tz=timezone.utc
+                            ).isoformat(),
+                            "mtime_age_hours": round(
+                                (datetime.now(timezone.utc).timestamp() - st.st_mtime) / 3600.0, 1
+                            ),
+                        }
+                    )
                 except OSError:
                     continue
         except (OSError, PermissionError):
@@ -108,15 +118,19 @@ def _recent_runs_from_db(
         return []
     out: List[Dict[str, Any]] = []
     for r in rows:
-        out.append({
-            "task": (r.task or "")[:120],
-            "status": str(r.status or ""),
-            "duration_ms": int(r.duration_ms or 0),
-            "llm_tokens": int(r.llm_tokens or 0),
-            "failure_kind": str(r.failure_kind or ""),
-            "error_preview": (r.error_preview or "")[:200] if hasattr(r, "error_preview") else "",
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
+        out.append(
+            {
+                "task": (r.task or "")[:120],
+                "status": str(r.status or ""),
+                "duration_ms": int(r.duration_ms or 0),
+                "llm_tokens": int(r.llm_tokens or 0),
+                "failure_kind": str(r.failure_kind or ""),
+                "error_preview": (
+                    (r.error_preview or "")[:200] if hasattr(r, "error_preview") else ""
+                ),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
     return out
 
 
@@ -145,13 +159,17 @@ def _recent_failures_from_db(
         return []
     out: List[Dict[str, Any]] = []
     for r in rows:
-        out.append({
-            "task": (r.task or "")[:120],
-            "status": str(r.status or ""),
-            "failure_kind": str(r.failure_kind or ""),
-            "error_preview": (r.error_preview or "")[:300] if hasattr(r, "error_preview") else "",
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
+        out.append(
+            {
+                "task": (r.task or "")[:120],
+                "status": str(r.status or ""),
+                "failure_kind": str(r.failure_kind or ""),
+                "error_preview": (
+                    (r.error_preview or "")[:300] if hasattr(r, "error_preview") else ""
+                ),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
     return out
 
 
@@ -186,11 +204,14 @@ def enrich_perception(
     if not scope_globs and not forbidden_globs and manifest:
         try:
             from modstore_server.employee_scope_policy import workspace_policy_from_manifest
+
             _sg, _fg, _ag = workspace_policy_from_manifest(manifest)
             scope_globs = _sg or []
             forbidden_globs = _fg or []
         except Exception as exc:  # noqa: BLE001
-            logger.debug("workspace_policy_from_manifest failed employee_id=%s err=%s", employee_id, exc)
+            logger.debug(
+                "workspace_policy_from_manifest failed employee_id=%s err=%s", employee_id, exc
+            )
 
     ni["_scope_summary"] = {
         "scope_globs": scope_globs,

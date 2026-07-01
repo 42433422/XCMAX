@@ -684,9 +684,9 @@ def execute_digest_line_work_units(
                     int(record_id), units
                 )
                 if local_results:
-                    run_payload["action_items_writeback"][
-                        "local_verified_merge"
-                    ] = _mark_local_verified_action_items_merged(local_results)
+                    run_payload["action_items_writeback"]["local_verified_merge"] = (
+                        _mark_local_verified_action_items_merged(local_results)
+                    )
             except Exception:
                 logger.exception("action_items dispatch writeback failed record_id=%s", record_id)
 

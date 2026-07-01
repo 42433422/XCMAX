@@ -29,9 +29,7 @@ _TITLE_PREFIX = "[员工交流圈]"
 
 
 def _enabled() -> bool:
-    raw = (
-        (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
-    )
+    raw = (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -205,18 +203,14 @@ def _post_report(
             "error": out.get("error", ""),
         }
     except Exception:
-        logger.exception(
-            "collab reporter: post failed key=%s dept=%s", report_key, dept_key
-        )
+        logger.exception("collab reporter: post failed key=%s dept=%s", report_key, dept_key)
         return {"ok": False, "skipped": False, "thread_id": tid, "error": "exception"}
 
 
 # ── 6 类 loop 产出的汇报入口 ─────────────────────────────────────────────────
 
 
-def report_meeting_minutes(
-    *, record_id: int, day: str, minutes_html: str
-) -> Dict[str, Any]:
+def report_meeting_minutes(*, record_id: int, day: str, minutes_html: str) -> Dict[str, Any]:
     """员工大会纪要 → company 线程，sender=meeting-chair。"""
     try:
         from modstore_server.daily_digest import _html_to_text_excerpt
@@ -245,9 +239,7 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
 
         items = list_action_items(day=day, record_id=record_id, limit=2000)
     except Exception:
-        logger.exception(
-            "collab reporter: list_action_items failed day=%s rid=%s", day, record_id
-        )
+        logger.exception("collab reporter: list_action_items failed day=%s rid=%s", day, record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
     by_emp: Dict[str, List[Dict[str, Any]]] = {}
@@ -273,9 +265,7 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
             txt = _excerpt(str(it.get("text") or ""), 200)
             lines.append(f"- **{pri}** [{kind}] {txt}")
         label = labels.get(eid, eid)
-        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(
-            lines
-        )
+        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(lines)
         res = _post_report(
             dept_key=_dept_for_employee(eid),
             sender_employee_id=eid,
@@ -383,9 +373,7 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
             status = str(row.status or "")
             diff = _excerpt(str(row.diff_explanation or ""), 1500)
     except Exception:
-        logger.exception(
-            "collab reporter: load evolution failed id=%s", evolution_record_id
-        )
+        logger.exception("collab reporter: load evolution failed id=%s", evolution_record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
     md = (
@@ -457,10 +445,7 @@ def report_staged_change(
     *, staged_id: int, branch: str, files: int, pr_url: str = ""
 ) -> Dict[str, Any]:
     """daily-orchestrator 的代码改动（staged change / PR）→ company 线程。"""
-    md = (
-        f"🛠️ **daily-orchestrator 自动改动**\n\n"
-        f"分支：`{branch}`\n变更文件：{int(files)} 个"
-    )
+    md = f"🛠️ **daily-orchestrator 自动改动**\n\n" f"分支：`{branch}`\n变更文件：{int(files)} 个"
     if pr_url:
         md += f"\nPR：{pr_url}"
     return _post_report(

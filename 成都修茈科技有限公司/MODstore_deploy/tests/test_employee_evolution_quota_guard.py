@@ -82,9 +82,9 @@ def test_classify_transient_vs_prompt():
     assert classify_failure_kind("429: Too many requests type=limitation") == (
         FAILURE_KIND_TRANSIENT
     )
-    assert classify_failure_kind("handler para_delegate failed status=para_api_failed_outboxed") == (
-        FAILURE_KIND_TRANSIENT
-    )
+    assert classify_failure_kind(
+        "handler para_delegate failed status=para_api_failed_outboxed"
+    ) == (FAILURE_KIND_TRANSIENT)
     assert classify_failure_kind("upstream 503 service unavailable") == FAILURE_KIND_TRANSIENT
     # 真正可能由 prompt/逻辑导致的失败
     assert classify_failure_kind("JSONDecodeError: expecting value") == FAILURE_KIND_PROMPT

@@ -85,9 +85,7 @@ def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, m
         return {"ok": True}
 
     monkeypatch.setattr("modstore_server.incident_bus.execute_employee_task", fake_execute)
-    monkeypatch.setattr(
-        "modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None
-    )
+    monkeypatch.setattr("modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None)
     monkeypatch.setattr(
         "modstore_server.employee_autonomy_service.ingest_suggestion_event_payload",
         lambda *a, **k: None,

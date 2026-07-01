@@ -1328,7 +1328,9 @@ def _code_task_text(run_id: str, evaluation: Dict[str, Any], memory: Dict[str, A
             f"  root_cause: {root_cause}\n"
             f"  fix_diff (first 1500 chars):\n{fix_diff}"
         )
-    fix_digest = "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
+    fix_digest = (
+        "\n\n".join(fix_digest_parts) if fix_digest_parts else "(no historical fixes matched)"
+    )
     return (
         "Run a real MODstore self-maintenance improvement task. "
         "Use the previous loop memory and current evidence gaps to fix the highest-value "
@@ -2472,14 +2474,16 @@ def _mint_local_para_guest_auth_token(api_base: str) -> Optional[str]:
         return None
     try:
         with sqlite3.connect(str(db_file), timeout=2.0) as conn:
-            row = conn.execute("""
+            row = conn.execute(
+                """
                 select id, email
                 from users
                 where email = 'guest@devfleet.local'
                    or (email like 'guest_%@devfleet.local')
                 order by case when email = 'guest@devfleet.local' then 0 else 1 end
                 limit 1
-                """).fetchone()
+                """
+            ).fetchone()
     except Exception:
         logger.warning(
             "failed to read Para guest user from sqlite for local auth mint", exc_info=True
@@ -3247,8 +3251,7 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
             para_workspace=para_workspace, run_id=final.get("run_id")
         )
         if salvage_summary and (
-            salvage_summary.get("salvaged_fixes")
-            or salvage_summary.get("salvaged_patterns")
+            salvage_summary.get("salvaged_fixes") or salvage_summary.get("salvaged_patterns")
         ):
             logger.info(
                 "kb salvage run_id=%s salvaged_fixes=%s salvaged_patterns=%s",
@@ -3262,7 +3265,9 @@ def _update_loop_memory(final: Dict[str, Any], gate: Dict[str, Any]) -> None:
                 "run_id": final.get("run_id"),
                 "para_task_id": final.get("para_task_id"),
                 "salvaged_fixes": salvage_summary.get("salvaged_fixes") if salvage_summary else 0,
-                "salvaged_patterns": salvage_summary.get("salvaged_patterns") if salvage_summary else 0,
+                "salvaged_patterns": (
+                    salvage_summary.get("salvaged_patterns") if salvage_summary else 0
+                ),
                 "skipped": salvage_summary.get("skipped") if salvage_summary else 0,
                 "workspace": salvage_summary.get("workspace") if salvage_summary else None,
                 "timestamp": _iso(_utc_now()),

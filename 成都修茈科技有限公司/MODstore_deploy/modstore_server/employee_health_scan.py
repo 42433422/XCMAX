@@ -260,20 +260,17 @@ def run_health_scan(
     with sf() as session:
         err_col = func.coalesce(EmployeeExecutionMetric.error, "")
         task_col = func.lower(func.coalesce(EmployeeExecutionMetric.task, ""))
-        rows = (
-            session.query(
-                EmployeeExecutionMetric.employee_id,
-                func.count(EmployeeExecutionMetric.id).label("fail_count"),
-                func.max(EmployeeExecutionMetric.created_at).label("last_at"),
-            )
-            .filter(
-                EmployeeExecutionMetric.created_at >= cutoff,
-                EmployeeExecutionMetric.status != "success",
-                or_(
-                    EmployeeExecutionMetric.failure_kind.is_(None),
-                    ~EmployeeExecutionMetric.failure_kind.in_(_INFRA_FAILURE_KINDS),
-                ),
-            )
+        rows = session.query(
+            EmployeeExecutionMetric.employee_id,
+            func.count(EmployeeExecutionMetric.id).label("fail_count"),
+            func.max(EmployeeExecutionMetric.created_at).label("last_at"),
+        ).filter(
+            EmployeeExecutionMetric.created_at >= cutoff,
+            EmployeeExecutionMetric.status != "success",
+            or_(
+                EmployeeExecutionMetric.failure_kind.is_(None),
+                ~EmployeeExecutionMetric.failure_kind.in_(_INFRA_FAILURE_KINDS),
+            ),
         )
         for marker in _INFRA_FAILURE_MARKERS:
             rows = rows.filter(~err_col.ilike(f"%{marker}%"))

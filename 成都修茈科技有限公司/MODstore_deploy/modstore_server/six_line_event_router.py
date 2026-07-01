@@ -176,7 +176,9 @@ def format_backlog_entries_as_vibe_sections(entries: Sequence[Dict[str, Any]]) -
     return "\n\n".join(sections).strip()
 
 
-def _drop_stale_time_rail_entries(entries: Sequence[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+def _drop_stale_time_rail_entries(
+    entries: Sequence[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], int]:
     time_rail_entries = [
         row
         for row in entries

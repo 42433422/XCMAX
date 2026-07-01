@@ -560,9 +560,7 @@ class TestModstoreGet:
             data = await modstore_client.modstore_get("/api/internal")
         assert data == {"ok": True}
         mock_client.post.assert_not_called()
-        assert mock_client.get.call_args.kwargs["headers"] == {
-            "X-Internal-Api-Key": "internal-key"
-        }
+        assert mock_client.get.call_args.kwargs["headers"] == {"X-Internal-Api-Key": "internal-key"}
 
     @pytest.mark.asyncio
     async def test_get_internal_key_falls_back_to_admin_login(self, monkeypatch):

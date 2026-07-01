@@ -189,8 +189,12 @@ def test_health_scan_evolution_records_are_cooled_down(fresh_db, monkeypatch):
         )
         session.commit()
 
-    out1 = run_health_scan(lookback_hours=24, warn_threshold=1, deactivate_threshold=2, notify=False)
-    out2 = run_health_scan(lookback_hours=24, warn_threshold=1, deactivate_threshold=2, notify=False)
+    out1 = run_health_scan(
+        lookback_hours=24, warn_threshold=1, deactivate_threshold=2, notify=False
+    )
+    out2 = run_health_scan(
+        lookback_hours=24, warn_threshold=1, deactivate_threshold=2, notify=False
+    )
     assert out1["deactivated"][0]["employee_id"] == "real-worker"
     assert out2["deactivated"][0]["employee_id"] == "real-worker"
 

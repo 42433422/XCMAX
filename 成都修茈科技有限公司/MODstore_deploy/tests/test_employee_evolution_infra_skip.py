@@ -71,9 +71,7 @@ def test_evolution_excludes_infra_quota_failures():
                 )
             )
         s.commit()
-        cands = dict(
-            svc._evolution_failure_candidates(s, cutoff=cutoff, min_failures=3, limit=20)
-        )
+        cands = dict(svc._evolution_failure_candidates(s, cutoff=cutoff, min_failures=3, limit=20))
     assert cands.get("emp-real") == 4
     assert "emp-quota" not in cands
     assert "emp-ratelimit" not in cands
@@ -89,7 +87,5 @@ def test_mixed_failures_only_count_prompt_addressable():
         _add_failures(s, "emp-mixed", 4, "403: 配额不足: llm_calls")  # 基建：不计
         _add_failures(s, "emp-mixed", 3, "handler raised ValueError")  # 真：计
         s.commit()
-        cands = dict(
-            svc._evolution_failure_candidates(s, cutoff=cutoff, min_failures=3, limit=20)
-        )
+        cands = dict(svc._evolution_failure_candidates(s, cutoff=cutoff, min_failures=3, limit=20))
     assert cands.get("emp-mixed") == 3
