@@ -61,7 +61,7 @@ for module in [
     "app.db.models",
     "app.middleware",
     "app.infrastructure.mods",
-    "app.mod_sdk.erp_wechat_contacts_facade",
+    "app.mod_sdk",
     "uvicorn",
     "fastapi",
     "sqlalchemy",

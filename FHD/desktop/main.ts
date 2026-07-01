@@ -8,6 +8,7 @@ import {
   ipcMain,
   nativeImage,
   screen,
+  session,
   shell
 } from 'electron'
 import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
@@ -22,6 +23,7 @@ const APP_NAME = 'XCAGI'
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
 /** macOS 12+「隔空播放接收器」占用 :5000，TCP 可达但返回 AirTunes 空 403 → Electron 白屏。 */
 function resolveDefaultDesktopPort(): number {
@@ -106,7 +108,7 @@ function readPackagedProductSku(): ProductSku | null {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sku?: string }
+      const raw = JSON.parse(readJsonTextFile(filePath)) as { sku?: string }
       const sku = String(raw.sku || '').trim().toLowerCase()
       if (sku === 'personal' || sku === 'enterprise') {
         return sku
@@ -116,6 +118,17 @@ function readPackagedProductSku(): ProductSku | null {
     }
   }
   return null
+}
+
+function readJsonTextFile(filePath: string): string {
+  const buffer = fs.readFileSync(filePath)
+  let text: string
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    text = buffer.toString('utf16le')
+  } else {
+    text = buffer.toString('utf8')
+  }
+  return text.replace(/^\uFEFF/, '')
 }
 
 function backendEditionEnv(): Record<string, string> {
@@ -318,7 +331,7 @@ function readPackagedAppVersion(): string {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = fs.readFileSync(filePath, 'utf8').trim()
+      const raw = readJsonTextFile(filePath).trim()
       if (filePath.endsWith('version.txt')) return raw || 'unknown'
       const json = JSON.parse(raw) as { sku?: string; schema_version?: number }
       return `${json.sku || 'enterprise'}-${json.schema_version ?? 1}`
@@ -575,6 +588,40 @@ function tagDesktopWebContents(win: BrowserWindow): void {
       classes.map(c => `document.documentElement.classList.add('${c}');`).join('')
     )
     .catch(() => { })
+}
+
+function isTrustedDesktopOrigin(rawUrl?: string): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(DEFAULT_PORT)
+  } catch {
+    return false
+  }
+}
+
+function configureDesktopMediaPermissions(): void {
+  const ses = session.defaultSession
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const requestUrl =
+      (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+  })
+  ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const origin = requestingOrigin || webContents?.getURL() || ''
+    return wantsAudio && isTrustedDesktopOrigin(origin)
+  })
 }
 
 function stopBackend(): void {
@@ -839,6 +886,7 @@ if (!gotLock) {
       }
     )
 
+    configureDesktopMediaPermissions()
     createMenu()
     createTray()
     await startBackend()

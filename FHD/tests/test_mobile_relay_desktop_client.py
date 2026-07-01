@@ -47,7 +47,7 @@ def test_register_desktop_relay_uses_stable_device_id(monkeypatch, tmp_path):
 
     relay.register_desktop_relay(host="192.168.0.38", port=17500)
     device_identity._cached = None
-    relay.register_desktop_relay(host="192.168.0.38", port=17501)
+    relay.register_desktop_relay(host="192.168.0.38", port=17501, force_new=True)
 
     assert len(posted) == 2
     assert posted[0]["device_id"] == posted[1]["device_id"]
@@ -97,6 +97,17 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
     assert payload["pairing_code"] == "123456"
     assert payload["qr_json"]["v"] == 3
     assert "desktop_token" not in payload
+
+
+def test_register_desktop_relay_invalid_base_url_returns_none(monkeypatch, tmp_path):
+    from app.services import mobile_relay_desktop_client as relay
+
+    monkeypatch.setenv("XCAGI_RELAY_BASE_URL", "http://:")
+    monkeypatch.setattr(relay, "_CONFIG_FILE", tmp_path / "mobile_relay_desktop.json")
+
+    payload = relay.register_desktop_relay(host="192.168.0.38", port=17500, force_new=True)
+
+    assert payload is None
 
 
 def test_execute_task_waits_for_real_codex_result(monkeypatch):

@@ -97,6 +97,12 @@ docker run --rm --platform linux/amd64 \
     wine64 python -m PyInstaller --noconfirm --clean scripts/package/xcagi_backend.spec
   '
 
+BACKEND_EXE="${ROOT}/dist/xcagi-backend/xcagi-backend.exe"
+if [[ ! -f "${BACKEND_EXE}" ]]; then
+  echo "[err] Windows backend executable missing: ${BACKEND_EXE}" >&2
+  exit 1
+fi
+
 printf '%s\n' "${VERSION}" > release/VERSION
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json
 
@@ -104,6 +110,13 @@ printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-
 
 # Electron NSIS（宿主 electron-builder 可交叉编译 win）
 (cd desktop && [ -d node_modules ] || npm install)
+(cd desktop && npm run build)
+for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_internal'" "180_000"; do
+  if ! grep -Fq "${marker}" desktop/dist/main.js; then
+    echo "[err] Electron main bundle is stale; missing marker: ${marker}" >&2
+    exit 1
+  fi
+done
 npm version "${VERSION}" --no-git-tag-version --prefix desktop
 APP_ID="$(sku_app_id "${SKU}")"
 PUBLISH_URL="$(sku_update_url "${SKU}")"
@@ -133,6 +146,17 @@ FINAL="${OUT_DIR}/XCAGI-${LABEL}-Setup-${VERSION}-x64.exe"
 if [[ "${SETUP}" != "${FINAL}" ]]; then
   mv -f "${SETUP}" "${FINAL}"
 fi
+
+UNPACKED="${OUT_DIR}/win-unpacked/resources"
+for required in \
+  "${UNPACKED}/app.asar" \
+  "${UNPACKED}/backend/xcagi-backend.exe" \
+  "${UNPACKED}/product-sku.json"; do
+  if [[ ! -f "${required}" ]]; then
+    echo "[err] packaged Windows release missing required file: ${required}" >&2
+    exit 1
+  fi
+done
 
 node scripts/package/generate-update-metadata.mjs "${FINAL}" "${VERSION}" win
 

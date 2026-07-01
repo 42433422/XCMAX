@@ -81,18 +81,14 @@ class TestGetSalesReport:
     @patch("app.services.report_service.get_db")
     def test_group_by_product(self, mock_get_db, service):
         """按产品分组"""
-        mock_item = MagicMock()
-        mock_item.product_name = "产品A"
-        mock_item.product_id = 1
-        mock_item.quantity = 10
-        mock_item.amount = 100.0
-
         mock_record = MagicMock()
-        mock_record.items = [mock_item]
-        mock_record.customer_name = "客户1"
-        mock_record.customer_id = 1
-        mock_record.total_amount = 100.0
-        mock_record.shipment_date = datetime(2026, 1, 15)
+        mock_record.id = 1
+        mock_record.product_name = "产品A"
+        mock_record.quantity_kg = 10
+        mock_record.amount = 100.0
+        mock_record.purchase_unit = "客户1"
+        mock_record.unit_id = 1
+        mock_record.created_at = datetime(2026, 1, 15)
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -109,10 +105,11 @@ class TestGetSalesReport:
     def test_group_by_customer(self, mock_get_db, service):
         """按客户分组"""
         mock_record = MagicMock()
-        mock_record.customer_name = "客户A"
-        mock_record.customer_id = 1
-        mock_record.total_amount = 500.0
-        mock_record.shipment_date = datetime(2026, 1, 15)
+        mock_record.id = 1
+        mock_record.purchase_unit = "客户A"
+        mock_record.unit_id = 1
+        mock_record.amount = 500.0
+        mock_record.created_at = datetime(2026, 1, 15)
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -128,10 +125,11 @@ class TestGetSalesReport:
     def test_group_by_date(self, mock_get_db, service):
         """按日期分组"""
         mock_record = MagicMock()
-        mock_record.customer_name = "客户A"
-        mock_record.customer_id = 1
-        mock_record.total_amount = 300.0
-        mock_record.shipment_date = datetime(2026, 1, 15)
+        mock_record.id = 1
+        mock_record.purchase_unit = "客户A"
+        mock_record.unit_id = 1
+        mock_record.amount = 300.0
+        mock_record.created_at = datetime(2026, 1, 15)
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -145,12 +143,13 @@ class TestGetSalesReport:
 
     @patch("app.services.report_service.get_db")
     def test_group_by_date_with_none_date(self, mock_get_db, service):
-        """shipment_date 为 None 时归类为 unknown"""
+        """created_at 为 None 时归类为 unknown"""
         mock_record = MagicMock()
-        mock_record.customer_name = "客户A"
-        mock_record.customer_id = 1
-        mock_record.total_amount = 200.0
-        mock_record.shipment_date = None
+        mock_record.id = 1
+        mock_record.purchase_unit = "客户A"
+        mock_record.unit_id = 1
+        mock_record.amount = 200.0
+        mock_record.created_at = None
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -179,8 +178,8 @@ class TestGetSalesReport:
     def test_with_date_filters(self, mock_get_db, mock_func, mock_sr, service):
         """日期范围过滤"""
         # Use real SQLAlchemy column objects so >= comparison with datetime works
-        mock_sr.shipment_date = column("shipment_date")
-        mock_sr.customer_id = column("customer_id")
+        mock_sr.created_at = column("created_at")
+        mock_sr.unit_id = column("unit_id")
         mock_sr.id = column("id")
 
         mock_func.count.return_value.label.return_value = "record_count"
@@ -203,8 +202,8 @@ class TestGetSalesReport:
     @patch("app.services.report_service.get_db")
     def test_with_customer_id_filter(self, mock_get_db, mock_func, mock_sr, service):
         """客户 ID 过滤"""
-        mock_sr.shipment_date = column("shipment_date")
-        mock_sr.customer_id = column("customer_id")
+        mock_sr.created_at = column("created_at")
+        mock_sr.unit_id = column("unit_id")
         mock_sr.id = column("id")
 
         mock_func.count.return_value.label.return_value = "record_count"
@@ -220,20 +219,35 @@ class TestGetSalesReport:
         assert result["success"] is True
 
     @patch("app.services.report_service.get_db")
+    def test_with_filters_uses_current_shipment_model_columns(self, mock_get_db, service):
+        """字段漂移回归：使用真实 ShipmentRecord 字段构建过滤条件。"""
+        mock_db = MagicMock()
+        mock_query = MagicMock()
+        mock_query.filter.return_value = mock_query
+        mock_query.group_by.return_value.all.return_value = []
+        mock_db.query.return_value = mock_query
+        mock_get_db.return_value = _mock_db_ctx(mock_db)
+
+        result = service.get_sales_report(
+            start_date=datetime(2026, 1, 1),
+            end_date=datetime(2026, 1, 31),
+            customer_id=1,
+        )
+
+        assert result["success"] is True
+        assert mock_query.filter.call_count == 3
+
+    @patch("app.services.report_service.get_db")
     def test_product_with_no_name_uses_fallback(self, mock_get_db, service):
         """产品名称为空时使用 fallback"""
-        mock_item = MagicMock()
-        mock_item.product_name = None
-        mock_item.product_id = 42
-        mock_item.quantity = 5
-        mock_item.amount = 50.0
-
         mock_record = MagicMock()
-        mock_record.items = [mock_item]
-        mock_record.customer_name = "客户1"
-        mock_record.customer_id = 1
-        mock_record.total_amount = 50.0
-        mock_record.shipment_date = datetime(2026, 1, 15)
+        mock_record.id = 42
+        mock_record.product_name = None
+        mock_record.quantity_kg = 5
+        mock_record.amount = 50.0
+        mock_record.purchase_unit = "客户1"
+        mock_record.unit_id = 1
+        mock_record.created_at = datetime(2026, 1, 15)
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -249,10 +263,11 @@ class TestGetSalesReport:
     def test_customer_with_no_name_uses_fallback(self, mock_get_db, service):
         """客户名称为空时使用 fallback"""
         mock_record = MagicMock()
-        mock_record.customer_name = None
-        mock_record.customer_id = 7
-        mock_record.total_amount = 200.0
-        mock_record.shipment_date = datetime(2026, 1, 15)
+        mock_record.id = 9
+        mock_record.purchase_unit = None
+        mock_record.unit_id = 7
+        mock_record.amount = 200.0
+        mock_record.created_at = datetime(2026, 1, 15)
 
         mock_db = MagicMock()
         mock_db.query.return_value.group_by.return_value.all.return_value = [
@@ -626,9 +641,9 @@ class TestGetDashboardSummary:
     ):
         """基本仪表盘摘要"""
         # Use real SQLAlchemy column objects so >= comparison with datetime works
-        mock_sr.total_amount = column("total_amount")
+        mock_sr.amount = column("amount")
         mock_sr.id = column("id")
-        mock_sr.shipment_date = column("shipment_date")
+        mock_sr.created_at = column("created_at")
         mock_po.id = column("id")
         mock_po.total_amount = column("total_amount")
         mock_po.order_date = column("order_date")
@@ -688,9 +703,9 @@ class TestGetDashboardSummary:
         service,
     ):
         """金额为 None 时使用 0"""
-        mock_sr.total_amount = column("total_amount")
+        mock_sr.amount = column("amount")
         mock_sr.id = column("id")
-        mock_sr.shipment_date = column("shipment_date")
+        mock_sr.created_at = column("created_at")
         mock_po.id = column("id")
         mock_po.total_amount = column("total_amount")
         mock_po.order_date = column("order_date")
@@ -723,6 +738,33 @@ class TestGetDashboardSummary:
 
         with patch.object(service, "_decimal_to_float", side_effect=_decimal_to_float_static):
             result = service.get_dashboard_summary()
+
+        assert result["success"] is True
+
+    @patch("app.services.report_service.get_db")
+    def test_uses_current_shipment_model_columns(self, mock_get_db, service):
+        """字段漂移回归：dashboard 直接使用 ShipmentRecord.amount/created_at。"""
+        mock_db = MagicMock()
+        call_count = 0
+
+        def side_effect_query(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            m = MagicMock()
+            if call_count == 1:
+                m.scalar.return_value = 0
+            elif call_count == 2:
+                m.filter.return_value.scalar.return_value = 0
+            elif call_count == 3 or call_count == 4:
+                m.filter.return_value.first.return_value = (0, None)
+            elif call_count == 5 or call_count == 6:
+                m.filter.return_value.scalar.return_value = 0
+            return m
+
+        mock_db.query = MagicMock(side_effect=side_effect_query)
+        mock_get_db.return_value = _mock_db_ctx(mock_db)
+
+        result = service.get_dashboard_summary()
 
         assert result["success"] is True
 
