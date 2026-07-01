@@ -85,9 +85,7 @@ def test_recovery_clears_consecutive_failures(db_ready):
     job_id = _job("recover")
     base = datetime.now(timezone.utc)
     record_job_run(job_id=job_id, status="failed", started_at=base, error="x")
-    record_job_run(
-        job_id=job_id, status="success", started_at=base + timedelta(seconds=1)
-    )
+    record_job_run(job_id=job_id, status="success", started_at=base + timedelta(seconds=1))
 
     entry = _find(get_runtime_status(), job_id)
     assert entry is not None

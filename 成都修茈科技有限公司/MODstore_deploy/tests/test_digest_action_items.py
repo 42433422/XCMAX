@@ -87,9 +87,7 @@ def test_parse_compacts_cross_day_duplicate_open_items(monkeypatch):
     assert second["closed_duplicates"] == 1
 
     with get_engine().begin() as conn:
-        rows = conn.execute(
-            text("SELECT day, status FROM daily_action_items ORDER BY day")
-        ).all()
+        rows = conn.execute(text("SELECT day, status FROM daily_action_items ORDER BY day")).all()
     assert rows == [("2026-06-27", "closed"), ("2026-06-28", "open")]
 
     latest = stats(day="2026-06-28")

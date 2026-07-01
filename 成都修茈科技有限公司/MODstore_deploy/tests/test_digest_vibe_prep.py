@@ -168,7 +168,7 @@ def test_template_fallback_emits_generation_breakpoint(monkeypatch) -> None:
                 "name": "测试质量运行员",
                 "pack_version": "3.4.5",
                 "scope_globs": ["tests/test_digest_vibe_prep.py"],
-            }
+            },
         ],
         ctx=ctx,
     )

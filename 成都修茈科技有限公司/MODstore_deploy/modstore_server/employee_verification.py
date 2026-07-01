@@ -18,6 +18,7 @@
     "summary": "全部通过" or "X 项失败：..."
   }
 """
+
 from __future__ import annotations
 
 import json
@@ -154,8 +155,7 @@ def _check_tests_reported(llm_out: Dict[str, Any], task: str) -> Dict[str, Any]:
     """如果 task 涉及测试，检查 LLM 是否报告了测试结果。"""
     task_lower = str(task or "").lower()
     involves_tests = any(
-        kw in task_lower
-        for kw in ("测试", "test", "qa", "tdd", "coverage", "单测", "回归")
+        kw in task_lower for kw in ("测试", "test", "qa", "tdd", "coverage", "单测", "回归")
     )
     if not involves_tests:
         return {

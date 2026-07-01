@@ -752,9 +752,7 @@ def execute_duty_graph_programmatic(
             # layer_index entry doesn't exist yet. Use .get(x, -1) to tolerate
             # those back-edges instead of raising KeyError.
             layer_index[eid] = (
-                (max((layer_index.get(x, -1) for x in relevant), default=-1) + 1)
-                if relevant
-                else 0
+                (max((layer_index.get(x, -1) for x in relevant), default=-1) + 1) if relevant else 0
             )
         layers: Dict[int, List[str]] = {}
         for eid, lvl in layer_index.items():

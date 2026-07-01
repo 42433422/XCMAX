@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]  # FHD/
 SOURCE = ROOT / "config" / "neuro_bus_events.yaml"
 SOURCE_REL = "config/neuro_bus_events.yaml"
 
-PY_HEADER = f"# CI SSOT: generated from {SOURCE_REL} — DO NOT EDIT BY HAND\n# 改事件契约请编辑该 yaml 后运行: python scripts/dev/neuro_bus_events_ssot.py generate --apply\n"
+PY_HEADER = f"# CI SSOT: generated from {SOURCE_REL} — DO NOT EDIT BY HAND\n# 改事件契约请编辑该 yaml 后运行: python scripts/dev/neuro_bus_events_ssot.py generate --apply\n# fmt: off\n"
 JS_HEADER = f"// CI SSOT: generated from {SOURCE_REL} — DO NOT EDIT BY HAND\n// 改事件契约请编辑该 yaml 后运行: python scripts/dev/neuro_bus_events_ssot.py generate --apply\n"
 
 EXIT_OK = 0

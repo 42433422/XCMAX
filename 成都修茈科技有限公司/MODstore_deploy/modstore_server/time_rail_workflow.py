@@ -258,7 +258,9 @@ def _ensure_p2_line_mappings(
 
 
 def _line_total_sections(line_dispatch: Dict[str, Any], line: str) -> Optional[int]:
-    meta = line_dispatch.get("line_meta") if isinstance(line_dispatch.get("line_meta"), dict) else {}
+    meta = (
+        line_dispatch.get("line_meta") if isinstance(line_dispatch.get("line_meta"), dict) else {}
+    )
     row = meta.get(line) if isinstance(meta.get(line), dict) else None
     if not row:
         return None
@@ -370,7 +372,11 @@ def _ensure_non_triggered_time_rail_decisions(
     rollback = (
         pipeline.get("rollback")
         if isinstance(pipeline.get("rollback"), dict)
-        else (phase_c or {}).get("rollback") if isinstance((phase_c or {}).get("rollback"), dict) else None
+        else (
+            (phase_c or {}).get("rollback")
+            if isinstance((phase_c or {}).get("rollback"), dict)
+            else None
+        )
     )
     if not rollback:
         mark(

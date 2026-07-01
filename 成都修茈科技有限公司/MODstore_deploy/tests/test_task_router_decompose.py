@@ -20,7 +20,13 @@ class _DummyCtx:
 
 def _fake_employees():
     return [
-        {"id": "writer", "name": "文案", "description": "写作", "domain": "marketing", "skills": []},
+        {
+            "id": "writer",
+            "name": "文案",
+            "description": "写作",
+            "domain": "marketing",
+            "skills": [],
+        },
         {"id": "designer", "name": "设计", "description": "配图", "domain": "design", "skills": []},
     ]
 

@@ -10,6 +10,7 @@
 
 挂载点：employee_executor.execute_employee_task 末尾，把 report 写到 result["human_report"]。
 """
+
 from __future__ import annotations
 
 import json
@@ -161,9 +162,13 @@ def _format_evolution(result: Dict[str, Any]) -> str:
         recent = []
 
     if needed:
-        lines = [f"⚠️ 学习信号：最近 {lookback}h 失败 {fail_count} 次（>= 阈值 {min_failures}），需要 prompt 进化"]
+        lines = [
+            f"⚠️ 学习信号：最近 {lookback}h 失败 {fail_count} 次（>= 阈值 {min_failures}），需要 prompt 进化"
+        ]
     else:
-        lines = [f"学习信号：最近 {lookback}h 失败 {fail_count} 次（< 阈值 {min_failures}），暂不需要进化"]
+        lines = [
+            f"学习信号：最近 {lookback}h 失败 {fail_count} 次（< 阈值 {min_failures}），暂不需要进化"
+        ]
     if suggestion:
         lines.append(f"  - {suggestion}")
     for f in recent[:3]:
@@ -255,7 +260,11 @@ def build_human_report(
         ptype = _safe_str(perceived.get("type"), 30)
         findings.append(f"- 输入类型：{ptype or 'text'}")
         # 10 项成熟度第 3 项「会判断任务」— 显示任务分类
-        ni = perceived.get("normalized_input") if isinstance(perceived.get("normalized_input"), dict) else None
+        ni = (
+            perceived.get("normalized_input")
+            if isinstance(perceived.get("normalized_input"), dict)
+            else None
+        )
         tc = ni.get("_task_classification") if isinstance(ni, dict) else None
         if isinstance(tc, dict):
             cat = _safe_str(tc.get("category"), 30)
@@ -273,11 +282,15 @@ def build_human_report(
                 findings.append(f"- 长期记忆：报错（{_safe_str(lt.get('error'), 80)}）")
             else:
                 memories = lt.get("memories") or []
-                findings.append(f"- 长期记忆：检索到 {len(memories) if isinstance(memories, list) else 0} 条相关项")
+                findings.append(
+                    f"- 长期记忆：检索到 {len(memories) if isinstance(memories, list) else 0} 条相关项"
+                )
         sess = memory.get("session") or {}
         if isinstance(sess, dict):
             recent = sess.get("recent_tasks") or []
-            findings.append(f"- 短期记忆：最近 {len(recent) if isinstance(recent, list) else 0} 条任务记录")
+            findings.append(
+                f"- 短期记忆：最近 {len(recent) if isinstance(recent, list) else 0} 条任务记录"
+            )
     if cognition_error:
         findings.append(f"- ⚠️ 认知层报错：{_safe_str(cognition_error, 200)}")
     # LLM 推理摘要：解析 reasoning 字符串里的 summary/warnings 字段
@@ -327,8 +340,7 @@ def build_human_report(
     if exec_status == "handler_failed":
         outputs = result.get("outputs") or [] if isinstance(result, dict) else []
         failed = [
-            o for o in outputs
-            if isinstance(o, dict) and (o.get("ok") is False or o.get("error"))
+            o for o in outputs if isinstance(o, dict) and (o.get("ok") is False or o.get("error"))
         ]
         if failed:
             remainders.append(f"- {len(failed)} 个 handler 失败，详见上方「修了什么」")
@@ -361,8 +373,7 @@ def build_human_report(
             tid = ho.get("thread_id") or 0
             mid = ho.get("message_id") or 0
             remainders.append(
-                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），"
-                "等对方判断是否接手"
+                f"- ✅ 已 @{tgt} 转交任务（协作线程 #{tid}，消息 #{mid}），" "等对方判断是否接手"
             )
         else:
             remainders.append(f"- ❌ 转交 @{tgt} 失败：{_safe_str(ho.get('skip_reason'), 100)}")

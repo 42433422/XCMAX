@@ -234,7 +234,11 @@ def _catalog_employee_ids(session) -> set[str]:
 def _incident_event_type(event_id: int) -> str:
     sf = get_session_factory()
     with sf() as session:
-        ev = session.query(IncidentEvent.event_type).filter(IncidentEvent.id == int(event_id)).first()
+        ev = (
+            session.query(IncidentEvent.event_type)
+            .filter(IncidentEvent.id == int(event_id))
+            .first()
+        )
         return str(ev[0] or "") if ev else ""
 
 

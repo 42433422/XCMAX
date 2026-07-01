@@ -1,5 +1,6 @@
 # CI SSOT: generated from config/neuro_bus_events.yaml — DO NOT EDIT BY HAND
 # 改事件契约请编辑该 yaml 后运行: python scripts/dev/neuro_bus_events_ssot.py generate --apply
+# fmt: off
 
 """NeuroBus event-type constants (derived from SSOT, zero business deps).
 

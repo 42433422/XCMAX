@@ -58,9 +58,7 @@ def test_check_fails_when_drift_introduced(tmp_path):
         DERIVED_PY.write_text(original + " ", encoding="utf-8")
         result = _run_check()
         assert result.returncode == 1, (
-            f"期望 exit 1(漂移检测),实际 exit {result.returncode}\n"
-            + result.stdout
-            + result.stderr
+            f"期望 exit 1(漂移检测),实际 exit {result.returncode}\n" + result.stdout + result.stderr
         )
     finally:
         DERIVED_PY.write_text(original, encoding="utf-8")
@@ -86,8 +84,7 @@ def test_all_dataclass_event_type_defaults_exist_in_ssot():
     # check 命令内部执行交叉校验,这里复用它
     result = _run_check()
     assert result.returncode == 0, (
-        "check 交叉校验失败,可能有 dataclass 默认值未登记在 SSOT:\n"
-        + result.stderr
+        "check 交叉校验失败,可能有 dataclass 默认值未登记在 SSOT:\n" + result.stderr
     )
 
 
@@ -97,8 +94,7 @@ def test_all_orchestrator_run_add_event_strings_exist_in_ssot():
     """
     result = _run_check()
     assert result.returncode == 0, (
-        "check 交叉校验失败,可能有 orchestrator 字符串未登记在 SSOT:\n"
-        + result.stderr
+        "check 交叉校验失败,可能有 orchestrator 字符串未登记在 SSOT:\n" + result.stderr
     )
 
 
@@ -115,20 +111,27 @@ def test_frontend_useAgentRunEvents_strings_exist_in_ssot():
     candidates = {match.group(1) for match in pattern.finditer(text)}
     # 过滤明显不是事件类型的字符串(如 'success' / 'failed' 不含点)
     agent_run_prefixes = {
-        "run", "planner", "step", "tool", "llm", "billing", "budget",
-        "observation", "artifact", "rag", "memory", "dataset",
+        "run",
+        "planner",
+        "step",
+        "tool",
+        "llm",
+        "billing",
+        "budget",
+        "observation",
+        "artifact",
+        "rag",
+        "memory",
+        "dataset",
     }
-    event_strings = {
-        s for s in candidates
-        if "." in s and s.split(".")[0] in agent_run_prefixes
-    }
+    event_strings = {s for s in candidates if "." in s and s.split(".")[0] in agent_run_prefixes}
 
     assert event_strings, "未扫描到任何 agent_run 事件字符串 — 扫描器或测试可能失效"
 
     # 从生成的派生文件直接提取 AGENT_RUN_EVENT_TYPES(避免 import app.neuro_bus 触发 3.9 语法错误)
     derived_text = DERIVED_PY.read_text(encoding="utf-8")
     ar_block_match = re.search(
-        r'AGENT_RUN_EVENT_TYPES: frozenset\[str\] = frozenset\(\{(.*?)\}\)',
+        r"AGENT_RUN_EVENT_TYPES: frozenset\[str\] = frozenset\(\{(.*?)\}\)",
         derived_text,
         re.DOTALL,
     )
@@ -136,6 +139,4 @@ def test_frontend_useAgentRunEvents_strings_exist_in_ssot():
     ar_types = set(re.findall(r'"([^"]+)"', ar_block_match.group(1)))
 
     missing = event_strings - ar_types
-    assert not missing, (
-        f"useAgentRunEvents.ts 中以下字符串未登记在 agent_run 流: {sorted(missing)}"
-    )
+    assert not missing, f"useAgentRunEvents.ts 中以下字符串未登记在 agent_run 流: {sorted(missing)}"

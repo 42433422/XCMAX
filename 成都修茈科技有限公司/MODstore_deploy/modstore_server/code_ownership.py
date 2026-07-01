@@ -88,7 +88,9 @@ def _iter_path_values(value: Any) -> Iterable[str]:
             yield _normalize_path(match)
 
 
-def extract_incident_paths(payload: Dict[str, Any], *, source: str = "", event_type: str = "") -> List[str]:
+def extract_incident_paths(
+    payload: Dict[str, Any], *, source: str = "", event_type: str = ""
+) -> List[str]:
     seen = set()
     out: List[str] = []
     for value in (payload or {}, source, event_type):
