@@ -1558,9 +1558,10 @@ def ensure_business_tenant_id_columns(
         except RECOVERABLE_ERRORS:
             return
 
+    # 注意：customers 不在列 —— Customer ORM 未声明 tenant_id（apply_tenant_filter 对其 no-op），
+    # 若要隔离客户表须走 ORM(TenantScopedMixin)+alembic，而非 ensure_*（见 test_ensure_columns_frozen）。
     business_tables = (
         "products",
-        "customers",
         "purchase_units",
         "materials",
         "shipment_records",
