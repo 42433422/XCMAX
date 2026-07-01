@@ -87,6 +87,15 @@ describe('useVisibleNavItems deep', () => {
     expect(visibleNavItems.value.length).toBeGreaterThan(0)
   })
 
+  it('keeps 智能对话 visible and pinned first', () => {
+    const { visibleNavItems } = useVisibleNavItems()
+    expect(visibleNavItems.value[0]).toMatchObject({
+      key: 'chat',
+      name: '智能对话',
+      routeName: 'chat',
+    })
+  })
+
   it('each item has routeName and source', () => {
     const { visibleNavItems } = useVisibleNavItems()
     for (const item of visibleNavItems.value) {
