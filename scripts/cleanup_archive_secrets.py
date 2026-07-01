@@ -138,7 +138,7 @@ def make_placeholder(orig: Path, rel: str, rule: str, snapshot_rel: str, sha256:
         f"# 脱敏时间: {datetime.now().isoformat(timespec='seconds')}\n"
         f"#\n"
         f"# 恢复: cp _archive/{snapshot_rel} _archive/{rel}\n"
-        f"# 详见根目录 SECURITY_CLEANUP_REPORT.md\n"
+        f"# 详见 docs/reports/SECURITY_CLEANUP_REPORT.md\n"
         f"__XCAGI_REDACTED__=1\n"
     )
 
@@ -381,7 +381,7 @@ def update_archived_md(results: list[dict]) -> None:
         f"v9.0.0 整改中已对 **{n}** 个高风险文件执行脱敏：\n\n"
         f"1. 原文件内容迁移到 `_archive/.redacted-snapshots/<原相对路径>`（已在 `.gitignore`）。\n"
         f"2. 原位用 `XCAGI_REDACTED_SNAPSHOT_POINTER` 占位文件替代，记录原 SHA-256 与快照路径。\n"
-        f"3. 详见根目录 [`SECURITY_CLEANUP_REPORT.md`](../SECURITY_CLEANUP_REPORT.md)。\n"
+        f"3. 详见 [`SECURITY_CLEANUP_REPORT.md`](../docs/reports/SECURITY_CLEANUP_REPORT.md)。\n"
         f"4. 二次执行幂等：占位文件已含标记，不会重复迁移。\n\n"
         f"恢复方式：\n\n"
         f"```bash\n"

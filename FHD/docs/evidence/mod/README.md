@@ -10,8 +10,6 @@
 | 3 | `03-payment.png` | 0.01 元支付成功 |
 | 4 | `04-activated.png` | FHD 宿主安装并激活 Mod |
 
-```bash
-bash MODstore/scripts/mod-pilot-checklist.sh --verify
-```
+历史试点阶段使用过旧 FHD 内副本的 `mod-pilot-checklist.sh --verify`；该副本后续已退役。当前 MODstore 唯一活跃源码为 `成都修茈科技有限公司/MODstore_deploy/`。
 
 详见 [`mod-merchant-pilot.md`](../../mod-merchant-pilot.md)。

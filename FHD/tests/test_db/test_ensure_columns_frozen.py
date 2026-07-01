@@ -22,11 +22,20 @@ growth:
    column-patching function — which guard 1 would not know to invoke — still trips
    this guard, forcing the author to route the change through Alembic or to
    consciously enlist the function in this freeze.
+
+3. ``test_ensure_emitted_columns_frozen`` — static, column-level. Guards 1 and 2
+   leave one gap: editing an *already-frozen* function to ALTER in a new column and
+   declaring it on the ORM too passes both (the function name is unchanged; the
+   column is ORM-known). This guard freezes the exact set of column *names* the
+   ``ensure_*``/``init_*`` layer can mint (only-shrink), so growing an existing
+   function's column list goes red. New columns must reach the schema through an
+   Alembic migration + ORM model — the ensure_* surface may only shrink.
 """
 
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
@@ -69,6 +78,84 @@ FROZEN_ADD_COLUMN_FUNCS = frozenset(
         "init_template_tables",
     }
 )
+
+# Eagerly consume the optional ``IF NOT EXISTS`` clause; the trailing ``(\w+)`` then
+# captures the column. SQL keywords are filtered so the ``{name}``-interpolated
+# PostgreSQL f-strings (column is a runtime value, absent from the literal) do not
+# capture "IF" as a phantom column.
+_ADD_COLUMN_COL_RE = re.compile(r"ADD\s+COLUMN\s+(?:IF\s+NOT\s+EXISTS\s+)?(\w+)", re.IGNORECASE)
+_SQL_KEYWORDS = {"if", "not", "exists"}
+
+# The frozen set of column names the runtime ``ensure_*``/``init_*`` layer may mint.
+# ONLY-SHRINK: when a column graduates to an Alembic migration, prune it here; a NEW
+# name appearing means the second schema head grew — route it through Alembic + the
+# ORM model instead. Derived from init_db.py via ``_emitted_columns`` below.
+FROZEN_EMITTED_COLUMNS = frozenset(
+    {
+        "account_kind",
+        "account_tier",
+        "action",
+        "analyzed_data",
+        "budget_range",
+        "business_rules",
+        "business_type",
+        "company_brand",
+        "created_at",
+        "editable_config",
+        "email_verified",
+        "entitled_industries",
+        "entitled_mod_ids_json",
+        "failed_login_attempts",
+        "impersonating_market_user_id",
+        "impersonating_username",
+        "industry_id",
+        "is_active",
+        "locked_until",
+        "market_access_token",
+        "market_is_admin",
+        "market_is_enterprise",
+        "market_membership_tier",
+        "market_refresh_token",
+        "market_user_id",
+        "merged_cells_config",
+        "original_file_path",
+        "result",
+        "style_config",
+        "template_id",
+        "template_key",
+        "template_name",
+        "template_type",
+        "tenant_id",
+        "tier",
+        "updated_at",
+        "zone_config",
+    }
+)
+
+
+def _emitted_columns(func_node: ast.AST) -> set[str]:
+    """Column names a frozen ``ensure_*``/``init_*`` function can ALTER into the schema.
+
+    Two emission shapes appear in init_db.py: (a) the column literal sits inside the
+    ``ALTER TABLE ... ADD COLUMN <col>`` string (incl. f-string literal parts and
+    adjacent-string concatenation), and (b) ``additions = [(name, type, default), ...]``
+    lists whose first tuple element is interpolated into an ``ADD COLUMN {name}`` f-string.
+    """
+    cols: set[str] = set()
+    for sub in ast.walk(func_node):
+        if isinstance(sub, ast.Constant) and isinstance(sub.value, str):
+            cols.update(
+                m.lower()
+                for m in _ADD_COLUMN_COL_RE.findall(sub.value)
+                if m.lower() not in _SQL_KEYWORDS
+            )
+        elif isinstance(sub, (ast.List, ast.Tuple, ast.Set)):
+            for elt in sub.elts:
+                if isinstance(elt, ast.Tuple) and elt.elts:
+                    first = elt.elts[0]
+                    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                        cols.add(first.value.lower())
+    return cols
 
 
 def _fresh_orm_engine():
@@ -129,4 +216,28 @@ def test_no_new_add_column_callsites() -> None:
         "Route new columns through an Alembic migration + ORM model. If a function "
         "genuinely only back-fills an ORM-declared column into old databases, add it "
         "to FROZEN_ADD_COLUMN_FUNCS (and, for ORM tables, ENSURE_COLUMN_PATCHERS)."
+    )
+
+
+def test_ensure_emitted_columns_frozen() -> None:
+    source = INIT_DB_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    live: set[str] = set()
+    for node in tree.body:
+        if (
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.name in FROZEN_ADD_COLUMN_FUNCS
+        ):
+            live |= _emitted_columns(node)
+
+    grew = sorted(live - FROZEN_EMITTED_COLUMNS)
+
+    assert not grew, (
+        "ensure_*/init_db grew the runtime schema-patch surface with new column(s): "
+        f"{grew}.\n"
+        "The ensure_* layer is the schema's second head and may only SHRINK — route "
+        "new columns through an Alembic migration + ORM model. If a column genuinely "
+        "only back-fills an ORM-declared column into legacy DBs, add it to "
+        "FROZEN_EMITTED_COLUMNS deliberately."
     )

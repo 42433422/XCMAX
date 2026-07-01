@@ -26,6 +26,8 @@ scope_globs:
   - MODstore_deploy/pyproject.toml           # 仅写注释 / 元数据；依赖升级走 dbops/ops 链路
   - MODstore_deploy/templates/**
   - MODstore_deploy/examples/**
+  - MODstore_deploy/docs/**
+  - MODstore_deploy/market/docs/**
   - 风格
 
 forbidden_globs:

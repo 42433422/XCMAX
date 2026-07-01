@@ -37,6 +37,7 @@ SIX_LINE_TO_DISPATCH: Dict[str, str] = {
 APP_LANE_EMPLOYEE_IDS: frozenset[str] = frozenset(
     {
         "mobile-android-release-officer",
+        "mobile-harmony-release-officer",
         "mobile-ios-release-officer",
     }
 )
@@ -58,7 +59,16 @@ def _six_line_map_path() -> Path:
         root = Path(repo_root())
     except Exception:
         root = Path(__file__).resolve().parents[2]
-    return root / "FHD" / "config" / "six_line_employee_map.json"
+    candidates = [
+        root / "FHD" / "config" / "six_line_employee_map.json",
+        root.parent / "FHD" / "config" / "six_line_employee_map.json",
+        Path.cwd() / "config" / "six_line_employee_map.json",
+        Path.cwd() / "FHD" / "config" / "six_line_employee_map.json",
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return candidates[0]
 
 
 def load_six_line_employee_map() -> Dict[str, Any]:
@@ -75,9 +85,15 @@ def load_six_line_employee_map() -> Dict[str, Any]:
 def build_employee_dispatch_map(
     six_line_map: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, set[str]]:
-    """员工 ID → 其作为主责出现时所属的三产线集合。"""
+    """员工 ID → 其在六线 primary/support 中出现时所属的三产线集合。"""
     doc = six_line_map if six_line_map is not None else load_six_line_employee_map()
     out: Dict[str, set[str]] = defaultdict(set)
+    try:
+        from modstore_server.duty_roster import all_planned_employee_ids
+
+        planned_ids = all_planned_employee_ids()
+    except Exception:
+        planned_ids = frozenset()
     for line_key, block in (doc.get("lines") or {}).items():
         dispatch = SIX_LINE_TO_DISPATCH.get(str(line_key))
         if not dispatch or not isinstance(block, dict):
@@ -85,9 +101,10 @@ def build_employee_dispatch_map(
         for step in (block.get("steps") or {}).values():
             if not isinstance(step, dict):
                 continue
-            for eid in step.get("primary") or []:
+            step_ids = list(step.get("primary") or []) + list(step.get("support") or [])
+            for eid in step_ids:
                 eid_s = str(eid).strip()
-                if eid_s:
+                if eid_s and (not planned_ids or eid_s in planned_ids):
                     out[eid_s].add(dispatch)
     # 移动发布岗位强制归入 P-App（覆盖部门映射可能给到的 P-S/P-W）。
     for eid in APP_LANE_EMPLOYEE_IDS:

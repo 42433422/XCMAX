@@ -10,6 +10,9 @@ also_serves: [ops_acquisition]
 
 scope_globs:
   - marketing-site/**
+  - marketing-assets/xc-brand-film/build.sh
+  - marketing-assets/xc-brand-film/scripts/**
+  - marketing-assets/xc-brand-film/assets/**
 
 forbidden_globs:
   - _local_secrets/**

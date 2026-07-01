@@ -540,6 +540,57 @@ class TestAuthHeaders:
 
 class TestModstoreGet:
     @pytest.mark.asyncio
+    async def test_get_prefers_internal_key_without_login(self, monkeypatch):
+        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://127.0.0.1:8788")
+        monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "internal-key")
+        monkeypatch.delenv("XCAGI_MARKET_INTERNAL_API_KEY", raising=False)
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = {"ok": True}
+        mock_client.get = AsyncMock(return_value=resp)
+        mock_client.post = AsyncMock()
+        with patch(
+            "app.application.modstore_local_client._async_client",
+            return_value=mock_client,
+        ):
+            data = await modstore_client.modstore_get("/api/internal")
+        assert data == {"ok": True}
+        mock_client.post.assert_not_called()
+        assert mock_client.get.call_args.kwargs["headers"] == {"X-Internal-Api-Key": "internal-key"}
+
+    @pytest.mark.asyncio
+    async def test_get_internal_key_falls_back_to_admin_login(self, monkeypatch):
+        monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://127.0.0.1:8788")
+        monkeypatch.setenv("MODSTORE_INTERNAL_API_KEY", "bad-internal-key")
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        resp_403 = MagicMock()
+        resp_403.status_code = 403
+        resp_403.raise_for_status = MagicMock()
+        resp_ok = MagicMock()
+        resp_ok.status_code = 200
+        resp_ok.raise_for_status = MagicMock()
+        resp_ok.json.return_value = {"ok": True}
+        login_resp = MagicMock()
+        login_resp.raise_for_status = MagicMock()
+        login_resp.json.return_value = {"access_token": "tok"}
+        login_resp.headers = {"x-csrf-token": "csrf"}
+        mock_client.get = AsyncMock(side_effect=[resp_403, resp_ok])
+        mock_client.post = AsyncMock(return_value=login_resp)
+        with patch(
+            "app.application.modstore_local_client._async_client",
+            return_value=mock_client,
+        ):
+            data = await modstore_client.modstore_get("/api/internal")
+        assert data == {"ok": True}
+        assert mock_client.post.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_get_success_dict_response(self, monkeypatch):
         monkeypatch.setenv("MODSTORE_LOCAL_BASE_URL", "http://test:8788")
         mock_client = MagicMock()

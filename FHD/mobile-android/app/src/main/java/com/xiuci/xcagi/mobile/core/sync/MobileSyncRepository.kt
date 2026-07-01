@@ -1,7 +1,9 @@
 package com.xiuci.xcagi.mobile.core.sync
 
+import android.util.Log
 import com.google.gson.Gson
 import com.xiuci.xcagi.mobile.core.datastore.SessionStore
+import com.xiuci.xcagi.mobile.core.db.AiCircleCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ApprovalCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ChatCacheEntity
 import com.xiuci.xcagi.mobile.core.db.ShipmentCacheEntity
@@ -25,6 +27,8 @@ data class SyncStatusSummary(
     val cursor: Int = 0,
     val lastSyncAt: String = "",
     val employeeCount: Int = 0,
+    val circleSynced: Boolean = false,
+    val circlePostCount: Int = 0,
 )
 
 internal object MobileSyncPolicy {
@@ -157,6 +161,29 @@ class MobileSyncRepository @Inject constructor(
                 )
             }
 
+            @Suppress("UNCHECKED_CAST")
+            val circlePosts = (data["circle_posts"] as? List<Map<String, Any?>>) ?: emptyList()
+            val circleSyncSupported = data.containsKey("circle_posts")
+            var circlePostCount = 0
+            if (data.containsKey("circle_posts")) {
+                db.aiCircleCacheDao().clear()
+                val cacheRows = circlePosts.mapNotNull { row ->
+                    val id = (row["id"] as? Number)?.toInt() ?: return@mapNotNull null
+                    AiCircleCacheEntity(
+                        postId = id,
+                        employeeId = row["employee_id"]?.toString(),
+                        authorName = row["author_name"]?.toString() ?: "",
+                        sourceType = row["source_type"]?.toString() ?: "",
+                        createdAt = row["created_at"]?.toString() ?: "",
+                        json = gson.toJson(row),
+                    )
+                }
+                if (cacheRows.isNotEmpty()) {
+                    db.aiCircleCacheDao().insertAll(cacheRows)
+                }
+                circlePostCount = cacheRows.size
+            }
+
             val accountKind = sessionStore.accountKindFlow.first()
             val adminMode = MobileSyncPolicy.isAdminAccountKind(accountKind)
             val employeeCount =
@@ -180,9 +207,12 @@ class MobileSyncRepository @Inject constructor(
                     cursor = cursor,
                     lastSyncAt = now,
                     employeeCount = employeeCount,
+                    circleSynced = circleSyncSupported,
+                    circlePostCount = circlePostCount,
                 ),
             )
         } catch (e: Exception) {
+            Log.w("MobileSyncRepository", "pullAndCache failed", e)
             Result.failure(e)
         }
     }

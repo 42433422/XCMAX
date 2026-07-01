@@ -14,6 +14,7 @@ from typing import Any
 from sqlalchemy import text
 
 from app.db.session import get_db
+from app.infrastructure.topology import FHD_API_BASE_URL
 
 
 def _utc_now() -> str:
@@ -64,7 +65,7 @@ def _row_dict(row: Any) -> dict[str, Any]:
 def _public_base_url(raw: str) -> str:
     value = (raw or "").strip()
     if not value:
-        value = "https://xiu-ci.com/fhd-api"
+        value = FHD_API_BASE_URL
     if not value.startswith(("http://", "https://")):
         value = f"https://{value}"
     return value.rstrip("/") + "/"

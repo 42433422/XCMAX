@@ -42,6 +42,19 @@ def modstore_digest_base_url() -> str:
     )
 
 
+def internal_api_key() -> str:
+    return (
+        os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or ""
+    ).strip()
+
+
+def internal_auth_headers() -> dict[str, str]:
+    key = internal_api_key()
+    return {"X-Internal-Api-Key": key} if key else {}
+
+
 def prefer_local_modstore() -> bool:
     """本地自动化默认开启；设 MODSTORE_LOCAL_AUTOMATION=0 可强制走远端代理。"""
     raw = os.environ.get("MODSTORE_LOCAL_AUTOMATION", "").strip().lower()
@@ -110,6 +123,13 @@ async def modstore_get(
     if query:
         url = f"{url}?{query.lstrip('?')}"
     async with _async_client(timeout=timeout) as client:
+        internal_headers = internal_auth_headers() if not authorization else {}
+        if internal_headers:
+            resp = await client.get(url, headers=internal_headers)
+            if resp.status_code not in (401, 403):
+                resp.raise_for_status()
+                data = resp.json()
+                return data if isinstance(data, dict) else {"success": True, "data": data}
         headers = await auth_headers(client, base, authorization)
         resp = await client.get(url, headers=headers)
         if resp.status_code == 401 and prefer_local_modstore() and authorization:

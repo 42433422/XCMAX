@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-
 DEFAULT_FIX_LIMIT = 5
 DEFAULT_PATTERN_LIMIT = 8
 MAX_DOC_TEXT = 20000
@@ -148,7 +147,9 @@ def validate_fix_knowledge_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
     for field in ("applicability_check", "patch_strategy", "rollback_plan"):
         _require_non_empty_string(template, field)
     required_tests = template.get("required_tests")
-    if not isinstance(required_tests, list) or not all(isinstance(item, str) for item in required_tests):
+    if not isinstance(required_tests, list) or not all(
+        isinstance(item, str) for item in required_tests
+    ):
         raise _validation_error("fix executable_template.required_tests must be a string list")
     return payload
 
@@ -270,7 +271,9 @@ def _rank_docs(
         if rag_text and any(str(doc.get(field) or "")[:80] in rag_text for field in fields):
             score += 0.75
         if score > 0:
-            ranked.append((score, {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]}))
+            ranked.append(
+                (score, {**doc, "score": round(score, 4), "rag_chunks": rag_chunks[:limit]})
+            )
     ranked.sort(key=lambda item: item[0], reverse=True)
     return [item[1] for item in ranked[:limit]]
 
@@ -655,13 +658,19 @@ def _knowledge_query(evaluation: Dict[str, Any], memory: Dict[str, Any]) -> str:
         "gaps": evaluation.get("gaps"),
         "incident_count": evaluation.get("incident_count"),
         "incident_signals": evaluation.get("incident_signals"),
-        "last_policy_decision": memory.get("last_policy_decision") if isinstance(memory, dict) else None,
-        "open_items": (memory.get("open_items") if isinstance(memory, dict) else [])[-8:]
-        if isinstance(memory.get("open_items") if isinstance(memory, dict) else [], list)
-        else [],
-        "recent_runs": (memory.get("recent_runs") if isinstance(memory, dict) else [])[-5:]
-        if isinstance(memory.get("recent_runs") if isinstance(memory, dict) else [], list)
-        else [],
+        "last_policy_decision": (
+            memory.get("last_policy_decision") if isinstance(memory, dict) else None
+        ),
+        "open_items": (
+            (memory.get("open_items") if isinstance(memory, dict) else [])[-8:]
+            if isinstance(memory.get("open_items") if isinstance(memory, dict) else [], list)
+            else []
+        ),
+        "recent_runs": (
+            (memory.get("recent_runs") if isinstance(memory, dict) else [])[-5:]
+            if isinstance(memory.get("recent_runs") if isinstance(memory, dict) else [], list)
+            else []
+        ),
     }
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
@@ -746,7 +755,9 @@ def infer_pattern_from_diff(diff_text: str) -> Dict[str, str]:
     }
 
 
-def record_loop_evolution_knowledge(final: Dict[str, Any], gate: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def record_loop_evolution_knowledge(
+    final: Dict[str, Any], gate: Dict[str, Any]
+) -> Optional[Dict[str, Any]]:
     decision = final.get("policy_decision")
     if not isinstance(decision, dict) or decision.get("action") != "auto_merged_low_risk":
         return None
@@ -762,7 +773,9 @@ def record_loop_evolution_knowledge(final: Dict[str, Any], gate: Dict[str, Any])
     symptom = "; ".join(str(item) for item in gaps) if isinstance(gaps, list) and gaps else ""
     if not symptom:
         symptom = str(decision.get("reason") or final.get("status") or "self-maintenance gap")
-    root_cause = reports or json.dumps(decision, ensure_ascii=False, sort_keys=True, default=_json_default)
+    root_cause = reports or json.dumps(
+        decision, ensure_ascii=False, sort_keys=True, default=_json_default
+    )
     metadata = {
         "branch": final.get("branch"),
         "changed_files": merge_result.get("changed_files"),
@@ -843,9 +856,11 @@ def _salvage_kb_files(
             ):
                 skipped += 1
                 continue
-            template = payload.get("executable_template") if isinstance(
-                payload.get("executable_template"), dict
-            ) else {}
+            template = (
+                payload.get("executable_template")
+                if isinstance(payload.get("executable_template"), dict)
+                else {}
+            )
             metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
             record_fix_knowledge(
                 symptom=symptom,

@@ -365,30 +365,45 @@ function downloadUrl(
   )
 }
 
-function download(sku: XcagiProductSku, platform: XcagiDownloadPlatform) {
+function browserDownload(url: string, filename: string) {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.rel = 'noopener noreferrer'
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
+async function download(sku: XcagiProductSku, platform: XcagiDownloadPlatform) {
   const arch = platform === 'mac' ? macArch : undefined
   const url = downloadUrl(sku, platform, arch ?? macArch)
   if (!url) return
-
-  if (platform === 'android' || isMobileViewport.value) {
-    window.location.assign(url)
-    return
-  }
-
-  const a = document.createElement('a')
-  a.href = url
-  a.download = xcagiDownloadFileName(
+  const filename = xcagiDownloadFileName(
     sku,
     platform,
     downloadVersion.value,
     androidVersion.value,
     platform === 'mac' ? macArch : 'arm64',
   )
-  a.rel = 'noopener noreferrer'
-  a.style.display = 'none'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+
+  if (platform === 'android' || isMobileViewport.value) {
+    window.location.assign(url)
+    return
+  }
+
+  const desktopDownload = window.xcagiDesktop?.downloadFile
+  if (desktopDownload) {
+    try {
+      const result = await desktopDownload({ url, filename })
+      if (result?.ok || result?.canceled) return
+    } catch {
+      /* 回退浏览器下载 */
+    }
+  }
+
+  browserDownload(url, filename)
 }
 
 const IconApple = () =>

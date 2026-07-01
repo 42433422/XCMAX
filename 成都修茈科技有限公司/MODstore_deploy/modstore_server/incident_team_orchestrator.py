@@ -48,12 +48,20 @@ def _role_override(role: str) -> str:
 
 
 def _candidate_ids(event_id: int) -> List[str]:
+    return [
+        str(row.get("employee_id") or "")
+        for row in _candidate_rows(event_id)
+        if isinstance(row, dict) and str(row.get("employee_id") or "").strip()
+    ]
+
+
+def _candidate_rows(event_id: int) -> List[Dict[str, Any]]:
     try:
         from modstore_server.employee_task_market import rank_market_candidates
 
         ranked = rank_market_candidates(event_id)
         rows = ranked.get("candidates") if isinstance(ranked.get("candidates"), list) else []
-        return [str(row.get("employee_id") or "") for row in rows if isinstance(row, dict)]
+        return [row for row in rows if isinstance(row, dict)]
     except Exception:
         return []
 
@@ -116,19 +124,43 @@ def _pick_role(role: str, candidates: List[str], used: set[str]) -> str:
 
 
 def build_incident_team(event_id: int) -> Dict[str, Any]:
-    candidates = _candidate_ids(event_id)
+    candidate_rows = _candidate_rows(event_id)
+    candidates = [
+        str(row.get("employee_id") or "")
+        for row in candidate_rows
+        if str(row.get("employee_id") or "").strip()
+    ]
+    code_owner = ""
+    code_owner_match: Dict[str, Any] = {}
+    for row in candidate_rows:
+        ownership = row.get("code_ownership") if isinstance(row.get("code_ownership"), dict) else {}
+        if ownership.get("match_count"):
+            code_owner = str(row.get("employee_id") or "").strip()
+            code_owner_match = ownership
+            break
     used: set[str] = set()
     team: List[Dict[str, str]] = []
     for role in ("scout", "fix", "verify"):
-        eid = _pick_role(role, candidates, used)
+        if role == "fix" and code_owner and code_owner not in used:
+            eid = code_owner
+        else:
+            reserved = {code_owner} if code_owner and role == "scout" else set()
+            eid = _pick_role(role, candidates, used | reserved)
         if eid:
             used.add(eid)
             team.append({"employee_id": eid, "role": role})
-    return {"candidates": candidates, "event_id": int(event_id), "team": team}
+    return {
+        "candidates": candidates,
+        "code_owner": code_owner,
+        "code_owner_match": code_owner_match,
+        "event_id": int(event_id),
+        "team": team,
+    }
 
 
 def _task_for_role(
     *,
+    code_ownership: Optional[Dict[str, Any]] = None,
     event_type: str,
     payload: Dict[str, Any],
     role: str,
@@ -137,20 +169,39 @@ def _task_for_role(
 ) -> str:
     summary = str(payload.get("summary") or event_type or "incident")
     base = (
-        f"Incident team role={role}. Event={event_type}. Summary={summary}. "
-        "Work as part of a scout/fix/verify incident team. "
+        f"你是事故处理小组的 {role}。事件类型：{event_type}。问题摘要：{summary}。\n"
+        "回复必须说人话：先给结论/状态，再说原因，再说下一步；不要直接倾倒 JSON、内部字段或英文模板。"
     )
+    ownership_text = ""
+    if isinstance(code_ownership, dict) and code_ownership:
+        files = [
+            str(item).strip()
+            for item in (code_ownership.get("matched_files") or [])
+            if str(item or "").strip()
+        ][:8]
+        globs = [
+            str(item).strip()
+            for item in (code_ownership.get("matched_globs") or [])
+            if str(item or "").strip()
+        ][:6]
+        bits = ["\n你是本事故命中的代码负责人，必须围绕归属代码给可执行处理。"]
+        if files:
+            bits.append("命中文件：" + "、".join(files))
+        if globs:
+            bits.append("归属规则：" + "、".join(globs))
+        ownership_text = "\n".join(bits)
     if role == "scout":
-        return base + "Scout the likely root cause, affected scope, severity, and safe next action."
+        return base + "你的任务是判断最可能的原因、影响范围、严重程度和安全的下一步。"
     if role == "fix":
         return base + (
-            "Apply or delegate the minimal safe fix. Use scout findings if present. "
-            f"SCOUT_RESULT={json.dumps(scout_result or {}, ensure_ascii=False)[:4000]}"
+            "你的任务是执行或委派最小安全修复。可参考前面排查结果，但输出时要翻译成人话。"
+            f"{ownership_text}"
+            f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:4000]}"
         )
     return base + (
-        "Verify the fix or recovery path. Report PASS/FAIL with concrete evidence and remaining risk. "
-        f"SCOUT_RESULT={json.dumps(scout_result or {}, ensure_ascii=False)[:3000]} "
-        f"FIX_RESULT={json.dumps(fix_result or {}, ensure_ascii=False)[:3000]}"
+        "你的任务是验证修复或恢复路径。用 PASS/FAIL 开头，并给出证据和剩余风险。"
+        f"\n排查结果：{json.dumps(scout_result or {}, ensure_ascii=False)[:3000]}"
+        f"\n修复结果：{json.dumps(fix_result or {}, ensure_ascii=False)[:3000]}"
     )
 
 
@@ -205,6 +256,11 @@ def dispatch_incident_team(event_id: int) -> Dict[str, Any]:
         except Exception:
             route = {"provider": "auto", "model": "auto", "reason": "router_error"}
         task = _task_for_role(
+            code_ownership=(
+                team_plan.get("code_owner_match")
+                if role == "fix" and isinstance(team_plan.get("code_owner_match"), dict)
+                else None
+            ),
             event_type=event_type,
             fix_result=fix_result,
             payload=payload,

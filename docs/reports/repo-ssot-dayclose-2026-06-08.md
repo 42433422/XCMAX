@@ -58,7 +58,7 @@
 # 克隆
 git clone https://github.com/42433422/XCMAX.git && cd XCMAX
 
-# 同步 CI workflow（改 FHD/MODstore 源 yml 后）
+# 同步 CI workflow（改 FHD 或 MODstore_deploy 源 yml 后）
 python scripts/dev/publish_ci_workflows_to_root.py
 
 # 日检

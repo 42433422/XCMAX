@@ -68,9 +68,16 @@ def test_license_gate_blocks_incompatible_and_reads_metadata(tmp_path: Path) -> 
     assert metadata_result.detected_license == "Apache-2.0"
 
 
-def test_product_service_and_blackhole_ui_surface(tmp_path: Path) -> None:
+def test_product_service_and_blackhole_ui_surface(tmp_path: Path, monkeypatch) -> None:
     project = tmp_path / "project"
     create_focused_tool_package(project)
+
+    monkeypatch.setattr(
+        "retort_engine.core.request_paibi_llm_review",
+        lambda **kwargs: {"provider": "paibi", "enabled": True, "status": "accepted", "dispatch": {"status": "accepted", "task_id": "task-product"}},
+    )
+    monkeypatch.setattr("retort_engine.core.wait_for_paibi_llm_review", lambda task_id, **kwargs: {"provider": "paibi", "task_id": task_id, "status": "running"})
+
     payload = RetortService().assess({"project": str(project), "context_policy": "provided", "gate_results": {"lint": True, "test": True}})
     assert payload["scores"] == []
     assert payload["metadata"]["score_source"] == "paibi_llm_pending"

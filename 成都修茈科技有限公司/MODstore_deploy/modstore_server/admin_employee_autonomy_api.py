@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import os
 import re
-from typing import Any, Dict, List
+import secrets
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Request
 
-from modstore_server.api.deps import require_admin
+from modstore_server.api.deps import get_current_user, require_admin
 from modstore_server.employee_autonomy_service import (
     aggregate_admin_suggestion_dashboard,
     approve_suggestion,
@@ -53,6 +55,32 @@ def _extract_mentions_from_text(text: str) -> List[str]:
         seen.add(s)
         out.append(s)
     return out
+
+
+def _internal_api_key() -> str:
+    return (
+        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
+        or ""
+    ).strip()
+
+
+def _has_valid_internal_api_key(request: Request) -> bool:
+    expected = _internal_api_key()
+    got = (request.headers.get("x-internal-api-key") or "").strip()
+    return bool(expected and got and secrets.compare_digest(got, expected))
+
+
+def _require_admin_or_internal(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+) -> Optional[User]:
+    """Read-only service bridge for FHD mobile sync; writes still require admin JWT."""
+
+    if _has_valid_internal_api_key(request):
+        return None
+    return require_admin(get_current_user(authorization))
 
 
 @router.get("/dashboard")
@@ -268,9 +296,9 @@ def trigger_evolution_scan(
 def list_collab_threads(
     status: str = Query("", description="open|resolved|closed"),
     limit: int = Query(50, ge=1, le=200),
-    _admin_user: User = Depends(require_admin),
+    _auth_user: Optional[User] = Depends(_require_admin_or_internal),
 ) -> Dict[str, Any]:
-    _ = _admin_user
+    _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
         q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
@@ -317,9 +345,9 @@ def create_collab_thread_api(
 def list_collab_messages(
     thread_id: int,
     limit: int = Query(100, ge=1, le=500),
-    _admin_user: User = Depends(require_admin),
+    _auth_user: Optional[User] = Depends(_require_admin_or_internal),
 ) -> Dict[str, Any]:
-    _ = _admin_user
+    _ = _auth_user
     if thread_id <= 0:
         raise HTTPException(400, "invalid thread id")
     sf = get_session_factory()
@@ -434,8 +462,9 @@ def human_questions_stats(
 
     GET /api/admin/employee-autonomy/questions/stats
     """
-    from modstore_server.models import PendingHumanQuestion, get_session_factory
     from sqlalchemy import func
+
+    from modstore_server.models import PendingHumanQuestion, get_session_factory
 
     sf = get_session_factory()
     with sf() as session:

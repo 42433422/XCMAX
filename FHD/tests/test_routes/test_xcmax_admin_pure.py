@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import os
 import tempfile
@@ -31,9 +32,19 @@ class TestReleaseTrainSnapshot:
     def test_fallback_when_no_file(self):
         from app.fastapi_routes.xcmax_admin import _release_train_snapshot
 
-        # The function uses try/except for modstore_server import
-        # and falls back to reading a file; if file doesn't exist, returns defaults
-        with patch("pathlib.Path.is_file", return_value=False):
+        original_import = builtins.__import__
+
+        def fail_release_train_import(name, *args, **kwargs):
+            if name == "modstore_server.release_train" or name.startswith(
+                "modstore_server.release_train.",
+            ):
+                raise ImportError("force file fallback")
+            return original_import(name, *args, **kwargs)
+
+        with (
+            patch("builtins.__import__", side_effect=fail_release_train_import),
+            patch("pathlib.Path.is_file", return_value=False),
+        ):
             result = _release_train_snapshot()
             assert "epoch" in result
             assert result["note"] == "ssot missing"
