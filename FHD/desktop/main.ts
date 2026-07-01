@@ -80,7 +80,7 @@ const SKU_UPDATE_URL: Record<ProductSku, string> = {
  */
 const ED25519_PUBLIC_KEY_PEM = [
   '-----BEGIN PUBLIC KEY-----',
-  'MCowBQYDK2VwAyEAQTSb+dYGOM3dwJkMcrTysZz1uUaUB9oCIFga2k+iHBc=',
+  'MCowBQYDK2VwAyEAO6AeYJ05qwfSgpGR7+FZiL6cY0uGtSJVRqIiws3P6N8=',
   '-----END PUBLIC KEY-----'
 ].join('\n')
 
