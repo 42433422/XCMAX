@@ -123,15 +123,8 @@ domains:
     check: python scripts/dev/ssot_plugins/error_codes.py check
     sync: null
 
-  - name: k8s-manifests
-    owner: devops
-    enabled: true
-    ssot: FHD/k8s/
-    derived:
-      - FHD/XCAGI/k8s/
-    mode: verify
-    check: python scripts/dev/ssot_plugins/k8s.py check
-    sync: null
+  # k8s-manifests 域已随假 k8s 路径整体退役（2026-07-01 运维根治）：清单从未指向
+  # 真实集群，生产 = 单 CVM（FHD/scripts/deploy 发布链 + 仓库根 ops/）。恢复看 git 历史。
 
   # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
   - name: employee-roster

@@ -24,7 +24,6 @@ defaults:
 """.strip()
 
 WORKFLOW_RENAMES = {
-    "deploy.yml": "fhd-deploy.yml",
     "ci-cd.yml": "fhd-ci-cd.yml",
     "release-gate-ci.yml": "fhd-release-gate-ci.yml",
     "ci-mobile-android.yml": "fhd-ci-mobile-android.yml",
@@ -38,7 +37,6 @@ WORKFLOW_RENAMES = {
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
-    "preview-env.yml": "fhd-preview-env.yml",
 }
 
 MOD_RENAMES = {
@@ -58,10 +56,6 @@ def _insert_defaults(content: str, defaults: str) -> str:
 
 
 def _prefix_fhd_paths(content: str, out_name: str) -> str:
-    content = content.replace(
-        "gh workflow run deploy.yml",
-        "gh workflow run fhd-deploy.yml",
-    )
     for wf in (
         "release-desktop.yml",
         "release-web.yml",

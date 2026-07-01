@@ -1,0 +1,100 @@
+# 站外拨测：GitHub Actions 定时探测生产公网端点。
+# 服务器整机失联时（连带机上哨兵一起死），这里仍会叫——通过开/评 issue，
+# GitHub 会给仓库 owner 发邮件通知，零新增账号/秘密。
+# root 原生 workflow（非 fhd-/modstore- 前缀，不经 CI SSOT publisher）——直接编辑此处。
+name: Ops Uptime Probe
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+concurrency:
+  group: ops-uptime
+  cancel-in-progress: false
+
+env:
+  # name|url|expect —— expect: "200"=必须 200；"lt500"=只要后端应答(<500)就算活
+  OPS_UPTIME_TARGETS: |
+    fhd-api|https://xiu-ci.com/fhd-api/api/health|200
+    corp-site|https://xiu-ci.com/|lt500
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - name: Probe endpoints (3 attempts each)
+        id: probe
+        run: |
+          set -uo pipefail
+          failed=""
+          detail=""
+          while IFS='|' read -r name url expect; do
+            [ -z "${name}" ] && continue
+            ok=0
+            code="000"
+            for attempt in 1 2 3; do
+              # curl 失败时自身已输出 000，勿再拼接；只留最后一行并兜底
+              code="$(curl -sS -o /dev/null -L --max-time 20 -w '%{http_code}' "$url" 2>/dev/null || true)"
+              code="${code##*$'\n'}"
+              [ -n "$code" ] || code="000"
+              case "$expect" in
+                200)   [ "$code" = "200" ] && ok=1 ;;
+                lt500) case "$code" in [1-4][0-9][0-9]) ok=1 ;; esac ;;
+              esac
+              [ "$ok" = "1" ] && break
+              sleep 15
+            done
+            if [ "$ok" = "1" ]; then
+              echo "OK   ${name} ${url} http=${code}"
+            else
+              echo "FAIL ${name} ${url} http=${code}"
+              failed="${failed}${name},"
+              detail="${detail}- **${name}** ${url} → http=${code}（3 次重试后仍失败）\n"
+            fi
+          done <<< "${OPS_UPTIME_TARGETS}"
+          {
+            echo "failed=${failed%,}"
+            echo "detail<<EOF"
+            printf '%b' "${detail}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Open or update incident issue
+        if: steps.probe.outputs.failed != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          FAILED: ${{ steps.probe.outputs.failed }}
+          DETAIL: ${{ steps.probe.outputs.detail }}
+        run: |
+          set -uo pipefail
+          gh label create ops-uptime --description "站外拨测事故" --color B60205 --force || true
+          BODY="$(printf '站外拨测失败: **%s**\n\n%s\n运行: %s/%s/actions/runs/%s\n\n处置手册: ops/README.md 第 2 节' \
+            "$FAILED" "$DETAIL" "$GITHUB_SERVER_URL" "$GH_REPO" "$GITHUB_RUN_ID")"
+          EXISTING="$(gh issue list --label ops-uptime --state open --json number --jq '.[0].number // ""')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "仍在故障 ($(date -u '+%Y-%m-%d %H:%M UTC')): ${FAILED}"$'\n'"${DETAIL}"
+          else
+            gh issue create \
+              --title "🔴 生产站外拨测失败: ${FAILED}" \
+              --label ops-uptime \
+              --body "$BODY"
+          fi
+
+      - name: Close incident on recovery
+        if: steps.probe.outputs.failed == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          EXISTING="$(gh issue list --label ops-uptime --state open --json number --jq '.[0].number // ""')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "✅ 全部端点恢复 ($(date -u '+%Y-%m-%d %H:%M UTC'))，自动关闭。"
+            gh issue close "$EXISTING"
+          fi

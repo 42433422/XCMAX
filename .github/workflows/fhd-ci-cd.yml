@@ -115,14 +115,6 @@ jobs:
       - name: Run Ruff format check
         run: ruff format --check app/ tests/
 
-      - name: Helm chart lint
-        run: |
-          if command -v helm >/dev/null 2>&1; then
-            bash scripts/observability/helm_lint.sh
-          else
-            echo "helm not on runner; skip chart lint"
-          fi
-
       - name: Run mypy type checking
         run: |
           set +e
@@ -351,7 +343,7 @@ jobs:
     needs: [backend-test, pack-verify, arch-fitness]
     runs-on: ubuntu-latest
     # image_tag = the exact tag metadata-action produced (rely on outputs.version, not a
-    # hand-rolled short sha — see docker/metadata-action#479). Consumed by gitops-image-bump.
+    # hand-rolled short sha — see docker/metadata-action#479).
     outputs:
       image_tag: ${{ steps.meta_fhd.outputs.version }}
     permissions:
@@ -485,68 +477,8 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # GitOps 声明式晋级：main 构建成功 → 把 staging overlay 镜像 tag 设为 sha-<gitsha>，
-  # 并创建/复用 promotion PR；main 受保护时不再由 workflow 直推主干。
-  # 生产 overlay 走 fhd-release-orchestrator / 人工 `bump_image.sh production <tag> --commit` 晋级。
-  gitops-image-bump:
-    needs: [docker-build-fhd-api]
-    if: >-
-      vars.GITOPS_BUMP_ENABLE == '1' &&
-      needs.docker-build-fhd-api.result == 'success' &&
-      github.ref == 'refs/heads/main' &&
-      github.event_name == 'push'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-    concurrency:
-      group: gitops-bump-main
-      cancel-in-progress: false
-    steps:
-      # checkout is NOT rewritten by publish → clones the XCMAX root repo at main HEAD.
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-      - name: Bump staging overlay image tag (declarative)
-        env:
-          # Exact tag metadata-action pushed (no short-sha guessing) — see docker-build-fhd-api outputs.
-          IMAGE_TAG: ${{ needs.docker-build-fhd-api.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          [ -n "${IMAGE_TAG}" ] || { echo "::error::empty image_tag from docker-build-fhd-api"; exit 1; }
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # run steps default to working-directory: FHD (injected by publish) → FHD-relative path.
-          bash scripts/gitops/bump_image.sh staging "${IMAGE_TAG}" --commit
-      - name: Open GitOps promotion PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          IMAGE_TAG: ${{ needs.docker-build-fhd-api.outputs.image_tag }}
-        run: |
-          set -euo pipefail
-          SAFE_TAG="$(printf '%s' "${IMAGE_TAG}" | tr -c 'A-Za-z0-9._-' '-')"
-          BRANCH="automation/gitops-staging-${SAFE_TAG}"
-
-          if git diff --quiet origin/main...HEAD; then
-            echo "::notice::No GitOps changes to promote."
-            exit 0
-          fi
-
-          git push --force origin "HEAD:${BRANCH}"
-
-          PR_URL="$(gh pr list --head "${BRANCH}" --base main --state open --json url --jq '.[0].url // ""')"
-          if [ -n "${PR_URL}" ]; then
-            echo "::notice::GitOps promotion PR already open: ${PR_URL}"
-            exit 0
-          fi
-
-          gh pr create \
-            --base main \
-            --head "${BRANCH}" \
-            --title "chore(gitops): promote staging ${IMAGE_TAG}" \
-            --body "Automated staging GitOps promotion for ${IMAGE_TAG} from ${GITHUB_SHA}.\n\nThis PR keeps main branch protection intact instead of pushing directly from CI." \
-            || echo "::warning::GitOps promotion branch pushed but PR creation failed. Check repository Actions pull-request permissions and open ${BRANCH} manually."
+  # gitops-image-bump 已随假 k8s/GitOps 路径退役（2026-07-01 运维根治）——
+  # 生产 CD 的唯一正道是下方 cvm-push-release + 服务器端 fhd-auto-update.sh。
 
   # CVM 拉取式自动 CD（main 成功 + secrets 就绪时 scp manifest/tarball；无 secrets 则跳过）
   cvm-push-release:
