@@ -2180,8 +2180,8 @@ def execute_employee_task(
                 # 「这事不归我管，转给 @xxx」。本员工仍继续执行能做的部分，不阻断。
                 try:
                     from modstore_server.employee_handoff import (
-                        perform_handoff,
                         _resolve_target_employee_id,
+                        perform_handoff,
                     )
 
                     _handoff_to_raw = None

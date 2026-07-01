@@ -31,7 +31,6 @@ from typing import Any, Dict, List
 from sqlalchemy import and_, func, or_
 
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
-
 from modstore_server.models import (
     CatalogItem,
     EmployeeEvolutionRecord,
