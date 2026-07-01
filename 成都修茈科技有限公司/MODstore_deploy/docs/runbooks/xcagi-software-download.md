@@ -51,7 +51,7 @@ curl -sI https://xiu-ci.com/releases/stable/personal/XCAGI-Personal-Setup-8.1.0-
 curl -sI https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-Setup-8.1.0-x64.exe
 ```
 
-## 下载慢（~100 KB/s、654MB 需 1～2 小时）
+## 下载慢（~100 KB/s、212MB 需约 35 分钟）
 
 根因：`dl.xiu-ci.com` 若仍 **A 记录到 CVM**，走单机出站带宽（常 1～3 Mbps）。  
 **解决办法**：安装包上传 COS + `dl.xiu-ci.com` 改 **CDN CNAME**，见 [`deploy/docs/runbooks/xcagi-download-cdn.md`](../../deploy/docs/runbooks/xcagi-download-cdn.md) 与脚本 `deploy/scripts/sync-xcagi-releases-to-cos.sh`。

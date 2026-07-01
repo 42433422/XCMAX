@@ -70,7 +70,7 @@ def load_release(*, path: Optional[Path] = None) -> Dict[str, Any]:
             "marketing_version": "10.0.0",
             "download_version": "10.0.0",
             "android_version": "10.0.0",
-            "win_installer_mb": 654,
+            "win_installer_mb": 212,
             "cos_base_url": "https://dl.xiu-ci.com",
             "last_push": {},
         }
@@ -93,7 +93,7 @@ def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "version_lock": str(r.get("version_lock") or "v10"),
         "download_version": dv,
         "android_version": str(r.get("android_version") or dv),
-        "win_installer_mb": r.get("win_installer_mb") or 654,
+        "win_installer_mb": r.get("win_installer_mb") or 212,
         "cos_base_url": base,
         "release_root": f"{base}/xcagi-v{dv}",
         "generated_at": datetime.now(timezone.utc).isoformat(),

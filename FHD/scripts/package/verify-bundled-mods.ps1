@@ -11,7 +11,18 @@ $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 $readProfileScript = Join-Path $PSScriptRoot "read-host-profile-stage-ids.py"
 $idsJson = python $readProfileScript $ProductSku
 if ($LASTEXITCODE -ne 0) { throw "read-host-profile-stage-ids.py failed" }
-$expectedIds = @($idsJson | ConvertFrom-Json)
+$idsJsonText = ($idsJson -join "`n")
+$parsedIds = $idsJsonText | ConvertFrom-Json
+$expectedIds = New-Object System.Collections.Generic.List[string]
+foreach ($item in @($parsedIds)) {
+  if ($item -is [System.Array]) {
+    foreach ($nested in $item) {
+      $expectedIds.Add([string]$nested)
+    }
+  } else {
+    $expectedIds.Add([string]$item)
+  }
+}
 
 $erpMod = 'xcagi-erp-domain-bridge'
 
@@ -55,5 +66,9 @@ Write-Host "OK: all $($expectedIds.Count) profile stage mod(s) present"
 $verifyIndustryScript = Join-Path $PSScriptRoot "verify-industry-seeds.ps1"
 if (Test-Path $verifyIndustryScript) {
   $internalDir = Split-Path $UnpackedDir -Parent
+  $industryErrorCount = $Error.Count
   & $verifyIndustryScript -ProductSku $ProductSku -UnpackedInternalDir $internalDir
+  if (-not $? -or $Error.Count -gt $industryErrorCount) {
+    throw "verify-industry-seeds failed for $ProductSku"
+  }
 }

@@ -656,6 +656,15 @@ _SPECIAL_INPUT_SCHEMAS: dict[tuple[str, str], dict[str, Any]] = {
             "source": {"type": "string"},
         },
     },
+    ("excel_import", "import_roster_file"): {
+        "type": "object",
+        "required": ["file_path"],
+        "properties": {
+            "file_path": {"type": "string"},
+            "sheet_name": {"type": "string"},
+            "source": {"type": "string"},
+        },
+    },
     ("excel_analyzer", "analyze"): {
         "type": "object",
         "required": ["file_path"],

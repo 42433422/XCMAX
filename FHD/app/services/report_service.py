@@ -48,23 +48,22 @@ class ReportService(NeuroEventPublisherMixin):
             query = db.query(ShipmentRecord, func.count(ShipmentRecord.id).label("record_count"))
 
             if start_date:
-                query = query.filter(ShipmentRecord.shipment_date >= start_date)
+                query = query.filter(ShipmentRecord.created_at >= start_date)
             if end_date:
-                query = query.filter(ShipmentRecord.shipment_date <= end_date)
+                query = query.filter(ShipmentRecord.created_at <= end_date)
             if customer_id:
-                query = query.filter(ShipmentRecord.customer_id == customer_id)
+                query = query.filter(ShipmentRecord.unit_id == customer_id)
 
             records = query.group_by(ShipmentRecord.id).all()
 
             if group_by == "product":
                 product_stats = {}
                 for record, count in records:
-                    for item in record.items:
-                        key = item.product_name or f"产品{item.product_id}"
-                        if key not in product_stats:
-                            product_stats[key] = {"product_name": key, "quantity": 0, "amount": 0}
-                        product_stats[key]["quantity"] += float(item.quantity or 0)
-                        product_stats[key]["amount"] += float(item.amount or 0)
+                    key = record.product_name or f"产品{record.id}"
+                    if key not in product_stats:
+                        product_stats[key] = {"product_name": key, "quantity": 0, "amount": 0}
+                    product_stats[key]["quantity"] += float(record.quantity_kg or 0)
+                    product_stats[key]["amount"] += float(record.amount or 0)
 
                 return {
                     "success": True,
@@ -78,11 +77,11 @@ class ReportService(NeuroEventPublisherMixin):
             elif group_by == "customer":
                 customer_stats = {}
                 for record, count in records:
-                    key = record.customer_name or f"客户{record.customer_id}"
+                    key = record.purchase_unit or f"客户{record.unit_id or record.id}"
                     if key not in customer_stats:
                         customer_stats[key] = {"customer_name": key, "order_count": 0, "amount": 0}
                     customer_stats[key]["order_count"] += 1
-                    customer_stats[key]["amount"] += float(record.total_amount or 0)
+                    customer_stats[key]["amount"] += float(record.amount or 0)
 
                 return {
                     "success": True,
@@ -97,14 +96,12 @@ class ReportService(NeuroEventPublisherMixin):
                 date_stats = {}
                 for record, count in records:
                     date_key = (
-                        record.shipment_date.strftime("%Y-%m-%d")
-                        if record.shipment_date
-                        else "unknown"
+                        record.created_at.strftime("%Y-%m-%d") if record.created_at else "unknown"
                     )
                     if date_key not in date_stats:
                         date_stats[date_key] = {"date": date_key, "order_count": 0, "amount": 0}
                     date_stats[date_key]["order_count"] += 1
-                    date_stats[date_key]["amount"] += float(record.total_amount or 0)
+                    date_stats[date_key]["amount"] += float(record.amount or 0)
 
                 return {
                     "success": True,
@@ -281,8 +278,8 @@ class ReportService(NeuroEventPublisherMixin):
 
     def get_dashboard_summary(self) -> dict[str, Any]:
         with get_db() as db:
-            today = datetime.now().date()
-            month_start = today.replace(day=1)
+            today = datetime.now()
+            month_start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
             product_count = db.query(func.count(Product.id)).scalar() or 0
             supplier_count = (
@@ -290,8 +287,8 @@ class ReportService(NeuroEventPublisherMixin):
             )
 
             month_shipments = (
-                db.query(func.count(ShipmentRecord.id), func.sum(ShipmentRecord.total_amount))
-                .filter(ShipmentRecord.shipment_date >= month_start)
+                db.query(func.count(ShipmentRecord.id), func.sum(ShipmentRecord.amount))
+                .filter(ShipmentRecord.created_at >= month_start)
                 .first()
             )
 

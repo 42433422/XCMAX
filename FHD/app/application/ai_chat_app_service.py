@@ -1624,6 +1624,129 @@ class AIChatApplicationService:
             intent=intent,
         )
 
+    @staticmethod
+    def _resolve_roster_probe_path(file_path: str) -> Path | None:
+        """把探测文件路径钉死在上传目录内（app 数据 uploads / WORKSPACE_ROOT/uploads）。
+
+        探测会真实读取文件前 10 行，若放任任意绝对路径将构成服务器端任意 .xlsx 读取；
+        合法来源只有上传/分析端点落盘的文件，故越界一律拒绝（含 ../ 与符号链接逃逸）。
+        """
+        raw = str(file_path or "").strip()
+        if not raw:
+            return None
+        bases: list[Path] = []
+        try:
+            from app.utils.path_utils import get_upload_dir
+
+            bases.append(Path(get_upload_dir()).resolve())
+        except RECOVERABLE_ERRORS:
+            logger.debug("upload dir unavailable for roster probe", exc_info=True)
+        ws_root = Path(os.environ.get("WORKSPACE_ROOT", os.getcwd()))
+        try:
+            bases.append((ws_root / "uploads").resolve())
+        except RECOVERABLE_ERRORS:
+            logger.debug("workspace uploads unavailable for roster probe", exc_info=True)
+        if not bases:
+            return None
+
+        candidate = Path(raw)
+        candidates: list[Path] = []
+        if candidate.is_absolute():
+            candidates.append(candidate)
+        else:
+            candidates.extend(base / raw for base in bases)
+            # 前端 chat 上传返回形如 uploads/chat/x.xlsx（相对 workspace root）
+            candidates.append(ws_root / raw)
+        for cand in candidates:
+            try:
+                resolved = cand.resolve(strict=True)
+            except (OSError, RuntimeError):
+                continue
+            for base in bases:
+                if resolved == base or base in resolved.parents:
+                    return resolved
+        return None
+
+    def _probe_attendance_roster_import(
+        self,
+        context: dict[str, Any] | None,
+        excel_analysis: dict[str, Any],
+    ) -> dict[str, str] | None:
+        """探测「考勤表/人员花名册」一键入库；命中返回 excel_import.import_roster_file 参数。
+
+        判据：分析字段/网格预览表头命中花名册特征（姓名+部门/考勤组且无产品列），
+        或轻量探测文件前 10 行定位到「姓名+部门」表头行且该行无产品列。
+        """
+        ctx = context if isinstance(context, dict) else {}
+        preview = excel_analysis.get("preview_data")
+        preview = preview if isinstance(preview, dict) else {}
+        data = excel_analysis.get("data")
+        data = data if isinstance(data, dict) else {}
+        data_preview = data.get("preview_data")
+        data_preview = data_preview if isinstance(data_preview, dict) else {}
+        candidates = (
+            ctx.get("excel_file_path"),
+            excel_analysis.get("file_path"),
+            preview.get("file_path"),
+            data.get("file_path"),
+            data_preview.get("file_path"),
+        )
+        file_path = next((str(c).strip() for c in candidates if str(c or "").strip()), "")
+        if not file_path:
+            return None
+        try:
+            from app.application.tools.workflow import (
+                _autodetect_attendance_roster_header_row,
+                _excel_cell_as_clean_str,
+                _looks_like_attendance_roster_columns,
+            )
+
+            p = self._resolve_roster_probe_path(file_path)
+            if p is None or p.suffix.lower() not in (".xlsx", ".xlsm", ".xls"):
+                return None
+
+            sheet_name = ""
+            selected = ctx.get("excel_analysis_selected_sheet")
+            if isinstance(selected, dict):
+                sheet_name = str(selected.get("sheet_name") or "").strip()
+            if not sheet_name:
+                sheet_name = str(ctx.get("preferred_sheet_name") or "").strip()
+
+            headers: list[str] = []
+            for item in (excel_analysis.get("fields") or [])[:64]:
+                if isinstance(item, dict):
+                    headers.append(str(item.get("label") or item.get("name") or ""))
+                else:
+                    headers.append(str(item))
+            grid = preview.get("grid_preview")
+            if isinstance(grid, dict):
+                rows = grid.get("rows")
+                if isinstance(rows, list) and rows and isinstance(rows[0], list):
+                    headers.extend(str(c) for c in rows[0])
+            headers = [h for h in headers if str(h or "").strip()]
+            if headers and _looks_like_attendance_roster_columns(headers):
+                return {"file_path": str(p), "sheet_name": sheet_name}
+
+            header_row = _autodetect_attendance_roster_header_row(
+                p, sheet_name or None, current_header_1based=None, current_columns=[]
+            )
+            if header_row is None:
+                return None
+            import pandas as pd
+
+            kw: dict[str, Any] = {"header": None, "skiprows": header_row - 1, "nrows": 1}
+            if p.suffix.lower() in (".xlsx", ".xlsm"):
+                kw["engine"] = "openpyxl"
+            if sheet_name:
+                kw["sheet_name"] = sheet_name
+            head = pd.read_excel(p, **kw)
+            cells = [_excel_cell_as_clean_str(v) for v in head.iloc[0].tolist()]
+            if _looks_like_attendance_roster_columns([c for c in cells if c]):
+                return {"file_path": str(p), "sheet_name": sheet_name}
+        except RECOVERABLE_ERRORS:
+            logger.debug("attendance roster import probe skipped", exc_info=True)
+        return None
+
     def _start_deterministic_import_agent_run(
         self,
         *,
@@ -1945,6 +2068,68 @@ class AIChatApplicationService:
             and any(k in text for k in ("数据库", "入库", "导入", "添加到库"))
             and not _skip_pro_excel_deterministic_import(context)
         ):
+            # 钉钉考勤/人员花名册：整文件确定性入库（人员→人员管理，部门→客户），
+            # 不走下方「单位/产品/价格」角色抽取（考勤表没有这些列）。
+            roster_params = self._probe_attendance_roster_import(context, excel_analysis)
+            if roster_params:
+                from app.application.workflow.types import PlanGraph, WorkflowNode
+
+                todo_lines = [
+                    "识别考勤表/花名册表头（姓名/部门/考勤组）",
+                    "人员写入「人员管理」，部门写入「客户/部门」",
+                    "返回导入结果（人员数/部门数）",
+                ]
+                plan = PlanGraph(
+                    plan_id=f"plan_roster_import_{uuid.uuid4().hex[:12]}",
+                    intent="attendance_roster_import_to_db",
+                    todo_steps=todo_lines,
+                    nodes=[
+                        WorkflowNode(
+                            node_id="import_attendance_roster",
+                            tool_id="excel_import",
+                            action="import_roster_file",
+                            params={**roster_params, "source": "deterministic_shortcut"},
+                            risk="medium",
+                            idempotent=False,
+                            description="考勤表人员/部门一键入库",
+                        )
+                    ],
+                    risk_level="medium",
+                    metadata={
+                        "source": "deterministic_excel_import",
+                        "artifacts": [
+                            {
+                                "artifact_type": "excel_records",
+                                "name": str(
+                                    excel_analysis.get("file_name")
+                                    or excel_analysis.get("filename")
+                                    or "考勤表"
+                                ),
+                                "source": "excel_analysis",
+                                "uri": roster_params.get("file_path") or "",
+                                "summary": "考勤表/人员花名册一键入库（人员→人员管理，部门→客户）",
+                                "metadata": {
+                                    "import_pipeline": "deterministic_shortcut",
+                                    "sheet_name": roster_params.get("sheet_name") or None,
+                                },
+                            }
+                        ],
+                    },
+                )
+                thinking_steps = self._build_workflow_thinking_steps(
+                    plan,
+                    "考勤表入库会写入人员与部门数据库，需用户确认",
+                )
+                return self._start_deterministic_import_agent_run(
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=context,
+                    file_context=merged_file_ctx,
+                    plan=plan,
+                    thinking_steps=thinking_steps,
+                )
+
             fields = excel_analysis.get("fields") or []
             field_names = []
             for item in fields[:10]:

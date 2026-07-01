@@ -2237,6 +2237,42 @@ def _registered_router_excel_import(
             return {"success": False, "message": "records 必须是数组"}
         return _execute_excel_import_records([r for r in records if isinstance(r, dict)])
 
+    if action == "import_roster_file":
+        # 钉钉考勤/人员花名册整文件入库：人员→products(人员管理)、部门→customers。
+        import json as _json
+
+        from app.application.tools.workflow import _handle_import_excel_to_database
+
+        file_path = str(params.get("file_path") or "").strip()
+        if not file_path:
+            return {"success": False, "message": "缺少 file_path"}
+        workspace_root = runtime_context.get("workspace_root")
+        raw = _handle_import_excel_to_database(
+            {
+                "import_type": "employees",
+                "file_path": file_path,
+                "sheet_name": str(params.get("sheet_name") or "").strip(),
+                "confirm": True,
+            },
+            workspace_root=str(workspace_root) if workspace_root else None,
+        )
+        try:
+            result = _json.loads(raw)
+        except (TypeError, ValueError):
+            return {"success": False, "message": "花名册导入返回格式异常"}
+        if not result.get("success"):
+            return {
+                "success": False,
+                "message": str(result.get("error") or "花名册导入失败"),
+                "data": {"result": result},
+            }
+        return {
+            "success": True,
+            "message": str(result.get("message") or "人员花名册导入完成"),
+            "imported_count": int(result.get("imported") or 0),
+            "data": {"result": result},
+        }
+
     return {"success": False, "message": f"未知 excel_import action: {action}"}
 
 
