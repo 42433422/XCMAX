@@ -65,6 +65,42 @@ def test_publish_dedupes_within_window(fresh_db, monkeypatch):
     assert publish("on_error", {"summary": "dup-test"}, source="unit") is False
 
 
+def test_employee_lifecycle_events_do_not_dispatch_back_to_employees(fresh_db, monkeypatch):
+    sf = models.get_session_factory()
+    with sf() as s:
+        s.add(
+            models.User(
+                username="incident_admin",
+                password_hash="x",
+                email="inc2@example.com",
+                is_admin=True,
+            )
+        )
+        s.commit()
+
+    calls = {"n": 0}
+
+    def fake_execute(*_args, **_kwargs):
+        calls["n"] += 1
+        return {"ok": True}
+
+    monkeypatch.setattr("modstore_server.incident_bus.execute_employee_task", fake_execute)
+    monkeypatch.setattr(
+        "modstore_server.incident_bus._publish_stream_shadow", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        "modstore_server.employee_autonomy_service.ingest_suggestion_event_payload",
+        lambda *a, **k: None,
+    )
+
+    assert publish(
+        "employee.evolution.suggested",
+        {"employee_id": "x", "summary": "loop"},
+        source="evolution-engine",
+    )
+    assert calls["n"] == 0
+
+
 def test_sync_employee_trigger_bindings_from_yuangon(fresh_db):
     y = fresh_db / "yuangon" / "g" / "e"
     y.mkdir(parents=True)

@@ -1,0 +1,502 @@
+{
+  "checks": [
+    {
+      "evidence": "external_project_count=40",
+      "id": "multi_external_project_materialized",
+      "passed": true
+    },
+    {
+      "evidence": "language_count=9",
+      "id": "cross_language_materialized",
+      "passed": true
+    },
+    {
+      "evidence": "large_project_count=1",
+      "id": "large_upstream_project_materialized",
+      "passed": true
+    },
+    {
+      "evidence": "ci_project_count=16",
+      "id": "upstream_ci_surface_seen",
+      "passed": true
+    },
+    {
+      "evidence": "complex_pr_status=ready; pr_dry_run_status=reviewed",
+      "id": "pr_runtime_replay_available",
+      "passed": true
+    }
+  ],
+  "projects": [
+    {
+      "ci_file_count": 1,
+      "file_count": 22,
+      "languages": {
+        "javascript": 14
+      },
+      "name": "AleksandrFurmenkovOfficial/ai-code-review",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/AleksandrFurmenkovOfficial/ai-code-review",
+      "source_file_count": 14,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 16,
+      "languages": {
+        "python": 12
+      },
+      "name": "Anandu361/pr-review-agent",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Anandu361/pr-review-agent",
+      "source_file_count": 12,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 3,
+      "file_count": 37,
+      "languages": {
+        "python": 15
+      },
+      "name": "AndreaBonn/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/AndreaBonn/ai-pr-reviewer",
+      "source_file_count": 15,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 143,
+      "languages": {
+        "typescript": 115
+      },
+      "name": "AnitSarkar123/AI_PR_REVIEWER",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/AnitSarkar123/AI_PR_REVIEWER",
+      "source_file_count": 115,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 56,
+      "languages": {
+        "python": 32,
+        "typescript": 11
+      },
+      "name": "ArdaVAROL/AI-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/ArdaVAROL/AI-pr-reviewer",
+      "source_file_count": 43,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 1,
+      "languages": {},
+      "name": "Code-review-VK/ai-review-test-1777810528",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Code-review-VK/ai-review-test-1777810528",
+      "source_file_count": 0,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 29,
+      "languages": {
+        "csharp": 6
+      },
+      "name": "DineshBabuPalanisamy/AI_Powered-PR_Reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/DineshBabuPalanisamy/AI_Powered-PR_Reviewer",
+      "source_file_count": 6,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 1,
+      "languages": {},
+      "name": "Durga2devops/terraform-ai-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Durga2devops/terraform-ai-reviewer",
+      "source_file_count": 0,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 64,
+      "languages": {
+        "python": 46
+      },
+      "name": "Faust7777777/ReviewPilot",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Faust7777777/ReviewPilot",
+      "source_file_count": 46,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 2501,
+      "languages": {
+        "java": 1916,
+        "javascript": 6,
+        "python": 14,
+        "shell": 16,
+        "typescript": 7
+      },
+      "name": "GerritCodeReview/gerrit",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/GerritCodeReview/gerrit",
+      "source_file_count": 1959,
+      "truncated": true
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 6,
+      "languages": {
+        "javascript": 1
+      },
+      "name": "HDVInsurance/gpt-code-review-action",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/HDVInsurance/gpt-code-review-action",
+      "source_file_count": 1,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 13,
+      "languages": {
+        "javascript": 6
+      },
+      "name": "IndranilKhedkar/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/IndranilKhedkar/ai-pr-reviewer",
+      "source_file_count": 6,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 42,
+      "languages": {
+        "typescript": 20
+      },
+      "name": "JeremyD7/AI-PR-Reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/JeremyD7/AI-PR-Reviewer",
+      "source_file_count": 20,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 103,
+      "languages": {
+        "javascript": 2,
+        "typescript": 45
+      },
+      "name": "Jice19/AI-PR-Review-",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Jice19/AI-PR-Review-",
+      "source_file_count": 47,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 207,
+      "languages": {
+        "python": 52
+      },
+      "name": "JulianEgbert/LLM-Code-Review-Benchmark",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/JulianEgbert/LLM-Code-Review-Benchmark",
+      "source_file_count": 52,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 63,
+      "languages": {
+        "python": 19,
+        "typescript": 15
+      },
+      "name": "Jway77-ai/PR-AI-Code-Reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Jway77-ai/PR-AI-Code-Reviewer",
+      "source_file_count": 34,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 38,
+      "languages": {
+        "python": 22,
+        "terraform": 5
+      },
+      "name": "KEE10/ai_reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/KEE10/ai_reviewer",
+      "source_file_count": 27,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 15,
+      "languages": {
+        "java": 7
+      },
+      "name": "KumarSaurabhSingh/AI-code-review-bot",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/KumarSaurabhSingh/AI-code-review-bot",
+      "source_file_count": 7,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 10,
+      "languages": {
+        "python": 7
+      },
+      "name": "Kush05Bhardwaj/PRobot",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Kush05Bhardwaj/PRobot",
+      "source_file_count": 7,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 4,
+      "file_count": 30,
+      "languages": {
+        "typescript": 8
+      },
+      "name": "LennardGeissler/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/LennardGeissler/ai-pr-reviewer",
+      "source_file_count": 8,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 4,
+      "file_count": 107,
+      "languages": {
+        "python": 79
+      },
+      "name": "MOHAMAD-ZUBI/Adrift",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/MOHAMAD-ZUBI/Adrift",
+      "source_file_count": 79,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 0,
+      "languages": {},
+      "name": "Manish-bhargava/ai-github-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Manish-bhargava/ai-github-pr-reviewer",
+      "source_file_count": 0,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 9,
+      "languages": {
+        "python": 2
+      },
+      "name": "Misty033/PR_Review-Benchmark-Dataset",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Misty033/PR_Review-Benchmark-Dataset",
+      "source_file_count": 2,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 13,
+      "languages": {
+        "typescript": 9
+      },
+      "name": "MySkillLife/skill-life-ai-pr-review-benchmark",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/MySkillLife/skill-life-ai-pr-review-benchmark",
+      "source_file_count": 9,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 24,
+      "languages": {
+        "javascript": 1,
+        "python": 15
+      },
+      "name": "NIU-2025/AI-PR-Review",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/NIU-2025/AI-PR-Review",
+      "source_file_count": 16,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 27,
+      "languages": {
+        "python": 10
+      },
+      "name": "NumeralTiger/AI-PR-Reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/NumeralTiger/AI-PR-Reviewer",
+      "source_file_count": 10,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 32,
+      "languages": {
+        "python": 15,
+        "shell": 1
+      },
+      "name": "Oxygen56/open-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Oxygen56/open-reviewer",
+      "source_file_count": 16,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 18,
+      "languages": {
+        "python": 4
+      },
+      "name": "PantoDev/pr_review_benchmark_tools",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/PantoDev/pr_review_benchmark_tools",
+      "source_file_count": 4,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 25,
+      "languages": {
+        "python": 16
+      },
+      "name": "Peachy-Peahces/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Peachy-Peahces/ai-pr-reviewer",
+      "source_file_count": 16,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 3,
+      "file_count": 59,
+      "languages": {
+        "python": 31,
+        "shell": 1
+      },
+      "name": "Perseus-Computing-LLC/pr-pilot",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Perseus-Computing-LLC/pr-pilot",
+      "source_file_count": 32,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 20,
+      "languages": {
+        "python": 10
+      },
+      "name": "PoorDoomer/pr-pilot",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/PoorDoomer/pr-pilot",
+      "source_file_count": 10,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 23,
+      "languages": {
+        "csharp": 5
+      },
+      "name": "PremkumarAdaiakalam/AI_Powered-PR_Reviewer_AIPRRFC",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/PremkumarAdaiakalam/AI_Powered-PR_Reviewer_AIPRRFC",
+      "source_file_count": 5,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 199,
+      "languages": {
+        "shell": 1,
+        "typescript": 128
+      },
+      "name": "Review-scope/ReviewScope",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
+      "source_file_count": 129,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 59,
+      "languages": {
+        "javascript": 19,
+        "python": 24
+      },
+      "name": "RitzwiK/ACRS-v2",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/RitzwiK/ACRS-v2",
+      "source_file_count": 43,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 164,
+      "languages": {
+        "javascript": 2,
+        "python": 76,
+        "shell": 3,
+        "typescript": 29
+      },
+      "name": "SCU-GuGuGaGa/Insightor",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/SCU-GuGuGaGa/Insightor",
+      "source_file_count": 110,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 0,
+      "file_count": 26,
+      "languages": {
+        "go": 2,
+        "python": 2,
+        "ruby": 3,
+        "shell": 2,
+        "typescript": 4
+      },
+      "name": "SRSACoE/coe-ai-pr-review-benchmark",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/SRSACoE/coe-ai-pr-review-benchmark",
+      "source_file_count": 13,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 4,
+      "file_count": 14,
+      "languages": {
+        "shell": 2
+      },
+      "name": "SchwarzSimon/auth0-ai-pr-analyzer-gh-action",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/SchwarzSimon/auth0-ai-pr-analyzer-gh-action",
+      "source_file_count": 2,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 2,
+      "file_count": 6,
+      "languages": {
+        "python": 1
+      },
+      "name": "Sin317/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Sin317/ai-pr-reviewer",
+      "source_file_count": 1,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 2,
+      "file_count": 91,
+      "languages": {
+        "go": 61
+      },
+      "name": "Slagri/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Slagri/ai-pr-reviewer",
+      "source_file_count": 61,
+      "truncated": false
+    },
+    {
+      "ci_file_count": 1,
+      "file_count": 2,
+      "languages": {},
+      "name": "Sneeg15/ai-pr-reviewer",
+      "path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Sneeg15/ai-pr-reviewer",
+      "source_file_count": 0,
+      "truncated": false
+    }
+  ],
+  "status": "ready",
+  "summary": {
+    "ci_project_count": 16,
+    "external_project_count": 40,
+    "language_count": 9,
+    "languages": {
+      "csharp": 11,
+      "go": 63,
+      "java": 1923,
+      "javascript": 51,
+      "python": 504,
+      "ruby": 3,
+      "shell": 26,
+      "terraform": 5,
+      "typescript": 391
+    },
+    "large_project_count": 1,
+    "pr_replay_status": "ready"
+  }
+}

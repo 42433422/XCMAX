@@ -16,6 +16,13 @@ CLOSED_LOOP_FLAGS = (
 )
 
 
+class _MissingFlags(list[str]):
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, (list, tuple)):
+            return list(self) == list(other)
+        return super().__eq__(other)
+
+
 def record_absorption_shock(own: Path, source: str, external_path: Path | None, tasks: list[dict[str, str]]) -> dict[str, Any]:
     task_dimensions = {task["dimension"] for task in tasks}
     state = {
@@ -84,7 +91,7 @@ def closed_loop_proof(root: Path) -> dict[str, Any]:
     state = load_absorption_state(root)
     proof = state.get("closed_loop_proof") if isinstance(state.get("closed_loop_proof"), dict) else {}
     flags = {name: bool(proof.get(name)) for name in CLOSED_LOOP_FLAGS}
-    missing = tuple(key for key, value in flags.items() if not value)
+    missing = _MissingFlags(key for key, value in flags.items() if not value)
     return {
         "verified": not missing,
         "missing": missing,

@@ -51,9 +51,10 @@ def _save_store(doc: Dict[str, Any]) -> None:
 def record_node_run(
     node_id: str,
     *,
-    ok: bool,
+    ok: Optional[bool],
     source: str = "",
     meta: Optional[Dict[str, Any]] = None,
+    proof_status: Optional[str] = None,
 ) -> Dict[str, Any]:
     """日更 job 完成时写入节点快照。"""
     nid = (node_id or "").strip()
@@ -63,11 +64,13 @@ def record_node_run(
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "last_run": now,
-        "ok": bool(ok),
+        "ok": bool(ok) if ok is not None else None,
         "source": (source or "").strip(),
         "meta": dict(meta or {}),
         "updated_at": now,
     }
+    if proof_status:
+        row["proof_status"] = str(proof_status)
     with _lock:
         doc = _load_store()
         nodes = doc.setdefault("nodes", {})

@@ -101,3 +101,32 @@ def test_merge_event_backlog_into_vibe_patches(routes_file):
     assert "事件轨·oa-o7-feedback" in merged
     assert "修复登录页卡顿" in merged
     assert routes_file.read_digest_backlog_entries() == []
+
+
+def test_merge_event_backlog_drops_stale_time_rail_entries(routes_file, monkeypatch):
+    routes_file.append_digest_backlog(
+        {
+            "source": "time-rail-observability",
+            "route_id": "time_rail_missing_evidence",
+            "node_id": "P4",
+            "dispatch_line": "P-S",
+            "priority": "P1",
+            "task_brief": "时间轨节点 `P4` 当前缺少 runtime 证据。",
+        }
+    )
+
+    monkeypatch.setattr(
+        "modstore_server.time_rail_workflow.collect_node_runtime_status",
+        lambda: {"nodes": {"P4": {"observed": True, "proof_status": "decision_not_taken"}}},
+    )
+
+    merged, meta = routes_file.merge_event_backlog_into_vibe_patches(
+        "# Vibe 预备 · 补丁清单\n",
+        consume=True,
+    )
+
+    assert "time_rail_missing_evidence" not in merged
+    assert meta["merged_count"] == 0
+    assert meta["skipped_stale_time_rail"] == 1
+    assert meta["consumed"] is True
+    assert routes_file.read_digest_backlog_entries() == []

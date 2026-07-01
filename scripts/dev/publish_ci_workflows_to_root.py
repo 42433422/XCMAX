@@ -170,6 +170,10 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
         "path: market/playwright-report/",
         f"path: {mod_root}/market/playwright-report/",
     )
+    content = content.replace(
+        "working-directory: desktop-shell",
+        f"working-directory: {mod_root}/desktop-shell",
+    )
     return content
 
 

@@ -10,20 +10,25 @@ sys.path.insert(0, str(ROOT))
 
 
 def test_ssot_list_shows_enabled_domains(capsys):
-    """list 输出全部 enabled 域。"""
+    """list 输出全部域(含 disabled),其中 enabled 域数量等于注册表 enabled_only 计数。
+    新增 disabled 域(如 neuro-bus-events Phase A)不应破坏此测试。
+    """
     from scripts.dev.ssot_cli import main
     from scripts.dev.ssot_plugins.base import load_registry
 
-    expected_count = len(load_registry(ROOT / "config" / "ssot.yaml", enabled_only=True))
+    registry_all = load_registry(ROOT / "config" / "ssot.yaml", enabled_only=False)
+    registry_enabled = load_registry(ROOT / "config" / "ssot.yaml", enabled_only=True)
+    expected_total = len(registry_all)
+    expected_enabled = len(registry_enabled)
     main(["list"])
     out = capsys.readouterr().out
-    # 域行（不含表头与分隔线）
+    # 域行(不含表头与分隔线)
     domain_lines = [
         l for l in out.splitlines() if l and not l.startswith("name") and not l.startswith("-")
     ]
-    assert len(domain_lines) == expected_count
+    assert len(domain_lines) == expected_total
     yes_count = sum(1 for l in domain_lines if l.split()[1] == "yes")
-    assert yes_count == expected_count  # 全部启用
+    assert yes_count == expected_enabled
 
 
 def test_ssot_gate_returns_0_or_1(capsys):

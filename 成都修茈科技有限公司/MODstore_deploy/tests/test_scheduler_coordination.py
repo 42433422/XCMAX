@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 from modstore_server.daily_backup_job import cron_trigger_for_backup
 from modstore_server.daily_pipeline_lock import (
@@ -46,3 +47,19 @@ def test_scheduler_heartbeat_writes_status(monkeypatch, tmp_path) -> None:
     assert payload["job_count"] == 7
     assert status["ok"] is True
     assert status["heartbeat"]["job_count"] == 7
+
+
+def test_scheduler_heartbeat_atomic_write_handles_parallel_writers(monkeypatch, tmp_path) -> None:
+    heartbeat = tmp_path / "heartbeat.json"
+    monkeypatch.setenv("MODSTORE_SCHEDULER_HEARTBEAT_FILE", str(heartbeat))
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        rows = list(pool.map(lambda i: write_scheduler_heartbeat(job_count=i), range(40)))
+
+    status = scheduler_heartbeat_status(max_age_seconds=60)
+    payload = json.loads(heartbeat.read_text(encoding="utf-8"))
+
+    assert len(rows) == 40
+    assert payload["job_count"] in set(range(40))
+    assert status["ok"] is True
+    assert list(tmp_path.glob(".heartbeat.json.*.tmp")) == []

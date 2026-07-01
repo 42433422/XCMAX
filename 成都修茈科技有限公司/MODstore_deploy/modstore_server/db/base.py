@@ -131,6 +131,7 @@ def init_db(db_path: Optional[Path] = None) -> None:
     engine = get_engine(db_path)
     Base.metadata.create_all(engine)
     _ensure_columns(engine)
+    _ensure_daily_action_items_table(engine)
     init_default_plan_templates()
 
 
@@ -162,6 +163,50 @@ def _ensure_columns(engine: Engine) -> None:
     ]
     for table, column, ddl in patches:
         _add_column_if_missing(engine, table, column, ddl)
+
+
+def _ensure_daily_action_items_table(engine: Engine) -> None:
+    """Create the digest action-item table during DB bootstrap.
+
+    ``digest_action_items.ensure_table`` still owns the runtime helper, but the
+    collab feed and mobile sync path should not depend on the daily digest
+    having already executed once.
+    """
+
+    cols = """
+        day VARCHAR(32) NOT NULL,
+        record_id INTEGER,
+        kind VARCHAR(16) NOT NULL,
+        employee_id VARCHAR(128),
+        employee_label VARCHAR(128),
+        line VARCHAR(16),
+        priority VARCHAR(8),
+        scope_path TEXT,
+        text TEXT,
+        rt_version VARCHAR(32),
+        status VARCHAR(16) DEFAULT 'open',
+        dedupe_key VARCHAR(64) UNIQUE,
+        created_at VARCHAR(40),
+        updated_at VARCHAR(40)
+    """
+    dialect = (engine.dialect.name or "").lower()
+    if dialect == "postgresql":
+        ddl = f"CREATE TABLE IF NOT EXISTS daily_action_items (id SERIAL PRIMARY KEY, {cols})"
+    else:
+        ddl = (
+            "CREATE TABLE IF NOT EXISTS daily_action_items "
+            f"(id INTEGER PRIMARY KEY AUTOINCREMENT, {cols})"
+        )
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
+        for stmt in (
+            "CREATE INDEX IF NOT EXISTS ix_dai_day ON daily_action_items (day)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_kind ON daily_action_items (kind)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_status ON daily_action_items (status)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_day_kind_status ON daily_action_items (day, kind, status)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_record_id ON daily_action_items (record_id)",
+        ):
+            conn.execute(text(stmt))
 
 
 def init_default_plan_templates() -> None:

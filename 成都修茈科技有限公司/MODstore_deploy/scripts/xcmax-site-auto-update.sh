@@ -179,6 +179,30 @@ ensure_market_dist() {
   return 1
 }
 
+market_dist_identity_ok() {
+  local idx="${MODSTORE_ROOT}/market/dist/index.html"
+  [[ -f "$idx" ]] || return 1
+  grep -q '<title>XC AGI 市场</title>' "$idx" || return 1
+  ! grep -qE 'CEED \| 聚合型视频生成平台|聚合型视频生成平台|index-CeJsc-Ly' "$idx"
+}
+
+validate_market_dist_identity() {
+  local idx="${MODSTORE_ROOT}/market/dist/index.html"
+  [[ -f "$idx" ]] || return 0
+  if market_dist_identity_ok; then
+    return 0
+  fi
+  local title
+  title="$(sed -n 's/.*<title>\(.*\)<\/title>.*/\1/p' "$idx" | head -1)"
+  log "ERROR: market/dist index 身份异常 title=${title:-unknown}，尝试重建市场前端"
+  if build_market && market_dist_identity_ok; then
+    log "market/dist index 身份已恢复为 XC AGI 市场"
+    return 0
+  fi
+  log "ERROR: market/dist index 身份仍异常，请人工检查是否被外部项目覆盖"
+  return 1
+}
+
 build_market() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
   # shellcheck disable=SC1091
@@ -349,6 +373,7 @@ if [[ "$REPO_CHANGED" != true ]]; then
   sync_corp_pages_to_dist_fallback
   sync_corp_butler_assets
   ensure_market_dist || true
+  validate_market_dist_identity || true
   log "XCMAX 无新提交，已检查 public→dist / corp-butler / market/dist"
   exit 0
 fi
@@ -392,6 +417,7 @@ sync_market_public_assets
 sync_corp_pages_to_dist_fallback
 sync_corp_butler_assets
 ensure_market_dist || true
+validate_market_dist_identity || true
 
 restart_app_services
 

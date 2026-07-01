@@ -156,6 +156,7 @@ def _status_from_block(
         "release_train",
         "release_kind",
         "shadow",
+        "dry_run",
         "skipped",
         "unit_count",
         "lines",
@@ -180,7 +181,209 @@ def _status_from_block(
         source=source,
         detail=detail_out,
         observed=True,
-        proof_status="shadow_observed" if block.get("shadow") else None,
+        proof_status="shadow_observed" if block.get("shadow") or block.get("dry_run") else None,
+    )
+
+
+def _decision_not_taken_status(
+    node_id: str,
+    *,
+    last_run: Optional[str] = None,
+    source: str,
+    reason: str,
+    detail: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    detail_out = dict(detail or {})
+    if reason and "reason" not in detail_out:
+        detail_out["reason"] = reason
+    return _node_status_shell(
+        node_id,
+        last_run=last_run,
+        ok=None,
+        source=source,
+        detail=detail_out,
+        observed=True,
+        proof_status="decision_not_taken",
+    )
+
+
+def _derive_mapped_node(
+    node_id: str,
+    from_node: Dict[str, Any],
+    *,
+    source: str,
+    detail: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    detail_out = {"from_node": from_node.get("node_id")}
+    detail_out.update(from_node.get("detail") if isinstance(from_node.get("detail"), dict) else {})
+    detail_out.update(detail or {})
+    proof_status = from_node.get("proof_status")
+    if proof_status not in (
+        "shadow_observed",
+        "planned",
+        "decision_true",
+        "decision_false",
+        "decision_not_taken",
+    ):
+        proof_status = None
+    return _node_status_shell(
+        node_id,
+        last_run=_iso_or_none(from_node.get("last_run")),
+        ok=from_node.get("ok"),
+        source=source,
+        detail=detail_out,
+        observed=True,
+        proof_status=proof_status,
+    )
+
+
+def _ensure_p2_line_mappings(
+    derived: Dict[str, Dict[str, Any]],
+    *,
+    record_id: int = 0,
+    release_kind: str = "",
+) -> None:
+    """派生 P2 编码节点，避免调度证据和 P2 图节点因解析顺序脱节。"""
+    for source_nid, mapped_nid in (("PW", "P2W"), ("APPB", "P2APP"), ("SR", "P2R")):
+        if source_nid in derived and mapped_nid not in derived:
+            derived[mapped_nid] = _derive_mapped_node(
+                mapped_nid,
+                derived[source_nid],
+                source=f"time_rail.derive.{source_nid}",
+                detail={
+                    "record_id": record_id,
+                    "release_kind": release_kind,
+                },
+            )
+
+
+def _line_total_sections(line_dispatch: Dict[str, Any], line: str) -> Optional[int]:
+    meta = line_dispatch.get("line_meta") if isinstance(line_dispatch.get("line_meta"), dict) else {}
+    row = meta.get(line) if isinstance(meta.get(line), dict) else None
+    if not row:
+        return None
+    try:
+        return int(row.get("total_sections") or 0)
+    except Exception:
+        return None
+
+
+def _ensure_non_triggered_time_rail_decisions(
+    derived: Dict[str, Dict[str, Any]],
+    *,
+    last_run: Optional[str],
+    record_id: int,
+    release_kind: str,
+    line_dispatch: Optional[Dict[str, Any]] = None,
+    phase_c_pipeline: Optional[Dict[str, Any]] = None,
+    phase_c: Optional[Dict[str, Any]] = None,
+    guard_active: bool = False,
+) -> None:
+    """Mark branch steps that were decided but intentionally not run in this cadence."""
+    base_detail = {"record_id": record_id, "release_kind": release_kind or "unknown"}
+
+    def mark(node_id: str, *, source: str, reason: str, detail: Optional[Dict[str, Any]] = None):
+        if node_id in derived:
+            return
+        out_detail = dict(base_detail)
+        out_detail.update(detail or {})
+        derived[node_id] = _decision_not_taken_status(
+            node_id,
+            last_run=last_run,
+            source=source,
+            reason=reason,
+            detail=out_detail,
+        )
+
+    if not guard_active:
+        mark(
+            "DRPROBE",
+            source="release_train.backup_guard",
+            reason="no_active_backup_guard",
+            detail={"active": False},
+        )
+
+    dispatch = line_dispatch or {}
+    for line, line_node, p2_node in (("P-W", "PW", "P2W"), ("S-R", "SR", "P2R")):
+        total = _line_total_sections(dispatch, line)
+        if total == 0:
+            detail = {"line": line, "total_sections": 0}
+            mark(
+                line_node,
+                source="daily_digest.vibe_prep_line_dispatch",
+                reason="line_has_no_work_items",
+                detail=detail,
+            )
+            mark(
+                p2_node,
+                source=f"time_rail.derive.{line_node}",
+                reason="line_has_no_work_items",
+                detail={**detail, "from_node": line_node},
+            )
+
+    if release_kind not in ("installer", "major"):
+        for nid in ("P9I", "P5I", "P6I", "FASTGATE", "DLSSOT"):
+            mark(
+                nid,
+                source="daily_digest.release_kind",
+                reason="release_kind_not_installer",
+            )
+
+    pipeline = phase_c_pipeline or {}
+    step_ids = list(
+        pipeline.get("executed_steps")
+        or pipeline.get("step_ids")
+        or pipeline.get("planned_steps")
+        or []
+    )
+    if pipeline or release_kind == "daily":
+        for step in ("P4", "P5", "P6", "P9"):
+            if step not in step_ids:
+                mark(
+                    step,
+                    source="daily_digest.phase_c_pipeline",
+                    reason="phase_c_step_not_planned",
+                    detail={"step_ids": step_ids},
+                )
+        if "P5" not in step_ids and "P6" not in step_ids:
+            mark(
+                "CANARY",
+                source="daily_digest.phase_c_pipeline",
+                reason="canary_not_scheduled_without_release",
+                detail={"step_ids": step_ids},
+            )
+        if "P6" not in step_ids:
+            for nid in ("P6POP", "P6PW"):
+                mark(
+                    nid,
+                    source="daily_digest.phase_c_pipeline",
+                    reason="update_push_not_scheduled",
+                    detail={"step_ids": step_ids},
+                )
+        mark(
+            "P9G",
+            source="release_train.json",
+            reason="generation_cadence_not_due",
+            detail={"step_ids": step_ids},
+        )
+
+    rollback = (
+        pipeline.get("rollback")
+        if isinstance(pipeline.get("rollback"), dict)
+        else (phase_c or {}).get("rollback") if isinstance((phase_c or {}).get("rollback"), dict) else None
+    )
+    if not rollback:
+        mark(
+            "ROLLBACK",
+            source="daily_digest.phase_c_pipeline",
+            reason="rollback_not_required",
+            detail={"step_ids": step_ids},
+        )
+    mark(
+        "HEAL",
+        source="daily_digest.phase_c_pipeline",
+        reason="self_heal_not_required",
+        detail={"step_ids": step_ids},
     )
 
 
@@ -447,12 +650,21 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             detail={"task_brief": getattr(metric, "task_brief", ""), "error": err},
         )
 
+    latest_digest_created: Optional[str] = None
+    latest_digest_record_id = 0
+    latest_release_kind = ""
+    latest_line_dispatch: Dict[str, Any] = {}
+    latest_phase_c_pipeline: Dict[str, Any] = {}
+    latest_phase_c: Dict[str, Any] = {}
     digest = _latest_digest_row()
     if digest is not None:
         created = _iso_or_none(getattr(digest, "created_at", None))
+        latest_digest_created = created
         day = str(getattr(digest, "day", "") or "")
         record_id = int(getattr(digest, "id", 0) or 0)
+        latest_digest_record_id = record_id
         release_kind = str(getattr(digest, "release_kind", "") or "daily")
+        latest_release_kind = release_kind
         derived["daily-hub"] = _node_status_shell(
             "daily-hub",
             last_run=created,
@@ -552,6 +764,7 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
 
         line_dispatch = _json_obj(getattr(digest, "vibe_prep_line_dispatch_json", "") or "")
         if line_dispatch:
+            latest_line_dispatch = line_dispatch
             derived["L"] = _node_status_shell(
                 "L",
                 last_run=created,
@@ -637,6 +850,8 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                         if isinstance(ex.get("phase_c_pipeline"), dict)
                         else {}
                     )
+                    latest_phase_c = phase_c
+                    latest_phase_c_pipeline = phase_c_pipeline
 
                     ps_run = (phase_a.get("line_results") or {}).get("P-S") or runs.get("P-S") or {}
                     app_run = (
@@ -654,6 +869,17 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                         derived["WB_D"] = _status_from_block(
                             "WB_D", phase_a, source="daily_digest.phase_a"
                         )
+                    for source_nid, mapped_nid in (("PSA", "P2S"),):
+                        if source_nid in derived and mapped_nid not in derived:
+                            derived[mapped_nid] = _derive_mapped_node(
+                                mapped_nid,
+                                derived[source_nid],
+                                source=f"time_rail.derive.{source_nid}",
+                                detail={
+                                    "record_id": record_id,
+                                    "release_kind": release_kind,
+                                },
+                            )
 
                     for line_key, nid in (("P-W", "PW"), ("P-App", "APPB"), ("S-R", "SR")):
                         line_block = (phase_b.get("line_results") or {}).get(line_key) or {}
@@ -661,6 +887,17 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                             derived[nid] = _status_from_block(
                                 nid, line_block, source=f"daily_digest.phase_b.{line_key}"
                             )
+                    _ensure_p2_line_mappings(
+                        derived, record_id=record_id, release_kind=release_kind
+                    )
+                    if "APPB" not in derived and "APPA" in derived:
+                        derived["APPB"] = _decision_not_taken_status(
+                            "APPB",
+                            last_run=_iso_or_none(derived["APPA"].get("last_run")),
+                            source="daily_digest.phase_a.P-App",
+                            reason="phase_b_app_updates_not_scheduled",
+                            detail={"record_id": record_id, "release_kind": release_kind},
+                        )
                     if phase_b:
                         derived["ORCH"] = derived.get("ORCH") or _status_from_block(
                             "ORCH", phase_b, source="daily_digest.phase_b"
@@ -770,19 +1007,86 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
                 source="ops_staged_changes",
                 detail=staged_detail,
             )
+        else:
+            for nid, reason in (
+                ("APPR", "ops_staged_change_waiting_approval"),
+                ("V10SYNC", "ops_staged_change_not_deployed"),
+                ("MERGE", "ops_staged_change_not_deployed"),
+                ("WB_M", "ops_staged_change_not_deployed"),
+            ):
+                if nid not in derived:
+                    derived[nid] = _decision_not_taken_status(
+                        nid,
+                        last_run=approved or created,
+                        source="ops_staged_changes",
+                        reason=reason,
+                        detail=staged_detail,
+                    )
 
     cr = _latest_change_request()
     if cr is not None:
+        branch = str(getattr(cr, "git_branch", "") or "")
+        base_sha = str(getattr(cr, "base_commit_sha", "") or "")
+        staged_sha = str(getattr(cr, "staged_commit_sha", "") or "")
+        approved = _iso_or_none(getattr(cr, "approved_at", None))
+        applied = _iso_or_none(getattr(cr, "applied_at", None))
         cr_detail = {
             "id": getattr(cr, "id", None),
             "source_employee_id": getattr(cr, "source_employee_id", ""),
             "status": getattr(cr, "status", ""),
             "change_kind": getattr(cr, "change_kind", ""),
+            "git_branch": branch,
+            "base_commit_sha": base_sha,
+            "staged_commit_sha": staged_sha,
         }
         created = _iso_or_none(getattr(cr, "created_at", None) or getattr(cr, "submitted_at", None))
         derived["CS_CHG"] = _node_status_shell(
             "CS_CHG", last_run=created, ok=True, source="employee_change_requests", detail=cr_detail
         )
+        if branch or staged_sha:
+            derived["GITCR"] = _node_status_shell(
+                "GITCR",
+                last_run=created,
+                ok=bool(branch and staged_sha),
+                source="employee_change_requests.git",
+                detail=cr_detail,
+                observed=True,
+            )
+            if "STG" not in derived and branch and staged_sha:
+                derived["STG"] = _node_status_shell(
+                    "STG",
+                    last_run=created,
+                    ok=True,
+                    source="employee_change_requests.git",
+                    detail=cr_detail,
+                    observed=True,
+                )
+        if approved and "APPR" not in derived:
+            derived["APPR"] = _node_status_shell(
+                "APPR",
+                last_run=approved,
+                ok=True,
+                source="employee_change_requests",
+                detail=cr_detail,
+            )
+        elif "APPR" not in derived:
+            derived["APPR"] = _decision_not_taken_status(
+                "APPR",
+                last_run=created,
+                source="employee_change_requests",
+                reason="change_request_waiting_approval",
+                detail=cr_detail,
+            )
+        for nid in ("V10SYNC", "MERGE", "WB_M"):
+            if nid in derived:
+                continue
+            derived[nid] = _decision_not_taken_status(
+                nid,
+                last_run=applied or approved or created,
+                source="employee_change_requests",
+                reason="change_request_not_deployed",
+                detail=cr_detail,
+            )
         derived["O7"] = _node_status_shell(
             "O7",
             last_run=created,
@@ -797,6 +1101,32 @@ def _derive_from_sources() -> Dict[str, Dict[str, Any]]:
             source="employee_change_requests",
             detail={"bridge": "change-request-to-next-digest", **cr_detail},
         )
+
+    for nid in ("O5", "O6"):
+        if nid not in derived:
+            derived[nid] = _decision_not_taken_status(
+                nid,
+                last_run=latest_digest_created,
+                source="production_line_orchestrator.static_skip",
+                reason="static_skip_step_not_triggered",
+                detail={"release_kind": latest_release_kind or "unknown"},
+            )
+
+    _ensure_non_triggered_time_rail_decisions(
+        derived,
+        last_run=latest_digest_created,
+        record_id=int(latest_digest_record_id or 0),
+        release_kind=latest_release_kind or "unknown",
+        line_dispatch=latest_line_dispatch,
+        phase_c_pipeline=latest_phase_c_pipeline,
+        phase_c=latest_phase_c,
+        guard_active=bool(guard),
+    )
+    _ensure_p2_line_mappings(
+        derived,
+        record_id=int(latest_digest_record_id or 0),
+        release_kind=latest_release_kind or "unknown",
+    )
 
     return derived
 
@@ -839,6 +1169,9 @@ def collect_node_runtime_status(
             if not detail and isinstance(row.get("meta"), dict):
                 detail = row.get("meta") or {}
             evidence = row.get("evidence") if isinstance(row.get("evidence"), list) else []
+            proof_status = row.get("proof_status")
+            if not proof_status and (detail.get("shadow") or detail.get("dry_run")):
+                proof_status = "shadow_observed"
             nodes[nid] = {
                 "node_id": nid,
                 "label": graph_meta.get("label", ""),
@@ -852,7 +1185,7 @@ def collect_node_runtime_status(
                 "detail": detail,
                 "observed": bool(row.get("observed"))
                 or bool(row.get("last_run") or row.get("source") or row.get("ok") is not None),
-                "proof_status": row.get("proof_status")
+                "proof_status": proof_status
                 or (
                     "proved_ok"
                     if row.get("ok") is True

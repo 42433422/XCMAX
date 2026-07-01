@@ -7,6 +7,7 @@ area: platform-core
 
 scope_globs:
   - mods/**
+  - FHD/mods/**
   - eskill-prototype/**
   - MODstore_deploy/modstore_server/market_files/**
   - MODstore_deploy/modstore_server/market_files/REGISTRY.json

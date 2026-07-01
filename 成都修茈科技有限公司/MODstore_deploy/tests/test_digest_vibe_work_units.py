@@ -64,3 +64,38 @@ def test_parse_digest_record_ps_only():
     )
     assert len(units) == 1
     assert units[0].employee_id == "modstore-backend-api"
+
+
+def test_parse_skips_empty_patch_placeholder_sections():
+    md = (
+        "# Vibe 预备 · P-S 软件线 · 补丁清单\n\n"
+        "## [daily-orchestrator] 编排\n\n"
+        "- scope：`MODstore_deploy/modstore_server/**`\n"
+        "- 当前无明确证据驱动补丁；不派发空补丁。\n\n"
+        "## [fhd-core-maintainer] 核心\n\n"
+        "- **P1** 修复真实失败\n"
+    )
+    units = parse_line_markdown_to_work_units(
+        md,
+        dispatch_line="P-S",
+        digest_record_id=47,
+        base_version="2026-06-28#main+abc#r47",
+        list_kinds=["patches"],
+    )
+    assert len(units) == 1
+    assert units[0].employee_id == "fhd-core-maintainer"
+
+
+def test_parse_skips_empty_update_placeholder_sections():
+    md = (
+        "# Vibe 预备 · P-W 市场线 · 更新清单\n\n"
+        "## [market-frontend-dev] 市场前端\n\n"
+        "- scope：`MODstore_deploy/market/src/**`\n"
+        "- 当前无明确证据驱动更新；保留员工版本快照用于审计。\n"
+    )
+    units = parse_line_markdown_to_work_units(
+        md,
+        dispatch_line="P-W",
+        list_kinds=["updates"],
+    )
+    assert units == []

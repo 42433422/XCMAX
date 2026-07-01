@@ -28,7 +28,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
+
+from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT
 
 from modstore_server.models import (
     CatalogItem,
@@ -39,6 +41,41 @@ from modstore_server.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+_INFRA_FAILURE_KINDS = (FAILURE_KIND_QUOTA, FAILURE_KIND_TRANSIENT)
+_INFRA_FAILURE_MARKERS = (
+    "配额",
+    "quota",
+    "llm_calls",
+    "429",
+    "too many requests",
+    "rate limit",
+    "ratelimit",
+    "limitation",
+    "missing api key",
+    "未配置",
+    "para_api",
+    "para api",
+    "para_delegate",
+    "blocked_no_online_para_device",
+    "missing_para_api_base_or_device_id",
+    "modstore_para_api_base",
+    "modstore_para_device_id",
+)
+_LIFECYCLE_TASK_MARKERS = (
+    "event=employee.evolution.",
+    "event=employee.suggestion.",
+    "event=employee.collab.",
+    "event=employee.brief_todo.",
+    "event=employee.execution.recovery",
+    "employee_health",
+)
+_PARA_DELEGATE_EMPLOYEES = (
+    "vibe-coding-maintainer",
+    "change-request-auditor",
+    "test-qa-runner",
+)
+_GENERIC_HANDLER_FAILURE = "one or more handlers returned ok=false"
 
 
 def _flag(name: str, default: str = "1") -> bool:
@@ -144,10 +181,24 @@ def _record_evolution(
     lookback_hours: int,
     status: str,
     explanation: str,
-) -> None:
+) -> bool:
     try:
         sf = get_session_factory()
         with sf() as session:
+            cooldown_min = max(5, _int_env("MODSTORE_HEALTH_SCAN_EVOLUTION_COOLDOWN_MIN", 360))
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=cooldown_min)
+            existing = (
+                session.query(EmployeeEvolutionRecord.id)
+                .filter(
+                    EmployeeEvolutionRecord.employee_id == employee_id,
+                    EmployeeEvolutionRecord.status == status,
+                    EmployeeEvolutionRecord.triggered_by == "employee_health_scan",
+                    EmployeeEvolutionRecord.created_at >= cutoff,
+                )
+                .first()
+            )
+            if existing is not None:
+                return False
             session.add(
                 EmployeeEvolutionRecord(
                     employee_id=employee_id,
@@ -161,8 +212,10 @@ def _record_evolution(
                 )
             )
             session.commit()
+            return True
     except Exception:
         logger.debug("employee evolution record failed eid=%s", employee_id, exc_info=True)
+        return False
 
 
 def run_health_scan(
@@ -205,6 +258,8 @@ def run_health_scan(
     cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, lookback_hours))
     sf = get_session_factory()
     with sf() as session:
+        err_col = func.coalesce(EmployeeExecutionMetric.error, "")
+        task_col = func.lower(func.coalesce(EmployeeExecutionMetric.task, ""))
         rows = (
             session.query(
                 EmployeeExecutionMetric.employee_id,
@@ -214,8 +269,24 @@ def run_health_scan(
             .filter(
                 EmployeeExecutionMetric.created_at >= cutoff,
                 EmployeeExecutionMetric.status != "success",
+                or_(
+                    EmployeeExecutionMetric.failure_kind.is_(None),
+                    ~EmployeeExecutionMetric.failure_kind.in_(_INFRA_FAILURE_KINDS),
+                ),
             )
-            .group_by(EmployeeExecutionMetric.employee_id)
+        )
+        for marker in _INFRA_FAILURE_MARKERS:
+            rows = rows.filter(~err_col.ilike(f"%{marker}%"))
+        for marker in _LIFECYCLE_TASK_MARKERS:
+            rows = rows.filter(~task_col.like(f"%{marker}%"))
+        rows = rows.filter(
+            ~and_(
+                EmployeeExecutionMetric.employee_id.in_(_PARA_DELEGATE_EMPLOYEES),
+                func.lower(err_col) == _GENERIC_HANDLER_FAILURE,
+            )
+        )
+        rows = (
+            rows.group_by(EmployeeExecutionMetric.employee_id)
             .order_by(func.count(EmployeeExecutionMetric.id).desc())
             .all()
         )
@@ -241,13 +312,6 @@ def run_health_scan(
                 lookback_hours=lookback_hours,
                 severity="deactivate",
             )
-            _record_evolution(
-                employee_id=eid,
-                fail_count=fail_count,
-                lookback_hours=lookback_hours,
-                status="auto_degraded",
-                explanation="Failure count reached deactivate threshold; catalog delisted and runtime policy forced conservative fallback.",
-            )
             if not ok_deact:
                 skipped_no_catalog.append(eid)
                 logger.info(
@@ -256,6 +320,13 @@ def run_health_scan(
                     deactivate_threshold,
                 )
                 continue
+            _record_evolution(
+                employee_id=eid,
+                fail_count=fail_count,
+                lookback_hours=lookback_hours,
+                status="auto_degraded",
+                explanation="Failure count reached deactivate threshold; catalog delisted and runtime policy forced conservative fallback.",
+            )
             deactivated.append(record)
             if notify:
                 _notify_admins(

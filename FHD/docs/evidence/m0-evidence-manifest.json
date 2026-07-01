@@ -140,7 +140,7 @@
   },
   "mod_pilot": {
     "label": "Mod 商家试点四图",
-    "blocker": "需 MODstore + 0.01 元沙箱 + FHD 激活 · mod-pilot-checklist.sh --verify",
+    "blocker": "需 MODstore_deploy + 0.01 元沙箱 + FHD 激活；历史 mod-pilot-checklist 已退役",
     "ready": 4,
     "total": 4,
     "path_ready": 0,
