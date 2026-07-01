@@ -1,6 +1,0 @@
-apiVersion: v2
-name: xcagi
-description: XCAGI v10 staging/production umbrella chart
-type: application
-version: 10.0.0
-appVersion: "10.0.0"

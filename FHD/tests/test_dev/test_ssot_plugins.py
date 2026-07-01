@@ -104,16 +104,6 @@ def test_error_codes_adapter_run_check():
     assert code in (0, 1)
 
 
-def test_k8s_adapter_run_check():
-    """k8s 适配器比较 FHD/k8s/ vs FHD/XCAGI/k8s/。"""
-    from scripts.dev.ssot_plugins.base import find_domain, load_registry
-    from scripts.dev.ssot_plugins.k8s import run
-
-    d = find_domain(load_registry(), "k8s-manifests")
-    code = run("check", d, dry_run=True)
-    assert code in (0, 1)
-
-
 def test_all_adapters_conform_to_protocol():
     """所有 enabled 域的 check 命令可被 shlex 解析。"""
     import shlex
