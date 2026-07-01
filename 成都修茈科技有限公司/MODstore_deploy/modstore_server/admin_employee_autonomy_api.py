@@ -462,8 +462,9 @@ def human_questions_stats(
 
     GET /api/admin/employee-autonomy/questions/stats
     """
-    from modstore_server.models import PendingHumanQuestion, get_session_factory
     from sqlalchemy import func
+
+    from modstore_server.models import PendingHumanQuestion, get_session_factory
 
     sf = get_session_factory()
     with sf() as session:
