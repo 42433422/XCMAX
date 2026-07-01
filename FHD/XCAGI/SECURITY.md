@@ -78,46 +78,47 @@ Please include the following information in your report:
 
 ### Data Protection
 
-- Sensitive data encryption at rest (AES-256-GCM)
-- TLS 1.3 for data in transit
-- Database encryption for PII (Personally Identifiable Information)
-- Automatic session timeout and token rotation
+- TLS for data in transit (terminated at the reverse proxy; see `docs/DEPLOYMENT.md` for setup guidance)
+- HttpOnly session cookies with configurable `Secure`/`SameSite` flags (`app/config.py` `SESSION_COOKIE_*`)
+- Stateless web JWT with one-time refresh-token rotation (`POST /api/auth/token/refresh`)
+- Salted password hashing (`app/utils/password_hash.py`)
+- **Known gap**: no at-rest / field-level database encryption for PII is implemented; at-rest protection currently depends on the deployment environment (disk / volume level)
 
 ### Mod Security
 
-- Mod signature verification before installation
-- Sandbox execution for untrusted Mods
-- Permission-based Mod capabilities
-- Mod version integrity checking
+- Ed25519 signature verification for Mod packages against publisher keys built into the app (fail-closed; `app/infrastructure/mods/package.py`, `trusted_keys.py`)
+- SHA-256 per-file and whole-package integrity hashing (`app/infrastructure/mods/package.py`)
+- Entitlement gating for licensed Mods (protected packages require granted entitlements)
+- **Known gap**: Mods are not executed in a sandbox — only install Mods from trusted sources
 
 ### Token Wallet Security
 
-- Cryptographic signature for Token consumption
-- Rate limiting per user and per API
-- Usage anomaly detection
-- Automatic lockout for suspicious activity
+- Wallet-based billing enforcement for AI service calls (quota middleware)
+- Rate limiting per user and per API (global, auth, and chat-stream limiters in `app/middleware/`)
+- Login lockout after repeated failed attempts (defaults: 5 attempts / 15-minute lock; `app/application/account_security.py`)
 
 ### Audit & Compliance
 
-- Comprehensive audit logging for all operations
-- GDPR compliance for EU users
-- China Cybersecurity Law compliance
-- Data retention and deletion policies
+- Application-level audit logging of security-relevant events (auth, licensing, NeuroBus safety domain) as JSON via `app/utils/audit_logger.py`, with optional JSONL persistence to `AUDIT_LOG_PATH` (`app/utils/audit_events.py`; **no-op when the env var is unset**); admin review via `GET /api/admin/audit-logs`
+- Targeted masking of sensitive values: HTTP trace headers redacted (`app/middleware/neuro_http_trace.py`), phone numbers masked for display (`app/domain/value_objects/phone.py`) — there is **no systematic audit-record redaction pipeline**
+- Compliance mainline is China's MLPS Level 2 (等保二级): remediation is **in progress and not yet certified** — control-by-control status lives in `docs/evidence/compliance-tier2/00-control-matrix.md`
+- **Known gap**: no automated data-retention or data-deletion policy engine; data-subject rights APIs are not implemented (see Compliance below)
 
 ## Compliance
 
+This section states actual status, not aspirations. The single source of truth for control-level status is `docs/evidence/compliance-tier2/00-control-matrix.md`.
+
 ### Data Privacy
 
-- Compliant with China's Personal Information Protection Law (PIPL)
-- GDPR compliant for international deployments
-- Data minimization principles
-- User consent mechanisms
+- **Target framework: China's Personal Information Protection Law (PIPL).** Alignment is being worked as part of the MLPS Level 2 (等保二级) remediation; this is a direction, not a completed-compliance claim.
+- Implemented today: RBAC with multi-tenant isolation, application-level audit logging of security-relevant events, targeted masking of sensitive values in logs and traces.
+- **Known gaps** (tracked in the control matrix): data-subject export / deletion / correction APIs are not implemented — a former GDPR placeholder route was never functional and was removed on 2026-07-01; no consent-management mechanism; no automated data-retention / deletion policies.
+- **GDPR: not claimed.** The product has no GDPR data-subject-rights capability, and there is no EU deployment target (the internationalization roadmap covers Southeast Asia only).
 
 ### Industry Standards
 
-- OWASP Top 10 mitigation
-- CIS Benchmarks for deployment
-- ISO 27001 aligned security controls
+- OWASP Top 10: mitigations implemented for the key risks — SQLAlchemy parameterized queries, XSS sanitization middleware, CSRF protection, security headers, and global / auth rate limiting.
+- ISO 27001: **roadmap item only** (12+ months out per the control matrix); no alignment is claimed today.
 
 ## Security Updates
 
@@ -129,5 +130,5 @@ Subscribe to our security advisories:
 
 ---
 
-*Last updated: 2026-04-17*  
+*Last updated: 2026-07-01*  
 *Version: 6.0.0*
