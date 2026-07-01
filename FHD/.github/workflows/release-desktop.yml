@@ -39,7 +39,14 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
+      - name: Verify Windows enterprise installer
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows

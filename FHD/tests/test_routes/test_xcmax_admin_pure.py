@@ -33,7 +33,9 @@ class TestReleaseTrainSnapshot:
 
         # The function uses try/except for modstore_server import
         # and falls back to reading a file; if file doesn't exist, returns defaults
-        with patch("pathlib.Path.is_file", return_value=False):
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ, {"XCMAX_MONOREPO_ROOT": tmpdir}
+        ):
             result = _release_train_snapshot()
             assert "epoch" in result
             assert result["note"] == "ssot missing"

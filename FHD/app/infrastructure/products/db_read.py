@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import inspect, text
 
 from app.infrastructure.db.sync_engine import get_read_sync_engine, get_sync_engine
+from app.infrastructure.tenant_scope import append_tenant_scope_where
 
 
 def _read_engine():
@@ -31,14 +32,18 @@ def load_products_for_price_list_by_customer(customer_name: str, _ctx: Any) -> l
     insp = inspect(eng)
     if "products" not in insp.get_table_names():
         return []
+    col_names = {c["name"] for c in insp.get_columns("products")}
+    where_parts = ["unit = :u"]
+    bind: dict[str, object] = {"u": customer_name}
+    append_tenant_scope_where(where_parts, bind, col_names, table_name="products")
     with eng.connect() as conn:
         rows = (
             conn.execute(
                 text(
                     "SELECT model_number, name, specification, unit, price FROM products "
-                    "WHERE unit = :u ORDER BY id LIMIT 200"
+                    "WHERE " + " AND ".join(where_parts) + " ORDER BY id LIMIT 200"
                 ),
-                {"u": customer_name},
+                bind,
             )
             .mappings()
             .all()

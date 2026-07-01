@@ -254,6 +254,9 @@ interface FhdApi {
     @GET(ApiEndpoints.ONBOARDING_INDUSTRY_BASELINE)
     suspend fun mobileIndustryBaseline(@Query("industry_id") industryId: String): MobileEnvelope<Map<String, Any?>>
 
+    @POST(ApiEndpoints.ONBOARDING_SELECT_INDUSTRY)
+    suspend fun mobileSelectOnboardingIndustry(@Body body: Map<String, String>): MobileEnvelope<Map<String, Any?>>
+
     @POST(ApiEndpoints.INSTALL_HOST_FOUNDATION)
     suspend fun mobileInstallHostFoundation(@Query("edition") edition: String = "generic"): MobileEnvelope<Map<String, Any?>>
 

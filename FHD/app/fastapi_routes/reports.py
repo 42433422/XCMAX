@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Query, Response
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +102,21 @@ def report_export(body: dict = Body(default_factory=dict)):
     from app.application.facades.inventory_facade import ReportService
 
     data = body or {}
-    return ReportService().export_to_excel(
+    result = ReportService().export_to_excel(
         report_type=data.get("report_type", "report"),
         data=data.get("data", []),
         filename=data.get("filename", "report"),
     )
+    payload = result.get("data") if isinstance(result, dict) else None
+    if result.get("success") and isinstance(payload, bytes):
+        filename = str(result.get("filename") or f"{data.get('filename', 'report')}.xlsx")
+        safe_filename = filename.replace('"', "")
+        return Response(
+            content=payload,
+            media_type=str(
+                result.get("content_type")
+                or "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            headers={"Content-Disposition": f'attachment; filename="{safe_filename}"'},
+        )
+    return result

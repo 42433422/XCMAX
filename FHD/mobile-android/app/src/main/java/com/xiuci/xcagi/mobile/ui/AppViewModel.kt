@@ -129,6 +129,15 @@ internal fun cachedConversationPreview(
         previews: Map<String, String>,
 ): String = previews[conversationId]?.trim().orEmpty()
 
+internal enum class ConversationUnreadAction {
+    MARK_READ,
+    MARK_UNREAD,
+}
+
+internal fun conversationUnreadAction(unreadCount: Int): ConversationUnreadAction =
+        if (unreadCount > 0) ConversationUnreadAction.MARK_READ
+        else ConversationUnreadAction.MARK_UNREAD
+
 @HiltViewModel
 class AppViewModel
 @Inject
@@ -1009,9 +1018,14 @@ constructor(
             }
 
     // ── 会话状态（个人 AI 会话） ──
-    fun toggleConversationUnread(conversationId: String) =
+    fun toggleConversationUnread(conversationId: String, unreadCount: Int = 0) =
             viewModelScope.launch {
-                repo.markConversationUnread(conversationId)
+                val result =
+                        when (conversationUnreadAction(unreadCount)) {
+                            ConversationUnreadAction.MARK_READ -> repo.markConversationRead(conversationId)
+                            ConversationUnreadAction.MARK_UNREAD -> repo.markConversationUnread(conversationId)
+                        }
+                result
                     .onSuccess {
                         refreshConversationUiState(conversationId)
                         loadConversations(currentIsEnterprise())
@@ -2159,6 +2173,22 @@ constructor(
                         }
                         .onFailure {
                             _industryBootstrapStatus.value = it.message ?: "行业初始化状态不可用"
+                        }
+            }
+
+    fun selectOnboardingIndustry(industryId: String, onDone: () -> Unit = {}) =
+            viewModelScope.launch {
+                _industryBootstrapStatus.value = "正在绑定行业到当前账号…"
+                repo.selectOnboardingIndustry(industryId)
+                        .onSuccess {
+                            snack("行业已绑定到当前账号")
+                            loadMobileOnboarding()
+                            onDone()
+                        }
+                        .onFailure {
+                            val msg = it.message ?: "行业绑定失败"
+                            _industryBootstrapStatus.value = msg
+                            snack(msg, true)
                         }
             }
 

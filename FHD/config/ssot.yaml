@@ -145,6 +145,9 @@ domains:
       - FHD/frontend/src/domain/yuangonDutyRoster.ts
       - FHD/app/infrastructure/mods/catalog_visibility.py
       - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/model/DutyRosterSsot.kt
+      - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
+      - FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart
     mode: sync
     check: python ../scripts/dev/sync_duty_roster.py --check
     sync: python ../scripts/dev/sync_duty_roster.py --generate
@@ -182,10 +185,19 @@ domains:
   - name: mobile-tri-platform
     owner: mobile-platform
     enabled: true
-    # 移动三端统一 SSOT：Android 主线、KMM 共享边界、设计 token、端侧性能监控。
+    # 移动统一 SSOT：Flutter 前端、OpenAPI 契约、FastAPI 后端业务、设计 token、端侧性能监控。
     ssot: FHD/docs/mobile_tri_platform_ssot.md
     derived:
       - FHD/config/mobile_design_tokens.json
+      - FHD/contracts/openapi.json
+      - FHD/app/fastapi_routes/mobile_api.py
+      - FHD/app/fastapi_routes/mobile_api_extensions.py
+      - FHD/mobile-flutter-poc/README.md
+      - FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart
+      - FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart
+      - FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt

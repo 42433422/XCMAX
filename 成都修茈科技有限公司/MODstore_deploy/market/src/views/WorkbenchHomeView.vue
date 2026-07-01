@@ -470,7 +470,7 @@
                         ref="directFileInputRef"
                         type="file"
                         class="wb-direct-file-input"
-                        :accept="DIRECT_ATTACHMENT_ACCEPT"
+                        :accept="DIRECT_AND_VISION_ACCEPT"
                         multiple
                         :disabled="directLoading || !!directDraft"
                         @change="onDirectFilesChange"
@@ -1375,7 +1375,7 @@
               ref="knowledgeFileInputRef"
               type="file"
               class="wb-direct-file-input"
-              :accept="DIRECT_ATTACHMENT_ACCEPT"
+              :accept="DIRECT_AND_VISION_ACCEPT"
               multiple
               :disabled="knowledgeUploading || !!planSession"
               @change="onKnowledgeFileChange"
@@ -2069,7 +2069,7 @@ import {
   resolveInlineVoicePhase,
 } from '../composables/inlineVoiceUi'
 import {
-  DIRECT_ATTACHMENT_ACCEPT,
+  DIRECT_AND_VISION_ACCEPT,
   DIRECT_EMPLOYEE_FILE_MAX_BYTES,
   DIRECT_KB_MAX_BYTES,
   DIRECT_KB_SUPPORTED_EXT,
@@ -2083,6 +2083,12 @@ import {
   resolveDirectAttachmentOutcome,
   resolveReadEmployeeForExtension,
 } from '../utils/directAttachments'
+import {
+  buildUserMultimodalContent,
+  compressImageFileToDataUrl,
+  isImageFileForVision,
+  modelSupportsVisionInput,
+} from '../utils/visionMultimodal'
 import {
   employeeAcceptsFileExtension,
   employeeFileMismatchHint,
@@ -2629,14 +2635,16 @@ const directAttachHint = computed(() => {
   const list = directAttachedFiles.value
   if (!list.length) return ''
   const empReady = list.filter((f) => f.purpose === 'employee' && f.status === 'ready').length
-  const ready = list.filter((f) => f.purpose !== 'employee' && f.status === 'ready').length
+  const visionReady = list.filter((f) => f.purpose === 'vision' && f.status === 'ready').length
+  const ready = list.filter((f) => f.purpose !== 'employee' && f.purpose !== 'vision' && f.status === 'ready').length
   const uploading = list.filter((f) => f.status === 'uploading').length
-  const inlined = list.filter((f) => f.purpose !== 'employee' && f.status === 'inline').length
+  const inlined = list.filter((f) => f.purpose !== 'employee' && f.purpose !== 'vision' && f.status === 'inline').length
   const skipped = list.filter((f) => f.status === 'skipped').length
   const errored = list.filter((f) => f.status === 'error').length
   const parts: string[] = []
   if (uploading) parts.push(`${uploading} 个读取中`)
   if (empReady) parts.push(`${empReady} 个将由读取员工全量解析（发送时直传原文件）`)
+  if (visionReady) parts.push(`${visionReady} 张图片将发给视觉模型识别`)
   if (ready) parts.push(`${ready} 个已纳入资料库（提问时按相关度自动召回）`)
   if (inlined) parts.push(`${inlined} 个已读取，可直接发送给模型`)
   const embLabels = Array.from(
@@ -3769,6 +3777,11 @@ function isGearAxisLocked() {
 function directFileChipTitle(f) {
   if (!f) return ''
   const emb = formatEmbeddingLabel(f.embedding)
+  if (f.purpose === 'vision') {
+    if (f.status === 'uploading') return `${f.name}：正在压缩图片，准备随本轮问题发给视觉模型…`
+    if (f.status === 'ready') return `${f.name}：已压缩，将随本轮问题发给视觉模型识别`
+    if (f.status === 'error') return `${f.name}：${f.error || '图片处理失败'}`
+  }
   if (f.status === 'uploading') return `${f.name}：正在读取文件内容…`
   if (f.status === 'ready') return `${f.name}：已纳入资料库，提问时会按相关度自动召回片段${emb ? `；向量模型：${emb}` : ''}`
   if (f.status === 'inline') {
@@ -3800,6 +3813,11 @@ function directAttachmentKindLabel(f) {
 
 function directAttachmentStatusText(f) {
   if (!f) return ''
+  if (f.purpose === 'vision') {
+    if (f.status === 'uploading') return '压缩中'
+    if (f.status === 'ready') return '待识图'
+    if (f.status === 'error') return '处理失败'
+  }
   if (f.status === 'uploading') return '读取中'
   if (f.status === 'ready') return f.embedding ? '已入库 · 向量' : '已入库'
   if (f.status === 'inline') {
@@ -3828,6 +3846,10 @@ function directAttachmentNote(files) {
     if (f.purpose === 'employee' && f.status === 'ready') {
       const emp = String(f.readEmployeeId || resolveReadEmployeeForExtension(directFileExt(f.name)) || '').trim()
       tag = emp ? `读取员工·${readEmployeeDisplayName(emp)}` : '读取员工'
+    } else if (f.purpose === 'vision' && f.status === 'ready') {
+      tag = '识图图片'
+    } else if (f.purpose === 'vision' && f.status === 'uploading') {
+      tag = '图片压缩中'
     }
     return `@附件${idx + 1} ${f.name}（${formatDirectFileSize(f.size)}，${tag}）`
   })
@@ -3861,6 +3883,23 @@ function applyDirectReadEmployeePick(readEmployeeId: string) {
 }
 
 function buildDirectAttachItem(file: File) {
+  if (isImageFileForVision(file)) {
+    const maxBytes = 20 * 1024 * 1024
+    const tooBig = Number(file.size || 0) > maxBytes
+    return {
+      id: makeDirectAttachId(),
+      name: file.name,
+      size: file.size || 0,
+      status: tooBig ? 'skipped' : 'uploading',
+      purpose: 'vision',
+      docId: '',
+      imageDataUrl: '',
+      error: tooBig ? `超过图片 ${formatDirectFileSize(maxBytes)} 上限` : '',
+      ingesting: false,
+      ingestError: '',
+      file,
+    }
+  }
   const ext = directFileExt(file.name)
   const readEmp = resolveReadEmployeeForExtension(ext)
   if (readEmp) {
@@ -4045,6 +4084,37 @@ async function uploadDirectAttachedFile(item) {
   }
 }
 
+async function prepareDirectVisionFile(item) {
+  try {
+    const imageDataUrl = await compressImageFileToDataUrl(item.file, {
+      maxEdge: 2048,
+      maxBytes: 5 * 1024 * 1024,
+    })
+    const idx = directAttachedFiles.value.findIndex((x) => x.id === item.id)
+    if (idx < 0) return
+    directAttachedFiles.value[idx] = {
+      ...directAttachedFiles.value[idx],
+      status: 'ready',
+      imageDataUrl,
+      docId: '',
+      error: '',
+      ingesting: false,
+      ingestError: '',
+    }
+  } catch (e) {
+    const idx = directAttachedFiles.value.findIndex((x) => x.id === item.id)
+    if (idx < 0) return
+    directAttachedFiles.value[idx] = {
+      ...directAttachedFiles.value[idx],
+      status: 'error',
+      imageDataUrl: '',
+      error: e instanceof Error ? e.message : String(e || '图片处理失败'),
+      ingesting: false,
+      ingestError: '',
+    }
+  }
+}
+
 function onDirectFilesChange(e) {
   const input = e?.target as HTMLInputElement | null
   if (!input || typeof input.files === 'undefined') return
@@ -4060,7 +4130,10 @@ function onDirectFilesChange(e) {
   directAttachedFiles.value = [...directAttachedFiles.value, ...items]
   appendAttachmentMentions(accepted, 'direct')
   for (const it of items) {
-    if (it.status === 'uploading') void uploadDirectAttachedFile(it)
+    if (it.status === 'uploading') {
+      if (it.purpose === 'vision') void prepareDirectVisionFile(it)
+      else void uploadDirectAttachedFile(it)
+    }
   }
 }
 
@@ -4438,7 +4511,12 @@ async function runDirectChatTurn(opts: {
     return s
   }
   try {
-    const resolvePromise = resolveChatProviderModel()
+    const needVision = directMessages.value.some((m) =>
+      m.id !== opts.assistantId &&
+      Array.isArray(m.multimodalContent) &&
+      m.multimodalContent.some((p) => p?.type === 'image_url'),
+    )
+    const resolvePromise = resolveChatProviderModel({ needVision })
     const kbPromise = opts.userText
       ? resolvePromise.then(({ provider, model }) =>
           retrieveKnowledgeForDirect(opts.userText, provider, model).then((r) => {
@@ -4473,7 +4551,10 @@ async function runDirectChatTurn(opts: {
     )
     const ctx = directMessages.value
       .filter((m) => m.id !== opts.assistantId)
-      .map((m) => ({ role: m.role, content: m.content }))
+      .map((m) => ({
+        role: m.role,
+        content: Array.isArray(m.multimodalContent) ? m.multimodalContent : m.content,
+      }))
     const msgs = [{ role: 'system', content: sys }, ...ctx]
     if (ttsAutoRead.value) {
       streamingTts.stop()
@@ -4626,9 +4707,15 @@ async function sendDirectChat(text = '') {
   const employeeFiles = filesSnapshot.filter(
     (f) => f.purpose === 'employee' && f.status === 'ready' && f.file instanceof File,
   )
-  const knowledgeFiles = filesSnapshot.filter((f) => f.purpose !== 'employee')
+  const visionFiles = filesSnapshot.filter(
+    (f) => f.purpose === 'vision' && f.status === 'ready' && typeof f.imageDataUrl === 'string' && f.imageDataUrl,
+  )
+  const knowledgeFiles = filesSnapshot.filter((f) => f.purpose !== 'employee' && f.purpose !== 'vision')
   const note = directAttachmentNote(filesSnapshot)
   let userContent = userText
+  if (!userContent && visionFiles.length) {
+    userContent = '请描述这些图片并回答我的问题。'
+  }
   if (note) userContent = userContent ? `${userContent}\n\n${note}` : note
   if (!userContent && employeeFiles.length) {
     userContent = note || '请全量读取以上附件'
@@ -4659,9 +4746,20 @@ async function sendDirectChat(text = '') {
   directDraft.value = ''
   directError.value = ''
 
+  const multimodalContent = buildUserMultimodalContent(
+    userContent,
+    visionFiles.map((f) => String(f.imageDataUrl || '')).filter(Boolean),
+  )
   const userMsg = makeMessage('user', userContent, {
     skills: [],
-    attachments: filesSnapshot.map((f) => ({ name: f.name, size: f.size, status: f.status, docId: f.docId })),
+    ...(Array.isArray(multimodalContent) ? { multimodalContent } : {}),
+    attachments: filesSnapshot.map((f) => ({
+      name: f.name,
+      size: f.size,
+      status: f.status,
+      docId: f.docId,
+      kind: f.purpose === 'vision' ? 'vision' : undefined,
+    })),
   })
   const inlineFiles = knowledgeFiles
     .filter((f: any) => (f.status === 'inline' || f.status === 'ready') && f.extractedText)
@@ -5464,28 +5562,16 @@ function onSurfaceDrop(e: DragEvent) {
 async function ingestComposerFiles(files: File[], target: 'direct' | 'make' = 'direct') {
   const remaining = Math.max(0, 12 - directAttachedFiles.value.length)
   const accepted = files.slice(0, remaining)
-  const items = accepted.map((file) => {
-    if (file.type.startsWith('image/')) {
-      return {
-        id: makeDirectAttachId(),
-        name: file.name,
-        size: file.size || 0,
-        status: 'skipped',
-        docId: '',
-        error: '图片暂以「文件名 + 简短描述」形式给模型；接入视觉模型后会改为 base64 上送。',
-        ingesting: false,
-        ingestError: '',
-        file,
-      }
-    }
-    return buildDirectAttachItem(file)
-  })
+  const items = accepted.map((file) => buildDirectAttachItem(file))
   const firstRead = items.find((it) => it.readEmployeeId)
   if (firstRead?.readEmployeeId) applyDirectReadEmployeePick(firstRead.readEmployeeId)
   directAttachedFiles.value = [...directAttachedFiles.value, ...items]
   appendAttachmentMentions(accepted, target)
   for (const it of items) {
-    if (it.status === 'uploading') void uploadDirectAttachedFile(it)
+    if (it.status === 'uploading') {
+      if (it.purpose === 'vision') void prepareDirectVisionFile(it)
+      else void uploadDirectAttachedFile(it)
+    }
   }
 }
 
@@ -5611,35 +5697,52 @@ const directFontPxStyle = computed(() => ({
   '--wb-direct-font-px': `${personalSettings.value.fontPx}px`,
 }))
 
+function videoSizeForAspect(aspect: string): string {
+  const a = String(aspect || '').trim()
+  if (a === '9:16') return '720x1280'
+  if (a === '1:1') return '1024x1024'
+  return '1280x720'
+}
+
+async function loadUsableMediaCatalog() {
+  if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
+    await loadLlmCatalogForWorkbench()
+  }
+  const catalog = llmCatalog.value
+  if (!catalog) return catalog
+  try {
+    const statusPayload = await api.llmStatus()
+    const fernetOk = Boolean(statusPayload?.fernet_configured)
+    const rows = Array.isArray(statusPayload?.providers) ? statusPayload.providers : []
+    const usableProviders = new Set(
+      rows.filter((r) => _providerRowHasUsableKey(r, fernetOk)).map((r) => String(r.provider || '').trim()),
+    )
+    const providers = Array.isArray(catalog.providers)
+      ? catalog.providers.filter((b) => usableProviders.has(String(b.provider || '').trim()))
+      : []
+    return { ...catalog, providers }
+  } catch {
+    return catalog
+  }
+}
+
 const mediaGenRunner = {
   async generateImages(prompt: string, opts: { size: string; style: string; count: number }) {
     const safePrompt = prompt.slice(0, 240)
     const styled = opts.style && opts.style !== 'default' ? `${opts.style} 风格，` : ''
-    try {
-      if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
-        await loadLlmCatalogForWorkbench()
-      }
-      const { resolveMediaProviderModel } = await import('../llmMedia')
-      const { provider, model } = resolveMediaProviderModel('image', llmCatalog.value)
-      if (!model) {
-        throw new Error('未找到可用的生图模型，请在「资金与记录 → 大模型 API」中选择含生图模型的厂商并刷新目录')
-      }
-      const res = await api.llmGenerateImage(provider, model, `${styled}${safePrompt}`, {
-        size: opts.size,
-        count: opts.count,
-      })
-      const urls = Array.isArray(res?.images) ? res.images.filter(Boolean) : []
-      if (urls.length) return urls
-    } catch {
-      // 未配置真实生图模型时保留占位图回退，避免打断创作流程。
+    const mediaCatalog = await loadUsableMediaCatalog()
+    const { resolveMediaProviderModel } = await import('../llmMedia')
+    const { provider, model } = resolveMediaProviderModel('image', mediaCatalog)
+    if (!model) {
+      throw new Error('未找到可用的生图模型，请在「资金与记录 → 大模型 API」中选择含生图模型的厂商并刷新目录')
     }
-    const items: string[] = []
-    for (let i = 0; i < Math.max(1, Math.min(4, opts.count)); i += 1) {
-      const seed = `${safePrompt}-${opts.size}-${i}`
-      const url = `https://picsum.photos/seed/${encodeURIComponent(seed)}/${opts.size.replace('x', '/')}`
-      items.push(url)
-    }
-    return items
+    const res = await api.llmGenerateImage(provider, model, `${styled}${safePrompt}`, {
+      size: opts.size,
+      count: opts.count,
+    })
+    const urls = Array.isArray(res?.images) ? res.images.filter(Boolean) : []
+    if (!urls.length) throw new Error('生图模型没有返回图片，请检查供应商返回或模型配置')
+    return urls
   },
   async generatePptOutline(topic: string, audience: string, pages: number) {
     const { provider, model } = await resolveChatProviderModel()
@@ -5673,38 +5776,28 @@ const mediaGenRunner = {
   },
   async generateVideo(prompt: string, opts: { aspect: string; durationSec: number }) {
     const safePrompt = prompt.slice(0, 240)
-    try {
-      if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
-        await loadLlmCatalogForWorkbench()
-      }
-      const { resolveMediaProviderModel } = await import('../llmMedia')
-      const { provider, model } = resolveMediaProviderModel('video', llmCatalog.value)
-      if (provider && model) {
-        const res = await api.llmChat(provider, model, [
-          {
-            role: 'system',
-            content:
-              '你是视频生成助手。根据用户描述输出 JSON：{"status":"pending","message":"…","jobId":"…"}。若上游为异步任务，说明预计等待时间。',
-          },
-          { role: 'user', content: `画幅 ${opts.aspect}，时长约 ${opts.durationSec} 秒。描述：${safePrompt}` },
-        ], 1200)
-        const raw = String(res?.content || '').trim()
-        if (raw) {
-          return { status: 'pending' as const, message: raw, previewUrl: '' }
-        }
-      }
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return {
-        status: 'pending' as const,
-        message: `${msg}\n\n请在「资金与记录 → 大模型 API」筛选「支持生视频」并配置对应厂商密钥。`,
-        previewUrl: '',
-      }
+    const mediaCatalog = await loadUsableMediaCatalog()
+    const { resolveMediaProviderModel } = await import('../llmMedia')
+    const { provider, model } = resolveMediaProviderModel('video', mediaCatalog)
+    if (!provider || !model) {
+      throw new Error('未找到可用的生视频模型，请在「资金与记录 → 大模型 API」中配置含生视频模型的厂商并刷新目录')
     }
+    const res = await api.llmGenerateVideo(provider, model, safePrompt, {
+      size: videoSizeForAspect(opts.aspect),
+      seconds: opts.durationSec,
+    })
+    const status = String(res?.status || 'pending')
+    const jobId = String(res?.job_id || '')
+    const previewUrl = String(res?.preview_url || '')
+    const lines = [
+      `任务状态：${status}`,
+      jobId ? `任务 ID：${jobId}` : '',
+      previewUrl ? `预览地址：${previewUrl}` : '视频任务已提交，上游生成完成后请按供应商任务状态查看结果。',
+    ].filter(Boolean)
     return {
-      status: 'pending' as const,
-      message: `已记录视频需求（${opts.aspect}，约 ${opts.durationSec}s）：${safePrompt}\n\n未找到可用视频模型，请在「资金与记录 → 大模型 API」中刷新目录并选择含生视频模型的厂商。`,
-      previewUrl: '',
+      status: status as 'pending' | 'succeeded' | 'failed' | 'processing',
+      message: lines.join('\n'),
+      previewUrl,
     }
   },
 }
@@ -10267,25 +10360,78 @@ function _providerRowHasUsableKey(row, fernetOk) {
 const RESOLVE_CHAT_CACHE_MS = 5 * 60 * 1000
 let resolveChatCache: { at: number; mode: string; provider: string; model: string } | null = null
 
+function pickVisionModelFromBlock(block): string {
+  if (!block) return ''
+  const detailed = Array.isArray(block.models_detailed) ? block.models_detailed : []
+  const byCategory = detailed.find((m) => m?.category === 'vlm' && String(m?.id || '').trim())
+  if (byCategory) return String(byCategory.id).trim()
+  const ids = Array.isArray(block.models) ? block.models : detailed.map((m) => m?.id).filter(Boolean)
+  const byHint = ids.find((id) => modelSupportsVisionInput(block.provider, String(id || ''), llmCatalog.value))
+  return byHint ? String(byHint).trim() : ''
+}
+
+async function pickUsableVisionProviderModel() {
+  if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
+    await loadLlmCatalogForWorkbench()
+  }
+  let statusPayload
+  try {
+    statusPayload = await api.llmStatus()
+  } catch {
+    statusPayload = null
+  }
+  const fernetOk = Boolean(statusPayload?.fernet_configured)
+  const rows = Array.isArray(statusPayload?.providers) ? statusPayload.providers : []
+  const usableProviders = new Set(
+    rows.filter((r) => _providerRowHasUsableKey(r, fernetOk)).map((r) => String(r.provider || '').trim()),
+  )
+  const providers = Array.isArray(llmCatalog.value?.providers) ? llmCatalog.value.providers : []
+  const pref = llmCatalog.value?.preferences || {}
+  const prefP = typeof pref.provider === 'string' ? pref.provider.trim() : ''
+  const ordered = [
+    ...providers.filter((b) => b.provider === prefP),
+    ...providers.filter((b) => b.provider !== prefP),
+  ]
+  for (const block of ordered) {
+    const provider = String(block?.provider || '').trim()
+    if (!provider || !usableProviders.has(provider)) continue
+    const model = pickVisionModelFromBlock(block)
+    if (model) return { provider, model }
+  }
+  if (!fernetOk && rows.some((r) => r.has_user_override)) {
+    throw new Error('已保存 BYOK，但服务端未配置 MODSTORE_LLM_MASTER_KEY，无法解密使用视觉模型。')
+  }
+  throw new Error('当前未配置支持识图的视觉模型。请在「资金与记录 → 大模型 API」配置 VLM/多模态模型，或切到「自选」选择支持图片输入的模型。')
+}
+
 /**
  * Auto 模式：优先请求服务端 /resolve-chat-default（与 /chat 共用 resolve_api_key），
  * 避免前端 /status + 目录推断与后端不一致；失败时再回退到本地推断。
  */
-async function resolveChatProviderModel() {
+async function resolveChatProviderModel(opts: { needVision?: boolean } = {}) {
+  const needVision = Boolean(opts.needVision)
+  if (needVision && !llmCatalog.value && localStorage.getItem('modstore_token')) {
+    await loadLlmCatalogForWorkbench()
+  }
   if (modelMode.value === 'manual') {
     resolveChatCache = null
     if (!selectedProvider.value || !selectedModel.value) {
       throw new Error('自选模式下请选择厂商与模型')
     }
+    if (needVision && !modelSupportsVisionInput(selectedProvider.value, selectedModel.value, llmCatalog.value)) {
+      throw new Error('当前自选模型不支持图片输入。请切换到支持识图的 VLM/多模态模型后重试。')
+    }
     return { provider: selectedProvider.value, model: selectedModel.value }
   }
-  const modeKey = 'auto'
+  const modeKey = needVision ? 'auto:vision' : 'auto'
   if (
     resolveChatCache &&
     resolveChatCache.mode === modeKey &&
     Date.now() - resolveChatCache.at < RESOLVE_CHAT_CACHE_MS
   ) {
-    return { provider: resolveChatCache.provider, model: resolveChatCache.model }
+    if (!needVision || modelSupportsVisionInput(resolveChatCache.provider, resolveChatCache.model, llmCatalog.value)) {
+      return { provider: resolveChatCache.provider, model: resolveChatCache.model }
+    }
   }
   if (localStorage.getItem('modstore_token')) {
     try {
@@ -10293,8 +10439,10 @@ async function resolveChatProviderModel() {
       const rp = typeof resolved?.provider === 'string' ? resolved.provider.trim() : ''
       const rm = typeof resolved?.model === 'string' ? resolved.model.trim() : ''
       if (rp && rm) {
-        resolveChatCache = { at: Date.now(), mode: modeKey, provider: rp, model: rm }
-        return { provider: rp, model: rm }
+        if (!needVision || modelSupportsVisionInput(rp, rm, llmCatalog.value)) {
+          resolveChatCache = { at: Date.now(), mode: modeKey, provider: rp, model: rm }
+          return { provider: rp, model: rm }
+        }
       }
     } catch (e) {
       const msg = e?.message || String(e)
@@ -10304,6 +10452,11 @@ async function resolveChatProviderModel() {
         throw e
       }
     }
+  }
+  if (needVision) {
+    const picked = await pickUsableVisionProviderModel()
+    resolveChatCache = { at: Date.now(), mode: modeKey, provider: picked.provider, model: picked.model }
+    return picked
   }
   if (!llmCatalog.value && localStorage.getItem('modstore_token')) {
     await loadLlmCatalogForWorkbench()

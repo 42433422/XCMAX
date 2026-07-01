@@ -84,6 +84,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.WeCell
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeCellGroup
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeCapsule
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeModeOption
+import com.xiuci.xcagi.mobile.ui.components.mobile.employeeAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Elevation
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
@@ -162,7 +163,7 @@ internal fun chatAvatarFallback(
         isCursorConversation(conversationId) -> AppAvatarFallback.CURSOR
         isClaudeConversation(conversationId) -> AppAvatarFallback.CLAUDE
         isTraeConversation(conversationId) -> AppAvatarFallback.TRAE
-        hasEmployeeProfile -> AppAvatarFallback.AI_EMPLOYEE
+        hasEmployeeProfile -> employeeAvatarFallback(conversationId)
         else -> AppAvatarFallback.ASSISTANT
     }
 
@@ -1259,7 +1260,7 @@ fun AiEmployeeListScreen(
                         ) {
                             AppAvatar(
                                 imageSource = employee.avatarUrl,
-                                fallback = AppAvatarFallback.AI_EMPLOYEE,
+                                fallback = employeeAvatarFallback(employee.employeeId, employee.name),
                                 size = MessageAvatarLayout.employeePickerAvatarSize,
                                 shape = MessageAvatarLayout.employeePickerAvatarShape(),
                                 contentDescription = employee.name,

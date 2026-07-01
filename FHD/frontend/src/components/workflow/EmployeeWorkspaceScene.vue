@@ -33,6 +33,7 @@ const ENTRY_BG_WORKFLOW_SVG = YUANGONG_ENTRY_WORKFLOW_SVG
 const router = useRouter()
 const route = useRoute()
 const isAdminConsole = isAdminConsoleSpa()
+const showManagementLoopPanels = computed(() => isAdminConsole)
 // SSOT 派生：运行时从后端 /api/system/duty-roster 获取编制矩阵
 const { allPlannedIds: ALL_PLANNED_YUANGON_PKG_IDS, employeeLabels: YUANGON_PKG_ROLE_LABELS, ensureLoaded: ensureDutyRosterLoaded } = useDutyRoster()
 const wfEmp = useWorkflowAiEmployeesStore()
@@ -50,11 +51,11 @@ const workspaceDesks = computed(() => {
   const stack = enterpriseStack.value
   const filtered = desks.value.filter((d) => {
     // 管理端只显示平台编制员工（ALL_PLANNED_YUANGON_PKG_IDS，SSOT 派生），隔离企业 Mod 栈员工（如 attendance_ai 等）
-    if (isAdminConsole && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
+    if (showManagementLoopPanels.value && !ALL_PLANNED_YUANGON_PKG_IDS.value.has(d.empId)) return false
     return workflowRegistryEntryBelongsToStack(d, stack)
   })
   // 管理端：工作流注册表无平台编制员工时，从 SSOT 54 岗构建占位工位，确保编制员工可见
-  if (isAdminConsole && filtered.length === 0) {
+  if (showManagementLoopPanels.value && filtered.length === 0) {
     return [...ALL_PLANNED_YUANGON_PKG_IDS.value].map((id) => ({
       empId: id,
       panelTitle: `工作流 · ${YUANGON_PKG_ROLE_LABELS.value[id] ?? id}`,
@@ -140,7 +141,9 @@ function onEntryBgError() {
 
 const totalCount = computed(() => workspaceDesks.value.length)
 const rosterCount = computed(() => ALL_PLANNED_YUANGON_PKG_IDS.value.size)
-const visualizedEmployeeCount = computed(() => Math.max(totalCount.value, rosterCount.value))
+const visualizedEmployeeCount = computed(() =>
+  showManagementLoopPanels.value ? Math.max(totalCount.value, rosterCount.value) : totalCount.value,
+)
 const enabledCount = computed(() => workspaceDesks.value.filter((d) => d.enabled).length)
 const busyCount = computed(() => workspaceDesks.value.filter((d) => isBusy(d)).length)
 const idleEnabledCount = computed(() => Math.max(0, enabledCount.value - busyCount.value))
@@ -148,7 +151,7 @@ const selectedDesk = computed(() =>
   workspaceDesks.value.find((d) => d.empId === selectedEmpId.value) || null,
 )
 const panoramaLocation = computed<RouteLocationRaw>(() => {
-  if (isAdminConsole && router.hasRoute('duty-roster-graph')) {
+  if (showManagementLoopPanels.value && router.hasRoute('duty-roster-graph')) {
     return { name: 'duty-roster-graph', query: { view: 'department' } }
   }
   return { name: 'workflow-employee-stitch-full' }
@@ -166,15 +169,15 @@ const dutyRosterDepartmentLocation = computed<RouteLocationRaw>(() => {
   return panoramaLocation.value
 })
 const entryKicker = computed(() =>
-  isAdminConsole ? '管理端可视化 · 六部门' : '企业版全景 · 四部门'
+  showManagementLoopPanels.value ? '管理端可视化 · 六部门' : '企业版全景 · 四部门'
 )
 const entryLead = computed(() =>
-  isAdminConsole
+  showManagementLoopPanels.value
     ? `进入管理端六部门流程可视化，查看 ${rosterCount.value} 岗 AI 员工在编制图谱、流程派发和执行回写中的状态。`
     : '进入企业端四部门节点图，查看企业 Mod 栈下工具、执行、服务、管理工位与任务快照。'
 )
 const entryCtaText = computed(() =>
-  isAdminConsole ? '进入六部门可视化' : '进入企业全景'
+  showManagementLoopPanels.value ? '进入六部门可视化' : '进入企业全景'
 )
 
 const workspaceStatSub = computed(() => {
@@ -185,15 +188,19 @@ const workspaceStatSub = computed(() => {
 })
 
 onMounted(() => {
-  // SSOT 派生：触发后端 /api/system/duty-roster 加载（失败时 composable 自动回退到构建时硬编码常量）
-  void ensureDutyRosterLoaded()
+  if (showManagementLoopPanels.value) {
+    // SSOT 派生：触发后端 /api/system/duty-roster 加载（失败时 composable 自动回退到构建时硬编码常量）
+    void ensureDutyRosterLoaded()
+  }
   void resolveEnterpriseModStack().then((stack) => {
     enterpriseStack.value = stack
   })
-  void refreshLoopRuntime()
-  loopRuntimeTimer = window.setInterval(() => {
+  if (showManagementLoopPanels.value) {
     void refreshLoopRuntime()
-  }, 30000)
+    loopRuntimeTimer = window.setInterval(() => {
+      void refreshLoopRuntime()
+    }, 30000)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -1352,10 +1359,10 @@ const selectedDeskLoopState = computed(() =>
       </div>
     </router-link>
 
-    <DutyRosterWorkflowLoopView surface="employee-space" compact />
-    <SelfEvolutionLoopRuntimePanel surface="employee-space" compact />
+    <DutyRosterWorkflowLoopView v-if="showManagementLoopPanels" surface="employee-space" compact />
+    <SelfEvolutionLoopRuntimePanel v-if="showManagementLoopPanels" surface="employee-space" compact />
 
-    <div class="ews-loop-console" role="region" aria-label="当前自进化循环员工">
+    <div v-if="showManagementLoopPanels" class="ews-loop-console" role="region" aria-label="当前自进化循环员工">
       <div class="ews-loop-cockpit">
         <div class="ews-loop-cockpit-copy">
           <span>循环驾驶舱</span>
@@ -1741,7 +1748,7 @@ const selectedDeskLoopState = computed(() =>
         </ul>
       </div>
 
-      <div v-if="routeFocusedEmployeeId && !routeFocusedEmployeeInWorkspace" class="ews-route-focus-warning">
+      <div v-if="showManagementLoopPanels && routeFocusedEmployeeId && !routeFocusedEmployeeInWorkspace" class="ews-route-focus-warning">
         <strong>当前定位员工不在员工空间工位里</strong>
         <span>{{ routeFocusedEmployeeId }} 属于编制/管理图谱上下文，但没有出现在企业 Mod 栈工位集合；这说明它不是当前工作空间的上岗工位。</span>
         <router-link :to="dutyRosterEmployeeLocation(routeFocusedEmployeeId)">回编制图谱定位</router-link>
@@ -1750,9 +1757,11 @@ const selectedDeskLoopState = computed(() =>
 
     <div class="ews-stats" role="list" aria-label="员工工位概要">
       <div class="ews-stat" role="listitem">
-        <p class="ews-stat-k">编制工位</p>
+        <p class="ews-stat-k">{{ showManagementLoopPanels ? '编制工位' : '企业工位' }}</p>
         <p class="ews-stat-v">{{ visualizedEmployeeCount }}</p>
-        <p class="ews-stat-sub">编制主索引 + {{ workspaceStatSub }}</p>
+        <p class="ews-stat-sub">
+          {{ showManagementLoopPanels ? `编制主索引 + ${workspaceStatSub}` : workspaceStatSub }}
+        </p>
       </div>
       <div class="ews-stat" role="listitem">
         <p class="ews-stat-k">已托管</p>
@@ -1791,15 +1800,18 @@ const selectedDeskLoopState = computed(() =>
         <div class="ews-grid" role="list" aria-label="工位卡片列表">
           <div v-if="!workspaceDesks.length" class="ews-empty" role="listitem">
             <p class="ews-empty-title">
-              {{ isAdminConsole ? '平台编制工位待同步' : '企业 Mod 工位待同步' }}
+              {{ showManagementLoopPanels ? '平台编制工位待同步' : '企业 Mod 工位待同步' }}
             </p>
             <p class="ews-empty-desc">
-              编制员工已经由图谱对齐为 {{ rosterCount }} 岗；这里等待副窗托管或{{
-                isAdminConsole ? '平台编制员工' : '企业 Mod 员工'
-              }}注册后显示实时工位卡片。
+              <template v-if="showManagementLoopPanels">
+                编制员工已经由图谱对齐为 {{ rosterCount }} 岗；这里等待副窗托管或平台编制员工注册后显示实时工位卡片。
+              </template>
+              <template v-else>
+                当前账号未同步到企业 Mod 员工工位；账号定制 Mod 开通并注册员工后，这里只显示本企业自己的工位卡片。
+              </template>
             </p>
             <router-link :to="{ name: 'workflow-visualization' }" class="ews-empty-link">
-              查看流程可视化
+              {{ showManagementLoopPanels ? '查看流程可视化' : '进入企业全景' }}
             </router-link>
           </div>
           <div
@@ -1856,10 +1868,11 @@ const selectedDeskLoopState = computed(() =>
               <span class="ews-desk-meta">
                 <span class="ews-desk-name" :title="row.panelTitle">{{ row.shortName }}</span>
                 <span class="ews-desk-status">{{ statusLine(row) }}</span>
-                <span v-if="isLoopParticipant(row.empId)" class="ews-desk-loop-role">
+                <span v-if="showManagementLoopPanels && isLoopParticipant(row.empId)" class="ews-desk-loop-role">
                   {{ loopParticipantRoleLabels[row.empId] || 'Self-evolution Loop' }}
                 </span>
                 <span
+                  v-if="showManagementLoopPanels"
                   class="ews-desk-loop-state"
                   :class="`ews-desk-loop-state--${deskLoopState(row).tone}`"
                 >
@@ -1893,7 +1906,7 @@ const selectedDeskLoopState = computed(() =>
         </div>
 
         <div class="ews-side">
-          <div v-if="selectedDesk && selectedDeskLoopState" class="ews-selected-loop">
+          <div v-if="showManagementLoopPanels && selectedDesk && selectedDeskLoopState" class="ews-selected-loop">
             <span>选中工位 Loop 上下文</span>
             <strong>{{ selectedDesk.shortName }}</strong>
             <p>{{ selectedDeskLoopState.detail }}</p>

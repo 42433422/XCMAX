@@ -275,7 +275,7 @@ def render_typescript(m: dict[str, Any]) -> str:
     lines = [JS_HEADER, ""]
     lines.append("export type AgentRunEventType =")
     for t in ar_types:
-        suffix = " |" if t != ar_types[-1] else ";"
+        suffix = ";" if t == ar_types[-1] else ""
         lines.append(f"  | '{t}'{suffix}")
     lines.append("")
     lines.append("export const TERMINAL_AGENT_RUN_EVENT_TYPES: ReadonlySet<AgentRunEventType> = new Set([")

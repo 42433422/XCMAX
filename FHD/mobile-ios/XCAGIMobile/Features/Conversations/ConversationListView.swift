@@ -35,6 +35,8 @@ struct ConversationRow: Identifiable, Hashable {
     var title: String
     var subtitle: String
     var avatarURL: String?
+    var type: ConversationType
+    var avatarFallback: AppAvatarFallback
     var peerKind: ChatPeerKind
     var timestamp: Double      // 毫秒
     var unread: Int
@@ -45,6 +47,7 @@ struct ConversationRow: Identifiable, Hashable {
 
     static func == (l: ConversationRow, r: ConversationRow) -> Bool {
         l.id == r.id && l.title == r.title && l.subtitle == r.subtitle &&
+        l.avatarURL == r.avatarURL && l.type == r.type && l.avatarFallback == r.avatarFallback &&
         l.timestamp == r.timestamp && l.unread == r.unread &&
         l.pinned == r.pinned && l.hidden == r.hidden && l.followed == r.followed && l.online == r.online
     }
@@ -105,6 +108,8 @@ final class ConversationListViewModel: ObservableObject {
                 title: g.name ?? "群聊",
                 subtitle: preview,
                 avatarURL: nil,
+                type: .aiTask,
+                avatarFallback: .aiEmployee,
                 peerKind: .employee,
                 timestamp: parseISO(g.lastMessageAt) ?? states[id]?.lastMessageAt ?? 0,
                 unread: g.unreadCount ?? 0,
@@ -115,26 +120,28 @@ final class ConversationListViewModel: ObservableObject {
             ))
         }
 
-        // 固定联系人(小C / 客服 / Codex / Claude)
+        // 固定联系人(小C / 客服 / Codex / Cursor / Claude / Trae)
         for c in fixedContacts {
             let local = localStates[c.id] ?? LocalConversationState()
             let sessionId = c.id.isEmpty ? "assistant" : c.id
             let cached = states[sessionId]
             let preview = cached?.lastMessagePreview.isEmpty == false ? cached!.lastMessagePreview : (c.summary.isEmpty ? "点击开始对话" : c.summary)
-            let peer = ChatPeerKind.resolve(id: c.id, kind: c.kind)
+            let peer = ChatPeerKind.resolve(id: c.id, kind: c.kind, title: c.name)
             out.append(ConversationRow(
                 id: c.id,
                 kind: .fixed(c),
                 title: c.name,
                 subtitle: preview,
-                avatarURL: c.avatar.hasPrefix("http") ? c.avatar : nil,
+                avatarURL: fixedAvatarURL(contact: c, peer: peer),
+                type: peer.conversationType,
+                avatarFallback: peer.conversationType.avatarFallback,
                 peerKind: peer,
                 timestamp: cached?.lastMessageAt ?? 0,
                 unread: local.unread,
                 pinned: local.pinned,
                 hidden: local.hidden,
                 followed: local.followed,
-                online: peer == .customerService
+                online: peer.conversationType.defaultOnline
             ))
         }
 
@@ -228,6 +235,11 @@ final class ConversationListViewModel: ObservableObject {
         if let d = fmt.date(from: s) { return d.timeIntervalSince1970 * 1000 }
         return nil
     }
+
+    private func fixedAvatarURL(contact: FixedContactDto, peer: ChatPeerKind) -> String? {
+        guard peer == .employee, contact.avatar.hasPrefix("http") else { return nil }
+        return contact.avatar
+    }
 }
 
 /// 消息列表(对标 Android `ConversationListScreen`):固定联系人 + AI 部门群 → 进入对话。
@@ -288,22 +300,68 @@ struct ConversationListView: View {
 
     private var list: some View {
         VStack(spacing: 0) {
-            filterBar
+            searchAndFilterHeader
             List {
                 ForEach(rows) { row in
                     NavigationLink(value: row) { rowContent(row) }
                         .simultaneousGesture(TapGesture().onEnded { markReadOnOpen(row) })
-                        .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
+                        .listRowInsets(EdgeInsets(
+                            top: MessageAvatarLayout.conversationRowVerticalPadding,
+                            leading: MessageAvatarLayout.conversationRowHorizontalPadding,
+                            bottom: MessageAvatarLayout.conversationRowVerticalPadding,
+                            trailing: MessageAvatarLayout.conversationRowHorizontalPadding
+                        ))
                         .contextMenu { contextMenu(for: row) }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             swipeActions(for: row)
                         }
                 }
+                bottomTabSpacer
             }
             .listStyle(.plain)
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "查找会话或伙伴")
+            .scrollContentBackground(.hidden)
+            .background(Theme.screenBackground)
             .refreshable { await vm.load(session) }
         }
+        .background(Theme.screenBackground)
+    }
+
+    private var searchAndFilterHeader: some View {
+        VStack(spacing: 0) {
+            searchBar
+                .padding(.horizontal, Theme.Space.lg)
+                .padding(.top, Theme.Space.sm)
+                .padding(.bottom, Theme.Space.xs)
+            filterBar
+        }
+        .background(Theme.screenBackground)
+    }
+
+    private var searchBar: some View {
+        HStack(spacing: Theme.Space.sm) {
+            Image(systemName: "magnifyingglass")
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.secondary)
+            TextField("查找会话或伙伴", text: $search)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .submitLabel(.search)
+            if !search.isEmpty {
+                Button {
+                    search = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .font(.subheadline)
+        .frame(height: 42)
+        .padding(.horizontal, Theme.Space.md)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .clipShape(Capsule())
     }
 
     private var filterBar: some View {
@@ -329,20 +387,47 @@ struct ConversationListView: View {
         .background(Theme.screenBackground)
     }
 
+    private var bottomTabSpacer: some View {
+        Color.clear
+            .frame(height: 96)
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+    }
+
     // MARK: - 行内容
 
     private func rowContent(_ row: ConversationRow) -> some View {
-        HStack(spacing: Theme.Space.md) {
-            ZStack(alignment: .topTrailing) {
-                AvatarView(text: row.title, url: row.avatarURL, size: 52)
-                UnreadBadge(count: row.unread).offset(x: 6, y: -6)
-                if row.online {
-                    Circle().fill(Color.green).frame(width: 12, height: 12)
+        HStack(spacing: MessageAvatarLayout.conversationAvatarTextGap) {
+            ZStack {
+                AvatarView(
+                    text: row.title,
+                    url: row.avatarURL,
+                    fallback: row.avatarFallback,
+                    size: MessageAvatarLayout.conversationAvatarSize,
+                    cornerRadius: MessageAvatarLayout.conversationAvatarCornerRadius
+                )
+                UnreadBadge(count: row.unread)
+                    .frame(
+                        width: MessageAvatarLayout.conversationAvatarSize,
+                        height: MessageAvatarLayout.conversationAvatarSize,
+                        alignment: .topTrailing
+                    )
+                    .offset(x: MessageAvatarLayout.unreadBadgeOffsetX, y: MessageAvatarLayout.unreadBadgeOffsetY)
+                if row.online && row.type == .pinnedCS {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: MessageAvatarLayout.onlineIndicatorSize, height: MessageAvatarLayout.onlineIndicatorSize)
                         .overlay(Circle().stroke(Theme.screenBackground, lineWidth: 2))
-                        .offset(x: 2, y: 2)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                        .frame(
+                            width: MessageAvatarLayout.conversationAvatarSize,
+                            height: MessageAvatarLayout.conversationAvatarSize,
+                            alignment: .bottomTrailing
+                        )
+                        .offset(x: 0, y: MessageAvatarLayout.onlineIndicatorOffsetY)
                 }
             }
+            .frame(width: MessageAvatarLayout.conversationAvatarSize, height: MessageAvatarLayout.conversationAvatarSize)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(row.title)
@@ -473,7 +558,7 @@ struct ConversationListView: View {
                     title: c.name,
                     sessionId: c.id.isEmpty ? "assistant" : c.id,
                     peerKind: row.peerKind,
-                    aiAvatarURL: c.avatar.hasPrefix("http") ? c.avatar : nil
+                    aiAvatarURL: row.avatarURL
                 )
             }
         }

@@ -46,6 +46,7 @@ from modstore_server.email_service import (
     generate_verification_code,
     send_verification_email,
 )
+from modstore_server.enterprise_entitlements import normalize_enterprise_entitlement_mod_ids
 from modstore_server.java_me_profile import fetch_java_user_overlay
 from modstore_server.market_shared import (
     _get_current_user,
@@ -695,6 +696,7 @@ class EnsureEnterpriseProfileDTO(BaseModel):
     market_user_id: int = Field(..., gt=0)
     company: str = Field(default="", max_length=256)
     display_name: str = Field(default="", max_length=64)
+    mod_ids: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -708,6 +710,10 @@ def api_internal_cs_intake_ensure_enterprise_profile(
 ):
     _require_internal_api_key(request)
     uid = int(body.market_user_id)
+    try:
+        requested_mod_ids = normalize_enterprise_entitlement_mod_ids(body.mod_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     sf = get_session_factory()
     with sf() as session:
         target = session.query(User).filter(User.id == uid).first()
@@ -726,6 +732,22 @@ def api_internal_cs_intake_ensure_enterprise_profile(
             renamed = True
         if not target.is_enterprise:
             target.is_enterprise = True
+        added_mod_ids: list[str] = []
+        if requested_mod_ids:
+            from modstore_server.models_catalog import UserMod
+
+            existing = {
+                str(row[0])
+                for row in session.query(UserMod.mod_id)
+                .filter(UserMod.user_id == uid, UserMod.mod_id.in_(requested_mod_ids))
+                .all()
+            }
+            for mod_id in requested_mod_ids:
+                if mod_id in existing:
+                    continue
+                session.add(UserMod(user_id=uid, mod_id=mod_id))
+                existing.add(mod_id)
+                added_mod_ids.append(mod_id)
         session.commit()
         return {
             "ok": True,
@@ -734,6 +756,8 @@ def api_internal_cs_intake_ensure_enterprise_profile(
             "username": target.username,
             "is_enterprise": bool(target.is_enterprise),
             "renamed": renamed,
+            "mod_ids": requested_mod_ids,
+            "added_mod_ids": added_mod_ids,
         }
 
 

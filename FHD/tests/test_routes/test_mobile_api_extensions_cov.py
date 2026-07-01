@@ -288,6 +288,19 @@ class TestRegisterDesktopRelayForPairing:
             result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)
         assert result is None
 
+    def test_relay_unexpected_error_returns_none(self, m, monkeypatch):
+        monkeypatch.setenv("XCAGI_RELAY_PAIRING_ENABLED", "1")
+
+        with (
+            patch.object(m, "_host_is_private_or_loopback", return_value=True),
+            patch(
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
+                side_effect=Exception("bad relay url"),
+            ),
+        ):
+            result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)
+        assert result is None
+
     def test_relay_empty_returns_none(self, m, monkeypatch):
         """branch: register returns falsy → None."""
         monkeypatch.setenv("XCAGI_RELAY_PAIRING_ENABLED", "1")

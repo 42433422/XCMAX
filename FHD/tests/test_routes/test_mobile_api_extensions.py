@@ -673,10 +673,13 @@ class TestAiEmployeeMarketProfiles:
         assert item["market_description"] == "市场资料"
 
     def test_admin_employee_items_uses_duty_roster_as_ssot(self, ext_mod):
+        from app.mod_sdk.duty_roster import all_planned_duty_employee_ids
+
         items = ext_mod._admin_employee_items()
         ids = {str(item.get("id") or "") for item in items}
-        assert len(items) == 54
-        assert len(ids) == 54
+        planned = all_planned_duty_employee_ids()
+        assert len(items) == len(planned)
+        assert len(ids) == len(planned)
         assert "llm-ops-engineer" in ids
         assert "mobile-harmony-release-officer" in ids
 

@@ -5,6 +5,7 @@ import {
   queueWorkspacePrefsSync,
   fetchWorkspacePrefs,
 } from './workspacePrefsApi'
+import { invalidateTenantStorageScopeCache } from '@/utils/tenantStorageScope'
 
 vi.mock('@/utils/apiBase', () => ({
   apiFetch: vi.fn(),
@@ -20,6 +21,7 @@ import { apiFetch } from '@/utils/apiBase'
 describe('workspacePrefsApi', () => {
   beforeEach(() => {
     localStorage.clear()
+    invalidateTenantStorageScopeCache()
     vi.clearAllMocks()
   })
 
@@ -33,6 +35,19 @@ describe('workspacePrefsApi', () => {
     expect(localStorage.getItem('xcagi_product_flow_host_ack')).toBe('0')
     const emp = JSON.parse(localStorage.getItem('xcagi_workflow_ai_employees') || '{}')
     expect(emp.label_print).toBe(true)
+  })
+
+  it('applyWorkspacePrefsToLocalCache writes tenant-scoped flags', () => {
+    applyWorkspacePrefsToLocalCache(
+      {
+        product_flow_completed: true,
+        host_pack_acknowledged: false,
+      },
+      'tenant:10',
+    )
+    expect(localStorage.getItem('xcagi_product_flow_completed')).toBeNull()
+    expect(localStorage.getItem('xcagi_product_flow_completed:tenant:10')).toBe('1')
+    expect(localStorage.getItem('xcagi_product_flow_host_ack:tenant:10')).toBe('0')
   })
 
   it('fetchWorkspacePrefs throws on HTTP error', async () => {

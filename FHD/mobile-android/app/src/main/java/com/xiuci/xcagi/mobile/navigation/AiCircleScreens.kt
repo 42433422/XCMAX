@@ -65,6 +65,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.LocalProfileAvatar
 import com.xiuci.xcagi.mobile.ui.components.mobile.MobileEmptyState
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
+import com.xiuci.xcagi.mobile.ui.components.mobile.employeeAvatarFallback
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
 
 internal data class AiEmployeeProfile(
@@ -352,7 +353,7 @@ private fun AiCirclePostCard(
             Row(Modifier.padding(start = 16.dp, end = 14.dp, top = 12.dp, bottom = 4.dp)) {
                 AppAvatar(
                     imageSource = post.author_avatar,
-                    fallback = AppAvatarFallback.AI_EMPLOYEE,
+                    fallback = employeeAvatarFallback(post.employee_id, post.author_name),
                     size = 42.dp,
                     shape = CircleShape,
                     contentDescription = post.author_name,
@@ -829,7 +830,7 @@ private fun AiProfileActionRow(
 private fun AiEmployeeAvatar(employee: AiEmployeeProfile, size: androidx.compose.ui.unit.Dp) {
     AppAvatar(
         imageSource = employee.avatarUrl,
-        fallback = AppAvatarFallback.AI_EMPLOYEE,
+        fallback = employeeAvatarFallback(employee.employeeId, employee.name),
         size = size,
         shape = CircleShape,
         contentDescription = employee.name,

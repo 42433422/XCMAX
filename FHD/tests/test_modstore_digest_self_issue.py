@@ -6,7 +6,11 @@ import importlib.util
 import sys
 from pathlib import Path
 
-MODSTORE = Path(__file__).resolve().parents[1] / "MODstore"
+MODSTORE = (
+    Path(__file__).resolve().parents[1].parent
+    / "成都修茈科技有限公司"
+    / "MODstore_deploy"
+)
 if str(MODSTORE) not in sys.path:
     sys.path.insert(0, str(MODSTORE))
 
