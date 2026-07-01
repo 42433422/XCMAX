@@ -247,7 +247,7 @@ def build_human_report(
     # ── 1. 我做了什么 ──
     task_preview = _safe_str(task, 200)
     sec1 = [
-        f"## 我做了什么",
+        "## 我做了什么",
         f"- 员工：`{employee_id}`",
         f"- 任务：{task_preview}" if task_preview else "- 任务：（空）",
         f"- 耗时：{duration_ms:.0f}ms，消耗 {llm_tokens} tokens",
@@ -325,15 +325,15 @@ def build_human_report(
         "## 修了什么",
         handlers_summary,
         "",
-        f"路径边界检查：",
+        "路径边界检查：",
         files_summary,
     ]
     if verification_summary:
-        sec3 += ["", f"程序化验证：", verification_summary]
+        sec3 += ["", "程序化验证：", verification_summary]
     if evolution_summary:
-        sec3 += ["", f"学习信号：", evolution_summary]
+        sec3 += ["", "学习信号：", evolution_summary]
     if handoff_summary:
-        sec3 += ["", f"任务转交：", handoff_summary]
+        sec3 += ["", "任务转交：", handoff_summary]
 
     # ── 4. 还剩什么 ──
     remainders = []
