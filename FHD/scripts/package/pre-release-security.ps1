@@ -1,7 +1,9 @@
 param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
-  [string]$Version = '10.0.0'
+  [string]$Version = '10.0.0',
+  [ValidateSet('personal', 'enterprise', 'all')]
+  [string]$ProductSku = 'all'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +12,7 @@ Set-Location $Root
 $Version = $Version.TrimStart('v', 'V')
 $erpMod = 'xcagi-erp-domain-bridge'
 $excludedMods = @('taiyangniao-pro', 'sz-qsm-pro', '_employees', 'industry-solutions')
+$skus = if ($ProductSku -eq 'all') { @('personal', 'enterprise') } else { @($ProductSku) }
 
 function Fail([string]$msg) {
   Write-Error "[pre-release-security] $msg"
@@ -64,8 +67,9 @@ if ($Phase -eq 'pre') {
   if (Test-Path $dotEnv) {
     Write-Warning 'Root .env exists; PyInstaller spec must ship only .env.example'
   }
-  Test-StagedSku 'personal' $false
-  Test-StagedSku 'enterprise' $true
+  foreach ($sku in $skus) {
+    Test-StagedSku $sku ($sku -eq 'enterprise')
+  }
   & "$PSScriptRoot\verify-desktop-database-default.ps1"
   Write-Host 'Pre-build security: PASSED'
   exit 0
@@ -86,7 +90,7 @@ if ($flatSku) {
   Fail "安装包必须位于 SKU 子目录内，不得放在 release 根: $($flatSku.Name -join ', ')"
 }
 
-foreach ($sku in @('personal', 'enterprise')) {
+foreach ($sku in $skus) {
   $skuDir = Join-Path $releaseRoot $sku
   if (-not (Test-Path $skuDir)) {
     Fail "missing SKU dir: $skuDir"
@@ -97,7 +101,11 @@ foreach ($sku in @('personal', 'enterprise')) {
   }
   $modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
   if (Test-Path $modsDir) {
+    $verifyErrorCount = $Error.Count
     & "$PSScriptRoot\verify-bundled-mods.ps1" -ProductSku $sku -UnpackedDir $modsDir
+    if (-not $? -or $Error.Count -gt $verifyErrorCount) {
+      Fail "verify-bundled-mods failed for $sku"
+    }
     Scan-SecretsInTree $modsDir "built-mods-$sku"
   } else {
     Fail "$sku missing bundled mods dir: $modsDir"
