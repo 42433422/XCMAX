@@ -30,6 +30,7 @@
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全 |
 | project-state（项目真实状态） | [PROJECT_STATE.md](PROJECT_STATE.md) | 项目健康度/完成度诚实仪表盘，唯一禁止撒谎的状态文档 |
 | mobile-tri-platform（移动三端） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | Android 主线、iOS/鸿蒙对标、KMM 共享边界、三端设计 token 与端侧性能监控 |
+| neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
 
 ## 已退役 SSOT（指针化）
 

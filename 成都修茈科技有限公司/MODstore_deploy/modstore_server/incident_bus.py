@@ -23,6 +23,21 @@ from modstore_server.platform_llm_scope import platform_llm_scoped
 
 logger = logging.getLogger(__name__)
 
+_NON_DISPATCH_EVENT_TYPES = frozenset(
+    {
+        "employee.suggestion.created",
+        "employee.suggestion.approved",
+        "employee.suggestion.rejected",
+        "employee.suggestion.dispatched",
+        "employee.collab.thread_created",
+        "employee.collab.message_created",
+        "employee.brief_todo.created",
+        "employee.brief_todo.dispatched",
+        "employee.evolution.suggested",
+        "employee.execution.recovery",
+    }
+)
+
 
 def _parse_binding_event_key(stored: str) -> tuple[str, str]:
     """binding.event_type 可为 ``on_error`` 或 ``employee.task.done:upstream-id``（首段 `:` 后为上事件源过滤）。"""
@@ -216,6 +231,17 @@ def _catalog_employee_ids(session) -> set[str]:
     return {str(r[0]) for r in rows if r[0]}
 
 
+def _incident_event_type(event_id: int) -> str:
+    sf = get_session_factory()
+    with sf() as session:
+        ev = (
+            session.query(IncidentEvent.event_type)
+            .filter(IncidentEvent.id == int(event_id))
+            .first()
+        )
+        return str(ev[0] or "") if ev else ""
+
+
 def _incident_employee_input(
     *,
     incident_payload: Dict[str, Any],
@@ -255,6 +281,15 @@ def _dispatch_incident(event_id: int) -> None:
             return
     except Exception:
         logger.debug("incident cluster claim skipped event_id=%s", event_id, exc_info=True)
+
+    event_type_pre = _incident_event_type(event_id)
+    if event_type_pre in _NON_DISPATCH_EVENT_TYPES:
+        logger.info(
+            "incident_bus: lifecycle event_id=%s event_type=%s recorded without employee dispatch",
+            event_id,
+            event_type_pre,
+        )
+        return
 
     if (os.environ.get("MODSTORE_UNIFIED_ORCHESTRATOR_ENABLED", "1") or "").strip().lower() in {
         "1",

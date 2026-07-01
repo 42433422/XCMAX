@@ -59,7 +59,7 @@ Body 任选：`token`、`authorization`，或 Header `Authorization: Bearer …`
 
 - `GET /api/auth/oidc/status` → `{ enabled }`
 - `GET /api/auth/oidc/start` → 302 IdP
-- `GET /api/auth/oidc/callback` → JIT 用户 + Cookie + **自动桥接 MODstore JWT**（`POST /api/auth/internal/sso-issue-token`，需 FHD/MODstore 共用 `XCAGI_MARKET_INTERNAL_API_KEY`）
+- `GET /api/auth/oidc/callback` → JIT 用户 + Cookie + **自动桥接 MODstore JWT**（`POST /api/auth/internal/sso-issue-token`，需 FHD 与 `成都修茈科技有限公司/MODstore_deploy` 共用 `XCAGI_MARKET_INTERNAL_API_KEY`）
 - Android `POST /api/mobile/v1/auth/oidc/exchange` — body `{ code, state }`
 
 ### 租户字段

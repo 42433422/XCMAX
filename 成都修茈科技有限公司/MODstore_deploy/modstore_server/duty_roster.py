@@ -62,8 +62,8 @@ YUANGON_AREAS: Dict[str, Dict[str, object]] = {
             "enterprise-adoption-officer",
             "delivery-receipt-officer",
             "mobile-android-release-officer",
-            "mobile-ios-release-officer",
             "mobile-harmony-release-officer",
+            "mobile-ios-release-officer",
         ],
     },
     "quality-and-docs": {
@@ -311,8 +311,8 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
                     "change-request-auditor",
                     "github-pr-gatekeeper",
                     "mobile-android-release-officer",
-                    "mobile-ios-release-officer",
                     "mobile-harmony-release-officer",
+                    "mobile-ios-release-officer",
                 ],
             },
             "ota-monitor": {
@@ -329,6 +329,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
                     "daily-orchestrator",
                     "intake-dispatcher",
                     "task-router-officer",
+                    "github-pr-gatekeeper",
                     "dbops-engineer",
                     "llm-ops-engineer",
                 ],

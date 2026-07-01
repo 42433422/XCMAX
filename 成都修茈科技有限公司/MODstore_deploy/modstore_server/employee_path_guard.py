@@ -6,6 +6,7 @@ hard 约束（本模块）：actions 执行后检查 changed_files 是否在 sco
 
 挂载点：employee_executor.execute_employee_task → _actions_real 之后。
 """
+
 from __future__ import annotations
 
 import fnmatch
@@ -181,24 +182,30 @@ def check_path_guard(
             g = str(g).strip()
             if not g:
                 continue
-            pattern = g.replace("**/", "*").replace("/**", "/*").replace("**", "*") if "**" in g else g
+            pattern = (
+                g.replace("**/", "*").replace("/**", "/*").replace("**", "*") if "**" in g else g
+            )
             if fnmatch.fnmatch(norm, pattern):
-                violations.append({
-                    "path": norm,
-                    "reason": "matches_forbidden",
-                    "matched_glob": g,
-                    "handler": file_to_handler.get(path, ""),
-                })
+                violations.append(
+                    {
+                        "path": norm,
+                        "reason": "matches_forbidden",
+                        "matched_glob": g,
+                        "handler": file_to_handler.get(path, ""),
+                    }
+                )
                 break
         else:
             # 不在 forbidden → 检查 scope
             if scope_globs and not _matches_any(norm, scope_globs):
-                violations.append({
-                    "path": norm,
-                    "reason": "out_of_scope",
-                    "matched_glob": "",
-                    "handler": file_to_handler.get(path, ""),
-                })
+                violations.append(
+                    {
+                        "path": norm,
+                        "reason": "out_of_scope",
+                        "matched_glob": "",
+                        "handler": file_to_handler.get(path, ""),
+                    }
+                )
 
     return {
         "ok": len(violations) == 0,

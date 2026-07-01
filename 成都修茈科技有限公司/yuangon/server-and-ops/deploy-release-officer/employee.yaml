@@ -32,6 +32,7 @@ scope_globs:
   - MODstore_deploy/market/nginx.conf
   - MODstore_deploy/market/nginx-errors/**
   - MODstore_deploy/market/nginx-snippets/**
+  - MODstore_deploy/market/scripts/**
   # MODstore_deploy 运维脚本（与 push-update-context-officer 的 yuangon_*.py 不重叠：那些已显式从此处排除）
   - MODstore_deploy/scripts/**
 

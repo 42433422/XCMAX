@@ -60,13 +60,54 @@ const SKIP_FORCE_UPDATE = process.env.SURFACE_AUDIT_SKIP_FORCE_UPDATE !== '0'
 
 let modstoreBlockIps = []
 let modstoreBlocked = false
+let selectedDeviceSerial = ''
 
-function adb(...args) {
+function adbArgs(args) {
+  const serial =
+    selectedDeviceSerial ||
+    (process.env.SURFACE_AUDIT_ANDROID_SERIAL || process.env.ANDROID_SERIAL || '').trim()
+  return serial ? ['-s', serial, ...args] : args
+}
+
+function adbRaw(...args) {
   return execFileSync(ADB, args, { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS }).trim()
 }
 
+function adb(...args) {
+  return execFileSync(ADB, adbArgs(args), { encoding: 'utf8', maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS }).trim()
+}
+
 function adbBuf(...args) {
-  return execFileSync(ADB, args, { maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS })
+  return execFileSync(ADB, adbArgs(args), { maxBuffer: 20 * 1024 * 1024, timeout: ADB_TIMEOUT_MS })
+}
+
+function parseDeviceSerials(output) {
+  return String(output || '')
+    .split('\n')
+    .slice(1)
+    .map((line) => line.trim())
+    .filter((line) => line && /\bdevice\b/.test(line) && !line.includes('devices'))
+    .map((line) => line.split(/\s+/)[0])
+    .filter(Boolean)
+}
+
+function selectDeviceSerial(serials) {
+  const requested = (process.env.SURFACE_AUDIT_ANDROID_SERIAL || process.env.ANDROID_SERIAL || '').trim()
+  if (requested) {
+    if (!serials.includes(requested)) {
+      throw new Error(`指定 Android 设备 ${requested} 不在线；在线设备: ${serials.join(', ') || 'none'}`)
+    }
+    return requested
+  }
+  for (const serial of serials) {
+    try {
+      const out = adbRaw('-s', serial, 'shell', 'pm', 'path', PACKAGE)
+      if (out && out.includes('package:')) return serial
+    } catch {
+      /* try next device */
+    }
+  }
+  return serials[0] || ''
 }
 
 function resolveApk() {
@@ -321,21 +362,25 @@ async function main() {
     return finish({ success: false, message: `巡检登录失败: ${err}`, pages: [] })
   }
 
-  let devices = []
+  let deviceSerials = []
   try {
-    const lines = adb('devices').split('\n').slice(1)
-    devices = lines.filter((l) => l.trim() && l.includes('device') && !l.includes('devices'))
+    deviceSerials = parseDeviceSerials(adbRaw('devices'))
   } catch (err) {
     return finish({ success: false, message: `adb 不可用: ${err}`, pages: [] })
   }
 
-  if (!devices.length) {
+  if (!deviceSerials.length) {
     return finish({
       success: false,
       message: '未检测到 Android 设备/模拟器',
       pages: [],
       hint: 'make android-emulator-start',
     })
+  }
+  try {
+    selectedDeviceSerial = selectDeviceSerial(deviceSerials)
+  } catch (err) {
+    return finish({ success: false, message: String(err), pages: [], device_count: deviceSerials.length })
   }
 
   const cfg = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'))
@@ -403,7 +448,8 @@ async function main() {
     workflow_node: 'SA',
     label: laneCfg?.label,
     source: 'android-adb',
-    device_count: devices.length,
+    device_count: deviceSerials.length,
+    selected_device_serial: selectedDeviceSerial,
     package: PACKAGE,
     fhd_host: FHD_HOST,
     page_count: results.length,

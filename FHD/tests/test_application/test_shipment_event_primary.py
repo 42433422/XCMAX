@@ -46,6 +46,11 @@ class TestCreateShipment:
                 "app.application.facades.shipment_event_primary.is_event_primary_enabled",
                 return_value=True,
             ),
+            patch(
+                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
+                return_value=True,
+            ),
+            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
             patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
         ):
             result = facade.create_shipment("Acme", [{"name": "P"}], "c", "p")
@@ -72,6 +77,11 @@ class TestCancelShipment:
                 "app.application.facades.shipment_event_primary.is_event_primary_enabled",
                 return_value=True,
             ),
+            patch(
+                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
+                return_value=True,
+            ),
+            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
             patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
         ):
             result = facade.cancel_shipment(5)
@@ -98,6 +108,11 @@ class TestDeleteShipment:
                 "app.application.facades.shipment_event_primary.is_event_primary_enabled",
                 return_value=True,
             ),
+            patch(
+                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
+                return_value=True,
+            ),
+            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
             patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
         ):
             result = facade.delete_shipment(5)
@@ -124,6 +139,11 @@ class TestMarkAsPrinted:
                 "app.application.facades.shipment_event_primary.is_event_primary_enabled",
                 return_value=True,
             ),
+            patch(
+                "app.application.facades.shipment_event_primary._neuro_runtime_ready",
+                return_value=True,
+            ),
+            patch.object(facade, "_dispatch_command", new=MagicMock(return_value=object())),
             patch.object(facade, "_run_cmd", return_value={"success": True}) as mock_run,
         ):
             result = facade.mark_as_printed(5, "printer1")

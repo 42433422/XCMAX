@@ -81,6 +81,7 @@ beforeEach(() => {
   routeState.name = 'download'
   routerMock.push.mockReset()
   routerMock.back.mockReset()
+  delete (window as Window & { xcagiDesktop?: unknown }).xcagiDesktop
   locationAssign = vi.fn()
   Object.defineProperty(window, 'location', {
     configurable: true,
@@ -99,6 +100,7 @@ afterEach(() => {
     configurable: true,
     value: originalLocation,
   })
+  delete (window as Window & { xcagiDesktop?: unknown }).xcagiDesktop
   installHistoryLength(originalHistoryLength)
   installUserAgent(originalUserAgent)
   document.body.innerHTML = ''
@@ -129,6 +131,39 @@ describe('SoftwareDownloadView', () => {
 
     expect(anchorClick).toHaveBeenCalledTimes(1)
     expect(locationAssign).not.toHaveBeenCalled()
+  })
+
+  it('uses the desktop native download bridge before falling back to the browser anchor', async () => {
+    const nativeDownload = vi.fn().mockResolvedValue({ ok: true })
+    Object.defineProperty(window, 'xcagiDesktop', {
+      configurable: true,
+      value: { isDesktop: true, downloadFile: nativeDownload },
+    })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const wrapper = await mountView()
+    await findButton(wrapper, 'Windows 64 位').trigger('click')
+    await flushPromises()
+
+    expect(nativeDownload).toHaveBeenCalledWith({
+      url: 'https://dl.xiu-ci.com/xcagi-v10.0.0/personal/XCAGI-Personal-Setup-10.0.0-x64.exe',
+      filename: 'XCAGI-Personal-Setup-10.0.0-x64.exe',
+    })
+    expect(anchorClick).not.toHaveBeenCalled()
+  })
+
+  it('falls back to browser download when the desktop bridge cannot start the download', async () => {
+    Object.defineProperty(window, 'xcagiDesktop', {
+      configurable: true,
+      value: { isDesktop: true, downloadFile: vi.fn().mockResolvedValue({ ok: false }) },
+    })
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    const wrapper = await mountView()
+    await findButton(wrapper, 'Windows 64 位').trigger('click')
+    await flushPromises()
+
+    expect(anchorClick).toHaveBeenCalledTimes(1)
   })
 
   it('ignores non-json manifests, switches editions, and sends Android downloads through location', async () => {

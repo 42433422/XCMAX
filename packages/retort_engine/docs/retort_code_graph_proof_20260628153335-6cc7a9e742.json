@@ -1,0 +1,228 @@
+{
+  "changed_file_count": 6,
+  "changed_files": [
+    "retort_engine/absorption_quality.py",
+    "retort_engine/absorbed_external_patterns.py",
+    "retort_engine/absorbed_capabilities.py",
+    "tests/test_absorbed_capabilities.py",
+    "retort_engine/review_context_bias.py",
+    "tests/test_review_context_bias.py"
+  ],
+  "edge_count": 18,
+  "edges": [
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "retort_engine/absorption_quality.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "import re",
+      "source": "retort_engine/absorption_quality.py",
+      "target": "re",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from pathlib import ...",
+      "source": "retort_engine/absorption_quality.py",
+      "target": "pathlib",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from typing import ...",
+      "source": "retort_engine/absorption_quality.py",
+      "target": "typing",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "retort_engine/absorbed_external_patterns.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "import json",
+      "source": "retort_engine/absorbed_external_patterns.py",
+      "target": "json",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from typing import ...",
+      "source": "retort_engine/absorbed_external_patterns.py",
+      "target": "typing",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "retort_engine/absorbed_capabilities.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "import json",
+      "source": "retort_engine/absorbed_capabilities.py",
+      "target": "json",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from typing import ...",
+      "source": "retort_engine/absorbed_capabilities.py",
+      "target": "typing",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from retort_engine.absorption_quality import ...",
+      "source": "retort_engine/absorbed_capabilities.py",
+      "target": "retort_engine/absorption_quality.py",
+      "target_is_local": true,
+      "target_kind": "local_python"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "tests/test_absorbed_capabilities.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from retort_engine.absorbed_capabilities import ...",
+      "source": "tests/test_absorbed_capabilities.py",
+      "target": "retort_engine/absorbed_capabilities.py",
+      "target_is_local": true,
+      "target_kind": "local_python"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "retort_engine/review_context_bias.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "import json",
+      "source": "retort_engine/review_context_bias.py",
+      "target": "json",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from typing import ...",
+      "source": "retort_engine/review_context_bias.py",
+      "target": "typing",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from __future__ import ...",
+      "source": "tests/test_review_context_bias.py",
+      "target": "__future__",
+      "target_is_local": false,
+      "target_kind": "external_or_unresolved"
+    },
+    {
+      "edge_type": "import",
+      "raw": "from retort_engine.review_context_bias import ...",
+      "source": "tests/test_review_context_bias.py",
+      "target": "retort_engine/review_context_bias.py",
+      "target_is_local": true,
+      "target_kind": "local_python"
+    }
+  ],
+  "external_path": "/Users/a4243342/Desktop/XCMAX/packages/retort_engine/.retort/cache/github/Review-scope/ReviewScope",
+  "generated_at": "2026-06-28T15:33:40Z",
+  "language_distribution": {
+    "python": 6
+  },
+  "node_count": 6,
+  "nodes": [
+    {
+      "imports": [
+        "from __future__ import ...",
+        "import json",
+        "from typing import ...",
+        "from retort_engine.absorption_quality import ..."
+      ],
+      "language": "python",
+      "line_count": 131,
+      "path": "retort_engine/absorbed_capabilities.py"
+    },
+    {
+      "imports": [
+        "from __future__ import ...",
+        "import json",
+        "from typing import ..."
+      ],
+      "language": "python",
+      "line_count": 19,
+      "path": "retort_engine/absorbed_external_patterns.py"
+    },
+    {
+      "imports": [
+        "from __future__ import ...",
+        "import re",
+        "from pathlib import ...",
+        "from typing import ..."
+      ],
+      "language": "python",
+      "line_count": 163,
+      "path": "retort_engine/absorption_quality.py"
+    },
+    {
+      "imports": [
+        "from __future__ import ...",
+        "import json",
+        "from typing import ..."
+      ],
+      "language": "python",
+      "line_count": 34,
+      "path": "retort_engine/review_context_bias.py"
+    },
+    {
+      "imports": [
+        "from __future__ import ...",
+        "from retort_engine.absorbed_capabilities import ..."
+      ],
+      "language": "python",
+      "line_count": 107,
+      "path": "tests/test_absorbed_capabilities.py"
+    },
+    {
+      "imports": [
+        "from __future__ import ...",
+        "from retort_engine.review_context_bias import ..."
+      ],
+      "language": "python",
+      "line_count": 15,
+      "path": "tests/test_review_context_bias.py"
+    }
+  ],
+  "run_id": "20260628153335-6cc7a9e742",
+  "source": "https://github.com/Review-scope/ReviewScope"
+}

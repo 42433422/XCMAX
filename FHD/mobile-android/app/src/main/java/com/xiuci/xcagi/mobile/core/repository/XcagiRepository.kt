@@ -10,6 +10,7 @@ import com.xiuci.xcagi.mobile.core.db.XcagiDatabase
 import com.xiuci.xcagi.mobile.core.db.ModInfoCacheEntity
 import com.xiuci.xcagi.mobile.core.model.AccessRequestPayload
 import com.xiuci.xcagi.mobile.core.model.AdminMobileHomeData
+import com.xiuci.xcagi.mobile.core.model.AiCirclePost
 import com.xiuci.xcagi.mobile.core.model.AiGroupCandidateDto
 import com.xiuci.xcagi.mobile.core.model.AiGroupCreateBody
 import com.xiuci.xcagi.mobile.core.model.AiGroupDto
@@ -2751,14 +2752,51 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
-    suspend fun loadAiCirclePosts(): Result<List<com.xiuci.xcagi.mobile.core.model.AiCirclePost>> = try {
+    suspend fun loadCachedAiCirclePosts(): List<AiCirclePost> = try {
+        db.aiCircleCacheDao().all().mapNotNull { row ->
+            try {
+                gson.fromJson(row.json, AiCirclePost::class.java)
+            } catch (_: Exception) {
+                null
+            }
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+
+    private suspend fun cacheAiCirclePosts(posts: List<AiCirclePost>) {
+        db.aiCircleCacheDao().clear()
+        if (posts.isEmpty()) return
+        db.aiCircleCacheDao().insertAll(
+            posts.map { post ->
+                com.xiuci.xcagi.mobile.core.db.AiCircleCacheEntity(
+                    postId = post.id,
+                    employeeId = post.employee_id,
+                    authorName = post.author_name,
+                    sourceType = post.source_type,
+                    createdAt = post.created_at,
+                    json = gson.toJson(post),
+                )
+            },
+        )
+    }
+
+    suspend fun loadAiCirclePosts(): Result<List<AiCirclePost>> = try {
         syncRouterFromStore()
         preferCloudIfLanUnreachable()
         val res = fhd().aiCirclePosts()
-        if (!res.success) Result.failure(Exception(res.message.ifBlank { "交流圈加载失败" }))
-        else Result.success(res.data?.items ?: emptyList())
+        if (!res.success) {
+            val cached = loadCachedAiCirclePosts()
+            if (cached.isNotEmpty()) Result.success(cached)
+            else Result.failure(Exception(res.message.ifBlank { "交流圈加载失败" }))
+        } else {
+            val posts = res.data?.items ?: emptyList()
+            cacheAiCirclePosts(posts)
+            Result.success(posts)
+        }
     } catch (e: Exception) {
-        Result.failure(e)
+        val cached = loadCachedAiCirclePosts()
+        if (cached.isNotEmpty()) Result.success(cached) else Result.failure(e)
     }
 
     suspend fun createAiCirclePost(body: String): Result<Unit> = try {

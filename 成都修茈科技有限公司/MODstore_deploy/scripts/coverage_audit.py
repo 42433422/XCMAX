@@ -33,6 +33,9 @@ DEFAULT_IGNORES: list[str] = [
     "**/modstore.egg-info/**",
     "**/*.pyc",
     "**/*.pyo",
+    "**/.DS_Store",
+    "**/._*",
+    "*.bak.*",
     ".coverage",
     "MODstore_deploy/.coverage",
     "MODstore_deploy/.venv/**",
@@ -57,6 +60,17 @@ DEFAULT_IGNORES: list[str] = [
     # Build outputs / large binary blobs (kept for archive but not authored by employees).
     "MODstore_deploy/market/dist/**",
     "MODstore_deploy/market/coverage/**",
+    "MODstore_deploy/market/.tmp-*/**",
+    "MODstore_deploy/market/coverage*/**",
+    "MODstore_deploy/market/coverage-*/**",
+    "MODstore_deploy/market/cov*.txt",
+    "MODstore_deploy/market/coverage_output.txt",
+    "MODstore_deploy/market/strict-errors*.txt",
+    "MODstore_deploy/market/strict-e*.txt",
+    "MODstore_deploy/market/out.txt",
+    "MODstore_deploy/market/err.txt",
+    "MODstore_deploy/market/test-results.json",
+    "MODstore_deploy/market/test-edge.wav",
     "MODstore_deploy/market/tmp_*.log",
     "MODstore_deploy/market/*.log",
     "MODstore_deploy/market/market-dist-upload.tgz",
@@ -66,6 +80,15 @@ DEFAULT_IGNORES: list[str] = [
     "MODstore_deploy/market_vue_baseline*.tar.gz",
     "MODstore_deploy/market-dist-*.zip",
     "MODstore_deploy/hero-video.mp4",
+    "MODstore_deploy/voice-e2e-result.png",
+    "MODstore_deploy/playwright-report/**",
+    "MODstore_deploy/tmp_*",
+    "MODstore_deploy/*.db*",
+    "MODstore_deploy/:memory:",
+    "MODstore_deploy/artifacts/*.log",
+    "MODstore_deploy/backups/**",
+    "MODstore_deploy/_generated_employee/**",
+    "MODstore_deploy/data/**",
     "*.mp4",
     "MODstore_deploy.zip",
     "xiu-ci.com_nginx.zip",
@@ -80,6 +103,15 @@ DEFAULT_IGNORES: list[str] = [
     "var/vibe_coding/**",
     "vibe-coding/test_vibe_*_data/**",
     "vibe-coding/test_vibe_data*/**",
+    # Static-site bundled/vendor artifacts.
+    "corp-butler/**/chunks/**",
+    "corp-butler/**/assets/**",
+    "corp-butler/**/vosk.wasm.js",
+    "corp-butler/**/vosk.worker.js",
+    "corp-butler/**/*.wasm",
+    "corp-butler/**/model.tar.gz",
+    # Generated marketing media outputs.
+    "marketing-assets/xc-brand-film/output/**",
     # Repo root mojibake/corrupt zero-byte file ("���"). retention-officer cleans manually.
     "\u17b9\u17b9\u17b9",
     "*\u17b9*",
@@ -107,6 +139,8 @@ def _glob_to_regex(glob: str) -> str:
     import re
 
     g = glob.replace("\\", "/")
+    if g.startswith("./"):
+        g = g[2:]
     out: list[str] = []
     i = 0
     while i < len(g):
@@ -137,6 +171,8 @@ def _match_any(path: str, globs: list[str]) -> bool:
 
     pp = path.replace("\\", "/")
     for g in globs:
+        if g.startswith("./"):
+            g = g[2:]
         try:
             if re.match(_glob_to_regex(g), pp):
                 return True

@@ -14,6 +14,7 @@
 
 返回结构写到 result["handoff"]，由 human_report 反映。
 """
+
 from __future__ import annotations
 
 import logging

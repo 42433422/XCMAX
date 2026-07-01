@@ -163,6 +163,22 @@ domains:
     check: python ../scripts/guard_alembic_single_head.py
     sync: null
 
+  - name: service-topology
+    owner: devops
+    enabled: true
+    # 服务拓扑 SSOT（第 11 域）：把散落的服务器事实（xiu-ci.com 硬编码 71 文件 / 端口散 100+ 文件）
+    # 收口成单一真相源 FHD/config/service_topology.yaml；派生四端常量 + 健康探针 JSON。
+    ssot: FHD/config/service_topology.yaml
+    derived:
+      - FHD/app/infrastructure/topology.py
+      - FHD/frontend/src/constants/topology.ts
+      - FHD/mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt
+      - FHD/config/topology.generated.json
+    mode: sync+verify
+    check: python scripts/dev/service_topology_ssot.py check
+    sync: python scripts/dev/service_topology_ssot.py generate --apply
+
   - name: mobile-tri-platform
     owner: mobile-platform
     enabled: true
@@ -184,3 +200,19 @@ domains:
     mode: lint
     check: python scripts/dev/ssot_plugins/mobile_tri_platform.py check
     sync: null
+
+  - name: neuro-bus-events
+    owner: neuro-platform
+    enabled: false  # Phase A: advisory only. Flip to true in Phase B (CI gate activation).
+    # NeuroBus 事件契约 SSOT:统一三流(NeuroBus 域事件 + AgentRun 事件 + 应用桥接)。
+    # canonical 命名 = code 中实际 emit 的字符串(dataclass 默认值即 canonical);
+    # 派生 Python 常量(非 Enum,字节级零破坏 string-equality 调用) + TS 类型 + OpenAPI schema。
+    # check 含 4 道校验:派生一致 + dataclass 默认值在 SSOT + orchestrator 字符串在 SSOT + OpenAPI schema 一致。
+    ssot: FHD/config/neuro_bus_events.yaml
+    derived:
+      - FHD/app/neuro_bus/event_types_generated.py
+      - FHD/frontend/src/types/agentRunEvents.generated.ts
+      - FHD/contracts/openapi.json#components.schemas.AgentRunEvent
+    mode: generate+verify
+    check: python scripts/dev/neuro_bus_events_ssot.py check
+    sync: python scripts/dev/neuro_bus_events_ssot.py generate --apply

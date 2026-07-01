@@ -12,6 +12,7 @@
 实际触发 prompt evolution 的工作由 employee_autonomy_service.run_employee_evolution_scan
 + admin API /api/admin/employee-autonomy/evolution/scan 完成，本模块不重复实现。
 """
+
 from __future__ import annotations
 
 import logging
@@ -77,13 +78,17 @@ def check_evolution_signal(
     needed = fail_count >= int(min_failures)
     recent_failures = []
     for r in rows[:3]:
-        recent_failures.append({
-            "task": (r.task or "")[:120],
-            "status": str(r.status or ""),
-            "failure_kind": str(r.failure_kind or ""),
-            "error_preview": (r.error_preview or "")[:150] if hasattr(r, "error_preview") else "",
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
+        recent_failures.append(
+            {
+                "task": (r.task or "")[:120],
+                "status": str(r.status or ""),
+                "failure_kind": str(r.failure_kind or ""),
+                "error_preview": (
+                    (r.error_preview or "")[:150] if hasattr(r, "error_preview") else ""
+                ),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+        )
 
     if needed:
         suggestion = (

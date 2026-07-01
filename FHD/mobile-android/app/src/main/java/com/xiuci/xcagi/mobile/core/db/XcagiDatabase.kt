@@ -29,6 +29,17 @@ data class ConversationListStateEntity(
     @ColumnInfo(name = "last_message_preview") val lastMessagePreview: String = "",
 )
 
+@Entity(tableName = "ai_circle_cache")
+data class AiCircleCacheEntity(
+    @PrimaryKey val postId: Int,
+    val employeeId: String?,
+    val authorName: String,
+    val sourceType: String,
+    val createdAt: String,
+    val json: String,
+    val cachedAt: Long = System.currentTimeMillis(),
+)
+
 @Entity(tableName = "approval_cache")
 data class ApprovalCacheEntity(
     @PrimaryKey val requestId: Int,
@@ -89,6 +100,18 @@ interface ConversationListStateDao {
         """
     )
     suspend fun upsertPreview(conversationId: String, timestamp: Long, preview: String)
+}
+
+@Dao
+interface AiCircleCacheDao {
+    @Query("SELECT * FROM ai_circle_cache ORDER BY postId DESC LIMIT 100")
+    suspend fun all(): List<AiCircleCacheEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(items: List<AiCircleCacheEntity>)
+
+    @Query("DELETE FROM ai_circle_cache")
+    suspend fun clear()
 }
 
 @Entity(tableName = "shipment_cache")
@@ -220,8 +243,9 @@ interface ModInfoCacheDao {
         ImReadStateEntity::class,
         ModInfoCacheEntity::class,
         ConversationListStateEntity::class,
+        AiCircleCacheEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = false,
 )
 abstract class XcagiDatabase : RoomDatabase() {
@@ -232,6 +256,7 @@ abstract class XcagiDatabase : RoomDatabase() {
     abstract fun imReadStateDao(): ImReadStateDao
     abstract fun modInfoCacheDao(): ModInfoCacheDao
     abstract fun conversationListStateDao(): ConversationListStateDao
+    abstract fun aiCircleCacheDao(): AiCircleCacheDao
 
     companion object {
         // 幂等守卫：install -r 保留旧 DB 时，列可能已存在，无条件 ADD COLUMN 会抛
@@ -321,6 +346,24 @@ abstract class XcagiDatabase : RoomDatabase() {
                         "ALTER TABLE conversation_list_state ADD COLUMN last_message_preview TEXT NOT NULL DEFAULT ''"
                     )
                 }
+            }
+        }
+
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS ai_circle_cache (
+                        postId INTEGER NOT NULL PRIMARY KEY,
+                        employeeId TEXT,
+                        authorName TEXT NOT NULL,
+                        sourceType TEXT NOT NULL,
+                        createdAt TEXT NOT NULL,
+                        json TEXT NOT NULL,
+                        cachedAt INTEGER NOT NULL
+                    )
+                    """.trimIndent()
+                )
             }
         }
     }

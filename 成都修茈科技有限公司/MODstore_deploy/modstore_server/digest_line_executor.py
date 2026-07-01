@@ -200,6 +200,183 @@ def _work_units_to_subtasks(
     return subtasks
 
 
+_VIBE_PREP_BREAKPOINT_PHRASES = (
+    "Vibe 预备任务生成断点",
+    "Vibe fallback 任务责任路由",
+    "template fallback 发生时必须进入",
+)
+
+
+def _is_vibe_prep_generation_breakpoint_unit(unit: VibeWorkUnit, *, line: str) -> bool:
+    """Vibe 预备 fallback 自举任务用本地证据验收，避免再进同一条慢 LLM 链路。"""
+    if (line or "").strip() != DISPATCH_PS:
+        return False
+    if str(getattr(unit, "list_kind", "") or "") != "patches":
+        return False
+    brief = str(getattr(unit, "task_brief", "") or "")
+    return any(p in brief for p in _VIBE_PREP_BREAKPOINT_PHRASES)
+
+
+def _verify_vibe_prep_generation_breakpoint_unit(
+    record_id: int, unit: VibeWorkUnit
+) -> Dict[str, Any]:
+    """快速闭环 Vibe 预备 fallback 任务：预备 MD、action-items、AI 交流圈都有证据即通过。"""
+    evidence: Dict[str, Any] = {
+        "kind": "vibe_prep_generation_breakpoint",
+        "record_id": int(record_id),
+        "unit_id": str(unit.unit_id or ""),
+    }
+    try:
+        from sqlalchemy import text as _sql
+
+        from modstore_server.digest_action_items import ensure_table, find_matching_item_ids
+        from modstore_server.models import DailyDigestRecord, get_engine, get_session_factory
+
+        sf = get_session_factory()
+        with sf() as session:
+            row = session.get(DailyDigestRecord, int(record_id))
+            if row is None:
+                return {
+                    "ok": False,
+                    "employee_id": unit.employee_id,
+                    "error": "digest record not found",
+                    "evidence": evidence,
+                }
+            day = str(getattr(row, "day", "") or "")
+            ps_md = str(getattr(row, "vibe_prep_ps_md", "") or "")
+            raw_meta = str(getattr(row, "vibe_prep_meta_json", "") or "")
+        meta: Dict[str, Any] = {}
+        if raw_meta.strip().startswith("{"):
+            try:
+                meta = json.loads(raw_meta)
+            except Exception:
+                meta = {}
+
+        fallback_reason = str(meta.get("fallback_reason") or "").strip()
+        evidence.update(
+            {
+                "day": day,
+                "fallback_reason": fallback_reason,
+                "ps_contains_breakpoint": "Vibe 预备任务生成断点" in ps_md,
+            }
+        )
+
+        ensure_table()
+        item_ids = find_matching_item_ids(
+            record_id=int(record_id),
+            employee_id=unit.employee_id,
+            kind="patch",
+            task_text=unit.task_brief,
+            day=day or None,
+        )
+        evidence["action_item_ids"] = item_ids
+
+        collab_ids: List[int] = []
+        if day:
+            eng = get_engine()
+            with eng.begin() as conn:
+                report_key = f"actions|{day}|{unit.employee_id}"
+                rows = conn.execute(
+                    _sql(
+                        "SELECT id FROM employee_collab_messages "
+                        "WHERE payload_json LIKE :pattern "
+                        "ORDER BY id DESC LIMIT 5"
+                    ),
+                    {"pattern": f"%{report_key}%"},
+                ).fetchall()
+            collab_ids = [int(r[0]) for r in rows]
+        evidence["collab_message_ids"] = collab_ids
+
+        missing: List[str] = []
+        if not fallback_reason:
+            missing.append("vibe_prep_meta_json.fallback_reason")
+        if not evidence["ps_contains_breakpoint"]:
+            missing.append("vibe_prep_ps_md breakpoint task")
+        if not item_ids:
+            missing.append("daily_action_items matched row")
+        if not collab_ids:
+            missing.append("employee_collab_messages actions report")
+        if missing:
+            return {
+                "ok": False,
+                "employee_id": unit.employee_id,
+                "error": "missing evidence: " + ", ".join(missing),
+                "evidence": evidence,
+            }
+        return {
+            "ok": True,
+            "employee_id": unit.employee_id,
+            "mode": "system_verified",
+            "result": "Vibe 预备 fallback 任务已由落库证据闭环",
+            "evidence": evidence,
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "verify vibe prep generation breakpoint failed record_id=%s unit=%s",
+            record_id,
+            getattr(unit, "unit_id", ""),
+        )
+        return {
+            "ok": False,
+            "employee_id": unit.employee_id,
+            "error": str(exc),
+            "evidence": evidence,
+        }
+
+
+def _split_local_verified_units(
+    units: Sequence[VibeWorkUnit],
+    *,
+    record_id: int,
+    line: str,
+    phase: str,
+) -> tuple[List[VibeWorkUnit], List[Dict[str, Any]], List[VibeWorkUnit]]:
+    if (phase or "").strip().upper() != "A":
+        return [], [], list(units)
+    local_units: List[VibeWorkUnit] = []
+    remote_units: List[VibeWorkUnit] = []
+    local_results: List[Dict[str, Any]] = []
+    for unit in units:
+        if _is_vibe_prep_generation_breakpoint_unit(unit, line=line):
+            local_units.append(unit)
+            local_results.append(_verify_vibe_prep_generation_breakpoint_unit(record_id, unit))
+        else:
+            remote_units.append(unit)
+    return local_units, local_results, remote_units
+
+
+def _mark_local_verified_action_items_merged(results: Sequence[Dict[str, Any]]) -> Dict[str, Any]:
+    """本地 evidence 已验收的自举任务没有后续员工执行，直接推进到 merged。"""
+    ids: List[int] = []
+    for result in results:
+        if not bool(result.get("ok")):
+            continue
+        evidence = result.get("evidence") if isinstance(result.get("evidence"), dict) else {}
+        for raw_id in evidence.get("action_item_ids") or []:
+            try:
+                iid = int(raw_id)
+            except (TypeError, ValueError):
+                continue
+            if iid not in ids:
+                ids.append(iid)
+    if not ids:
+        return {"ok": True, "updated": 0, "matched_ids": []}
+
+    updated = 0
+    advanced: List[int] = []
+    try:
+        from modstore_server.digest_action_items import set_status_if_advanced
+
+        for iid in ids:
+            if set_status_if_advanced(iid, "merged"):
+                updated += 1
+                advanced.append(iid)
+        return {"ok": True, "updated": updated, "matched_ids": advanced, "seen_ids": ids}
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("local verified action_items merge writeback failed")
+        return {"ok": False, "error": str(exc), "updated": updated, "matched_ids": advanced}
+
+
 def _filter_units_for_line(
     units: Sequence[VibeWorkUnit],
     *,
@@ -421,13 +598,8 @@ def execute_digest_line_work_units(
             persist_line_execute_on_digest_record(record_id, merged)
             return {"ok": True, "record_id": record_id, **run_payload}
 
-        subtasks = _work_units_to_subtasks(
-            units,
-            digest_record_id=int(record_id),
-            base_version=base_version,
-            dispatch_line=line,
-            project_root=root,
-            digest_subject=str(ctx.get("subject") or ""),
+        local_units, local_results, remote_units = _split_local_verified_units(
+            units, record_id=int(record_id), line=line, phase=run_phase
         )
 
         try:
@@ -448,15 +620,35 @@ def execute_digest_line_work_units(
         else:
             allow_high_risk = bool(allow_high_risk_real_run)
 
-        from modstore_server.employee_orchestrator import dispatch_subtasks
+        remote_out: Dict[str, Any] = {"ok": True, "results": []}
+        if remote_units:
+            subtasks = _work_units_to_subtasks(
+                remote_units,
+                digest_record_id=int(record_id),
+                base_version=base_version,
+                dispatch_line=line,
+                project_root=root,
+                digest_subject=str(ctx.get("subject") or ""),
+            )
+            from modstore_server.employee_orchestrator import dispatch_subtasks
 
-        dispatch_out = dispatch_subtasks(
-            subtasks,
-            created_by_user_id=_resolve_user_id(),
-            max_concurrency=conc,
-            allow_high_risk_real_run=allow_high_risk,
-            bench_llm_override=_platform_bench_override(),
-        )
+            remote_out = dispatch_subtasks(
+                subtasks,
+                created_by_user_id=_resolve_user_id(),
+                max_concurrency=conc,
+                allow_high_risk_real_run=allow_high_risk,
+                bench_llm_override=_platform_bench_override(),
+            )
+
+        remote_results = list(remote_out.get("results") or [])
+        all_results = [*local_results, *remote_results]
+        dispatch_out = {
+            "ok": bool(remote_out.get("ok")) and all(bool(r.get("ok")) for r in local_results),
+            "results": all_results,
+            "handoff_chain": remote_out.get("handoff_chain") or [],
+            "local_verified_count": len(local_units),
+            "remote_dispatched_count": len(remote_units),
+        }
 
         completed_at = datetime.now(timezone.utc).isoformat()
         run_payload = {
@@ -474,6 +666,9 @@ def execute_digest_line_work_units(
                 "ok": dispatch_out.get("ok"),
                 "results_count": len(dispatch_out.get("results") or []),
                 "handoff_chain": dispatch_out.get("handoff_chain") or [],
+                "local_verified_count": dispatch_out.get("local_verified_count", 0),
+                "remote_dispatched_count": dispatch_out.get("remote_dispatched_count", 0),
+                "local_results": local_results,
             },
             "started_at": started_at,
             "completed_at": completed_at,
@@ -488,6 +683,10 @@ def execute_digest_line_work_units(
                 run_payload["action_items_writeback"] = sync_dispatched_for_work_units(
                     int(record_id), units
                 )
+                if local_results:
+                    run_payload["action_items_writeback"]["local_verified_merge"] = (
+                        _mark_local_verified_action_items_merged(local_results)
+                    )
             except Exception:
                 logger.exception("action_items dispatch writeback failed record_id=%s", record_id)
 

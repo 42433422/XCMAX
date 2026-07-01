@@ -310,5 +310,6 @@
 [routes->services] app/fastapi_routes/mobile_api_extensions.py:304
 [giant-file] app/fastapi_routes/mobile_api.py
 [giant-file] app/services/mobile_relay_desktop_client.py
-[skip] modstore_server not found at e:\成都修茈科技有限公司\MODstore_deploy\modstore_server
-[skip] modstore_server not found at e:/成都修茈科技有限公司/MODstore_deploy/modstore_server
+[giant-file] modstore_server/fhd_routes_api.py
+[giant-file] modstore_server/digest_vibe_prep.py
+[giant-file] modstore_server/daily_digest.py

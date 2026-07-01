@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
@@ -33,6 +34,26 @@ _SECTION_RE = re.compile(
 _ITEM_RE = re.compile(r"(?m)^(?P<indent>[ \t]*)(?:[-*]|\d+\.)\s+(?P<text>.+?)\s*$")
 _PRIORITY_RE = re.compile(r"\bP([0-2])\b")
 _PATH_RE = re.compile(r"`([^`]*/[^`]*)`")
+_LOW_SIGNAL_PHRASES = (
+    "核对 depends_on 文档与联调说明是否仍与 manifest 一致",
+    "复核 handlers 注册与 yuangon 目录结构一致",
+    "暂无 recent_failures",
+    "当前无明确证据驱动更新",
+    "当前无明确证据驱动补丁",
+    "不派发空补丁",
+    "基础设施/llm 瞬断",
+    "server disconnected without sending a response",
+    "修复 p-s 页面标题/head 管理",
+    "审核前端全局标题服务/路由元数据契约",
+    "将标题契约写入 p-s 巡检 runbook",
+    "增加路由标题一致性断言",
+    "把 p-s title/route 对照表纳入每日巡检验收项",
+    "排查 p-w 静态站资源加载失败",
+    "为 p-w 资源加载失败补充可重复巡检页面清单",
+    "修复 ai 员工商品页 catalog 404",
+    "增加商品详情页存在性检查",
+    "复核沙箱测试页 403 是否符合权限预期",
+)
 
 
 def _default_priority(*, kind: str) -> str:
@@ -62,6 +83,41 @@ def _infer_priority(text: str, *, kind: str, section_priority: str, indent: int)
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _normalize_action_text(text: str) -> str:
+    s = str(text or "")
+    s = re.sub(r"\*\*P[0-3]\*\*", "", s, flags=re.I)
+    s = re.sub(r"\bP[0-3]\b", "", s, flags=re.I)
+    s = re.sub(r"`([^`]*)`", r"\1", s)
+    s = re.sub(r"\s+", " ", s).strip().lower()
+    return s
+
+
+def _is_low_signal_action_item(text: str) -> bool:
+    if (os.environ.get("MODSTORE_ACTION_ITEMS_KEEP_LOW_SIGNAL") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return False
+    core = _normalize_action_text(text)
+    raw = str(text or "").lower()
+    if "修复近期失败" in core:
+        if "status': 'skipped'" in raw or '"status": "skipped"' in raw:
+            return True
+        if "blocked_by_risk_gate" in raw and ("error': ''" in raw or '"error": ""' in raw):
+            return True
+        if ("status': 'warning'" in raw or '"status": "warning"' in raw) and (
+            "error': ''" in raw or '"error": ""' in raw
+        ):
+            return True
+        if ("你是 modstore 在岗 ai 员工" in core or "员工大会" in core) and (
+            "llm_tokens': 0" in raw or '"llm_tokens": 0' in raw
+        ):
+            return True
+    return any(phrase.lower() in core for phrase in _LOW_SIGNAL_PHRASES)
 
 
 def _dedupe_key(day: str, kind: str, eid: str, text: str) -> str:
@@ -107,6 +163,8 @@ def ensure_table() -> None:
             "CREATE INDEX IF NOT EXISTS ix_dai_day ON daily_action_items (day)",
             "CREATE INDEX IF NOT EXISTS ix_dai_kind ON daily_action_items (kind)",
             "CREATE INDEX IF NOT EXISTS ix_dai_status ON daily_action_items (status)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_day_kind_status ON daily_action_items (day, kind, status)",
+            "CREATE INDEX IF NOT EXISTS ix_dai_record_id ON daily_action_items (record_id)",
         ):
             try:
                 conn.execute(_sql(stmt))
@@ -143,6 +201,8 @@ def _parse_markdown(markdown: str, *, kind: str) -> List[Dict[str, Any]]:
             ) or low.startswith(("scope", "pack_version")):
                 continue
             if _is_noise_sub_item(item_text, indent):
+                continue
+            if _is_low_signal_action_item(item_text):
                 continue
             pr = _infer_priority(
                 item_text, kind=kind, section_priority=section_priority, indent=indent
@@ -228,6 +288,7 @@ def parse_and_store_action_items(
     from sqlalchemy import text as _sql
 
     inserted = {"patch": 0, "update": 0}
+    compacted = {"closed_low_signal": 0, "closed_duplicates": 0}
     eng = _engine()
     with eng.begin() as conn:
         for r in rows:
@@ -249,13 +310,19 @@ def parse_and_store_action_items(
                 inserted[r["kind"]] = inserted.get(r["kind"], 0) + 1
             except Exception:
                 logger.exception("action_items: insert failed key=%s", r.get("dedupe_key"))
+        try:
+            compacted = _compact_open_backlog(conn)
+        except Exception:
+            logger.exception("action_items: compact open backlog failed")
     logger.info(
-        "action_items stored day=%s patch=%s update=%s",
+        "action_items stored day=%s patch=%s update=%s closed_low_signal=%s closed_duplicates=%s",
         day,
         inserted.get("patch"),
         inserted.get("update"),
+        compacted.get("closed_low_signal"),
+        compacted.get("closed_duplicates"),
     )
-    return {"ok": True, **inserted}
+    return {"ok": True, **inserted, **compacted}
 
 
 def _normalize_item_row(it: Dict[str, Any]) -> Dict[str, Any]:
@@ -311,6 +378,75 @@ def list_action_items(
     return out
 
 
+def _compact_open_backlog(conn: Any, *, limit: int = 10000) -> Dict[str, int]:
+    """关闭低信号 open 项和跨天重复项，保持断点清单短而可执行。"""
+    from sqlalchemy import bindparam
+    from sqlalchemy import text as _sql
+
+    rows = list(
+        conn.execute(
+            _sql(
+                "SELECT id, day, kind, employee_id, line, text FROM daily_action_items "
+                "WHERE status='open' ORDER BY day DESC, id DESC LIMIT :lim"
+            ),
+            {"lim": max(1, int(limit))},
+        ).mappings()
+    )
+    now = _now()
+    close_low_signal: List[int] = []
+    close_duplicates: List[int] = []
+    seen: set[tuple[str, str, str]] = set()
+    for row in rows:
+        item_id = int(row.get("id") or 0)
+        text = str(row.get("text") or "")
+        if item_id <= 0:
+            continue
+        if _is_low_signal_action_item(text):
+            close_low_signal.append(item_id)
+            continue
+        normalized = _normalize_match_text(text)
+        if not normalized:
+            continue
+        key = (
+            str(row.get("kind") or ""),
+            str(row.get("employee_id") or ""),
+            normalized,
+        )
+        if key in seen:
+            close_duplicates.append(item_id)
+        else:
+            seen.add(key)
+
+    def _close(ids: List[int]) -> int:
+        if not ids:
+            return 0
+        conn.execute(
+            _sql(
+                "UPDATE daily_action_items SET status='closed', updated_at=:u "
+                "WHERE status='open' AND id IN :ids"
+            ).bindparams(bindparam("ids", expanding=True)),
+            {"u": now, "ids": sorted(set(ids))},
+        )
+        return len(set(ids))
+
+    return {
+        "closed_low_signal": _close(close_low_signal),
+        "closed_duplicates": _close(close_duplicates),
+    }
+
+
+def compact_open_backlog() -> Dict[str, Any]:
+    """手动收敛现有 open backlog；用于运维和测试。"""
+    try:
+        ensure_table()
+    except Exception as exc:  # noqa: BLE001
+        return {"ok": False, "error": str(exc), "closed_low_signal": 0, "closed_duplicates": 0}
+    eng = _engine()
+    with eng.begin() as conn:
+        out = _compact_open_backlog(conn)
+    return {"ok": True, **out}
+
+
 def latest_day(*, kind: Optional[str] = None) -> str:
     try:
         ensure_table()
@@ -332,12 +468,7 @@ def latest_day(*, kind: Optional[str] = None) -> str:
 
 def _normalize_match_text(text: str) -> str:
     """条目 / WorkUnit 文本归一化，便于跨解析器模糊匹配。"""
-    s = str(text or "")
-    s = re.sub(r"\*\*P[0-3]\*\*", "", s, flags=re.I)
-    s = re.sub(r"\bP[0-3]\b", "", s, flags=re.I)
-    s = re.sub(r"`[^`]*`", "", s)
-    s = re.sub(r"\s+", " ", s).strip().lower()
-    return s[:400]
+    return _normalize_action_text(text)[:400]
 
 
 def _text_matches(item_text: str, task_text: str) -> bool:
@@ -487,16 +618,49 @@ def sync_merged_on_deploy(
 
 def stats(*, kind: Optional[str] = None, day: Optional[str] = None) -> Dict[str, Any]:
     """完成率/分布指标（Agentic Business OS 趋势用）。"""
-    items = list_action_items(kind=kind, day=day, limit=2000)
-    total = len(items)
+    try:
+        ensure_table()
+    except Exception:
+        return {
+            "total": 0,
+            "done": 0,
+            "completion_rate": 0.0,
+            "by_status": {},
+            "by_line": {},
+            "by_priority": {},
+        }
+    from sqlalchemy import text as _sql
+
+    where = []
+    params: Dict[str, Any] = {}
+    if kind:
+        where.append("kind=:kind")
+        params["kind"] = kind
+    if day:
+        where.append("day=:day")
+        params["day"] = day
+    sql = "SELECT status, line, priority, COUNT(*) AS n FROM daily_action_items"
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " GROUP BY status, line, priority"
+
+    total = 0
     by_status: Dict[str, int] = {}
     by_line: Dict[str, int] = {}
     by_priority: Dict[str, int] = {}
-    for it in items:
-        by_status[it["status"]] = by_status.get(it["status"], 0) + 1
-        by_line[it["line"]] = by_line.get(it["line"], 0) + 1
-        if it.get("priority"):
-            by_priority[it["priority"]] = by_priority.get(it["priority"], 0) + 1
+    eng = _engine()
+    with eng.begin() as conn:
+        rows = conn.execute(_sql(sql), params).mappings()
+        for row in rows:
+            n = int(row.get("n") or 0)
+            total += n
+            status = str(row.get("status") or "")
+            line = str(row.get("line") or "")
+            priority = str(row.get("priority") or "")
+            by_status[status] = by_status.get(status, 0) + n
+            by_line[line] = by_line.get(line, 0) + n
+            if priority:
+                by_priority[priority] = by_priority.get(priority, 0) + n
     done = by_status.get("merged", 0) + by_status.get("closed", 0)
     return {
         "total": total,

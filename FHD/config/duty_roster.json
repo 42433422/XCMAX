@@ -203,8 +203,8 @@
             "change-request-auditor",
             "github-pr-gatekeeper",
             "mobile-android-release-officer",
-            "mobile-ios-release-officer",
-            "mobile-harmony-release-officer"
+            "mobile-harmony-release-officer",
+            "mobile-ios-release-officer"
           ]
         },
         "ota-monitor": {
@@ -221,6 +221,7 @@
             "daily-orchestrator",
             "intake-dispatcher",
             "task-router-officer",
+            "github-pr-gatekeeper",
             "dbops-engineer",
             "llm-ops-engineer"
           ]
@@ -316,8 +317,8 @@
         "enterprise-adoption-officer",
         "delivery-receipt-officer",
         "mobile-android-release-officer",
-        "mobile-ios-release-officer",
-        "mobile-harmony-release-officer"
+        "mobile-harmony-release-officer",
+        "mobile-ios-release-officer"
       ]
     },
     "quality-and-docs": {

@@ -8,7 +8,7 @@ name: archive-hygiene
 # workflow 拒绝合入。
 #
 # 对应清理脚本：scripts/cleanup_archive_secrets.py（--check / --strict 双模式）
-# 详细规则：    SECURITY_CLEANUP_REPORT.md
+# 详细规则：    docs/reports/SECURITY_CLEANUP_REPORT.md
 # 设计取舍：
 #   - 仅依赖 Python 3 stdlib，无第三方依赖，CI 启动 < 5s。
 #   - 把脚本执行结果 + 报告以 artifact 形式上传，便于审计/排错。
@@ -79,7 +79,7 @@ jobs:
         with:
           name: archive-hygiene-report-${{ github.run_id }}
           path: |
-            SECURITY_CLEANUP_REPORT.md
+            docs/reports/SECURITY_CLEANUP_REPORT.md
             _archive/.redacted-snapshots/
           retention-days: 30
           if-no-files-found: ignore

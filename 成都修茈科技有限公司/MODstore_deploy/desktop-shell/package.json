@@ -13,31 +13,10 @@
   },
   "scripts": {
     "start": "electron .",
-    "dist:win": "electron-builder --win --x64"
+    "dist:win": "electron-builder --win --x64 --publish never --config electron-builder.config.cjs"
   },
   "devDependencies": {
-    "electron": "^39.8.5",
-    "electron-builder": "^24.13.3"
-  },
-  "build": {
-    "appId": "com.xiuci.xcagi.desktop",
-    "productName": "XCAGI",
-    "artifactName": "XCAGI-Personal-Setup-${version}-${arch}.${ext}",
-    "publish": [
-      { "provider": "generic", "url": "https://xiu-ci.com/xcagi-v10.0.0/personal/" }
-    ],
-    "directories": { "output": "dist" },
-    "files": ["main.js", "preload.js", "package.json"],
-    "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }]
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "XCAGI"
-    }
+    "electron": "^31.7.6",
+    "electron-builder": "^26.15.3"
   }
 }

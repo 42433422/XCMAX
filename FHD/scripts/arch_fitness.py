@@ -14,7 +14,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 APP_DIR = REPO_ROOT / "app"
-MODSTORE_SERVER_DIR = Path(r"e:\成都修茈科技有限公司\MODstore_deploy\modstore_server")
+MODSTORE_SERVER_DIR = REPO_ROOT / "MODstore" / "modstore_server"
 
 MAX_FILE_LINES = 500
 BASELINE_FILE = Path(__file__).resolve().parent / "arch_fitness_baseline.txt"

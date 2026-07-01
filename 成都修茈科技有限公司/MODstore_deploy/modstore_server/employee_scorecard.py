@@ -3,6 +3,7 @@
 对应「10 项成熟度要求」第 8 项 — 会承担结果：
 每个员工要有最近任务、成功率、失败原因、处理时长、影响范围。
 """
+
 from __future__ import annotations
 
 from collections import Counter
@@ -87,9 +88,7 @@ def get_employee_scorecard(
                 "note": "时间窗内无执行记录",
             }
 
-        success_count = int(
-            base_q.filter(EmployeeExecutionMetric.status == "success").count() or 0
-        )
+        success_count = int(base_q.filter(EmployeeExecutionMetric.status == "success").count() or 0)
         failure_count = total - success_count
 
         # 失败原因 top N（按 failure_kind 聚合）
@@ -109,8 +108,7 @@ def get_employee_scorecard(
             .all()
         )
         failure_breakdown = [
-            {"failure_kind": _ensure_aware(k) or "unknown", "count": int(c)}
-            for k, c in fail_rows
+            {"failure_kind": _ensure_aware(k) or "unknown", "count": int(c)} for k, c in fail_rows
         ]
 
         # 平均处理时长
@@ -149,11 +147,7 @@ def get_employee_scorecard(
             or 0
         )
 
-        recent_rows = (
-            base_q.order_by(EmployeeExecutionMetric.id.desc())
-            .limit(limit_recent)
-            .all()
-        )
+        recent_rows = base_q.order_by(EmployeeExecutionMetric.id.desc()).limit(limit_recent).all()
         recent_tasks = _build_recent_task_list(recent_rows, limit=limit_recent)
 
         last_row = (
@@ -201,7 +195,13 @@ def list_all_employee_scorecards(
     except (TypeError, ValueError):
         days, top_n = 7, 50
 
-    valid_sort = {"total_tasks", "success_rate", "avg_duration_ms", "failure_count", "total_llm_tokens"}
+    valid_sort = {
+        "total_tasks",
+        "success_rate",
+        "avg_duration_ms",
+        "failure_count",
+        "total_llm_tokens",
+    }
     if sort_by not in valid_sort:
         sort_by = "total_tasks"
 
@@ -263,7 +263,9 @@ def list_all_employee_scorecards(
                 "success_rate": round(success / total, 4) if total else 0.0,
                 "avg_duration_ms": round(agg["total_duration_ms"] / total, 1) if total else 0.0,
                 "total_llm_tokens": agg["total_llm_tokens"],
-                "top_failure_kind": (agg["failure_kinds"].most_common(1)[0][0] if agg["failure_kinds"] else ""),
+                "top_failure_kind": (
+                    agg["failure_kinds"].most_common(1)[0][0] if agg["failure_kinds"] else ""
+                ),
                 "last_run_at": agg["last_run_at"],
             }
         )

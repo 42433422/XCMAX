@@ -597,6 +597,17 @@ constructor(
                 loadWalletBalance()
                 loadNavMenu()
                 refreshModInfos()
+                try {
+                    withTimeout(10_000) {
+                        syncRepo.pullAndCache().onSuccess { summary ->
+                            if (summary.circleSynced) {
+                                _aiCirclePosts.value = repo.loadCachedAiCirclePosts()
+                            }
+                        }
+                    }
+                } catch (_: Exception) {
+                    /* 冷启动同步失败不阻塞进入 App，后台 Worker 会继续重试 */
+                }
             }
         }
     }
@@ -2214,6 +2225,16 @@ constructor(
     fun loadAiCirclePosts(showError: Boolean = false) =
             viewModelScope.launch {
                 _aiCircleLoading.value = true
+                val cached = repo.loadCachedAiCirclePosts()
+                if (cached.isNotEmpty()) {
+                    _aiCirclePosts.value = cached
+                }
+                val syncResult = syncRepo.pullAndCache()
+                if (syncResult.getOrNull()?.circleSynced == true) {
+                    _aiCirclePosts.value = repo.loadCachedAiCirclePosts()
+                    _aiCircleLoading.value = false
+                    return@launch
+                }
                 repo.loadAiCirclePosts()
                         .onSuccess { _aiCirclePosts.value = it }
                         .onFailure {

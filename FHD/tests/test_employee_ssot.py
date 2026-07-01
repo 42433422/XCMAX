@@ -130,7 +130,7 @@ def test_mobile_employee_ssot_payload_matches_kotlin_dto():
 
 def test_digest_dispatch_derives_from_roster_ssot():
     """MODstore digest 产线路由派生自 roster SSOT（生成的 duty_roster），覆盖全编制。"""
-    modstore_dir = FHD / "MODstore"
+    modstore_dir = REPO / "成都修茈科技有限公司" / "MODstore_deploy"
     if str(modstore_dir) not in sys.path:
         sys.path.insert(0, str(modstore_dir))
     from modstore_server.digest_vibe_line_dispatch import build_employee_dispatch_map

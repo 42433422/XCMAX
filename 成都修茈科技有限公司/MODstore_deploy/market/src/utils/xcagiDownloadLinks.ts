@@ -24,7 +24,8 @@ export function xcagiDownloadFileName(
 ): string {
   const label = sku === 'personal' ? 'Personal' : 'Enterprise'
   if (platform === 'android') return `XCAGI-${label}-Android-${androidVersion}.apk`
-  if (platform === 'mac') return `XCAGI-${label}-${version}-mac-${macArch}.dmg`
+  // macOS artifacts live under SKU-specific directories, so the file name itself is SKU-neutral.
+  if (platform === 'mac') return `XCAGI-${version}-mac-${macArch}.dmg`
   return `XCAGI-${label}-Setup-${version}-x64.exe`
 }
 

@@ -29,9 +29,7 @@ _TITLE_PREFIX = "[员工交流圈]"
 
 
 def _enabled() -> bool:
-    raw = (
-        (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
-    )
+    raw = (os.environ.get("MODSTORE_COLLAB_REPORTER_ENABLED", "1") or "").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -205,18 +203,14 @@ def _post_report(
             "error": out.get("error", ""),
         }
     except Exception:
-        logger.exception(
-            "collab reporter: post failed key=%s dept=%s", report_key, dept_key
-        )
+        logger.exception("collab reporter: post failed key=%s dept=%s", report_key, dept_key)
         return {"ok": False, "skipped": False, "thread_id": tid, "error": "exception"}
 
 
 # ── 6 类 loop 产出的汇报入口 ─────────────────────────────────────────────────
 
 
-def report_meeting_minutes(
-    *, record_id: int, day: str, minutes_html: str
-) -> Dict[str, Any]:
+def report_meeting_minutes(*, record_id: int, day: str, minutes_html: str) -> Dict[str, Any]:
     """员工大会纪要 → company 线程，sender=meeting-chair。"""
     try:
         from modstore_server.daily_digest import _html_to_text_excerpt
@@ -245,14 +239,15 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
 
         items = list_action_items(day=day, record_id=record_id, limit=2000)
     except Exception:
-        logger.exception(
-            "collab reporter: list_action_items failed day=%s rid=%s", day, record_id
-        )
+        logger.exception("collab reporter: list_action_items failed day=%s rid=%s", day, record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
     by_emp: Dict[str, List[Dict[str, Any]]] = {}
     labels: Dict[str, str] = {}
     for it in items:
+        status = str(it.get("status") or "open").strip().lower()
+        if status in ("closed", "merged"):
+            continue
         eid = str(it.get("employee_id") or "").strip()
         if not eid:
             continue
@@ -270,9 +265,7 @@ def report_action_items(*, day: str, record_id: int) -> Dict[str, Any]:
             txt = _excerpt(str(it.get("text") or ""), 200)
             lines.append(f"- **{pri}** [{kind}] {txt}")
         label = labels.get(eid, eid)
-        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(
-            lines
-        )
+        md = f"🗂️ **{label} · 今日行动条目（{day}）** 共 {len(rows)} 项\n\n" + "\n".join(lines)
         res = _post_report(
             dept_key=_dept_for_employee(eid),
             sender_employee_id=eid,
@@ -380,9 +373,7 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
             status = str(row.status or "")
             diff = _excerpt(str(row.diff_explanation or ""), 1500)
     except Exception:
-        logger.exception(
-            "collab reporter: load evolution failed id=%s", evolution_record_id
-        )
+        logger.exception("collab reporter: load evolution failed id=%s", evolution_record_id)
         return {"ok": False, "skipped": True, "error": "query_failed"}
 
     md = (
@@ -402,14 +393,59 @@ def report_evolution(*, evolution_record_id: int) -> Dict[str, Any]:
     )
 
 
+def report_execution_metric(*, metric_id: int) -> Dict[str, Any]:
+    """任意员工执行指标 → 员工所在部门线程。"""
+    try:
+        from modstore_server.models import EmployeeExecutionMetric, get_session_factory
+
+        sf = get_session_factory()
+        with sf() as session:
+            row = session.get(EmployeeExecutionMetric, int(metric_id))
+            if row is None:
+                return {"ok": False, "skipped": True, "error": "not_found"}
+            employee_id = str(row.employee_id or "").strip()
+            task = _excerpt(str(row.task or ""), 360)
+            status = str(row.status or "").strip() or "unknown"
+            duration_ms = float(row.duration_ms or 0.0)
+            llm_tokens = int(row.llm_tokens or 0)
+            error = _excerpt(str(row.error or ""), 800)
+            failure_kind = str(getattr(row, "failure_kind", "") or "").strip()
+    except Exception:
+        logger.exception("collab reporter: load execution metric failed id=%s", metric_id)
+        return {"ok": False, "skipped": True, "error": "query_failed"}
+
+    ok = status == "success"
+    icon = "✅" if ok else "❌"
+    title = "员工任务完成" if ok else "员工任务失败"
+    lines = [
+        f"{icon} **{title}** · {employee_id or 'unknown'}",
+        "",
+        f"- 任务：{task or '（无任务摘要）'}",
+        f"- 状态：{status}；耗时：{duration_ms:.0f} ms；LLM tokens：{llm_tokens}",
+    ]
+    if failure_kind:
+        lines.append(f"- 失败类型：{failure_kind}")
+    if error:
+        lines.append(f"- 问题摘要：{error}")
+    return _post_report(
+        dept_key=_dept_for_employee(employee_id),
+        sender_employee_id=employee_id,
+        report_key=f"metric|{int(metric_id)}",
+        source="execution_metric",
+        markdown="\n".join(lines),
+        payload_extra={
+            "metric_id": int(metric_id),
+            "status": status,
+            "failure_kind": failure_kind,
+        },
+    )
+
+
 def report_staged_change(
     *, staged_id: int, branch: str, files: int, pr_url: str = ""
 ) -> Dict[str, Any]:
     """daily-orchestrator 的代码改动（staged change / PR）→ company 线程。"""
-    md = (
-        f"🛠️ **daily-orchestrator 自动改动**\n\n"
-        f"分支：`{branch}`\n变更文件：{int(files)} 个"
-    )
+    md = f"🛠️ **daily-orchestrator 自动改动**\n\n" f"分支：`{branch}`\n变更文件：{int(files)} 个"
     if pr_url:
         md += f"\nPR：{pr_url}"
     return _post_report(

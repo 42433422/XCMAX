@@ -12,6 +12,7 @@
 把结果写到 perceived["task_classification"] 让 LLM 也能感知到任务类型。
 human_report 在「发现什么」段反映。
 """
+
 from __future__ import annotations
 
 import logging
@@ -25,42 +26,179 @@ logger = logging.getLogger(__name__)
 # 每项：(category, [关键词列表], suggested_target_prefix)
 # suggested_target_prefix 是建议目标员工的 employee_id 前缀（不是硬指派）
 _CATEGORY_RULES: List[Tuple[str, List[str], str]] = [
-    ("security", [
-        "安全", "漏洞", "越权", "sql注入", "xss", "csrf", "rce", "密钥泄露",
-        "权限绕过", "敏感数据", "加密", "证书过期", "鉴权", "认证失败",
-        "security", "vulnerability", "cve", "exploit", "leak", "secret",
-    ], "security-"),
-    ("bug", [
-        "bug", "缺陷", "报错", "错误", "异常", "崩溃", "crash", "故障",
-        "排错", "排查问题", "修复", "fix", "broken", "失败", "不工作",
-        "无法", "无效", "出错", "exception", "traceback", "error",
-    ], ""),
-    ("release", [
-        "发布", "上线", "deploy", "deployment", "rollback", "回滚",
-        "上线版本", "release", "ship", "发版", "灰度", "blue-green",
-    ], "release-"),
-    ("ops", [
-        "运维", "ops", "部署", "重启", "服务挂了", "磁盘", "cpu", "内存",
-        "监控", "告警", "alert", "incident", "线上", "线上服务", "健康检查",
-        "host probe", "机器", "节点", "k8s", "pod", "容器",
-    ], "host-"),
-    ("test", [
-        "测试", "test", "回归", "单测", "unit test", "集成测试", "e2e",
-        "覆盖率", "coverage", "测试用例", "test case", "qa", "质检",
-        "验证", "verify", "断言", "assert",
-    ], "qa-"),
-    ("doc", [
-        "文档", "doc", "documentation", "readme", "使用说明", "操作手册",
-        "runbook", "knowledge", "知识库", "wiki", "整理文档", "更新文档",
-    ], "doc-"),
-    ("feature", [
-        "需求", "feature", "新功能", "实现", "开发", "增加", "添加",
-        "支持", "改造", "重构", "refactor", "enhancement",
-    ], ""),
-    ("handoff", [
-        "转交", "转给", "移交", "delegate", "handoff", "不归我", "不是我",
-        "交给", "转给同事", "@",
-    ], ""),
+    (
+        "security",
+        [
+            "安全",
+            "漏洞",
+            "越权",
+            "sql注入",
+            "xss",
+            "csrf",
+            "rce",
+            "密钥泄露",
+            "权限绕过",
+            "敏感数据",
+            "加密",
+            "证书过期",
+            "鉴权",
+            "认证失败",
+            "security",
+            "vulnerability",
+            "cve",
+            "exploit",
+            "leak",
+            "secret",
+        ],
+        "security-",
+    ),
+    (
+        "bug",
+        [
+            "bug",
+            "缺陷",
+            "报错",
+            "错误",
+            "异常",
+            "崩溃",
+            "crash",
+            "故障",
+            "排错",
+            "排查问题",
+            "修复",
+            "fix",
+            "broken",
+            "失败",
+            "不工作",
+            "无法",
+            "无效",
+            "出错",
+            "exception",
+            "traceback",
+            "error",
+        ],
+        "",
+    ),
+    (
+        "release",
+        [
+            "发布",
+            "上线",
+            "deploy",
+            "deployment",
+            "rollback",
+            "回滚",
+            "上线版本",
+            "release",
+            "ship",
+            "发版",
+            "灰度",
+            "blue-green",
+        ],
+        "release-",
+    ),
+    (
+        "ops",
+        [
+            "运维",
+            "ops",
+            "部署",
+            "重启",
+            "服务挂了",
+            "磁盘",
+            "cpu",
+            "内存",
+            "监控",
+            "告警",
+            "alert",
+            "incident",
+            "线上",
+            "线上服务",
+            "健康检查",
+            "host probe",
+            "机器",
+            "节点",
+            "k8s",
+            "pod",
+            "容器",
+        ],
+        "host-",
+    ),
+    (
+        "test",
+        [
+            "测试",
+            "test",
+            "回归",
+            "单测",
+            "unit test",
+            "集成测试",
+            "e2e",
+            "覆盖率",
+            "coverage",
+            "测试用例",
+            "test case",
+            "qa",
+            "质检",
+            "验证",
+            "verify",
+            "断言",
+            "assert",
+        ],
+        "qa-",
+    ),
+    (
+        "doc",
+        [
+            "文档",
+            "doc",
+            "documentation",
+            "readme",
+            "使用说明",
+            "操作手册",
+            "runbook",
+            "knowledge",
+            "知识库",
+            "wiki",
+            "整理文档",
+            "更新文档",
+        ],
+        "doc-",
+    ),
+    (
+        "feature",
+        [
+            "需求",
+            "feature",
+            "新功能",
+            "实现",
+            "开发",
+            "增加",
+            "添加",
+            "支持",
+            "改造",
+            "重构",
+            "refactor",
+            "enhancement",
+        ],
+        "",
+    ),
+    (
+        "handoff",
+        [
+            "转交",
+            "转给",
+            "移交",
+            "delegate",
+            "handoff",
+            "不归我",
+            "不是我",
+            "交给",
+            "转给同事",
+            "@",
+        ],
+        "",
+    ),
 ]
 
 
@@ -123,7 +261,9 @@ def classify_task(task_text: str) -> Dict[str, Any]:
     if cat_first == "handoff":
         reason = f"任务提到转交关键词（{', '.join(kws_first[:3])}），建议转交"
     elif should_handoff:
-        reason = f"判断为 {cat_first}（命中：{', '.join(kws_first[:3])}），但同时也提到转交，可考虑转交"
+        reason = (
+            f"判断为 {cat_first}（命中：{', '.join(kws_first[:3])}），但同时也提到转交，可考虑转交"
+        )
     else:
         reason = f"判断为 {cat_first}（命中关键词：{', '.join(kws_first[:3])}）"
 

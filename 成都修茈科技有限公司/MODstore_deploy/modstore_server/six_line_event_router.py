@@ -176,19 +176,84 @@ def format_backlog_entries_as_vibe_sections(entries: Sequence[Dict[str, Any]]) -
     return "\n\n".join(sections).strip()
 
 
+def _drop_stale_time_rail_entries(
+    entries: Sequence[Dict[str, Any]],
+) -> Tuple[List[Dict[str, Any]], int]:
+    time_rail_entries = [
+        row
+        for row in entries
+        if str(row.get("route_id") or "") == "time_rail_missing_evidence"
+        and str(row.get("node_id") or "").strip()
+    ]
+    if not time_rail_entries:
+        return list(entries), 0
+    try:
+        from modstore_server.time_rail_workflow import collect_node_runtime_status
+
+        status = collect_node_runtime_status()
+    except Exception:
+        logger.exception("six_line_event_router: time rail stale backlog check failed")
+        return list(entries), 0
+
+    nodes = status.get("nodes") if isinstance(status, dict) else {}
+    if not isinstance(nodes, dict):
+        return list(entries), 0
+
+    kept: List[Dict[str, Any]] = []
+    skipped = 0
+    for row in entries:
+        if str(row.get("route_id") or "") != "time_rail_missing_evidence":
+            kept.append(dict(row))
+            continue
+        node_id = str(row.get("node_id") or "").strip()
+        node = nodes.get(node_id) if node_id else None
+        if not isinstance(node, dict):
+            kept.append(dict(row))
+            continue
+        proof_status = str(node.get("proof_status") or "")
+        if proof_status == "maintenance_queued":
+            kept.append(dict(row))
+            continue
+        if bool(node.get("observed")) or proof_status in (
+            "proved_ok",
+            "proved_failed",
+            "guard_active",
+            "decision_true",
+            "decision_false",
+            "shadow_observed",
+            "planned",
+            "decision_not_taken",
+        ):
+            skipped += 1
+            continue
+        kept.append(dict(row))
+    return kept, skipped
+
+
 def merge_event_backlog_into_vibe_patches(
     patches_markdown: str,
     *,
     consume: bool = True,
 ) -> Tuple[str, Dict[str, Any]]:
     """M2：把事件轨 backlog 合并进 Vibe 补丁 Markdown；可选消费（归档并清空 backlog）。"""
-    entries = read_digest_backlog_entries()
-    if not entries:
+    raw_entries = read_digest_backlog_entries()
+    if not raw_entries:
         return patches_markdown, {"merged_count": 0, "backlog_path": str(_backlog_path())}
 
+    entries, skipped_stale = _drop_stale_time_rail_entries(raw_entries)
     block = format_backlog_entries_as_vibe_sections(entries)
     if not block:
-        return patches_markdown, {"merged_count": 0, "skipped_empty_brief": len(entries)}
+        meta = {
+            "merged_count": 0,
+            "skipped_empty_brief": len(entries),
+            "skipped_stale_time_rail": skipped_stale,
+            "backlog_path": str(_backlog_path()),
+            "consumed": False,
+        }
+        if consume and skipped_stale and skipped_stale >= len(raw_entries):
+            _archive_consumed_backlog(raw_entries)
+            meta["consumed"] = True
+        return patches_markdown, meta
 
     base = (patches_markdown or "").strip()
     if not base:
@@ -200,11 +265,12 @@ def merge_event_backlog_into_vibe_patches(
 
     meta: Dict[str, Any] = {
         "merged_count": len(entries),
+        "skipped_stale_time_rail": skipped_stale,
         "backlog_path": str(_backlog_path()),
         "consumed": False,
     }
     if consume:
-        _archive_consumed_backlog(entries)
+        _archive_consumed_backlog(raw_entries)
         meta["consumed"] = True
     return merged, meta
 

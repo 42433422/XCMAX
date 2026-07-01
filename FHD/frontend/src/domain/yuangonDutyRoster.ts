@@ -63,8 +63,8 @@ export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {
       'enterprise-adoption-officer',
       'delivery-receipt-officer',
       'mobile-android-release-officer',
-      'mobile-ios-release-officer',
       'mobile-harmony-release-officer',
+      'mobile-ios-release-officer',
     ],
   },
   'quality-and-docs': {
@@ -379,8 +379,8 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
         'change-request-auditor',
         'github-pr-gatekeeper',
         'mobile-android-release-officer',
-        'mobile-ios-release-officer',
         'mobile-harmony-release-officer',
+        'mobile-ios-release-officer',
       ] },
       'ota-monitor': { label: 'OTA 监控 P6-P7', ids: [
         'push-update-context-officer',
@@ -391,6 +391,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
         'daily-orchestrator',
         'intake-dispatcher',
         'task-router-officer',
+        'github-pr-gatekeeper',
         'dbops-engineer',
         'llm-ops-engineer',
       ] },

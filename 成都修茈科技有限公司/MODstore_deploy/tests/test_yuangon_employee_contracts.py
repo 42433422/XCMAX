@@ -49,7 +49,7 @@ def _cycle_nodes(graph: dict[str, list[str]]) -> set[str]:
 
 def test_all_yuangon_employees_are_explicit_and_complete():
     rows = _employees()
-    assert len(rows) == 52
+    assert len(rows) == 55
     known = set(rows)
     for employee_id, (path, data) in rows.items():
         base = path.parent
@@ -85,6 +85,18 @@ def test_handler_normalizer_keeps_executor_supported_handlers():
         "fhd_business",
         "shell_exec",
     ]
+
+
+def test_yuangon_manifest_generation_preserves_declared_handlers():
+    rows = _employees()
+    for employee_id, (path, data) in rows.items():
+        manifest, error = _manifest_from_employee_yaml(data, pack_dir=path.parent)
+        assert error == "", employee_id
+        assert manifest is not None, employee_id
+        actions = data.get("actions") if isinstance(data.get("actions"), dict) else {}
+        yaml_handlers = [str(h).strip() for h in actions.get("handlers", []) if str(h).strip()]
+        manifest_handlers = manifest["employee_config_v2"]["actions"]["handlers"]
+        assert manifest_handlers == yaml_handlers, employee_id
 
 
 def test_root_anchored_scope_glob_does_not_match_nested_file():
