@@ -15,7 +15,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-
 DEFAULT_FIX_LIMIT = 5
 DEFAULT_PATTERN_LIMIT = 8
 MAX_DOC_TEXT = 20000
