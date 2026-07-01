@@ -345,8 +345,8 @@ def im_list_messages(
     limit: int = Query(default=50, ge=1, le=100),
     before_id: int | None = Query(default=None),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid_for_request(request, user)
     db = HostSessionLocal()
     try:
         svc = ImApplicationService(db)
@@ -377,8 +377,8 @@ async def im_send_message(
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(get_current_user),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid_for_request(request, user)
     db = HostSessionLocal()
     try:
         svc = ImApplicationService(db)
@@ -420,8 +420,8 @@ async def im_mark_read(
     body: dict = Body(default_factory=dict),
     user: CurrentUser = Depends(get_current_user),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid_for_request(request, user)
     last_id = int(body.get("last_message_id") or 0)
     db = HostSessionLocal()
     try:

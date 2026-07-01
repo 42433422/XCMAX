@@ -1738,7 +1738,9 @@ def _actions_real(
                 employee_id, config if isinstance(config, dict) else {}, _rep_body, "report"
             )
     except Exception:
-        logger.debug("actions_real report im hook skipped employee_id=%s", employee_id, exc_info=True)
+        logger.debug(
+            "actions_real report im hook skipped employee_id=%s", employee_id, exc_info=True
+        )
     return {
         "task": task,
         "handlers": handlers,

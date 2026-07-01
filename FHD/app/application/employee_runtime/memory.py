@@ -83,7 +83,7 @@ class EmployeeMemoryManager:
             from app.services.conversation_service import ConversationService
 
             rows = ConversationService().get_session_messages(sid, limit=50)
-        except Exception:
+        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
             logger.debug("short-term recall skipped (session=%s)", sid, exc_info=True)
             return []
         out: list[dict[str, str]] = []
@@ -133,7 +133,7 @@ class EmployeeMemoryManager:
                 return "", []
             prompt = rag.format_for_prompt(index_ns, query_text, hits)
             return prompt, hits
-        except Exception:
+        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
             logger.debug("long-term recall skipped (ns=%s)", index_ns, exc_info=True)
             return "", []
 
@@ -177,7 +177,7 @@ class EmployeeMemoryManager:
                     intent=self.scope.employee_id,
                     metadata=meta,
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
             logger.debug("short-term remember skipped (session=%s)", sid, exc_info=True)
 
     def _remember_long_term(self, task: str, summary: str, *, user_id: Any, success: bool) -> None:
@@ -204,7 +204,7 @@ class EmployeeMemoryManager:
                 },
             )
             get_user_memory_vector_ingest_app_service().ingest_chunks(index_ns, [chunk])
-        except Exception:
+        except Exception:  # noqa: BLE001 - 记忆读写是尽力而为的旁路,任何失败都不能搞崩员工回复
             logger.debug("long-term remember skipped (ns=%s)", index_ns, exc_info=True)
 
 
