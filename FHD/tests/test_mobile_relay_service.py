@@ -239,8 +239,9 @@ def test_complete_invoke_task_pushes_creator(monkeypatch, tmp_path):
     monkeypatch.setattr(
         mobile_push,
         "notify_user",
-        lambda uid, title, body, data=None: calls.append((uid, title, body, data))
-        or {"outbox": True},
+        lambda uid, title, body, data=None: (
+            calls.append((uid, title, body, data)) or {"outbox": True}
+        ),
     )
     service = relay.MobileRelayService()
     reg = service.register_desktop(
