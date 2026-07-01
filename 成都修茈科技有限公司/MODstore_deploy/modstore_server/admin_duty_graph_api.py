@@ -692,16 +692,15 @@ def execute_duty_graph_programmatic(
 
         order, cycle_nodes = _topo_sort(selected, deps_map)
         if cycle_nodes:
-            # Cycle detected but not fatal: _topo_sort already broke the cycle
-            # by appending the remaining nodes in deterministic order. Log a
-            # warning so operators know the dependency graph has a mutual edge
-            # that should be cleaned up in the employee manifests, but proceed
-            # with execution rather than blocking the entire duty graph.
             logger.warning(
-                "duty graph cycle detected and broken: %s — proceeding with order %s",
+                "duty graph cycle detected: %s order=%s",
                 ", ".join(cycle_nodes),
                 order,
             )
+            return {
+                "ok": False,
+                "error": "员工依赖图存在循环: " + " -> ".join(cycle_nodes),
+            }
 
         run = DutyGraphRun(
             created_by_user_id=int(created_by_user_id),
@@ -747,10 +746,6 @@ def execute_duty_graph_programmatic(
                 else deps_map.get(eid, [])
             )
             relevant = [x for x in (d or []) if x in selected]
-            # When _topo_sort broke a cycle, a node's dependency may appear
-            # later in `order` (back-edge of the broken cycle), so its
-            # layer_index entry doesn't exist yet. Use .get(x, -1) to tolerate
-            # those back-edges instead of raising KeyError.
             layer_index[eid] = (
                 (max((layer_index.get(x, -1) for x in relevant), default=-1) + 1) if relevant else 0
             )

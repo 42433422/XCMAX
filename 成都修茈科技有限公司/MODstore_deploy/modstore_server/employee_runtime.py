@@ -38,6 +38,7 @@ EXECUTOR_ACTION_HANDLERS = frozenset(
         "doc_sync",
         "shell_exec",
         "ssh_exec",
+        "specialized",
     }
 )
 
