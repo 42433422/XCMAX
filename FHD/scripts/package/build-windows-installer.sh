@@ -64,9 +64,9 @@ export XCAGI_STAGED_INDUSTRY_SEEDS_DIR="${ROOT}/build/staged-industry-seeds-${SK
 # 前端
 (cd frontend && [ -d node_modules ] || npm install)
 if [[ "${SKU}" == "personal" ]]; then
-  (cd frontend && npm run build:minimal)
+  (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
 else
-  (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise npm run build)
+  (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 fi
 
 "${PYTHON}" scripts/package/generate_mods_index.py

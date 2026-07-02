@@ -50,9 +50,9 @@ bash scripts/package/stage-bundled-mods.sh "${SKU}" || true
 
 (cd frontend && [ -d node_modules ] || npm install)
 if [[ "${SKU}" == "personal" ]]; then
-  (cd frontend && npm run build:minimal)
+  (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
 else
-  (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise npm run build)
+  (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 fi
 
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json

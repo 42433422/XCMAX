@@ -27,10 +27,10 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   (cd frontend && [ -d node_modules ] || npm install)
   case "${PRODUCT_SKU}" in
     personal)
-      (cd frontend && npm run build:minimal)
+      (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
       ;;
     enterprise)
-      (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise npm run build)
+      (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
       ;;
     *)
       (cd frontend && npm run build)

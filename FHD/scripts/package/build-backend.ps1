@@ -15,8 +15,7 @@ $Version = $Version.TrimStart("v", "V")
 
 $skuFrontendMap = @{
   personal = 'minimal'
-  # 与 frontend/.env.development.local 企业网页 dev 对齐：generic 宿主 + VITE_XCAGI_PRODUCT_SKU
-  enterprise = 'generic'
+  enterprise = 'full'
 }
 if ($ProductSku) {
   if (-not $skuFrontendMap.ContainsKey($ProductSku)) {
@@ -40,6 +39,7 @@ if (-not $SkipFrontend) {
   if ($ProductSku) {
     $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
   }
+  $env:VITE_XCAGI_EDITION = $FrontendEdition
   if ($FrontendEdition -eq 'minimal') {
     npm run build:minimal
   } elseif ($FrontendEdition -eq 'full') {
@@ -47,6 +47,7 @@ if (-not $SkipFrontend) {
   } else {
     npm run build
   }
+  Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
   if ($ProductSku) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }
