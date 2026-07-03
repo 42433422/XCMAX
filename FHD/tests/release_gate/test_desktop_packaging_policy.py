@@ -64,3 +64,14 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "if (!isDesktopShell())" in router
     assert "next({ name: 'chat', replace: true });" not in router
     assert "console=False" in spec
+
+
+def test_missing_industry_seed_does_not_block_desktop_release() -> None:
+    scripts = REPO_ROOT / "scripts" / "package"
+    ps_stage = (scripts / "stage-industry-seeds.ps1").read_text(encoding="utf-8")
+    sh_stage = (scripts / "stage-industry-seeds.sh").read_text(encoding="utf-8")
+
+    assert "Skipped missing industry seed mod(s)" in ps_stage
+    assert "Skipped missing industry seed mod(s)" in sh_stage
+    assert "throw \"Missing industry seed mod(s)" not in ps_stage
+    assert "exit 1" not in sh_stage.split("Skipped missing industry seed mod(s)", 1)[-1]
