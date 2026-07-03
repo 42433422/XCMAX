@@ -1,5 +1,5 @@
 param(
-  [string]$BaseUrl = 'http://127.0.0.1:5000',
+  [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$ProductSku = 'enterprise',
   [string]$InstalledExe = '',
   [switch]$RestartApp,
@@ -202,4 +202,3 @@ Write-Host "SMOKE_FAIL=$script:FailCount"
 if ($script:FailCount -ne 0) {
   throw "Installed Windows smoke failed: $script:FailCount"
 }
-
