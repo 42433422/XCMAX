@@ -70,8 +70,11 @@ def test_missing_industry_seed_does_not_block_desktop_release() -> None:
     scripts = REPO_ROOT / "scripts" / "package"
     ps_stage = (scripts / "stage-industry-seeds.ps1").read_text(encoding="utf-8")
     sh_stage = (scripts / "stage-industry-seeds.sh").read_text(encoding="utf-8")
+    ps_verify = (scripts / "verify-industry-seeds.ps1").read_text(encoding="utf-8")
 
     assert "Skipped missing industry seed mod(s)" in ps_stage
     assert "Skipped missing industry seed mod(s)" in sh_stage
+    assert "Skipped missing industry seed mod(s)" in ps_verify
     assert "throw \"Missing industry seed mod(s)" not in ps_stage
+    assert "throw \"industry-seeds/ missing open industry mod(s)" not in ps_verify
     assert "exit 1" not in sh_stage.split("Skipped missing industry seed mod(s)", 1)[-1]
