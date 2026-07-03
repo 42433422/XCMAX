@@ -25,13 +25,16 @@ const APP_NAME = 'XCAGI'
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
-/** macOS 12+「隔空播放接收器」占用 :5000，TCP 可达但返回 AirTunes 空 403 → Electron 白屏。 */
+/** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 function resolveDefaultDesktopPort(): number {
   const env = process.env.XCAGI_DESKTOP_PORT
   if (env) {
-    return Number(env)
+    const port = Number(env)
+    if (Number.isFinite(port) && port > 0 && port < 65536) {
+      return Math.floor(port)
+    }
   }
-  return process.platform === 'darwin' ? 17500 : 5000
+  return 17500
 }
 
 const DEFAULT_PORT = resolveDefaultDesktopPort()
@@ -51,8 +54,8 @@ function isPortAvailable(port: number): Promise<boolean> {
 /** 端口被占时给用户的引导文案。 */
 function portOccupiedHint(port: number): string {
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? '\n\nmacOS「隔空播放接收器」常占用 5000，请在系统设置 → 通用 → 隔空播放接收器 中关闭，或设置环境变量 XCAGI_DESKTOP_PORT=17500 后重启。'
+    port === 5000
+      ? '\n\n5000 是历史开发端口，容易被系统服务或本机代理占用；正式桌面版默认端口为 17500。'
       : ''
   return (
     `端口 ${port} 已被占用，XCAGI 后端无法启动。\n\n` +
@@ -281,7 +284,7 @@ function packagedBackendHealthTimeoutMs(): number {
   return process.platform === 'win32' ? 180_000 : 120_000
 }
 
-/** 须确认 uvicorn /api/health，避免 macOS AirPlay 占 5000 时 TCP 误判就绪。 */
+/** 须确认 uvicorn /api/health，避免 TCP 可达但不是 XCAGI 后端时误判就绪。 */
 async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
@@ -291,7 +294,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
       })
       const server = (response.headers.get('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
-        startupMarks.tcp5000Ms = Date.now() - (startupMarks.backendSpawnMs ?? started)
+        startupMarks.backendHealthMs = Date.now() - (startupMarks.backendSpawnMs ?? started)
         return
       }
       if (server.includes('airtunes')) {
@@ -303,8 +306,8 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     await new Promise(resolve => setTimeout(resolve, 500))
   }
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? ' macOS「隔空播放接收器」占用 5000，请在系统设置中关闭，或设置 XCAGI_DESKTOP_PORT=17500。'
+    port === 5000
+      ? ' 5000 是历史开发端口，正式桌面版默认端口为 17500；请清理 XCAGI_DESKTOP_PORT 后重启。'
       : ''
   const firstBootHint = app.isPackaged
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
@@ -316,7 +319,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
 
 type DesktopStartupMarks = {
   backendSpawnMs?: number
-  tcp5000Ms?: number
+  backendHealthMs?: number
   desktopStatusMs?: number
 }
 

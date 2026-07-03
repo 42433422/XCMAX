@@ -1,5 +1,5 @@
 param(
-  [string]$BaseUrl = 'http://127.0.0.1:5000',
+  [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$Username = 'SUNBIRD',
   [string]$Password = 'SUN123456',
   [string]$DbWriteToken = $env:FHD_DB_WRITE_TOKEN,
