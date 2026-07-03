@@ -352,6 +352,28 @@ class TestInstallCustomerDeliverySeedPackage:
             result = await install_customer_delivery_seed_package(mod_id="some-mod")
         assert result["success"] is False
 
+    async def test_missing_market_token_blocks_download(self):
+        """Account-scoped seeds require a market access token before download."""
+        with (
+            patch(
+                "app.mod_sdk.customer_delivery_seed.delivery_for_account_custom_mod",
+                return_value={"delivery_id": "d1"},
+            ),
+            patch(
+                "app.mod_sdk.customer_delivery_seed.delivery_seed_package_for_mod",
+                return_value={"pkg_id": "pkg-x", "version": "1.0.0", "apply": "", "artifact": None},
+            ),
+            patch(
+                "app.mod_sdk.customer_delivery_seed.catalog_download_to",
+                new=AsyncMock(),
+            ) as mock_download,
+        ):
+            result = await install_customer_delivery_seed_package(mod_id="some-mod")
+
+        assert result["success"] is False
+        assert "市场登录凭证" in result["message"]
+        mock_download.assert_not_called()
+
     async def test_successful_install_no_apply(self, tmp_path):
         """Full happy path: pkg downloaded, extracted, no apply_kind."""
         zip_path = tmp_path / "seed.zip"
@@ -392,10 +414,16 @@ class TestInstallCustomerDeliverySeedPackage:
             # catalog_download_to is AsyncMock that does nothing (zip stays empty but extract is mocked)
             mock_download.side_effect = None
             result = await install_customer_delivery_seed_package(
-                mod_id="some-mod", industry_id="ind1"
+                mod_id="some-mod", industry_id="ind1", market_token="tok"
             )
 
         assert result["success"] is True
+        mock_download.assert_awaited_once()
+        args, kwargs = mock_download.await_args
+        assert args[0] == (
+            "/api/enterprise/customer-delivery-seeds/pkg-123/1.0.0/download?mod_id=some-mod"
+        )
+        assert kwargs["headers"] == {"Authorization": "Bearer tok"}
         assert result["applied"] is False
         assert result["mod_id"] == "some-mod"
         assert result["delivery_id"] == "d42"
@@ -444,7 +472,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 },
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="some-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="some-mod", market_token="Bearer tok"
+            )
 
         assert result["success"] is True
         assert result["applied"] is True
@@ -491,7 +521,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 },
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="some-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="some-mod", market_token="tok"
+            )
 
         assert result["success"] is True
         assert result["applied"] is False
@@ -519,7 +551,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 return_value=str(data_root),
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="some-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="some-mod", market_token="tok"
+            )
 
         assert result["success"] is False
         assert "network error" in result["message"]
@@ -552,7 +586,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 side_effect=ValueError("bad zip"),
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="some-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="some-mod", market_token="tok"
+            )
 
         assert result["success"] is False
         assert "bad zip" in result["message"]
@@ -594,7 +630,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 return_value=[],
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="clean-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="clean-mod", market_token="tok"
+            )
 
         assert result["success"] is True
         # tmp file should no longer exist (cleaned up by finally)
@@ -633,7 +671,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 return_value=str(data_root),
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="err-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="err-mod", market_token="tok"
+            )
 
         assert result["success"] is False
         for p in created_tmp:
@@ -669,7 +709,9 @@ class TestInstallCustomerDeliverySeedPackage:
             patch("os.unlink", side_effect=OSError("cannot delete")),
         ):
             # Should not raise — OSError in finally is swallowed
-            result = await install_customer_delivery_seed_package(mod_id="swallow-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="swallow-mod", market_token="tok"
+            )
 
         assert result["success"] is True
 
@@ -721,7 +763,9 @@ class TestInstallCustomerDeliverySeedPackage:
                 return_value=[],
             ),
         ):
-            result = await install_customer_delivery_seed_package(mod_id="no-did-mod")
+            result = await install_customer_delivery_seed_package(
+                mod_id="no-did-mod", market_token="tok"
+            )
 
         assert result["success"] is True
         assert "delivery_id" in result

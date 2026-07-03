@@ -209,6 +209,15 @@ _ensure_stub(
     "app.infrastructure.mods.artifact_package",
     {"peek_artifact": MagicMock(return_value="mod")},
 )
+_ensure_stub(
+    "app.fastapi_routes.market_account",
+    {"resolve_valid_market_access_token": AsyncMock(return_value="market-tok")},
+)
+_ensure_stub("app.infrastructure.auth")
+_ensure_stub(
+    "app.infrastructure.auth.dependencies",
+    {"session_id_from_request": MagicMock(return_value="sid")},
+)
 
 # ---------------------------------------------------------------------------
 # Import the module under test (AFTER stubs are in place)
@@ -1140,6 +1149,29 @@ class TestInstallCustomerDeliverySeedRoute:
         with _make_client() as client:
             resp = client.post("/install-customer-delivery-seed", json={"mod_id": "mod-x"})
         assert resp.status_code == 200
+
+    def test_session_market_token_passed_to_seed_installer(self):
+        self._setup_entitlements(active=False)
+        install_mock = AsyncMock(return_value={"success": True, "message": "done"})
+        sys.modules[
+            "app.mod_sdk.customer_delivery_seed"
+        ].install_customer_delivery_seed_package = install_mock
+        sys.modules[
+            "app.fastapi_routes.market_account"
+        ].resolve_valid_market_access_token = AsyncMock(return_value="market-tok")
+        sys.modules[
+            "app.infrastructure.auth.dependencies"
+        ].session_id_from_request = MagicMock(return_value="sid")
+
+        with _make_client() as client:
+            resp = client.post(
+                "/install-customer-delivery-seed",
+                json={"mod_id": "mod-x", "industry_id": "attendance"},
+            )
+
+        assert resp.status_code == 200
+        install_mock.assert_awaited_once()
+        assert install_mock.await_args.kwargs["market_token"] == "market-tok"
 
     def test_recoverable_error_in_entitlement_check_skipped(self):
         """Branch: RECOVERABLE_ERRORS during entitlement check → warning + continue."""

@@ -147,3 +147,33 @@ def test_remove_package_matches_int_id_in_json(monkeypatch, tmp_path: Path):
     n = remove_package("42", version=None)
     assert n == 1
     assert load_store()["packages"] == []
+
+
+def test_customer_delivery_seed_hidden_from_public_catalog(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("MODSTORE_CATALOG_DIR", str(tmp_path))
+    from fastapi.testclient import TestClient
+
+    from modstore_server.app import app
+    from modstore_server.catalog_store import append_package
+
+    src = tmp_path / "seed.zip"
+    src.write_bytes(b"PK\x03\x04seed")
+    append_package(
+        {
+            "id": "sunbird-delivery-seed",
+            "version": "1.0.0",
+            "name": "Sunbird Seed",
+            "artifact": "customer_delivery_seed",
+            "account_mod_id": "taiyangniao-pro",
+        },
+        src,
+    )
+
+    c = TestClient(app)
+    idx = c.get("/v1/index.json")
+    assert idx.status_code == 200
+    assert idx.json() == {"packages": []}
+    assert c.get("/v1/packages/sunbird-delivery-seed/1.0.0").status_code == 404
+    assert (
+        c.get("/v1/packages/sunbird-delivery-seed/1.0.0/download").status_code == 404
+    )

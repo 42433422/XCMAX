@@ -7,6 +7,7 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import quote
 
 from app.application.mod_store_catalog_app import catalog_download_to, catalog_get_json
 from app.desktop_runtime.paths import get_desktop_data_dir
@@ -73,6 +74,7 @@ async def install_customer_delivery_seed_package(
     *,
     mod_id: str,
     industry_id: str = "",
+    market_token: str = "",
 ) -> dict[str, Any]:
     """按账号定制 Mod 下载并应用客户交付种子包。"""
     mid = str(mod_id or "").strip()
@@ -96,11 +98,29 @@ async def install_customer_delivery_seed_package(
     if not pkg_id or not version:
         return {"success": False, "message": "交付种子包缺少 pkg_id/version", "mod_id": mid}
 
+    token = str(market_token or "").strip()
+    if not token:
+        return {
+            "success": False,
+            "message": "缺少市场登录凭证，无法下载账号专属交付种子包",
+            "mod_id": mid,
+            "package": {"pkg_id": pkg_id, "version": version, "artifact": pkg.get("artifact")},
+        }
+    auth_header = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+    protected_path = (
+        f"/api/enterprise/customer-delivery-seeds/{quote(pkg_id, safe='')}/"
+        f"{quote(version, safe='')}/download?mod_id={quote(mid, safe='')}"
+    )
+
     tmp = tempfile.NamedTemporaryFile(prefix="xcagi-delivery-seed-", suffix=".zip", delete=False)
     tmp_path = Path(tmp.name)
     tmp.close()
     try:
-        await catalog_download_to(f"/packages/{pkg_id}/{version}/download", tmp_path)
+        await catalog_download_to(
+            protected_path,
+            tmp_path,
+            headers={"Authorization": auth_header},
+        )
         data_root = Path(get_desktop_data_dir()).resolve()
         extracted = extract_customer_delivery_seed(tmp_path, data_root)
 
