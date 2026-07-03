@@ -65,7 +65,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: xcagi-desktop-windows
-          path: ${{ github.workspace }}/artifacts
+          path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
@@ -84,7 +84,7 @@ jobs:
             echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
             exit 0
           fi
-          ARTIFACTS_DIR="${GITHUB_WORKSPACE}/artifacts"
+          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
           find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
             echo "Signing: $f"
             python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
@@ -109,7 +109,7 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${GITHUB_WORKSPACE}/artifacts"
+          BASE="${RUNNER_TEMP}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
           raw="${raw#v}"
@@ -168,7 +168,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: xcagi-desktop-macos
-          path: ${{ github.workspace }}/artifacts
+          path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
@@ -187,7 +187,7 @@ jobs:
             echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
             exit 0
           fi
-          ARTIFACTS_DIR="${GITHUB_WORKSPACE}/artifacts"
+          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
           find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
             echo "Signing: $f"
             python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
@@ -210,7 +210,7 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${GITHUB_WORKSPACE}/artifacts"
+          BASE="${RUNNER_TEMP}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
           raw="${raw#v}"
