@@ -640,11 +640,23 @@ async def mod_store_install_customer_delivery_seed(request: Request) -> ModStore
     except RECOVERABLE_ERRORS:
         logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
 
+    market_token = ""
+    try:
+        from app.fastapi_routes.market_account import resolve_valid_market_access_token
+        from app.infrastructure.auth.dependencies import session_id_from_request
+
+        sid = session_id_from_request(request)
+        if sid:
+            market_token = await resolve_valid_market_access_token(sid) or ""
+    except RECOVERABLE_ERRORS:
+        logger.warning("customer delivery seed token resolve skipped", exc_info=True)
+
     from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
 
     data = await install_customer_delivery_seed_package(
         mod_id=mod_id,
         industry_id=industry_id,
+        market_token=market_token,
     )
     return ModStoreInstallResult(
         success=bool(data.get("success")),

@@ -44,6 +44,8 @@ def package_row_eligible_for_public_index(
         return False
     ver = norm_version(row.get("version"))
     artifact = str(row.get("artifact") or "mod").strip().lower()
+    if artifact == "customer_delivery_seed":
+        return False
 
     if pid in all_planned_employee_ids() or is_planned_duty_employee_pack(pid, artifact):
         return False

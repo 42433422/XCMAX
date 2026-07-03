@@ -2152,6 +2152,49 @@ def api_enterprise_entitled_mod_ids(user: User = Depends(get_current_user)):
     }
 
 
+@router.get("/enterprise/customer-delivery-seeds/{pkg_id}/{version}/download")
+def api_enterprise_customer_delivery_seed_download(
+    pkg_id: str,
+    version: str,
+    mod_id: str = Query(""),
+    user: User = Depends(get_current_user),
+):
+    """Download an account-scoped customer seed after enterprise entitlement checks."""
+    from fastapi.responses import FileResponse
+
+    from modstore_server.catalog_store import files_dir, get_package
+    from modstore_server.models_db import get_user_mod_ids
+
+    pkg = get_package(pkg_id, version)
+    if not pkg:
+        raise HTTPException(404, "交付种子包不存在")
+
+    artifact = str(pkg.get("artifact") or "").strip().lower()
+    if artifact != "customer_delivery_seed":
+        raise HTTPException(404, "不是客户交付种子包")
+
+    account_mod_id = str(pkg.get("account_mod_id") or "").strip()
+    if not account_mod_id:
+        raise HTTPException(403, "交付种子包未绑定客户 Mod")
+
+    requested_mod_id = str(mod_id or account_mod_id).strip()
+    if requested_mod_id != account_mod_id:
+        raise HTTPException(403, "交付种子包与请求 Mod 不匹配")
+
+    entitled = set(get_user_mod_ids(int(user.id)))
+    if account_mod_id not in entitled:
+        raise HTTPException(403, "当前账号未授权该客户交付包")
+
+    name = str(pkg.get("stored_filename") or "").strip()
+    if not name:
+        raise HTTPException(404, "交付种子包无本地文件")
+    path = files_dir() / name
+    if not path.is_file():
+        raise HTTPException(404, "交付种子文件缺失")
+
+    return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
 @router.get("/admin/wallets")
 def api_admin_list_wallets(
     limit: int = Query(100, ge=1, le=500),
