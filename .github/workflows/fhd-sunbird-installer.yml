@@ -88,7 +88,7 @@ jobs:
           $exe = Join-Path $installDir "XCAGI.exe"
           scripts/package/acceptance-sunbird-windows.ps1 `
             -InstalledExe $exe `
-            -RestartApp `
+            -UseInstalledBackend `
             -ReadyTimeoutSeconds 240 `
             -MinHostFoundationCount 6
       - name: Stage sunbird installer for upload

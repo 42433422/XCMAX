@@ -9,6 +9,7 @@ param(
   [string]$AttendanceTemplatePath = '',
   [string]$InstalledExe = '',
   [switch]$RestartApp,
+  [switch]$UseInstalledBackend,
   [string]$WorkDir = '',
   [int]$ReadyTimeoutSeconds = 180,
   [int]$MinHostFoundationCount = 10
@@ -30,6 +31,7 @@ $CookieJar = Join-Path $WorkDir 'cookies.txt'
 Set-Content -Path $CookieJar -Value '' -Encoding ASCII
 
 $script:PassCount = 0
+$script:StartedBackendProcess = $null
 
 function Join-XcagiUrl {
   param([Parameter(Mandatory = $true)][string]$Path)
@@ -184,6 +186,7 @@ function Wait-XcagiReady {
       Start-Sleep -Seconds 2
     }
   }
+  Dump-XcagiDiagnostics
   throw "backend did not become ready: $BaseUrl/api/health"
 }
 
@@ -205,6 +208,103 @@ function Start-XcagiApp {
     Stop-Process -Force -ErrorAction SilentlyContinue
   Start-Sleep -Seconds 2
   Start-Process -FilePath $InstalledExe | Out-Null
+}
+
+function Resolve-InstalledBackendExe {
+  if (-not $InstalledExe) {
+    $InstalledExe = Get-DefaultInstalledExe
+  }
+  if (-not (Test-Path $InstalledExe)) {
+    throw "installed exe not found: $InstalledExe"
+  }
+  $installDir = Split-Path -Parent (Resolve-Path $InstalledExe).Path
+  $candidates = @(
+    (Join-Path $installDir 'resources\backend\xcagi-backend.exe'),
+    (Join-Path $installDir 'resources\backend\xcagi-backend\xcagi-backend.exe'),
+    (Join-Path $installDir 'resources\backend\_internal\xcagi-backend.exe')
+  )
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return (Resolve-Path $candidate).Path
+    }
+  }
+  throw "installed backend exe not found under $installDir"
+}
+
+function Start-XcagiInstalledBackend {
+  $backendExe = Resolve-InstalledBackendExe
+  $dataRoot = Join-Path $env:APPDATA 'XCAGI'
+  New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+
+  $env:XCAGI_DESKTOP_MODE = '1'
+  $env:XCAGI_DATA_DIR = $dataRoot
+  $env:XCAGI_UVICORN_RELOAD = '0'
+  $env:XCAGI_PRODUCT_SKU = 'enterprise'
+  $env:XCAGI_PLATFORM_SHELL = '0'
+  $env:XCAGI_DEFAULT_EDITION = 'full'
+  $env:XCAGI_EDITION = 'full'
+  $env:PYTHONUTF8 = '1'
+
+  $stdout = Join-Path $WorkDir 'acceptance-backend.stdout.log'
+  $stderr = Join-Path $WorkDir 'acceptance-backend.stderr.log'
+  $args = @(
+    '--desktop',
+    '--headless',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    '17500',
+    '--data-dir',
+    $dataRoot
+  )
+  $script:StartedBackendProcess = Start-Process `
+    -FilePath $backendExe `
+    -ArgumentList $args `
+    -WorkingDirectory (Split-Path -Parent $backendExe) `
+    -RedirectStandardOutput $stdout `
+    -RedirectStandardError $stderr `
+    -WindowStyle Hidden `
+    -PassThru
+  Write-Host "Started installed backend pid=$($script:StartedBackendProcess.Id) exe=$backendExe data=$dataRoot"
+}
+
+function Write-LogTail {
+  param(
+    [Parameter(Mandatory = $true)][string]$Label,
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+  if (-not (Test-Path $Path)) {
+    Write-Host "DIAG missing $Label $Path"
+    return
+  }
+  Write-Host "DIAG $Label $Path"
+  Get-Content $Path -Tail 120 -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host $_
+  }
+}
+
+function Dump-XcagiDiagnostics {
+  Write-Host 'DIAG process-list'
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Select-Object ProcessName,Id,HasExited,StartTime,Path |
+    Format-List |
+    Out-String |
+    Write-Host
+  Write-Host 'DIAG port-17500'
+  Get-NetTCPConnection -LocalPort 17500 -ErrorAction SilentlyContinue |
+    Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess |
+    Format-List |
+    Out-String |
+    Write-Host
+
+  Write-LogTail 'acceptance-backend-stdout' (Join-Path $WorkDir 'acceptance-backend.stdout.log')
+  Write-LogTail 'acceptance-backend-stderr' (Join-Path $WorkDir 'acceptance-backend.stderr.log')
+  if ($env:APPDATA) {
+    Write-LogTail 'electron-backend' (Join-Path $env:APPDATA 'XCAGI\logs\electron-backend.log')
+  }
 }
 
 function Select-ExcelSheet {
@@ -289,7 +389,9 @@ function Invoke-ChatImport {
   return ([string]$resp.response).Substring(0, [Math]::Min(120, ([string]$resp.response).Length))
 }
 
-if ($RestartApp -or $InstalledExe) {
+if ($UseInstalledBackend) {
+  Start-XcagiInstalledBackend
+} elseif ($RestartApp -or $InstalledExe) {
   Start-XcagiApp
 }
 
