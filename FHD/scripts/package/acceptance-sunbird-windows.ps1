@@ -41,6 +41,24 @@ function Join-XcagiUrl {
   return $BaseUrl.TrimEnd('/') + '/' + $Path.TrimStart('/')
 }
 
+function Get-CsrfTokenFromCookieJar {
+  if (-not (Test-Path $CookieJar)) {
+    return ''
+  }
+  $lines = Get-Content $CookieJar -ErrorAction SilentlyContinue
+  for ($i = $lines.Count - 1; $i -ge 0; $i -= 1) {
+    $line = [string]$lines[$i]
+    if (-not $line -or $line.StartsWith('#')) {
+      continue
+    }
+    $parts = $line -split "`t"
+    if ($parts.Count -ge 7 -and $parts[5] -eq 'csrf_token') {
+      return [System.Uri]::UnescapeDataString([string]$parts[6])
+    }
+  }
+  return ''
+}
+
 function Invoke-XcagiJson {
   param(
     [Parameter(Mandatory = $true)][string]$Path,
@@ -58,6 +76,13 @@ function Invoke-XcagiJson {
     '-b', $CookieJar,
     '-c', $CookieJar
   )
+
+  if ($Method -eq 'POST') {
+    $csrf = Get-CsrfTokenFromCookieJar
+    if ($csrf) {
+      $args += @('-H', "X-CSRF-Token: $csrf")
+    }
+  }
 
   if ($Form.Count -gt 0) {
     foreach ($entry in $Form) {
