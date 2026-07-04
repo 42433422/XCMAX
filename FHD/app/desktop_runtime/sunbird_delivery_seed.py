@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 ROSTER_FILENAME = "sunbird-roster.json"
 APPLIED_MARKER = "sunbird-roster.applied"
 SEED_ROOT_ENV = "XCAGI_SUNBIRD_SEED_ROOT"
-SEED_DIRS = ("424", "data/mod_dbs")
+SEED_DIRS = ("424", "data/mod_dbs", "mods")
 SEED_FILES = (f"config/{ROSTER_FILENAME}",)
 
 
