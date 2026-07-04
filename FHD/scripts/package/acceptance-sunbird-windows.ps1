@@ -482,26 +482,26 @@ Invoke-Check 'workspace-template' {
   "template=$target"
 }
 
-$excelAnalysis = $null
+$script:ExcelAnalysis = $null
 Invoke-Check 'chat-excel:analyze' {
   $form = @(
     "file=@$tutorialPath",
     'analyze_all_sheets=true'
   )
-  $excelAnalysis = Invoke-XcagiJson '/api/templates/extract-grid' -Method POST -Form $form -TimeoutSec 180
-  if (-not $excelAnalysis.success) {
+  $script:ExcelAnalysis = Invoke-XcagiJson '/api/templates/extract-grid' -Method POST -Form $form -TimeoutSec 180
+  if (-not $script:ExcelAnalysis.success) {
     throw "extract-grid failed"
   }
-  $fp = [string]$excelAnalysis.file_path
-  $wr = [string]$excelAnalysis.workspace_root
+  $fp = [string]$script:ExcelAnalysis.file_path
+  $wr = [string]$script:ExcelAnalysis.workspace_root
   if ($fp -and $wr -and -not [System.IO.Path]::IsPathRooted($fp)) {
     $abs = Join-Path $wr $fp
-    $excelAnalysis | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
-    if ($excelAnalysis.preview_data) {
-      $excelAnalysis.preview_data | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
+    $script:ExcelAnalysis | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
+    if ($script:ExcelAnalysis.preview_data) {
+      $script:ExcelAnalysis.preview_data | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
     }
   }
-  $sheets = @($excelAnalysis.preview_data.sheet_names)
+  $sheets = @($script:ExcelAnalysis.preview_data.sheet_names)
   if (-not ($sheets -contains '教程示例-部门') -or -not ($sheets -contains '教程示例-人员')) {
     throw "unexpected sheets: $($sheets -join ',')"
   }
@@ -510,11 +510,11 @@ Invoke-Check 'chat-excel:analyze' {
 
 $chatUserId = 'sunbird_acceptance_' + [guid]::NewGuid().ToString('N').Substring(0, 8)
 Invoke-Check 'chat-import:departments' {
-  Invoke-ChatImport -ExcelAnalysis $excelAnalysis -SheetName '教程示例-部门' -Message '导入数据库，类型客户，确认导入' -UserId $chatUserId
+  Invoke-ChatImport -ExcelAnalysis $script:ExcelAnalysis -SheetName '教程示例-部门' -Message '导入数据库，类型客户，确认导入' -UserId $chatUserId
 }
 
 Invoke-Check 'chat-import:employees' {
-  Invoke-ChatImport -ExcelAnalysis $excelAnalysis -SheetName '教程示例-人员' -Message '导入数据库，类型产品，确认导入' -UserId $chatUserId
+  Invoke-ChatImport -ExcelAnalysis $script:ExcelAnalysis -SheetName '教程示例-人员' -Message '导入数据库，类型产品，确认导入' -UserId $chatUserId
 }
 
 Invoke-Check 'db-verify:departments' {
