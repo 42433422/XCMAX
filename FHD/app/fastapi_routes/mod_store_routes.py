@@ -752,8 +752,10 @@ async def mod_store_rebuild_index() -> ModStoreRebuildResponse:
 
 
 async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
-    """将仓库内置 _employees/xcagi-host-foundation-employee 复制到用户 mods 目录（若尚未存在）。"""
+    """将内置 _employees/xcagi-host-foundation-employee 复制到用户 mods 目录（若尚未存在）。"""
     import shutil
+    import sys
+    from pathlib import Path
 
     from app.infrastructure.mods.employee_registry import employees_root, get_employee_registry
     from app.mod_sdk.host_foundation import HOST_FOUNDATION_EMPLOYEE_PACK_ID
@@ -762,9 +764,19 @@ async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
     dest = os.path.join(employees_root(mm_root), HOST_FOUNDATION_EMPLOYEE_PACK_ID)
     if os.path.isdir(dest):
         return True, "employee pack present"
-    src = os.path.join(mm_root, "_employees", HOST_FOUNDATION_EMPLOYEE_PACK_ID)
-    if not os.path.isdir(src):
-        return False, f"内置员工包目录缺失：{src}"
+    candidates = [Path(mm_root) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID]
+    if getattr(sys, "frozen", False) or os.environ.get("XCAGI_BUNDLED_MODS_DIR") or os.environ.get(
+        "XCAGI_SEED_MODS_DIR"
+    ):
+        from app.mod_sdk.edition_policy import bundled_mods_dir
+
+        bundled = bundled_mods_dir()
+        if bundled is not None:
+            candidates.append(Path(bundled) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID)
+    src = next((p for p in candidates if os.path.isdir(str(p))), None)
+    if src is None:
+        checked = "；".join(str(p) for p in candidates)
+        return False, f"内置员工包目录缺失：{checked}"
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     shutil.copytree(src, dest)
     return True, "employee pack seeded"
