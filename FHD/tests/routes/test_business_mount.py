@@ -51,3 +51,4 @@ def test_register_business_routes_smoke() -> None:
     business_mount.register_business_routes(app, registry)
     assert len(registry.names()) >= 5
     assert "agent" in registry.names()
+    assert "taiyangniao_attendance_compat" in registry.names()
