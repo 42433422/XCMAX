@@ -78,6 +78,7 @@ function Invoke-XcagiJson {
   )
 
   if ($Method -eq 'POST') {
+    $args += @('-X', 'POST', '--post301', '--post302', '--post303')
     $csrf = Get-CsrfTokenFromCookieJar
     if ($csrf) {
       $args += @('-H', "X-CSRF-Token: $csrf")
@@ -518,6 +519,16 @@ Invoke-Check 'db-read:customers-products' {
     throw "products/list failed"
   }
   "customers_total=$(Get-ListTotal $customers);products_total=$(Get-ListTotal $products)"
+}
+
+Invoke-Check 'attendance:rules' {
+  $res = Invoke-XcagiJson '/api/mod/taiyangniao-pro/attendance/rules' -TimeoutSec 60
+  if (-not $res.success) {
+    throw "attendance rules failed: $($res.error) $($res.message)"
+  }
+  $data = Get-EnvelopeData $res
+  $groups = @($data.schedule_groups)
+  "schedule_groups=$($groups.Count)"
 }
 
 Invoke-Check 'attendance:convert-upload' {
