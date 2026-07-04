@@ -7,6 +7,8 @@ param(
   [string]$TutorialExcelPath = '',
   [string]$AttendanceInputPath = '',
   [string]$AttendanceTemplatePath = '',
+  [string]$InstalledExe = '',
+  [switch]$RestartApp,
   [string]$WorkDir = '',
   [int]$ReadyTimeoutSeconds = 180,
   [int]$MinHostFoundationCount = 10
@@ -185,6 +187,26 @@ function Wait-XcagiReady {
   throw "backend did not become ready: $BaseUrl/api/health"
 }
 
+function Get-DefaultInstalledExe {
+  if (-not $env:LOCALAPPDATA) {
+    throw 'LOCALAPPDATA is not set; pass -InstalledExe explicitly'
+  }
+  return (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\XCAGI.exe')
+}
+
+function Start-XcagiApp {
+  if (-not $InstalledExe) {
+    $InstalledExe = Get-DefaultInstalledExe
+  }
+  if (-not (Test-Path $InstalledExe)) {
+    throw "installed exe not found: $InstalledExe"
+  }
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  Start-Process -FilePath $InstalledExe | Out-Null
+}
+
 function Select-ExcelSheet {
   param(
     [Parameter(Mandatory = $true)][object]$Analysis,
@@ -265,6 +287,10 @@ function Invoke-ChatImport {
     throw "chat import failed: $($resp.message) $($resp.response)"
   }
   return ([string]$resp.response).Substring(0, [Math]::Min(120, ([string]$resp.response).Length))
+}
+
+if ($RestartApp -or $InstalledExe) {
+  Start-XcagiApp
 }
 
 Invoke-Check 'health' {
