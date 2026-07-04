@@ -782,13 +782,27 @@ async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
     return True, "employee pack seeded"
 
 
+def _can_materialize_host_foundation_without_employee_marker() -> bool:
+    """Packaged builds can seed host bridges without the employee marker pack."""
+    import sys
+
+    return bool(
+        getattr(sys, "frozen", False)
+        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
+        or os.environ.get("XCAGI_SEED_MODS_DIR")
+    )
+
+
 async def _install_host_foundation_internal(edition: str | None) -> ModStoreInstallResult:
     from app.mod_sdk.edition_policy import resolve_edition
     from app.mod_sdk.host_foundation import materialize_host_foundation_bridges
 
     ok, msg = await _ensure_host_foundation_employee_on_disk()
+    employee_seed_warning = ""
     if not ok:
-        return ModStoreInstallResult(success=False, message=msg, data=None)
+        if not _can_materialize_host_foundation_without_employee_marker():
+            return ModStoreInstallResult(success=False, message=msg, data=None)
+        employee_seed_warning = msg
     ed = (edition or resolve_edition() or "generic").strip().lower()
     if ed not in ("minimal", "generic", "full"):
         ed = "generic"
@@ -801,8 +815,12 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
             message=f"展开宿主 bridge 失败：{exc}",
             data={"edition": ed, "missing_mod_ids": [], "ready": False},
         )
+    if employee_seed_warning and isinstance(data, dict):
+        data = {**data, "employee_seed_warning": employee_seed_warning}
     if data.get("ready"):
         message = f"宿主基础能力员工包已就绪（bridge {data.get('installed_count')}/{data.get('expected_count')}）"
+        if employee_seed_warning:
+            message += f"；员工包标记未复制（{employee_seed_warning}）"
         success = True
     else:
         missing = data.get("missing_mod_ids") or []

@@ -37,14 +37,4 @@ foreach ($modId in $ids) {
   Write-Host "Staged: $modId"
 }
 
-$hostFoundationEmployee = "xcagi-host-foundation-employee"
-$hostFoundationSrc = Join-Path $modsRoot "_employees\$hostFoundationEmployee"
-if (-not (Test-Path $hostFoundationSrc)) {
-  throw "Host foundation employee seed missing: $hostFoundationSrc"
-}
-$hostFoundationDst = Join-Path $stageDir "_employees\$hostFoundationEmployee"
-New-Item -ItemType Directory -Force -Path (Split-Path $hostFoundationDst -Parent) | Out-Null
-Copy-Item -Path $hostFoundationSrc -Destination $hostFoundationDst -Recurse -Force
-Write-Host "Staged employee seed: _employees\$hostFoundationEmployee"
-
 Write-Host "Staged $($ids.Count) mod(s) for SKU $ProductSku -> $stageDir"
