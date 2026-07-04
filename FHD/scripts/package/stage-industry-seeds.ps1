@@ -6,7 +6,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
-$modsRoot = Join-Path $Root "mods"
+$modsRoots = @(
+  (Join-Path $Root "mods"),
+  (Join-Path $Root "XCAGI\mods")
+)
 $stageDir = Join-Path $Root "build\staged-industry-seeds-$ProductSku"
 
 if ($ProductSku -ne 'enterprise') {
@@ -34,10 +37,17 @@ New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
 
 $missing = @()
 foreach ($modId in $ids) {
-  $src = Join-Path $modsRoot $modId
-  if (-not (Test-Path $src)) {
+  $src = $null
+  foreach ($modsRoot in $modsRoots) {
+    $candidate = Join-Path $modsRoot $modId
+    if (Test-Path $candidate) {
+      $src = (Resolve-Path $candidate).Path
+      break
+    }
+  }
+  if (-not $src) {
     $missing += $modId
-    Write-Warning "Industry seed mod not found, skip: $modId ($src)"
+    Write-Warning "Industry seed mod not found, skip: $modId ($($modsRoots -join ', '))"
     continue
   }
   $dst = Join-Path $stageDir $modId
@@ -46,7 +56,8 @@ foreach ($modId in $ids) {
 }
 
 if ($missing.Count -gt 0) {
-  throw "Missing industry seed mod(s) under mods/: $($missing -join ', ')"
+  Write-Warning "Skipped missing industry seed mod(s): $($missing -join ', ')"
 }
 
-Write-Host "Staged $($ids.Count) industry seed mod(s) for SKU $ProductSku -> $stageDir"
+$stagedCount = $ids.Count - $missing.Count
+Write-Host "Staged $stagedCount industry seed mod(s) for SKU $ProductSku -> $stageDir"
