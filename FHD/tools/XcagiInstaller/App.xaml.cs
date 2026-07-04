@@ -39,13 +39,24 @@ public partial class App : System.Windows.Application
                 WriteSilentLog("sunbird seed deployed");
             }
 
-            Shutdown(0);
+            ShutdownOnUiThread(0);
         }
         catch (Exception ex)
         {
             WriteSilentLog("failed: " + ex);
-            Shutdown(1);
+            ShutdownOnUiThread(1);
         }
+    }
+
+    private void ShutdownOnUiThread(int exitCode)
+    {
+        if (Dispatcher.CheckAccess())
+        {
+            Shutdown(exitCode);
+            return;
+        }
+
+        Dispatcher.Invoke(() => Shutdown(exitCode));
     }
 
     private static void WriteSilentLog(string message)
