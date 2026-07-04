@@ -17,7 +17,7 @@ from app.mod_sdk.customer_delivery import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_ALLOWED_TOP_LEVELS = {"424", "config", "data", "delivery-manifest.json"}
+_ALLOWED_TOP_LEVELS = {"424", "config", "data", "mods", "delivery-manifest.json"}
 
 
 def _safe_member_relpath(name: str) -> Path | None:
@@ -133,6 +133,15 @@ async def install_customer_delivery_seed_package(
 
             applied = bool(apply_sunbird_roster_seed_if_needed(data_root))
 
+        route_ready = False
+        try:
+            from app.infrastructure.mods.mod_manager import ensure_mod_api_ready, get_mod_manager
+
+            get_mod_manager().scan_mods(use_cache=False)
+            route_ready = bool(ensure_mod_api_ready(mid))
+        except RECOVERABLE_ERRORS:
+            route_ready = False
+
         return {
             "success": True,
             "message": "客户交付种子包已下载并应用",
@@ -142,6 +151,7 @@ async def install_customer_delivery_seed_package(
             "data_root": str(data_root),
             "extracted_files": extracted,
             "applied": applied,
+            "route_ready": route_ready,
         }
     except RECOVERABLE_ERRORS as exc:
         return {

@@ -170,6 +170,17 @@ class TestExtractCustomerDeliverySeed:
         assert len(result) == 3
         assert "delivery-manifest.json" in result
 
+    def test_extracts_customer_mod_files(self, tmp_path):
+        zip_path = _make_zip(
+            tmp_path,
+            {"mods/taiyangniao-pro/manifest.json": b'{"id":"taiyangniao-pro"}'},
+        )
+        data_root = tmp_path / "data"
+        data_root.mkdir()
+        result = extract_customer_delivery_seed(zip_path, data_root)
+        assert result == ["mods/taiyangniao-pro/manifest.json"]
+        assert (data_root / "mods" / "taiyangniao-pro" / "manifest.json").exists()
+
     def test_creates_parent_dirs(self, tmp_path):
         zip_path = _make_zip(tmp_path, {"config/nested/deep/file.txt": b"deep"})
         data_root = tmp_path / "data"

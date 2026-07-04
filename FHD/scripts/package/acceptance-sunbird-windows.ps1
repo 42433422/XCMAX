@@ -439,6 +439,11 @@ Invoke-Check 'login:SUNBIRD' {
   if (-not $login.success) {
     throw "login failed: $($login.message) $($login.error.message)"
   }
+  $loginData = Get-EnvelopeData $login
+  $entitled = @()
+  if ($loginData -and ($loginData.PSObject.Properties.Name -contains 'entitled_mod_ids')) {
+    $entitled = @($loginData.entitled_mod_ids)
+  }
   $me = Invoke-XcagiJson '/api/auth/me' -TimeoutSec 30
   if (-not $me.success) {
     throw "auth/me failed: $($me.message)"
@@ -447,7 +452,20 @@ Invoke-Check 'login:SUNBIRD' {
   if ([string]$data.user.username -ne $Username) {
     throw "logged in as $($data.user.username), expected $Username"
   }
-  "username=$($data.user.username);account_kind=$($data.account_kind)"
+  "username=$($data.user.username);account_kind=$($data.account_kind);entitled=$($entitled -join ',')"
+}
+
+Invoke-Check 'customer-delivery-seed' {
+  $res = Invoke-XcagiJson '/api/mod-store/install-customer-delivery-seed' -Method POST -Body @{
+    mod_id = 'taiyangniao-pro'
+    industry_id = 'attendance-industry'
+  } -TimeoutSec 240
+  if (-not $res.success) {
+    throw "customer delivery seed failed: $($res.message) $($res.error)"
+  }
+  $data = Get-EnvelopeData $res
+  $files = @($data.extracted_files)
+  "applied=$($data.applied);route_ready=$($data.route_ready);files=$($files.Count)"
 }
 
 Invoke-Check 'host-foundation:install' {
