@@ -2,14 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
 
+const mockFlags = vi.hoisted(() => ({
+  clientErpSidebarContext: true,
+  exposeIndustrySidebar: true,
+}))
+
 vi.mock('@/constants/platformShellMode', () => ({
   isPlatformShellModeEnabled: () => false,
-  shouldExposeIndustrySidebar: () => true,
+  shouldExposeIndustrySidebar: () => mockFlags.exposeIndustrySidebar,
   resolvePlatformShellMenuKeys: () => new Set<string>(),
 }))
 
 vi.mock('@/constants/genericModPack', () => ({
-  isClientErpSidebarContext: () => true,
+  isClientErpSidebarContext: () => mockFlags.clientErpSidebarContext,
   keepHostNavKeyVisibleWhenModSidebarFacetSuppressed: () => false,
   normalizeModSidebarNavKey: (key: string) => String(key || '').replace(/^mod-mod-/, 'mod-'),
   shouldHideAttendanceModSidebarMenu: () => false,
@@ -112,6 +117,8 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    mockFlags.clientErpSidebarContext = true
+    mockFlags.exposeIndustrySidebar = true
   })
 
   it('非平台壳模式下选中太阳鸟也注入宿主业务卡片', () => {
@@ -124,5 +131,17 @@ describe('useVisibleNavItems · 企业完整包客户行业侧栏', () => {
     expect(keys).not.toContain('mod-erp-data-sources')
     expect(visibleNavItems.value.find((i) => i.key === 'products')?.name).toBe('人员管理')
     expect(visibleNavItems.value.find((i) => i.key === 'customers')?.name).toBe('部门管理')
+  })
+
+  it('账号定制已开放侧栏时不依赖主 ERP 上下文', () => {
+    mockFlags.clientErpSidebarContext = false
+
+    const { visibleNavItems } = useVisibleNavItems()
+    const keys = visibleNavItems.value.map((i) => i.key)
+
+    expect(keys).toContain('products')
+    expect(keys).toContain('customers')
+    expect(keys).toContain('data-sources')
+    expect(visibleNavItems.value.find((i) => i.key === 'products')?.name).toBe('人员管理')
   })
 })
