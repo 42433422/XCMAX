@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Windows;
 using XcagiInstaller.Services;
 
@@ -22,7 +23,7 @@ public partial class App : System.Windows.Application
                 cancellationToken: CancellationToken.None).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(setupExe))
                 throw new InvalidOperationException("Unable to resolve embedded setup payload.");
-            WriteSilentLog($"payload={setupExe}");
+            WriteSilentLog($"payload={setupExe};{DescribeFile(setupExe)}");
 
             var result = await NsisSilentInstaller.RunAsync(
                 setupExe,
@@ -69,6 +70,21 @@ public partial class App : System.Windows.Application
         catch
         {
             // Silent install logging must never hide the real install result.
+        }
+    }
+
+    private static string DescribeFile(string path)
+    {
+        try
+        {
+            using var sha = SHA256.Create();
+            using var stream = File.OpenRead(path);
+            var hash = Convert.ToHexString(sha.ComputeHash(stream)).ToLowerInvariant();
+            return $"size={new FileInfo(path).Length};sha256={hash}";
+        }
+        catch (Exception ex)
+        {
+            return $"describe_error={ex.GetType().Name}:{ex.Message}";
         }
     }
 

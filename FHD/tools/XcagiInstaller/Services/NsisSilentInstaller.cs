@@ -17,7 +17,8 @@ public sealed class NsisSilentInstaller
         string setupExePath,
         string installDirectory,
         IProgress<InstallProgressUpdate>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int attempt = 1)
     {
         if (!File.Exists(setupExePath))
             return InstallResult.Fail($"未找到安装包：{setupExePath}");
@@ -113,7 +114,21 @@ public sealed class NsisSilentInstaller
         if (!InstallProgressTracker.IsInstallComplete(dir))
         {
             if (process.ExitCode != 0)
+            {
+                if (attempt == 1 && process.ExitCode == unchecked((int)0xC0000005))
+                {
+                    progress?.Report(new InstallProgressUpdate(0, "安装程序异常退出，正在重试…"));
+                    TryCleanInstallDirectory(dir);
+                    return await RunAsync(
+                        setupExePath,
+                        installDirectory,
+                        progress,
+                        cancellationToken,
+                        attempt + 1).ConfigureAwait(false);
+                }
+
                 return InstallResult.Fail($"安装程序退出码 {process.ExitCode}。");
+            }
             return InstallResult.Fail("安装未完成：缺少 XCAGI 主程序或后端文件。");
         }
 
@@ -126,6 +141,20 @@ public sealed class NsisSilentInstaller
         }
 
         return InstallResult.Ok(dir, File.Exists(appExe) ? appExe : null);
+    }
+
+    private static void TryCleanInstallDirectory(string dir)
+    {
+        try
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+            Directory.CreateDirectory(dir);
+        }
+        catch
+        {
+            // The retry will report the actual installer result.
+        }
     }
 }
 
