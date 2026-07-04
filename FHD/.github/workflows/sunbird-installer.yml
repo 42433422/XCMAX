@@ -58,10 +58,14 @@ jobs:
           $installer = "release/xcagi-v$v/sunbird/太阳鸟-Setup-$v-x64.exe"
           if (-not (Test-Path $installer)) { throw "Sunbird installer missing: $installer" }
           $installDir = Join-Path $env:RUNNER_TEMP "XCAGI-Sunbird"
-          & $installer --silent --install-dir $installDir --sunbird-seed
-          if ($LASTEXITCODE -ne 0) {
+          $proc = Start-Process `
+            -FilePath (Resolve-Path $installer).Path `
+            -ArgumentList @('--silent', '--install-dir', $installDir, '--sunbird-seed') `
+            -Wait `
+            -PassThru
+          if ($proc.ExitCode -ne 0) {
             Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
-            throw "Silent install failed: exit=$LASTEXITCODE"
+            throw "Silent install failed: exit=$($proc.ExitCode)"
           }
           Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
           $exe = Join-Path $installDir "XCAGI.exe"
