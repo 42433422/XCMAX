@@ -79,8 +79,7 @@ jobs:
               'xcagi-core-workflow-employees',
               'xcagi-office-employee-pack-bridge',
               'wechat-contacts-ai-employee',
-              'attendance-industry',
-              'taiyangniao-pro'
+              'attendance-industry'
             )
       - name: Sunbird acceptance
         shell: pwsh
