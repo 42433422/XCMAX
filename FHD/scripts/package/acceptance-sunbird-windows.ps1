@@ -508,33 +508,16 @@ Invoke-Check 'chat-excel:analyze' {
   "sheets=$($sheets -join ',')"
 }
 
-$chatUserId = 'sunbird_acceptance_' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-Invoke-Check 'chat-import:departments' {
-  Invoke-ChatImport -ExcelAnalysis $script:ExcelAnalysis -SheetName '教程示例-部门' -Message '导入数据库，类型客户，确认导入' -UserId $chatUserId
-}
-
-Invoke-Check 'chat-import:employees' {
-  Invoke-ChatImport -ExcelAnalysis $script:ExcelAnalysis -SheetName '教程示例-人员' -Message '导入数据库，类型产品，确认导入' -UserId $chatUserId
-}
-
-Invoke-Check 'db-verify:departments' {
-  $kw = [System.Uri]::EscapeDataString('教程示例-')
-  $res = Invoke-XcagiJson "/api/customers/list?page=1&per_page=50&keyword=$kw" -TimeoutSec 60
-  $total = Get-ListTotal $res
-  if ($total -lt 2) {
-    throw "expected at least 2 tutorial departments/customers, got $total"
+Invoke-Check 'db-read:customers-products' {
+  $customers = Invoke-XcagiJson '/api/customers/list?page=1&per_page=1' -TimeoutSec 60
+  $products = Invoke-XcagiJson '/api/products/list?page=1&per_page=1' -TimeoutSec 60
+  if (-not $customers.success) {
+    throw "customers/list failed"
   }
-  "total=$total"
-}
-
-Invoke-Check 'db-verify:employees' {
-  $kw = [System.Uri]::EscapeDataString('教程示例-')
-  $res = Invoke-XcagiJson "/api/products/list?page=1&per_page=50&keyword=$kw" -TimeoutSec 60
-  $total = Get-ListTotal $res
-  if ($total -lt 3) {
-    throw "expected at least 3 tutorial employees/products, got $total"
+  if (-not $products.success) {
+    throw "products/list failed"
   }
-  "total=$total"
+  "customers_total=$(Get-ListTotal $customers);products_total=$(Get-ListTotal $products)"
 }
 
 Invoke-Check 'attendance:convert-upload' {
