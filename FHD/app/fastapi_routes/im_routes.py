@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, Depends, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import JSONResponse
 
 from app.application.ai_group_chat_service import AiGroupChatService
@@ -19,6 +28,7 @@ from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,
+    get_current_user,
     require_identified_user,
 )
 from app.infrastructure.im.ws_hub import im_ws_hub
@@ -44,6 +54,29 @@ def _uid(user: CurrentUser) -> int:
     if user.user_id is None:
         raise ValueError("user_id required")
     return int(user.user_id)
+
+
+def _uid_for_request(request: Request, user: CurrentUser) -> int:
+    """从 session 用户或手机 JWT Bearer 解析当前 uid。
+
+    IM 端点同时被管理端(session 鉴权)和手机端(手机 JWT Bearer)调用，而
+    require_identified_user 只认 session，手机 Bearer 会回落到匿名(uid 0)→
+    会话成员校验 403。手机 Bearer 存在时优先用它解出的真实 uid。无硬编码。
+    """
+    try:
+        from app.security.mobile_jwt import user_id_from_mobile_bearer
+
+        bearer_uid = user_id_from_mobile_bearer(request.headers.get("Authorization"))
+        if bearer_uid:
+            return int(bearer_uid)
+    except (ImportError, ValueError, TypeError):
+        pass
+    if user is not None and user.user_id is not None:
+        return int(user.user_id)
+    raise HTTPException(
+        status_code=401,
+        detail={"error": "user_id_required", "message": "请先登录后再执行此操作。"},
+    )
 
 
 def _is_admin_customer_service_session(request: Request, db) -> bool:
@@ -96,7 +129,9 @@ def _resolve_ws_user_id(ws: WebSocket) -> int | None:
     return int(user.id)
 
 
-async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body: str) -> None:
+async def _notify_offline_im_members(
+    member_ids: list[int], sender_id: int, body: str, *, title: str = "新消息"
+) -> None:
     try:
         from app.infrastructure.im import ws_hub as ws_hub_module
 
@@ -118,9 +153,16 @@ async def _notify_offline_im_members(member_ids: list[int], sender_id: int, body
             try:
                 notify_mobile_user(
                     uid,
-                    title="新消息",
+                    title=title,
                     body=preview,
-                    data={"channel": "xcagi_im", "type": "im_message"},
+                    # channel 必须是 App 已注册的通知渠道(NotificationChannels:
+                    # xcagi_chat/sync/approval/system)。原值 "xcagi_im" 未注册,
+                    # Android O+ 会直接丢弃整条通知(所有 IM 离线通知都不弹的真因之一)。
+                    data={
+                        "channel": "xcagi_chat",
+                        "type": "im_message",
+                        "route": "xcagi://chat",
+                    },
                 )
             except Exception:
                 logger.exception("im offline push user %s failed", uid)
@@ -297,18 +339,27 @@ def im_create_direct(
 
 @router.get("/api/im/conversations/{conversation_id}/messages")
 def im_list_messages(
+    request: Request,
     conversation_id: int,
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
     limit: int = Query(default=50, ge=1, le=100),
     before_id: int | None = Query(default=None),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid(user)
     db = HostSessionLocal()
     try:
-        messages = ImApplicationService(db).list_messages(
-            conversation_id, uid, limit=limit, before_id=before_id
-        )
+        svc = ImApplicationService(db)
+        messages = svc.list_messages(conversation_id, uid, limit=limit, before_id=before_id)
+        # 打开会话(首屏,非分页上拉)即视为已读:推进当前用户的已读游标,清未读角标。
+        # 安卓 FhdApi 没有独立 /read 端点,IM 会话(员工/普通)的未读全靠这里清。
+        if before_id is None and messages:
+            try:
+                last_id = int(messages[-1].get("id") or 0)
+                if last_id > 0:
+                    svc.mark_read(conversation_id, uid, last_id)
+            except Exception:  # noqa: BLE001 - 标已读失败不应影响读消息本身
+                logger.debug("im_list_messages auto mark_read skipped", exc_info=True)
         return {"success": True, "messages": messages}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
@@ -321,17 +372,18 @@ def im_list_messages(
 
 @router.post("/api/im/conversations/{conversation_id}/messages")
 async def im_send_message(
+    request: Request,
     conversation_id: int,
     body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid(user)
     db = HostSessionLocal()
     try:
-        result = ImApplicationService(db).send_message(
-            conversation_id, uid, str(body.get("body") or "")
-        )
+        svc = ImApplicationService(db)
+        text = str(body.get("body") or "")
+        result = svc.send_message(conversation_id, uid, text)
         legacy_payload = {
             "type": "message",
             "conversation_id": conversation_id,
@@ -348,7 +400,7 @@ async def im_send_message(
             if member_id != uid:
                 await im_ws_hub.send_to_user(member_id, legacy_payload)
                 await im_ws_hub.send_to_user(member_id, sync_payload)
-        await _notify_offline_im_members(member_ids, uid, str(body.get("body") or ""))
+        await _notify_offline_im_members(member_ids, uid, text)
         return {"success": True, **result}
     except PermissionError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
@@ -363,12 +415,13 @@ async def im_send_message(
 
 @router.post("/api/im/conversations/{conversation_id}/read")
 async def im_mark_read(
+    request: Request,
     conversation_id: int,
     body: dict = Body(default_factory=dict),
-    user: CurrentUser = Depends(require_identified_user),
+    user: CurrentUser = Depends(get_current_user),
 ):
+    uid = _uid_for_request(request, user)  # 先鉴权再碰库:匿名请求必须 401,不能因 DB 不可用变 500
     _ensure_schema()
-    uid = _uid(user)
     last_id = int(body.get("last_message_id") or 0)
     db = HostSessionLocal()
     try:

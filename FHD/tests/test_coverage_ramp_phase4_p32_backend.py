@@ -30,10 +30,13 @@ def test_collect_mod_modules_reads_registry(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_im_mark_read_permission_error() -> None:
     from app.fastapi_routes import im_routes
+    from app.infrastructure.auth.dependencies import get_current_user
 
     app = FastAPI()
     app.include_router(im_routes.router)
     app.dependency_overrides[require_identified_user] = lambda: CurrentUser(1)
+    # mark_read 已改依赖 get_current_user(手机 Bearer 兼容),一并 override
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(1)
 
     mock_db = MagicMock()
     mock_svc = MagicMock()

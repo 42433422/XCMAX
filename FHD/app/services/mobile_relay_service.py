@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 import time
@@ -15,6 +16,8 @@ from sqlalchemy import text
 
 from app.db.session import get_db
 from app.infrastructure.topology import FHD_API_BASE_URL
+
+logger = logging.getLogger(__name__)
 
 
 def _utc_now() -> str:
@@ -595,7 +598,75 @@ class MobileRelayService:
                 .mappings()
                 .first()
             )
-            return _row_dict(row) if row else None
+            task_row = _row_dict(row) if row else None
+        # 终态主动推送创建者手机（FCM + 离线队列轮询补发）——在 DB 事务收尾后再发，
+        # 不让推送网络耗时拖住 complete 回写。此前任务完成只写库，手机要等下次打开
+        # App 轮询才知道结果，"超级员工干完活"对老板完全无感。
+        if task_row:
+            self._notify_task_creator(task_row)
+        return task_row
+
+    @staticmethod
+    def _notify_task_creator(task: dict[str, Any]) -> None:
+        """CLI 执行类任务(*.invoke)到达终态时推送创建者。
+
+        git.merge/diff/discard 是人守在 App 里等结果的同步交互，事后补推只会
+        变成噪音，跳过；cancelled 是用户自己取消的，也不推。推送失败仅记日志，
+        绝不影响 complete 主流程。channel 必须用 App 已注册的通知渠道(xcagi_chat)。
+        """
+        try:
+            uid = int(task.get("created_by_user_id") or 0)
+        except (TypeError, ValueError):
+            uid = 0
+        kind = str(task.get("kind") or "").strip()
+        status = str(task.get("status") or "").strip()
+        title = {
+            "completed": "✅ 超级员工任务完成",
+            "failed": "❌ 超级员工任务失败",
+            "blocked": "⏸️ 超级员工任务受阻",
+        }.get(status)
+        if uid <= 0 or not kind.endswith(".invoke") or not title:
+            return
+        # _row_dict 已把 result_json 解析进 "result"；直查裸行时兜底再解一次。
+        result = task.get("result")
+        if not isinstance(result, dict):
+            try:
+                result = json.loads(task.get("result_json") or "{}")
+            except (TypeError, ValueError):
+                result = {}
+        body = ""
+        if isinstance(result, dict):
+            body = str(
+                result.get("summary")
+                or result.get("answer")
+                or result.get("output")
+                or result.get("error_message")
+                or result.get("error")
+                or ""
+            ).strip()
+        tool = kind.split(".", 1)[0]
+        if not body:
+            body = f"{tool} 已结束本次任务，打开对话查看详情。"
+        try:
+            from app.services.mobile_push import notify_user
+
+            notify_user(
+                uid,
+                title=title,
+                body=body[:200],
+                data={
+                    "channel": "xcagi_chat",
+                    "type": "relay_task_done",
+                    "route": "xcagi://chat",
+                    "task_id": str(task.get("task_id") or ""),
+                    "task_status": status,
+                    "tool": tool,
+                },
+            )
+        except Exception:  # noqa: BLE001 - 推送是尽力而为的旁路
+            logger.warning(
+                "relay task completion push failed task_id=%s", task.get("task_id"), exc_info=True
+            )
 
     def _fresh_pairing_code(self) -> str:
         with get_db() as db:

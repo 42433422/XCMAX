@@ -150,6 +150,22 @@ async def employee_im_send(request: Request, payload: EmployeeImSendRequest = Bo
         except Exception:  # noqa: BLE001 - websocket fanout is best-effort after DB write
             logger.debug("employee_im_send ws push skipped", exc_info=True)
 
+        # 离线推送:老板 App 未在线(WS 未连)时,把员工主动汇报写进自建推送离线队列
+        # (手机 WorkManager 轮询 /api/notifications/pending 取回弹本地通知)。
+        # 否则离线时一条提示都没有,只能手动打开会话才看见汇报。复用 _notify_offline_im_members
+        # 的在线/离线判定:在线成员已收 WS 实时推送,只对离线成员补推,标题用员工名。
+        try:
+            from app.fastapi_routes.im_routes import _notify_offline_im_members
+
+            off_member_ids = [int(m) for m in (result.get("member_user_ids") or [])]
+            off_sender_uid = int(result.get("employee_user_id") or 0)
+            emp_title = (payload.display_name or payload.employee_id or "员工").strip()
+            await _notify_offline_im_members(
+                off_member_ids, off_sender_uid, payload.body, title=emp_title
+            )
+        except Exception:  # noqa: BLE001 - offline push is best-effort after DB write
+            logger.debug("employee_im_send offline push skipped", exc_info=True)
+
         logger.info(
             "employee_im_send ok: boss=%s employee=%s hook=%s conv=%s",
             boss_uid,
