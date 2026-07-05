@@ -840,10 +840,7 @@ class AiGroupChatService:
             # 企业端 4 部门初始只保留必备小C助理，不自动铺员工（按需/装 mod 后由生态同步进入）。
             return
         targets = [
-            g
-            for g in groups
-            if isinstance(g, dict)
-            and str(g.get("department_key") or "").strip()
+            g for g in groups if isinstance(g, dict) and str(g.get("department_key") or "").strip()
         ]
         if not targets:
             return
@@ -880,9 +877,7 @@ class AiGroupChatService:
             dk = str(g.get("department_key") or "").strip()
             if not dk:
                 continue
-            existing = {
-                _member_employee_id(m) for m in g.get("members", []) if isinstance(m, dict)
-            }
+            existing = {_member_employee_id(m) for m in g.get("members", []) if isinstance(m, dict)}
             existing.discard("")
             fresh = members_by_dept.get(dk, [])
             roster_ids = {_member_employee_id(m) for m in fresh if _member_employee_id(m)}

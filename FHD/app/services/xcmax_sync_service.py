@@ -56,7 +56,9 @@ def _csrf_token_from_jar(jar: http.cookiejar.CookieJar) -> str:
     return ""
 
 
-def _prime_csrf_cookie(opener: urllib.request.OpenerDirector, jar: http.cookiejar.CookieJar, base_url: str) -> str:
+def _prime_csrf_cookie(
+    opener: urllib.request.OpenerDirector, jar: http.cookiejar.CookieJar, base_url: str
+) -> str:
     try:
         req = urllib.request.Request(f"{base_url}/api/health", method="GET")
         with opener.open(req, timeout=10) as resp:
@@ -798,7 +800,9 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
         if tier not in {"personal", "enterprise", "admin"}:
             tier = "enterprise" if bool(payload.get("is_enterprise")) else "personal"
 
-        industry_id = str(profile.get("industry_id") or payload.get("industry_id") or "通用").strip()
+        industry_id = str(
+            profile.get("industry_id") or payload.get("industry_id") or "通用"
+        ).strip()
         account_tier = str(profile.get("account_tier") or "").strip() or None
         budget_range = str(profile.get("budget_range") or "").strip() or None
         entitled_industries = _sync_payload_list(profile.get("entitled_industries"))
@@ -820,7 +824,9 @@ def _apply_account_entitlements(item: dict[str, Any]) -> None:
                 user.email = str(payload.get("email") or "").strip()
             db.commit()
     except OPERATIONAL_ERRORS as exc:
-        logger.warning("apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc)
+        logger.warning(
+            "apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc
+        )
 
 
 def apply_inbox(limit: int = 200) -> dict[str, Any]:

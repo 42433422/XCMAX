@@ -11,6 +11,27 @@ def push_outbox(*, remote_host: str, remote_port: int) -> Any:
     return _push(remote_host=remote_host, remote_port=remote_port)
 
 
+def record_change(
+    entity_type: str,
+    entity_id: str,
+    operation: str,
+    payload: dict[str, Any],
+    *,
+    actor: str = "system",
+    version: int = 1,
+) -> int:
+    from app.services.xcmax_sync_service import record_change as _record
+
+    return _record(
+        entity_type,
+        entity_id,
+        operation,
+        payload,
+        actor=actor,
+        version=version,
+    )
+
+
 def apply_inbox(limit: int = 200, **kwargs: Any) -> Any:
     from app.services.xcmax_sync_service import apply_inbox as _apply
 

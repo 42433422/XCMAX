@@ -944,8 +944,7 @@ async def admin_force_push_user_entitlements(
     这个接口服务管理端的“账号权益”页，不进入代管会话，也不污染桌面端当前登录态。
     """
     from app.application.session_account_meta import audit_admin_action
-    from app.application.xcmax_sync_app import push_outbox
-    from app.services.xcmax_sync_service import record_change
+    from app.application.xcmax_sync_app import push_outbox, record_change
 
     gate = _require_market_admin_session(request)
     if gate is not None:
@@ -962,7 +961,9 @@ async def admin_force_push_user_entitlements(
     tier = str(profile_data.get("tier") or user_data.get("tier") or "").strip().lower()
     if tier not in _VALID_TIERS:
         tier = "enterprise" if _truthy(user_data.get("is_enterprise")) else "personal"
-    industry_id = str(profile_data.get("industry_id") or user_data.get("industry_id") or "通用").strip()
+    industry_id = str(
+        profile_data.get("industry_id") or user_data.get("industry_id") or "通用"
+    ).strip()
     entitled_industries = _clean_string_list(profile_data.get("entitled_industries"))
     if industry_id and industry_id not in entitled_industries:
         entitled_industries.append(industry_id)
@@ -1050,7 +1051,7 @@ async def admin_list_wechat_groups(
     if gate is not None:
         return gate
     try:
-        from app.services.wechat_group_customer_bridge import list_group_contacts
+        from app.application.wechat_group_customer_app import list_group_contacts
 
         rows = list_group_contacts(keyword=keyword or None, limit=limit)
         return {"success": True, "data": rows, "total": len(rows)}
@@ -1064,7 +1065,7 @@ async def admin_list_user_wechat_customers(request: Request, user_id: int):
     if gate is not None:
         return gate
     try:
-        from app.services.wechat_group_customer_bridge import get_bindings_for_user
+        from app.application.wechat_group_customer_app import get_bindings_for_user
 
         return {"success": True, "data": get_bindings_for_user(user_id)}
     except RECOVERABLE_ERRORS as exc:
@@ -1081,7 +1082,7 @@ async def admin_save_user_wechat_customers(
     if gate is not None:
         return gate
     try:
-        from app.services.wechat_group_customer_bridge import save_bindings_for_user
+        from app.application.wechat_group_customer_app import save_bindings_for_user
 
         ids = body.get("contact_ids") or body.get("wechat_contact_ids") or []
         if not isinstance(ids, list):
