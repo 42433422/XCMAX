@@ -845,7 +845,7 @@ void main() {
           'employee:admin-duty-employees:user-customer-service-officer',
     );
     expect(customerService.title, '客户客服');
-    expect(customerService.subtitle, '查看并回复客户的客服消息');
+    expect(customerService.subtitle, '查看并回复企业客户的客服消息');
     expect(customerService.type, ConversationType.aiTask);
     expect(conversations.indexOf(customerService), 5);
     final employee = conversations.singleWhere(
@@ -988,10 +988,10 @@ void main() {
     );
 
     expect(customerService.title, '客户客服');
-    expect(customerService.subtitle, '查看并回复客户的客服消息');
+    expect(customerService.subtitle, '查看并回复企业客户的客服消息');
     expect(customerServiceProfile.name, '客户客服');
     expect(customerServiceProfile.title, '客户客服');
-    expect(customerServiceProfile.summary, '查看并回复客户的客服消息');
+    expect(customerServiceProfile.summary, '查看并回复企业客户的客服消息');
   });
 
   test('MobileRepository AI employee page uses Android mobile mods source',
