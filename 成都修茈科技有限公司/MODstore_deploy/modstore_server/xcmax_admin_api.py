@@ -74,7 +74,8 @@ def _init_schema_once() -> None:
     """幂等建表 + WAL；多 worker 安全。"""
     with _db_lock:
         with _connect() as conn:
-            conn.executescript("""
+            conn.executescript(
+                """
                 PRAGMA journal_mode=WAL;
                 PRAGMA synchronous=NORMAL;
                 CREATE TABLE IF NOT EXISTS xcmax_changes (
@@ -107,7 +108,8 @@ def _init_schema_once() -> None:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL DEFAULT ''
                 );
-                """)
+                """
+            )
             conn.commit()
 
 

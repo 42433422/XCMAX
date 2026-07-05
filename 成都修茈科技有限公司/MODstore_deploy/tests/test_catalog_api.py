@@ -174,6 +174,4 @@ def test_customer_delivery_seed_hidden_from_public_catalog(monkeypatch, tmp_path
     assert idx.status_code == 200
     assert idx.json() == {"packages": []}
     assert c.get("/v1/packages/sunbird-delivery-seed/1.0.0").status_code == 404
-    assert (
-        c.get("/v1/packages/sunbird-delivery-seed/1.0.0/download").status_code == 404
-    )
+    assert c.get("/v1/packages/sunbird-delivery-seed/1.0.0/download").status_code == 404

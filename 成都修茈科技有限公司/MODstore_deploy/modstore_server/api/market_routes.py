@@ -72,6 +72,7 @@ router = APIRouter(prefix="/api", tags=["market"])
 _get_current_user = get_current_user
 _require_admin = require_admin
 
+
 def _enterprise_assignable_mod_ids() -> frozenset[str]:
     return enterprise_assignable_mod_ids()
 
