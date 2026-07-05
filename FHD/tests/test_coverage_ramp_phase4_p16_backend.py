@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import sqlite3
 import urllib.error
+import urllib.request
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -44,6 +46,136 @@ def test_register_entity_applier() -> None:
 
     assert svc._ENTITY_APPLIERS["__test_entity__"] is _applier
     del svc._ENTITY_APPLIERS["__test_entity__"]
+
+
+def test_csrf_token_from_jar_covers_empty_nonmatching_and_valid_cookie() -> None:
+    assert svc._csrf_token_from_jar([]) == ""
+    jar = [
+        SimpleNamespace(name="session_id", value="sid"),
+        SimpleNamespace(name="csrf_token", value="  "),
+        SimpleNamespace(name="csrf_token", value="csrf-123"),
+    ]
+    assert svc._csrf_token_from_jar(jar) == "csrf-123"
+
+
+def test_open_sync_request_uses_direct_opener_when_urlopen_is_default() -> None:
+    req = urllib.request.Request("http://example.invalid/api/health", method="GET")
+    opener = MagicMock()
+    opener.open.return_value = _FakeResp(b"ok")
+
+    assert svc._open_sync_request(opener, req, timeout=1).read() == b"ok"
+    opener.open.assert_called_once_with(req, timeout=1)
+
+
+def test_open_sync_request_honors_monkeypatched_urlopen() -> None:
+    req = urllib.request.Request("http://example.invalid/api/health", method="GET")
+    opener = MagicMock()
+    with patch("urllib.request.urlopen", return_value=_FakeResp(b"patched")) as urlopen:
+        assert svc._open_sync_request(opener, req, timeout=2).read() == b"patched"
+    urlopen.assert_called_once_with(req, timeout=2)
+    opener.open.assert_not_called()
+
+
+def test_sync_payload_list_filters_blank_and_duplicates() -> None:
+    assert svc._sync_payload_list("not-list") == []
+    assert svc._sync_payload_list([" mod-a ", "", None, "mod-a", "mod-b"]) == [
+        "mod-a",
+        "mod-b",
+    ]
+
+
+def test_apply_account_entitlements_skips_invalid_payloads() -> None:
+    with patch.object(svc, "_write_sync_meta") as write_meta:
+        svc._apply_account_entitlements({"payload": "bad"})
+        svc._apply_account_entitlements({"payload": {"username": "alice"}})
+        svc._apply_account_entitlements({"entity_id": "42", "payload": {}})
+    write_meta.assert_not_called()
+
+
+class _DbContext:
+    def __init__(self, db: MagicMock) -> None:
+        self._db = db
+
+    def __enter__(self) -> MagicMock:
+        return self._db
+
+    def __exit__(self, *args) -> bool:  # noqa: ANN002
+        return False
+
+
+class _FakeUser:
+    username = "username-column"
+
+    def __init__(self, **kwargs) -> None:  # noqa: ANN003
+        self.__dict__.update(kwargs)
+
+
+def test_apply_account_entitlements_creates_user_and_normalizes_payload() -> None:
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    payload = {
+        "profile": {
+            "username": "alice",
+            "account_tier": "pro",
+            "budget_range": "10-20",
+            "entitled_industries": ["retail"],
+        },
+        "is_enterprise": True,
+        "industry_id": "food",
+        "mod_ids": [" mod-a ", "", "mod-a", "mod-b"],
+        "email": " alice@example.com ",
+    }
+
+    with (
+        patch.object(svc, "_write_sync_meta") as write_meta,
+        patch("app.db.models.user.User", _FakeUser),
+        patch("app.db.session.get_db", return_value=_DbContext(db)),
+    ):
+        svc._apply_account_entitlements({"entity_id": "42", "payload": payload})
+
+    assert write_meta.call_count == 2
+    stored = write_meta.call_args_list[0].args[1]
+    assert stored["market_user_id"] == "42"
+    assert stored["mod_ids"] == ["mod-a", "mod-b"]
+    created = db.add.call_args.args[0]
+    assert created.username == "alice"
+    assert created.tier == "enterprise"
+    assert created.account_tier == "pro"
+    assert created.industry_id == "food"
+    assert created.entitled_industries == ["retail", "food"]
+    assert created.email == "alice@example.com"
+    db.flush.assert_called_once()
+    db.commit.assert_called_once()
+
+
+def test_apply_account_entitlements_updates_existing_personal_user() -> None:
+    db = MagicMock()
+    existing = SimpleNamespace(username="bob")
+    db.query.return_value.filter.return_value.first.return_value = existing
+    payload = {
+        "profile": {
+            "username": "bob",
+            "tier": "personal",
+            "account_tier": "ignored",
+            "entitled_industries": ["general"],
+        },
+        "industry_id": "general",
+        "mod_ids": [],
+    }
+
+    with (
+        patch.object(svc, "_write_sync_meta"),
+        patch("app.db.models.user.User", _FakeUser),
+        patch("app.db.session.get_db", return_value=_DbContext(db)),
+    ):
+        svc._apply_account_entitlements({"entity_id": "7", "payload": payload})
+
+    db.add.assert_not_called()
+    assert existing.tier == "personal"
+    assert existing.account_tier is None
+    assert existing.entitled_industries == ["general"]
+    assert not hasattr(existing, "email")
+    db.commit.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
