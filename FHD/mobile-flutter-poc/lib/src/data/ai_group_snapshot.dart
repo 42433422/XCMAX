@@ -274,7 +274,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "user-customer-service-officer",
         name: "客户客服",
-        summary: "查看并回复客户的客服消息",
+        summary: "查看并回复企业客户的客服消息",
         avatarUrl: null,
         avatarKey: "",
       ),

@@ -38,7 +38,7 @@ from app.application.execution_scope import (
 from app.application.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.workspaces import WorkspaceError, get_workspace_registry
-from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -1096,9 +1096,7 @@ class SuperEmployeeService:
         accepted: bool,
         reason: str,
     ) -> dict[str, Any]:
-        return self._messages.write_outbox(
-            request, status=status, accepted=accepted, reason=reason
-        )
+        return self._messages.write_outbox(request, status=status, accepted=accepted, reason=reason)
 
     def _dispatch_reply(self, dispatch: dict[str, Any]) -> str:
         # 统一对外提示为"思考中..."，避免暴露派工细节导致用户误以为卡住。

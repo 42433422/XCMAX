@@ -21,7 +21,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
   DutyRosterEmployee(
     id: 'user-customer-service-officer',
     label: '客户客服',
-    summary: '查看并回复客户的客服消息',
+    summary: '查看并回复企业客户的客服消息',
   ),
   DutyRosterEmployee(
     id: 'site-content-editor',
@@ -159,7 +159,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     id: 'github-pr-gatekeeper',
     label: 'GitHub PR 守门员',
     summary:
-        '通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（平台 CR）。',
+        '通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。',
   ),
   DutyRosterEmployee(
     id: 'daily-orchestrator',
@@ -181,9 +181,9 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
   ),
   DutyRosterEmployee(
     id: 'enterprise-adoption-officer',
-    label: '使用跟踪员',
+    label: '企业使用跟踪员',
     summary:
-        '跟踪 O6 使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。',
+        '跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。',
   ),
   DutyRosterEmployee(
     id: 'delivery-receipt-officer',
@@ -225,7 +225,7 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     id: 'employee-interview-assistant',
     label: '员工信息访谈员',
     summary:
-        '面向平台协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。',
+        '面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。',
   ),
   DutyRosterEmployee(
     id: 'employee-pack-quality-interviewer',

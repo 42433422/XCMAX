@@ -11,7 +11,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
@@ -41,9 +40,7 @@ class GitWorkspaceManager:
         self._employee_name = employee_name
         self._git_call = git_call
 
-    def git(
-        self, cwd: str, *args: str, timeout: float = 60.0
-    ) -> subprocess.CompletedProcess:
+    def git(self, cwd: str, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess:
         if self._git_call is not None:
             return self._git_call(cwd, *args, timeout=timeout)
         env = os.environ.copy()
@@ -147,9 +144,7 @@ class GitWorkspaceManager:
             if not st.stdout.strip():
                 return False, "无改动可提交"
             title = (text.strip().splitlines() or ["开发任务"])[0][:60]
-            msg = (
-                f"{self._employee_name}: {title}\n\n手机超级员工自动提交（coding→view→push 闭环）"
-            )
+            msg = f"{self._employee_name}: {title}\n\n手机超级员工自动提交（coding→view→push 闭环）"
             c = self.git(cwd, "commit", "-m", msg, timeout=60)
             if c.returncode != 0:
                 return False, "提交失败：" + (c.stderr.strip() or c.stdout.strip())[:300]

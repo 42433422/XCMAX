@@ -1217,7 +1217,7 @@ void main() {
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.text('专属客服'), findsNothing);
     expect(find.text('客户客服'), findsWidgets);
-    expect(find.text('查看并回复客户的客服消息'), findsWidgets);
+    expect(find.text('查看并回复企业客户的客服消息'), findsWidgets);
 
     await tester.tap(find.text('客户客服').first);
     await tester.pumpAndSettle();
