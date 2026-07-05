@@ -81,7 +81,7 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '高级设置' : '已安装',
+        badgeText: adminMode ? '服务器后台' : '已安装',
         badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
         states: conversationStates,
       ),
@@ -109,7 +109,7 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '高级设置' : '已安装',
+        badgeText: adminMode ? '服务器后台' : '已安装',
         badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
         states: conversationStates,
       ),
@@ -427,6 +427,35 @@ class MobileRepository {
       throw MobileRepositoryException(response.message.ifEmpty('客服消息发送失败'));
     }
     return _parseCsMessageResponse(response.data);
+  }
+
+  Future<List<AdminCsInboxItem>> loadAdminCsInbox() async {
+    final response = await _client.adminCsInbox();
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('加载客服收件箱失败'));
+    }
+    return _parseAdminCsInbox(response.data);
+  }
+
+  Future<List<AdminCsMessage>> loadAdminCsMessages(int conversationId) async {
+    if (conversationId <= 0) return const [];
+    final response = await _client.adminCsMessages(conversationId);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('加载客服消息失败'));
+    }
+    return _parseAdminCsMessages(response.data);
+  }
+
+  Future<void> replyAdminCs({
+    required int conversationId,
+    required String body,
+  }) async {
+    final text = body.trim();
+    if (conversationId <= 0 || text.isEmpty) return;
+    final response = await _client.replyAdminCs(id: conversationId, body: text);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('客服回复失败'));
+    }
   }
 
   Future<List<MobileNavMenuItem>> loadNavMenu() async {
@@ -1357,20 +1386,19 @@ class MobileRepository {
   }
 
   Future<String> _relayIdForSuperEmployeeDispatch() async {
-    final configured = _client.configuredRelayId;
     try {
       final response = await _client.relayDesktops();
-      if (!response.success) return configured;
+      if (!response.success) return '';
       final rows = _relayDesktopRows(response.data)
           .where(_relayDesktopIsDispatchable)
           .toList(growable: false);
-      if (rows.isEmpty) return configured;
+      if (rows.isEmpty) return '';
       rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
             _relayDesktopSortKey(b),
           ));
-      return _stringField(rows.last, 'relay_id').ifEmpty(configured);
+      return _stringField(rows.last, 'relay_id');
     } catch (_) {
-      return configured;
+      return '';
     }
   }
 
@@ -1402,7 +1430,10 @@ class MobileRepository {
     String taskId,
   ) async {
     final currentRelayId = await _relayIdForSuperEmployeeDispatch();
-    if (currentRelayId.isEmpty) return false;
+    if (currentRelayId.isEmpty) {
+      await _setInflightRelayTask(conversationId, '');
+      return true;
+    }
     final status = await _client.relayTaskStatus(taskId);
     final taskMap = _objectMap(status.data?['task']);
     final current =
@@ -1788,7 +1819,7 @@ class MarketCapability {
         _stringField(json, 'summary'),
         _stringField(json, 'subtitle'),
         _stringField(json, 'version'),
-        '从工作台同步的能力包',
+        '从企业端同步的能力包',
       ]),
       payload: json,
     );
@@ -2317,6 +2348,70 @@ CsMessageResponse _parseCsMessageResponse(Object? value) {
   );
 }
 
+List<AdminCsInboxItem> _parseAdminCsInbox(Object? value) {
+  final data = _objectMap(value);
+  final raw = data['conversations'] ?? data['items'] ?? data['data'] ?? value;
+  return _objectList(raw)
+      .map(
+        (json) => AdminCsInboxItem(
+          conversationId: _intField(json, 'conversationId').ifZero(
+            _intField(json, 'conversation_id').ifZero(_intField(json, 'id')),
+          ),
+          customerName: _firstNonBlank([
+            _stringField(json, 'customerName'),
+            _stringField(json, 'customer_name'),
+            _stringField(json, 'name'),
+            '客户',
+          ]),
+          lastMessageAt: _firstNonBlank([
+            _stringField(json, 'lastMessageAt'),
+            _stringField(json, 'last_message_at'),
+            _stringField(json, 'updated_at'),
+            _stringField(json, 'created_at'),
+          ]),
+          unreadCount: _intField(json, 'unreadCount').ifZero(
+            _intField(json, 'unread_count'),
+          ),
+        ),
+      )
+      .where((item) => item.conversationId > 0)
+      .toList(growable: false);
+}
+
+List<AdminCsMessage> _parseAdminCsMessages(Object? value) {
+  final data = _objectMap(value);
+  final raw = data['messages'] ?? data['items'] ?? data['data'] ?? value;
+  return _objectList(raw)
+      .map(
+        (json) => AdminCsMessage(
+          messageId: _firstNonBlank([
+            _stringField(json, 'messageId'),
+            _stringField(json, 'message_id'),
+            _stringField(json, 'id'),
+          ]),
+          fromCustomer: _boolField(json, 'fromCustomer') ||
+              _boolField(json, 'from_customer'),
+          senderName: _firstNonBlank([
+            _stringField(json, 'senderName'),
+            _stringField(json, 'sender_name'),
+            _stringField(json, 'sender'),
+          ]),
+          body: _firstNonBlank([
+            _stringField(json, 'body'),
+            _stringField(json, 'content'),
+            _stringField(json, 'text'),
+          ]),
+          timestamp: _firstNonBlank([
+            _stringField(json, 'timestamp'),
+            _stringField(json, 'created_at'),
+            _stringField(json, 'updated_at'),
+          ]),
+        ),
+      )
+      .where((message) => message.body.trim().isNotEmpty)
+      .toList(growable: false);
+}
+
 bool _shouldDispatchGroupTask(String text) {
   final body = text.trim();
   if (body.isEmpty) return false;
@@ -2810,7 +2905,7 @@ extension on String {
   String contactChannelLabel() {
     switch (trim()) {
       case 'admin-duty':
-        return '高级设置';
+        return '服务器后台';
       case 'mobile':
       case 'mobile-chat':
         return '手机端会话';
@@ -2936,23 +3031,44 @@ String _take(String value, int maxLength) {
 }
 
 String _assistantReplyFromMap(Map<String, Object?> json) {
+  final assistant = _firstNestedReply(json, const [
+    'assistant_message',
+    'assistantMessage',
+    'assistant',
+  ]);
+  if (assistant.isNotEmpty) return assistant;
+
   final direct = _firstString(json, const [
     'reply',
     'answer',
     'response',
-    'message',
     'body',
     'content',
     'text',
+    'message',
   ]);
   if (direct.isNotEmpty) return direct;
 
-  final data = json['data'];
-  if (data is Map<String, Object?>) return _assistantReplyFromMap(data);
-  if (data is Map) {
-    return _assistantReplyFromMap(
-      data.map((key, value) => MapEntry(key.toString(), value)),
-    );
+  return _firstNestedReply(json, const ['data', 'result', 'codex']);
+}
+
+String _firstNestedReply(Map<String, Object?> json, List<String> keys) {
+  for (final key in keys) {
+    final value = json[key];
+    if (value is String) {
+      final text = value.trim();
+      if (text.isNotEmpty) return text;
+    }
+    if (value is Map<String, Object?>) {
+      final text = _assistantReplyFromMap(value);
+      if (text.isNotEmpty) return text;
+    }
+    if (value is Map) {
+      final text = _assistantReplyFromMap(
+        value.map((key, value) => MapEntry(key.toString(), value)),
+      );
+      if (text.isNotEmpty) return text;
+    }
   }
   return '';
 }
@@ -2960,8 +3076,8 @@ String _assistantReplyFromMap(Map<String, Object?> json) {
 String _firstString(Map<String, Object?> json, List<String> keys) {
   for (final key in keys) {
     final value = json[key];
-    if (value == null) continue;
-    final text = value.toString().trim();
+    if (value is! String) continue;
+    final text = value.trim();
     if (text.isNotEmpty) return text;
   }
   return '';

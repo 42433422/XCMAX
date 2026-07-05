@@ -2,8 +2,17 @@
   <div class="page-view admin-entitlements-view">
     <div class="page-content">
       <header class="admin-entitlements-head">
-        <h2>用户管理</h2>
-        <p class="muted">管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。</p>
+        <div>
+          <h2>用户管理</h2>
+          <p class="muted">管理用户等级与行业，分配客户 Mod 权益，或进入代管模式代为配置。</p>
+        </div>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm"
+          @click="createAccountOpen = !createAccountOpen"
+        >
+          {{ createAccountOpen ? '收起新建' : '新建账号' }}
+        </button>
       </header>
 
       <div v-if="loadError" class="admin-entitlements-alert" role="alert">{{ loadError }}</div>
@@ -23,6 +32,64 @@
       <div v-if="localStatusError" class="admin-entitlements-alert admin-entitlements-alert--soft" role="status">
         {{ localStatusError }}
       </div>
+
+      <section v-if="createAccountOpen" class="admin-create-account" aria-label="新建账号">
+        <div class="admin-create-account__grid">
+          <label class="admin-user-profile__field">
+            <span class="admin-user-profile__label">用户名</span>
+            <input
+              v-model.trim="newAccount.username"
+              class="admin-user-input"
+              type="text"
+              autocomplete="off"
+              placeholder="例如 15099909316"
+            >
+          </label>
+          <label class="admin-user-profile__field">
+            <span class="admin-user-profile__label">密码</span>
+            <input
+              v-model="newAccount.password"
+              class="admin-user-input"
+              type="text"
+              autocomplete="new-password"
+              placeholder="至少 6 位"
+            >
+          </label>
+          <label class="admin-user-profile__field">
+            <span class="admin-user-profile__label">邮箱</span>
+            <input
+              v-model.trim="newAccount.email"
+              class="admin-user-input"
+              type="email"
+              placeholder="默认自动生成"
+            >
+          </label>
+          <label class="admin-user-profile__field">
+            <span class="admin-user-profile__label">等级</span>
+            <select v-model="newAccount.tier" class="admin-user-profile__select">
+              <option v-for="t in TIER_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
+            </select>
+          </label>
+          <label class="admin-user-profile__field">
+            <span class="admin-user-profile__label">行业</span>
+            <select v-model="newAccount.industry_id" class="admin-user-profile__select">
+              <option v-for="id in INDUSTRY_PRESET_IDS" :key="id" :value="id">{{ id }}</option>
+            </select>
+          </label>
+          <label class="admin-flag admin-create-account__flag">
+            <input v-model="newAccount.is_enterprise" type="checkbox">
+            企业用户
+          </label>
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="creatingAccount"
+            @click="createAccount"
+          >
+            {{ creatingAccount ? '创建中…' : '创建账号' }}
+          </button>
+        </div>
+      </section>
 
       <section class="admin-user-toolbar" aria-label="用户筛选">
         <div class="admin-user-toolbar__search">
@@ -177,6 +244,55 @@
           </div>
         </section>
 
+        <section class="admin-wallet-panel" aria-label="账户余额加款">
+          <div class="admin-wallet-panel__summary">
+            <span class="admin-user-profile__label">账户余额</span>
+            <strong>{{ walletBalance(selectedUser) }}</strong>
+            <small class="muted">给客户市场钱包加款，完成后同步到账户可用余额。</small>
+          </div>
+          <div class="admin-wallet-panel__form">
+            <label class="admin-user-profile__field admin-wallet-panel__amount">
+              <span class="admin-user-profile__label">添加金额</span>
+              <input
+                v-model.number="creditForm.amount"
+                class="admin-user-input"
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputmode="decimal"
+              >
+            </label>
+            <label class="admin-user-profile__field admin-wallet-panel__desc">
+              <span class="admin-user-profile__label">备注</span>
+              <input
+                v-model.trim="creditForm.description"
+                class="admin-user-input"
+                type="text"
+                placeholder="后台加款"
+              >
+            </label>
+            <div class="admin-wallet-panel__quick" aria-label="快捷金额">
+              <button
+                v-for="amount in CREDIT_QUICK_AMOUNTS"
+                :key="amount"
+                type="button"
+                class="btn btn-secondary btn-sm"
+                @click="setCreditAmount(amount)"
+              >
+                ¥{{ amount }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="creditingWallet"
+              @click="creditSelectedWallet"
+            >
+              {{ creditingWallet ? '加款中…' : '加钱' }}
+            </button>
+          </div>
+        </section>
+
         <section class="admin-entitlement-chain" aria-label="授权联动闭环">
           <div class="admin-entitlement-chain__intro">
             <div>
@@ -184,6 +300,14 @@
               <span class="muted">这里的绑定会决定企业端、手机端和信息页能看到并调用哪些员工。</span>
             </div>
             <div class="admin-chain-actions">
+              <button
+                type="button"
+                class="btn btn-primary btn-sm"
+                :disabled="forcePushingEntitlements"
+                @click="forcePushSelectedEntitlements"
+              >
+                {{ forcePushingEntitlements ? '推送中…' : '强制推送企业端' }}
+              </button>
               <a class="btn btn-secondary btn-sm" href="/admin/im">打开信息</a>
               <a class="btn btn-secondary btn-sm" href="/admin/settings">设备绑定</a>
             </div>
@@ -336,6 +460,7 @@ const localStatusLoading = ref(false);
 const localStatusError = ref('');
 const installedMods = ref<LocalModRow[]>([]);
 const syncStatus = ref<Record<string, unknown> | null>(null);
+const forcePushingEntitlements = ref(false);
 
 // 用户钱包余额（远端 market /api/admin/wallets，按 user_id 索引）
 const walletMap = ref<Map<number, WalletRow>>(new Map());
@@ -350,6 +475,22 @@ const profileEditing = ref<{
   entitled_industries: string[];
 }>({ tier: '', industry_id: '', account_tier: '', budget_range: '', entitled_industries: [] });
 const profileSaving = ref(false);
+const createAccountOpen = ref(false);
+const creatingAccount = ref(false);
+const newAccount = ref({
+  username: '',
+  password: 'XC888888',
+  email: '',
+  tier: 'enterprise',
+  industry_id: '通用',
+  is_enterprise: true,
+});
+const CREDIT_QUICK_AMOUNTS = [50, 100, 500, 1000];
+const creditingWallet = ref(false);
+const creditForm = ref({
+  amount: 100,
+  description: '后台加款',
+});
 
 const TIER_OPTIONS: { value: string; label: string }[] = [
   { value: 'personal', label: '个人' },
@@ -597,6 +738,161 @@ function walletBalance(u: AdminUser): string {
   return `¥${n.toFixed(2)}`;
 }
 
+function defaultEmailForUsername(username: string): string {
+  const normalized = username.trim().toLowerCase();
+  return normalized.includes('@') ? normalized : `${normalized}@xcagi.local`;
+}
+
+async function applyProfileToUser(user: AdminUser, tier: string, industryId: string) {
+  const entitled = industryId ? [industryId] : ['通用'];
+  await xcmaxAdminApi.setUserProfile(user.id, {
+    username: user.username,
+    tier,
+    industry_id: industryId || '通用',
+    entitled_industries: entitled,
+  });
+  user.tier = tier;
+  user.industry_id = industryId || '通用';
+  user.entitled_industries = entitled;
+}
+
+async function createAccount() {
+  const username = newAccount.value.username.trim();
+  const password = newAccount.value.password;
+  if (!username) {
+    await appAlert('请填写用户名');
+    return;
+  }
+  if (password.length < 6) {
+    await appAlert('密码至少 6 位');
+    return;
+  }
+  creatingAccount.value = true;
+  try {
+    const email = newAccount.value.email.trim() || defaultEmailForUsername(username);
+    await xcmaxAdminApi.createMarketUser({ username, password, email });
+    await loadUsers();
+    let created = users.value.find((u) => u.username === username);
+    if (created) {
+      if (created.is_enterprise !== newAccount.value.is_enterprise) {
+        await xcmaxAdminApi.setUserEnterprise(created.id, newAccount.value.is_enterprise);
+        created.is_enterprise = newAccount.value.is_enterprise;
+      }
+      await applyProfileToUser(created, newAccount.value.tier, newAccount.value.industry_id);
+      await loadUsers();
+      created = users.value.find((u) => u.username === username) || created;
+      await selectUser(created);
+    }
+    await loadWallets();
+    newAccount.value = {
+      username: '',
+      password: 'XC888888',
+      email: '',
+      tier: 'enterprise',
+      industry_id: '通用',
+      is_enterprise: true,
+    };
+    createAccountOpen.value = false;
+    await appAlert('账号已创建');
+  } catch (e) {
+    await appAlert(`创建失败：${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    creatingAccount.value = false;
+  }
+}
+
+function setCreditAmount(amount: number) {
+  creditForm.value.amount = amount;
+}
+
+async function creditSelectedWallet() {
+  if (!selectedUser.value) return;
+  const amount = Number(creditForm.value.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    await appAlert('加款金额必须大于 0');
+    return;
+  }
+  creditingWallet.value = true;
+  try {
+    await xcmaxAdminApi.creditWallet(selectedUser.value.id, {
+      amount,
+      description: creditForm.value.description.trim() || '后台加款',
+    });
+    await loadWallets();
+    await appAlert('加钱成功');
+  } catch (e) {
+    await appAlert(`加钱失败：${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    creditingWallet.value = false;
+  }
+}
+
+async function forcePushSelectedEntitlements() {
+  if (!selectedUser.value) return;
+  const user = selectedUser.value;
+  const entitled = [...profileEditing.value.entitled_industries];
+  if (profileEditing.value.industry_id && !entitled.includes(profileEditing.value.industry_id)) {
+    entitled.push(profileEditing.value.industry_id);
+  }
+  const isEnterprise = profileEditing.value.tier === 'enterprise';
+  const wallet = walletMap.value.get(user.id) || null;
+  forcePushingEntitlements.value = true;
+  try {
+    const res = await xcmaxAdminApi.forcePushUserEntitlements(user.id, {
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email || '',
+        is_admin: Boolean(user.is_admin),
+        is_enterprise: Boolean(user.is_enterprise || isEnterprise),
+        tier: profileEditing.value.tier,
+        industry_id: profileEditing.value.industry_id,
+      },
+      profile: {
+        tier: profileEditing.value.tier,
+        industry_id: profileEditing.value.industry_id || '通用',
+        account_tier: isEnterprise ? profileEditing.value.account_tier || '' : '',
+        budget_range: profileEditing.value.budget_range || '',
+        entitled_industries: entitled,
+      },
+      mod_ids: [...userModIds.value],
+      wallet: wallet
+        ? {
+            id: wallet.id,
+            user_id: wallet.user_id,
+            balance: wallet.balance,
+            updated_at: wallet.updated_at,
+          }
+        : null,
+      workflow_employees: selectedWorkflowEmployees.value.map((emp) => ({
+        id: emp.id,
+        label: emp.label,
+        mod_id: emp.modId,
+        mod_name: emp.modName,
+        summary: emp.summary,
+      })),
+      installed_mods: selectedInstalledMods.value.map((mod) => ({
+        id: mod.id,
+        name: mod.name,
+        version: mod.version,
+        is_installed: Boolean(mod.is_installed),
+      })),
+    });
+    await refreshLocalStatus();
+    const body = res as {
+      data?: { push?: { sent?: number; failed?: number; total_pending?: number } };
+    };
+    const push = body.data?.push || {};
+    const sent = Number(push.sent ?? 0);
+    const failed = Number(push.failed ?? 0);
+    await appAlert(`已强制推送企业端：发送 ${sent} 条，失败 ${failed} 条`);
+  } catch (e) {
+    await appAlert(`强制推送失败：${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    forcePushingEntitlements.value = false;
+  }
+}
+
 async function selectUser(u: AdminUser) {
   selectedUserId.value = u.id;
   modToBind.value = '';
@@ -731,6 +1027,13 @@ onMounted(async () => {
   margin: 0 0 6px;
 }
 
+.admin-entitlements-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .admin-entitlements-alert {
   margin: 12px 0;
   padding: 10px 12px;
@@ -812,6 +1115,45 @@ onMounted(async () => {
 .admin-user-toolbar__count {
   font-size: 12px;
   white-space: nowrap;
+}
+
+.admin-create-account {
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid #dce7f5;
+  border-radius: 12px;
+  background: #f8fbff;
+}
+
+.admin-create-account__grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(140px, 1fr) minmax(200px, 1.4fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) auto auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.admin-create-account__flag {
+  min-height: 34px;
+  padding-bottom: 4px;
+  white-space: nowrap;
+}
+
+.admin-user-input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-size: 13px;
+}
+
+.admin-user-input:focus {
+  outline: none;
+  border-color: #1e3a5f;
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
 }
 
 /* 卡片网格 */
@@ -1046,6 +1388,42 @@ onMounted(async () => {
   margin: 0;
 }
 
+.admin-wallet-panel {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid #dbe6f3;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+.admin-wallet-panel__summary strong,
+.admin-wallet-panel__summary small {
+  display: block;
+}
+
+.admin-wallet-panel__summary strong {
+  margin: 4px 0;
+  color: #16803c;
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.admin-wallet-panel__form {
+  display: grid;
+  grid-template-columns: minmax(120px, 160px) minmax(180px, 1fr) auto auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.admin-wallet-panel__quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .admin-entitlement-chain {
   margin-bottom: 18px;
   padding: 14px;
@@ -1205,6 +1583,12 @@ onMounted(async () => {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
 
+  .admin-create-account__grid,
+  .admin-wallet-panel,
+  .admin-wallet-panel__form {
+    grid-template-columns: 1fr;
+  }
+
   .admin-chain-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1215,6 +1599,10 @@ onMounted(async () => {
 }
 
 @media (max-width: 600px) {
+  .admin-entitlements-head {
+    flex-direction: column;
+  }
+
   .admin-user-grid {
     grid-template-columns: 1fr;
   }

@@ -336,3 +336,33 @@ class CsMessageResponse {
   final String backend;
   final String timestamp;
 }
+
+class AdminCsInboxItem {
+  const AdminCsInboxItem({
+    required this.conversationId,
+    required this.customerName,
+    required this.lastMessageAt,
+    required this.unreadCount,
+  });
+
+  final int conversationId;
+  final String customerName;
+  final String lastMessageAt;
+  final int unreadCount;
+}
+
+class AdminCsMessage {
+  const AdminCsMessage({
+    required this.messageId,
+    required this.fromCustomer,
+    required this.senderName,
+    required this.body,
+    required this.timestamp,
+  });
+
+  final String messageId;
+  final bool fromCustomer;
+  final String senderName;
+  final String body;
+  final String timestamp;
+}

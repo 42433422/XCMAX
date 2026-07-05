@@ -66,6 +66,30 @@ void main() {
       ),
       AndroidStartupRoute.home,
     );
+    expect(
+      resolveAndroidStartupRoute(
+        session: const MobileSessionData(
+          legalAcceptedVersion: 'legal-2',
+          accessToken: 'access',
+          accountKind: 'admin',
+          setupComplete: false,
+        ),
+        appConfig: config,
+      ),
+      AndroidStartupRoute.home,
+    );
+    expect(
+      resolveAndroidStartupRoute(
+        session: const MobileSessionData(
+          legalAcceptedVersion: 'legal-2',
+          accessToken: 'access',
+          accountKind: 'admin_portal',
+          setupComplete: false,
+        ),
+        appConfig: config,
+      ),
+      AndroidStartupRoute.home,
+    );
   });
 
   test('theme mode follows Android system light dark values', () {
@@ -122,6 +146,7 @@ void main() {
       'profile': AndroidDeepLinkTarget.profile,
       'ai_chat': AndroidDeepLinkTarget.aiChat,
       'cs_chat': AndroidDeepLinkTarget.csChat,
+      'admin_cs_console': AndroidDeepLinkTarget.adminCsConsole,
       'ai_employees': AndroidDeepLinkTarget.aiEmployees,
       'ai_circle': AndroidDeepLinkTarget.aiCircle,
       'ai_groups': AndroidDeepLinkTarget.aiGroups,
@@ -148,6 +173,7 @@ void main() {
       'ai_open': AndroidDeepLinkTarget.aiOpen,
       'brain': AndroidDeepLinkTarget.brain,
       'mod_store': AndroidDeepLinkTarget.modStore,
+      'employee_questions_all': AndroidDeepLinkTarget.employeeQuestions,
     };
 
     for (final entry in routes.entries) {
@@ -170,6 +196,11 @@ void main() {
     expect(resolveAndroidDeepLinkDestination('erp_tab/2').tabIndex, 2);
     expect(resolveAndroidDeepLinkDestination('approval/42').approvalId, 42);
     expect(resolveAndroidDeepLinkDestination('mod/example').modId, 'example');
+    expect(
+      resolveAndroidDeepLinkDestination('employee_questions/example')
+          .employeeId,
+      'example',
+    );
     final web = resolveAndroidDeepLinkDestination(
       'web_view?url=/market/workbench/home&title=工作台',
     );
@@ -194,6 +225,7 @@ void main() {
       'ai_chat',
       'conversation_chat',
       'cs_chat',
+      'admin_cs_console',
       'im',
       'approval',
       'erp',
@@ -215,6 +247,7 @@ void main() {
       'ai_open',
       'brain',
       'mod_store',
+      'employee_questions_all',
       'notifications',
     };
     final templateExamples = <String, String>{
@@ -224,6 +257,7 @@ void main() {
       'mod/{modId}': 'mod/example',
       'ai_employee/{modId}/{employeeId}':
           'ai_employee/example/example-employee',
+      'employee_questions/{employeeId}': 'employee_questions/example-employee',
       'web_view?url={url}&title={title}':
           'web_view?url=/market/workbench/home&title=工作台',
     };
@@ -291,7 +325,82 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.session.legalAcceptedVersion, 'legal-2');
-    expect(find.text('XCAGI'), findsOneWidget);
+    expect(find.text('密码登录'), findsOneWidget);
+    expect(find.text('账号注册'), findsOneWidget);
+  });
+
+  testWidgets('auto-login route displays Android auth screen while retrying',
+      (tester) async {
+    final loginGate = Completer<void>();
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(
+        legalAcceptedVersion: 'legal-2',
+        savedUsername: 'remembered-admin',
+        savedPassword: 'secret',
+        rememberPassword: true,
+        autoLogin: true,
+        accountKind: 'admin',
+      ),
+      config: _appConfig('legal-2'),
+    );
+    final repository = _StartupRepository(api, loginGate: loginGate);
+
+    await tester.pumpWidget(
+      AndroidStartupApp(
+        repository: repository,
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('密码登录'), findsOneWidget);
+    expect(find.text('扫码绑定/登录'), findsOneWidget);
+    expect(find.text('账号注册'), findsOneWidget);
+    expect(find.text('正在自动登录'), findsNothing);
+    expect(find.text('手动登录'), findsNothing);
+    expect(repository.logins, hasLength(1));
+
+    loginGate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(HomeShell), findsOneWidget);
+    expect(find.text('启动配置'), findsNothing);
+  });
+
+  testWidgets('auto-login failure stays on Android auth screen with snack',
+      (tester) async {
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(
+        legalAcceptedVersion: 'legal-2',
+        savedUsername: 'remembered-admin',
+        savedPassword: 'secret',
+        rememberPassword: true,
+        autoLogin: true,
+        accountKind: 'admin',
+      ),
+      config: _appConfig('legal-2'),
+    );
+    final repository = _StartupRepository(
+      api,
+      loginError: Exception('offline'),
+    );
+
+    await tester.pumpWidget(
+      AndroidStartupApp(
+        repository: repository,
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(repository.logins, hasLength(1));
+    expect(find.text('密码登录'), findsOneWidget);
+    expect(find.text('账号注册'), findsOneWidget);
+    expect(find.text('自动登录失败，请手动登录'), findsOneWidget);
+    expect(find.text('正在自动登录'), findsNothing);
   });
 
   testWidgets('biometric root gate runs before Android home shell', (
@@ -439,9 +548,15 @@ class _FakeStartupApi extends MobileApiClient {
 }
 
 class _StartupRepository extends MobileRepository {
-  _StartupRepository(this.api) : super(client: api);
+  _StartupRepository(
+    this.api, {
+    this.loginGate,
+    this.loginError,
+  }) : super(client: api);
 
   final _FakeStartupApi api;
+  final Completer<void>? loginGate;
+  final Object? loginError;
   final List<Map<String, Object?>> logins = [];
 
   @override
@@ -459,6 +574,10 @@ class _StartupRepository extends MobileRepository {
       'rememberPass': rememberPass,
       'autoLogin': autoLogin,
     });
+    final gate = loginGate;
+    if (gate != null) await gate.future;
+    final error = loginError;
+    if (error != null) throw error;
     api.session = api.session.copyWith(
       accessToken: 'access',
       username: username.trim(),

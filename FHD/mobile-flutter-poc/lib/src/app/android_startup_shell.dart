@@ -19,6 +19,7 @@ import '../features/connect/connect_screen.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/contacts/employee_profile_screen.dart';
 import '../features/contacts/fixed_partner_profile_screen.dart';
+import '../features/cs/admin_cs_console_screen.dart';
 import '../features/cs/cs_chat_screen.dart';
 import '../features/enterprise/enterprise_module_screen.dart';
 import '../features/finance/longtail_screen.dart';
@@ -37,6 +38,7 @@ import '../models/conversation.dart';
 import '../platform/android_background_work_scheduler.dart';
 import '../platform/android_deep_link_bridge.dart';
 import '../platform/biometric_gate.dart';
+import '../policy/android_runtime_policy.dart';
 import '../policy/pinned_ids.dart';
 import '../theme/app_assets.dart';
 import '../theme/app_theme.dart';
@@ -67,8 +69,11 @@ AndroidStartupRoute resolveAndroidStartupRoute({
   if (!loggedIn && canAutoLogin) return AndroidStartupRoute.authAutoLogin;
   if (!loggedIn) return AndroidStartupRoute.auth;
 
+  final adminMode = AndroidConversationRuntimePolicy.isAdminAccountKind(
+    session.accountKind,
+  );
   final setupComplete =
-      session.setupComplete || session.fhdHost.trim().isNotEmpty;
+      adminMode || session.setupComplete || session.fhdHost.trim().isNotEmpty;
   return setupComplete
       ? AndroidStartupRoute.home
       : AndroidStartupRoute.onboarding;
@@ -120,7 +125,6 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
   var _biometricPromptInFlight = false;
   var _autoLoginStarted = false;
   var _handlingDeepLink = false;
-  String? _autoLoginError;
   String? _pendingDeepLinkRoute;
 
   MobileApiClient get _client => widget.repository.client;
@@ -172,11 +176,6 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
           onAccepted: _acceptLegalAndRefresh,
         );
       case AndroidStartupRoute.authAutoLogin:
-        return _AutoLoginScreen(
-          error: _autoLoginError,
-          onRetry: _startAutoLogin,
-          onManualLogin: () => _setRoute(AndroidStartupRoute.auth),
-        );
       case AndroidStartupRoute.auth:
         return AuthScreen(
           repository: widget.repository,
@@ -275,19 +274,11 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
         session: session,
         appConfig: _appConfig,
       );
-      _autoLoginError = null;
       _autoLoginStarted = false;
     });
     unawaited(_reconcileAndroidBackgroundWork(session));
     _startAutoLoginIfNeeded();
     _tryHandlePendingDeepLink();
-  }
-
-  void _setRoute(AndroidStartupRoute route) {
-    setState(() {
-      _route = route;
-      _autoLoginError = null;
-    });
   }
 
   void _startAutoLoginIfNeeded() {
@@ -317,10 +308,10 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _autoLoginError = '自动登录失败，请手动登录';
         _autoLoginStarted = false;
         _route = AndroidStartupRoute.auth;
       });
+      _showAndroidSnack('自动登录失败，请手动登录');
     }
   }
 
@@ -432,6 +423,12 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
           CsChatScreen(repository: widget.repository),
         );
         return true;
+      case AndroidDeepLinkTarget.adminCsConsole:
+        _pushAndroidDeepLinkPage(
+          navigator,
+          AdminCsConsoleScreen(repository: widget.repository),
+        );
+        return true;
       case AndroidDeepLinkTarget.fixedPartnerProfile:
         _pushAndroidDeepLinkPage(
           navigator,
@@ -443,7 +440,7 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
         return true;
       case AndroidDeepLinkTarget.market:
         unawaited(_refreshWalletForAndroidPaymentReturn());
-        _showAndroidDeepLinkSnack('已返回应用，正在刷新支付状态');
+        _showAndroidSnack('已返回应用，正在刷新支付状态');
         _pushAndroidDeepLinkPage(
           navigator,
           MarketListScreen(repository: widget.repository),
@@ -530,6 +527,12 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
             modId: destination.modId ?? '',
             employeeId: destination.employeeId ?? '',
           ),
+        );
+        return true;
+      case AndroidDeepLinkTarget.employeeQuestions:
+        _pushAndroidDeepLinkPage(
+          navigator,
+          _EmployeeQuestionsDeepLinkScreen(employeeId: destination.employeeId),
         );
         return true;
       case AndroidDeepLinkTarget.settings:
@@ -729,7 +732,7 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     }
   }
 
-  void _showAndroidDeepLinkSnack(String message) {
+  void _showAndroidSnack(String message) {
     final messenger = _scaffoldMessengerKey.currentState;
     messenger
       ?..hideCurrentSnackBar()
@@ -814,6 +817,80 @@ class _DeepLinkedAiEmployeeProfileScreen extends StatelessWidget {
   }
 }
 
+class _EmployeeQuestionsDeepLinkScreen extends StatelessWidget {
+  const _EmployeeQuestionsDeepLinkScreen({required this.employeeId});
+
+  final String? employeeId;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final cleanEmployeeId = employeeId?.trim() ?? '';
+    final title = cleanEmployeeId.isEmpty ? '员工任务中心' : '$cleanEmployeeId 的提问';
+    return Scaffold(
+      backgroundColor: colors.page,
+      body: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            WeTopBar(
+              title: title,
+              showBack: true,
+              onBack: () => Navigator.of(context).maybePop(),
+              actions: [
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.question_answer_outlined),
+                  color: colors.textPrimary,
+                  tooltip: '刷新',
+                ),
+              ],
+            ),
+            Expanded(
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.question_answer_outlined,
+                        size: 48,
+                        color: colors.textTertiary,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        '暂无员工主动提问',
+                        style: TextStyle(
+                          color: colors.textTertiary,
+                          fontSize: 16,
+                          height: 1.38,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '员工遇到需要老板决策的事会主动在这里问你',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: colors.textTertiary,
+                          fontSize: 12,
+                          height: 1.33,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _StartupLoadingScreen extends StatelessWidget {
   const _StartupLoadingScreen();
 
@@ -867,83 +944,6 @@ class _BiometricLockScreen extends StatelessWidget {
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AutoLoginScreen extends StatelessWidget {
-  const _AutoLoginScreen({
-    required this.error,
-    required this.onRetry,
-    required this.onManualLogin,
-  });
-
-  final String? error;
-  final VoidCallback onRetry;
-  final VoidCallback onManualLogin;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Scaffold(
-      backgroundColor: colors.surface,
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(16),
-                  child: Image.asset(
-                    appLauncherIconAsset,
-                    width: 64,
-                    height: 64,
-                    fit: BoxFit.contain,
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  error ?? '正在自动登录',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 17,
-                    height: 1.29,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0,
-                  ),
-                ),
-                const SizedBox(height: 18),
-                if (error == null)
-                  const SizedBox(
-                    width: 28,
-                    height: 28,
-                    child: CircularProgressIndicator(strokeWidth: 2.4),
-                  )
-                else ...[
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: onRetry,
-                      child: const Text('重试'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: onManualLogin,
-                      child: const Text('手动登录'),
-                    ),
-                  ),
-                ],
-              ],
-            ),
           ),
         ),
       ),

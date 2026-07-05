@@ -8,7 +8,7 @@ package com.xiuci.xcagi.mobile.core.model
  * /api/mobile/v1/admin/home 返回的服务端数据为主，本文件用于离线补齐、测试和漂移守卫。
  */
 object DutyRosterSsot {
-    const val PLANNED_EMPLOYEE_COUNT: Int = 55
+    const val PLANNED_EMPLOYEE_COUNT: Int = 56
 
     val PLANNED_EMPLOYEE_IDS: Set<String> = setOf(
         "site-content-editor",
@@ -30,6 +30,7 @@ object DutyRosterSsot {
         "java-payment-bridge-officer",
         "market-frontend-dev",
         "workbench-ux-stylist",
+        "top-architect",
         "fhd-core-maintainer",
         "vibe-coding-maintainer",
         "mods-and-eskill-curator",
@@ -108,6 +109,7 @@ object DutyRosterSsot {
             "workbench-ux-stylist",
         ),
         "platform-core" to listOf(
+            "top-architect",
             "fhd-core-maintainer",
             "vibe-coding-maintainer",
             "mods-and-eskill-curator",
@@ -173,6 +175,7 @@ object DutyRosterSsot {
         "java-payment-bridge-officer" to "modstore-backend",
         "market-frontend-dev" to "modstore-frontend",
         "workbench-ux-stylist" to "modstore-frontend",
+        "top-architect" to "platform-core",
         "fhd-core-maintainer" to "platform-core",
         "vibe-coding-maintainer" to "platform-core",
         "mods-and-eskill-curator" to "platform-core",
@@ -231,6 +234,7 @@ object DutyRosterSsot {
         "java-payment-bridge-officer" to "Java 支付桥接员",
         "market-frontend-dev" to "市场前端开发员",
         "workbench-ux-stylist" to "工作台 UX 设计员",
+        "top-architect" to "顶级架构师员工",
         "fhd-core-maintainer" to "FHD 核心应用维护员",
         "vibe-coding-maintainer" to "Vibe-Coding 维护员",
         "mods-and-eskill-curator" to "Mods/ESkill 策展员",
@@ -289,6 +293,7 @@ object DutyRosterSsot {
         "java-payment-bridge-officer" to "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
         "market-frontend-dev" to "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
         "workbench-ux-stylist" to "专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。",
+        "top-architect" to "掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。",
         "fhd-core-maintainer" to "维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。",
         "vibe-coding-maintainer" to "全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。",
         "mods-and-eskill-curator" to "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",

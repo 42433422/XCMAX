@@ -143,7 +143,7 @@ List<AiEmployeeProfile> adminDutyEmployeeProfiles([
           modDescription: '系统 AI 员工',
           modVersion: '10.0',
           modAuthor: 'XCAGI',
-          industryName: '高级设置',
+          industryName: '服务器后台',
           employeeId: employee.id.trim(),
           name: employee.label.ifEmpty(employee.id),
           title: employee.label.ifEmpty(employee.id),
@@ -167,7 +167,7 @@ List<AiEmployeeProfile> adminDutyEmployeeProfiles([
 String _contactChannelLabel(String value) {
   switch (value.trim()) {
     case 'admin-duty':
-      return '高级设置';
+      return '服务器后台';
     case 'mobile':
     case 'mobile-chat':
       return '手机端会话';

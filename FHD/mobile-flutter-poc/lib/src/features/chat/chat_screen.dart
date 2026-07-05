@@ -1827,7 +1827,7 @@ AiEmployeeProfile? _employeePlaceholderFromRef(_EmployeeConversationRef? ref) {
     employeeId: ref.employeeId,
     name: ref.employeeId,
     title: ref.employeeId,
-    summary: '稍后刷新或从工作台同步数据',
+    summary: '稍后刷新或从企业端同步数据',
     apiBasePath: '',
     phoneChannel: '',
     workflowPlaceholder: false,

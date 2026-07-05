@@ -17,6 +17,7 @@
   model_config   模型服务配置
   ecosystem      智能生态配置
   workflow_employee  员工工作流节点
+  account_entitlements 账号权益快照（管理员强制推送到企业端）
   im_message         IM 消息（im_messages）
   im_read_state      IM 已读游标（im_conversation_members.last_read_message_id）
 """
@@ -35,6 +36,7 @@ from app.utils.operational_errors import OPERATIONAL_ERRORS
 logger = logging.getLogger(__name__)
 
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
+_DIRECT_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 def utc_now_ms() -> int:
@@ -157,7 +159,7 @@ def push_outbox(
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with _DIRECT_HTTP_OPENER.open(req, timeout=10) as resp:
                 resp.read(4096)
             db.mark_outbox_sent(outbox_id)
             sent += 1
@@ -198,7 +200,7 @@ def pull_from_remote(
     url = f"http://{host}:{port}/api/xcmax/sync/changes?since_cursor={cursor}&limit=200"
     try:
         req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with _DIRECT_HTTP_OPENER.open(req, timeout=10) as resp:
             body = json.loads(resp.read(1024 * 512).decode("utf-8", errors="replace"))
         changes = body.get("data") or []
         if changes:
@@ -715,6 +717,78 @@ def _apply_workflow_employee(item: dict[str, Any]) -> None:
         conn.close()
     except OPERATIONAL_ERRORS as exc:
         logger.debug("apply_workflow_employee non-fatal: %s", exc)
+
+
+def _sync_payload_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    result: list[str] = []
+    for item in value:
+        text = str(item or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+@register_entity_applier("account_entitlements")
+def _apply_account_entitlements(item: dict[str, Any]) -> None:
+    """账号权益快照：写入 sync_meta，并同步本地 User 核心权益字段。
+
+    管理端强制推送的是一次完整快照，企业端收到后即使暂时没有市场 API，也能从本地
+    User 表和 sync_meta 读到账号等级、行业、绑定 Mod、余额等状态。
+    """
+    payload = item.get("payload") or {}
+    if not isinstance(payload, dict):
+        return
+
+    entity_id = str(payload.get("market_user_id") or item.get("entity_id") or "").strip()
+    if not entity_id:
+        return
+
+    profile = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
+    username = str(payload.get("username") or profile.get("username") or "").strip()
+    if not username:
+        return
+
+    try:
+        stored_payload = {
+            **payload,
+            "market_user_id": entity_id,
+            "mod_ids": _sync_payload_list(payload.get("mod_ids")),
+        }
+        _write_sync_meta(f"account_entitlements:{entity_id}", stored_payload)
+        _write_sync_meta(f"account_entitlements:username:{username}", stored_payload)
+
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        tier = str(profile.get("tier") or payload.get("tier") or "").strip().lower()
+        if tier not in {"personal", "enterprise", "admin"}:
+            tier = "enterprise" if bool(payload.get("is_enterprise")) else "personal"
+
+        industry_id = str(profile.get("industry_id") or payload.get("industry_id") or "通用").strip()
+        account_tier = str(profile.get("account_tier") or "").strip() or None
+        budget_range = str(profile.get("budget_range") or "").strip() or None
+        entitled_industries = _sync_payload_list(profile.get("entitled_industries"))
+        if industry_id and industry_id not in entitled_industries:
+            entitled_industries.append(industry_id)
+
+        with get_db() as db:
+            user = db.query(User).filter(User.username == username).first()
+            if user is None:
+                user = User(username=username, password="", role="user")
+                db.add(user)
+                db.flush()
+            user.tier = tier
+            user.industry_id = industry_id or "通用"
+            user.account_tier = account_tier if tier == "enterprise" else None
+            user.budget_range = budget_range
+            user.entitled_industries = entitled_industries or [user.industry_id]
+            if payload.get("email"):
+                user.email = str(payload.get("email") or "").strip()
+            db.commit()
+    except OPERATIONAL_ERRORS as exc:
+        logger.warning("apply_account_entitlements failed user=%s id=%s: %s", username, entity_id, exc)
 
 
 def apply_inbox(limit: int = 200) -> dict[str, Any]:
