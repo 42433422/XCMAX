@@ -163,7 +163,7 @@ class MobileMeData {
         user: MobileUserData(
           id: 0,
           username: 'admin',
-          displayName: 'XCAGI 用户',
+          displayName: 'XCAGI 企业版',
           email: '',
           role: 'admin',
           isActive: true,
@@ -279,7 +279,7 @@ class AdminMobileHomeData {
       description: '$count 位系统 AI 员工与 ${features.length} 个管理功能入口',
       author: 'XCAGI',
       primary: true,
-      industry: const ModIndustry(id: 'admin', name: '高级设置'),
+      industry: const ModIndustry(id: 'admin', name: '服务器后台'),
       avatarUrl: null,
       frontendMenu: features
           .map(
@@ -299,7 +299,7 @@ class AdminMobileHomeData {
           employee.id,
         ]);
         final fallbackSummary =
-            '高级设置 ${employee.yuangonArea.ifEmpty('duty')} 员工';
+            '服务器后台 ${employee.yuangonArea.ifEmpty('duty')} 员工';
 
         return WorkflowEmployeeInfo(
           id: employee.id,

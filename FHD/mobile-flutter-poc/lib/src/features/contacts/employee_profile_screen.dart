@@ -7,9 +7,9 @@ import '../../policy/avatar_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
-import '../bridge/bridge_screen.dart';
 import '../circle/ai_circle_screen.dart';
 import '../chat/chat_screen.dart';
+import '../cs/admin_cs_console_screen.dart';
 
 class AiEmployeeProfileScreen extends StatefulWidget {
   const AiEmployeeProfileScreen({
@@ -103,7 +103,7 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
     if (employee.employeeId.trim() == 'user-customer-service-officer') {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BridgeScreen.customerService(repository: _repository),
+          builder: (_) => AdminCsConsoleScreen(repository: _repository),
         ),
       );
       return;
@@ -225,7 +225,7 @@ class _EmployeeNotFoundState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '稍后刷新或从工作台同步数据',
+              '稍后刷新或从企业端同步数据',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,

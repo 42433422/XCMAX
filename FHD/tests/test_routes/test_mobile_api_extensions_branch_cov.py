@@ -298,8 +298,23 @@ class TestCachedDesktopRelayForAccountBinding:
             result = m._cached_desktop_relay_for_account_binding()
         assert result is None
 
+    def test_relay_unpaired_returns_none(self, m):
+        """branch: relay has relay_id but is not paired → None."""
+        with patch(
+            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            return_value={
+                "relay_id": "pending-r1",
+                "relay_base_url": "http://relay",
+                "expires_at": "2026-12-31",
+                "exp": 9999,
+                "paired": False,
+            },
+        ):
+            result = m._cached_desktop_relay_for_account_binding()
+        assert result is None
+
     def test_relay_valid_returns_dict(self, m):
-        """branch: relay has relay_id → return dict."""
+        """branch: paired relay has relay_id → return dict."""
         with patch(
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
@@ -307,6 +322,7 @@ class TestCachedDesktopRelayForAccountBinding:
                 "relay_base_url": "http://relay",
                 "expires_at": "2026-12-31",
                 "exp": 9999,
+                "paired": True,
             },
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -316,10 +332,16 @@ class TestCachedDesktopRelayForAccountBinding:
         assert result["exp"] == 9999
 
     def test_relay_valid_with_empty_fields(self, m):
-        """branch: relay has relay_id but other fields empty."""
+        """branch: paired relay has relay_id but other fields empty."""
         with patch(
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
-            return_value={"relay_id": "r2", "relay_base_url": "", "expires_at": "", "exp": None},
+            return_value={
+                "relay_id": "r2",
+                "relay_base_url": "",
+                "expires_at": "",
+                "exp": None,
+                "paired": True,
+            },
         ):
             result = m._cached_desktop_relay_for_account_binding()
         assert result is not None

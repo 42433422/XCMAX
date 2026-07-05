@@ -96,7 +96,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: 'AI交流圈',
-                            subtitle: '查看AI 员工动态、主页和能力介绍',
+                            subtitle: '查看企业 AI 员工动态、主页和能力介绍',
                             icon: Icons.forum,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -125,7 +125,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         children: [
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定云端工作台或电脑工具',
+                            subtitle: '绑定企业端、管理端或电脑端登录',
                             icon: Icons.qr_code_scanner,
                             iconColor: colors.brand,
                             iconBg: colors.brandContainer,
@@ -142,7 +142,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                           ),
                           WeCell(
                             title: '通知与公告',
-                            subtitle: '系统公告与系统通知',
+                            subtitle: '企业公告与系统通知',
                             icon: Icons.notifications,
                             iconColor: colors.danger,
                             iconBg:

@@ -63,6 +63,9 @@ class XcagiMobileEndpoints {
       '$base/service-bridge/requests/{id}/respond';
   static const csInfo = '$base/cs/info';
   static const csMessages = '$base/cs/messages';
+  static const adminCsInbox = '$base/im/cs/inbox';
+  static const adminCsInboxMessagesTemplate = '$base/im/cs/inbox/{id}/messages';
+  static const adminCsInboxReplyTemplate = '$base/im/cs/inbox/{id}/reply';
   static const mods = '$base/mods';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
@@ -165,6 +168,14 @@ class XcagiMobileEndpoints {
 
   static String serviceBridgeRespond(int id) {
     return serviceBridgeRequestsRespond.replaceFirst('{id}', '$id');
+  }
+
+  static String adminCsInboxMessages(int id) {
+    return adminCsInboxMessagesTemplate.replaceFirst('{id}', '$id');
+  }
+
+  static String adminCsInboxReply(int id) {
+    return adminCsInboxReplyTemplate.replaceFirst('{id}', '$id');
   }
 
   static String aiGroupMessages(String groupId) {
@@ -1184,6 +1195,26 @@ class MobileApiClient {
     String body,
   ) async {
     final json = await postJson(XcagiMobileEndpoints.csMessages, {
+      'body': body.trim(),
+    });
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> adminCsInbox() async {
+    final json = await getJson(XcagiMobileEndpoints.adminCsInbox);
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> adminCsMessages(int id) async {
+    final json = await getJson(XcagiMobileEndpoints.adminCsInboxMessages(id));
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> replyAdminCs({
+    required int id,
+    required String body,
+  }) async {
+    final json = await postJson(XcagiMobileEndpoints.adminCsInboxReply(id), {
       'body': body.trim(),
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);

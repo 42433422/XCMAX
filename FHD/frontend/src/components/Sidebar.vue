@@ -84,6 +84,14 @@
         <div class="status-indicator">
           <span class="status-dot online"></span>
           <span>系统正常</span>
+          <span
+            v-if="adminDeployStatusText"
+            class="sidebar-update-chip"
+            :class="`is-${adminDeployStatusTone}`"
+            :title="adminDeployStatusTitle"
+          >
+            {{ adminDeployStatusText }}
+          </span>
         </div>
         <div
           v-if="primaryModChip && !isAdminConsoleSpa()"
@@ -145,6 +153,7 @@ import {
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
+import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 
 const { imUnreadTotal } = useImUnreadBadge()
@@ -198,6 +207,9 @@ const pressingKey = ref('')
 const draggingKey = ref('')
 const dragOverKey = ref('')
 const expandedKeys = ref(new Set())
+const adminDeployStatus = ref(null)
+const adminDeployStatusError = ref('')
+const adminDeployStatusLoading = ref(false)
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -205,6 +217,7 @@ let boundWindowPointerUp = null
 let boundWindowPointerCancel = null
 let dragMoveRaf = 0
 let pendingDragPoint = null
+let adminDeployPollTimer = null
 /** @type {{ key: string, midY: number }[]} */
 let menuHitCache = []
 
@@ -301,8 +314,97 @@ const currentModeText = computed(() => {
   return '普通版（标准对话）'
 })
 
+const shouldShowAdminDeployStatus = computed(() => isAdminConsoleSpa() && isAdminAccount.value)
+
+function displayVersion(value) {
+  const text = String(value || '').trim()
+  if (!text) return ''
+  return text.toLowerCase().startsWith('v') ? text : `v${text}`
+}
+
+const adminDeployDisplayVersion = computed(() =>
+  displayVersion(
+    adminDeployStatus.value?.update_hub?.version ||
+      adminDeployStatus.value?.admin_local?.version ||
+      '',
+  ),
+)
+
+const adminDeployStatusTone = computed(() => {
+  if (adminDeployStatusError.value) return 'error'
+  const flags = adminDeployStatus.value?.flags || {}
+  if (flags.needs_push || flags.needs_pack) return 'warn'
+  if (flags.enterprise_pending) return 'info'
+  if (flags.up_to_date) return 'ok'
+  return 'muted'
+})
+
+const adminDeployStatusText = computed(() => {
+  if (!shouldShowAdminDeployStatus.value) return ''
+  if (adminDeployStatusLoading.value && !adminDeployStatus.value) return '版本检测中'
+  if (adminDeployStatusError.value) return '版本未知'
+  const flags = adminDeployStatus.value?.flags || {}
+  const version = adminDeployDisplayVersion.value
+  if (flags.enterprise_pending) return `新版本 ${version || ''} 已推送`.trim()
+  if (flags.needs_push || flags.needs_pack) return `${version || '新版本'} 待推送`
+  if (flags.up_to_date) return `${version || '当前版本'} 最新`
+  return version || ''
+})
+
+const adminDeployStatusTitle = computed(() => {
+  if (adminDeployStatusError.value) return adminDeployStatusError.value
+  const hub = adminDeployStatus.value?.update_hub || {}
+  const local = adminDeployStatus.value?.admin_local || {}
+  return [
+    local.version ? `管理端 ${displayVersion(local.version)}` : '',
+    hub.version ? `update 站 ${displayVersion(hub.version)}` : '',
+    hub.git_sha ? `Git ${String(hub.git_sha).slice(0, 12)}` : '',
+  ].filter(Boolean).join(' · ')
+})
+
 const syncProIntentExperience = () => {
   proIntentExperienceEnabled.value = localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1'
+}
+
+async function refreshAdminDeployStatus() {
+  if (!shouldShowAdminDeployStatus.value || adminDeployStatusLoading.value) return
+  adminDeployStatusLoading.value = true
+  adminDeployStatusError.value = ''
+  try {
+    const res = await xcmaxAdminApi.checkDeployUpdates('stable')
+    adminDeployStatus.value = res?.data || null
+    if (!adminDeployStatus.value) throw new Error(res?.message || '版本检测失败')
+  } catch (e) {
+    adminDeployStatus.value = null
+    adminDeployStatusError.value = e instanceof Error ? e.message : String(e || '版本检测失败')
+  } finally {
+    adminDeployStatusLoading.value = false
+  }
+}
+
+function stopAdminDeployStatusPolling() {
+  if (adminDeployPollTimer != null) {
+    window.clearInterval(adminDeployPollTimer)
+    adminDeployPollTimer = null
+  }
+}
+
+function startAdminDeployStatusPolling() {
+  if (!shouldShowAdminDeployStatus.value || adminDeployPollTimer != null) return
+  void refreshAdminDeployStatus()
+  adminDeployPollTimer = window.setInterval(() => {
+    void refreshAdminDeployStatus()
+  }, 180000)
+}
+
+function syncAdminDeployStatusPolling() {
+  if (shouldShowAdminDeployStatus.value) {
+    startAdminDeployStatusPolling()
+  } else {
+    stopAdminDeployStatusPolling()
+    adminDeployStatus.value = null
+    adminDeployStatusError.value = ''
+  }
 }
 
 const lastSelectViewAt = new Map()
@@ -344,6 +446,10 @@ watch(() => props.activeView, (viewKey) => {
     }
   }
 }, { immediate: true })
+
+watch(shouldShowAdminDeployStatus, () => {
+  syncAdminDeployStatusPolling()
+})
 
 const toggleProMode = () => {
   emit('toggle-pro-mode')
@@ -535,6 +641,7 @@ watch(draggingKey, (key) => {
 onMounted(async () => {
   window.addEventListener('storage', syncProIntentExperience)
   window.addEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperience)
+  window.addEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
   sidebarLayoutStore.initialize(sidebarLayoutSeedKeys())
   if (!industryStore.isLoaded) {
     try {
@@ -546,12 +653,15 @@ onMounted(async () => {
   if (!modsStore.isLoaded) {
     void modsStore.initialize()
   }
+  syncAdminDeployStatusPolling()
 })
 
 onBeforeUnmount(() => {
   clearReorderGesture()
+  stopAdminDeployStatusPolling()
   window.removeEventListener('storage', syncProIntentExperience)
   window.removeEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperience)
+  window.removeEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)
 })
 </script>
 
@@ -569,6 +679,53 @@ onBeforeUnmount(() => {
   margin-bottom: 0;
   flex-shrink: 0;
   min-width: 0;
+}
+
+.sidebar-update-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 132px;
+  margin-left: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  border: 1px solid transparent;
+}
+
+.sidebar-update-chip.is-ok {
+  color: #047857;
+  background: #d1fae5;
+  border-color: #a7f3d0;
+}
+
+.sidebar-update-chip.is-info {
+  color: #1d4ed8;
+  background: #dbeafe;
+  border-color: #bfdbfe;
+}
+
+.sidebar-update-chip.is-warn {
+  color: #b45309;
+  background: #fef3c7;
+  border-color: #fde68a;
+}
+
+.sidebar-update-chip.is-error {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+.sidebar-update-chip.is-muted {
+  color: #475569;
+  background: #e2e8f0;
+  border-color: #cbd5e1;
 }
 
 .sidebar-mods-badges {

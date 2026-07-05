@@ -261,8 +261,8 @@ List<_NotificationItem> _androidFallbackNotifications() {
     _NotificationItem(
       id: '1',
       type: _NotificationType.announcement,
-      title: '欢迎使用 XCAGI 标准版',
-      content: '您的AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看AI伙伴。',
+      title: '欢迎使用 XCAGI 企业版',
+      content: '您的企业 AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看企业智能伙伴。',
       dateText: _formatNotificationDate(now.subtract(const Duration(hours: 2))),
     ),
     _NotificationItem(
@@ -284,7 +284,7 @@ List<_NotificationItem> _androidFallbackNotifications() {
       id: '4',
       type: _NotificationType.success,
       title: '账号配对成功',
-      content: '您的移动端已成功配对工作台，可以开始使用全部功能。',
+      content: '您的移动端已成功配对企业端，可以开始使用全部功能。',
       dateText: _formatNotificationDate(now.subtract(const Duration(days: 2))),
       read: true,
     ),

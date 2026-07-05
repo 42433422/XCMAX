@@ -219,6 +219,7 @@ const _employeeAvatarFallbacks = <String, AppAvatarFallback>{
   'java-payment-bridge-officer': AppAvatarFallback.empJavaPaymentBridgeOfficer,
   'market-frontend-dev': AppAvatarFallback.empMarketFrontendDev,
   'workbench-ux-stylist': AppAvatarFallback.empWorkbenchUxStylist,
+  'top-architect': AppAvatarFallback.empFhdCoreMaintainer,
   'fhd-core-maintainer': AppAvatarFallback.empFhdCoreMaintainer,
   'vibe-coding-maintainer': AppAvatarFallback.empVibeCodingMaintainer,
   'mods-and-eskill-curator': AppAvatarFallback.empModsAndEskillCurator,
