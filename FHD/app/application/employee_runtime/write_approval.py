@@ -47,7 +47,12 @@ def build_write_approval_gate(
             from app.application.workflow.approval_gated_engine import ApprovalGatedEngine
             from app.application.workflow.engine import WorkflowEngine
             from app.application.workflow.types import PlanGraph, WorkflowNode
+            from resources.config.risk_actions_loader import get_action_risk
 
+            write_action = "execute"
+            if name in ("import_excel_to_database", "products_bulk_import"):
+                write_action = "import"
+            risk = get_action_risk(name, write_action, default="high")
             plan = PlanGraph(
                 plan_id=f"emp-write-{employee_id}-{uuid.uuid4().hex[:8]}",
                 intent=f"员工 {employee_id} 写操作审批",
@@ -55,12 +60,12 @@ def build_write_approval_gate(
                     WorkflowNode(
                         node_id="write",
                         tool_id=name,
-                        action="execute",
+                        action=write_action,
                         params=dict(args or {}),
-                        risk="high",
+                        risk=risk,
                     )
                 ],
-                risk_level="high",
+                risk_level=risk,
             )
             gated = ApprovalGatedEngine(WorkflowEngine(lambda **kw: {"success": True}))
             decision = gated.evaluate_plan(plan, runtime_context=payload, strategy="interactive")

@@ -7,9 +7,10 @@ import os
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.secure_filename import secure_filename
 
@@ -36,7 +37,7 @@ def _ensure_upload_folder() -> None:
 
 
 @router.post("/temp")
-async def upload_temp(file: UploadFile | None = File(default=None)):
+async def upload_temp(file: UploadFile | None = File(default=None), _user=Depends(get_logged_in_user)):
     try:
         _ensure_upload_folder()
         if file is None:
@@ -87,9 +88,16 @@ async def upload_temp(file: UploadFile | None = File(default=None)):
 
 
 @router.delete("/temp/{filename}")
-def delete_temp_file(filename: str):
+def delete_temp_file(filename: str, _user=Depends(get_logged_in_user)):
     try:
-        file_path = os.path.join(UPLOAD_FOLDER, filename)
+        base_name = os.path.basename(str(filename or "").replace("\\", "/"))
+        safe_name = secure_filename(base_name)
+        if not safe_name:
+            return JSONResponse({"success": False, "message": "非法文件名"}, status_code=400)
+        file_path = os.path.join(UPLOAD_FOLDER, safe_name)
+        file_path = os.path.normpath(file_path)
+        if not file_path.startswith(os.path.normpath(UPLOAD_FOLDER)):
+            return JSONResponse({"success": False, "message": "非法路径"}, status_code=400)
         if not os.path.exists(file_path):
             return JSONResponse({"success": False, "message": "文件不存在"}, status_code=404)
         os.remove(file_path)

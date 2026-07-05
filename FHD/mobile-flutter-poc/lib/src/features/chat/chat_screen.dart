@@ -631,7 +631,7 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_runningGitOp) return;
     final repository = widget.repository;
     if (repository == null) {
-      _showMessage('未绑定电脑执行端，无法执行 $op');
+      _showMessage('未绑定电脑工具，无法执行 $op');
       return;
     }
     final messageId = 'git-${DateTime.now().microsecondsSinceEpoch}';
@@ -653,7 +653,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final result = await repository.runGitOperation(branch: branch, op: op);
       if (!mounted) return;
       _replaceMessageBody(
-          messageId, result.trim().isEmpty ? '电脑执行端已完成任务。' : result);
+          messageId, result.trim().isEmpty ? '电脑工具已完成任务。' : result);
     } catch (error) {
       if (!mounted) return;
       _replaceMessageBody(messageId, '（$error）');
@@ -1827,7 +1827,7 @@ AiEmployeeProfile? _employeePlaceholderFromRef(_EmployeeConversationRef? ref) {
     employeeId: ref.employeeId,
     name: ref.employeeId,
     title: ref.employeeId,
-    summary: '稍后刷新或从企业端同步数据',
+    summary: '稍后刷新或从工作台同步数据',
     apiBasePath: '',
     phoneChannel: '',
     workflowPlaceholder: false,

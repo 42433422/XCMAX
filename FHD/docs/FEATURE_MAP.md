@@ -7,7 +7,7 @@
 ## 三条硬规则
 
 1. **服务端代码只许新写到 `app/`**。`backend/` 目录已于 **2026-04-20** 全量下线(迁移登记见 [MIGRATION_REGISTRY.md §5](MIGRATION_REGISTRY.md));备份见 [.archive/legacy-backend-2026-04-final/](../.archive/legacy-backend-2026-04-final/)。
-2. **前端代码只许写到 `frontend/`**。`static/`、`templates/vue-dist/` 是构建产物,不是源。
+2. **前端代码只许写到 `frontend/`**。`static/`、`templates/vue-dist/`、`templates/admin-vue-dist/` 是构建产物,不是源；`.codex-artifacts/` 是本地 smoke 验证产物,勿提交。
 3. **服务启动只用 `XCAGI/run.py`**(端口 5000);禁止新增任何其它 HTTP 入口。
 
 ## 顶层目录角色

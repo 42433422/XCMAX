@@ -291,7 +291,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(api.session.legalAcceptedVersion, 'legal-2');
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI'), findsOneWidget);
   });
 
   testWidgets('biometric root gate runs before Android home shell', (

@@ -29,7 +29,7 @@ class OcrScreen extends StatelessWidget {
                     children: [
                       WeCell(
                         title: '拍照识别',
-                        subtitle: '调用企业端 OCR 引擎处理图片文字',
+                        subtitle: '调用工作台 OCR 引擎处理图片文字',
                         icon: Icons.camera_alt,
                         iconColor: colors.brand,
                         iconBg: colors.brandContainer,
@@ -62,7 +62,7 @@ class OcrScreen extends StatelessWidget {
                   WeCellGroup(
                     children: [
                       WeCell(
-                        title: '企业 OCR',
+                        title: 'OCR 服务',
                         subtitle: '等待移动端上传链路接入',
                         icon: Icons.cloud_done,
                         iconColor: colors.success,

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -18,6 +18,7 @@ from app.desktop_runtime import (
 )
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
@@ -47,6 +48,8 @@ def desktop_status(request: Request):
         timing = startup_timing_snapshot()
     except RECOVERABLE_ERRORS:
         timing = {}
+    db_recovery = _resolve_db_recovery_status()
+    last_backup = _resolve_last_backup(dirs)
     return {
         "desktopMode": is_desktop_mode(),
         "dataDir": str(dirs["root"]),
@@ -63,11 +66,39 @@ def desktop_status(request: Request):
         "readyForUi": True,
         "modsReady": mods_full or not mods_bg,
         "startupTiming": timing,
+        "dbRecovery": db_recovery,
+        "lastBackup": last_backup,
     }
 
 
+def _resolve_db_recovery_status() -> dict[str, str | None]:
+    """解析启动自检 + 自动恢复的状态，供前端/Electron 感知。
+
+    `XCAGI_DESKTOP_DB_RECOVERY` 由 `configure_desktop_environment` 在启动时设置：
+    - 未设置：未进入桌面模式或库健康（ok）
+    - "corrupt_no_backup"：库损坏且无可用备份（严重，需提示用户）
+    - "restored:{filename}"：库损坏但已从备份恢复（警告，需提示用户）
+    """
+    raw = (os.environ.get("XCAGI_DESKTOP_DB_RECOVERY") or "").strip()
+    if not raw:
+        return {"action": "ok", "detail": None}
+    if raw.startswith("restored:"):
+        return {"action": "restored", "detail": raw.split(":", 1)[1]}
+    return {"action": raw, "detail": None}
+
+
+def _resolve_last_backup(dirs: dict) -> dict[str, str | int | None]:
+    """返回最近一次备份信息（路径/文件名/时间/大小），无备份时各字段为 None。"""
+    try:
+        from app.desktop_runtime.backup_scheduler import get_last_backup_info
+
+        return get_last_backup_info(dirs["root"])
+    except RECOVERABLE_ERRORS:
+        return {"path": None, "filename": None, "timestamp": None, "size": None}
+
+
 @router.get("/models")
-def list_models():
+def list_models(_user=Depends(get_logged_in_user)):
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     root = dirs["models"]
     models = []
@@ -78,7 +109,7 @@ def list_models():
 
 
 @router.post("/models/download")
-def download_model_asset(request: DownloadModelRequest):
+def download_model_asset(request: DownloadModelRequest, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
     asset = ModelAsset(**request.model_dump())
@@ -87,7 +118,7 @@ def download_model_asset(request: DownloadModelRequest):
 
 
 @router.post("/models/install-manifest")
-def install_manifest(path: str):
+def install_manifest(path: str, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
     manifest_path = Path(path)
@@ -104,8 +135,8 @@ def install_manifest(path: str):
 
 
 @router.get("/support-bundle")
-def download_support_bundle(request: Request):
-    """ZIP：环境摘要 + 近期后端日志节选（不含数据库正文）。仅桌面模式。"""
+def download_support_bundle(request: Request, _user=Depends(get_logged_in_user)):
+    """ZIP：环境摘要 + 近期后端日志节选（不含数据库正文）。仅桌面模式；需登录。"""
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="诊断包仅在桌面模式下可用")
     try:

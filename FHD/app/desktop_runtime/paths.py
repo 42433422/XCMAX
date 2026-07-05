@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import platform
 from pathlib import Path
@@ -79,6 +80,25 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
 
     (root / "config").mkdir(parents=True, exist_ok=True)
     apply_database_profile_to_env(root, local_sqlite_url=sqlite_database_url(root))
+    # 本地 SQLite 模式：启动自检 + 自动恢复。PostgreSQL 模式跳过（主库在远端）。
+    if os.environ.get("DATABASE_URL", "").startswith("sqlite"):
+        from .migrate import recover_if_corrupt
+
+        try:
+            recovery = recover_if_corrupt(root)
+            if recovery["action"] == "corrupt_no_backup":
+                logging.getLogger(__name__).error(
+                    "desktop db corrupt and no usable backup: %s", recovery["detail"]
+                )
+                # 不阻塞启动：让后续 bootstrap 流程决定如何处理（可能创建空库）。
+                # 但要把状态暴露出去供上层 UI/支持工具感知。
+                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = "corrupt_no_backup"
+            elif recovery["action"] == "restored":
+                os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
+        except RECOVERABLE_ERRORS as exc:
+            logging.getLogger(__name__).warning(
+                "recover_if_corrupt failed (non-fatal): %s", exc
+            )
     os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
     # 考勤模板 424/… 与上传输出均相对工作区根；桌面默认=userData
     os.environ.setdefault("WORKSPACE_ROOT", str(root))

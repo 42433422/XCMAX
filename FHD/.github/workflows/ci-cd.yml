@@ -129,6 +129,7 @@ jobs:
       - name: Run tests with coverage
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+          XCAGI_TENANT_STRICT: "1"
           INTENT_BENCHMARK_RUN: "1"
         run: |
           mkdir -p coverage
@@ -144,7 +145,7 @@ jobs:
       - name: Coverage ratchet check (行/分支只升不降)
         env:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
-        run: python scripts/dev/coverage_ratchet.py --check --require-backend
+        run: python scripts/dev/coverage_ratchet.py --check --require-backend --require-frontend
 
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
@@ -190,12 +191,11 @@ jobs:
 
       - name: Run vue-tsc
         working-directory: frontend
-        run: |
-          set +e
-          npm run type-check
-          if [ "$?" -ne 0 ]; then
-            echo "::warning::vue-tsc reported errors (advisory; strict build uses tsconfig.build.json)"
-          fi
+        run: npm run type-check
+
+      - name: Run frontend production build (strict)
+        working-directory: frontend
+        run: npm run build:strict
 
       - name: Upload frontend coverage
         uses: actions/upload-artifact@v4
@@ -315,8 +315,20 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node.js (admin-console build)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
       - name: Verify v10 version anchors
         run: python scripts/dev/verify_version_anchors.py
+
+      - name: Build admin-console (admin-vue-dist)
+        run: |
+          cd frontend && npm ci && npm run build:full
+          cd ../admin-console && npm run build
 
       - name: Pack FHD server release tarball
         run: bash scripts/deploy/fhd-pack-release.sh
@@ -580,6 +592,63 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
+
+  release-verify:
+    name: release-verify
+    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_VERIFY_SKIP_E2E: "1"
+      RELEASE_VERIFY_SKIP_PACK: "0"
+      RELEASE_VERIFY_SKIP_DESKTOP: "0"
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+      XCAGI_TENANT_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install backend test deps
+        run: pip install -r requirements.txt -r requirements-base.txt
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Run release_verify.sh
+        run: bash scripts/dev/release_verify.sh
+
+  desktop-build-smoke:
+    name: desktop-build-smoke
+    needs: [frontend-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Desktop tsc build
+        working-directory: desktop
+        run: |
+          npm ci
+          npm run build
 
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.

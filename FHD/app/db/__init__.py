@@ -149,12 +149,29 @@ def _get_test_db_manager():
 
 @event.listens_for(Engine, "connect")
 def set_sqlite_pragma(dbapi_connection, connection_record):
-    if dbapi_connection.__class__.__module__.startswith("sqlite3"):
-        cursor = dbapi_connection.cursor()
-        cursor.execute("PRAGMA journal_mode=WAL")
-        cursor.execute("PRAGMA synchronous=NORMAL")
-        cursor.execute("PRAGMA cache_size=-64000")
-        cursor.execute("PRAGMA foreign_keys=ON")
+    """SQLite 连接级 PRAGMA 配置。
+
+    桌面端（XCAGI_DESKTOP_MODE=1）：WAL + synchronous=FULL + wal_autocheckpoint=1000。
+    WAL 模式下写入先进 WAL 文件再 checkpoint 回主库，断电时主库不损坏（最坏只丢
+    WAL 里未 checkpoint 的部分）；synchronous=FULL 保证已提交事务不丢，适合 ERP。
+
+    非桌面端（Web/测试）：不强制 WAL，仅启用 foreign_keys 和 cache_size，避免
+    影响测试隔离和 Web 模式（Web 模式默认走 PostgreSQL）。
+    """
+    if not dbapi_connection.__class__.__module__.startswith("sqlite3"):
+        return
+    cursor = dbapi_connection.cursor()
+    try:
+        if _sqlite_desktop_mode():
+            cursor.execute("PRAGMA journal_mode=WAL")
+            cursor.execute("PRAGMA synchronous=FULL")
+            cursor.execute("PRAGMA wal_autocheckpoint=1000")
+            cursor.execute("PRAGMA cache_size=-64000")
+            cursor.execute("PRAGMA foreign_keys=ON")
+        else:
+            cursor.execute("PRAGMA foreign_keys=ON")
+            cursor.execute("PRAGMA cache_size=-64000")
+    finally:
         cursor.close()
 
 

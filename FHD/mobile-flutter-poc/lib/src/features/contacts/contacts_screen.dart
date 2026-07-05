@@ -435,7 +435,7 @@ class _AiEmployeeEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '扫码绑定企业端或登录管理端后，员工会自动同步到这里。',
+              '扫码绑定云端工作台或登录账号后，员工会自动同步到这里。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,

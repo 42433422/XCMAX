@@ -163,7 +163,7 @@ class MobileMeData {
         user: MobileUserData(
           id: 0,
           username: 'admin',
-          displayName: 'admin',
+          displayName: 'XCAGI 用户',
           email: '',
           role: 'admin',
           isActive: true,
@@ -207,13 +207,13 @@ class MobileMeData {
     switch (accountKind.trim().toLowerCase()) {
       case 'admin':
       case 'admin_portal':
-        return '管理员账号';
+        return '账号';
       case 'enterprise':
-        return '企业账号';
+        return '账号';
       case 'personal':
         return '个人账号';
       default:
-        return displayName.isEmpty ? '未登录' : '管理员账号';
+        return displayName.isEmpty ? '未登录' : '账号';
     }
   }
 }
@@ -274,12 +274,12 @@ class AdminMobileHomeData {
     final count = employeeCount > 0 ? employeeCount : employees.length;
     return ModInfo(
       id: 'admin-duty-employees',
-      name: '管理端 AI 员工',
+      name: '系统 AI 员工',
       version: '10.0',
-      description: '$count 位管理端 duty AI 员工与 ${features.length} 个管理功能入口',
-      author: 'XCAGI 管理端',
+      description: '$count 位系统 AI 员工与 ${features.length} 个管理功能入口',
+      author: 'XCAGI',
       primary: true,
-      industry: const ModIndustry(id: 'admin', name: '管理端'),
+      industry: const ModIndustry(id: 'admin', name: '高级设置'),
       avatarUrl: null,
       frontendMenu: features
           .map(
@@ -299,7 +299,7 @@ class AdminMobileHomeData {
           employee.id,
         ]);
         final fallbackSummary =
-            '管理端 ${employee.yuangonArea.ifEmpty('duty')} 员工';
+            '高级设置 ${employee.yuangonArea.ifEmpty('duty')} 员工';
 
         return WorkflowEmployeeInfo(
           id: employee.id,
