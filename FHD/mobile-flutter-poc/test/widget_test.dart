@@ -5254,7 +5254,7 @@ void main() {
     expect(find.text('伙伴资料'), findsOneWidget);
   });
 
-  testWidgets('super employee chat shows Android CLI switch card', (
+  testWidgets('super employee chat hides Android CLI switch card', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -5268,21 +5268,9 @@ void main() {
     );
 
     expect(find.byKey(const ValueKey('super_dev_cli_model_switch_card')),
-        findsOneWidget);
-    expect(find.text('超级开发组 · CLI'), findsOneWidget);
-    expect(find.text('Codex'), findsOneWidget);
-    expect(find.text('Cursor'), findsOneWidget);
-    expect(find.text('Claude'), findsOneWidget);
-    expect(find.text('Trae'), findsOneWidget);
-
-    await tester.tap(
-      find.byKey(const ValueKey('super_dev_cli_option_pinned:cursor')),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('超级员工-Cursor'), findsWidgets);
-    expect(find.byKey(const ValueKey('super_dev_cli_model_switch_card')),
-        findsOneWidget);
+        findsNothing);
+    expect(find.text('超级开发组 · CLI'), findsNothing);
+    expect(find.text('超级员工-Codex'), findsOneWidget);
   });
 
   testWidgets('chat detail resolves employee profile from Android modInfos', (
