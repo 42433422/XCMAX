@@ -8,10 +8,11 @@ import '../policy/android_runtime_policy.dart';
 import '../policy/avatar_policy.dart';
 import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
+import 'deployment_modes_ssot.dart';
 import 'duty_roster_ssot.dart';
 
-const _badgeAdminColor = 0xFFED7B2F;
 const _badgeInstalledColor = 0xFF3370FF;
+const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
 
 class MobileRepository {
   MobileRepository({MobileApiClient? client})
@@ -74,18 +75,18 @@ class MobileRepository {
       states: conversationStates,
     );
 
-    if (!adminMode && !enterpriseMode) return fixed;
+    if (!adminMode && !enterpriseMode) return _sortConversationItems(fixed);
 
     final mods = await _loadModInfosOrCache(adminMode: adminMode);
-    return [
+    return _sortConversationItems([
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '服务器后台' : '已安装',
-        badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
+        badgeText: adminMode ? null : '已安装',
+        badgeColor: adminMode ? null : _badgeInstalledColor,
         states: conversationStates,
       ),
-    ];
+    ]);
   }
 
   Future<List<ConversationItem>> loadCachedConversations({
@@ -102,18 +103,18 @@ class MobileRepository {
       states: conversationStates,
     );
 
-    if (!adminMode && !enterpriseMode) return fixed;
+    if (!adminMode && !enterpriseMode) return _sortConversationItems(fixed);
 
     final mods = await _loadCachedModInfos(adminMode: adminMode);
-    return [
+    return _sortConversationItems([
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '服务器后台' : '已安装',
-        badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
+        badgeText: adminMode ? null : '已安装',
+        badgeColor: adminMode ? null : _badgeInstalledColor,
         states: conversationStates,
       ),
-    ];
+    ]);
   }
 
   Future<List<ModInfo>> loadModInfos({bool adminMode = false}) async {
@@ -692,13 +693,20 @@ class MobileRepository {
     }
 
     if (tool != null) {
-      final response = await _client.postSuperEmployeeMessage(tool, text);
-      if (!response.success) {
-        throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
+      final localBaseUrl = await _superEmployeeLanBaseUrl();
+      if (localBaseUrl.isNotEmpty) {
+        try {
+          final reply = await _postSuperEmployeeMessage(
+            tool,
+            text,
+            baseUrl: localBaseUrl,
+          );
+          return _assistantMessage(conversation.id, reply);
+        } catch (_) {
+          // LAN is a speed path. If it is unavailable, keep the cloud path alive.
+        }
       }
-      final reply = _assistantReplyFromMap(
-        response.data ?? response.raw,
-      ).ifEmpty('已收到，我会继续处理。');
+      final reply = await _postSuperEmployeeMessage(tool, text);
       return _assistantMessage(conversation.id, reply);
     }
 
@@ -742,6 +750,25 @@ class MobileRepository {
         role: ChatRole.user,
         body: text,
       );
+      final localBaseUrl = await _superEmployeeLanBaseUrl();
+      if (localBaseUrl.isNotEmpty) {
+        try {
+          final reply = await _postSuperEmployeeMessage(
+            tool,
+            text,
+            baseUrl: localBaseUrl,
+          );
+          _throwIfCancelled(isCancelled);
+          await _cacheChatMessage(
+            conversation.id,
+            role: ChatRole.assistant,
+            body: reply,
+          );
+          return reply;
+        } catch (_) {
+          _throwIfCancelled(isCancelled);
+        }
+      }
       final relayKind = relayKindForConversation(conversation.id);
       final relayId = await _relayIdForSuperEmployeeDispatch();
       if (relayKind != null && relayId.isNotEmpty) {
@@ -916,10 +943,8 @@ class MobileRepository {
       kind: cleanOp,
       payload: {
         'branch': cleanBranch,
-        'context': const {
-          'source': 'mobile_chat',
-          'client_surface': 'mobile',
-        },
+        'workspace_root': _xcmaxDefaultWorkspaceRoot,
+        'context': _superEmployeeRelayContext(),
       },
     );
     if (!created.success) {
@@ -957,13 +982,38 @@ class MobileRepository {
     );
   }
 
-  Future<String> _postSuperEmployeeMessage(String tool, String text) async {
-    final response = await _client.postSuperEmployeeMessage(tool, text);
+  Future<String> _postSuperEmployeeMessage(
+    String tool,
+    String text, {
+    String baseUrl = '',
+  }) async {
+    final response = await _client.postSuperEmployeeMessage(
+      tool,
+      text,
+      baseUrl: baseUrl,
+    );
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
     }
     return _assistantReplyFromMap(response.data ?? response.raw)
         .ifEmpty('已收到，我会继续处理。');
+  }
+
+  Future<String> _superEmployeeLanBaseUrl() async {
+    if (!DeploymentModesSsot.mobileConnectionPrefersLan('lan_direct')) {
+      return '';
+    }
+    final session = await _client.loadSession();
+    final localBase = session.localBaseUrl.trim();
+    if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
+    final mode = session.serverMode.trim().toLowerCase();
+    final host = session.fhdHost.trim();
+    if (mode != 'lan' && host.isEmpty) return '';
+    if (host.isEmpty) return '';
+    return AndroidServerRouter(
+      fhdHost: host,
+      mode: AndroidServerMode.lan,
+    ).fhdBaseUrl();
   }
 
   Future<String> _streamRelaySuperEmployeeTask({
@@ -979,11 +1029,8 @@ class MobileRepository {
       kind: relayKind,
       payload: {
         'message': message,
-        'context': {
-          'source': 'mobile_chat',
-          'client_surface': 'mobile',
-          'conversation_id': conversationId,
-        },
+        'workspace_root': _xcmaxDefaultWorkspaceRoot,
+        'context': _superEmployeeRelayContext(conversationId: conversationId),
       },
     );
     if (!created.success) {
@@ -1409,7 +1456,7 @@ class MobileRepository {
     bool adminMode = true,
     bool enterpriseMode = true,
   }) {
-    return [
+    return _sortConversationItems([
       ..._fixedConversationItems(
         showCodex: enterpriseMode || adminMode,
         showCursor: enterpriseMode || adminMode,
@@ -1419,7 +1466,7 @@ class MobileRepository {
         states: _emptyConversationStates,
       ),
       if (adminMode) ...adminDutyRosterConversationItems(),
-    ];
+    ]);
   }
 
   Future<String> _relayIdForSuperEmployeeDispatch() async {
@@ -1530,6 +1577,18 @@ class MobileRepository {
       ),
     );
   }
+}
+
+Map<String, Object?> _superEmployeeRelayContext({
+  String conversationId = '',
+}) {
+  return {
+    'source': 'mobile_chat',
+    'client_surface': 'mobile',
+    'workspace_root': _xcmaxDefaultWorkspaceRoot,
+    if (conversationId.trim().isNotEmpty)
+      'conversation_id': conversationId.trim(),
+  };
 }
 
 PairingPayload? parsePairingPayload(String raw) {
@@ -2230,14 +2289,14 @@ List<AiGroupConversation> _parseAiGroups(Object? value) {
 }
 
 AiGroupConversation _aiGroupFromJson(Map<String, Object?> json) {
+  final lastMessageAt = _stringField(json, 'last_message_at');
   return AiGroupConversation(
     id: _stringField(json, 'id'),
     name: _stringField(json, 'name'),
     memberCount: _intField(json, 'member_count'),
     preview: _aiGroupPreview(_stringField(json, 'last_message_preview')),
-    timestampText: _friendlyGroupTimestamp(
-      _stringField(json, 'last_message_at'),
-    ),
+    timestampText: _friendlyGroupTimestamp(lastMessageAt),
+    timestampMs: _timestampMsFromValue(json['last_message_at']),
     unreadCount: _intField(json, 'unread_count'),
     isPinned: _boolField(json, 'is_pinned'),
     isHidden: _boolField(json, 'is_hidden'),
@@ -2255,6 +2314,20 @@ AiGroupConversation _aiGroupFromJson(Map<String, Object?> json) {
         )
         .toList(growable: false),
   );
+}
+
+int _timestampMsFromValue(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) {
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return 0;
+    final numeric = int.tryParse(trimmed);
+    if (numeric != null) return numeric;
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed != null) return parsed.toLocal().millisecondsSinceEpoch;
+  }
+  return 0;
 }
 
 String _aiGroupPreview(String raw) {
@@ -2633,6 +2706,12 @@ bool _boolField(
   return fallback;
 }
 
+String _ensureTrailingSlash(String value) {
+  final clean = value.trim();
+  if (clean.isEmpty) return '';
+  return clean.endsWith('/') ? clean : '$clean/';
+}
+
 String _friendlyGroupTimestamp(String value) {
   final parsed = DateTime.tryParse(value.trim());
   if (parsed == null) return '';
@@ -2736,8 +2815,8 @@ String _adminDutyEmployeeLabel(
 
 List<ConversationItem> _employeeConversationItems(
   List<ModInfo> mods, {
-  required String badgeText,
-  required int badgeColor,
+  required String? badgeText,
+  required int? badgeColor,
   required Map<String, _ConversationListState> states,
 }) {
   final seenIds = <String>{};
@@ -2775,6 +2854,32 @@ List<ConversationItem> _employeeConversationItems(
   }
 
   return items;
+}
+
+List<ConversationItem> _sortConversationItems(List<ConversationItem> items) {
+  final entries = <_IndexedConversationItem>[
+    for (var i = 0; i < items.length; i++)
+      _IndexedConversationItem(index: i, item: items[i]),
+  ];
+  entries.sort((a, b) {
+    if (a.item.isPinned != b.item.isPinned) {
+      return a.item.isPinned ? -1 : 1;
+    }
+    final timestampOrder = b.item.timestampMs.compareTo(a.item.timestampMs);
+    if (timestampOrder != 0) return timestampOrder;
+    return a.index.compareTo(b.index);
+  });
+  return entries.map((entry) => entry.item).toList(growable: false);
+}
+
+class _IndexedConversationItem {
+  const _IndexedConversationItem({
+    required this.index,
+    required this.item,
+  });
+
+  final int index;
+  final ConversationItem item;
 }
 
 class _EmployeeConversationRef {

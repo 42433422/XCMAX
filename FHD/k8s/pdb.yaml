@@ -1,0 +1,16 @@
+# CI SSOT: PodDisruptionBudget for xcagi-fhd-api.
+# Ensures at least 1 pod stays available during voluntary disruptions (node drain, upgrade).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: xcagi-pdb
+  namespace: __NAMESPACE__
+  labels:
+    app: xcagi
+    component: fhd-api
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: xcagi
+      component: fhd-api

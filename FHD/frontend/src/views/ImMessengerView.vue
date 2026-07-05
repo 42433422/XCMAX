@@ -53,7 +53,7 @@
               <div class="im-conv-preview">{{ sidebarItemPreview(item) }}</div>
             </div>
             <i
-              v-if="item.kind === 'pinned'"
+              v-if="sidebarItemShowsPin(item)"
               :class="sidebarItemPinClasses(item)"
               aria-hidden="true"
             ></i>
@@ -1068,6 +1068,7 @@ function sidebarItemClasses(item: ImSidebarListItem) {
   return [
     'im-conv-item',
     { 'im-conv-item--pinned': item.kind === 'pinned' },
+    { 'im-conv-item--admin-contact': item.kind === 'pinned' && isAdminCustomerServiceConsole.value },
     { active: isSidebarItemActive(item) },
   ];
 }
@@ -1094,6 +1095,10 @@ function sidebarItemPinClasses(item: ImSidebarListItem) {
     'im-pin',
     { 'im-pin--employee': isDutyEmployeeEntry(item.entry) },
   ];
+}
+
+function sidebarItemShowsPin(item: ImSidebarListItem): boolean {
+  return item.kind === 'pinned' && !isAdminCustomerServiceConsole.value;
 }
 
 function sidebarItemTitle(item: ImSidebarListItem): string {
@@ -1996,6 +2001,15 @@ onUnmounted(() => {
 }
 .im-conv-item--pinned {
   background: rgba(0, 82, 217, 0.05);
+}
+.im-conv-item--admin-contact {
+  background: transparent;
+}
+.im-conv-item--admin-contact:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+.im-conv-item--admin-contact.active {
+  background: rgba(0, 82, 217, 0.08);
 }
 .im-pin {
   flex: none;

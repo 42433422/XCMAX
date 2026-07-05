@@ -1,7 +1,7 @@
 """Werkzeug 风格 URL 规则与 OpenAPI 路径模板之间的相互转换。
 
 原实现位于 ``app.fastapi_routes.archive_explicit_proxy``,Phase 2C 迁入 utils
-以让 ``scripts/route_inventory_diff.py``、``scripts/check_openapi_consistency.py``
+以让 ``scripts/route_inventory_diff.py``、``scripts/tools/check_openapi_consistency.py``
 等脚本摆脱对 archive 模块的依赖。
 """
 

@@ -562,19 +562,18 @@ void main() {
     );
   });
 
-  testWidgets('message list status badge uses Android conversation badge color',
-      (
+  testWidgets('message list status badge uses conversation badge color', (
     WidgetTester tester,
   ) async {
-    const adminBadge = Color(0xFFED7B2F);
+    const installedBadge = Color(0xFF3370FF);
     const conversation = ConversationItem(
       id: 'employee:demo:admin',
       type: ConversationType.aiTask,
       title: '系统 AI 员工',
       subtitle: '徽标颜色来自会话数据',
       timestampText: '6/24',
-      badgeText: '服务器后台',
-      badgeColor: 0xFFED7B2F,
+      badgeText: '已安装',
+      badgeColor: 0xFF3370FF,
     );
 
     await tester.pumpWidget(
@@ -587,15 +586,122 @@ void main() {
     );
 
     final badge = tester.widget<Container>(
-      find.byKey(const ValueKey('conversation_status_badge_服务器后台')),
+      find.byKey(const ValueKey('conversation_status_badge_已安装')),
     );
     final decoration = badge.decoration! as BoxDecoration;
     final border = decoration.border! as Border;
-    final label = tester.widget<Text>(find.text('服务器后台'));
+    final label = tester.widget<Text>(find.text('已安装'));
 
-    expect(decoration.color, adminBadge.withValues(alpha: 0.12));
-    expect(border.top.color, adminBadge.withValues(alpha: 0.30));
-    expect(label.style?.color, adminBadge);
+    expect(decoration.color, installedBadge.withValues(alpha: 0.12));
+    expect(border.top.color, installedBadge.withValues(alpha: 0.30));
+    expect(label.style?.color, installedBadge);
+  });
+
+  testWidgets('message list hides backend admin badges from conversation cards',
+      (
+    WidgetTester tester,
+  ) async {
+    const conversations = [
+      ConversationItem(
+        id: 'employee:demo:backend',
+        type: ConversationType.aiTask,
+        title: '管理端员工',
+        subtitle: '不应该显示后台角标',
+        timestampText: '6/24',
+        badgeText: '管理端后台',
+        badgeColor: 0xFFED7B2F,
+      ),
+      ConversationItem(
+        id: 'employee:demo:server',
+        type: ConversationType.aiTask,
+        title: '服务器员工',
+        subtitle: '不应该显示后台角标',
+        timestampText: '6/23',
+        badgeText: '服务器后台',
+        badgeColor: 0xFFED7B2F,
+      ),
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(
+          body: MessageListScreen(items: conversations),
+        ),
+      ),
+    );
+
+    expect(find.text('管理端后台'), findsNothing);
+    expect(find.text('服务器后台'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('conversation_status_badge_管理端后台')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('conversation_status_badge_服务器后台')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('message list sorts conversations by pinned then latest message',
+      (
+    WidgetTester tester,
+  ) async {
+    const pinned = ConversationItem(
+      id: 'pinned:assistant',
+      type: ConversationType.pinnedAssistant,
+      title: '置顶小C',
+      subtitle: '置顶优先',
+      timestampText: '6/22',
+      timestampMs: 1000,
+      isPinned: true,
+    );
+    const newestEmployee = ConversationItem(
+      id: 'employee:demo:newest',
+      type: ConversationType.aiTask,
+      title: '最新员工',
+      subtitle: '最近说话',
+      timestampText: '刚刚',
+      timestampMs: 3000,
+    );
+    const olderEmployee = ConversationItem(
+      id: 'employee:demo:older',
+      type: ConversationType.aiTask,
+      title: '旧员工',
+      subtitle: '更早消息',
+      timestampText: '6/24',
+      timestampMs: 1000,
+    );
+    const group = AiGroupConversation(
+      id: 'group-new',
+      name: '最新群聊',
+      memberCount: 2,
+      preview: '群消息',
+      timestampText: '刚刚',
+      timestampMs: 4000,
+      members: [],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: const Scaffold(
+          body: MessageListScreen(
+            groups: [group],
+            items: [olderEmployee, newestEmployee, pinned],
+          ),
+        ),
+      ),
+    );
+
+    final pinnedTop = tester.getTopLeft(find.text('置顶小C')).dy;
+    final groupTop = tester.getTopLeft(find.text('最新群聊')).dy;
+    final newestTop = tester.getTopLeft(find.text('最新员工')).dy;
+    final olderTop = tester.getTopLeft(find.text('旧员工')).dy;
+
+    expect(pinnedTop, lessThan(groupTop));
+    expect(groupTop, lessThan(newestTop));
+    expect(newestTop, lessThan(olderTop));
   });
 
   testWidgets('message list unread conversation text colors mirror Android', (
@@ -1158,8 +1264,8 @@ void main() {
     expect(find.text('小C助理'), findsWidgets);
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(
-      tester.getTopLeft(find.text('超级开发部')).dy,
-      lessThan(tester.getTopLeft(find.text('小C助理').first).dy),
+      tester.getTopLeft(find.text('小C助理').first).dy,
+      lessThan(tester.getTopLeft(find.text('超级开发部')).dy),
     );
   });
 

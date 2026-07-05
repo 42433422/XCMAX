@@ -66,10 +66,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final groups = widget.groups.where(_matchesGroupQuery).toList();
     final items = widget.items.where(_matchesQuery).toList();
-    final conversationEntries = <Object>[
-      ...groups,
-      ...items,
-    ];
+    final conversationEntries = _sortMessageEntries(groups, items);
     final showEmptyState = conversationEntries.isEmpty;
     final entries = <Object>[
       ...conversationEntries,
@@ -754,6 +751,59 @@ class GroupConversationRow extends StatelessWidget {
   }
 }
 
+List<Object> _sortMessageEntries(
+  List<AiGroupConversation> groups,
+  List<ConversationItem> items,
+) {
+  final entries = <_IndexedMessageEntry>[
+    for (var i = 0; i < groups.length; i++)
+      _IndexedMessageEntry(index: i, entry: groups[i]),
+    for (var i = 0; i < items.length; i++)
+      _IndexedMessageEntry(index: groups.length + i, entry: items[i]),
+  ];
+  entries.sort((a, b) {
+    final aPinned = _messageEntryPinned(a.entry);
+    final bPinned = _messageEntryPinned(b.entry);
+    if (aPinned != bPinned) return aPinned ? -1 : 1;
+    final timestampOrder = _messageEntryTimestampMs(b.entry)
+        .compareTo(_messageEntryTimestampMs(a.entry));
+    if (timestampOrder != 0) return timestampOrder;
+    return a.index.compareTo(b.index);
+  });
+  return entries.map((entry) => entry.entry).toList(growable: false);
+}
+
+bool _messageEntryPinned(Object entry) {
+  if (entry is AiGroupConversation) return entry.isPinned;
+  if (entry is ConversationItem) return entry.isPinned;
+  return false;
+}
+
+int _messageEntryTimestampMs(Object entry) {
+  if (entry is AiGroupConversation) return entry.timestampMs;
+  if (entry is ConversationItem) return entry.timestampMs;
+  return 0;
+}
+
+String? _visibleConversationBadge(ConversationItem item) {
+  final badge = item.badgeText?.trim();
+  if (badge == null || badge.isEmpty || badge == item.timestampText) {
+    return null;
+  }
+  if (const {'管理端后台', '服务器后台'}.contains(badge)) return null;
+  return badge;
+}
+
+class _IndexedMessageEntry {
+  const _IndexedMessageEntry({
+    required this.index,
+    required this.entry,
+  });
+
+  final int index;
+  final Object entry;
+}
+
 class ConversationRowTile extends StatelessWidget {
   const ConversationRowTile({
     super.key,
@@ -772,10 +822,7 @@ class ConversationRowTile extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final hasUnread = item.unreadCount > 0;
     final background = item.isPinned ? colors.surfaceHigh : colors.surface;
-    final visibleBadge =
-        item.badgeText == null || item.badgeText == item.timestampText
-            ? null
-            : item.badgeText;
+    final visibleBadge = _visibleConversationBadge(item);
     final titleColor = item.isHidden
         ? colors.textSecondary.withValues(alpha: 0.65)
         : !item.isFollowed

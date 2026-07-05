@@ -1,0 +1,79 @@
+{
+  "_generated_from": "config/deployment_modes.yaml",
+  "_note": "DO NOT EDIT BY HAND — run scripts/dev/deployment_modes_ssot.py generate --apply",
+  "databaseTransitionPolicy": {},
+  "defaultMode": "safe",
+  "mobileConnectionPolicy": {
+    "lan_direct": {
+      "description": "手机和桌面端在同一局域网内使用桌面端地址直连。",
+      "desktop_listen_service": "desktop-fhd",
+      "pair_via_qr": true
+    },
+    "public_relay_with_lan_fallback": {
+      "description": "优先使用公网/中继 AI 能力，局域网配对仍可作为手机端直连入口。",
+      "desktop_listen_service": "desktop-fhd",
+      "pair_via_qr": true
+    }
+  },
+  "modes": [
+    {
+      "aiMode": "offline",
+      "allowsOutbound": false,
+      "badge": "1级 | 内网 + SQLite",
+      "databaseMode": "local_sqlite",
+      "features": [
+        "本地部署",
+        "零出网",
+        "最高数据安全"
+      ],
+      "id": "absolute_safe",
+      "label": "绝对安全模式",
+      "level": 1,
+      "mobileConnection": "lan_direct",
+      "networkScope": "lan",
+      "performanceProfile": "conservative",
+      "requiresPostgresql": false,
+      "summary": "数据最安全，桌面端与移动端优先局域网直连，AI 不走外网。"
+    },
+    {
+      "aiMode": "online",
+      "allowsOutbound": true,
+      "badge": "2级 | 外网 + SQLite",
+      "databaseMode": "local_sqlite",
+      "features": [
+        "AI 能力增强",
+        "数据本地留存",
+        "安全与效率平衡"
+      ],
+      "id": "safe",
+      "label": "安全模式",
+      "level": 2,
+      "mobileConnection": "public_relay_with_lan_fallback",
+      "networkScope": "public",
+      "performanceProfile": "balanced",
+      "requiresPostgresql": false,
+      "summary": "解放 AI 能力，业务数据仍保留在本机 SQLite。"
+    },
+    {
+      "aiMode": "online",
+      "allowsOutbound": true,
+      "badge": "3级 | 外网 + PostgreSQL",
+      "databaseMode": "remote_postgresql",
+      "features": [
+        "PostgreSQL 向量索引",
+        "长期记忆",
+        "工具调用",
+        "高性能协作"
+      ],
+      "id": "performance",
+      "label": "性能模式",
+      "level": 3,
+      "mobileConnection": "public_relay_with_lan_fallback",
+      "networkScope": "public",
+      "performanceProfile": "performance",
+      "requiresPostgresql": true,
+      "summary": "全面释放 AI 性能、长期记忆能力与工具调用，适合真实 AI 员工协作。"
+    }
+  ],
+  "version": 1
+}

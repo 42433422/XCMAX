@@ -69,4 +69,55 @@ test.describe('P0 critical paths', () => {
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 });
     await captureEvidence(page, '05-mod.png');
   });
+
+  test('06 fulfillment — 订单发货后状态流转为已发货', async ({ page, request }) => {
+    const apiBase = (process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '');
+
+    if (!isFullStack()) {
+      await page.route('**/api/orders/E2E-1001', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: { id: 'E2E-1001', status: 'pending', total: 199.0 },
+          }),
+        })
+      );
+      await page.route('**/api/orders/*/fulfill', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: { id: 'E2E-1001', status: 'shipped', tracking_no: 'SF-E2E-001' },
+          }),
+        })
+      );
+    }
+
+    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 });
+
+    const beforeResp = await request.get(`${apiBase}/api/orders/E2E-1001`, { timeout: 15_000 });
+    expect(beforeResp.status(), await beforeResp.text()).toBeLessThan(500);
+    const beforeBody = await beforeResp.json().catch(() => ({} as any));
+    const beforeStatus = String(beforeBody?.data?.status || beforeBody?.status || 'pending');
+    expect(['pending', 'paid', 'unfulfilled', 'shipped', 'delivered']).toContain(beforeStatus);
+
+    const fulfillResp = await request.post(`${apiBase}/api/orders/E2E-1001/fulfill`, {
+      data: { tracking_no: 'SF-E2E-001', carrier: 'SF' },
+      timeout: 15_000,
+    });
+    expect(fulfillResp.status(), await fulfillResp.text()).toBeLessThan(500);
+    const fulfillBody = await fulfillResp.json().catch(() => ({} as any));
+    expect(fulfillBody?.success, `fulfill body: ${JSON.stringify(fulfillBody)}`).toBe(true);
+
+    const afterResp = await request.get(`${apiBase}/api/orders/E2E-1001`, { timeout: 15_000 });
+    const afterBody = await afterResp.json().catch(() => ({} as any));
+    const afterStatus = String(afterBody?.data?.status || afterBody?.status || '');
+    expect(['shipped', 'delivered']).toContain(afterStatus);
+
+    await captureEvidence(page, '06-fulfillment.png');
+  });
 });

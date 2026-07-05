@@ -45,13 +45,13 @@ lint:
 	cd $(FHD) && $(PY) -m ruff check app/
 
 openapi-check:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/tools/check_openapi_consistency.py
 
 openapi-check-relaxed:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/tools/check_openapi_consistency.py
 
 openapi-check-strict:
-	cd $(FHD) && PYTHONPATH=. $(PY) scripts/check_openapi_consistency.py --strict
+	cd $(FHD) && PYTHONPATH=. $(PY) scripts/tools/check_openapi_consistency.py --strict
 
 e2e:
 	bash $(FHD)/scripts/dev/e2e-full.sh

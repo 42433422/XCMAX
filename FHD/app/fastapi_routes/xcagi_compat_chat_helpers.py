@@ -44,8 +44,17 @@ _CHAT_DB_READ_GRACE_SEC = 5 * 60
 _chat_db_read_grace_lock = threading.Lock()
 _chat_db_read_grace_until: dict[str, float] = {}
 
-_CHAT_DB_READ_INTENT_RE = re.compile(
-    r"(查看|查询|检索|读取|看|浏览).*(数据库|数据表|产品库|客户库)|((数据库|数据表|产品库|客户库).*(查看|查询|检索|读取|看|浏览))",
+_CHAT_DB_READ_ACTION_RE = re.compile(r"(查看|查询|检索|读取|看|浏览|导出)", re.IGNORECASE)
+_CHAT_RAW_DB_SUBJECT_RE = re.compile(
+    r"(数据库|数据表|表结构|schema|sql|SQL|raw|原始|全库|整库|数据库文件)",
+    re.IGNORECASE,
+)
+_CHAT_CONTROLLED_BUSINESS_DB_RE = re.compile(
+    r"(产品库|客户库|客户信息|购买单位|物料库|原材料|发货记录|出货记录|业务库)",
+    re.IGNORECASE,
+)
+_CHAT_RAW_DB_STRONG_RE = re.compile(
+    r"(原始|raw|SQL|sql|表结构|schema|全库|整库|数据表|数据库文件|导出数据库|备份数据库)",
     re.IGNORECASE,
 )
 
@@ -87,7 +96,13 @@ def _message_requires_db_read_token(message: str) -> bool:
     text = str(message or "").strip()
     if not text:
         return False
-    return bool(_CHAT_DB_READ_INTENT_RE.search(text))
+    # Controlled business reads (产品库/客户库/物料库等) are normal assistant
+    # capabilities and must not be blocked by the raw database token gate.
+    if _CHAT_CONTROLLED_BUSINESS_DB_RE.search(text) and not _CHAT_RAW_DB_STRONG_RE.search(text):
+        return False
+    if not _CHAT_DB_READ_ACTION_RE.search(text):
+        return False
+    return bool(_CHAT_RAW_DB_SUBJECT_RE.search(text))
 
 
 def _chat_read_token_required_payload(message: str) -> dict[str, Any]:

@@ -24,10 +24,10 @@ OpenAPI 文档与实际路由的一致性验证
 
 用法（仓库根目录）::
 
-    python scripts/check_openapi_consistency.py
-    python scripts/check_openapi_consistency.py --json-out scripts/output/openapi_consistency.json
-    python scripts/check_openapi_consistency.py --md-out docs/reports/openapi_consistency.md
-    python scripts/check_openapi_consistency.py --strict
+    python scripts/tools/check_openapi_consistency.py
+    python scripts/tools/check_openapi_consistency.py --json-out scripts/output/openapi_consistency.json
+    python scripts/tools/check_openapi_consistency.py --md-out docs/reports/openapi_consistency.md
+    python scripts/tools/check_openapi_consistency.py --strict
 
 常见白名单（默认忽略，不算缺失）::
 

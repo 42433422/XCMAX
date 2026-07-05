@@ -15,24 +15,21 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from app.services.intent_trainer import (
-        HAS_YAML,
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        IntentDataset,
-        IntentExample,
-        compute_metrics,
-        export_to_onnx,
-        load_training_data,
-        main,
-        parse_nlu_yaml,
-        split_data,
-        train_intent_model,
-    )
-except ImportError:
-    pytest.skip("intent_trainer dependencies unavailable", allow_module_level=True)
+from app.services.intent_trainer import (
+    HAS_YAML,
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    IntentDataset,
+    IntentExample,
+    compute_metrics,
+    export_to_onnx,
+    load_training_data,
+    main,
+    parse_nlu_yaml,
+    split_data,
+    train_intent_model,
+)
 
 torch_available = True
 try:

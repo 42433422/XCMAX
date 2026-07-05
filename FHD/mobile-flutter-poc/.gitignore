@@ -16,6 +16,7 @@ android/local.properties
 android/app/debug/
 android/app/profile/
 android/app/release/
+artifacts/
 
 # iOS generated Flutter state
 ios/Flutter/Generated.xcconfig

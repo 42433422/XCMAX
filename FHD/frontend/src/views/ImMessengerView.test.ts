@@ -176,6 +176,7 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).toContain('Codex')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
+    expect(wrapper.find('.im-pin').exists()).toBe(false)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
     await wrapper.find('.im-conv-item--pinned').trigger('click')
@@ -240,6 +241,7 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
+    expect(wrapper.find('.im-pin').exists()).toBe(false)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
 
     const input = wrapper.find('.im-compose--codex input')

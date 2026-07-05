@@ -734,6 +734,32 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
+  test('MobileRepository Trae relay tasks carry XCMAX workspace context',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '修复工作目录',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.lastRelayId, 'fresh-relay');
+    expect(api.lastKind, 'trae.invoke');
+    expect(api.lastPayload?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
+    final context = api.lastPayload?['context'] as Map<String, Object?>?;
+    expect(context?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
+    expect(context?['conversation_id'], 'pinned:trae');
+  });
+
   test('MobileRepository clears stale inflight relay without paired desktop',
       () async {
     final store = MemoryMobileSessionStore(
@@ -948,7 +974,7 @@ void main() {
     expect(employee.badgeColor, 0xFF3370FF);
   });
 
-  test('MobileRepository admin conversations use Android admin badge color',
+  test('MobileRepository admin conversations hide backend card badge',
       () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
@@ -990,8 +1016,59 @@ void main() {
     final employee = conversations.singleWhere(
       (item) => item.id == 'employee:admin-duty-employees:site-content-editor',
     );
-    expect(employee.badgeText, '服务器后台');
-    expect(employee.badgeColor, 0xFFED7B2F);
+    expect(employee.badgeText, isNull);
+    expect(employee.badgeColor, isNull);
+  });
+
+  test('MobileRepository conversation items sort by latest message time',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accountKind: 'enterprise',
+        cachedModInfos: [
+          {
+            'id': 'sort-mod',
+            'name': '排序员工包',
+            'workflow_employees': [
+              {
+                'id': 'older-employee',
+                'label': '旧员工',
+                'panel_summary': '旧消息',
+                'phone_channel': 'mobile-chat',
+              },
+              {
+                'id': 'newer-employee',
+                'label': '新员工',
+                'panel_summary': '新消息',
+                'phone_channel': 'mobile-chat',
+              },
+            ],
+          },
+        ],
+        conversationListStates: {
+          'employee:sort-mod:older-employee': {
+            'last_message_preview': '旧消息',
+            'last_message_at': 1719820800000,
+          },
+          'employee:sort-mod:newer-employee': {
+            'last_message_preview': '新消息',
+            'last_message_at': 1719820900000,
+          },
+        },
+      ),
+    );
+    final repository = MobileRepository(client: _FailingModsApi(store: store));
+
+    final conversations = await repository.loadCachedConversations(
+      adminMode: false,
+      enterpriseMode: true,
+    );
+    final ids = conversations.map((item) => item.id).toList();
+
+    expect(
+      ids.indexOf('employee:sort-mod:newer-employee'),
+      lessThan(ids.indexOf('employee:sort-mod:older-employee')),
+    );
   });
 
   test('MobileRepository timestamps mirror Android cross-year format',
@@ -1053,6 +1130,7 @@ void main() {
 
     expect(groups.single.name, '超级开发部');
     expect(groups.single.preview, isEmpty);
+    expect(groups.single.timestampMs, greaterThan(0));
   });
 
   test(
@@ -1186,7 +1264,9 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
   @override
   Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
     String tool,
-    String body,
+    String body, {
+    String baseUrl = '',
+  }
   ) async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1242,7 +1322,9 @@ class _SuperEmployeeDirectApi extends MobileApiClient {
   @override
   Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
     String tool,
-    String body,
+    String body, {
+    String baseUrl = '',
+  }
   ) async {
     postedTools.add(tool);
     final data = <String, Object?>{
@@ -1357,7 +1439,9 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
   @override
   Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
     String tool,
-    String body,
+    String body, {
+    String baseUrl = '',
+  }
   ) async {
     postedTools.add(tool);
     return MobileEnvelope<Map<String, Object?>>(
@@ -1396,6 +1480,89 @@ class _StalePairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
             'updated_at': '2026-06-29T16:22:16+00:00',
           },
         ],
+      },
+    );
+  }
+}
+
+class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+  _FreshPairedRelayApi(super.store);
+
+  String lastRelayId = '';
+  String lastKind = '';
+  Map<String, Object?>? lastPayload;
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    final now = DateTime.now().toUtc().toIso8601String();
+    return MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'items': [
+          {
+            'relay_id': 'fresh-relay',
+            'status': 'paired',
+            'last_seen_at': now,
+            'updated_at': now,
+          },
+        ],
+      },
+      raw: {
+        'items': [
+          {
+            'relay_id': 'fresh-relay',
+            'status': 'paired',
+            'last_seen_at': now,
+            'updated_at': now,
+          },
+        ],
+      },
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateTask({
+    required String relayId,
+    required String kind,
+    required Map<String, Object?> payload,
+  }) async {
+    createdRelayTasks += 1;
+    lastRelayId = relayId;
+    lastKind = kind;
+    lastPayload = payload;
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'task': {'task_id': 'fresh-task'},
+      },
+      raw: {
+        'task': {'task_id': 'fresh-task'},
+      },
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
+    String taskId,
+  ) async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'task': {
+          'task_id': 'fresh-task',
+          'status': 'done',
+          'result': {'reply': 'Trae 中继回复'},
+        },
+      },
+      raw: {
+        'task': {
+          'task_id': 'fresh-task',
+          'status': 'done',
+          'result': {'reply': 'Trae 中继回复'},
+        },
       },
     );
   }

@@ -12,6 +12,7 @@ import { ref, type Ref, nextTick } from 'vue'
 /* ── mock functions ── */
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
+const mockApiPut = vi.fn().mockResolvedValue({ success: true })
 const mockApiDelete = vi.fn().mockResolvedValue({ success: true, message: 'ok' })
 const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
@@ -223,6 +224,7 @@ vi.mock('@/api', () => ({
   default: {
     get: (...args: unknown[]) => mockApiGet(...args),
     post: (...args: unknown[]) => mockApiPost(...args),
+    put: (...args: unknown[]) => mockApiPut(...args),
     delete: (...args: unknown[]) => mockApiDelete(...args),
   },
   ApiError: class ApiError extends Error {
@@ -295,9 +297,11 @@ function resetStores() {
 function resetApiMocks() {
   mockApiGet.mockReset()
   mockApiPost.mockReset()
+  mockApiPut.mockReset()
   mockApiDelete.mockReset()
   mockApiGet.mockResolvedValue({ data: {}, success: false })
   mockApiPost.mockResolvedValue({ success: true })
+  mockApiPut.mockResolvedValue({ success: true })
   mockApiDelete.mockResolvedValue({ success: true, message: 'ok' })
   mockAuthApiGetCurrentUser.mockReset()
   mockAuthApiValidateSession.mockReset()
@@ -2335,18 +2339,18 @@ describe('SettingsView – 行业与品牌计算属性', () => {
   it('basicSettingsSummary online 模式', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.aiMode = 'online'
+    vm.deploymentMode = 'safe'
     await nextTick()
-    expect(vm.basicSettingsSummary).toContain('settings.aiModeOnline')
+    expect(vm.basicSettingsSummary).toContain('安全模式')
     wrapper.unmount()
   })
 
   it('basicSettingsSummary offline 模式', async () => {
     const wrapper = await mountSettings()
     const vm = wrapper.vm as any
-    vm.aiMode = 'offline'
+    vm.deploymentMode = 'absolute_safe'
     await nextTick()
-    expect(vm.basicSettingsSummary).toContain('settings.offline')
+    expect(vm.basicSettingsSummary).toContain('绝对安全模式')
     wrapper.unmount()
   })
 

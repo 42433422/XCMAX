@@ -1,7 +1,7 @@
 """
 OpenAPI 与实际路由一致性测试（pytest 版）
 
-与 ``scripts/check_openapi_consistency.py`` 共用底层实现，这里只复核 **error 级**
+与 ``scripts/tools/check_openapi_consistency.py`` 共用底层实现，这里只复核 **error 级**
 发现，作为 CI 守门员：``warn`` 级（缺 summary/description/响应 schema）不阻塞，
 允许逐步补齐。
 
@@ -27,7 +27,7 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 
 def _load_checker_module():
-    """把 ``scripts/check_openapi_consistency.py`` 作为模块导入。
+    """把 ``scripts/tools/check_openapi_consistency.py`` 作为模块导入。
 
     由于脚本内部使用了 ``@dataclass``，而 ``dataclasses`` 在处理类时会回查
     ``sys.modules[cls.__module__]``，所以这里必须先把 spec 注册到 ``sys.modules``
@@ -39,7 +39,7 @@ def _load_checker_module():
     if mod_name in sys.modules:
         return sys.modules[mod_name]
 
-    path = SCRIPTS_DIR / "check_openapi_consistency.py"
+    path = SCRIPTS_DIR / "tools" / "check_openapi_consistency.py"
     spec = importlib.util.spec_from_file_location(mod_name, str(path))
     assert spec and spec.loader, f"无法定位 {path}"
     mod = importlib.util.module_from_spec(spec)
@@ -86,7 +86,7 @@ def test_openapi_and_routes_are_consistent():
         if len(errors) > 20:
             lines.append(
                 f"  … 还有 {len(errors) - 20} 条，运行 "
-                "``python scripts/check_openapi_consistency.py`` 查看完整列表。"
+                "``python scripts/tools/check_openapi_consistency.py`` 查看完整列表。"
             )
         raise AssertionError("\n".join(lines))
 
