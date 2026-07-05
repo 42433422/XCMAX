@@ -265,9 +265,7 @@ def _customer_pg_insert(name: str, cp: str, ph: str, addr: str) -> dict:
     with eng.connect() as conn:
         dup_parts = ["unit_name = :n", _pg_purchase_unit_active_sql()]
         dup_bind: dict[str, object] = {"n": name}
-        _append_tenant_scope_or_raise(
-            dup_parts, dup_bind, pu_cols, table_name="purchase_units"
-        )
+        _append_tenant_scope_or_raise(dup_parts, dup_bind, pu_cols, table_name="purchase_units")
         append_mod_scope_where(dup_parts, dup_bind, pu_cols)
         dup_sql = " AND ".join(dup_parts)
         dup = conn.execute(
@@ -317,9 +315,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
     with eng.connect() as conn:
         prev_parts = ["id = :id", _pg_purchase_unit_active_sql()]
         prev_bind: dict[str, object] = {"id": int(customer_id)}
-        _append_tenant_scope_or_raise(
-            prev_parts, prev_bind, pu_cols, table_name="purchase_units"
-        )
+        _append_tenant_scope_or_raise(prev_parts, prev_bind, pu_cols, table_name="purchase_units")
         append_mod_scope_where(prev_parts, prev_bind, pu_cols)
         prev = (
             conn.execute(
@@ -344,9 +340,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             _pg_purchase_unit_active_sql(),
         ]
         clash_bind: dict[str, object] = {"n": name, "id": int(customer_id)}
-        _append_tenant_scope_or_raise(
-            clash_parts, clash_bind, pu_cols, table_name="purchase_units"
-        )
+        _append_tenant_scope_or_raise(clash_parts, clash_bind, pu_cols, table_name="purchase_units")
         append_mod_scope_where(clash_parts, clash_bind, pu_cols)
         clash = conn.execute(
             text(_sql_select_from_where("id", "purchase_units", " AND ".join(clash_parts))),
@@ -362,9 +356,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             "addr": addr,
             "id": int(customer_id),
         }
-        upd_bind["tenant_id"] = _require_tenant_id_or_raise(
-            pu_cols, table_name="purchase_units"
-        )
+        upd_bind["tenant_id"] = _require_tenant_id_or_raise(pu_cols, table_name="purchase_units")
         tenant_and = " AND tenant_id = :tenant_id"
         mod_and = products_update_or_delete_mod_and(pu_cols, upd_bind)
         if "updated_at" in pu_cols:
@@ -382,9 +374,7 @@ def _customer_pg_update(customer_id: int, name: str, cp: str, ph: str, addr: str
             conn.execute(
                 text(
                     "UPDATE purchase_units SET unit_name = :un, contact_person = :cp, "
-                    "contact_phone = :ph, address = :addr WHERE id = :id"
-                    + tenant_and
-                    + mod_and
+                    "contact_phone = :ph, address = :addr WHERE id = :id" + tenant_and + mod_and
                 ),
                 upd_bind,
             )

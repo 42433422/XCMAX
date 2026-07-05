@@ -1882,7 +1882,9 @@ class TestMobileSelectOnboardingIndustry:
 
     @pytest.mark.asyncio
     async def test_missing_industry_id_returns_400(self, m):
-        result = await m.mobile_select_onboarding_industry(body={}, request=MagicMock(), user=_user())
+        result = await m.mobile_select_onboarding_industry(
+            body={}, request=MagicMock(), user=_user()
+        )
         assert result.status_code == 400
 
     @pytest.mark.asyncio
