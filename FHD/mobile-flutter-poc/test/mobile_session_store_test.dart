@@ -760,6 +760,61 @@ void main() {
     expect(context?['conversation_id'], 'pinned:trae');
   });
 
+  test('MobileRepository prefers LAN direct super employee over fresh relay',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '局域网直连执行',
+    );
+
+    expect(reply, 'Trae 直连回复');
+    expect(api.createdRelayTasks, 0);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/fhd-api/']);
+  });
+
+  test('MobileRepository falls back to relay when LAN direct fails', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        fhdHost: '192.168.31.8:17500',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _LanFailFreshRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '局域网失败就回中继',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
+  });
+
   test('MobileRepository clears stale inflight relay without paired desktop',
       () async {
     final store = MemoryMobileSessionStore(
@@ -1266,8 +1321,7 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
-  }
-  ) async {
+  }) async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
       message: '',
@@ -1324,8 +1378,7 @@ class _SuperEmployeeDirectApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
-  }
-  ) async {
+  }) async {
     postedTools.add(tool);
     final data = <String, Object?>{
       'message': {
@@ -1365,6 +1418,7 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
         );
 
   final postedTools = <String>[];
+  final postedBaseUrls = <String>[];
   var createdRelayTasks = 0;
   var statusCalls = 0;
 
@@ -1441,9 +1495,9 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
-  }
-  ) async {
+  }) async {
     postedTools.add(tool);
+    postedBaseUrls.add(baseUrl);
     return MobileEnvelope<Map<String, Object?>>(
       success: true,
       message: '',
@@ -1565,6 +1619,29 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
         },
       },
     );
+  }
+}
+
+class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
+  _LanFailFreshRelayApi(super.store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+  }) async {
+    postedTools.add(tool);
+    postedBaseUrls.add(baseUrl);
+    if (baseUrl.trim().isNotEmpty) {
+      return const MobileEnvelope<Map<String, Object?>>(
+        success: false,
+        message: 'lan unavailable',
+        data: {},
+        raw: {'success': false, 'message': 'lan unavailable'},
+      );
+    }
+    return super.postSuperEmployeeMessage(tool, body, baseUrl: baseUrl);
   }
 }
 

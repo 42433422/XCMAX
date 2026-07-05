@@ -560,7 +560,9 @@ async def execute_compat_chat_batch(
                     results.append(
                         {
                             "success": False,
-                            "message": err.detail if isinstance(err.detail, str) else str(err.detail),
+                            "message": (
+                                err.detail if isinstance(err.detail, str) else str(err.detail)
+                            ),
                             "response": err.detail
                             if isinstance(err.detail, str)
                             else str(err.detail),

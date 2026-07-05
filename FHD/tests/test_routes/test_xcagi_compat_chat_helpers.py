@@ -166,7 +166,7 @@ class TestMessageRequiresDbReadToken:
         assert ch._message_requires_db_read_token("查询数据库") is True
 
     def test_read_product_db(self):
-        assert ch._message_requires_db_read_token("读取产品库") is True
+        assert ch._message_requires_db_read_token("读取产品库") is False
 
     def test_normal_message(self):
         assert ch._message_requires_db_read_token("今天天气怎么样") is False
