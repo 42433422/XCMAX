@@ -262,7 +262,8 @@ def test_get_tool_registry_has_core_tools() -> None:
 
 
 def test_message_requires_db_read_token() -> None:
-    assert _message_requires_db_read_token("查看数据库产品库") is True
+    assert _message_requires_db_read_token("查看数据库产品库") is False
+    assert _message_requires_db_read_token("查看数据库") is True
     assert _message_requires_db_read_token("你好") is False
 
 
