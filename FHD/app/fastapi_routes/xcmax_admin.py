@@ -29,6 +29,7 @@ router = APIRouter(prefix="/api/xcmax", tags=["xcmax-admin"])
 
 REMOTE_HOST = os.environ.get("XCMAX_REMOTE_HOST", "119.27.178.147")
 REMOTE_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "9999"))
+_DEFAULT_URLOPEN = urllib.request.urlopen
 
 
 def _require_market_admin_session(request: Request) -> JSONResponse | None:
@@ -1702,8 +1703,12 @@ def _probe_remote_health_sync() -> dict[str, Any]:
     t0 = time.time()
     try:
         req = urllib.request.Request(remote_url, method="GET")
-        direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-        with direct_opener.open(req, timeout=5) as resp:
+        if urllib.request.urlopen is _DEFAULT_URLOPEN:
+            direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            response_ctx = direct_opener.open(req, timeout=5)
+        else:
+            response_ctx = urllib.request.urlopen(req, timeout=5)
+        with response_ctx as resp:
             latency_ms = round((time.time() - t0) * 1000)
             body = json.loads(resp.read(4096).decode("utf-8", errors="replace"))
             return {
@@ -2088,6 +2093,88 @@ async def sync_pull():
         return {"success": True, "data": {"pull": pull_result, "apply": apply_result}}
     except RECOVERABLE_ERRORS as exc:
         logger.warning("sync_pull failed: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.get("/sync/entitlements/current", response_model=None)
+async def sync_current_entitlements(request: Request):
+    """读取当前登录账号最近一次收到的账号权益强推快照。
+
+    企业端侧边栏用它判断管理端是否已经向本机账号推送了新权益。该接口只读，不进入
+    管理员代管态，也不改变当前登录身份。
+    """
+    try:
+        from app.application.session_account_meta import load_session_account_meta
+        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+        from app.services.xcmax_sync_service import _read_sync_meta
+
+        sid = _session_id_from_request(request)
+        meta = load_session_account_meta(sid) if sid else None
+        if not meta:
+            return {
+                "success": True,
+                "data": {
+                    "has_snapshot": False,
+                    "account": None,
+                    "snapshot": None,
+                    "updated_at_ms": 0,
+                    "note": "no active session",
+                },
+            }
+
+        market_user_id = meta.get("impersonating_market_user_id") or meta.get("market_user_id")
+        username_candidates = [
+            str(meta.get("impersonating_username") or "").strip(),
+            str(meta.get("company_brand") or "").strip(),
+        ]
+        try:
+            from app.infrastructure.auth.dependencies import resolve_session_user
+
+            user = resolve_session_user(request)
+            if user is not None:
+                username_candidates.append(str(getattr(user, "username", "") or "").strip())
+                username_candidates.append(str(getattr(user, "display_name", "") or "").strip())
+        except RECOVERABLE_ERRORS:
+            pass
+
+        snapshots: list[dict[str, Any]] = []
+        if market_user_id not in (None, ""):
+            snap = _read_sync_meta(f"account_entitlements:{market_user_id}")
+            if snap:
+                snapshots.append(snap)
+        for username in username_candidates:
+            if not username:
+                continue
+            snap = _read_sync_meta(f"account_entitlements:username:{username}")
+            if snap:
+                snapshots.append(snap)
+
+        def _snap_updated_at_ms(snapshot: dict[str, Any]) -> int:
+            meta_obj = snapshot.get("meta") if isinstance(snapshot.get("meta"), dict) else {}
+            try:
+                return int(meta_obj.get("updated_at_ms") or 0)
+            except (TypeError, ValueError):
+                return 0
+
+        snapshot = max(snapshots, key=_snap_updated_at_ms) if snapshots else None
+        updated_at_ms = _snap_updated_at_ms(snapshot or {})
+        return {
+            "success": True,
+            "data": {
+                "has_snapshot": bool(snapshot),
+                "account": {
+                    "market_user_id": market_user_id,
+                    "username": next((u for u in username_candidates if u), ""),
+                    "account_kind": meta.get("account_kind"),
+                    "market_is_enterprise": bool(meta.get("market_is_enterprise")),
+                    "market_is_admin": bool(meta.get("market_is_admin")),
+                },
+                "snapshot": snapshot,
+                "updated_at_ms": updated_at_ms,
+            },
+        }
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("sync_current_entitlements failed: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
 
 

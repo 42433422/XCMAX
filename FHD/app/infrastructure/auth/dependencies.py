@@ -85,17 +85,19 @@ def require_identified_user(
 
 
 def session_id_from_request(request: Request) -> str:
+    headers = getattr(request, "headers", {}) or {}
+    cookies = getattr(request, "cookies", {}) or {}
     # 移动端 AuthInterceptor 显式发 X-Session-ID；优先用，避免把 JWT 当 session_id 解析失败。
-    x_sid_raw = request.headers.get("X-Session-ID") or ""
+    x_sid_raw = headers.get("X-Session-ID") or ""
     x_sid = x_sid_raw.strip() if isinstance(x_sid_raw, str) else ""
     if x_sid:
         return x_sid
-    auth_raw = request.headers.get("Authorization") or ""
+    auth_raw = headers.get("Authorization") or ""
     auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):
         return auth[7:].strip()
     cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
-    cookie_raw = request.cookies.get(cookie_name) or ""
+    cookie_raw = cookies.get(cookie_name) or ""
     return cookie_raw.strip() if isinstance(cookie_raw, str) else ""
 
 
