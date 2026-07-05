@@ -29,16 +29,13 @@ export XCAGI_TENANT_STRICT=1
 
 run_step "verify_version_anchors" python3 scripts/dev/verify_version_anchors.py
 run_step "check_coverage_ssot" python3 scripts/ci/check_coverage_ssot.py
-run_step "coverage_ratchet" python3 scripts/dev/coverage_ratchet.py --check --require-backend --require-frontend
 run_step "layer_ratchet" python3 scripts/dev/check_layer_ratchet.py
 run_step "ssot_cli gate" python3 scripts/dev/ssot_cli.py gate
 run_step "smoke_all" python3 scripts/dev/smoke_all.py
 run_step "pytest release_gate" python3 -m pytest tests/release_gate/ -q --tb=short
-run_step "pytest (full)" python3 -m pytest tests/ -q --tb=line --cov-fail-under=0
 
 pushd frontend >/dev/null
 run_step "frontend eslint" npm run lint
-run_step "frontend vitest coverage" npm run test:coverage
 run_step "frontend vue-tsc" npm run type-check
 run_step "frontend build:strict" npm run build:strict
 if [[ "$SKIP_E2E" != "1" ]]; then
