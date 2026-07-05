@@ -10,11 +10,11 @@ void main() {
     );
     expect(
       androidProductErrorMessage('请求被拒绝', 'fallback'),
-      '当前账号没有权限，请切换到管理员账号或重新绑定后台',
+      '当前账号没有权限，请切换账号或重新绑定',
     );
     expect(
       androidProductErrorMessage('failed to connect to desktop', 'fallback'),
-      '连接不到电脑执行端，已尝试通过服务器中继，请稍后重试',
+      '连接不到电脑工具，已尝试通过云端中继，请稍后重试',
     );
     expect(
       androidProductErrorMessage('FCM registration missing', 'fallback'),

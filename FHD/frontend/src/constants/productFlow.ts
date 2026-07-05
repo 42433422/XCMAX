@@ -27,7 +27,13 @@ export function readOnboardingReturnPath(raw: unknown): string {
   return '/'
 }
 
-export type ProductFlowStepId = 'welcome' | 'host-pack' | 'industry' | 'done'
+export type ProductFlowStepId =
+  | 'welcome'
+  | 'host-pack'
+  | 'industry'
+  | 'seed-demo'
+  | 'first-ai-task'
+  | 'done'
 
 export interface ProductFlowStepMeta {
   id: ProductFlowStepId
@@ -56,8 +62,20 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
   },
   {
-    id: 'done',
+    id: 'seed-demo',
     index: 4,
+    title: '首笔业务数据',
+    subtitle: '写入 1 个演示客户与 1 个演示产品，便于工作台验收',
+  },
+  {
+    id: 'first-ai-task',
+    index: 5,
+    title: 'AI 读写验收',
+    subtitle: '让 AI 列出刚创建的演示客户并总结，验证读写闭环',
+  },
+  {
+    id: 'done',
+    index: 6,
     title: '开始使用',
     subtitle: '进入智能对话与日常操作',
   },
@@ -202,6 +220,8 @@ export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
   const s = String(raw || '').trim().toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'
   if (s === 'industry' || s === 'mod') return 'industry'
+  if (s === 'seed-demo' || s === 'seed') return 'seed-demo'
+  if (s === 'first-ai-task' || s === 'ai-demo') return 'first-ai-task'
   if (s === 'done' || s === 'finish') return 'done'
   return 'welcome'
 }

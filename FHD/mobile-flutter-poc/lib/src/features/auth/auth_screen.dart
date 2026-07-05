@@ -89,7 +89,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 12),
             Text(
-              'XCAGI 手机控制端',
+              'XCAGI',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textPrimary,
@@ -101,7 +101,7 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '连接服务器后台、企业工作台和电脑执行端',
+              '注册或登录，连接 AI 工作台和电脑工具',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,
@@ -139,7 +139,7 @@ class _AuthScreenState extends State<AuthScreen> {
               const SizedBox(height: 14),
               _AuthTextField(
                 controller: _usernameController,
-                hintText: _adminMode ? '管理员账号' : '账号或邮箱',
+                hintText: _adminMode ? '账号' : '账号或邮箱',
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 14),
@@ -290,8 +290,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   String get _loginButtonText {
     if (_loggingIn) return '登录中…';
-    if (_mode == AuthLoginMode.password && _adminMode) return '进入服务器后台';
-    if (_mode == AuthLoginMode.password) return '进入企业工作台';
+    if (_mode == AuthLoginMode.password && _adminMode) return '进入高级设置';
+    if (_mode == AuthLoginMode.password) return '进入 AI 工作台';
     return '登录';
   }
 
@@ -446,7 +446,7 @@ class _AccountKindSegment extends StatelessWidget {
       children: [
         Expanded(
           child: _LoginTab(
-            label: '企业工作台',
+            label: '账号登录',
             selected: !adminMode,
             onTap: () => onChanged(false),
           ),
@@ -454,7 +454,7 @@ class _AccountKindSegment extends StatelessWidget {
         const SizedBox(width: 10),
         Expanded(
           child: _LoginTab(
-            label: '服务器后台',
+            label: '高级设置',
             selected: adminMode,
             onTap: () => onChanged(true),
           ),

@@ -1,0 +1,117 @@
+# 桌面端启动时间基线测量
+# 在真实 Win10/Win11/macOS 机器上各跑 10 次，区分首次启动 vs 后续启动，输出 P50/P95 报告。
+# 触发：手动 / release tag (FHD/v*) 推送后
+# 依赖：self-hosted runner（带 XCAGI 安装包或本地构建产物）
+name: desktop-startup-baseline
+
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "每个模式运行次数（默认 10）"
+        required: false
+        default: "10"
+      mode:
+        description: "测量模式：all | first-run | subsequent"
+        required: false
+        default: "all"
+  release:
+    types: [published]
+
+jobs:
+  mac-baseline:
+    name: macOS startup baseline
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: FHD/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve XCAGI binary
+        id: binary
+        run: |
+          # 优先用本地安装的 XCAGI.app；否则用 dist/mac 下的构建产物
+          if [ -d "/Applications/XCAGI.app" ]; then
+            echo "binary=/Applications/XCAGI.app/Contents/MacOS/XCAGI" >> $GITHUB_OUTPUT
+          elif [ -f "dist/mac-universal/XCAGI.app/Contents/MacOS/XCAGI" ]; then
+            echo "binary=$(pwd)/dist/mac-universal/XCAGI.app/Contents/MacOS/XCAGI" >> $GITHUB_OUTPUT
+          elif [ -f "dist/mac/XCAGI.app/Contents/MacOS/XCAGI" ]; then
+            echo "binary=$(pwd)/dist/mac/XCAGI.app/Contents/MacOS/XCAGI" >> $GITHUB_OUTPUT
+          else
+            echo "::error::未找到 XCAGI 可执行文件，请先构建或安装"
+            exit 1
+          fi
+
+      - name: Run startup baseline (10 runs, first + subsequent)
+        env:
+          XCAGI_DESKTOP_BINARY: ${{ steps.binary.outputs.binary }}
+          XCAGI_USER_DATA: /tmp/xcagi-startup-baseline-mac
+        run: |
+          node scripts/measure-startup-baseline.js \
+            --runs=${{ github.event.inputs.runs || '10' }} \
+            --mode=${{ github.event.inputs.mode || 'all' }}
+
+      - name: Upload baseline report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: startup-baseline-mac-${{ github.run_id }}
+          path: FHD/desktop/metrics/startup-baseline-mac-*.json
+          retention-days: 90
+
+  windows-baseline:
+    name: Windows startup baseline
+    runs-on: [self-hosted, Windows]
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: FHD/desktop
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Resolve XCAGI binary
+        id: binary
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "$env:PROGRAMFILES\XCAGI\XCAGI.exe",
+            "$(Get-Location)\dist\win-unpacked\XCAGI.exe"
+          )
+          foreach ($c in $candidates) {
+            if (Test-Path $c) {
+              "binary=$c" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+              exit 0
+            }
+          }
+          Write-Error "未找到 XCAGI 可执行文件，请先构建或安装"
+          exit 1
+
+      - name: Run startup baseline (10 runs, first + subsequent)
+        env:
+          XCAGI_DESKTOP_BINARY: ${{ steps.binary.outputs.binary }}
+          XCAGI_USER_DATA: ${{ runner.temp }}\xcagi-startup-baseline-win
+        shell: pwsh
+        run: |
+          node scripts/measure-startup-baseline.js `
+            --runs=${{ github.event.inputs.runs || '10' }} `
+            --mode=${{ github.event.inputs.mode || 'all' }}
+
+      - name: Upload baseline report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: startup-baseline-win-${{ github.run_id }}
+          path: FHD/desktop/metrics/startup-baseline-win-*.json
+          retention-days: 90

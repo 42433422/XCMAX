@@ -86,7 +86,7 @@ class _ImMessengerScreenState extends State<ImMessengerScreen> {
           children: [
             const WeCell(
               title: '对方用户',
-              subtitle: '输入企业用户 ID 后发起直聊',
+              subtitle: '输入用户 ID 后发起直聊',
               icon: Icons.person_search,
               showArrow: false,
               showDivider: false,

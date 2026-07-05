@@ -7,6 +7,7 @@
 import logging
 import os
 import shutil
+import sqlite3
 from datetime import datetime
 from typing import Any, cast
 
@@ -46,6 +47,10 @@ class DatabaseService(NeuroEventPublisherMixin):
         """
         备份数据库
 
+        使用 sqlite3.backup() API 做在线热备份，避免 shutil.copy2 在 WAL 模式下
+        丢失未 checkpoint 的写入内容。备份后跑 integrity_check 校验一致性，
+        校验失败删除半成品并返回失败。
+
         Returns:
             结果字典：
                 - success: 是否成功
@@ -78,7 +83,13 @@ class DatabaseService(NeuroEventPublisherMixin):
             backup_filename = f"{db_filename}.{timestamp}.bak"
             backup_path = os.path.join(backup_dir, backup_filename)
 
-            shutil.copy2(db_path, backup_path)
+            if not self._hot_backup(db_path, backup_path):
+                return {
+                    "success": False,
+                    "message": f"在线热备份失败（数据库可能损坏或被锁定）：{db_path}",
+                    "file_path": None,
+                    "filename": None,
+                }
 
             logger.info("数据库备份成功：%s", backup_path)
 
@@ -97,6 +108,49 @@ class DatabaseService(NeuroEventPublisherMixin):
                 "file_path": None,
                 "filename": None,
             }
+
+    @staticmethod
+    def _hot_backup(src_path: str, dst_path: str) -> bool:
+        """用 sqlite3.backup() API 做在线热备份，备份后校验完整性。
+
+        shutil.copy2 是文件级拷贝，SQLite 在 WAL 模式下写入先进 WAL 文件再
+        checkpoint，文件级拷贝会漏掉 WAL 内容得到不一致的库。sqlite3.backup()
+        是 SQLite 官方推荐的在线热备份 API，会合并 WAL 保证备份一致。
+        """
+        src_conn = None
+        dst_conn = None
+        try:
+            src_conn = sqlite3.connect(src_path)
+            dst_conn = sqlite3.connect(dst_path)
+            src_conn.backup(dst_conn)
+        except sqlite3.Error as e:
+            logger.error("hot backup failed: %s", e)
+            try:
+                os.remove(dst_path)
+            except OSError:
+                pass
+            return False
+        finally:
+            if dst_conn is not None:
+                dst_conn.close()
+            if src_conn is not None:
+                src_conn.close()
+
+        try:
+            check_conn = sqlite3.connect(dst_path)
+            result = check_conn.execute("PRAGMA integrity_check").fetchone()
+            check_conn.close()
+            ok = bool(result) and result[0] == "ok"
+        except sqlite3.Error as e:
+            logger.error("integrity_check failed for backup %s: %s", dst_path, e)
+            ok = False
+        if not ok:
+            try:
+                os.remove(dst_path)
+            except OSError:
+                pass
+            return False
+        return True
 
     def restore_database(self, backup_file: str) -> dict[str, Any]:
         """

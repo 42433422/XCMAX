@@ -166,6 +166,12 @@ def _resolve_personnel_roster() -> list[tuple[str, str, str]]:
     return _load_products_personnel_roster(resolve_mod_private_sqlite_path(DEFAULT_DB_NAME))
 
 
+def _safe_workspace_file(relpath: str, *, field_name: str) -> Path:
+    """Resolve user-supplied relative path inside workspace sandbox."""
+    rel = _normalize_relpath(relpath, field_name=field_name)
+    return resolve_safe_workspace_relpath(rel)
+
+
 def _normalize_relpath(raw: str, *, field_name: str) -> str:
     rel = unquote(raw or "").strip().replace("\\", "/").lstrip("/")
     if not rel:
@@ -256,17 +262,17 @@ async def attendance_convert_upload(
         src_path = upload_dir / src_name
         content = await file.read()
         src_path.write_bytes(content)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("Failed to save attendance upload")
         return JSONResponse(
-            {"success": False, "error": f"save upload failed: {exc}"},
+            {"success": False, "error": "save upload failed"},
             status_code=500,
         )
 
     try:
         out_path = resolve_safe_workspace_relpath(out_rel)
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
     raw_tpl_rel = unquote(template_relpath or "").strip()
     if raw_tpl_rel:
@@ -293,8 +299,8 @@ async def attendance_convert_upload(
                 {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                 status_code=400,
             )
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        return JSONResponse({"success": False, "error": "模板路径无效"}, status_code=400)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -328,10 +334,10 @@ async def attendance_convert_upload(
             use_llm=use_llm_flag or None,
             personnel_roster=roster,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("Attendance conversion crashed")
         return JSONResponse(
-            {"success": False, "error": f"convert failed: {exc}"},
+            {"success": False, "error": "convert failed"},
             status_code=500,
         )
     if not result.get("success"):
@@ -392,12 +398,11 @@ async def attendance_convert_upload(
 @router.get("/attendance/download", response_model=None)
 async def attendance_download(relpath: str):
     try:
-        rel = _normalize_relpath(relpath, field_name="relpath")
-        p = resolve_safe_workspace_relpath(rel)
+        p = _safe_workspace_file(relpath, field_name="relpath")
     except ValueError as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
-    except RECOVERABLE_ERRORS as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS:
+        return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
 
     if not p.exists() or not p.is_file():
         return JSONResponse({"success": False, "error": "file not found"}, status_code=404)

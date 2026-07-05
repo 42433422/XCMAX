@@ -13,7 +13,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -57,7 +57,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -152,7 +152,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -204,7 +204,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -274,7 +274,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "user-customer-service-officer",
         name: "客户客服",
-        summary: "查看并回复企业客户的客服消息",
+        summary: "查看并回复客户的客服消息",
         avatarUrl: null,
         avatarKey: "",
       ),
@@ -288,9 +288,9 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       ),
       AiGroupMember(
         employeeId: "enterprise-adoption-officer",
-        name: "企业使用跟踪员",
+        name: "使用跟踪员",
         summary:
-            "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
+            "跟踪 O6 使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
         avatarUrl: null,
         avatarKey: "",
       ),
@@ -314,7 +314,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -322,7 +322,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
         employeeId: "employee-interview-assistant",
         name: "员工信息访谈员",
         summary:
-            "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
+            "面向平台协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
         avatarUrl: null,
         avatarKey: "",
       ),
@@ -452,7 +452,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -492,7 +492,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
       AiGroupMember(
         employeeId: "xcagi-assistant",
         name: "小C助理",
-        summary: "企业智能助手，负责群内上下文、任务拆解和工作汇报串联。",
+        summary: "AI助手，负责群内上下文、任务拆解和工作汇报串联。",
         avatarUrl: null,
         avatarKey: "assistant",
       ),
@@ -531,7 +531,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
         employeeId: "mobile-harmony-release-officer",
         name: "鸿蒙发版员",
         summary:
-            "P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、企业版发版。",
+            "P-S 鸿蒙 HarmonyOS 渠道构建与发布：build-hap.sh、publish-release-harmony.sh、HAP/HSP 产出与签名、标准版发版。",
         avatarUrl: null,
         avatarKey: "",
       ),

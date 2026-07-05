@@ -73,7 +73,7 @@ class TestBackupDatabase:
     def test_backup_success(self, tmp_path):
         svc = DatabaseService()
         db_file = tmp_path / "test.db"
-        db_file.write_text("fake db content")
+        self._create_real_sqlite_db(db_file)
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
 
@@ -87,9 +87,16 @@ class TestBackupDatabase:
         assert result["filename"].endswith(".bak")
 
     def test_backup_copies_content(self, tmp_path):
+        """sqlite3.backup() API 备份出来的库必须包含全部已提交数据。"""
+        import sqlite3
+
         svc = DatabaseService()
         db_file = tmp_path / "test.db"
-        db_file.write_text("important data")
+        conn = sqlite3.connect(str(db_file))
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)")
+        conn.execute("INSERT INTO t (v) VALUES ('important data')")
+        conn.commit()
+        conn.close()
         backup_dir = tmp_path / "backups"
         backup_dir.mkdir()
 
@@ -97,8 +104,21 @@ class TestBackupDatabase:
             with patch.object(svc, "_get_backup_dir", return_value=str(backup_dir)):
                 result = svc.backup_database()
 
-        with open(result["file_path"]) as f:
-            assert f.read() == "important data"
+        assert result["success"] is True
+        verify_conn = sqlite3.connect(result["file_path"])
+        rows = verify_conn.execute("SELECT v FROM t").fetchall()
+        verify_conn.close()
+        assert rows == [("important data",)]
+
+    @staticmethod
+    def _create_real_sqlite_db(db_file):
+        import sqlite3
+
+        conn = sqlite3.connect(str(db_file))
+        conn.execute("CREATE TABLE t (id INTEGER PRIMARY KEY)")
+        conn.execute("INSERT INTO t DEFAULT VALUES")
+        conn.commit()
+        conn.close()
 
 
 class TestRestoreDatabase:

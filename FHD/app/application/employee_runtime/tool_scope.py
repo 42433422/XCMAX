@@ -22,9 +22,19 @@ logger = logging.getLogger(__name__)
 READ_TOOLS = ("excel_analysis", "excel_schema_understand", "excel_join_compare")
 CHART_TOOLS = ("excel_chart_recommend",)
 DOC_TOOLS = ("generate_office_document",)
-WRITE_TOOLS = frozenset({"import_excel_to_database", "products_bulk_import"})
-# 代码修改工具（patch_file/write_file 等）—— 受 scope_globs + write_approval gate 强制
-CODE_WRITE_TOOLS = frozenset({"patch_file", "write_file"})
+
+
+def __getattr__(name: str):
+    if name == "WRITE_TOOLS":
+        from resources.config.risk_actions_loader import list_write_tools
+
+        return list_write_tools()
+    if name == "CODE_WRITE_TOOLS":
+        from resources.config.risk_actions_loader import list_code_write_tools
+
+        return list_code_write_tools()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 _EXCEL_KW = (
     "excel",
@@ -185,7 +195,10 @@ def resolve_employee_tools(
             add(n)
 
     if read_only:
-        selected = [n for n in selected if n not in WRITE_TOOLS]
+        from resources.config.risk_actions_loader import list_write_tools
+
+        blocked = set(list_write_tools())
+        selected = [n for n in selected if n not in blocked]
 
     return [base[n] for n in selected] or None
 

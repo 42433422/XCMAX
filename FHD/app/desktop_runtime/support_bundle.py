@@ -12,8 +12,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.desktop_runtime.migrate import export_config
+from app.security.log_redaction import redact_log_text
 
 from .paths import ensure_desktop_dirs, is_desktop_mode
+
+
+def _redact_log_bytes(chunk: bytes) -> bytes:
+    text = chunk.decode("utf-8", errors="replace")
+    return redact_log_text(text).encode("utf-8", errors="replace")
 
 
 def _tail_bytes(path: Path, max_bytes: int = 2_097_152) -> bytes | None:
@@ -57,6 +63,19 @@ def build_support_bundle_zip(
         "note": "不含数据库正文；数据库备份请在 backups/ 目录单独拷贝。",
     }
 
+    updater_log = logs_dir / "updater-events.jsonl"
+    updater_chunk = _tail_bytes(updater_log, max_bytes=512_000)
+    manifest["updaterLogIncluded"] = bool(updater_chunk)
+    manifest["modsLoaded"] = []
+    try:
+        from app.infrastructure.mods.mod_manager import get_mod_manager
+
+        manifest["modsLoaded"] = [
+            str(m.get("id") or "") for m in get_mod_manager().list_all_mods() if m.get("id")
+        ][:200]
+    except Exception:  # noqa: BLE001
+        manifest["modsLoaded"] = []
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
@@ -66,7 +85,8 @@ def build_support_bundle_zip(
                 "------------\n"
                 "将此 ZIP 提供给技术支持即可。\n"
                 "- manifest.json：环境与路径摘要（不含密钥）。\n"
-                "- xcagi.log（若存在）：后端近期日志节选。\n"
+                "- logs/xcagi.log（若存在）：后端近期日志节选。\n"
+                "- logs/updater-events.jsonl（若存在）：桌面更新事件。\n"
                 "数据库文件默认不在包内；如需一并分析请单独发送 backups 下的 .db 备份。\n"
             ).encode(),
         )
@@ -77,7 +97,10 @@ def build_support_bundle_zip(
         for name in ("xcagi.log", "xcagi.log.1", "xcagi.log.2"):
             chunk = _tail_bytes(logs_dir / name)
             if chunk:
-                zf.writestr(f"logs/{name}", chunk)
+                zf.writestr(f"logs/{name}", _redact_log_bytes(chunk))
+
+        if updater_chunk:
+            zf.writestr("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk))
 
     buf.seek(0)
     return buf.getvalue()
