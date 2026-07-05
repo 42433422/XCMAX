@@ -159,21 +159,22 @@ class TestBertIntentClassifierLoadModel:
         """use_fp16=True calls model.half()."""
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
+        mock_model_loader = MagicMock()
+        mock_model_loader.from_pretrained.return_value = mock_model
+        mock_tokenizer_loader = MagicMock()
+        mock_tokenizer_loader.from_pretrained.return_value = mock_tokenizer
 
         clf = BertIntentClassifier(device="cpu", use_fp16=True)
 
-        with (
-            patch(
-                "app.ai_engines.bert.intent_service.AutoModelForSequenceClassification.from_pretrained",
-                return_value=mock_model,
-            ),
-            patch(
-                "app.ai_engines.bert.intent_service.BertTokenizer.from_pretrained",
-                return_value=mock_tokenizer,
-            ),
-        ):
-            clf.load_model()
+        import app.ai_engines.bert.intent_service as svc_mod
 
+        with (
+            patch.object(svc_mod, "AutoModelForSequenceClassification", mock_model_loader),
+            patch.object(svc_mod, "BertTokenizer", mock_tokenizer_loader),
+        ):
+            result = clf.load_model()
+
+        assert result is True
         mock_model.half.assert_called_once()
 
 
