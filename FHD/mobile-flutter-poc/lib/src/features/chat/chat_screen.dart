@@ -8,7 +8,6 @@ import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
 import '../../policy/android_error_policy.dart';
 import '../../policy/avatar_policy.dart';
-import '../../policy/pinned_ids.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
@@ -74,7 +73,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final colors = AppTheme.colors(context);
     final activeGitBranches = _activeGitBranches();
     final activeGitBranch = _currentGitBranch(activeGitBranches);
-    final isSuperEmployee = widget.conversation.type.superTool != null;
     final employeeProfile = _employeeProfile;
     return Scaffold(
       backgroundColor: colors.page,
@@ -107,11 +105,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 minHeight: 2,
                 color: colors.brand,
                 backgroundColor: colors.surfaceHigh,
-              ),
-            if (isSuperEmployee)
-              _SuperDevCliModelSwitchCard(
-                selectedConversationId: widget.conversation.id,
-                onSelect: _switchSuperDevCliModel,
               ),
             Expanded(
               child: _messages.isEmpty
@@ -156,21 +149,6 @@ class _ChatScreenState extends State<ChatScreen> {
               toolActions: _toolActions(),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _switchSuperDevCliModel(String conversationId) {
-    if (conversationId == widget.conversation.id) return;
-    final next = _superDevConversationFor(conversationId);
-    if (next == null) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          conversation: next,
-          initialMessages: const <ChatMessage>[],
-          repository: _repository ?? widget.repository,
         ),
       ),
     );
@@ -915,199 +893,6 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         );
       },
-    );
-  }
-}
-
-const _superDevCliOptions = <_SuperDevCliOption>[
-  _SuperDevCliOption(PinnedIds.codex, 'Codex'),
-  _SuperDevCliOption(PinnedIds.cursor, 'Cursor'),
-  _SuperDevCliOption(PinnedIds.claude, 'Claude'),
-  _SuperDevCliOption(PinnedIds.trae, 'Trae'),
-];
-
-class _SuperDevCliOption {
-  const _SuperDevCliOption(this.id, this.label);
-
-  final String id;
-  final String label;
-}
-
-ConversationItem? _superDevConversationFor(String id) {
-  switch (id) {
-    case PinnedIds.codex:
-      return const ConversationItem(
-        id: PinnedIds.codex,
-        type: ConversationType.pinnedCodex,
-        title: '超级员工-Codex',
-        subtitle: '全设备协同',
-        timestampText: '',
-        isOnline: true,
-        isPinned: true,
-      );
-    case PinnedIds.cursor:
-      return const ConversationItem(
-        id: PinnedIds.cursor,
-        type: ConversationType.pinnedCursor,
-        title: '超级员工-Cursor',
-        subtitle: '全设备协同 · Agent',
-        timestampText: '',
-        isOnline: true,
-        isPinned: true,
-      );
-    case PinnedIds.claude:
-      return const ConversationItem(
-        id: PinnedIds.claude,
-        type: ConversationType.pinnedClaude,
-        title: '超级员工-Claude',
-        subtitle: '全设备协同 · 排比派工',
-        timestampText: '',
-        isOnline: true,
-        isPinned: true,
-      );
-    case PinnedIds.trae:
-      return const ConversationItem(
-        id: PinnedIds.trae,
-        type: ConversationType.pinnedTrae,
-        title: '超级员工-Trae',
-        subtitle: '全设备协同 · Trae',
-        timestampText: '',
-        isOnline: true,
-        isPinned: true,
-      );
-  }
-  return null;
-}
-
-class _SuperDevCliModelSwitchCard extends StatelessWidget {
-  const _SuperDevCliModelSwitchCard({
-    required this.selectedConversationId,
-    required this.onSelect,
-  });
-
-  final String selectedConversationId;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Container(
-      key: const ValueKey('super_dev_cli_model_switch_card'),
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: colors.surfaceHigh.withValues(alpha: 0.55),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: colors.divider, width: 0.5),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            '超级开发组 · CLI',
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 13,
-              height: 1.31,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 0,
-            ),
-          ),
-          const SizedBox(height: 4),
-          _SuperDevCliModeCapsule(
-            selectedConversationId: selectedConversationId,
-            onSelect: onSelect,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SuperDevCliModeCapsule extends StatelessWidget {
-  const _SuperDevCliModeCapsule({
-    required this.selectedConversationId,
-    required this.onSelect,
-  });
-
-  final String selectedConversationId;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: colors.surface,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          for (var index = 0; index < _superDevCliOptions.length; index++) ...[
-            Expanded(
-              child: _SuperDevCliModeOption(
-                option: _superDevCliOptions[index],
-                selected:
-                    _superDevCliOptions[index].id == selectedConversationId,
-                onTap: () => onSelect(_superDevCliOptions[index].id),
-              ),
-            ),
-            if (index != _superDevCliOptions.length - 1)
-              const SizedBox(width: 4),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SuperDevCliModeOption extends StatelessWidget {
-  const _SuperDevCliModeOption({
-    required this.option,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final _SuperDevCliOption option;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    return Material(
-      color: selected ? colors.brandContainer : Colors.transparent,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        key: ValueKey('super_dev_cli_option_${option.id}'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-          child: Center(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                option.label,
-                maxLines: 1,
-                softWrap: false,
-                style: TextStyle(
-                  color: selected ? colors.brand : colors.textSecondary,
-                  fontSize: 15,
-                  height: 1.4,
-                  fontWeight: selected ? FontWeight.w500 : FontWeight.w400,
-                  letterSpacing: 0,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
