@@ -90,16 +90,16 @@ def install_tenant_filter() -> None:
         for obj in session.new:
             if isinstance(obj, TenantScopedMixin) and getattr(obj, "tenant_id", None) is None:
                 if tid is None:
-                    if (os.environ.get("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE") or "").strip().lower() in (
+                    if (
+                        os.environ.get("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE") or ""
+                    ).strip().lower() in (
                         "1",
                         "true",
                         "yes",
                         "on",
                     ):
                         continue
-                    raise TenantScopeError(
-                        f"{obj.__class__.__name__} 写入缺少 tenant_id，已拒绝"
-                    )
+                    raise TenantScopeError(f"{obj.__class__.__name__} 写入缺少 tenant_id，已拒绝")
                 obj.tenant_id = tid
 
 

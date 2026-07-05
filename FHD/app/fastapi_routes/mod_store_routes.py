@@ -765,8 +765,10 @@ async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
     if os.path.isdir(dest):
         return True, "employee pack present"
     candidates = [Path(mm_root) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID]
-    if getattr(sys, "frozen", False) or os.environ.get("XCAGI_BUNDLED_MODS_DIR") or os.environ.get(
-        "XCAGI_SEED_MODS_DIR"
+    if (
+        getattr(sys, "frozen", False)
+        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
+        or os.environ.get("XCAGI_SEED_MODS_DIR")
     ):
         from app.mod_sdk.edition_policy import bundled_mods_dir
 

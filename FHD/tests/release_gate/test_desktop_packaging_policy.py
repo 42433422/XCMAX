@@ -26,8 +26,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
 
     for script in (sh_backend, sh_windows, sh_thin):
         assert (
-            "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full "
-            "npm run build:full"
+            "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
 
@@ -37,21 +36,17 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     ps_installer = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
         encoding="utf-8"
     )
-    sh_installer = (
-        REPO_ROOT / "scripts" / "package" / "build-windows-installer.sh"
-    ).read_text(encoding="utf-8")
+    sh_installer = (REPO_ROOT / "scripts" / "package" / "build-windows-installer.sh").read_text(
+        encoding="utf-8"
+    )
     smoke = (REPO_ROOT / "scripts" / "package" / "smoke-installed-windows.ps1").read_text(
         encoding="utf-8"
     )
-    acceptance = (
-        REPO_ROOT / "scripts" / "package" / "acceptance-sunbird-windows.ps1"
-    ).read_text(encoding="utf-8")
-    router = (REPO_ROOT / "frontend" / "src" / "router" / "index.ts").read_text(
+    acceptance = (REPO_ROOT / "scripts" / "package" / "acceptance-sunbird-windows.ps1").read_text(
         encoding="utf-8"
     )
-    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
-        encoding="utf-8"
-    )
+    router = (REPO_ROOT / "frontend" / "src" / "router" / "index.ts").read_text(encoding="utf-8")
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
 
     assert "return 17500" in desktop_main
     assert "process.platform === 'darwin' ? 17500 : 5000" not in desktop_main
@@ -75,6 +70,6 @@ def test_missing_industry_seed_does_not_block_desktop_release() -> None:
     assert "Skipped missing industry seed mod(s)" in ps_stage
     assert "Skipped missing industry seed mod(s)" in sh_stage
     assert "Skipped missing industry seed mod(s)" in ps_verify
-    assert "throw \"Missing industry seed mod(s)" not in ps_stage
-    assert "throw \"industry-seeds/ missing open industry mod(s)" not in ps_verify
+    assert 'throw "Missing industry seed mod(s)' not in ps_stage
+    assert 'throw "industry-seeds/ missing open industry mod(s)' not in ps_verify
     assert "exit 1" not in sh_stage.split("Skipped missing industry seed mod(s)", 1)[-1]

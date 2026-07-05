@@ -302,9 +302,7 @@ class SQLAlchemyProductRepository(ProductRepository):
             with get_db() as db:
                 insp = inspect(db.bind)
                 if "products" in (insp.get_table_names() or []):
-                    rows = (
-                        apply_tenant_filter(db.query(Product.unit), Product).distinct().all()
-                    )
+                    rows = apply_tenant_filter(db.query(Product.unit), Product).distinct().all()
                     for u in rows:
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)

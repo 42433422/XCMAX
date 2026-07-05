@@ -79,9 +79,11 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "taiyangniao_attendance_compat",
-        lambda: __import__(
-            "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
-        ).router,
+        lambda: (
+            __import__(
+                "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
+            ).router
+        ),
         priority=14,
     )
     _mount(

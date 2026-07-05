@@ -1159,9 +1159,9 @@ class TestInstallCustomerDeliverySeedRoute:
         sys.modules[
             "app.fastapi_routes.market_account"
         ].resolve_valid_market_access_token = AsyncMock(return_value="market-tok")
-        sys.modules[
-            "app.infrastructure.auth.dependencies"
-        ].session_id_from_request = MagicMock(return_value="sid")
+        sys.modules["app.infrastructure.auth.dependencies"].session_id_from_request = MagicMock(
+            return_value="sid"
+        )
 
         with _make_client() as client:
             resp = client.post(

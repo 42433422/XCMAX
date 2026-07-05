@@ -66,13 +66,7 @@ def _parse_price(value: Any) -> float:
     text = str(value).strip()
     if not text:
         return 0.0
-    text = (
-        text.replace(",", "")
-        .replace("￥", "")
-        .replace("¥", "")
-        .replace("元", "")
-        .strip()
-    )
+    text = text.replace(",", "").replace("￥", "").replace("¥", "").replace("元", "").strip()
     try:
         return float(Decimal(text))
     except (InvalidOperation, ValueError):

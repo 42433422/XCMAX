@@ -89,12 +89,15 @@ async def patch_workspace_prefs_endpoint(body: WorkspacePrefsPatch, request: Req
         selected_industry_id = str(partial.get("selected_industry_id") or "").strip()
         prefs = patch_workspace_prefs(owner_id, partial)
         if selected_industry_id:
-            prefs = bind_selected_industry_for_user(
-                user,
-                selected_industry_id,
-                industry_mod_id=str(partial.get("industry_mod_id") or "").strip(),
-                owner_id=owner_id,
-            ) or prefs
+            prefs = (
+                bind_selected_industry_for_user(
+                    user,
+                    selected_industry_id,
+                    industry_mod_id=str(partial.get("industry_mod_id") or "").strip(),
+                    owner_id=owner_id,
+                )
+                or prefs
+            )
         market_entitlements = await _try_grant_market_entitlements(
             session_id_from_request(request),
             selected_industry_id,

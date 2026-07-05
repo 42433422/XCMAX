@@ -96,9 +96,7 @@ class ReportService(NeuroEventPublisherMixin):
                 date_stats = {}
                 for record, count in records:
                     date_key = (
-                        record.created_at.strftime("%Y-%m-%d")
-                        if record.created_at
-                        else "unknown"
+                        record.created_at.strftime("%Y-%m-%d") if record.created_at else "unknown"
                     )
                     if date_key not in date_stats:
                         date_stats[date_key] = {"date": date_key, "order_count": 0, "amount": 0}
