@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import logging
 import os
@@ -37,6 +38,32 @@ logger = logging.getLogger(__name__)
 
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
 _DIRECT_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _direct_cookie_opener() -> tuple[urllib.request.OpenerDirector, http.cookiejar.CookieJar]:
+    jar: http.cookiejar.CookieJar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(
+        urllib.request.ProxyHandler({}),
+        urllib.request.HTTPCookieProcessor(jar),
+    )
+    return opener, jar
+
+
+def _csrf_token_from_jar(jar: http.cookiejar.CookieJar) -> str:
+    for cookie in jar:
+        if cookie.name == "csrf_token" and str(cookie.value or "").strip():
+            return str(cookie.value)
+    return ""
+
+
+def _prime_csrf_cookie(opener: urllib.request.OpenerDirector, jar: http.cookiejar.CookieJar, base_url: str) -> str:
+    try:
+        req = urllib.request.Request(f"{base_url}/api/health", method="GET")
+        with opener.open(req, timeout=10) as resp:
+            resp.read(4096)
+    except OPERATIONAL_ERRORS as exc:
+        logger.debug("prime sync csrf cookie failed: %s", exc)
+    return _csrf_token_from_jar(jar)
 
 
 def utc_now_ms() -> int:
@@ -141,6 +168,8 @@ def push_outbox(
     db = SyncDb()
     pending = db.get_pending_outbox(limit=200)
     sent = failed = 0
+    opener, cookie_jar = _direct_cookie_opener()
+    csrf_token = _prime_csrf_cookie(opener, cookie_jar, base_url) if pending else ""
 
     for item in pending:
         outbox_id = item["id"]
@@ -156,10 +185,13 @@ def push_outbox(
             req = urllib.request.Request(
                 f"{base_url}/api/xcmax/sync/receive",
                 data=body,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    **({"X-CSRF-Token": csrf_token} if csrf_token else {}),
+                },
                 method="POST",
             )
-            with _DIRECT_HTTP_OPENER.open(req, timeout=10) as resp:
+            with opener.open(req, timeout=10) as resp:
                 resp.read(4096)
             db.mark_outbox_sent(outbox_id)
             sent += 1

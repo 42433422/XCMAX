@@ -183,6 +183,8 @@ void main() {
     expect(find.text('查找会话或伙伴'), findsOneWidget);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
+    expect(find.textContaining('排队中'), findsNothing);
+    expect(find.textContaining('服务器队列'), findsNothing);
     expect(find.text('P-W 网站部'), findsOneWidget);
     expect(find.text('小C助理'), findsWidgets);
     expect(find.text('超级员工-Codex'), findsWidgets);

@@ -1741,7 +1741,20 @@ Map<String, Object?> _workflowEmployeeToJson(WorkflowEmployeeInfo employee) {
 bool _relayDesktopIsDispatchable(Map<String, Object?> row) {
   final relayId = _stringField(row, 'relay_id');
   final status = _stringField(row, 'status').toLowerCase();
-  return relayId.isNotEmpty && status == 'paired';
+  return relayId.isNotEmpty && status == 'paired' && _relayDesktopIsFresh(row);
+}
+
+bool _relayDesktopIsFresh(Map<String, Object?> row) {
+  final lastSeen = _firstNonBlank([
+    _stringField(row, 'last_seen_at'),
+    _stringField(row, 'updated_at'),
+  ]);
+  if (lastSeen.isEmpty) return false;
+  final parsed = DateTime.tryParse(lastSeen)?.toUtc();
+  if (parsed == null) return false;
+  final age = DateTime.now().toUtc().difference(parsed);
+  if (age.isNegative) return true;
+  return age <= const Duration(minutes: 5);
 }
 
 String _relayDesktopSortKey(Map<String, Object?> row) {

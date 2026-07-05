@@ -713,6 +713,27 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
+  test('MobileRepository ignores stale paired relay desktop', () async {
+    final store = MemoryMobileSessionStore();
+    final api = _StalePairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '不要再卡旧队列',
+    );
+
+    expect(reply, 'Trae 直连回复');
+    expect(api.postedTools, ['Trae']);
+    expect(api.createdRelayTasks, 0);
+  });
+
   test('MobileRepository clears stale inflight relay without paired desktop',
       () async {
     final store = MemoryMobileSessionStore(
@@ -1268,6 +1289,38 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
       message: '',
       data: {'reply': '$tool 直连回复'},
       raw: {'reply': '$tool 直连回复'},
+    );
+  }
+}
+
+class _StalePairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+  _StalePairedRelayApi(super.store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'items': [
+          {
+            'relay_id': 'old-paired-relay',
+            'status': 'paired',
+            'last_seen_at': '2026-06-29T16:22:16+00:00',
+            'updated_at': '2026-06-29T16:22:16+00:00',
+          },
+        ],
+      },
+      raw: {
+        'items': [
+          {
+            'relay_id': 'old-paired-relay',
+            'status': 'paired',
+            'last_seen_at': '2026-06-29T16:22:16+00:00',
+            'updated_at': '2026-06-29T16:22:16+00:00',
+          },
+        ],
+      },
     );
   }
 }

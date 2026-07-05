@@ -7,7 +7,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
     id: "506de49aa92342149885f648601ca3f0",
     name: "超级开发部",
     memberCount: 5,
-    preview: "超级员工-Codex：【超级员工-Codex 进度回访】\n状态：排队中\n负责：主负责人\n结果：还在服务器队列中，任务号：",
+    preview: "小C助理、Codex、Cursor、Claude、Trae 在群里协同处理开发任务。",
     timestampText: "12小时前",
     members: [
       AiGroupMember(
