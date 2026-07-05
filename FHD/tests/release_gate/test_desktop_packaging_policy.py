@@ -56,7 +56,8 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
-    assert "if (!isDesktopShell())" in router
+    assert "!isDesktopShell()" in router
+    assert "profile.isAdminAccount" in router
     assert "next({ name: 'chat', replace: true });" not in router
     assert "console=False" in spec
 
