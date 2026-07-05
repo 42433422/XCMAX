@@ -73,9 +73,11 @@
         :auto-refresh-starred-wechat="autoRefreshStarredWechat"
         :tts-enabled="ttsEnabled"
         :excel-analyze-input-ref="chatRefBag.excelAnalyzeInputRef"
+        :office-docking-processing="officeDockingProcessing"
         @new-conversation="newConversation"
         @show-history="showHistoryPanel"
         @trigger-upload="triggerUpload"
+        @trigger-office-docking="triggerOfficeDocking"
         @excel-file-change="onExcelAnalyzeFileChange"
         @pro-intent-change="onProIntentToolbarChange"
         @auto-refresh-change="onAutoRefreshToolbarChange"
@@ -142,6 +144,22 @@
       @clear="clearHistorySessions"
       @load-session="loadSession"
     />
+    <input
+      ref="officeDockingInputRef"
+      type="file"
+      multiple
+      accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+      style="display:none"
+      @change="onOfficeDockingFileChange"
+    />
+    <ChatOfficeDockingReview
+      v-if="officeDockingPanelOpen"
+      :items="officeDockingReviewItems"
+      :processing="officeDockingProcessing"
+      @toggle-target="toggleOfficeDockingTarget"
+      @confirm="confirmOfficeDockingReview"
+      @close="clearOfficeDockingReview"
+    />
   </div>
 </template>
 
@@ -158,6 +176,8 @@ import ChatMessageList from '@/components/chat/ChatMessageList.vue'
 import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
+import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
+import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
@@ -252,6 +272,8 @@ const {
   handleAutoAction: chatHandleAutoAction,
   ttsEnabled,
   setTtsEnabled,
+  addAndSaveMessage,
+  stageExcelAnalysisContext,
 } = chatViewApi
 
 const messageInput = ref('')
@@ -316,6 +338,25 @@ const sendMessage = async () => {
   messageInput.value = ''
   await chatSendMessage(message)
 }
+
+const {
+  officeDockingInputRef,
+  officeDockingProcessing,
+  officeDockingPanelOpen,
+  officeDockingReviewItems,
+  triggerOfficeDocking,
+  onOfficeDockingFileChange,
+  toggleOfficeDockingTarget,
+  confirmOfficeDockingReview,
+  clearOfficeDockingReview,
+} = useChatOfficeDocking({
+  addAndSaveMessage,
+  stageExcelAnalysisContext,
+  sendDatabaseImportMessage: async (message: string) => {
+    messageInput.value = message
+    await sendMessage()
+  },
+})
 
 const sendQuick = (text: string) => {
   messageInput.value = text

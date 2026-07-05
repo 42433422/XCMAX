@@ -22,6 +22,9 @@ ALLOWED_TOP_LEVEL_KEYS = frozenset(
         "workflow_ai_employees",
         "product_flow_completed",
         "host_pack_acknowledged",
+        "onboarding_completed_at",
+        "onboarding_seed_done",
+        "onboarding_ai_demo_done",
     }
 )
 

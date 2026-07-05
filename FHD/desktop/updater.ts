@@ -1,8 +1,28 @@
 import { BrowserWindow, app, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 
 let updateDownloaded = false
+
+function updaterLogPath(): string {
+  return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
+}
+
+function appendUpdaterEvent(type: string, data?: unknown): void {
+  try {
+    const dir = path.dirname(updaterLogPath())
+    fs.mkdirSync(dir, { recursive: true })
+    fs.appendFileSync(
+      updaterLogPath(),
+      `${JSON.stringify({ ts: new Date().toISOString(), type, data })}\n`,
+      'utf8',
+    )
+  } catch {
+    /* ignore log failures */
+  }
+}
 
 export function isUpdateDownloaded(): boolean {
   return updateDownloaded
@@ -30,6 +50,8 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () =
     send('update-available', info)
     void autoUpdater.downloadUpdate().catch(error => {
       send('error', { message: error.message, phase: 'download' })
+      appendUpdaterEvent('download_failed', { message: error.message })
+      updateDownloaded = false
     })
   })
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
@@ -46,13 +68,30 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () =
       message: `新版本 ${info.version} 已准备好，是否立即重启安装？`
     })
     if (result.response === 1) {
-      if (beforeInstall) {
-        await beforeInstall()
+      try {
+        if (beforeInstall) {
+          await beforeInstall()
+        }
+        appendUpdaterEvent('install_start', { version: info.version })
+        autoUpdater.quitAndInstall(false, true)
+      } catch (error) {
+        appendUpdaterEvent('install_failed', {
+          message: error instanceof Error ? error.message : String(error),
+        })
+        updateDownloaded = true
+        await dialog.showMessageBox(mainWindow, {
+          type: 'error',
+          title: '更新安装失败',
+          message: '更新安装未完成，当前版本仍可继续使用。可导出诊断包后重试或安装上一版本。',
+        })
       }
-      autoUpdater.quitAndInstall(false, true)
     }
   })
-  autoUpdater.on('error', error => send('error', { message: error.message, stack: error.stack }))
+  autoUpdater.on('error', error => {
+    send('error', { message: error.message, stack: error.stack, phase: 'updater' })
+    appendUpdaterEvent('error', { message: error.message, stack: error.stack })
+    updateDownloaded = false
+  })
 
   setTimeout(() => {
     void checkForUpdates().catch(error => send('error', { message: error.message }))
