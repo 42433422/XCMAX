@@ -25,6 +25,7 @@ const {
   mockValidateEnterpriseSession,
   mockIsAdminConsoleSpa,
   mockResolveAdminConsoleHomeUrl,
+  mockIsDesktopShell,
   mockModsStore,
   mockAccountProfileStore,
 } = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ const {
   mockValidateEnterpriseSession: vi.fn().mockResolvedValue(true),
   mockIsAdminConsoleSpa: vi.fn(() => false),
   mockResolveAdminConsoleHomeUrl: vi.fn(() => '/admin'),
+  mockIsDesktopShell: vi.fn(() => false),
   mockModsStore: {
     clientModsUiOff: false,
     mods: [] as unknown[],
@@ -119,6 +121,10 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+}))
+
+vi.mock('@/utils/desktopShell', () => ({
+  isDesktopShell: mockIsDesktopShell,
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -215,6 +221,7 @@ describe('router/index enhanced', () => {
     vi.clearAllMocks()
     mockIsAdminConsoleSpa.mockReturnValue(false)
     mockIsEnterpriseEdition.mockReturnValue(false)
+    mockIsDesktopShell.mockReturnValue(false)
     mockFetchProductSku.mockResolvedValue('generic')
     mockShouldRouteToProductOnboarding.mockReturnValue(false)
     mockShouldRouteToHostPackOnboarding.mockReturnValue(false)
@@ -329,7 +336,7 @@ describe('router/index enhanced', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
-  it('redirects admin account to admin console in enterprise mode', async () => {
+  it('redirects browser admin account to admin console in enterprise mode', async () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockAccountProfileStore.isAdminAccount = true
@@ -337,6 +344,17 @@ describe('router/index enhanced', () => {
     // Admin account should be redirected to admin console
     // The guard calls window.location.href which we can't easily test
     // but we can verify the navigation was aborted
+  })
+
+  it('allows desktop shell admin account to use enterprise pages', async () => {
+    mockIsEnterpriseEdition.mockReturnValue(true)
+    mockValidateEnterpriseSession.mockResolvedValue(true)
+    mockIsDesktopShell.mockReturnValue(true)
+    mockAccountProfileStore.loaded = true
+    mockAccountProfileStore.isAdminAccount = true
+    await router.push('/settings')
+    expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('settings')
   })
 
   // ── product onboarding ──────────────────────────────────

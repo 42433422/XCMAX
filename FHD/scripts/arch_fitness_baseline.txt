@@ -313,3 +313,11 @@
 [giant-file] modstore_server/fhd_routes_api.py
 [giant-file] modstore_server/digest_vibe_prep.py
 [giant-file] modstore_server/daily_digest.py
+[routes->services] app/fastapi_routes/xcmax_admin.py:834
+[routes->services] app/fastapi_routes/xcmax_admin.py:848
+[routes->services] app/fastapi_routes/xcmax_admin.py:865
+[routes->services] app/fastapi_routes/xcmax_admin.py:1791
+[routes->services] app/fastapi_routes/xcmax_admin.py:1809
+[routes->services] app/fastapi_routes/xcmax_admin.py:1818
+[routes->services] app/fastapi_routes/xcagi_compat_product.py:282
+[routes->services] app/fastapi_routes/domains/product/compat_routes.py:282

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -11,6 +12,56 @@ from app.fastapi_routes.registry import RouteRegistry
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
+    """仅当 taiyangniao-pro 的 /api/mod/* 已实际挂载时，跳过宿主 compat 层。"""
+    try:
+        from app.infrastructure.mods.mod_manager import get_mod_manager
+
+        return "taiyangniao-pro" in get_mod_manager()._http_routes_registered
+    except RECOVERABLE_ERRORS:
+        return False
+
+
+def _bundled_taiyangniao_pro_exposes_attendance_api() -> bool:
+    """Detect the bundled taiyangniao-pro blueprint before Mod routes are mounted."""
+    fhd_root = Path(__file__).resolve().parents[3]
+    candidates = (
+        fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+        fhd_root / "XCAGI" / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+    )
+    for file_path in candidates:
+        try:
+            if not file_path.is_file():
+                continue
+            text = file_path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        if (
+            "register_fastapi_routes" in text
+            and "/attendance/rules" in text
+            and "/attendance/convert-upload" in text
+            and "/attendance/download" in text
+        ):
+            return True
+    return False
+
+
+def _load_taiyangniao_attendance_compat_router():
+    if (
+        _mod_taiyangniao_pro_exposes_attendance_api()
+        or _bundled_taiyangniao_pro_exposes_attendance_api()
+    ):
+        from fastapi import APIRouter
+
+        logger.info(
+            "Skip taiyangniao_attendance_compat routes: taiyangniao-pro mod already exposes attendance API"
+        )
+        return APIRouter(tags=["sunbird-attendance-compat-skipped"])
+    return __import__(
+        "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
+    ).router
 
 
 def _mount(
@@ -75,6 +126,12 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
         "knowledge_v1",
         lambda: __import__("app.fastapi_routes.knowledge_v1", fromlist=["router"]).router,
         priority=13,
+    )
+    _mount(
+        registry,
+        "taiyangniao_attendance_compat",
+        _load_taiyangniao_attendance_compat_router,
+        priority=14,
     )
     _mount(
         registry,

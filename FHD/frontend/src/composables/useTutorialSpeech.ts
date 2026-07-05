@@ -1,4 +1,5 @@
-import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie'
+import { apiFetch } from '@/utils/apiBase'
+import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 
 const TTS_CACHE_MAX = 80
 const SPEECH_END_PADDING_MS = 450
@@ -83,15 +84,12 @@ export function createTutorialSpeech(): TutorialSpeechController {
     if (ttsInflight.has(content)) return ttsInflight.get(content) || null
 
     const req = (async () => {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (shouldAttachCsrfHeader('POST', headers)) {
-        const tok = readCsrfTokenFromCookie()
-        if (tok) headers['X-CSRF-Token'] = tok
-      }
-      const resp = await fetch('/api/tts', {
+      await ensureTutorialTtsCsrfCookie()
+
+      const resp = await apiFetch('/api/tts', {
         method: 'POST',
-        headers,
-        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        timeoutMs: 30_000,
         body: JSON.stringify({
           text: content,
           lang: 'zh',
@@ -194,5 +192,15 @@ export function createTutorialSpeech(): TutorialSpeechController {
     prefetchAll,
     getCachedDuration,
     stepHoldMs,
+  }
+}
+
+async function ensureTutorialTtsCsrfCookie(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (readCsrfTokenFromCookie()) return
+  try {
+    await apiFetch('/api/health', { method: 'GET', timeoutMs: 5_000 })
+  } catch {
+    /* best-effort: the following POST will surface the actual TTS error */
   }
 }

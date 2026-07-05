@@ -142,6 +142,11 @@ DEFAULT_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
     "/api/im",
 )
 
+FIXED_LAN_BYPASS_PREFIXES: tuple[str, ...] = (
+    "/api/im",
+    "/ws/im",
+)
+
 
 def normalize_lan_guard_path(path: str) -> str:
     """规范 ASGI path，避免代理/重复斜杠导致放行前缀匹配失败。"""
@@ -162,17 +167,25 @@ def lan_guard_path_is_bypassed(path: str, cfg: LanConfig) -> bool:
     path = normalize_lan_guard_path(path)
     if not path:
         return False
-    for exact in cfg.bypass_paths:
-        if not exact:
-            continue
-        if path == exact or path.rstrip("/") == exact.rstrip("/"):
-            return True
-    for prefix in cfg.static_prefixes:
-        if prefix and path.startswith(prefix):
-            return True
-    for pfx in DEFAULT_LAN_BYPASS_PREFIXES:
-        if path == pfx or path.startswith(pfx + "/"):
-            return True
+    candidates = [path]
+    if path.startswith("/fhd-api/"):
+        candidates.append(path.removeprefix("/fhd-api") or "/")
+    for candidate in candidates:
+        for exact in cfg.bypass_paths:
+            if not exact:
+                continue
+            normalized_exact = normalize_lan_guard_path(exact)
+            if candidate == normalized_exact or candidate.rstrip("/") == normalized_exact.rstrip(
+                "/"
+            ):
+                return True
+        for prefix in cfg.static_prefixes:
+            normalized_prefix = normalize_lan_guard_path(prefix)
+            if normalized_prefix and candidate.startswith(normalized_prefix):
+                return True
+        for pfx in (*FIXED_LAN_BYPASS_PREFIXES, *DEFAULT_LAN_BYPASS_PREFIXES):
+            if candidate == pfx or candidate.startswith(pfx + "/"):
+                return True
     return False
 
 

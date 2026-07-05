@@ -1,18 +1,89 @@
 import SwiftUI
 
-/// 头像:有 `url` 时加载真实头像,加载中/失败回退名字首字色块(对标 Android AppAvatar)。
+/// 消息页头像布局 SSOT,对齐 Android `MessageAvatarLayout`。
+enum MessageAvatarLayout {
+    static let headerAvatarSize: CGFloat = 44
+    static let headerAvatarCornerRadius: CGFloat = 10
+    static let topBarAvatarSize: CGFloat = 32
+
+    static let conversationAvatarSize: CGFloat = 52
+    static let conversationAvatarCornerRadius: CGFloat = 8
+    static let conversationRowHorizontalPadding: CGFloat = 16
+    static let conversationRowVerticalPadding: CGFloat = 11
+    static let conversationAvatarTextGap: CGFloat = 12
+    static let conversationDividerExtraInset: CGFloat = 4
+    static let conversationDividerStart: CGFloat =
+        conversationRowHorizontalPadding +
+        conversationAvatarSize +
+        conversationAvatarTextGap +
+        conversationDividerExtraInset
+
+    static let unreadBadgeOffsetX: CGFloat = 5
+    static let unreadBadgeOffsetY: CGFloat = -5
+    static let unreadBadgeSize: CGFloat = 21
+    static let unreadBadgeLargeSize: CGFloat = 25
+    static let onlineIndicatorSize: CGFloat = 14
+    static let onlineIndicatorOffsetY: CGFloat = 2
+    static let onlineIndicatorPadding: CGFloat = 2.5
+
+    static let bubbleAvatarSize: CGFloat = 40
+    static let bubbleAvatarCornerRadius: CGFloat = 8
+    static let bubbleAvatarGap: CGFloat = 8
+    static let bubbleTopPaddingWithAvatar: CGFloat = 12
+    static let bubbleTopPaddingWithoutAvatar: CGFloat = 4
+    static let bubbleAvatarReservedWidth: CGFloat = bubbleAvatarSize + bubbleAvatarGap
+    static let emptyStateAvatarSize: CGFloat = 72
+    static let emptyStateAvatarCornerRadius: CGFloat = 20
+
+    static let employeePickerAvatarSize: CGFloat = 44
+    static let employeePickerAvatarCornerRadius: CGFloat = 4
+    static let employeePickerRowHorizontalPadding: CGFloat = 12
+    static let employeePickerRowVerticalPadding: CGFloat = 10
+    static let employeePickerAvatarTextGap: CGFloat = 12
+    static let employeePickerDividerStart: CGFloat =
+        employeePickerRowHorizontalPadding +
+        employeePickerAvatarSize +
+        employeePickerAvatarTextGap
+
+    static let customerServiceBubbleAvatarSize: CGFloat = 36
+    static let customerServiceBubbleIconSize: CGFloat = 24
+    static let customerServiceBubbleAvatarGap: CGFloat = 8
+}
+
+/// 固定图片头像兜底,对齐 Android `AppAvatarFallback`。
+enum AppAvatarFallback: Hashable {
+    case user
+    case assistant
+    case customerService
+    case aiEmployee
+    case codex
+    case claude
+    case cursor
+    case trae
+
+    var assetName: String? {
+        switch self {
+        case .user: return "avatar_default_user"
+        case .assistant: return "avatar_assistant"
+        case .customerService, .aiEmployee: return "avatar_default_ai_employee"
+        case .codex: return "codex_app_icon"
+        case .claude: return "claude_app_icon"
+        case .cursor: return "cursor_app_icon"
+        case .trae: return "trae_app_icon"
+        }
+    }
+}
+
+/// 头像:有 `url` 时加载真实头像,加载中/失败回退固定图片(对标 Android AppAvatar)。
 struct AvatarView: View {
     let text: String
     var url: String? = nil
+    var fallback: AppAvatarFallback = .aiEmployee
     var size: CGFloat = 44
-
-    private var initial: String {
-        let t = text.trimmingCharacters(in: .whitespaces)
-        return t.isEmpty ? "AI" : String(t.prefix(1))
-    }
+    var cornerRadius: CGFloat = 8
 
     private var resolvedURL: URL? {
-        guard let raw = url?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else { return nil }
+        guard let raw = url?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }
         return URL(string: raw)
     }
 
@@ -20,26 +91,42 @@ struct AvatarView: View {
         Group {
             if let resolvedURL {
                 AsyncImage(url: resolvedURL) { phase in
-                    if case .success(let image) = phase {
+                    switch phase {
+                    case .success(let image):
                         image.resizable().scaledToFill()
-                    } else {
-                        textAvatar   // 加载中 / 失败 → 首字母回退
+                    case .empty, .failure:
+                        fallbackAvatar
+                    @unknown default:
+                        fallbackAvatar
                     }
                 }
             } else {
-                textAvatar
+                fallbackAvatar
             }
         }
         .frame(width: size, height: size)
-        .clipShape(Circle())
+        .background(Color(uiColor: .secondarySystemFill))
+        .clipShape(shape)
+        .overlay(shape.stroke(Color.white.opacity(0.10), lineWidth: 0.5))
+        .contentShape(shape)
+        .accessibilityLabel(text)
     }
 
-    private var textAvatar: some View {
-        Text(initial)
-            .font(.system(size: size * 0.42, weight: .semibold))
-            .foregroundColor(.white)
-            .frame(width: size, height: size)
-            .background(Color.avatarTint(for: text))
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+    }
+
+    @ViewBuilder
+    private var fallbackAvatar: some View {
+        if let assetName = fallback.assetName {
+            Image(assetName)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Image("avatar_default_ai_employee")
+                .resizable()
+                .scaledToFill()
+        }
     }
 }
 

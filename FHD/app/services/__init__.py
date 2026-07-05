@@ -61,7 +61,7 @@ from app.services.intent_service import get_tool_key_with_negation_check, recogn
 from app.services.task_agent import TaskAgent, get_task_agent
 from app.services.user_service import UserService, get_user_service
 from app.services.wechat_task_service import WechatTaskService
-from app.utils.database_service import get_database_service
+from app.services.database_service import get_database_service
 from app.utils.system_service import get_system_service
 from app.utils.task_context import TaskContextService, get_task_context_service
 from app.utils.user_memory import UserMemoryService, get_user_memory_service

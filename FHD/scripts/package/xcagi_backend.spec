@@ -26,6 +26,7 @@ for item in [
     "alembic",
     ".env.example",
     "alembic.ini",
+    "scripts/backup",
 ]:
     datas.extend(add_data(item))
 
@@ -61,7 +62,7 @@ for module in [
     "app.db.models",
     "app.middleware",
     "app.infrastructure.mods",
-    "app.mod_sdk.erp_wechat_contacts_facade",
+    "app.mod_sdk",
     "uvicorn",
     "fastapi",
     "sqlalchemy",
@@ -147,8 +148,8 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
-    disable_windowed_traceback=False,
+    console=False,
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,

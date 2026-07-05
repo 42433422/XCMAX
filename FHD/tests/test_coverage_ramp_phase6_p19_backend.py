@@ -1462,10 +1462,8 @@ class TestRunMarketFirstLogin:
         assert err is not None
 
     @pytest.mark.asyncio
-    async def test_enterprise_account_kind_mismatch_is_ignored(self):
-        # 行为变更：account_kind hint 与市场身份不一致不再拒绝登录，仅记录告警，
-        # 实际档位由 User.tier 派生（见 finalize_enterprise_login）。此处断言
-        # 市场已通过时即使入口 hint 与市场身份不匹配也会继续完成本地登录。
+    async def test_enterprise_account_kind_mismatch_is_rejected(self):
+        # 客户入口不能接收管理员身份；否则会把企业用户会话覆盖成管理员会话。
         from app.application.enterprise_login_flow import run_market_first_login
 
         local_result = {"success": True, "session_id": "s9", "user": {"id": 1}}
@@ -1489,8 +1487,8 @@ class TestRunMarketFirstLogin:
                 jit_create_fn=MagicMock(),
                 market_user_email_from_raw=MagicMock(),
             )
-        assert result is not None
-        assert err is None
+        assert result is None
+        assert err is not None
 
     @pytest.mark.asyncio
     async def test_enterprise_no_username_from_market(self):

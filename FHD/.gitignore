@@ -17,6 +17,8 @@ eggs/
 lib/
 !scripts/deploy/lib/
 !scripts/deploy/lib/**
+!mobile-flutter-poc/lib/
+!mobile-flutter-poc/lib/**
 lib64/
 parts/
 sdist/
@@ -132,6 +134,7 @@ Thumbs.db
 !frontend/.env.generic
 !frontend/.env.minimal
 scripts/package/upload-release.env
+scripts/package/mac-signing.env
 .secrets/
 *.der
 **/chroma/
@@ -186,7 +189,15 @@ frontend/.nm-*/
 frontend/.vite/
 frontend/dist/
 templates/vue-dist/
+templates/admin-vue-dist/
+templates/sunbird-vue-dist/
 vue-dist/
+
+# Agent/Codex 本地 smoke 截图与 JSON（勿提交）
+**/.codex-artifacts/
+
+# release_train bump 运行时快照（SSOT 为 config/release_train.json）
+config/release_train_history/
 
 # ============================================================================
 # Model checkpoints (large binaries)

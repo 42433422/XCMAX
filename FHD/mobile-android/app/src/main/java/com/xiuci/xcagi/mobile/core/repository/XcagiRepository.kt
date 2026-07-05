@@ -887,6 +887,7 @@ class XcagiRepository @Inject constructor(
                 is String -> raw.toIntOrNull() ?: 0
                 else -> 0
             }
+        rejectRelayAccountHijack(username, accountKind)
         val relayBaseUrl = data["relay_base_url"]?.toString()?.trim().orEmpty()
         val localBaseUrl = data["local_base_url"]?.toString()?.trim().orEmpty()
         val relaySessionToken =
@@ -908,6 +909,24 @@ class XcagiRepository @Inject constructor(
             username = username,
             userId = userId,
         )
+    }
+
+    private suspend fun rejectRelayAccountHijack(targetUsername: String, targetAccountKind: String) {
+        val target = targetUsername.trim()
+        if (target.isBlank()) return
+        val remembered = sessionStore.savedUsername().trim()
+        val current = sessionStore.fhdUsernameFlow.first().trim()
+        val anchor = current.ifBlank { remembered }
+        if (anchor.isBlank() || anchor.equals(target, ignoreCase = true)) return
+
+        val kind = targetAccountKind.trim().lowercase()
+        val targetIsAdmin = kind in setOf("admin", "admin_portal") || target.equals("admin", true)
+        val anchorLooksCustomer = remembered.isNotBlank() || !anchor.equals("admin", true)
+        if (targetIsAdmin && anchorLooksCustomer) {
+            throw IllegalStateException(
+                "设备绑定返回管理员账号 $target，与当前客户账号 $anchor 不一致；已阻止覆盖，请先切换账号再绑定"
+            )
+        }
     }
 
     private suspend fun persistRelayBindingMeta(
@@ -2456,16 +2475,22 @@ class XcagiRepository @Inject constructor(
             )
         }
 
-    private suspend fun bridgeRequestsFromMobile(): Result<List<ListItem>> {
-        val res = fhd().mobileBridgeRequests()
+    private suspend fun bridgeRequestsFromMobile(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> {
+        val res = fhd().mobileBridgeRequests(status = status, requestType = requestType)
         if (!res.success) {
             return Result.failure(Exception(res.message.ifBlank { "移动端服务桥接请求列表加载失败" }))
         }
         return Result.success(mapServiceBridgeRequestRows(res.data))
     }
 
-    private suspend fun bridgeRequestsFromLegacy(): Result<List<ListItem>> {
-        val res = fhd().bridgeRequests()
+    private suspend fun bridgeRequestsFromLegacy(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> {
+        val res = fhd().bridgeRequests(status = status, requestType = requestType)
         return Result.success(mapServiceBridgeRequestRows(res["data"]))
     }
 
@@ -2519,13 +2544,16 @@ class XcagiRepository @Inject constructor(
         val cached = cachedShipmentItems()
         return if (cached.isNotEmpty()) Result.success(cached) else remote
     }
-    suspend fun bridgeRequests(): Result<List<ListItem>> = try {
+    suspend fun bridgeRequests(
+        status: String? = null,
+        requestType: String? = null,
+    ): Result<List<ListItem>> = try {
         syncRouterFromStore()
-        bridgeRequestsFromMobile()
+        bridgeRequestsFromMobile(status = status, requestType = requestType)
     } catch (e: Exception) {
         if (e is HttpException && e.code() == 404) {
             try {
-                bridgeRequestsFromLegacy()
+                bridgeRequestsFromLegacy(status = status, requestType = requestType)
             } catch (legacyError: Exception) {
                 Result.failure(legacyError)
             }
@@ -2534,14 +2562,18 @@ class XcagiRepository @Inject constructor(
         }
     }
 
-    suspend fun bridgeRespond(id: Int, text: String): Result<Unit> = try {
+    suspend fun bridgeRespond(
+        id: Int,
+        text: String,
+        respondedBy: String = "android",
+    ): Result<Unit> = try {
         syncRouterFromStore()
         try {
-            fhd().mobileBridgeRespond(id, BridgeRespondBody(text, "android"))
+            fhd().mobileBridgeRespond(id, BridgeRespondBody(text, respondedBy))
             Result.success(Unit)
         } catch (e: Exception) {
             if (e is HttpException && e.code() == 404) {
-                fhd().bridgeRespond(id, BridgeRespondBody(text, "android"))
+                fhd().bridgeRespond(id, BridgeRespondBody(text, respondedBy))
                 Result.success(Unit)
             } else {
                 Result.failure(e)
@@ -2940,10 +2972,22 @@ class XcagiRepository @Inject constructor(
         Result.failure(e)
     }
 
+    suspend fun selectOnboardingIndustry(industryId: String): Result<Unit> = try {
+        syncRouterFromStore()
+        preferCloudIfLanUnreachable()
+        val industry = industryId.ifBlank { "通用" }
+        val res = fhd().mobileSelectOnboardingIndustry(mapOf("industry_id" to industry))
+        if (!res.success) Result.failure(Exception(res.message.ifBlank { "行业绑定失败" }))
+        else Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
     suspend fun bootstrapIndustry(industryId: String): Result<String> = try {
         syncRouterFromStore()
         preferCloudIfLanUnreachable()
         val industry = industryId.ifBlank { "通用" }
+        selectOnboardingIndustry(industry).getOrThrow()
         val host = fhd().mobileInstallHostFoundation("generic")
         if (!host.success) {
             throw Exception(host.message.ifBlank { "宿主基础包安装失败" })
@@ -3108,7 +3152,7 @@ class XcagiRepository @Inject constructor(
     }
 
     suspend fun logout() {
-        sessionStore.clear()
+        sessionStore.clearActiveAuth()
         db.chatDao().clear()
         db.approvalDao().clear()
         db.shipmentDao().clear()

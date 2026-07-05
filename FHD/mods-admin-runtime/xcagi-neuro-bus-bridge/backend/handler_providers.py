@@ -43,6 +43,7 @@ def list_handler_specs() -> list[dict[str, Any]]:
         domain_id = str(row.get("domain_id") or "").strip()
         host_module = str(row.get("host_module") or "").strip()
         register_fn = str(row.get("register_fn") or "").strip()
+        managed_by = str(row.get("managed_by") or "").strip()
         if domain_id and host_module and register_fn:
             specs.append(
                 {
@@ -50,6 +51,7 @@ def list_handler_specs() -> list[dict[str, Any]]:
                     "host_module": host_module,
                     "register_fn": register_fn,
                     "optional": bool(row.get("optional")),
+                    "managed_by": managed_by,
                 }
             )
     return specs
@@ -59,6 +61,7 @@ def register_all_domain_handlers(bus) -> dict[str, Any]:
     """按 catalog 将宿主 *_domain_handlers 注册到 NeuroBus。"""
     registered: list[str] = []
     skipped: list[str] = []
+    domain_managed: list[str] = []
     errors: list[dict[str, str]] = []
 
     for spec in list_handler_specs():
@@ -66,6 +69,13 @@ def register_all_domain_handlers(bus) -> dict[str, Any]:
         host_module = spec["host_module"]
         register_fn = spec["register_fn"]
         optional = spec.get("optional")
+        if spec.get("managed_by") == "domain_registry":
+            domain_managed.append(domain_id)
+            logger.info(
+                "[NeuroBusMod] handler already managed by DomainRegistry: %s",
+                domain_id,
+            )
+            continue
         try:
             mod = importlib.import_module(host_module)
             fn = getattr(mod, register_fn, None)
@@ -90,6 +100,7 @@ def register_all_domain_handlers(bus) -> dict[str, Any]:
         "delegate": DELEGATE,
         "registered": registered,
         "skipped_optional": skipped,
+        "domain_managed": domain_managed,
         "errors": errors,
         "handler_count": len(registered),
     }

@@ -1,0 +1,82 @@
+{
+  "brief": "商标生成员：为公司、产品、App、AI 员工和店铺生成原创商标/Logo 方向、提示词、矢量交付建议和初步近似风险自检。",
+  "mode": "direct_python_trademark_generation",
+  "accepted_extensions": [
+    ".json",
+    ".txt"
+  ],
+  "default_action": "generate",
+  "default_output_relpath": "outputs/trademark_profile.json",
+  "default_template_relpath": "",
+  "runtime_kind": "trademark_generation",
+  "trademark_types": [
+    {
+      "id": "wordmark",
+      "label": "文字商标"
+    },
+    {
+      "id": "lettermark",
+      "label": "字母商标"
+    },
+    {
+      "id": "pictorial_symbol",
+      "label": "图形商标"
+    },
+    {
+      "id": "abstract_mark",
+      "label": "抽象商标"
+    },
+    {
+      "id": "mascot_mark",
+      "label": "吉祥物商标"
+    },
+    {
+      "id": "combination_mark",
+      "label": "组合商标"
+    },
+    {
+      "id": "badge_seal",
+      "label": "徽章/印章"
+    },
+    {
+      "id": "app_icon",
+      "label": "App 图标"
+    },
+    {
+      "id": "package_label",
+      "label": "包装标签"
+    }
+  ],
+  "requirements": [
+    "Generate original trademark/logo concepts and never imitate existing brands or protected IP.",
+    "Include prompt_zh, prompt_en, negative_prompt, clearance_checklist, delivery_spec, and legal_note.",
+    "Default recommendation for new brands is combination_mark.",
+    "Preset brand_mark_sheet for 3x3 multi-direction exploration.",
+    "Preset app_icon_mark for app, favicon, plugin, mini-program, and mobile icons.",
+    "Preset package_label_mark for stickers, bottle labels, e-commerce, and packaging.",
+    "Write outputs/trademark_profile.json even when image generation is unavailable."
+  ],
+  "prompt_presets": [
+    {
+      "id": "brand_mark_sheet",
+      "label": "商标方向九宫格",
+      "usage": "一次生成 9 个原创商标方向，便于挑选后精修。"
+    },
+    {
+      "id": "startup_combination_mark",
+      "label": "新品牌图文组合商标",
+      "usage": "适合公司/产品初期，用图形 + 字标建立完整识别。"
+    },
+    {
+      "id": "app_icon_mark",
+      "label": "App 图标商标",
+      "usage": "适合 App、SaaS、插件和小程序入口图标。"
+    },
+    {
+      "id": "package_label_mark",
+      "label": "包装标签商标",
+      "usage": "适合商品包装、外卖贴纸、瓶贴、门店和电商主图。"
+    }
+  ],
+  "pack_id": "trademark-generation-employee"
+}

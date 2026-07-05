@@ -1,0 +1,26 @@
+# Flutter/Dart generated state
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+build/
+
+# IDE-local state
+.idea/
+*.iml
+
+# Android generated state
+android/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+
+# iOS generated Flutter state
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Flutter/ephemeral/
+
+# OS noise
+.DS_Store

@@ -13,6 +13,7 @@ import asyncio
 import json
 import os
 import tempfile
+from contextlib import ExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -642,6 +643,29 @@ def _admin_session_ok():
         "app.fastapi_routes.xcmax_admin._require_market_admin_session",
         return_value=None,
     )
+
+
+def _local_employee_execute_session_patches():
+    """Patches for local_employee_execute auth chain (sid + resolve_session_user + require_allowed)."""
+    mock_user = MagicMock(id=1)
+    return [
+        patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+            return_value="sid",
+        ),
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=mock_user,
+        ),
+        patch(
+            "app.application.session_account_meta.enrich_session_meta_with_tenant",
+            return_value={"tenant_id": 1, "account_kind": "admin"},
+        ),
+        patch(
+            "app.application.auth_permission_resolver.require_allowed",
+            return_value=None,
+        ),
+    ]
 
 
 class TestAdminSetUserProfile:
@@ -1331,10 +1355,9 @@ class TestLocalEndpoints:
 
     def test_local_employee_execute_no_task(self, client: TestClient):
         """Lines 1201-1202: task empty → 400."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid",
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": ""},
@@ -1343,10 +1366,9 @@ class TestLocalEndpoints:
 
     def test_local_employee_execute_bad_input_data(self, client: TestClient):
         """Lines 1204-1205: input_data not dict → 400."""
-        with patch(
-            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-            return_value="sid",
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": "run", "input_data": "not-a-dict"},
@@ -1354,16 +1376,33 @@ class TestLocalEndpoints:
         assert resp.status_code == 400
 
     def test_local_employee_execute_success(self, client: TestClient):
-        with (
-            patch(
-                "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
-                return_value="sid",
-            ),
-            patch(
-                "app.application.employee_runtime.executor.execute_employee_task_local",
-                return_value={"success": True, "output": "done"},
-            ),
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.executor.execute_employee_task_local",
+                    return_value={"success": True, "output": "done"},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                    return_value=(True, "ok"),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                    return_value="run-1",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                    return_value=None,
+                )
+            )
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": "run_report"},

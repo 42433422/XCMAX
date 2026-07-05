@@ -305,9 +305,17 @@ const syncProIntentExperience = () => {
   proIntentExperienceEnabled.value = localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1'
 }
 
+const lastSelectViewAt = new Map()
+
 const selectView = (key) => {
   if (draggingKey.value) return
-  emit('change-view', key)
+  const normalized = String(key || '').trim()
+  if (!normalized) return
+  const now = Date.now()
+  const last = lastSelectViewAt.get(normalized) || 0
+  if (now - last < 80) return
+  lastSelectViewAt.set(normalized, now)
+  emit('change-view', normalized)
 }
 
 /** 有子菜单的父项：进入父路由（如 other-tools → 员工工作流管理）并展开子菜单 */

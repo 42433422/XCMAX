@@ -95,7 +95,7 @@
             </div>
           </div>
           <div class="actions">
-            <button type="button" class="btn primary" :disabled="!canConfirmIndustry" @click="confirmIndustryAndNext">
+            <button type="button" class="btn primary" :disabled="!canConfirmIndustry || loading" @click="confirmIndustryAndNext">
               下一步：看要补哪些侧栏基础线
             </button>
             <button type="button" class="btn ghost" @click="openModStore">打开扩展市场</button>
@@ -250,14 +250,38 @@
               一键装齐本行业侧栏推荐项
             </button>
             <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
-            <button v-if="baselineOk" type="button" class="btn primary" @click="finishToChat">
-              进入智能对话
+            <button v-if="baselineOk" type="button" class="btn primary" @click="goStep('seed-demo')">
+              下一步：写入演示数据
             </button>
             <button type="button" class="btn link" @click="finishToChat">先进入对话，稍后再补</button>
           </div>
         </template>
 
-        <template v-else>
+        <template v-else-if="currentStep === 'seed-demo'">
+          <h1>首笔业务数据</h1>
+          <p class="lead">{{ seedDemoLead }}</p>
+          <p v-if="seedSummary" class="hint">{{ seedSummary }}</p>
+          <div class="actions">
+            <button type="button" class="btn primary" :disabled="seedBusy" @click="runSeedDemo">
+              {{ seedBusy ? '写入中…' : '写入演示数据' }}
+            </button>
+            <button type="button" class="btn ghost" @click="goStep('first-ai-task')">下一步：AI 验收</button>
+          </div>
+        </template>
+
+        <template v-else-if="currentStep === 'first-ai-task'">
+          <h1>AI 读写验收</h1>
+          <p class="lead">{{ aiDemoLead }}</p>
+          <p v-if="aiDemoReply" class="hint">{{ aiDemoReply }}</p>
+          <div class="actions">
+            <button type="button" class="btn primary" :disabled="aiDemoBusy" @click="runFirstAiTask">
+              {{ aiDemoBusy ? '请求中…' : '运行 AI 演示任务' }}
+            </button>
+            <button type="button" class="btn primary" @click="finishOnboardingComplete">完成引导</button>
+          </div>
+        </template>
+
+        <template v-else-if="currentStep === 'done'">
           <h1>可以开始使用</h1>
           <p class="lead">可从智能对话或扩展市场开始。</p>
           <div class="actions">
@@ -282,6 +306,8 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { installHostFoundation, installMod, installIndustrySeed, installCustomerDeliverySeed } from '@/api/modStore'
 import { autoOnboardWorkflowEmployeesFromMods } from '@/utils/workflowEmployeeOnboard'
+import { apiFetch } from '@/utils/apiBase'
+import { queueWorkspacePrefsSync } from '@/utils/workspacePrefsApi'
 import { useModsStore } from '@/stores/mods'
 import { readBuildEdition } from '@/constants/genericModPack'
 import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku'
@@ -315,6 +341,7 @@ import {
   markHostPackSkippedThisSession,
 } from '@/utils/hostPackOnboardingGate'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
+import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
 
 const route = useRoute()
 const router = useRouter()
@@ -382,6 +409,12 @@ function industryPackageLabel(industryId) {
   return preset?.name ? `${preset.name}行业包` : ''
 }
 
+function industryPackageModId(industryId) {
+  const id = String(industryId || '').trim()
+  const row = onboardingCatalog.value?.open_packages?.find((p) => p.industry_id === id)
+  return String(row?.mod_id || '').trim()
+}
+
 /** 行业 chip 第三行：去掉句末句号，避免行高不齐 */
 function chipScenarioText(text) {
   return String(text || '').replace(/[。．]$/, '')
@@ -415,6 +448,14 @@ const steps = PRODUCT_FLOW_STEPS.filter((s) => s.id !== 'done')
 const currentStep = ref(parseFlowStepQuery(route.query.step))
 const loading = ref(false)
 const bootstrapBusy = ref(false)
+const seedBusy = ref(false)
+const seedSummary = ref('')
+const seedDemoLead = ref('为空企业写入演示客户与演示产品，便于工作台与 AI 验收。')
+const aiDemoLead = ref('请确认 AI 能读取刚创建的演示数据并给出摘要。')
+const aiDemoPrompt = ref('请列出当前租户下的演示客户「XC 演示客户」并一句话总结。')
+const demoCustomerMarker = ref('XC 演示客户')
+const aiDemoBusy = ref(false)
+const aiDemoReply = ref('')
 const baselinePlan = ref(null)
 
 function startupAsset(fileName) {
@@ -677,9 +718,27 @@ async function confirmIndustryAndNext() {
       /* 离线仍允许继续 */
     }
   }
-  // 行业现在由后端 SSOT 决定（industryStore.switchIndustry 已删除）：
-  // 这里只确认用户选择的行业（pickedIndustryId），用于后续 host-pack 步骤
-  // 拉取对应行业的基础线与安装行业包；后端会在行业包装载后自动同步当前行业。
+  loading.value = true
+  try {
+    await patchWorkspacePrefs({
+      selected_industry_id: pickedIndustryId.value,
+      industry_mod_id: industryPackageModId(pickedIndustryId.value) || undefined,
+    })
+    clearDeliverableStatusCache()
+    try {
+      onboardingCatalog.value = await fetchOnboardingIndustryCatalog()
+      if (onboardingCatalog.value?.open_industry_ids?.length) {
+        setRuntimeOnboardingOpenIndustryIds(onboardingCatalog.value.open_industry_ids)
+      }
+    } catch {
+      /* 绑定已完成，目录刷新失败不阻断下一步 */
+    }
+  } catch (err) {
+    await appAlert(err instanceof Error ? err.message : '行业绑定失败，请稍后重试')
+    return
+  } finally {
+    loading.value = false
+  }
   goStep('host-pack')
 }
 
@@ -709,9 +768,9 @@ function openModStore() {
 function finishHostPackFlow() {
   invalidateHostPackCompletionCache()
   if (baselineOk.value) {
+    flow.markHostPackAcknowledged()
     if (!readProductFlowCompleted()) {
       flow.markProductFlowCompleted()
-      flow.markHostPackAcknowledged()
     }
     if (fromTutorial.value) {
       returnFromTutorial()
@@ -730,6 +789,77 @@ function finishHostPackFlow() {
 
 function finishToChat() {
   finishHostPackFlow()
+}
+
+async function runSeedDemo() {
+  seedBusy.value = true
+  seedSummary.value = ''
+  try {
+    const industry = pickedIndustryId.value || '通用'
+    const res = await apiFetch('/api/platform-shell/onboarding/seed-demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ industry_id: industry }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok || body?.success === false) {
+      throw new Error(body?.message || body?.detail || `HTTP ${res.status}`)
+    }
+    const customer = body?.data?.customer?.name || '演示客户'
+    const product = body?.data?.product?.name || '演示产品'
+    const customerEntity = body?.data?.customer?.entity || '客户'
+    const productEntity = body?.data?.product?.entity || '产品'
+    seedSummary.value = `已写入：${customer}、${product}`
+    seedDemoLead.value = `为空企业写入 1 个演示${customerEntity}与 1 个演示${productEntity}，便于工作台与 AI 验收。`
+    demoCustomerMarker.value = customer
+    const queries = body?.data?.demo_queries || {}
+    aiDemoPrompt.value = queries.ai_prompt || `请列出当前租户下的演示${customerEntity}「${customer}」并一句话总结。`
+    aiDemoLead.value = `请确认 AI 能读取刚创建的「${customer}」并给出摘要。`
+    queueWorkspacePrefsSync({ onboarding_seed_done: true })
+    goStep('first-ai-task')
+  } catch (e) {
+    seedSummary.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    seedBusy.value = false
+  }
+}
+
+async function runFirstAiTask() {
+  aiDemoBusy.value = true
+  aiDemoReply.value = ''
+  try {
+    const res = await apiFetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: aiDemoPrompt.value,
+        session_id: `onboarding-${Date.now()}`,
+      }),
+    })
+    const body = await res.json().catch(() => ({}))
+    const text = String(body?.response || body?.message || body?.data?.response || '').trim()
+    aiDemoReply.value = text || 'AI 已响应（请进入对话查看完整内容）'
+    if (text.includes(demoCustomerMarker.value) || text.includes('演示客户') || text.includes('演示')) {
+      queueWorkspacePrefsSync({ onboarding_ai_demo_done: true })
+    }
+  } catch (e) {
+    aiDemoReply.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    aiDemoBusy.value = false
+  }
+}
+
+function finishOnboardingComplete() {
+  queueWorkspacePrefsSync({
+    product_flow_completed: true,
+    onboarding_completed_at: new Date().toISOString(),
+    onboarding_seed_done: true,
+    onboarding_ai_demo_done: true,
+  })
+  flow.markProductFlowCompleted()
+  flow.markHostPackAcknowledged()
+  goStep('done')
+  finishToChat()
 }
 
 function skipEntireFlow() {

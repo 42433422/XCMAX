@@ -17,6 +17,20 @@ $ReleaseExe = Join-Path $FhdRoot "release\xcagi-v$Version\sunbird\$SetupName"
 
 New-Item -ItemType Directory -Force -Path $DeliveryDir, $BuildDir | Out-Null
 
+function Resolve-ModSource {
+  param([Parameter(Mandatory = $true)][string]$ModId)
+  foreach ($candidate in @(
+      (Join-Path $FhdRoot "mods\$ModId"),
+      (Join-Path $FhdRoot "XCAGI\mods\$ModId"),
+      (Join-Path $FhdRoot "build\staged-industry-seeds-enterprise\$ModId")
+    )) {
+    if (Test-Path $candidate) {
+      return (Resolve-Path $candidate).Path
+    }
+  }
+  throw "Missing mod source: $ModId"
+}
+
 Write-Host "==> Building sunbird seed (template + roster + mod db) ..."
 $env:PYTHONUTF8 = "1"
 $env:PYTHONIOENCODING = "utf-8"
@@ -27,10 +41,7 @@ if ($LASTEXITCODE -ne 0) { throw "build-sunbird-seed.py failed" }
 $modsDest = Join-Path $SeedRoot "mods"
 New-Item -ItemType Directory -Force -Path $modsDest | Out-Null
 foreach ($modId in @("taiyangniao-pro", "attendance-industry")) {
-  $src = Join-Path $FhdRoot "mods\$modId"
-  if (-not (Test-Path $src)) {
-    throw "Missing mod source: $src"
-  }
+  $src = Resolve-ModSource -ModId $modId
   $dst = Join-Path $modsDest $modId
   if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
   Copy-Item $src $dst -Recurse -Force

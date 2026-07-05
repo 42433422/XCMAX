@@ -72,7 +72,7 @@ const routes: RouteRecordRaw[] = [
       layout: 'public',
       pageTitle: '下载 XCAGI 客户端',
       pageDescription:
-        '下载 XCAGI 个人版与企业版客户端：Windows、macOS 与 Android APK（官网分发，应用商店审核中）。',
+        '下载 XCAGI 企业版客户端：Windows、macOS 与 Android APK（官网分发，应用商店审核中）。',
     },
   },
   { path: '/workflow', name: 'workflow', component: () => import('../views/WorkflowView.vue'), meta: { auth: true } },

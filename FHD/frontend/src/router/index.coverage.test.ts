@@ -38,6 +38,7 @@ const {
   mockValidateEnterpriseSession,
   mockIsAdminConsoleSpa,
   mockResolveAdminConsoleHomeUrl,
+  mockIsDesktopShell,
   mockIsPlatformShellModeEnabled,
   mockModsStore,
   mockAccountProfileStore,
@@ -63,6 +64,7 @@ const {
   mockValidateEnterpriseSession: vi.fn().mockResolvedValue(true),
   mockIsAdminConsoleSpa: vi.fn(() => false),
   mockResolveAdminConsoleHomeUrl: vi.fn(() => '/admin'),
+  mockIsDesktopShell: vi.fn(() => false),
   mockIsPlatformShellModeEnabled: vi.fn(() => false),
   mockModsStore: {
     clientModsUiOff: false,
@@ -149,6 +151,10 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+}))
+
+vi.mock('@/utils/desktopShell', () => ({
+  isDesktopShell: mockIsDesktopShell,
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -270,6 +276,7 @@ function resetMockDefaults() {
   mockResolveHostBusinessPageRedirect.mockReturnValue(null)
   mockIsProtectedClientModId.mockReturnValue(false)
   mockReadActiveExtensionModId.mockReturnValue('')
+  mockIsDesktopShell.mockReturnValue(false)
   mockIsPlatformShellModeEnabled.mockReturnValue(false)
   mockIsIndustryDeliveryRouteName.mockReturnValue(false)
   mockReadHostPackAcknowledged.mockReturnValue(false)
@@ -811,6 +818,17 @@ describe('router/index 覆盖率补齐', () => {
       await router.push('/settings')
       // 由于 next(false)，当前路由不变（或保持上一个）
       expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
+    })
+
+    it('desktop shell 内 enterprise admin 可正常访问企业页面，不跳外部 admin URL', async () => {
+      mockIsEnterpriseEdition.mockReturnValue(true)
+      mockValidateEnterpriseSession.mockResolvedValue(true)
+      mockIsDesktopShell.mockReturnValue(true)
+      mockAccountProfileStore.loaded = true
+      mockAccountProfileStore.isAdminAccount = true
+      await router.push('/settings')
+      expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('settings')
     })
 
     it('enterprise + 有效 session + profile 未加载时调用 refresh', async () => {

@@ -12,8 +12,8 @@
  *   - online 不可用时优先用 offline，最后才回退 system
  */
 
-import { getApiBase } from './apiBase'
-import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
+import { apiFetch } from './apiBase'
+import { readCsrfTokenFromCookie } from './csrfCookie'
 import { playOfflinePcm, synthesizeOffline, ensureOfflineReady, isOfflineReady, isOfflineLoading, getOfflineProgress, stopOffline } from './offlineTts'
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
@@ -333,19 +333,16 @@ export function createChineseUtterance(text: string): SpeechSynthesisUtterance {
 }
 
 async function fetchOnlineTtsDataUri(text: string): Promise<string> {
-  const base = getApiBase().replace(/\/$/, '')
   const voice = getOnlineVoiceId()
   const rate = getSpeechRate()
   const ratePercent = Math.round(rate * 100)
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (shouldAttachCsrfHeader('POST', headers)) {
-    const tok = readCsrfTokenFromCookie()
-    if (tok) headers['X-CSRF-Token'] = tok
-  }
-  const res = await fetch(`${base}/api/tts`, {
+
+  await ensureTtsCsrfCookie()
+
+  const res = await apiFetch('/api/tts', {
     method: 'POST',
-    headers,
-    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    timeoutMs: 30_000,
     body: JSON.stringify({ text, lang: 'zh', voice, rate: `+${ratePercent - 100}%` }),
   })
   let json: Record<string, unknown> = {}
@@ -363,6 +360,16 @@ async function fetchOnlineTtsDataUri(text: string): Promise<string> {
     throw new Error('在线 TTS 响应缺少音频')
   }
   return uri
+}
+
+async function ensureTtsCsrfCookie(): Promise<void> {
+  if (typeof window === 'undefined') return
+  if (readCsrfTokenFromCookie()) return
+  try {
+    await apiFetch('/api/health', { method: 'GET', timeoutMs: 5_000 })
+  } catch {
+    /* best-effort: the following POST will surface the actual TTS error */
+  }
 }
 
 async function playOnlineTts(text: string): Promise<void> {
@@ -545,4 +552,3 @@ if (typeof window !== 'undefined' && AUTO_PRELOAD_OFFLINE_TTS) {
     void preloadOfflineTts()
   }, 1500)
 }
-

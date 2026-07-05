@@ -18,6 +18,17 @@
       {{ excelAnalyzeUploading ? $t('shell.uploadAnalyzing') : $t('shell.upload') }}
       {{ multimodalPendingCount ? `(${multimodalPendingCount})` : '' }}
     </button>
+    <button
+      class="toolbar-btn"
+      type="button"
+      data-tutorial-id="toolbar-office-docking"
+      title="办公文件对接（Excel/CSV/Word/PDF/PPT）"
+      @click="$emit('trigger-office-docking')"
+      :disabled="officeDockingProcessing"
+    >
+      <i class="fa fa-file-text-o" aria-hidden="true"></i>
+      {{ officeDockingProcessing ? '对接识别中' : '办公对接' }}
+    </button>
     <input
       ref="fileInputRef"
       type="file"
@@ -77,6 +88,7 @@ const props = defineProps<{
   proIntentExperienceEnabled: boolean
   autoRefreshStarredWechat: boolean
   ttsEnabled: boolean
+  officeDockingProcessing?: boolean
   excelAnalyzeInputRef?: Ref<HTMLInputElement | null>
 }>()
 
@@ -84,6 +96,7 @@ const emit = defineEmits<{
   'new-conversation': []
   'show-history': []
   'trigger-upload': []
+  'trigger-office-docking': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
   'pro-intent-change': [enabled: boolean]

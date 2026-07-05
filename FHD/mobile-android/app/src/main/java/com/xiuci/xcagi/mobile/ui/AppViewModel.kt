@@ -129,6 +129,15 @@ internal fun cachedConversationPreview(
         previews: Map<String, String>,
 ): String = previews[conversationId]?.trim().orEmpty()
 
+internal enum class ConversationUnreadAction {
+    MARK_READ,
+    MARK_UNREAD,
+}
+
+internal fun conversationUnreadAction(unreadCount: Int): ConversationUnreadAction =
+        if (unreadCount > 0) ConversationUnreadAction.MARK_READ
+        else ConversationUnreadAction.MARK_UNREAD
+
 @HiltViewModel
 class AppViewModel
 @Inject
@@ -1175,9 +1184,14 @@ constructor(
             }
 
     // ── 会话状态（个人 AI 会话） ──
-    fun toggleConversationUnread(conversationId: String) =
+    fun toggleConversationUnread(conversationId: String, unreadCount: Int = 0) =
             viewModelScope.launch {
-                repo.markConversationUnread(conversationId)
+                val result =
+                        when (conversationUnreadAction(unreadCount)) {
+                            ConversationUnreadAction.MARK_READ -> repo.markConversationRead(conversationId)
+                            ConversationUnreadAction.MARK_UNREAD -> repo.markConversationUnread(conversationId)
+                        }
+                result
                     .onSuccess {
                         refreshConversationUiState(conversationId)
                         loadConversations(currentIsEnterprise())
@@ -1479,7 +1493,7 @@ constructor(
                 )
         }
 
-        // 3. 专属客服（仅企业客户账号；管理端账号不显示客服）
+        // 3. 专属客服（企业客户账号显示；管理端客户客服走 duty AI 员工）
         if (showCustomerService) {
             items.add(
                 ConversationItem(
@@ -2307,9 +2321,9 @@ constructor(
 
     fun loadShipments() = loadEnterpriseList { repo.shipments() }
 
-    fun loadBridge() =
+    fun loadBridge(requestType: String? = null) =
             viewModelScope.launch {
-                repo.bridgeRequests().onSuccess { _items.value = it }.onFailure {
+                repo.bridgeRequests(requestType = requestType).onSuccess { _items.value = it }.onFailure {
                     snack(it.message ?: "加载失败", true)
                 }
             }
@@ -2470,6 +2484,22 @@ constructor(
                         }
             }
 
+    fun selectOnboardingIndustry(industryId: String, onDone: () -> Unit = {}) =
+            viewModelScope.launch {
+                _industryBootstrapStatus.value = "正在绑定行业到当前账号…"
+                repo.selectOnboardingIndustry(industryId)
+                        .onSuccess {
+                            snack("行业已绑定到当前账号")
+                            loadMobileOnboarding()
+                            onDone()
+                        }
+                        .onFailure {
+                            val msg = it.message ?: "行业绑定失败"
+                            _industryBootstrapStatus.value = msg
+                            snack(msg, true)
+                        }
+            }
+
     fun bootstrapIndustry(industryId: String) =
             viewModelScope.launch {
                 _industryBootstrapStatus.value = "正在装齐行业能力…"
@@ -2610,9 +2640,14 @@ constructor(
         return if (t.isBlank()) "" else "Bearer $t"
     }
 
-    fun bridgeRespond(id: Int, text: String, onDone: () -> Unit) =
+    fun bridgeRespond(
+            id: Int,
+            text: String,
+            respondedBy: String = "android",
+            onDone: () -> Unit,
+    ) =
             viewModelScope.launch {
-                repo.bridgeRespond(id, text)
+                repo.bridgeRespond(id, text, respondedBy = respondedBy)
                         .onSuccess {
                             snack("回复发送成功")
                             onDone()

@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
+import * as apiBase from '@/utils/apiBase'
 import { useChatVoiceInput } from './useChatVoiceInput'
 
 // ── BlobEvent polyfill（jsdom 不提供） ────────────────────────────────
@@ -82,6 +83,13 @@ function makeMediaRecorderClass(mockRecorder: ReturnType<typeof createMockMediaR
     stop = mockRecorder.stop
     addEventListener = mockRecorder.addEventListener
     removeEventListener = mockRecorder.removeEventListener
+  }
+}
+
+async function flushVoiceAsyncWork() {
+  for (let i = 0; i < 5; i += 1) {
+    await Promise.resolve()
+    await nextTick()
   }
 }
 
@@ -481,7 +489,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'))
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -492,7 +500,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
 
     await nextTick()
     await vi.advanceTimersByTimeAsync(10)
-    await nextTick()
+    await flushVoiceAsyncWork()
 
     expect(api.voiceButtonText.value).toContain('Network error')
   })
@@ -862,7 +870,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
     })
 
     const longMsg = 'A'.repeat(100)
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error(longMsg))
+    vi.spyOn(apiBase, 'apiFetch').mockRejectedValueOnce(new Error(longMsg))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -896,7 +904,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce('string error')
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue('string error')
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -907,7 +915,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
 
     await nextTick()
     await vi.advanceTimersByTimeAsync(10)
-    await nextTick()
+    await flushVoiceAsyncWork()
 
     expect(api.voiceButtonText.value).toContain('语音识别失败')
   })

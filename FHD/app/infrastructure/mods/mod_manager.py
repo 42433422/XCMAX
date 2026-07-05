@@ -1153,6 +1153,31 @@ def load_employee_pack_routes(app, mod_manager: ModManager | None = None) -> Non
         register_employee_pack_routes(app, mod_manager, pack_id)
 
 
+def _resolve_mod_metadata_for_http(mod_manager: ModManager, mod_id: str) -> ModMetadata | None:
+    """为 HTTP 挂载解析 Mod 元数据；Registry 未登记时从磁盘 manifest 补全。"""
+    mid = (mod_id or "").strip()
+    if not mid:
+        return None
+    registry = get_mod_registry()
+    metadata = registry.get_mod_metadata(mid)
+    needs_disk = (
+        metadata is None
+        or not (metadata.backend_entry or "").strip()
+        or not (metadata.mod_path or "").strip()
+    )
+    if needs_disk:
+        mod_path = mod_manager.resolve_mod_directory(mid)
+        if mod_path:
+            parsed = parse_manifest(mod_path)
+            if parsed and (parsed.backend_entry or "").strip():
+                if metadata is None:
+                    registry.register_mod(parsed)
+                metadata = parsed
+    if not metadata or not (metadata.backend_entry or "").strip():
+        return None
+    return metadata
+
+
 def _register_single_mod_http_routes(
     app,
     mod_manager: ModManager,
@@ -1167,9 +1192,8 @@ def _register_single_mod_http_routes(
     if not force and mid in mod_manager._http_routes_registered:
         return True
 
-    registry = get_mod_registry()
-    metadata = registry.get_mod_metadata(mid)
-    if not metadata or not (metadata.backend_entry or "").strip():
+    metadata = _resolve_mod_metadata_for_http(mod_manager, mid)
+    if not metadata:
         logger.warning("Mod %s has no backend_entry; skip HTTP route registration", mid)
         return False
 
@@ -1290,7 +1314,75 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         logger.warning("ensure_mod_api_ready: cannot get FastAPI app: %s", e)
         return False
 
-    return _register_single_mod_http_routes(app, mm, mid)
+    ok = _register_single_mod_http_routes(app, mm, mid)
+    if ok:
+        from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+        ensure_spa_fallback_last(app)
+    return ok
+
+
+def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> list[str]:
+    """当前企业会话下允许挂载 API 的客户定制 Mod id（去重、排序）。"""
+    try:
+        from app.enterprise.mod_entitlements import (
+            enterprise_mod_filter_active,
+            get_cached_entitled_client_mod_ids,
+            is_client_mod_id,
+            is_mod_visible_for_enterprise,
+        )
+    except RECOVERABLE_ERRORS:
+        return []
+
+    if not enterprise_mod_filter_active():
+        return []
+
+    _restore_entitlements_from_session_id(session_id)
+
+    candidates: set[str] = set()
+    entitled = get_cached_entitled_client_mod_ids()
+    if entitled:
+        for mid in entitled:
+            token = str(mid or "").strip()
+            if token and is_client_mod_id(token) and is_mod_visible_for_enterprise(token):
+                candidates.add(token)
+
+    try:
+        from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
+
+        for mid in PROTECTED_CLIENT_MOD_IDS:
+            token = str(mid or "").strip()
+            if token and is_mod_visible_for_enterprise(token):
+                candidates.add(token)
+    except RECOVERABLE_ERRORS:
+        pass
+
+    return sorted(candidates)
+
+
+def mount_entitled_client_mod_api_routes(app, session_id: str | None = None) -> list[str]:
+    """
+    登录后治根：为 entitlement 允许的客户 Mod 执行 load + /api/mod/{id}/* 挂载。
+
+    与冷启动 ``load_all_mods`` 互补——避免无 session 时跳过、登录后仍 404。
+    """
+    if is_mods_disabled():
+        return []
+
+    mounted: list[str] = []
+    for mid in _entitled_client_mod_ids_for_api_mount(session_id):
+        if ensure_mod_api_ready(mid, session_id=session_id):
+            mounted.append(mid)
+
+    if mounted:
+        from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+        ensure_spa_fallback_last(app)
+        logger.info(
+            "[ModManager] mount_entitled_client_mod_api_routes: %s",
+            mounted,
+        )
+    return mounted
 
 
 def mount_on_disk_primary_client_mods(mod_manager: ModManager | None = None) -> list[str]:

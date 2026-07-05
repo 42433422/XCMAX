@@ -5,7 +5,6 @@ import {
   resetClientModeTierLocalState,
   PRO_INTENT_EXPERIENCE_KEY,
 } from '@/constants/clientModeTiers'
-import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
 import { asRecord } from '@/utils/typeGuards'
 import type { useModsStore } from '@/stores/mods'
 
@@ -66,7 +65,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
 
   let legacyAutoActionHandler: ((action: unknown, userMessage?: string) => void) | null = null
   let proRuntimeClearTimer: number | null = null
-  let switchViewHandler: ((evt: Event) => void) | null = null
   let proModeObserver: MutationObserver | null = null
   let onProModeChanged: ((evt: Event) => void) | null = null
   let onAssistantPush: ((evt: Event) => void) | null = null
@@ -228,15 +226,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
     syncProModeState()
     window.addEventListener('xcagi:pro-task-status', setProRuntimeTaskFromEvent)
 
-    switchViewHandler = (evt: Event) => {
-      const targetView = (evt as CustomEvent).detail?.view
-      if (targetView && typeof targetView === 'string') {
-        const modPath = resolveHostBusinessPageRedirect(targetView)
-        if (modPath) router.push(modPath)
-        else router.push({ name: targetView })
-      }
-    }
-    window.addEventListener('xcagi:switch-view', switchViewHandler)
     onProModeChanged = (evt: Event) => {
       isProMode.value = !!(evt as CustomEvent).detail?.isProMode
     }
@@ -283,7 +272,6 @@ export function useChatViewHost(deps: UseChatViewHostDeps) {
         legacyAutoActionHandler
     }
     window.removeEventListener('xcagi:pro-task-status', setProRuntimeTaskFromEvent)
-    if (switchViewHandler) window.removeEventListener('xcagi:switch-view', switchViewHandler)
     if (onProModeChanged) {
       window.removeEventListener('xcagi:pro-mode-changed', onProModeChanged)
       onProModeChanged = null

@@ -75,6 +75,34 @@ def _coerce_user_cs_reply(result: dict[str, Any], fallback: str) -> str:
     return fallback
 
 
+def _strip_markdown_json_fence(text: str) -> str:
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if lines and lines[0].strip().startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip() == "```":
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _coerce_cs_reply_body(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = _strip_markdown_json_fence(text)
+    try:
+        raw = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return text
+    if isinstance(raw, dict):
+        for key in ("message_text", "reply", "answer", "summary", "body"):
+            val = str(raw.get(key) or "").strip()
+            if val:
+                return val
+    return text
+
+
 def _service_request_to_cs_messages(row: Any) -> list[dict[str, Any]]:
     created = row.created_at.isoformat() if getattr(row, "created_at", None) else ""
     updated = row.updated_at.isoformat() if getattr(row, "updated_at", None) else created
@@ -95,7 +123,7 @@ def _service_request_to_cs_messages(row: Any) -> list[dict[str, Any]]:
                 extra = raw
         except (TypeError, json.JSONDecodeError):
             extra = {}
-    reply = str(extra.get("ai_reply") or row.response or "").strip()
+    reply = _coerce_cs_reply_body(row.response) or _coerce_cs_reply_body(extra.get("ai_reply"))
     if reply:
         messages.append(
             {

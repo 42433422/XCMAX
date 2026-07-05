@@ -123,15 +123,8 @@ domains:
     check: python scripts/dev/ssot_plugins/error_codes.py check
     sync: null
 
-  - name: k8s-manifests
-    owner: devops
-    enabled: true
-    ssot: FHD/k8s/
-    derived:
-      - FHD/XCAGI/k8s/
-    mode: verify
-    check: python scripts/dev/ssot_plugins/k8s.py check
-    sync: null
+  # k8s-manifests 域已随假 k8s 路径整体退役（2026-07-01 运维根治）：清单从未指向
+  # 真实集群，生产 = 单 CVM（FHD/scripts/deploy 发布链 + 仓库根 ops/）。恢复看 git 历史。
 
   # ===== 此前游离于注册表外的真相源（2026-06-23 补登记）=====
   - name: employee-roster
@@ -145,6 +138,9 @@ domains:
       - FHD/frontend/src/domain/yuangonDutyRoster.ts
       - FHD/app/infrastructure/mods/catalog_visibility.py
       - FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets
+      - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/model/DutyRosterSsot.kt
+      - FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts
+      - FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart
     mode: sync
     check: python ../scripts/dev/sync_duty_roster.py --check
     sync: python ../scripts/dev/sync_duty_roster.py --generate
@@ -182,10 +178,19 @@ domains:
   - name: mobile-tri-platform
     owner: mobile-platform
     enabled: true
-    # 移动三端统一 SSOT：Android 主线、KMM 共享边界、设计 token、端侧性能监控。
+    # 移动统一 SSOT：Flutter 前端、OpenAPI 契约、FastAPI 后端业务、设计 token、端侧性能监控。
     ssot: FHD/docs/mobile_tri_platform_ssot.md
     derived:
       - FHD/config/mobile_design_tokens.json
+      - FHD/contracts/openapi.json
+      - FHD/app/fastapi_routes/mobile_api.py
+      - FHD/app/fastapi_routes/mobile_api_extensions.py
+      - FHD/mobile-flutter-poc/README.md
+      - FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart
+      - FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart
+      - FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt
