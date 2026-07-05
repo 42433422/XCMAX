@@ -208,7 +208,7 @@ const brandLogoSrc = '/corp-butler/brand-xc-logo.jpg'
 const downloadVersion = ref(import.meta.env.VITE_XCAGI_DOWNLOAD_VERSION || DEFAULT_XCAGI_DOWNLOAD_VERSION)
 const androidVersion = ref(import.meta.env.VITE_XCAGI_ANDROID_VERSION || DEFAULT_XCAGI_ANDROID_VERSION)
 const downloadBaseOverride = ref<string | undefined>(import.meta.env.VITE_XCAGI_DOWNLOAD_BASE_URL)
-const winInstallerMb = ref(String(import.meta.env.VITE_XCAGI_WIN_INSTALLER_MB || '654'))
+const winInstallerMb = ref(String(import.meta.env.VITE_XCAGI_WIN_INSTALLER_MB || '212'))
 const downloadBase = computed(() =>
   normalizeXcagiDownloadBase(downloadBaseOverride.value, downloadVersion.value),
 )
