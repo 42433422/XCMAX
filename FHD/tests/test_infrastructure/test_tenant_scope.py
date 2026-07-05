@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from app.db.models.product import Product
 from app.infrastructure.tenant_scope import (
-    apply_tenant_filter,
+    TenantScopeError,
     append_tenant_scope_where,
+    apply_tenant_filter,
     current_tenant_id,
     require_raw_sql_tenant_id,
     set_current_tenant_id,
-    TenantScopeError,
     tenant_scope,
 )
 

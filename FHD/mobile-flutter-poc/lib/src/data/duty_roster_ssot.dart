@@ -156,6 +156,12 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
         '对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。',
   ),
   DutyRosterEmployee(
+    id: 'github-pr-gatekeeper',
+    label: 'GitHub PR 守门员',
+    summary:
+        '通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。',
+  ),
+  DutyRosterEmployee(
     id: 'daily-orchestrator',
     label: '每日编排员',
     summary:
@@ -172,12 +178,6 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     label: '任务派发员',
     summary:
         '把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。',
-  ),
-  DutyRosterEmployee(
-    id: 'github-pr-gatekeeper',
-    label: 'GitHub PR 守门员',
-    summary:
-        '通用 GitHub PR 审查：Dependabot/Renovate PR 自动审查与合并、CI 状态聚合、低风险自动 approve、major 版本升级派发 vibe-coding-maintainer 验证。与 change-request-auditor 分工：本员工专注 GitHub 原生 PR（外部），change-request-auditor 专注员工包补丁队列（内部 CR）。',
   ),
   DutyRosterEmployee(
     id: 'enterprise-adoption-officer',

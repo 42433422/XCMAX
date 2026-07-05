@@ -97,7 +97,7 @@ def _ensure_sunbird_backend_on_path() -> Path | None:
 def _load_convert_attendance_file() -> Callable[..., dict[str, Any]]:
     _ensure_sunbird_backend_on_path()
     module = importlib.import_module("taiyangniao_attendance.convert")
-    convert_fn = getattr(module, "convert_attendance_file")
+    convert_fn = module.convert_attendance_file
     if not callable(convert_fn):
         raise RuntimeError("taiyangniao_attendance.convert.convert_attendance_file 不可用")
     return convert_fn
