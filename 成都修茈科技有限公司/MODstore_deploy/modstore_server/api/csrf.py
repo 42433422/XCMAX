@@ -29,6 +29,8 @@ _CSRF_EXEMPT_PATHS = frozenset(
         # 运维密钥接口：无用户 Cookie 场景（脚本 / TestClient），由 X-Modstore-Recharge-Token 单独鉴权
         "/api/admin/reset-user-password",
         "/api/csp-report",
+        # 机器对机器同步入口：本地管理端强制推送账号权益到企业端，无浏览器 csrf_token。
+        "/api/xcmax/sync/receive",
         "/api/agent/butler/corp-chat",
         "/api/agent/butler/corp-intake-fill",
     }

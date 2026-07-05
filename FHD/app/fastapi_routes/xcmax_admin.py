@@ -1011,6 +1011,19 @@ async def admin_force_push_user_entitlements(
         )
 
     push_result = push_outbox(remote_host=REMOTE_HOST, remote_port=REMOTE_PORT)
+    if int(push_result.get("failed") or 0) > 0 or int(push_result.get("sent") or 0) <= 0:
+        return JSONResponse(
+            {
+                "success": False,
+                "message": "账号权益已写入本地队列，但推送企业端失败，请检查云端同步服务",
+                "data": {
+                    "change_id": change_id,
+                    "snapshot": snapshot,
+                    "push": push_result,
+                },
+            },
+            status_code=502,
+        )
     audit_admin_action(
         request,
         "force_push_user_entitlements",
