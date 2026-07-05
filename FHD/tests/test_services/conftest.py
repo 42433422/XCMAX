@@ -25,7 +25,6 @@ import sys
 import types
 from unittest.mock import MagicMock
 
-
 _STUB_FLAG = "_xcmax_ml_stubs_installed"
 
 
