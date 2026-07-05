@@ -171,7 +171,9 @@ def lan_guard_path_is_bypassed(path: str, cfg: LanConfig) -> bool:
             if not exact:
                 continue
             normalized_exact = normalize_lan_guard_path(exact)
-            if candidate == normalized_exact or candidate.rstrip("/") == normalized_exact.rstrip("/"):
+            if candidate == normalized_exact or candidate.rstrip("/") == normalized_exact.rstrip(
+                "/"
+            ):
                 return True
         for prefix in cfg.static_prefixes:
             normalized_prefix = normalize_lan_guard_path(prefix)

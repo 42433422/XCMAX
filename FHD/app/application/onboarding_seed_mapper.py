@@ -206,7 +206,9 @@ def build_product_row(*, tenant_id: int, profile: OnboardingSeedProfile) -> dict
         "name": name,
         "model_number": str(mapped.get("model_number") or "DEMO-001"),
         "specification": str(mapped.get("specification") or f"{profile.industry_id} 首启样例 SKU"),
-        "price": mapped.get("price") if isinstance(mapped.get("price"), Decimal) else Decimal("99.00"),
+        "price": mapped.get("price")
+        if isinstance(mapped.get("price"), Decimal)
+        else Decimal("99.00"),
         "quantity": int(mapped.get("quantity") or 10),
         "category": profile.industry_id,
         "brand": "XCAGI",

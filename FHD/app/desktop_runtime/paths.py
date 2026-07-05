@@ -96,9 +96,7 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
             elif recovery["action"] == "restored":
                 os.environ["XCAGI_DESKTOP_DB_RECOVERY"] = f"restored:{recovery['detail']}"
         except RECOVERABLE_ERRORS as exc:
-            logging.getLogger(__name__).warning(
-                "recover_if_corrupt failed (non-fatal): %s", exc
-            )
+            logging.getLogger(__name__).warning("recover_if_corrupt failed (non-fatal): %s", exc)
     os.environ.setdefault("DATABASE_PATH", str(dirs["data"]))
     # 考勤模板 424/… 与上传输出均相对工作区根；桌面默认=userData
     os.environ.setdefault("WORKSPACE_ROOT", str(root))

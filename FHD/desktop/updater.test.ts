@@ -27,13 +27,13 @@ releaseDate: '2026-07-05T00:00:00.000Z'`
 
 describe('updater — verifyMetadataSignatureText', () => {
   it('accepts valid Ed25519 signature', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const content = buildMetadata('10.0.1')
     await expect(verifyMetadataSignatureText(content, TEST_PUBLIC_KEY_PEM)).resolves.toBeUndefined()
   })
 
   it('rejects missing signature line', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const content = buildMetadata('10.0.1', false)
     await expect(verifyMetadataSignatureText(content, TEST_PUBLIC_KEY_PEM)).rejects.toThrow(
       /缺少 Ed25519 二次签名/
@@ -41,7 +41,7 @@ describe('updater — verifyMetadataSignatureText', () => {
   })
 
   it('rejects tampered body content', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const content = buildMetadata('10.0.1')
     const tampered = content.replace('10.0.1', '10.0.2')
     await expect(verifyMetadataSignatureText(tampered, TEST_PUBLIC_KEY_PEM)).rejects.toThrow(
@@ -50,7 +50,7 @@ describe('updater — verifyMetadataSignatureText', () => {
   })
 
   it('rejects signature from wrong key', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const other = crypto.generateKeyPairSync('ed25519')
     const otherPrivate = other.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
     const body = `version: 10.0.1\npath: XCAGI-10.0.1.exe`
@@ -64,7 +64,7 @@ describe('updater — verifyMetadataSignatureText', () => {
   it('verifies signature line appended at end of yaml content', async () => {
     // 真实生产场景：签名脚本在 latest.yml 末尾追加 "signature: ed25519:<sig>" 行
     // verifyMetadataSignatureText 必须过滤该行后用剩余 yaml 验签
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const yamlContent = `version: 10.0.1
 files:
   - url: XCAGI-10.0.1.exe
@@ -79,7 +79,7 @@ releaseDate: '2026-07-05T00:00:00.000Z'`
   })
 
   it('handles CRLF line endings', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const body = `version: 10.0.1\r\npath: XCAGI-10.0.1.exe`
     // 签名时用 \n 规范化
     const sig = signBody(body.replace(/\r\n/g, '\n'))
@@ -88,7 +88,7 @@ releaseDate: '2026-07-05T00:00:00.000Z'`
   })
 
   it('rejects malformed signature base64', async () => {
-    const { verifyMetadataSignatureText } = await import('./updater')
+    const { verifyMetadataSignatureText } = await import('./updater.js')
     const content = `version: 10.0.1\nsignature: ed25519:!!!not-base64!!!`
     await expect(verifyMetadataSignatureText(content, TEST_PUBLIC_KEY_PEM)).rejects.toThrow()
   })
@@ -109,7 +109,7 @@ describe('updater — verifyLatestMetadataSignature', () => {
   })
 
   it('skips silently when env not configured', async () => {
-    const { verifyLatestMetadataSignature } = await import('./updater')
+    const { verifyLatestMetadataSignature } = await import('./updater.js')
     await expect(verifyLatestMetadataSignature()).resolves.toBeUndefined()
   })
 
@@ -122,7 +122,7 @@ describe('updater — verifyLatestMetadataSignature', () => {
       statusText: 'Not Found',
       text: async () => ''
     } as Response)
-    const { verifyLatestMetadataSignature } = await import('./updater')
+    const { verifyLatestMetadataSignature } = await import('./updater.js')
     await expect(verifyLatestMetadataSignature()).rejects.toThrow(/404/)
     fetchSpy.mockRestore()
   })
@@ -136,7 +136,7 @@ describe('updater — verifyLatestMetadataSignature', () => {
       statusText: 'OK',
       text: async () => 'version: 10.0.5\npath: XCAGI-10.0.5.exe'
     } as Response)
-    const { verifyLatestMetadataSignature } = await import('./updater')
+    const { verifyLatestMetadataSignature } = await import('./updater.js')
     await expect(verifyLatestMetadataSignature()).rejects.toThrow(/缺少 Ed25519 二次签名/)
     fetchSpy.mockRestore()
   })
@@ -151,7 +151,7 @@ describe('updater — verifyLatestMetadataSignature', () => {
       statusText: 'OK',
       text: async () => validContent
     } as Response)
-    const { verifyLatestMetadataSignature } = await import('./updater')
+    const { verifyLatestMetadataSignature } = await import('./updater.js')
     await expect(verifyLatestMetadataSignature()).resolves.toBeUndefined()
     fetchSpy.mockRestore()
   })
@@ -159,7 +159,7 @@ describe('updater — verifyLatestMetadataSignature', () => {
 
 describe('updater — __resetUpdateDownloadedForTest', () => {
   it('can be called without error', async () => {
-    const { __resetUpdateDownloadedForTest } = await import('./updater')
+    const { __resetUpdateDownloadedForTest } = await import('./updater.js')
     expect(() => __resetUpdateDownloadedForTest()).not.toThrow()
   })
 })

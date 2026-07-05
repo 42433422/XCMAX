@@ -41,7 +41,9 @@ def test_registry_tools_parity():
     reg = load_risk_registry()
     json_tools = set((reg.get("tools") or {}).keys())
     runtime_tools = set(get_workflow_tool_registry().keys())
-    assert json_tools == runtime_tools, f"drift: json-only={json_tools - runtime_tools} runtime-only={runtime_tools - json_tools}"
+    assert json_tools == runtime_tools, (
+        f"drift: json-only={json_tools - runtime_tools} runtime-only={runtime_tools - json_tools}"
+    )
 
 
 def test_hybrid_risk_gate_medium_high():

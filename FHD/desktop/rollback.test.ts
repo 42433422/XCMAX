@@ -73,12 +73,12 @@ describe('rollback — prepareRollback', () => {
 
   it('skips prepareRollback in dev mode (not packaged)', async () => {
     electronMocks.app.isPackaged = false
-    const { prepareRollback } = await import('./rollback')
+    const { prepareRollback } = await import('./rollback.js')
     await expect(prepareRollback('10.0.1')).resolves.toBeUndefined()
   })
 
   it('backs up backend dir and writes marker when packaged', async () => {
-    const { prepareRollback, checkPendingRollback } = await import('./rollback')
+    const { prepareRollback, checkPendingRollback } = await import('./rollback.js')
     await prepareRollback('10.0.1')
     const marker = checkPendingRollback()
     expect(marker).not.toBeNull()
@@ -100,19 +100,19 @@ describe('rollback — prepareRollback', () => {
     const backendDir = path.join(tmpResources, 'backend')
     fs.rmSync(backendDir, { recursive: true, force: true })
 
-    const { prepareRollback } = await import('./rollback')
+    const { prepareRollback } = await import('./rollback.js')
     await expect(prepareRollback('10.0.1')).rejects.toThrow(/找不到当前 backend/)
   })
 })
 
 describe('rollback — checkPendingRollback', () => {
   it('returns null when no marker exists', async () => {
-    const { checkPendingRollback } = await import('./rollback')
+    const { checkPendingRollback } = await import('./rollback.js')
     expect(checkPendingRollback()).toBeNull()
   })
 
   it('returns marker when prepared', async () => {
-    const { prepareRollback, checkPendingRollback } = await import('./rollback')
+    const { prepareRollback, checkPendingRollback } = await import('./rollback.js')
     // 先 setup packaged 模式
     electronMocks.app.isPackaged = true
     const tmpResources = path.join(os.tmpdir(), `xcagi-check-${Date.now()}`)
@@ -136,7 +136,7 @@ describe('rollback — checkPendingRollback', () => {
 
 describe('rollback — commitRollback', () => {
   it('deletes marker file', async () => {
-    const { prepareRollback, commitRollback, checkPendingRollback } = await import('./rollback')
+    const { prepareRollback, commitRollback, checkPendingRollback } = await import('./rollback.js')
     electronMocks.app.isPackaged = true
     const tmpResources = path.join(os.tmpdir(), `xcagi-commit-${Date.now()}`)
     fs.mkdirSync(path.join(tmpResources, 'backend'), { recursive: true })
@@ -159,12 +159,12 @@ describe('rollback — commitRollback', () => {
 
 describe('rollback — triggerRollback', () => {
   it('returns silently when no marker (not update first-run)', async () => {
-    const { triggerRollback } = await import('./rollback')
+    const { triggerRollback } = await import('./rollback.js')
     await expect(triggerRollback('test reason')).resolves.toBeUndefined()
   })
 
   it('restores backend from backup and writes applied marker', async () => {
-    const { prepareRollback, triggerRollback, checkPendingRollback, checkRollbackApplied } = await import('./rollback')
+    const { prepareRollback, triggerRollback, checkPendingRollback, checkRollbackApplied } = await import('./rollback.js')
     electronMocks.app.isPackaged = true
     const tmpResources = path.join(os.tmpdir(), `xcagi-trigger-${Date.now()}-${Math.random().toString(36).slice(2)}`)
     const backendDir = path.join(tmpResources, 'backend')
@@ -204,7 +204,7 @@ describe('rollback — triggerRollback', () => {
 
 describe('rollback — checkRollbackApplied', () => {
   it('returns null when no applied marker', async () => {
-    const { checkRollbackApplied } = await import('./rollback')
+    const { checkRollbackApplied } = await import('./rollback.js')
     expect(checkRollbackApplied()).toBeNull()
   })
 })
