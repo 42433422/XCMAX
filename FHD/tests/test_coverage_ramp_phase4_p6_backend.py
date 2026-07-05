@@ -120,7 +120,9 @@ def test_ensure_authorized_message_not_protected(_m: MagicMock) -> None:
 def test_ensure_authorized_correct_token_sets_grace(_m: MagicMock) -> None:
     mod._chat_db_read_grace_until.clear()
     req = _req()
-    ok, payload = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token="secret")
+    ok, payload = _ensure_chat_db_read_authorized(
+        req, message="查询数据库", provided_token="secret"
+    )
     assert ok is True and payload is None
     # grace now active → second protected call passes without token
     ok2, _ = _ensure_chat_db_read_authorized(req, message="查询数据库", provided_token=None)
@@ -130,7 +132,9 @@ def test_ensure_authorized_correct_token_sets_grace(_m: MagicMock) -> None:
 @patch.object(mod, "effective_db_read_token", return_value="secret")
 def test_ensure_authorized_wrong_token(_m: MagicMock) -> None:
     mod._chat_db_read_grace_until.clear()
-    ok, payload = _ensure_chat_db_read_authorized(_req(), message="查询数据库", provided_token="nope")
+    ok, payload = _ensure_chat_db_read_authorized(
+        _req(), message="查询数据库", provided_token="nope"
+    )
     assert ok is False
     assert payload is not None and payload["requires_token"] is True
 

@@ -52,7 +52,9 @@ def load_or_create_profile(data_root: str | os.PathLike[str]) -> tuple[Path, dic
     return path, profile
 
 
-def save_profile(data_root: str | os.PathLike[str], profile: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
+def save_profile(
+    data_root: str | os.PathLike[str], profile: dict[str, Any]
+) -> tuple[Path, dict[str, Any]]:
     """Validate and persist a desktop database profile."""
     path = profile_path(data_root)
     path.parent.mkdir(parents=True, exist_ok=True)

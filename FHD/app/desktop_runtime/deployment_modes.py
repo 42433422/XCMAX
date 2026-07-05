@@ -117,9 +117,7 @@ def build_sqlite_to_postgres_sync_plan(
     postgres_url: str,
     data_root: str,
 ) -> dict[str, Any]:
-    storage_catalog = (
-        catalog if "transitions" in catalog else load_database_storage_catalog()
-    )
+    storage_catalog = catalog if "transitions" in catalog else load_database_storage_catalog()
     policy = (storage_catalog.get("transitions") or {}).get("sqlite_to_postgresql") or {}
     command = str(policy.get("sync_command") or "").strip()
     if command:
@@ -134,7 +132,9 @@ def build_sqlite_to_postgres_sync_plan(
         "requiresBackup": bool(policy.get("requires_backup", True)),
         "requiresAlembicUpgrade": bool(policy.get("requires_alembic_upgrade", True)),
         "restartRequired": bool(policy.get("restart_required", True)),
-        "syncStrategy": str(policy.get("sync_strategy") or "copy_sqlite_tables_to_postgresql_then_switch_profile"),
+        "syncStrategy": str(
+            policy.get("sync_strategy") or "copy_sqlite_tables_to_postgresql_then_switch_profile"
+        ),
         "syncCommand": command,
         "profilePathTemplate": str(policy.get("profile_path") or ""),
     }

@@ -70,7 +70,9 @@ def test_ensure_chat_db_read_authorized_no_token(_mock: MagicMock) -> None:
     "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"
 )
 def test_ensure_chat_db_read_authorized_wrong_token(_mock: MagicMock) -> None:
-    ok, payload = _ensure_chat_db_read_authorized(_req(), message="查看数据库", provided_token="bad")
+    ok, payload = _ensure_chat_db_read_authorized(
+        _req(), message="查看数据库", provided_token="bad"
+    )
     assert ok is False
     assert payload is not None
 
