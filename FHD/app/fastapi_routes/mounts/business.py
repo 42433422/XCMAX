@@ -13,6 +13,31 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 
+def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
+    """Mod SSOT 已挂载考勤路由时，跳过宿主 compat 层避免重复注册。"""
+    from pathlib import Path
+
+    fhd_root = Path(__file__).resolve().parents[3]
+    candidates = (
+        fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+        fhd_root / "XCAGI" / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+    )
+    return any(p.is_file() for p in candidates)
+
+
+def _load_taiyangniao_attendance_compat_router():
+    if _mod_taiyangniao_pro_exposes_attendance_api():
+        from fastapi import APIRouter
+
+        logger.info(
+            "Skip taiyangniao_attendance_compat routes: taiyangniao-pro mod already exposes attendance API"
+        )
+        return APIRouter(tags=["sunbird-attendance-compat-skipped"])
+    return __import__(
+        "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
+    ).router
+
+
 def _mount(
     registry: RouteRegistry,
     name: str,
@@ -79,11 +104,7 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     _mount(
         registry,
         "taiyangniao_attendance_compat",
-        lambda: (
-            __import__(
-                "app.fastapi_routes.taiyangniao_attendance_compat", fromlist=["router"]
-            ).router
-        ),
+        _load_taiyangniao_attendance_compat_router,
         priority=14,
     )
     _mount(

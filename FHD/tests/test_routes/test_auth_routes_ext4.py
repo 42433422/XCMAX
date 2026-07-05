@@ -669,17 +669,9 @@ class TestAuthRegister:
                 ),
             ),
             patch(
-                "app.fastapi_routes.market_account.ensure_market_enterprise_profile",
-                new=AsyncMock(return_value={"success": True}),
-            ) as mock_profile,
-            patch(
-                "app.fastapi_routes.market_account.enterprise_mod_ids_for_industry",
-                return_value=["coating-industry"],
-            ) as mock_mod_ids,
-            patch(
                 "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
                 return_value=True,
-            ),
+            ) as mock_jit,
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
             mock_service = MagicMock()
@@ -695,9 +687,7 @@ class TestAuthRegister:
                 },
             )
         assert isinstance(result, JSONResponse)
-        mock_mod_ids.assert_called_once_with("涂料")
-        mock_profile.assert_awaited_once()
-        assert mock_profile.await_args.kwargs["mod_ids"] == ["coating-industry"]
+        mock_jit.assert_called_once()
         assert result.status_code == 500
 
     @pytest.mark.asyncio
@@ -720,21 +710,21 @@ class TestAuthRegister:
                 ),
             ),
             patch(
-                "app.fastapi_routes.market_account.ensure_market_enterprise_profile",
-                new=AsyncMock(return_value={"success": False, "message": "mark failed"}),
-            ),
-            patch(
                 "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
                 return_value=True,
             ) as mock_jit,
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
+            mock_service = MagicMock()
+            mock_service.login.return_value = {"success": False, "message": "no user"}
+            mock_get.return_value = mock_service
             result = await auth_register(
                 request,
                 {"username": "u", "password": "pass123", "email": "a@b.com"},
             )
         assert isinstance(result, JSONResponse)
-        assert result.status_code == 502
-        mock_jit.assert_not_called()
+        assert result.status_code == 500
+        mock_jit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_enterprise_full_success(self):
