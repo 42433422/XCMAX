@@ -44,6 +44,12 @@ def pull_from_remote(*, remote_host: str, remote_port: int, **kwargs: Any) -> An
     return _pull(remote_host=remote_host, remote_port=remote_port, **kwargs)
 
 
+def read_sync_meta(key: str) -> dict[str, Any]:
+    from app.services.xcmax_sync_service import _read_sync_meta
+
+    return _read_sync_meta(key)
+
+
 def entity_appliers():
     from app.services.xcmax_sync_service import _ENTITY_APPLIERS
 
