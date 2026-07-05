@@ -82,6 +82,44 @@ function severityLevel(name) {
   return order[String(name).trim().toLowerCase()] ?? -1
 }
 
+function loadSuppressions(csvPath) {
+  const candidates = [
+    path.join(path.dirname(csvPath), '..', 'electronegativity-suppressions.json'),
+    path.join(process.cwd(), '.github', 'electronegativity-suppressions.json'),
+    path.join(path.dirname(csvPath), 'electronegativity-suppressions.json'),
+  ]
+  for (const p of candidates) {
+    if (fs.existsSync(p)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(p, 'utf8'))
+        if (Array.isArray(data)) return data
+      } catch (err) {
+        console.error(`⚠️  suppressions 文件解析失败 ${p}: ${err.message}`)
+      }
+    }
+  }
+  return []
+}
+
+function isSuppressed(finding, suppressions) {
+  if (!suppressions.length) return false
+  const ruleId = String(finding.issue || '').trim()
+  const filename = String(finding.filename || '').trim()
+  const today = new Date()
+  for (const s of suppressions) {
+    if (s.ruleId !== ruleId) continue
+    if (!s.filenamePattern) continue
+    if (filename.includes(s.filenamePattern) || s.filenamePattern.includes(filename)) {
+      if (s.expires) {
+        const exp = new Date(s.expires)
+        if (!isNaN(exp.getTime()) && exp < today) continue
+      }
+      return true
+    }
+  }
+  return false
+}
+
 function main() {
   const { csvPath, gateSeverity, gateLevel } = parseArgs(process.argv)
   if (!fs.existsSync(csvPath)) {
@@ -102,12 +140,23 @@ function main() {
     process.exit(2)
   }
 
+  const suppressions = loadSuppressions(csvPath)
+  if (suppressions.length > 0) {
+    console.log(`📋 已加载 ${suppressions.length} 条 suppressions 规则`)
+  }
+
   const findings = []
+  const suppressed = []
   for (let i = 1; i < lines.length; i++) {
     const fields = parseCsvLine(lines[i])
     if (!fields || fields.length < 8) continue
     const [issue, severity, confidence, filename, location, sample, description, url] = fields
-    findings.push({ issue, severity, confidence, filename, location, sample, description, url })
+    const finding = { issue, severity, confidence, filename, location, sample, description, url }
+    if (isSuppressed(finding, suppressions)) {
+      suppressed.push(finding)
+    } else {
+      findings.push(finding)
+    }
   }
 
   const counts = { HIGH: 0, MEDIUM: 0, LOW: 0, INFORMATIONAL: 0 }
@@ -165,6 +214,18 @@ function main() {
     }
   } else {
     summaryLines.push(`### ✅ 门禁通过: 无 ${gateSeverity.toUpperCase()}+ finding`)
+  }
+
+  if (suppressed.length > 0) {
+    summaryLines.push('')
+    summaryLines.push(`### 📋 已抑制: ${suppressed.length} 个 finding (按 suppressions 规则)`)
+    summaryLines.push('')
+    summaryLines.push('| 文件 | 位置 | 检查 ID | 严重程度 |')
+    summaryLines.push('|------|------|---------|----------|')
+    for (const f of suppressed) {
+      const fname = (f.filename || '').replace(/\|/g, '\\|')
+      summaryLines.push(`| ${fname} | ${f.location} | ${f.issue} | ${f.severity} |`)
+    }
   }
 
   const summary = summaryLines.join('\n')
