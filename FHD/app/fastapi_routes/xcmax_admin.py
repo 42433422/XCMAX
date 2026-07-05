@@ -2105,8 +2105,8 @@ async def sync_current_entitlements(request: Request):
     """
     try:
         from app.application.session_account_meta import load_session_account_meta
+        from app.application.xcmax_sync_app import read_sync_meta
         from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
-        from app.services.xcmax_sync_service import _read_sync_meta
 
         sid = _session_id_from_request(request)
         meta = load_session_account_meta(sid) if sid else None
@@ -2139,13 +2139,13 @@ async def sync_current_entitlements(request: Request):
 
         snapshots: list[dict[str, Any]] = []
         if market_user_id not in (None, ""):
-            snap = _read_sync_meta(f"account_entitlements:{market_user_id}")
+            snap = read_sync_meta(f"account_entitlements:{market_user_id}")
             if snap:
                 snapshots.append(snap)
         for username in username_candidates:
             if not username:
                 continue
-            snap = _read_sync_meta(f"account_entitlements:username:{username}")
+            snap = read_sync_meta(f"account_entitlements:username:{username}")
             if snap:
                 snapshots.append(snap)
 
