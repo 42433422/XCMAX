@@ -260,3 +260,57 @@ class TestGetDatabaseService:
     def test_returns_instance(self):
         svc = get_database_service()
         assert isinstance(svc, DatabaseService)
+
+
+class TestServiceReExportGuard:
+    """防回归：``from app.services import get_database_service`` 必须转发到
+    ``app.services.database_service``（sqlite3.backup() 版本），而非历史误用的
+    ``app.utils.database_service``（shutil.copy2 版本）。
+
+    历史 bug：app/services/__init__.py:64 错误地从 app.utils.database_service 导入，
+    导致 Web 后台 POST /api/database/backup 实际用 shutil.copy2 做文件级拷贝，
+    在 WAL 模式下会得到不一致的库。此测试套件确保该 bug 不再回退。
+    """
+
+    def test_reexports_services_version_not_utils(self):
+        import app.services as services_pkg
+        import app.services.database_service as correct_mod
+
+        assert services_pkg.get_database_service is correct_mod.get_database_service
+
+    def test_database_service_has_hot_backup_method(self):
+        from app.services.database_service import DatabaseService as CorrectDbService
+
+        # 正确版本用 sqlite3.backup() API，封装在 _hot_backup 静态方法里；
+        # 旧错误版本（app.utils.database_service）没有这个方法。
+        assert hasattr(CorrectDbService, "_hot_backup")
+
+    def test_backup_database_uses_hot_backup_not_shutil_copy(self):
+        """正确版本 backup_database 必须调用 _hot_backup（sqlite3.backup() API），
+        而非直接 shutil.copy2。用行为测试验证：mock _hot_backup 返回 False 时
+        backup_database 必须返回失败。"""
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+
+        from app.services.database_service import DatabaseService as CorrectDbService
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_file = Path(tmp) / "test.db"
+            conn = sqlite3.connect(str(db_file))
+            conn.execute("CREATE TABLE t (id INTEGER)")
+            conn.commit()
+            conn.close()
+
+            svc = CorrectDbService()
+            with (
+                patch.object(svc, "_get_db_path", return_value=str(db_file)),
+                patch.object(svc, "_get_backup_dir", return_value=str(Path(tmp) / "backups")),
+                patch.object(CorrectDbService, "_hot_backup", return_value=False) as mock_hot,
+            ):
+                result = svc.backup_database()
+
+            assert result["success"] is False
+            assert "热备份失败" in result["message"]
+            mock_hot.assert_called_once()
