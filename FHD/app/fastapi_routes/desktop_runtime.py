@@ -95,7 +95,9 @@ def desktop_deployment_status():
     db_profile_path, db_profile = load_or_create_profile(dirs["root"])
     db_url = os.environ.get("DATABASE_URL", "")
     storage_mode = resolve_storage_mode(db_url, db_profile)
-    current_mode_id = resolve_effective_mode_id(catalog, deployment_profile, storage_mode=storage_mode)
+    current_mode_id = resolve_effective_mode_id(
+        catalog, deployment_profile, storage_mode=storage_mode
+    )
     current_mode = mode_by_id(catalog, current_mode_id) or {}
     remote = db_profile.get("remote") if isinstance(db_profile.get("remote"), dict) else {}
     postgres_url = str(remote.get("database_url") or "").strip()
@@ -186,7 +188,9 @@ def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
         postgres_url=postgres_url or "<postgres-url>",
         data_root=str(dirs["root"]),
     )
-    restart_required = requires_postgresql or os.environ.get("DATABASE_URL", "").startswith("postgres")
+    restart_required = requires_postgresql or os.environ.get("DATABASE_URL", "").startswith(
+        "postgres"
+    )
     return {
         "success": True,
         "mode": deployment_profile["mode"],
