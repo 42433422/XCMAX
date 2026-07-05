@@ -22,7 +22,7 @@ class TestGetToolRegistry:
         assert isinstance(reg, dict)
         assert "products" in reg
         assert "customers" in reg
-        assert "shipment_generate" in reg
+        assert "shipment_orders" in reg
 
     def test_tool_has_actions(self):
         reg = get_tool_registry()
