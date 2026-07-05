@@ -4,9 +4,11 @@ import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
+import { isDesktopShell } from '@/utils/desktopShell'
 import {
   isEnterpriseProductSkuBuild,
   isPlatformShellModeEnabled,
+  INDUSTRY_DELIVERY_ERP_MENU_KEYS,
 } from '@/constants/platformShellMode'
 import { useModsStore } from '@/stores/mods'
 
@@ -73,9 +75,17 @@ function resolveLegacyRouteFromModPath(router: Router, modPath: string) {
 /** Enterprise 桌面：宿主 route 已注册时优先直跳，避免 Mod 门面未就绪被守卫打回对话页 */
 function preferHostSidebarRoute(router: Router, routeName: string): boolean {
   if (isAdminConsoleSpa()) return false
-  if (!isEnterpriseProductSkuBuild() || isPlatformShellModeEnabled()) return false
   const name = String(routeName || '').replace(/^mod-/, '').trim()
-  return name.length > 0 && router.hasRoute(name)
+  if (!name.length || !router.hasRoute(name)) return false
+  if (
+    isDesktopShell() &&
+    isEnterpriseProductSkuBuild() &&
+    (INDUSTRY_DELIVERY_ERP_MENU_KEYS as readonly string[]).includes(name)
+  ) {
+    return true
+  }
+  if (!isEnterpriseProductSkuBuild() || isPlatformShellModeEnabled()) return false
+  return true
 }
 
 async function ensureModRoutesRegistered(router: Router, getModRoutes?: () => unknown[] | undefined) {

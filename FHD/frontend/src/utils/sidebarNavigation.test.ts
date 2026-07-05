@@ -6,9 +6,14 @@ import {
   resetSidebarNavigationForTests,
 } from '@/utils/sidebarNavigation'
 
+vi.mock('@/utils/desktopShell', () => ({
+  isDesktopShell: () => true,
+}))
+
 vi.mock('@/constants/platformShellMode', () => ({
   isEnterpriseProductSkuBuild: () => true,
   isPlatformShellModeEnabled: () => false,
+  INDUSTRY_DELIVERY_ERP_MENU_KEYS: ['print', 'products', 'customers'],
 }))
 
 vi.mock('@/utils/adminConsoleUrl', () => ({
