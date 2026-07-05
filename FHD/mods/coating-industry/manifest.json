@@ -87,5 +87,7 @@
   },
   "comms": {
     "exports": []
-  }
+  },
+  "import_templates": [],
+  "samples": []
 }

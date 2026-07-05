@@ -116,7 +116,7 @@ void main() {
     expect(loaded.rememberPassword, isTrue);
     expect(loaded.autoLogin, isTrue);
     expect(loaded.walletBalanceJson, '{"balance":12.5}');
-    expect(loaded.androidServerModeLabel, '服务器中继 · 电脑执行端');
+    expect(loaded.androidServerModeLabel, '云端中继 · 电脑工具');
     expect(loaded.inflightRelayTasks['pinned:codex'], 'task-1');
     expect(loaded.cachedChatMessages['pinned:codex']?.single['body'], '已完成');
     expect(loaded.cachedModInfos.single['id'], 'avatar-mod');
@@ -141,7 +141,7 @@ void main() {
         fhdHost: '10.0.0.2:5112',
         relayDesktopId: 'relay-1',
       ).androidServerModeLabel,
-      '服务器中继 · 电脑执行端',
+      '云端中继 · 电脑工具',
     );
   });
 
@@ -461,7 +461,7 @@ void main() {
     expect(saved.relayDesktopId, 'relay-new');
     expect(saved.relaySessionToken, 'relay-session');
     expect(saved.relayPairedAt, '2026-07-01T00:01:00Z');
-    expect(saved.androidServerModeLabel, '服务器中继 · 电脑执行端');
+    expect(saved.androidServerModeLabel, '云端中继 · 电脑工具');
   });
 
   test('MobileRepository cachedMe restores Android username and local avatar',
@@ -481,7 +481,7 @@ void main() {
     final me = await repository.cachedMe();
 
     expect(me.displayName, 'admin');
-    expect(me.accountKindLabel, '管理员账号');
+    expect(me.accountKindLabel, '账号');
     expect(me.avatarSource, '/data/user/0/app/files/avatar.jpg');
   });
 
@@ -817,7 +817,7 @@ void main() {
         cachedModInfos: [
           {
             'id': 'admin-duty',
-            'name': '管理端 AI 员工',
+            'name': '系统 AI 员工',
             'workflow_employees': [
               {
                 'id': 'site-content-editor',
@@ -851,7 +851,7 @@ void main() {
     final employee = conversations.singleWhere(
       (item) => item.id == 'employee:admin-duty-employees:site-content-editor',
     );
-    expect(employee.badgeText, '管理端');
+    expect(employee.badgeText, '高级设置');
     expect(employee.badgeColor, 0xFFED7B2F);
   });
 

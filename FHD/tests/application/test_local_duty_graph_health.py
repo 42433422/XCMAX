@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -150,9 +150,33 @@ class TestLocalDutyGraphRoutes:
                 return_value="sess",
             ),
             patch(
+                "app.infrastructure.auth.dependencies.resolve_session_user",
+                return_value=MagicMock(id=1),
+            ),
+            patch(
+                "app.application.session_account_meta.enrich_session_meta_with_tenant",
+                return_value={"tenant_id": 1, "account_kind": "admin"},
+            ),
+            patch(
+                "app.application.auth_permission_resolver.require_allowed",
+                return_value=None,
+            ),
+            patch(
                 "app.application.employee_runtime.executor.execute_employee_task_local",
                 return_value={"success": True, "employee_id": "seo-sitemap-curator"},
             ) as execute,
+            patch(
+                "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                return_value=(True, "ok"),
+            ),
+            patch(
+                "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                return_value="run-1",
+            ),
+            patch(
+                "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                return_value=None,
+            ),
         ):
             resp = client.post(
                 "/api/xcmax/local/employees/seo-sitemap-curator/execute",

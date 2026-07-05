@@ -39,6 +39,12 @@
             <li v-for="(step, tIdx) in msg.todoSteps" :key="tIdx">{{ step }}</li>
           </ul>
         </div>
+        <ChatApprovalInlineCard
+          v-if="msg.role === 'ai' && msg.approvalCard && msg.approvalCard.status === 'pending'"
+          :card="msg.approvalCard"
+          @confirm="$emit('approval-confirm')"
+          @cancel="$emit('approval-cancel')"
+        />
         <div v-if="msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))" class="trace-panel">
           <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
           <div class="trace-stages">
@@ -99,6 +105,7 @@ import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 
 useI18n()
 
@@ -121,6 +128,8 @@ defineEmits<{
   'collapse-message': [idx: number]
   'toggle-message-tts': [idx: number, content: string]
   'shipment-download-click': []
+  'approval-confirm': []
+  'approval-cancel': []
 }>()
 
 const messagesHostRef = ref<HTMLElement | null>(null)

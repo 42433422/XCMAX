@@ -95,7 +95,7 @@ class MobileSessionData {
       autoLogin && savedUsername.trim().isNotEmpty && savedPassword.isNotEmpty;
 
   String get androidServerModeLabel {
-    if (relayDesktopId.trim().isNotEmpty) return '服务器中继 · 电脑执行端';
+    if (relayDesktopId.trim().isNotEmpty) return '云端中继 · 电脑工具';
     final host = fhdHost.trim();
     if (host.isNotEmpty) return 'Agent 控制 · $host';
     final mode = serverMode.trim().toLowerCase();

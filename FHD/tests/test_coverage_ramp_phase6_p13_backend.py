@@ -857,8 +857,8 @@ class TestGetToolRegistryPlanner:
         assert isinstance(reg, dict)
         assert "products" in reg
         assert "customers" in reg
-        assert "price_list" in reg
-        assert "shipment_generate" in reg
+        assert "shipment_orders" in reg
+        assert "shipment_records" in reg
 
     def test_tool_has_required_fields(self) -> None:
         reg = get_tool_registry()

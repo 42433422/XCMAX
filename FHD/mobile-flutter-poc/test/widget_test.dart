@@ -174,7 +174,7 @@ void main() {
     );
 
     expect(find.text('admin'), findsOneWidget);
-    expect(find.text('管理员账号 · 55位AI员工'), findsOneWidget);
+    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
     expect(find.text('查找会话或伙伴'), findsOneWidget);
     expect(find.text('超级开发部'), findsOneWidget);
     expect(find.text('(5)'), findsOneWidget);
@@ -234,7 +234,7 @@ void main() {
     expect(headerTitle.style?.fontWeight, FontWeight.w600);
 
     final headerSubtitle = tester.widget<Text>(
-      find.text('管理员账号 · 2位AI员工'),
+      find.text('账号 · 2位AI员工'),
     );
     expect(headerSubtitle.style?.fontSize, typography.labelMedium?.fontSize);
     expect(headerSubtitle.style?.height, typography.labelMedium?.height);
@@ -563,10 +563,10 @@ void main() {
     const conversation = ConversationItem(
       id: 'employee:demo:admin',
       type: ConversationType.aiTask,
-      title: '管理端员工',
+      title: '系统 AI 员工',
       subtitle: '徽标颜色来自会话数据',
       timestampText: '6/24',
-      badgeText: '管理端',
+      badgeText: '高级设置',
       badgeColor: 0xFFED7B2F,
     );
 
@@ -580,11 +580,11 @@ void main() {
     );
 
     final badge = tester.widget<Container>(
-      find.byKey(const ValueKey('conversation_status_badge_管理端')),
+      find.byKey(const ValueKey('conversation_status_badge_高级设置')),
     );
     final decoration = badge.decoration! as BoxDecoration;
     final border = decoration.border! as Border;
-    final label = tester.widget<Text>(find.text('管理端'));
+    final label = tester.widget<Text>(find.text('高级设置'));
 
     expect(decoration.color, adminBadge.withValues(alpha: 0.12));
     expect(border.top.color, adminBadge.withValues(alpha: 0.30));
@@ -746,7 +746,7 @@ void main() {
     );
 
     expect(find.text('账号生态待同步'), findsOneWidget);
-    expect(find.text('点这里重新同步管理端员工。'), findsOneWidget);
+    expect(find.text('点这里重新同步 AI 员工。'), findsOneWidget);
     expect(find.text('暂无会话'), findsOneWidget);
     expect(find.text('下拉刷新或和小C助理聊聊吧'), findsOneWidget);
 
@@ -789,7 +789,7 @@ void main() {
       ),
     );
 
-    expect(find.text('管理员账号'), findsOneWidget);
+    expect(find.text('账号'), findsOneWidget);
     expect(find.textContaining('55位AI员工'), findsNothing);
   });
 
@@ -1295,8 +1295,8 @@ void main() {
         subtitle: '来自 HomeShell repository client',
         statusReady: '同源状态已就绪',
         statusSyncing: '',
-        primaryChip: '管理员账号',
-        secondaryChip: '服务器中继 · 电脑执行端',
+        primaryChip: '账号',
+        secondaryChip: '云端中继 · 电脑工具',
         accent: 'indigo',
       ),
     );
@@ -1472,7 +1472,7 @@ void main() {
 
     expect(repository.accountLoads, 1);
     expect(find.text('fallback-name'), findsOneWidget);
-    expect(find.text('企业账号 · 55位AI员工'), findsOneWidget);
+    expect(find.text('账号 · 55位AI员工'), findsOneWidget);
     expect(find.text('admin'), findsNothing);
   });
 
@@ -1590,7 +1590,7 @@ void main() {
 
     expect(find.text('来源：AI市场 · 头像员工包'), findsOneWidget);
     expect(find.text('AI市场 · 头像员工包'), findsOneWidget);
-    expect(find.text('管理端 AI 员工'), findsNothing);
+    expect(find.text('系统 AI 员工'), findsNothing);
     expect(
       find.byWidgetPredicate(
         (widget) =>
@@ -1688,7 +1688,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未找到该 AI 员工'), findsOneWidget);
-    expect(find.text('稍后刷新或从企业端同步数据'), findsOneWidget);
+    expect(find.text('稍后刷新或从工作台同步数据'), findsOneWidget);
     expect(find.text('刷新'), findsOneWidget);
     expect(repository.employeeLoads, 1);
 
@@ -1745,7 +1745,7 @@ void main() {
 
     expect(find.text('查找会话或伙伴'), findsNothing);
     expect(find.text('暂无 AI 员工'), findsOneWidget);
-    expect(find.text('扫码绑定企业端或登录管理端后，员工会自动同步到这里。'), findsOneWidget);
+    expect(find.text('扫码绑定云端工作台或登录账号后，员工会自动同步到这里。'), findsOneWidget);
     expect(find.text('扫码绑定'), findsWidgets);
     expect(find.byIcon(Icons.auto_awesome), findsOneWidget);
   });
@@ -1769,7 +1769,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('未找到匹配的 AI 员工'), findsOneWidget);
-    expect(find.text('扫码绑定企业端或登录管理端后，员工会自动同步到这里。'), findsNothing);
+    expect(find.text('扫码绑定工作台或登录账号后，员工会自动同步到这里。'), findsNothing);
   });
 
   testWidgets('discover tab matches Android tool sections', (
@@ -1994,8 +1994,8 @@ void main() {
 
     expect(find.text('AI交流圈'), findsOneWidget);
     expect(find.text('AI员工交流圈'), findsOneWidget);
-    expect(find.text('55 位智能伙伴正在企业账号里值守'), findsOneWidget);
-    expect(find.text('企业账号生态'), findsOneWidget);
+    expect(find.text('55 位智能伙伴正在账号里值守'), findsOneWidget);
+    expect(find.text('账号生态'), findsOneWidget);
     expect(find.text('员工动态、能力更新和协同消息会在这里汇总。'), findsOneWidget);
     expect(find.text('静态站内容编辑员'), findsOneWidget);
     expect(find.text('已完成首页内容巡检。'), findsOneWidget);
@@ -2032,8 +2032,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('0 位智能伙伴正在企业账号里值守'), findsOneWidget);
-    expect(find.text('55 位智能伙伴正在企业账号里值守'), findsNothing);
+    expect(find.text('0 位智能伙伴正在账号里值守'), findsOneWidget);
+    expect(find.text('55 位智能伙伴正在账号里值守'), findsNothing);
     expect(find.text('已完成首页内容巡检。'), findsOneWidget);
   });
 
@@ -2055,7 +2055,7 @@ void main() {
 
     expect(find.text('赞'), findsOneWidget);
     expect(find.text('赞 1'), findsNothing);
-    expect(find.text('连接不到电脑执行端，已尝试通过服务器中继，请稍后重试'), findsOneWidget);
+    expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
   });
 
@@ -2129,7 +2129,7 @@ void main() {
     expect(find.text('从相册选择'), findsOneWidget);
     expect(find.text('批量识别'), findsOneWidget);
     expect(find.text('状态'), findsOneWidget);
-    expect(find.text('企业 OCR'), findsOneWidget);
+    expect(find.text('OCR 服务'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.camera_alt));
     await tester.pumpAndSettle();
@@ -2291,7 +2291,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(repository.pairingCodes, ['123456']);
-    expect(find.text('连接不到电脑执行端，已尝试通过服务器中继，请稍后重试'), findsOneWidget);
+    expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
     expect(find.text('配对成功'), findsNothing);
   });
@@ -2673,7 +2673,7 @@ void main() {
 
     expect(find.text('XCAGI'), findsOneWidget);
     expect(find.image(const AssetImage(appLauncherIconAsset)), findsOneWidget);
-    expect(find.text('企业智能工作平台'), findsOneWidget);
+    expect(find.text('AI 工作平台'), findsOneWidget);
     expect(find.text('我已阅读并同意'), findsOneWidget);
     expect(find.text('《用户协议》'), findsOneWidget);
     expect(find.text('《隐私政策》'), findsOneWidget);
@@ -2766,13 +2766,13 @@ void main() {
       MaterialApp(theme: AppTheme.light(), home: const AuthScreen()),
     );
 
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI'), findsOneWidget);
     expect(find.image(const AssetImage(appLauncherIconAsset)), findsOneWidget);
-    expect(find.text('连接服务器后台、企业工作台和电脑执行端'), findsOneWidget);
+    expect(find.text('注册或登录，连接 AI 工作台和电脑工具'), findsOneWidget);
     expect(find.text('密码登录'), findsOneWidget);
     expect(find.text('手机号登录'), findsOneWidget);
-    expect(find.text('企业工作台'), findsOneWidget);
-    expect(find.text('服务器后台'), findsOneWidget);
+    expect(find.text('账号登录'), findsOneWidget);
+    expect(find.text('高级设置'), findsOneWidget);
     expect(find.text('扫码绑定/登录'), findsOneWidget);
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
@@ -2803,9 +2803,9 @@ void main() {
 
     final colors = AppTheme.colors(tester.element(find.byType(AuthScreen)));
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
-    final title = tester.widget<Text>(find.text('XCAGI 手机控制端'));
+    final title = tester.widget<Text>(find.text('XCAGI'));
     final subtitle = tester.widget<Text>(
-      find.text('连接服务器后台、企业工作台和电脑执行端'),
+      find.text('注册或登录，连接 AI 工作台和电脑工具'),
     );
     final selectedTab = tester.widget<Text>(find.text('密码登录'));
     final agreement = tester.widget<Text>(find.text('已阅读并同意 '));
@@ -2844,7 +2844,7 @@ void main() {
     expect(find.text('记住密码'), findsOneWidget);
     expect(find.text('免登录'), findsOneWidget);
 
-    await tester.tap(find.widgetWithText(FilledButton, '进入企业工作台'));
+    await tester.tap(find.widgetWithText(FilledButton, '进入 AI 工作台'));
     await tester.pumpAndSettle();
 
     expect(repository.logins, [
@@ -3060,7 +3060,7 @@ void main() {
             MarketCapability(
               id: 'chart-dashboard-employee',
               title: '综合看板可视化员',
-              subtitle: '从企业端同步的能力包',
+              subtitle: '从工作台同步的能力包',
             ),
           ],
         ),
@@ -3111,7 +3111,7 @@ void main() {
             MarketCapability(
               id: 'chart-dashboard-employee',
               title: '综合看板可视化员',
-              subtitle: '从企业端同步的能力包',
+              subtitle: '从工作台同步的能力包',
             ),
           ],
         ),
@@ -3451,11 +3451,11 @@ void main() {
       const [
         BusinessListItem(
           id: '9',
-          title: '我想买企业版',
+          title: '我想买标准版',
           subtitle: 'pending',
           payload: {
             'source_instance_name': '手机端 Alice',
-            'description': '我想买企业版',
+            'description': '我想买标准版',
             'status': 'pending',
           },
         ),
@@ -3476,14 +3476,14 @@ void main() {
     expect(find.text('客户客服'), findsOneWidget);
     expect(find.text('客户消息'), findsOneWidget);
     expect(find.text('手机端 Alice'), findsWidgets);
-    expect(find.text('我想买企业版 · pending'), findsOneWidget);
+    expect(find.text('我想买标准版 · pending'), findsOneWidget);
     expect(find.text('回复客户 #9'), findsOneWidget);
     expect(find.text('输入给客户的回复'), findsOneWidget);
 
     await tester.tap(find.text('手机端 Alice').first);
     await tester.pump();
     expect(find.text('回复客户 #9'), findsOneWidget);
-    await tester.enterText(find.byType(TextField), '我来跟进企业版开通');
+    await tester.enterText(find.byType(TextField), '我来跟进标准版开通');
     await tester.pump();
     await tester.ensureVisible(find.text('发送回复'));
     await tester.tap(find.text('发送回复'));
@@ -3492,7 +3492,7 @@ void main() {
     expect(repository.replies, [
       {
         'id': 9,
-        'response': '我来跟进企业版开通',
+        'response': '我来跟进标准版开通',
         'respondedBy': 'mobile-admin-customer-service',
       },
     ]);
@@ -3748,7 +3748,7 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_divider_智脑集成')),
       findsOneWidget,
     );
-    expect(find.text('员工编排由企业端模块承载'), findsOneWidget);
+    expect(find.text('员工编排由工作台模块承载'), findsOneWidget);
     expect(find.text('打开能力库'), findsOneWidget);
 
     await tester.pumpWidget(
@@ -3759,8 +3759,8 @@ void main() {
     );
 
     expect(find.text('能力库'), findsWidgets);
-    expect(find.text('安装与授权由企业端和管理端统一管理'), findsOneWidget);
-    expect(find.text('查看企业模块'), findsOneWidget);
+    expect(find.text('安装与授权由工作台统一管理'), findsOneWidget);
+    expect(find.text('查看工作台模块'), findsOneWidget);
   });
 
   testWidgets('enterprise module placeholders follow Android dark theme tokens',
@@ -4447,8 +4447,8 @@ void main() {
         subtitle: '账号、员工体系、工作台与执行端状态统一管理',
         statusReady: '资料、头像和工作台状态已同步',
         statusSyncing: '正在同步你的资料与工作台状态',
-        primaryChip: '管理员账号',
-        secondaryChip: '服务器中继 · 电脑执行端',
+        primaryChip: '账号',
+        secondaryChip: '云端中继 · 电脑工具',
         accent: 'indigo',
       ),
     );
@@ -4567,7 +4567,7 @@ void main() {
 
     expect(find.text('Agent 远程控制'), findsOneWidget);
     expect(find.image(const AssetImage(appLauncherIconAsset)), findsOneWidget);
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI'), findsOneWidget);
     expect(find.text('扫描绑定'), findsOneWidget);
     expect(find.text('返回'), findsWidgets);
   });
@@ -4584,8 +4584,8 @@ void main() {
         subtitle: '账号、员工体系、工作台与执行端状态统一管理',
         statusReady: '资料、头像和工作台状态已同步',
         statusSyncing: '正在同步你的资料与工作台状态',
-        primaryChip: '管理员账号',
-        secondaryChip: '服务器中继 · 电脑执行端',
+        primaryChip: '账号',
+        secondaryChip: '云端中继 · 电脑工具',
         accent: 'indigo',
       ),
     );
@@ -4644,8 +4644,8 @@ void main() {
         subtitle: '',
         statusReady: '',
         statusSyncing: '',
-        primaryChip: '管理员账号',
-        secondaryChip: '服务器中继 · 电脑执行端',
+        primaryChip: '账号',
+        secondaryChip: '云端中继 · 电脑工具',
         accent: 'purple',
       ),
     );
@@ -4765,7 +4765,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('local-admin'), findsOneWidget);
-    expect(find.text('企业账号'), findsWidgets);
+    expect(find.text('账号'), findsWidgets);
     expect(find.text('Agent 控制 · 10.0.0.2:5112'), findsWidgets);
   });
 
@@ -5026,14 +5026,14 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_divider_Agent 远程控制')),
       findsOneWidget,
     );
-    expect(find.text('XCAGI 手机控制端'), findsOneWidget);
+    expect(find.text('XCAGI'), findsOneWidget);
     final connectTitle = tester.widget<Text>(
       find.byKey(const ValueKey('connect_title')),
     );
     expect(connectTitle.style?.fontSize, 18);
     expect(connectTitle.style?.fontWeight, FontWeight.w600);
     expect(
-      find.text('绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。'),
+      find.text('绑定云端工作台或电脑工具后，手机可远程调动 AI 员工和 Codex。'),
       findsOneWidget,
     );
     final connectDescription = tester.widget<Text>(
@@ -5523,12 +5523,12 @@ void main() {
     expect(find.text('停止'), findsOneWidget);
     expect(find.textContaining('思考中'), findsOneWidget);
 
-    repository.finish.complete('电脑执行端已完成任务。');
+    repository.finish.complete('电脑工具已完成任务。');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('停止'), findsNothing);
-    expect(find.text('电脑执行端已完成任务。'), findsOneWidget);
+    expect(find.text('电脑工具已完成任务。'), findsOneWidget);
   });
 
   testWidgets('chat detail failed assistant bubble can resend like Android', (
@@ -5553,7 +5553,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('发送失败'), findsOneWidget);
-    expect(find.text('连接不到电脑执行端，已尝试通过服务器中继，请稍后重试'), findsOneWidget);
+    expect(find.text('连接不到电脑工具，已尝试通过云端中继，请稍后重试'), findsOneWidget);
     expect(find.textContaining('failed to connect'), findsNothing);
     expect(find.text('重发'), findsOneWidget);
 
@@ -5643,7 +5643,7 @@ const _fakeGroup = AiGroupConversation(
       employeeId: 'xcagi-assistant',
       modId: 'core',
       name: '小C助理',
-      summary: '企业 AI 助手',
+      summary: 'AI 助手',
     ),
     AiGroupMember(
       employeeId: 'site-content-editor',
@@ -5741,7 +5741,7 @@ class _FakeRealtimeRepository extends MobileRepository {
         employeeId: 'xcagi-assistant',
         modId: 'core',
         name: '小C助理',
-        summary: '企业 AI 助手',
+        summary: 'AI 助手',
         departmentKey: 'core',
         isSuper: false,
       ),
@@ -6106,11 +6106,11 @@ class _FakeHomeShellRepository extends MobileRepository {
     return const [
       BusinessListItem(
         id: '11',
-        title: '需要企业客服跟进',
+        title: '需要客服跟进',
         subtitle: 'pending',
         payload: {
           'source_instance_name': '手机端客户',
-          'description': '需要企业客服跟进',
+          'description': '需要客服跟进',
           'status': 'pending',
         },
       ),

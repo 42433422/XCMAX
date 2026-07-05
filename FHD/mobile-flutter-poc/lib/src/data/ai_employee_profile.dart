@@ -139,15 +139,15 @@ List<AiEmployeeProfile> adminDutyEmployeeProfiles([
       .map(
         (employee) => AiEmployeeProfile(
           modId: adminDutyModId,
-          modName: '管理端 AI 员工',
-          modDescription: '管理端 duty AI 员工',
+          modName: '系统 AI 员工',
+          modDescription: '系统 AI 员工',
           modVersion: '10.0',
-          modAuthor: 'XCAGI 管理端',
-          industryName: '管理端',
+          modAuthor: 'XCAGI',
+          industryName: '高级设置',
           employeeId: employee.id.trim(),
           name: employee.label.ifEmpty(employee.id),
           title: employee.label.ifEmpty(employee.id),
-          summary: employee.summary.ifEmpty('管理端 duty AI 员工'),
+          summary: employee.summary.ifEmpty('系统 AI 员工'),
           apiBasePath: '/api/admin/employees/${employee.id.trim()}',
           phoneChannel: 'admin-duty',
           workflowPlaceholder: false,
@@ -167,7 +167,7 @@ List<AiEmployeeProfile> adminDutyEmployeeProfiles([
 String _contactChannelLabel(String value) {
   switch (value.trim()) {
     case 'admin-duty':
-      return '管理端工作台';
+      return '高级设置';
     case 'mobile':
     case 'mobile-chat':
       return '手机端会话';

@@ -477,19 +477,14 @@ class TestGetToolRegistryStructure:
     def test_registry_has_all_tools(self):
         reg = get_tool_registry()
         expected_tools = [
-            "price_list",
             "products",
             "customers",
-            "shipment_generate",
+            "shipment_orders",
             "shipment_records",
             "materials",
-            "print_label",
-            "excel_decompose",
             "template_extract",
-            "wechat_send",
-            "excel_schema",
             "excel_analysis",
-            "import_excel",
+            "excel_import",
         ]
         for tool in expected_tools:
             assert tool in reg, f"Missing tool: {tool}"
