@@ -63,6 +63,20 @@ def test_track_job_run_failure_reraises_and_records(db_ready):
     assert entry["last_success_at"] is None
 
 
+def test_workflow_scheduler_non_daily_job_uses_runtime_ledger(db_ready):
+    from modstore_server.scheduler_runtime import get_runtime_status
+    from modstore_server.workflow_scheduler import _run_tracked_scheduler_job
+
+    job_id = _job("employee_loop")
+    result = _run_tracked_scheduler_job(job_id, lambda: {"ok": True})
+
+    entry = _find(get_runtime_status(), job_id)
+    assert result == {"ok": True}
+    assert entry is not None
+    assert entry["state"] == "healthy"
+    assert entry["last_status"] == "success"
+
+
 def test_stale_when_last_success_too_old(db_ready):
     from modstore_server.scheduler_runtime import get_runtime_status, record_job_run
 
