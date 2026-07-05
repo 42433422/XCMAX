@@ -78,6 +78,19 @@ def _run_daily_pipeline_stage(stage: str, fn: Callable[[], Any]) -> Any:
             return fn()
 
 
+def _run_tracked_scheduler_job(job_id: str, fn: Callable[[], Any]) -> Any:
+    """Record non-daily scheduler jobs in the same runtime ledger.
+
+    ``/api/scheduler/runtime`` reads ``scheduler_job_runs``. If only daily-pipeline
+    stages write there, the scheduler can be alive and running employee loops while
+    the runtime endpoint still claims only ``daily_digest`` exists.
+    """
+    from modstore_server.scheduler_runtime import track_job_run
+
+    with track_job_run(job_id):
+        return fn()
+
+
 def _trigger_self_maintenance_from_incident(*, emitted: bool, source: str) -> None:
     if not emitted or not _env_bool("MODSTORE_SELF_MAINTENANCE_EVENT_TRIGGER_ENABLED", True):
         return
@@ -367,12 +380,16 @@ def start_scheduler() -> None:
 
     def _self_maintenance_loop_job() -> None:
         try:
-            from modstore_server.self_maintenance_loop_runner import (
-                run_self_maintenance_loop,
-            )
 
-            result = run_self_maintenance_loop(triggered_by="scheduler")
-            logger.info("self-maintenance loop finished: %s", result)
+            def _run() -> None:
+                from modstore_server.self_maintenance_loop_runner import (
+                    run_self_maintenance_loop,
+                )
+
+                result = run_self_maintenance_loop(triggered_by="scheduler")
+                logger.info("self-maintenance loop finished: %s", result)
+
+            _run_tracked_scheduler_job("self_maintenance_loop_daily", _run)
         except Exception:
             logger.exception("self-maintenance loop job failed")
 
@@ -578,9 +595,13 @@ def start_scheduler() -> None:
 
     def _inbox_poll_job() -> None:
         try:
-            from modstore_server.inbox_poller import poll_inbox_once
 
-            poll_inbox_once()
+            def _run() -> None:
+                from modstore_server.inbox_poller import poll_inbox_once
+
+                poll_inbox_once()
+
+            _run_tracked_scheduler_job("inbox_approval_poll", _run)
         except Exception:
             logger.exception("inbox poll job failed")
 
@@ -598,14 +619,18 @@ def start_scheduler() -> None:
 
     def _email_intake_poll_job() -> None:
         try:
-            from modstore_server.email_intake import poll_email_intake_once
 
-            out = poll_email_intake_once()
-            if not out.get("ok"):
-                logger.warning(
-                    "email intake poll failed: %s",
-                    out.get("error") or "unknown",
-                )
+            def _run() -> None:
+                from modstore_server.email_intake import poll_email_intake_once
+
+                out = poll_email_intake_once()
+                if not out.get("ok"):
+                    logger.warning(
+                        "email intake poll failed: %s",
+                        out.get("error") or "unknown",
+                    )
+
+            _run_tracked_scheduler_job("email_intake_poll", _run)
         except Exception:
             logger.exception("email intake poll job failed")
 
@@ -622,30 +647,34 @@ def start_scheduler() -> None:
 
     def _employee_autonomy_dispatch_loop() -> None:
         try:
-            from modstore_server.employee_autonomy_service import (
-                dispatch_pending_brief_tasks,
-                dispatch_pending_suggestions,
-            )
 
-            try:
-                brief_limit = int(os.environ.get("MODSTORE_BRIEF_DISPATCH_BATCH", "20"))
-            except ValueError:
-                brief_limit = 20
-            try:
-                sug_limit = int(os.environ.get("MODSTORE_SUGGESTION_DISPATCH_BATCH", "20"))
-            except ValueError:
-                sug_limit = 20
-            b = dispatch_pending_brief_tasks(limit=max(1, min(brief_limit, 100)))
-            s = dispatch_pending_suggestions(limit=max(1, min(sug_limit, 100)))
-            logger.info(
-                "employee autonomy dispatch: brief processed=%s done=%s failed=%s; suggestion processed=%s ok=%s skipped=%s",
-                b.get("processed"),
-                b.get("done"),
-                b.get("failed"),
-                s.get("processed"),
-                s.get("ok_count"),
-                s.get("skipped"),
-            )
+            def _run() -> None:
+                from modstore_server.employee_autonomy_service import (
+                    dispatch_pending_brief_tasks,
+                    dispatch_pending_suggestions,
+                )
+
+                try:
+                    brief_limit = int(os.environ.get("MODSTORE_BRIEF_DISPATCH_BATCH", "20"))
+                except ValueError:
+                    brief_limit = 20
+                try:
+                    sug_limit = int(os.environ.get("MODSTORE_SUGGESTION_DISPATCH_BATCH", "20"))
+                except ValueError:
+                    sug_limit = 20
+                b = dispatch_pending_brief_tasks(limit=max(1, min(brief_limit, 100)))
+                s = dispatch_pending_suggestions(limit=max(1, min(sug_limit, 100)))
+                logger.info(
+                    "employee autonomy dispatch: brief processed=%s done=%s failed=%s; suggestion processed=%s ok=%s skipped=%s",
+                    b.get("processed"),
+                    b.get("done"),
+                    b.get("failed"),
+                    s.get("processed"),
+                    s.get("ok_count"),
+                    s.get("skipped"),
+                )
+
+            _run_tracked_scheduler_job("employee_autonomy_dispatch_loop", _run)
         except Exception:
             logger.exception("employee autonomy dispatch loop failed")
 
@@ -662,35 +691,41 @@ def start_scheduler() -> None:
 
     def _employee_evolution_scan_loop() -> None:
         try:
-            from modstore_server.employee_autonomy_service import run_employee_evolution_scan
 
-            try:
-                lookback = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24"))
-            except ValueError:
-                lookback = 24
-            try:
-                min_fail = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3"))
-            except ValueError:
-                min_fail = 3
-            try:
-                lim = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20"))
-            except ValueError:
-                lim = 20
-            out = run_employee_evolution_scan(
-                lookback_hours=lookback,
-                min_failures=min_fail,
-                limit=lim,
-                triggered_by="scheduler",
-            )
-            logger.info(
-                "employee evolution scan: processed=%s created=%s enabled=%s "
-                "quota_failures=%s circuit_broken=%s",
-                out.get("processed"),
-                out.get("created"),
-                out.get("enabled"),
-                out.get("quota_failures"),
-                out.get("circuit_broken"),
-            )
+            def _run() -> None:
+                from modstore_server.employee_autonomy_service import run_employee_evolution_scan
+
+                try:
+                    lookback = int(
+                        os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_LOOKBACK_HOURS", "24")
+                    )
+                except ValueError:
+                    lookback = 24
+                try:
+                    min_fail = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_MIN_FAILURES", "3"))
+                except ValueError:
+                    min_fail = 3
+                try:
+                    lim = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20"))
+                except ValueError:
+                    lim = 20
+                out = run_employee_evolution_scan(
+                    lookback_hours=lookback,
+                    min_failures=min_fail,
+                    limit=lim,
+                    triggered_by="scheduler",
+                )
+                logger.info(
+                    "employee evolution scan: processed=%s created=%s enabled=%s "
+                    "quota_failures=%s circuit_broken=%s",
+                    out.get("processed"),
+                    out.get("created"),
+                    out.get("enabled"),
+                    out.get("quota_failures"),
+                    out.get("circuit_broken"),
+                )
+
+            _run_tracked_scheduler_job("employee_evolution_scan_loop", _run)
         except Exception:
             logger.exception("employee evolution scan loop failed")
 
@@ -709,15 +744,19 @@ def start_scheduler() -> None:
 
     def _employee_health_scan_loop() -> None:
         try:
-            from modstore_server.employee_health_scan import run_health_scan
 
-            out = run_health_scan()
-            if out.get("scanned"):
-                logger.info(
-                    "employee health scan: warned=%d deactivated=%d",
-                    len(out.get("warned") or []),
-                    len(out.get("deactivated") or []),
-                )
+            def _run() -> None:
+                from modstore_server.employee_health_scan import run_health_scan
+
+                out = run_health_scan()
+                if out.get("scanned"):
+                    logger.info(
+                        "employee health scan: warned=%d deactivated=%d",
+                        len(out.get("warned") or []),
+                        len(out.get("deactivated") or []),
+                    )
+
+            _run_tracked_scheduler_job("employee_health_scan_loop", _run)
         except Exception:
             logger.exception("employee health scan loop failed")
 
