@@ -63,6 +63,9 @@ def _default_enterprise_tenant_scope_for_tests(request):
     if request.node.fspath.basename == "test_tenant_scope.py":
         yield
         return
+    if request.node.get_closest_marker("release_gate"):
+        yield
+        return
     from app.infrastructure.tenant_scope import tenant_scope
 
     with tenant_scope(1):

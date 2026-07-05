@@ -1340,6 +1340,8 @@ async def grant_market_enterprise_entitlements_for_session(
         logger.exception("grant_market_enterprise_entitlements: load session meta failed")
     if market_user_id is None:
         token = await resolve_valid_market_access_token(sid)
+        from app.enterprise.mod_entitlements import _market_user_id_from_access_token
+
         market_user_id = _market_user_id_from_access_token(token)
     if market_user_id is None:
         return {"success": False, "message": "当前会话没有市场用户ID，无法写入市场行业权限"}
