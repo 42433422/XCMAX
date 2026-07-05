@@ -2197,7 +2197,7 @@ AiGroupConversation _aiGroupFromJson(Map<String, Object?> json) {
     id: _stringField(json, 'id'),
     name: _stringField(json, 'name'),
     memberCount: _intField(json, 'member_count'),
-    preview: _stringField(json, 'last_message_preview'),
+    preview: _aiGroupPreview(_stringField(json, 'last_message_preview')),
     timestampText: _friendlyGroupTimestamp(
       _stringField(json, 'last_message_at'),
     ),
@@ -2218,6 +2218,17 @@ AiGroupConversation _aiGroupFromJson(Map<String, Object?> json) {
         )
         .toList(growable: false),
   );
+}
+
+String _aiGroupPreview(String raw) {
+  final text = raw.trim();
+  if (text.isEmpty) return '';
+  if (text.contains('服务器队列') ||
+      text.contains('任务仍在后台运行') ||
+      (text.contains('状态：排队中') && text.contains('任务号'))) {
+    return '';
+  }
+  return text;
 }
 
 AiGroupConversation? _groupFromWrap(Map<String, Object?>? body) {
