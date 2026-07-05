@@ -259,7 +259,7 @@
 
         <template v-else-if="currentStep === 'seed-demo'">
           <h1>首笔业务数据</h1>
-          <p class="lead">为空企业写入 1 个演示客户与 1 个演示产品，便于工作台与 AI 验收。</p>
+          <p class="lead">{{ seedDemoLead }}</p>
           <p v-if="seedSummary" class="hint">{{ seedSummary }}</p>
           <div class="actions">
             <button type="button" class="btn primary" :disabled="seedBusy" @click="runSeedDemo">
@@ -271,7 +271,7 @@
 
         <template v-else-if="currentStep === 'first-ai-task'">
           <h1>AI 读写验收</h1>
-          <p class="lead">请确认 AI 能读取刚创建的「XC 演示客户」并给出摘要。</p>
+          <p class="lead">{{ aiDemoLead }}</p>
           <p v-if="aiDemoReply" class="hint">{{ aiDemoReply }}</p>
           <div class="actions">
             <button type="button" class="btn primary" :disabled="aiDemoBusy" @click="runFirstAiTask">
@@ -450,6 +450,10 @@ const loading = ref(false)
 const bootstrapBusy = ref(false)
 const seedBusy = ref(false)
 const seedSummary = ref('')
+const seedDemoLead = ref('为空企业写入演示客户与演示产品，便于工作台与 AI 验收。')
+const aiDemoLead = ref('请确认 AI 能读取刚创建的演示数据并给出摘要。')
+const aiDemoPrompt = ref('请列出当前租户下的演示客户「XC 演示客户」并一句话总结。')
+const demoCustomerMarker = ref('XC 演示客户')
 const aiDemoBusy = ref(false)
 const aiDemoReply = ref('')
 const baselinePlan = ref(null)
@@ -803,7 +807,14 @@ async function runSeedDemo() {
     }
     const customer = body?.data?.customer?.name || '演示客户'
     const product = body?.data?.product?.name || '演示产品'
+    const customerEntity = body?.data?.customer?.entity || '客户'
+    const productEntity = body?.data?.product?.entity || '产品'
     seedSummary.value = `已写入：${customer}、${product}`
+    seedDemoLead.value = `为空企业写入 1 个演示${customerEntity}与 1 个演示${productEntity}，便于工作台与 AI 验收。`
+    demoCustomerMarker.value = customer
+    const queries = body?.data?.demo_queries || {}
+    aiDemoPrompt.value = queries.ai_prompt || `请列出当前租户下的演示${customerEntity}「${customer}」并一句话总结。`
+    aiDemoLead.value = `请确认 AI 能读取刚创建的「${customer}」并给出摘要。`
     queueWorkspacePrefsSync({ onboarding_seed_done: true })
     goStep('first-ai-task')
   } catch (e) {
@@ -821,14 +832,14 @@ async function runFirstAiTask() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        message: '请列出当前租户下的演示客户「XC 演示客户」并一句话总结。',
+        message: aiDemoPrompt.value,
         session_id: `onboarding-${Date.now()}`,
       }),
     })
     const body = await res.json().catch(() => ({}))
     const text = String(body?.response || body?.message || body?.data?.response || '').trim()
     aiDemoReply.value = text || 'AI 已响应（请进入对话查看完整内容）'
-    if (text.includes('XC 演示客户') || text.includes('演示客户')) {
+    if (text.includes(demoCustomerMarker.value) || text.includes('演示客户') || text.includes('演示')) {
       queueWorkspacePrefsSync({ onboarding_ai_demo_done: true })
     }
   } catch (e) {
