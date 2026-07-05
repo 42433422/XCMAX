@@ -12,9 +12,9 @@ from pydantic import BaseModel
 from app.desktop_runtime import (
     build_sqlite_to_postgres_sync_plan,
     ensure_desktop_dirs,
+    is_desktop_mode,
     is_valid_remote_database_url,
     load_database_storage_catalog,
-    is_desktop_mode,
     load_deployment_catalog,
     load_or_create_deployment_profile,
     load_or_create_profile,
