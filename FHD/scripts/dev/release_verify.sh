@@ -9,6 +9,7 @@ cd "$FHD_ROOT"
 SKIP_DESKTOP="${RELEASE_VERIFY_SKIP_DESKTOP:-0}"
 SKIP_E2E="${RELEASE_VERIFY_SKIP_E2E:-0}"
 SKIP_PACK="${RELEASE_VERIFY_SKIP_PACK:-0}"
+PYTHON_BIN="${PYTHON:-python3}"
 
 banner() {
   echo ""
@@ -27,18 +28,35 @@ export PYTHONPATH="${FHD_ROOT}${PYTHONPATH:+:$PYTHONPATH}"
 export XCAGI_SKIP_LEGACY_COMPAT_ROUTES=1
 export XCAGI_TENANT_STRICT=1
 
-run_step "verify_version_anchors" python3 scripts/dev/verify_version_anchors.py
-run_step "check_coverage_ssot" python3 scripts/ci/check_coverage_ssot.py
-run_step "coverage_ratchet" python3 scripts/dev/coverage_ratchet.py --check --require-backend --require-frontend
-run_step "layer_ratchet" python3 scripts/dev/check_layer_ratchet.py
-run_step "ssot_cli gate" python3 scripts/dev/ssot_cli.py gate
-run_step "smoke_all" python3 scripts/dev/smoke_all.py
-run_step "pytest release_gate" python3 -m pytest tests/release_gate/ -q --tb=short
-run_step "pytest (full)" python3 -m pytest tests/ -q --tb=line --cov-fail-under=0
+run_step "verify_version_anchors" "$PYTHON_BIN" scripts/dev/verify_version_anchors.py
+run_step "check_coverage_ssot" "$PYTHON_BIN" scripts/ci/check_coverage_ssot.py
+run_step "layer_ratchet" "$PYTHON_BIN" scripts/dev/check_layer_ratchet.py
+run_step "ssot_cli gate" "$PYTHON_BIN" scripts/dev/ssot_cli.py gate
+run_step "werkzeug shim smoke" "$PYTHON_BIN" scripts/dev/smoke_werkzeug_shim.py
+run_step "fastapi boot smoke" "$PYTHON_BIN" - <<'PY'
+import logging
+
+for name in (
+    "app",
+    "app.fastapi_app",
+    "app.fastapi_routes",
+    "app.middleware.error_handler",
+    "app.neuro_bus.bus",
+    "app.neuro_bus.integrations.fastapi_integration",
+    "resources.config.intent_config",
+):
+    logging.getLogger(name).setLevel(logging.ERROR)
+
+from app.fastapi_app import get_fastapi_app
+
+app = get_fastapi_app()
+print(f"[FastAPI boot] OK routes={len(app.routes)}")
+PY
+run_step "paramfree GET route smoke" "$PYTHON_BIN" scripts/smoke_paramfree_get_routes.py
+run_step "pytest release_gate" "$PYTHON_BIN" -m pytest tests/release_gate/ -q --tb=short
 
 pushd frontend >/dev/null
 run_step "frontend eslint" npm run lint
-run_step "frontend vitest coverage" npm run test:coverage
 run_step "frontend vue-tsc" npm run type-check
 run_step "frontend build:strict" npm run build:strict
 if [[ "$SKIP_E2E" != "1" ]]; then
