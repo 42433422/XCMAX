@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+
 from app.services.relay_gitops import GIT_OP_KINDS, handle_git_op
 from app.utils.device_identity import get_stable_device_id
 from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
