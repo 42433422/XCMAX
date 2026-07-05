@@ -17,7 +17,9 @@ EMPLOYEE_ENTRY = (
 
 
 def _load_employee_module():
-    spec = importlib.util.spec_from_file_location("trademark_generation_employee_test", EMPLOYEE_ENTRY)
+    spec = importlib.util.spec_from_file_location(
+        "trademark_generation_employee_test", EMPLOYEE_ENTRY
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
