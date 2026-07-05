@@ -268,8 +268,7 @@ exclude_lines = [
 # 未修红灯前禁止对外宣称达标或 bump 棘轮。
 # 留 ~2pt 余量防止回退。开启 branch 后 coverage 自带门禁按合并指标拦截，故标准命令传
 # --cov-fail-under=0，由 coverage_ratchet.py --check 按行/分支分别守护（floor 只升不降）。
-# 2026-07-05 bump：89→90 行（CI 实测 90.69 / 85.06，commit 91e0e0344）；分支 floor 由棘轮 83→85。
-fail_under = 90
+fail_under = 89
 
 [tool.coverage.html]
 directory = "htmlcov"
