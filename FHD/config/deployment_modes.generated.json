@@ -1,18 +1,19 @@
 {
   "_generated_from": "config/deployment_modes.yaml",
   "_note": "DO NOT EDIT BY HAND — run scripts/dev/deployment_modes_ssot.py generate --apply",
-  "databaseTransitionPolicy": {},
   "defaultMode": "safe",
   "mobileConnectionPolicy": {
     "lan_direct": {
       "description": "手机和桌面端在同一局域网内使用桌面端地址直连。",
       "desktop_listen_service": "desktop-fhd",
-      "pair_via_qr": true
+      "pair_via_qr": true,
+      "super_employee_execution": "lan_first_with_relay_fallback"
     },
     "public_relay_with_lan_fallback": {
       "description": "优先使用公网/中继 AI 能力，局域网配对仍可作为手机端直连入口。",
       "desktop_listen_service": "desktop-fhd",
-      "pair_via_qr": true
+      "pair_via_qr": true,
+      "super_employee_execution": "lan_first_with_relay_fallback"
     }
   },
   "modes": [
