@@ -59,21 +59,20 @@ def test_relay_workorder_uses_real_repo_when_env_set(repo_root, monkeypatch):
     assert cwd.resolve() == repo_root.resolve()
 
 
-def test_relay_workorder_uses_verified_context_workspace_root(tmp_path):
-    """移动中继显式带 workspace_root 且本机验证为 git repo → 可作为 Trae/Codex 执行 cwd。"""
+def test_relay_workorder_rejects_untrusted_context_workspace_root(tmp_path, repo_root):
+    """移动中继显式带任意 git workspace_root → 不采信，避免客户端选择执行目录。"""
     (tmp_path / ".git").mkdir()
     svc = _svc()
     svc._grant = CapabilityGrant.product()
-    cwd = Path(
-        svc._cli_workspace(
-            {
-                "source": "mobile_relay",
-                "force_cli_direct": True,
-                "workspace_root": str(tmp_path),
-            }
-        )
+    cwd = svc._cli_workspace(
+        {
+            "source": "mobile_relay",
+            "force_cli_direct": True,
+            "workspace_root": str(tmp_path),
+        }
     )
-    assert cwd.resolve() == tmp_path.resolve()
+    assert Path(cwd).resolve() == repo_root.resolve()
+    assert Path(cwd).resolve() != tmp_path.resolve()
 
 
 def test_relay_workorder_uses_inferred_verified_workspace_root(tmp_path, monkeypatch):
