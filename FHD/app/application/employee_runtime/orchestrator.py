@@ -72,6 +72,10 @@ def _employee_dispatcher(
     input_data = {
         k: v for k, v in params.items() if k not in ("_runtime_context", "task", "user_request")
     }
+    input_data["invoke_mode"] = "collaboration_context"
+    input_data["source"] = "employee_collaboration"
+    input_data["client_surface"] = "employee_runtime"
+    input_data["root_employee_id"] = str(ctx.get("employee_id") or "")
     input_data["upstream_outputs"] = node_outputs
     input_data["skip_collaboration"] = True
     user_id = int(params.get("user_id") or ctx.get("user_id") or 0)

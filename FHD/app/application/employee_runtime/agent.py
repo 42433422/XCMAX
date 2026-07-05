@@ -242,7 +242,8 @@ class EmployeeAgent:
                 )
                 return self._blocked_result(pack, task, handler_list, gate, t0)
 
-            upstream = self._run_upstream_collaboration(task, payload, manifest, config)
+            if not self._is_interactive_chat_payload(payload):
+                upstream = self._run_upstream_collaboration(task, payload, manifest, config)
             if upstream and upstream.get("node_outputs"):
                 payload["upstream_outputs"] = upstream["node_outputs"]
                 payload["collaboration"] = {
@@ -274,6 +275,26 @@ class EmployeeAgent:
             else:
                 memory = _ex._memory_light({"employee_id": employee_id})
                 reasoning = _ex._cognition_fhd(config, perceived, memory, task)
+                if reasoning.get("error") and self._is_collaboration_context_payload(payload):
+                    from app.application.employee_runtime.metrics import record_employee_run
+
+                    result = self._collaboration_context_result(
+                        pack,
+                        manifest,
+                        task,
+                        handler_list,
+                        reasoning,
+                        t0,
+                        mem_ctx,
+                        degraded=True,
+                    )
+                    record_employee_run(
+                        employee_id,
+                        success=True,
+                        task=task,
+                        summary=self._summarize(result["result"]),
+                    )
+                    return result
                 if reasoning.get("error") and handler_list != ["direct_python"]:
                     if self._is_interactive_chat_payload(payload):
                         from app.application.employee_runtime.metrics import record_employee_run
@@ -288,6 +309,50 @@ class EmployeeAgent:
                             t0,
                         )
                     return self._cognition_failed_result(pack, task, handler_list, reasoning, t0)
+
+            if self._is_collaboration_context_payload(payload):
+                from app.application.employee_runtime.metrics import record_employee_run
+
+                result = self._collaboration_context_result(
+                    pack,
+                    manifest,
+                    task,
+                    handler_list,
+                    reasoning,
+                    t0,
+                    mem_ctx,
+                )
+                record_employee_run(
+                    employee_id,
+                    success=True,
+                    task=task,
+                    summary=self._summarize(result["result"]),
+                )
+                return result
+
+            if self._is_interactive_chat_payload(payload):
+                from app.application.employee_runtime.metrics import record_employee_run
+
+                chat_result = self._interactive_chat_reply_result(
+                    pack,
+                    manifest,
+                    task,
+                    handler_list,
+                    reasoning,
+                    t0,
+                    upstream,
+                    mem_ctx,
+                )
+                summary = self._summarize(chat_result["result"])
+                record_employee_run(employee_id, success=True, task=task, summary=summary)
+                memory_mgr.remember(
+                    task,
+                    summary,
+                    user_id=user_id,
+                    session_id=session_id,
+                    success=True,
+                )
+                return chat_result
 
             agent_tools = (
                 self._build_agent_tools(manifest, config) if "agent" in handler_list else None
@@ -424,6 +489,64 @@ class EmployeeAgent:
             "mobile_app",
         }
 
+    @staticmethod
+    def _is_collaboration_context_payload(payload: dict[str, Any]) -> bool:
+        mode = str(payload.get("invoke_mode") or payload.get("mode") or "").strip().lower()
+        source = str(payload.get("source") or payload.get("client_surface") or "").strip().lower()
+        return mode in {"collaboration_context", "upstream_context"} or source in {
+            "employee_collaboration",
+            "collaboration",
+        }
+
+    def _collaboration_context_result(
+        self,
+        pack: dict[str, Any],
+        manifest: dict[str, Any],
+        task: str,
+        handler_list: list[str],
+        reasoning: dict[str, Any],
+        t0: float,
+        mem_ctx: MemoryContext,
+        *,
+        degraded: bool = False,
+    ) -> dict[str, Any]:
+        employee_meta = (
+            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        )
+        label = str(
+            manifest.get("name")
+            or employee_meta.get("label")
+            or pack.get("pack_id")
+            or self.employee_id
+        ).strip()
+        text = str((reasoning or {}).get("reasoning") or "").strip()
+        if not text:
+            error = str((reasoning or {}).get("error") or "").strip()
+            text = f"{label} 协作上下文暂不可用" + (f"：{error}" if error else "。")
+        return {
+            "employee_id": self.employee_id,
+            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
+            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
+            "success": True,
+            "result": {
+                "task": task,
+                "handlers": handler_list,
+                "outputs": [
+                    {
+                        "handler": "collaboration_context",
+                        "ok": True,
+                        "output": text,
+                    }
+                ],
+                "summary": "collaboration context",
+                **({"cognition_error": reasoning.get("error")} if degraded else {}),
+            },
+            "executed_at": datetime.now(UTC).isoformat(),
+            "source": "employee_runtime.local",
+            "memory_used": mem_ctx.has_content,
+            "degraded": degraded,
+        }
+
     def _interactive_chat_fallback_result(
         self,
         pack: dict[str, Any],
@@ -467,6 +590,57 @@ class EmployeeAgent:
             "executed_at": datetime.now(UTC).isoformat(),
             "source": "employee_runtime.local",
             "degraded": True,
+        }
+
+    def _interactive_chat_reply_result(
+        self,
+        pack: dict[str, Any],
+        manifest: dict[str, Any],
+        task: str,
+        handler_list: list[str],
+        reasoning: dict[str, Any],
+        t0: float,
+        upstream: dict[str, Any] | None,
+        mem_ctx: MemoryContext,
+    ) -> dict[str, Any]:
+        employee_meta = (
+            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
+        )
+        label = str(
+            manifest.get("name")
+            or employee_meta.get("label")
+            or pack.get("pack_id")
+            or self.employee_id
+        ).strip()
+        text = str((reasoning or {}).get("reasoning") or "").strip()
+        if not text:
+            text = (
+                f"我在，{label} 已接到消息。你可以继续补充要咨询的问题；"
+                "如果需要我执行改文件、写库或发布类动作，请明确任务目标、范围和验收标准。"
+            )
+        return {
+            "employee_id": self.employee_id,
+            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
+            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
+            "success": True,
+            "result": {
+                "task": task,
+                "handlers": handler_list,
+                "outputs": [
+                    {
+                        "handler": "interactive_chat",
+                        "ok": True,
+                        "output": text,
+                    }
+                ],
+                "summary": "interactive chat reply",
+            },
+            "executed_at": datetime.now(UTC).isoformat(),
+            "source": "employee_runtime.local",
+            "memory_used": mem_ctx.has_content,
+            "collaboration_upstream": upstream
+            if upstream and not upstream.get("skipped")
+            else None,
         }
 
 
