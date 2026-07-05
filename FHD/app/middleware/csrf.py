@@ -59,6 +59,12 @@ def _csrf_exempt_internal_api(scope: Scope) -> bool:
     return path.startswith("/api/internal/")
 
 
+def _csrf_exempt_sync_api(scope: Scope) -> bool:
+    """节点同步入口：桌面端 / 企业端后台互推变更，无浏览器 csrf_token。"""
+    path = (scope.get("path") or "").rstrip("/")
+    return path.endswith("/api/xcmax/sync/receive")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -103,6 +109,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_internal_api(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_sync_api(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")
