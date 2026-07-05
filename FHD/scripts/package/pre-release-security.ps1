@@ -1,7 +1,9 @@
 param(
   [ValidateSet('pre', 'post')]
   [string]$Phase = 'pre',
-  [string]$Version = '10.0.0'
+  [string]$Version = '10.0.0',
+  [ValidateSet('personal', 'enterprise', 'all')]
+  [string]$ProductSku = 'all'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -10,6 +12,7 @@ Set-Location $Root
 $Version = $Version.TrimStart('v', 'V')
 $erpMod = 'xcagi-erp-domain-bridge'
 $excludedMods = @('taiyangniao-pro', 'sz-qsm-pro', '_employees', 'industry-solutions')
+$skus = if ($ProductSku -eq 'all') { @('personal', 'enterprise') } else { @($ProductSku) }
 
 function Fail([string]$msg) {
   Write-Error "[pre-release-security] $msg"
@@ -30,6 +33,45 @@ function Scan-SecretsInTree {
     }
   foreach ($h in $hits) {
     Fail "${Label} sensitive file: $($h.FullName)"
+  }
+}
+
+function Assert-WindowsGuiSubsystem {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if (-not (Test-Path $Path)) {
+    Fail "$Label missing: $Path"
+  }
+
+  $stream = [System.IO.File]::OpenRead($Path)
+  $reader = New-Object System.IO.BinaryReader($stream)
+  try {
+    if ($reader.ReadUInt16() -ne 0x5A4D) {
+      Fail "$Label is not a PE executable: $Path"
+    }
+    $stream.Seek(0x3C, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $peOffset = $reader.ReadUInt32()
+    $stream.Seek($peOffset, [System.IO.SeekOrigin]::Begin) | Out-Null
+    if ($reader.ReadUInt32() -ne 0x00004550) {
+      Fail "$Label has invalid PE signature: $Path"
+    }
+    $stream.Seek(20, [System.IO.SeekOrigin]::Current) | Out-Null
+    $optionalHeaderOffset = $stream.Position
+    $magic = $reader.ReadUInt16()
+    if ($magic -ne 0x10B -and $magic -ne 0x20B) {
+      Fail "$Label has unsupported PE optional header: 0x$($magic.ToString('x'))"
+    }
+    $stream.Seek($optionalHeaderOffset + 68, [System.IO.SeekOrigin]::Begin) | Out-Null
+    $subsystem = $reader.ReadUInt16()
+    if ($subsystem -ne 2) {
+      Fail "$Label must be Windows GUI subsystem (2), got $subsystem. Console subsystem builds show a terminal window."
+    }
+    Write-Host "OK $Label Windows GUI subsystem"
+  } finally {
+    $reader.Dispose()
+    $stream.Dispose()
   }
 }
 
@@ -64,8 +106,9 @@ if ($Phase -eq 'pre') {
   if (Test-Path $dotEnv) {
     Write-Warning 'Root .env exists; PyInstaller spec must ship only .env.example'
   }
-  Test-StagedSku 'personal' $false
-  Test-StagedSku 'enterprise' $true
+  foreach ($sku in $skus) {
+    Test-StagedSku $sku ($sku -eq 'enterprise')
+  }
   & "$PSScriptRoot\verify-desktop-database-default.ps1"
   Write-Host 'Pre-build security: PASSED'
   exit 0
@@ -86,7 +129,7 @@ if ($flatSku) {
   Fail "安装包必须位于 SKU 子目录内，不得放在 release 根: $($flatSku.Name -join ', ')"
 }
 
-foreach ($sku in @('personal', 'enterprise')) {
+foreach ($sku in $skus) {
   $skuDir = Join-Path $releaseRoot $sku
   if (-not (Test-Path $skuDir)) {
     Fail "missing SKU dir: $skuDir"
@@ -95,9 +138,14 @@ foreach ($sku in @('personal', 'enterprise')) {
   if (-not (Test-Path $backendExe)) {
     Fail "$sku missing packaged backend executable: $backendExe"
   }
+  Assert-WindowsGuiSubsystem -Path $backendExe -Label "$sku packaged backend executable"
   $modsDir = Join-Path $skuDir 'win-unpacked\resources\backend\_internal\mods'
   if (Test-Path $modsDir) {
+    $verifyErrorCount = $Error.Count
     & "$PSScriptRoot\verify-bundled-mods.ps1" -ProductSku $sku -UnpackedDir $modsDir
+    if (-not $? -or $Error.Count -gt $verifyErrorCount) {
+      Fail "verify-bundled-mods failed for $sku"
+    }
     Scan-SecretsInTree $modsDir "built-mods-$sku"
   } else {
     Fail "$sku missing bundled mods dir: $modsDir"

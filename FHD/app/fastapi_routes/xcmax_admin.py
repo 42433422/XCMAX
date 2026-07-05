@@ -52,34 +52,44 @@ def _require_market_admin_session(request: Request) -> JSONResponse | None:
 
 def _release_train_snapshot() -> dict[str, Any]:
     """读取 release_train SSOT；优先 modstore 模块，回退 FHD/config JSON。"""
+    from pathlib import Path
+
+    def _default_snapshot(*, note: str | None = None) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "epoch": "1.0.0.0",
+            "current": "1.0.0.0",
+            "started_at": "2026-06-04",
+            "day_index": 0,
+        }
+        if note:
+            data["note"] = note
+        return data
+
+    def _from_file(path: Path) -> dict[str, Any]:
+        if not path.is_file():
+            return _default_snapshot(note="ssot missing")
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                return raw
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("release-train json read failed: %s", exc)
+        return _default_snapshot()
+
+    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
+    if mono:
+        path = Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
+        return _from_file(path)
+
     try:
         from modstore_server.release_train import snapshot_public
 
         return cast("dict[str, Any]", snapshot_public())
     except RECOVERABLE_ERRORS:
         pass
-    from pathlib import Path
 
-    mono = (os.environ.get("XCMAX_MONOREPO_ROOT") or "").strip()
-    if mono:
-        path = Path(mono).expanduser().resolve() / "FHD" / "config" / "release_train.json"
-    else:
-        path = Path(__file__).resolve().parents[2] / "config" / "release_train.json"
-    if not path.is_file():
-        return {
-            "epoch": "1.0.0.0",
-            "current": "1.0.0.0",
-            "started_at": "2026-06-04",
-            "day_index": 0,
-            "note": "ssot missing",
-        }
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(raw, dict):
-            return raw
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("release-train json read failed: %s", exc)
-    return {"epoch": "1.0.0.0", "current": "1.0.0.0", "day_index": 0}
+    path = Path(__file__).resolve().parents[2] / "config" / "release_train.json"
+    return _from_file(path)
 
 
 async def _market_admin_proxy(

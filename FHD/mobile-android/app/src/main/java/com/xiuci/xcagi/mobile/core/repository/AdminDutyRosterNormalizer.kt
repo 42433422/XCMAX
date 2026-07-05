@@ -9,7 +9,7 @@ internal object AdminDutyRosterNormalizer {
 
     fun normalize(mods: List<ModInfo>): List<ModInfo> =
         mods.map { mod ->
-            if (mod.id == ADMIN_DUTY_MOD_ID) normalizeDutyMod(mod) else mod
+            if (mod.id == ADMIN_DUTY_MOD_ID || mod.id == "admin-duty") normalizeDutyMod(mod) else mod
         }
 
     fun isCurrent(mods: List<ModInfo>): Boolean {
@@ -36,6 +36,7 @@ internal object AdminDutyRosterNormalizer {
             }
         val featureCount = mod.frontend_menu.size
         return mod.copy(
+            id = ADMIN_DUTY_MOD_ID,
             description =
                 "${DutyRosterSsot.PLANNED_EMPLOYEE_COUNT} 位管理端 duty AI 员工与 ${featureCount} 个管理功能入口",
             workflow_employees = employees,
@@ -45,13 +46,21 @@ internal object AdminDutyRosterNormalizer {
     private fun WorkflowEmployeeInfo.normalizedDutyEmployee(employeeId: String): WorkflowEmployeeInfo {
         val fallback = fallbackEmployee(employeeId)
         val resolvedLabel =
-            label.ifBlank { panel_title }.ifBlank { DutyRosterSsot.EMPLOYEE_LABELS[employeeId].orEmpty() }
+            if (employeeId == "user-customer-service-officer") {
+                fallback.label
+            } else {
+                label.ifBlank { panel_title }.ifBlank { DutyRosterSsot.EMPLOYEE_LABELS[employeeId].orEmpty() }
+            }
                 .ifBlank { employeeId }
         return copy(
             id = employeeId,
             label = resolvedLabel,
-            panel_title = panel_title.ifBlank { resolvedLabel },
-            panel_summary = panel_summary.ifBlank { fallback.panel_summary },
+            panel_title =
+                if (employeeId == "user-customer-service-officer") resolvedLabel
+                else panel_title.ifBlank { resolvedLabel },
+            panel_summary =
+                if (employeeId == "user-customer-service-officer") fallback.panel_summary
+                else panel_summary.ifBlank { fallback.panel_summary },
             api_base_path = api_base_path.ifBlank { fallback.api_base_path },
             phone_channel = phone_channel.ifBlank { fallback.phone_channel },
             workflow_placeholder = false,
@@ -80,5 +89,9 @@ internal object AdminDutyRosterNormalizer {
     }
 
     private fun plannedIdsInOrder(): List<String> =
-        DutyRosterSsot.AREA_EMPLOYEE_IDS.values.flatten().distinct()
+        listOf("user-customer-service-officer") +
+            DutyRosterSsot.AREA_EMPLOYEE_IDS.values
+                .flatten()
+                .filterNot { it == "user-customer-service-officer" }
+                .distinct()
 }

@@ -48,7 +48,8 @@
               :aria-label="child.name"
               :aria-current="activeView === child.key ? 'page' : undefined"
               :title="child.name"
-              @click="$emit('select-view', child.key)"
+              @click.stop="activateChild(child.key)"
+              @pointerup.stop="activateChildFromPointer(child.key, $event)"
             >
               <span class="menu-item-icon" aria-hidden="true">
                 <i class="fa" :class="child.iconClass"></i>
@@ -105,9 +106,24 @@ const props = defineProps({
   },
 })
 
-defineEmits(['parent-click', 'select-view', 'reorder-pointer-down', 'keydown'])
-
 const hasChildren = computed(() => Boolean(props.item.children?.length))
+
+const emit = defineEmits(['parent-click', 'select-view', 'reorder-pointer-down', 'keydown'])
+
+const lastChildPointerUpAt = new Map()
+
+function activateChild(key) {
+  const now = Date.now()
+  const last = lastChildPointerUpAt.get(key) || 0
+  if (now - last < 80) return
+  lastChildPointerUpAt.set(key, now)
+  emit('select-view', key)
+}
+
+function activateChildFromPointer(key, event) {
+  if (event.button !== 0) return
+  activateChild(key)
+}
 </script>
 
 <style scoped>

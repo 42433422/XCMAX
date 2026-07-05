@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.infrastructure.products import db_read
+from app.infrastructure.tenant_scope import tenant_scope
 
 
 class TestReadEngineSelection:
@@ -89,7 +90,9 @@ class TestLoadProductsForPriceListByCustomer:
         mock_conn.execute.return_value = mock_result
         mock_insp = MagicMock()
         mock_insp.get_table_names.return_value = ["products"]
+        mock_insp.get_columns.return_value = [{"name": "tenant_id"}]
         with (
+            tenant_scope(7),
             patch("app.infrastructure.products.db_read._read_engine", return_value=mock_engine),
             patch("app.infrastructure.products.db_read.inspect", return_value=mock_insp),
         ):

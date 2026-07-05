@@ -8,6 +8,7 @@ import {
   ipcMain,
   nativeImage,
   screen,
+  session,
   shell
 } from 'electron'
 import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
@@ -22,14 +23,18 @@ const APP_NAME = 'XCAGI'
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
-/** macOS 12+「隔空播放接收器」占用 :5000，TCP 可达但返回 AirTunes 空 403 → Electron 白屏。 */
+/** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 function resolveDefaultDesktopPort(): number {
   const env = process.env.XCAGI_DESKTOP_PORT
   if (env) {
-    return Number(env)
+    const port = Number(env)
+    if (Number.isFinite(port) && port > 0 && port < 65536) {
+      return Math.floor(port)
+    }
   }
-  return process.platform === 'darwin' ? 17500 : 5000
+  return 17500
 }
 
 const DEFAULT_PORT = resolveDefaultDesktopPort()
@@ -49,8 +54,8 @@ function isPortAvailable(port: number): Promise<boolean> {
 /** 端口被占时给用户的引导文案。 */
 function portOccupiedHint(port: number): string {
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? '\n\nmacOS「隔空播放接收器」常占用 5000，请在系统设置 → 通用 → 隔空播放接收器 中关闭，或设置环境变量 XCAGI_DESKTOP_PORT=17500 后重启。'
+    port === 5000
+      ? '\n\n5000 是历史开发端口，容易被系统服务或本机代理占用；正式桌面版默认端口为 17500。'
       : ''
   return (
     `端口 ${port} 已被占用，XCAGI 后端无法启动。\n\n` +
@@ -78,7 +83,7 @@ const SKU_UPDATE_URL: Record<ProductSku, string> = {
  */
 const ED25519_PUBLIC_KEY_PEM = [
   '-----BEGIN PUBLIC KEY-----',
-  'MCowBQYDK2VwAyEAQTSb+dYGOM3dwJkMcrTysZz1uUaUB9oCIFga2k+iHBc=',
+  'MCowBQYDK2VwAyEAO6AeYJ05qwfSgpGR7+FZiL6cY0uGtSJVRqIiws3P6N8=',
   '-----END PUBLIC KEY-----'
 ].join('\n')
 
@@ -106,7 +111,7 @@ function readPackagedProductSku(): ProductSku | null {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sku?: string }
+      const raw = JSON.parse(readJsonTextFile(filePath)) as { sku?: string }
       const sku = String(raw.sku || '').trim().toLowerCase()
       if (sku === 'personal' || sku === 'enterprise') {
         return sku
@@ -116,6 +121,17 @@ function readPackagedProductSku(): ProductSku | null {
     }
   }
   return null
+}
+
+function readJsonTextFile(filePath: string): string {
+  const buffer = fs.readFileSync(filePath)
+  let text: string
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    text = buffer.toString('utf16le')
+  } else {
+    text = buffer.toString('utf8')
+  }
+  return text.replace(/^\uFEFF/, '')
 }
 
 function backendEditionEnv(): Record<string, string> {
@@ -268,7 +284,7 @@ function packagedBackendHealthTimeoutMs(): number {
   return process.platform === 'win32' ? 180_000 : 120_000
 }
 
-/** 须确认 uvicorn /api/health，避免 macOS AirPlay 占 5000 时 TCP 误判就绪。 */
+/** 须确认 uvicorn /api/health，避免 TCP 可达但不是 XCAGI 后端时误判就绪。 */
 async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
@@ -278,7 +294,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
       })
       const server = (response.headers.get('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
-        startupMarks.tcp5000Ms = Date.now() - (startupMarks.backendSpawnMs ?? started)
+        startupMarks.backendHealthMs = Date.now() - (startupMarks.backendSpawnMs ?? started)
         return
       }
       if (server.includes('airtunes')) {
@@ -290,8 +306,8 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     await new Promise(resolve => setTimeout(resolve, 500))
   }
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? ' macOS「隔空播放接收器」占用 5000，请在系统设置中关闭，或设置 XCAGI_DESKTOP_PORT=17500。'
+    port === 5000
+      ? ' 5000 是历史开发端口，正式桌面版默认端口为 17500；请清理 XCAGI_DESKTOP_PORT 后重启。'
       : ''
   const firstBootHint = app.isPackaged
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
@@ -303,7 +319,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
 
 type DesktopStartupMarks = {
   backendSpawnMs?: number
-  tcp5000Ms?: number
+  backendHealthMs?: number
   desktopStatusMs?: number
 }
 
@@ -318,7 +334,7 @@ function readPackagedAppVersion(): string {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = fs.readFileSync(filePath, 'utf8').trim()
+      const raw = readJsonTextFile(filePath).trim()
       if (filePath.endsWith('version.txt')) return raw || 'unknown'
       const json = JSON.parse(raw) as { sku?: string; schema_version?: number }
       return `${json.sku || 'enterprise'}-${json.schema_version ?? 1}`
@@ -577,6 +593,40 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
+function isTrustedDesktopOrigin(rawUrl?: string): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(DEFAULT_PORT)
+  } catch {
+    return false
+  }
+}
+
+function configureDesktopMediaPermissions(): void {
+  const ses = session.defaultSession
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const requestUrl =
+      (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+  })
+  ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const origin = requestingOrigin || webContents?.getURL() || ''
+    return wantsAudio && isTrustedDesktopOrigin(origin)
+  })
+}
+
 function stopBackend(): void {
   const child = backendProcess
   backendProcess = null
@@ -605,6 +655,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1180,
     minHeight: 760,
     title: APP_NAME,
+    autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -622,6 +673,10 @@ async function createWindow(): Promise<void> {
   winOpts.show = false
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  if (process.platform !== 'darwin') {
+    mainWindow.setAutoHideMenuBar(true)
+    mainWindow.setMenuBarVisibility(false)
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -746,6 +801,8 @@ function createTray(): void {
     Menu.buildFromTemplate([
       { label: '显示 XCAGI', click: () => mainWindow?.show() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
+      { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
+      { label: '检查更新', click: () => void checkForUpdates() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }
     ])
@@ -839,6 +896,7 @@ if (!gotLock) {
       }
     )
 
+    configureDesktopMediaPermissions()
     createMenu()
     createTray()
     await startBackend()

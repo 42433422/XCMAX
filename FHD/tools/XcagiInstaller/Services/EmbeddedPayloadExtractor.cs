@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Cryptography;
 
 namespace XcagiInstaller.Services;
 
@@ -35,19 +36,22 @@ public static class EmbeddedPayloadExtractor
         if (!HasEmbeddedPayload())
             return null;
 
-        await using var stream = HostAssembly.GetManifestResourceStream(PayloadResourceName);
-        if (stream == null)
+        await using var hashStream = HostAssembly.GetManifestResourceStream(PayloadResourceName);
+        if (hashStream == null)
             return null;
 
         Directory.CreateDirectory(CacheDirectory);
         var cacheExe = Path.Combine(CacheDirectory, "XCAGI-Setup-payload.exe");
         var stampFile = cacheExe + ".stamp";
-        var expectedSize = stream.Length;
+        var expectedSize = hashStream.Length;
+        var expectedHash = await ComputeSha256Async(hashStream, cancellationToken)
+            .ConfigureAwait(false);
+        var expectedStamp = $"{expectedSize}:{expectedHash}";
 
         if (File.Exists(cacheExe) && File.Exists(stampFile))
         {
             var stamp = await File.ReadAllTextAsync(stampFile, cancellationToken).ConfigureAwait(false);
-            if (long.TryParse(stamp, out var cachedSize) && cachedSize == expectedSize &&
+            if (stamp.Trim().Equals(expectedStamp, StringComparison.OrdinalIgnoreCase) &&
                 new FileInfo(cacheExe).Length == expectedSize)
             {
                 if (progress != null)
@@ -64,6 +68,10 @@ public static class EmbeddedPayloadExtractor
         }
 
         var tempPath = cacheExe + ".tmp";
+        await using var stream = HostAssembly.GetManifestResourceStream(PayloadResourceName);
+        if (stream == null)
+            return null;
+
         try
         {
             if (File.Exists(tempPath))
@@ -94,7 +102,7 @@ public static class EmbeddedPayloadExtractor
             if (File.Exists(cacheExe))
                 File.Delete(cacheExe);
             File.Move(tempPath, cacheExe);
-            await File.WriteAllTextAsync(stampFile, expectedSize.ToString(), cancellationToken)
+            await File.WriteAllTextAsync(stampFile, expectedStamp, cancellationToken)
                 .ConfigureAwait(false);
             progress?.Report(100);
             return cacheExe;
@@ -115,6 +123,13 @@ public static class EmbeddedPayloadExtractor
 
             throw;
         }
+    }
+
+    private static async Task<string> ComputeSha256Async(Stream stream, CancellationToken cancellationToken)
+    {
+        using var sha = SHA256.Create();
+        var hash = await sha.ComputeHashAsync(stream, cancellationToken).ConfigureAwait(false);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     public static string? ReadEmbeddedLicense()

@@ -11,7 +11,7 @@ final class ChatViewModel: ObservableObject {
 
     let sessionId: String
     let peerKind: ChatPeerKind
-    /// 超级员工工具("codex" | "claude");普通会话为 nil。
+    /// 超级员工工具("codex" | "cursor" | "claude" | "trae");普通会话为 nil。
     let superTool: String?
 
     private var streamTask: Task<Void, Never>?
@@ -19,11 +19,7 @@ final class ChatViewModel: ObservableObject {
     init(sessionId: String, peerKind: ChatPeerKind) {
         self.sessionId = sessionId
         self.peerKind = peerKind
-        switch peerKind {
-        case .codex: superTool = "codex"
-        case .claude: superTool = "claude"
-        default: superTool = nil
-        }
+        superTool = peerKind.superTool
     }
 
     /// 冷启动:从本地缓存秒出历史(对标 Android loadChatCache)。
@@ -105,7 +101,7 @@ final class ChatViewModel: ObservableObject {
         }
     }
 
-    /// 超级员工派工(codex/claude):提交一条消息,展示即时直答 / 派工回执,拉取最新历史。
+    /// 超级员工派工(codex/cursor/claude/trae):提交一条消息,展示即时直答 / 派工回执,拉取最新历史。
     private func dispatchSuperEmployee(text: String, tool: String, session: SessionManager) {
         cache(session, role: "user", text: text)
         messages.append(ChatMessage(role: .user, text: text))

@@ -7,6 +7,7 @@ import tempfile
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any
+from urllib.parse import quote
 
 from app.application.mod_store_catalog_app import catalog_download_to, catalog_get_json
 from app.desktop_runtime.paths import get_desktop_data_dir
@@ -16,7 +17,7 @@ from app.mod_sdk.customer_delivery import (
 )
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
-_ALLOWED_TOP_LEVELS = {"424", "config", "data", "delivery-manifest.json"}
+_ALLOWED_TOP_LEVELS = {"424", "config", "data", "mods", "delivery-manifest.json"}
 
 
 def _safe_member_relpath(name: str) -> Path | None:
@@ -73,6 +74,7 @@ async def install_customer_delivery_seed_package(
     *,
     mod_id: str,
     industry_id: str = "",
+    market_token: str = "",
 ) -> dict[str, Any]:
     """按账号定制 Mod 下载并应用客户交付种子包。"""
     mid = str(mod_id or "").strip()
@@ -96,11 +98,29 @@ async def install_customer_delivery_seed_package(
     if not pkg_id or not version:
         return {"success": False, "message": "交付种子包缺少 pkg_id/version", "mod_id": mid}
 
+    token = str(market_token or "").strip()
+    if not token:
+        return {
+            "success": False,
+            "message": "缺少市场登录凭证，无法下载账号专属交付种子包",
+            "mod_id": mid,
+            "package": {"pkg_id": pkg_id, "version": version, "artifact": pkg.get("artifact")},
+        }
+    auth_header = token if token.lower().startswith("bearer ") else f"Bearer {token}"
+    protected_path = (
+        f"/api/enterprise/customer-delivery-seeds/{quote(pkg_id, safe='')}/"
+        f"{quote(version, safe='')}/download?mod_id={quote(mid, safe='')}"
+    )
+
     tmp = tempfile.NamedTemporaryFile(prefix="xcagi-delivery-seed-", suffix=".zip", delete=False)
     tmp_path = Path(tmp.name)
     tmp.close()
     try:
-        await catalog_download_to(f"/packages/{pkg_id}/{version}/download", tmp_path)
+        await catalog_download_to(
+            protected_path,
+            tmp_path,
+            headers={"Authorization": auth_header},
+        )
         data_root = Path(get_desktop_data_dir()).resolve()
         extracted = extract_customer_delivery_seed(tmp_path, data_root)
 
@@ -113,6 +133,15 @@ async def install_customer_delivery_seed_package(
 
             applied = bool(apply_sunbird_roster_seed_if_needed(data_root))
 
+        route_ready = False
+        try:
+            from app.infrastructure.mods.mod_manager import ensure_mod_api_ready, get_mod_manager
+
+            get_mod_manager().scan_mods(use_cache=False)
+            route_ready = bool(ensure_mod_api_ready(mid))
+        except RECOVERABLE_ERRORS:
+            route_ready = False
+
         return {
             "success": True,
             "message": "客户交付种子包已下载并应用",
@@ -122,6 +151,7 @@ async def install_customer_delivery_seed_package(
             "data_root": str(data_root),
             "extracted_files": extracted,
             "applied": applied,
+            "route_ready": route_ready,
         }
     except RECOVERABLE_ERRORS as exc:
         return {

@@ -965,9 +965,9 @@ class TestReportServiceUncoveredBranches:
     def test_get_sales_report_group_by_customer(self, svc):
         mock_db = MagicMock()
         record = MagicMock()
-        record.customer_name = "c1"
-        record.customer_id = 1
-        record.total_amount = Decimal("100")
+        record.purchase_unit = "c1"
+        record.unit_id = 1
+        record.amount = Decimal("100")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
@@ -979,8 +979,8 @@ class TestReportServiceUncoveredBranches:
     def test_get_sales_report_group_by_date(self, svc):
         mock_db = MagicMock()
         record = MagicMock()
-        record.shipment_date = datetime(2026, 1, 1)
-        record.total_amount = Decimal("50")
+        record.created_at = datetime(2026, 1, 1)
+        record.amount = Decimal("50")
         mock_db.query.return_value.group_by.return_value.all.return_value = [(record, 1)]
 
         with patch("app.services.report_service.get_db", return_value=_mock_db_ctx(mock_db)):
@@ -1002,8 +1002,8 @@ class TestReportServiceUncoveredBranches:
     def test_get_sales_report_with_date_filters(self, mock_func, mock_sr, svc):
         from sqlalchemy import column
 
-        mock_sr.shipment_date = column("shipment_date")
-        mock_sr.customer_id = column("customer_id")
+        mock_sr.created_at = column("created_at")
+        mock_sr.unit_id = column("unit_id")
         mock_sr.id = column("id")
         mock_func.count.return_value.label.return_value = "record_count"
 
@@ -1088,9 +1088,9 @@ class TestReportServiceUncoveredBranches:
     ):
         from sqlalchemy import column
 
-        mock_sr.total_amount = column("total_amount")
+        mock_sr.amount = column("amount")
         mock_sr.id = column("id")
-        mock_sr.shipment_date = column("shipment_date")
+        mock_sr.created_at = column("created_at")
         mock_po.id = column("id")
         mock_po.total_amount = column("total_amount")
         mock_po.order_date = column("order_date")

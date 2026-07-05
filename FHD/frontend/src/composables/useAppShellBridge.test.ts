@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAppShellBridge } from './useAppShellBridge'
+import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 
 vi.mock('@/constants/clientModeTiers', () => ({
   isClientModeTiersUiEnabled: () => true,
   PRO_INTENT_EXPERIENCE_KEY: 'xcagi_pro_intent_experience',
   resetClientModeTierLocalState: vi.fn(),
+}))
+
+vi.mock('@/utils/sidebarNavigation', () => ({
+  navigateFromSidebarKey: vi.fn(async () => true),
 }))
 
 function makeRouter() {
@@ -38,7 +43,7 @@ describe('useAppShellBridge', () => {
     const bridge = useAppShellBridge(router, makeProMode())
     bridge.installSwitchViewBridge()
     window.dispatchEvent(new CustomEvent('xcagi:switch-view', { detail: { view: 'products' } }))
-    expect(router.push).toHaveBeenCalledWith({ name: 'products' })
+    expect(navigateFromSidebarKey).toHaveBeenCalledWith(router, 'products')
     bridge.uninstall()
   })
 

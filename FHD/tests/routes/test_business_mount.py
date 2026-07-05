@@ -51,3 +51,26 @@ def test_register_business_routes_smoke() -> None:
     business_mount.register_business_routes(app, registry)
     assert len(registry.names()) >= 5
     assert "agent" in registry.names()
+    assert "taiyangniao_attendance_compat" in registry.names()
+
+
+def test_mod_taiyangniao_pro_exposes_attendance_api_when_ssot_present() -> None:
+    assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is True
+
+
+def test_load_taiyangniao_attendance_compat_router_skips_when_mod_present() -> None:
+    router = business_mount._load_taiyangniao_attendance_compat_router()
+    assert router.routes == []
+
+
+def test_load_taiyangniao_attendance_compat_router_loads_routes_when_mod_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        business_mount,
+        "_mod_taiyangniao_pro_exposes_attendance_api",
+        lambda: False,
+    )
+    router = business_mount._load_taiyangniao_attendance_compat_router()
+    paths = {getattr(r, "path", "") for r in router.routes}
+    assert "/api/mod/taiyangniao-pro/attendance/rules" in paths

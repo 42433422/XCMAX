@@ -24,11 +24,48 @@ PACKAGE_ID = "sunbird-delivery-seed"
 DEFAULT_VERSION = "1.0.0"
 ARTIFACT = "customer_delivery_seed"
 
-PACKAGE_FILES = (
+PACKAGE_REQUIRED_FILES = (
     "config/sunbird-roster.json",
     "data/mod_dbs/taiyangniao_pro.db",
     "424/考勤-2026-3月份考勤统计表.xlsx",
 )
+PACKAGE_MOD_IDS = ("taiyangniao-pro",)
+
+
+def _resolve_mod_source(mod_id: str) -> Path:
+    candidates = (
+        ROOT / "mods" / mod_id,
+        ROOT / "XCAGI" / "mods" / mod_id,
+        ROOT / "build" / "staged-industry-seeds-enterprise" / mod_id,
+    )
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    raise SystemExit(f"missing mod source: {mod_id}")
+
+
+def _stage_customer_mods(seed_root: Path) -> None:
+    mods_dest = seed_root / "mods"
+    mods_dest.mkdir(parents=True, exist_ok=True)
+    for mod_id in PACKAGE_MOD_IDS:
+        src = _resolve_mod_source(mod_id)
+        dst = mods_dest / mod_id
+        if dst.exists():
+            shutil.rmtree(dst)
+        shutil.copytree(src, dst)
+
+
+def _iter_package_files(seed_root: Path) -> list[str]:
+    files: list[str] = list(PACKAGE_REQUIRED_FILES)
+    mods_root = seed_root / "mods"
+    if mods_root.is_dir():
+        for path in sorted(mods_root.rglob("*")):
+            if not path.is_file():
+                continue
+            if "__pycache__" in path.parts or path.suffix == ".pyc":
+                continue
+            files.append(path.relative_to(seed_root).as_posix())
+    return files
 
 
 def _sha256(path: Path) -> str:
@@ -40,7 +77,9 @@ def _sha256(path: Path) -> str:
 
 
 def _build_zip(seed_root: Path, out_dir: Path, version: str) -> Path:
-    missing = [rel for rel in PACKAGE_FILES if not (seed_root / rel).is_file()]
+    _stage_customer_mods(seed_root)
+    package_files = _iter_package_files(seed_root)
+    missing = [rel for rel in PACKAGE_REQUIRED_FILES if not (seed_root / rel).is_file()]
     if missing:
         raise SystemExit("missing seed files: " + ", ".join(missing))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -54,7 +93,7 @@ def _build_zip(seed_root: Path, out_dir: Path, version: str) -> Path:
         "pkg_id": PACKAGE_ID,
         "version": version,
         "apply": "sunbird_roster",
-        "contents": list(PACKAGE_FILES),
+        "contents": package_files,
         "built_at": datetime.now(timezone.utc).isoformat(),
     }
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -62,7 +101,7 @@ def _build_zip(seed_root: Path, out_dir: Path, version: str) -> Path:
             "delivery-manifest.json",
             json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         )
-        for rel in PACKAGE_FILES:
+        for rel in package_files:
             zf.write(seed_root / rel, rel)
     return zip_path
 

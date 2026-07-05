@@ -52,6 +52,62 @@ jobs:
         run: |
           $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
           scripts/package/build-sunbird-installer.ps1 -Version $v
+      - name: Install and smoke Sunbird package
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}".TrimStart('v','V')
+          $installer = "release/xcagi-v$v/sunbird/太阳鸟-Setup-$v-x64.exe"
+          if (-not (Test-Path $installer)) { throw "Sunbird installer missing: $installer" }
+          $installerPath = (Resolve-Path $installer).Path
+          $installDir = Join-Path $env:RUNNER_TEMP "XCAGI-Sunbird"
+          $cacheDir = Join-Path $env:LOCALAPPDATA "XCAGI\installer-cache"
+          Remove-Item $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+          $proc = Start-Process `
+            -FilePath $installerPath `
+            -ArgumentList @('--silent', '--install-dir', $installDir, '--sunbird-seed') `
+            -Wait `
+            -PassThru
+          if ($proc.ExitCode -ne 0) {
+            Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
+            Write-Host "installer=$installerPath"
+            Get-Item $installerPath | Select-Object FullName, Length, LastWriteTimeUtc | Format-List
+            Get-FileHash $installerPath -Algorithm SHA256 | Format-List
+            if (Test-Path $cacheDir) {
+              Write-Host "installer cache:"
+              Get-ChildItem $cacheDir -Force | Select-Object FullName, Length, LastWriteTimeUtc | Format-List
+            }
+            if (Test-Path $installDir) {
+              Write-Host "install dir sample:"
+              Get-ChildItem $installDir -Recurse -Force -ErrorAction SilentlyContinue |
+                Select-Object -First 80 FullName, Length, LastWriteTimeUtc |
+                Format-List
+            }
+            throw "Silent install failed: exit=$($proc.ExitCode)"
+          }
+          Get-Content (Join-Path $env:TEMP "xcagi-installer-silent.log") -ErrorAction SilentlyContinue
+          $exe = Join-Path $installDir "XCAGI.exe"
+          scripts/package/smoke-installed-windows.ps1 `
+            -InstalledExe $exe `
+            -RestartApp `
+            -ReadyTimeoutSeconds 240 `
+            -RequiredModIds @(
+              'xcagi-planner-bridge',
+              'xcagi-core-workflow-employees',
+              'xcagi-office-employee-pack-bridge',
+              'wechat-contacts-ai-employee',
+              'attendance-industry'
+            )
+      - name: Sunbird acceptance
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP "XCAGI-Sunbird"
+          $exe = Join-Path $installDir "XCAGI.exe"
+          scripts/package/acceptance-sunbird-windows.ps1 `
+            -InstalledExe $exe `
+            -UseInstalledBackend `
+            -ReadyTimeoutSeconds 240 `
+            -MinHostFoundationCount 6
       - name: Stage sunbird installer for upload
         shell: pwsh
         run: |

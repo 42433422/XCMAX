@@ -46,7 +46,14 @@ jobs:
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
+      - name: Verify Windows enterprise installer
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku enterprise
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows
@@ -65,7 +72,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: xcagi-desktop-windows
-          path: artifacts
+          path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
@@ -81,16 +88,16 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
-            exit 0
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
+            exit 1
           fi
-          find artifacts -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
+          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
+          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
             echo "Signing: $f"
-            python FHD/scripts/dev/sign_update_metadata.py "$f"
+            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
           done
       - name: Upload installers to update server
-        continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 30
         working-directory: .
         env:
           # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
@@ -108,7 +115,7 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${GITHUB_WORKSPACE}/artifacts"
+          BASE="${RUNNER_TEMP}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
           raw="${raw#v}"
@@ -119,7 +126,15 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
+            timeout 1800 rsync -avz --timeout=120 \
+              --include='*/' \
+              --include='*.exe' \
+              --include='*.exe.blockmap' \
+              --include='*.dmg' \
+              --include='*.dmg.blockmap' \
+              --include='latest*.yml' \
+              --exclude='*' \
+              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   macos:
@@ -167,7 +182,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: xcagi-desktop-macos
-          path: artifacts
+          path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
           sparse-checkout: |
@@ -183,16 +198,16 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::notice::No XCAGI_UPDATE_ED25519_PRIVATE_KEY secret — skipping metadata signing."
-            exit 0
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
+            exit 1
           fi
-          find artifacts -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
+          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
+          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
             echo "Signing: $f"
-            python FHD/scripts/dev/sign_update_metadata.py "$f"
+            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
           done
       - name: Upload macOS installers to update server
-        continue-on-error: true
-        timeout-minutes: 10
+        timeout-minutes: 30
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
@@ -208,7 +223,7 @@ jobs:
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${GITHUB_WORKSPACE}/artifacts"
+          BASE="${RUNNER_TEMP}/artifacts"
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"
           raw="${raw#v}"
@@ -219,7 +234,15 @@ jobs:
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
             dest="/var/www/update/releases/stable/$sku"
-            timeout 540 rsync -avz --timeout=60 -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
+            timeout 1800 rsync -avz --timeout=120 \
+              --include='*/' \
+              --include='*.exe' \
+              --include='*.exe.blockmap' \
+              --include='*.dmg' \
+              --include='*.dmg.blockmap' \
+              --include='latest*.yml' \
+              --exclude='*' \
+              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   github-release:

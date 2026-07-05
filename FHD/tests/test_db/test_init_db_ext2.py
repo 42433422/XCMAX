@@ -1069,6 +1069,30 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
             result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
             tables = {row[0] for row in result}
         assert "warehouses" in tables
+        assert "suppliers" in tables
+        assert "purchase_orders" in tables
+        assert "shipment_records" in tables
+        assert "financial_transactions" in tables
+
+    def test_backfills_summary_tables_when_inventory_tables_already_exist(self):
+        from app.db.base import Base
+        from app.db.init_db import ensure_sqlite_inventory_bootstrap
+        from app.db.models.inventory import Warehouse
+
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine, tables=[Warehouse.__table__], checkfirst=True)
+
+        with patch("app.db.init_db._resolve_auth_bootstrap_engine", return_value=engine):
+            ensure_sqlite_inventory_bootstrap(engine)
+
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            tables = {row[0] for row in result}
+        assert "warehouses" in tables
+        assert "purchase_orders" in tables
+        assert "suppliers" in tables
+        assert "shipment_records" in tables
+        assert "financial_transactions" in tables
 
     def test_swallow_errors_true(self):
         from app.db.init_db import ensure_sqlite_inventory_bootstrap

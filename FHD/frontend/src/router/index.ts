@@ -28,6 +28,7 @@ import {
   isAdminConsoleSpa,
   resolveAdminConsoleHomeUrl,
 } from '@/utils/adminConsoleUrl';
+import { isDesktopShell } from '@/utils/desktopShell';
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes';
 import {
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES,
@@ -717,9 +718,11 @@ router.beforeEach(async (to, _from, next) => {
             await profile.refreshFromServer();
           }
           if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
-            window.location.href = resolveAdminConsoleHomeUrl();
-            next(false);
-            return;
+            if (!isDesktopShell()) {
+              window.location.href = resolveAdminConsoleHomeUrl();
+              next(false);
+              return;
+            }
           }
         } catch {
           /* ignore */
