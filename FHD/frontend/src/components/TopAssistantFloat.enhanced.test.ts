@@ -122,6 +122,9 @@ vi.mock('pinia', async (importOriginal) => {
 })
 
 vi.mock('@/utils/workflowEmployeeRegistry', () => ({
+  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
+  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
+  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
   resolveLabel: (entry: { id: string }, _resolver?: unknown) => entry.id + '-label',
 }))
 
