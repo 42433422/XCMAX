@@ -1069,6 +1069,7 @@ def test_run_direct_python_fast_path_success() -> None:
         patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
         patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
         patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
         patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
         patch(
             "app.application.employee_runtime.agent._ex._actions_fhd",
@@ -1143,6 +1144,7 @@ def test_run_cognition_failed_returns_cognition_failed_result() -> None:
         patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
         patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
         patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
         patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
         patch(
             "app.application.employee_runtime.agent._ex._memory_light",
@@ -1196,6 +1198,7 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
         patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
         patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
         patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
         patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
         patch(
             "app.application.employee_runtime.agent._ex._memory_light",
@@ -1227,6 +1230,73 @@ def test_run_interactive_chat_cognition_failed_returns_degraded_reply() -> None:
     mock_actions.assert_not_called()
     # interactive_chat fallback 分支仅传 task（无 summary）。
     mock_record.assert_called_once_with("emp-1", success=True, task="你好")
+
+
+def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> None:
+    agent = EmployeeAgent("emp-1")
+    pack = {
+        "pack_id": "emp-1",
+        "version": "1.0.0",
+        "manifest": {"name": "静态站内容编辑员"},
+        "pack_dir": "/tmp/emp-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    reasoning = {"reasoning": "我是静态站内容编辑员，可以帮你检查页面文案。", "input": {}}
+    with (
+        patch(
+            "app.application.employee_runtime.agent.load_employee_pack_from_disk",
+            return_value=pack,
+        ),
+        patch(
+            "app.application.employee_runtime.agent.parse_employee_config_v2",
+            return_value={},
+        ),
+        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._handler_list",
+            return_value=["direct_python"],
+        ),
+        patch(
+            "app.application.employee_runtime.agent.gate_action_or_block",
+            return_value=gate,
+        ),
+        patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
+        patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+        patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
+        patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
+        patch(
+            "app.application.employee_runtime.agent._ex._memory_light",
+            return_value={"session": {}},
+        ),
+        patch(
+            "app.application.employee_runtime.agent._ex._cognition_fhd",
+            return_value=reasoning,
+        ),
+        patch("app.application.employee_runtime.agent._ex._actions_fhd") as mock_actions,
+        patch("app.application.employee_runtime.metrics.record_employee_run") as mock_record,
+    ):
+        mock_scope_cls.return_value = MagicMock()
+        mock_mm = MagicMock()
+        mock_mm_cls.return_value = mock_mm
+        mock_mm.recall.return_value = MemoryContext()
+
+        out = agent.run(
+            "你好",
+            input_data={"source": "mobile_app", "invoke_mode": "interactive_chat"},
+        )
+
+    assert out["success"] is True
+    assert out["result"]["summary"] == "interactive chat reply"
+    assert out["result"]["outputs"][0]["handler"] == "interactive_chat"
+    assert out["result"]["outputs"][0]["output"] == "我是静态站内容编辑员，可以帮你检查页面文案。"
+    mock_upstream.assert_not_called()
+    mock_actions.assert_not_called()
+    mock_record.assert_called_once()
+    _, kwargs = mock_record.call_args
+    assert kwargs["success"] is True
+    assert kwargs["task"] == "你好"
+    mock_mm.remember.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
