@@ -30,7 +30,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final MobileApiClient _api;
   late final ImagePicker _imagePicker;
   late Future<WalletBalanceData> _walletFuture;
-  var _displayName = 'XCAGI 用户';
+  var _displayName = '未登录';
   var _avatarPath = '';
   var _accountKindLabel = '账号';
   var _serverModeLabel = '远程同步可用';
@@ -93,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定云端工作台或电脑工具',
+                            subtitle: '绑定服务器后台、企业工作台或电脑执行端',
                             icon: Icons.qr_code_2,
                             iconColor: Theme.of(context).colorScheme.secondary,
                             iconBg: Theme.of(context)
@@ -129,7 +129,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             subtitle: '成都修茈科技有限公司',
                             icon: Icons.account_balance_wallet,
                             iconColor: colors.warning,
-                            iconBg: colors.warning.withValues(alpha: 0.12),
+                            iconBg:
+                                Theme.of(context).colorScheme.primaryContainer,
                             showDivider: false,
                             onTap: _openAbout,
                           ),

@@ -8,7 +8,6 @@ import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import 'employee_profile_screen.dart';
-import '../scan/scan_qr_screen.dart';
 
 class AiEmployeesScreen extends StatefulWidget {
   const AiEmployeesScreen({
@@ -66,10 +65,9 @@ class _AiEmployeesScreenState extends State<AiEmployeesScreen> {
                   count: employees.length,
                   onBack: widget.onBack,
                   onRefresh: _refresh,
-                  onScan: _openScan,
                 ),
                 if (!hasEmployees)
-                  Expanded(child: _AiEmployeeEmptyState(onScan: _openScan))
+                  const Expanded(child: _AiEmployeeEmptyState())
                 else ...[
                   _AiEmployeeSearchBar(
                     controller: _controller,
@@ -114,12 +112,6 @@ class _AiEmployeesScreenState extends State<AiEmployeesScreen> {
     });
   }
 
-  void _openScan() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => ScanQrScreen(repository: _repository)),
-    );
-  }
-
   List<AiEmployeeProfile> _filteredEmployees(
     List<AiEmployeeProfile> source,
   ) {
@@ -138,13 +130,11 @@ class _AiEmployeeTopBar extends StatelessWidget {
     required this.count,
     this.onBack,
     required this.onRefresh,
-    required this.onScan,
   });
 
   final int count;
   final VoidCallback? onBack;
   final VoidCallback onRefresh;
-  final VoidCallback onScan;
 
   @override
   Widget build(BuildContext context) {
@@ -184,12 +174,6 @@ class _AiEmployeeTopBar extends StatelessWidget {
               icon: const Icon(Icons.refresh, size: 24),
               color: colors.textSecondary,
               tooltip: '刷新AI员工',
-            ),
-            IconButton(
-              onPressed: onScan,
-              icon: const Icon(Icons.qr_code_scanner, size: 24),
-              color: colors.textSecondary,
-              tooltip: '扫码绑定',
             ),
           ],
         ),
@@ -394,11 +378,7 @@ class _AiEmployeeRow extends StatelessWidget {
 }
 
 class _AiEmployeeEmptyState extends StatelessWidget {
-  const _AiEmployeeEmptyState({
-    required this.onScan,
-  });
-
-  final VoidCallback onScan;
+  const _AiEmployeeEmptyState();
 
   @override
   Widget build(BuildContext context) {
@@ -435,26 +415,13 @@ class _AiEmployeeEmptyState extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              '扫码绑定云端工作台或登录账号后，员工会自动同步到这里。',
+              '员工会自动同步到这里；如未显示，点右上角刷新。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 13,
                 height: 1.38,
                 letterSpacing: 0,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: onScan,
-              icon: const Icon(Icons.qr_code_scanner, size: 18),
-              label: const Text('扫码绑定'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: colors.brand,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
               ),
             ),
           ],

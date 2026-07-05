@@ -11,6 +11,7 @@ enum AndroidDeepLinkTarget {
   aiChat,
   conversationChat,
   csChat,
+  adminCsConsole,
   fixedPartnerProfile,
   market,
   mods,
@@ -24,6 +25,7 @@ enum AndroidDeepLinkTarget {
   approvalList,
   approvalDetail,
   aiEmployeeProfile,
+  employeeQuestions,
   settings,
   about,
   notifications,
@@ -78,6 +80,9 @@ class AndroidDeepLinkDestination {
   const AndroidDeepLinkDestination.csChat()
       : this._(AndroidDeepLinkTarget.csChat);
 
+  const AndroidDeepLinkDestination.adminCsConsole()
+      : this._(AndroidDeepLinkTarget.adminCsConsole);
+
   const AndroidDeepLinkDestination.fixedPartnerProfile(String partnerKind)
       : this._(
           AndroidDeepLinkTarget.fixedPartnerProfile,
@@ -128,6 +133,12 @@ class AndroidDeepLinkDestination {
   }) : this._(
           AndroidDeepLinkTarget.aiEmployeeProfile,
           modId: modId,
+          employeeId: employeeId,
+        );
+
+  const AndroidDeepLinkDestination.employeeQuestions(String? employeeId)
+      : this._(
+          AndroidDeepLinkTarget.employeeQuestions,
           employeeId: employeeId,
         );
 
@@ -298,6 +309,15 @@ AndroidDeepLinkDestination resolveAndroidDeepLinkDestination(String route) {
     }
     return const AndroidDeepLinkDestination.aiEmployees();
   }
+  if (first == 'employee_questions') {
+    final employeeId = segments.length >= 2 ? segments[1].trim() : '';
+    return AndroidDeepLinkDestination.employeeQuestions(
+      employeeId.isEmpty ? null : employeeId,
+    );
+  }
+  if (first == 'employee_questions_all') {
+    return const AndroidDeepLinkDestination.employeeQuestions(null);
+  }
   if (first == 'ai_chat') {
     return const AndroidDeepLinkDestination.aiChat();
   }
@@ -309,6 +329,9 @@ AndroidDeepLinkDestination resolveAndroidDeepLinkDestination(String route) {
   }
   if (first == 'cs_chat') {
     return const AndroidDeepLinkDestination.csChat();
+  }
+  if (first == 'admin_cs_console') {
+    return const AndroidDeepLinkDestination.adminCsConsole();
   }
   if (first == 'fixed_partner') {
     final partnerKind = segments.length >= 2 ? segments[1] : '';

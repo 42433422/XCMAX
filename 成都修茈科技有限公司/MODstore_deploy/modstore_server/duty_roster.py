@@ -50,6 +50,7 @@ YUANGON_AREAS: Dict[str, Dict[str, object]] = {
     "platform-core": {
         "label": "平台核心",
         "ids": [
+            "top-architect",
             "fhd-core-maintainer",
             "vibe-coding-maintainer",
             "mods-and-eskill-curator",
@@ -290,6 +291,7 @@ SIX_LINE_DEPARTMENTS: Dict[str, Dict[str, object]] = {
             "core-coding": {
                 "label": "核心编码 P2",
                 "ids": [
+                    "top-architect",
                     "fhd-core-maintainer",
                     "vibe-coding-maintainer",
                 ],

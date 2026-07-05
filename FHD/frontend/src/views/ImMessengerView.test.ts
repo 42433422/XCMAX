@@ -23,6 +23,9 @@ vi.mock('@/api/im', () => ({
     },
   ]),
   fetchImMessages: vi.fn().mockResolvedValue([]),
+  fetchCsInbox: vi.fn().mockResolvedValue([]),
+  fetchCsInboxMessages: vi.fn().mockResolvedValue([]),
+  replyCsInbox: vi.fn().mockResolvedValue({ success: true }),
   sendImMessage: vi.fn().mockResolvedValue({ success: true }),
   createDirectConversation: vi.fn().mockResolvedValue({ id: 1 }),
   fetchImContacts: vi.fn().mockResolvedValue([enterpriseCsContact]),
@@ -126,9 +129,10 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
     expect(wrapper.find('.im-messenger').exists()).toBe(true)
-    expect(wrapper.text()).toContain('固定联系人')
+    expect(wrapper.text()).not.toContain('固定联系人')
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('还没有会话')
+    expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
   })
 
@@ -166,10 +170,11 @@ describe('ImMessengerView.vue', () => {
 
     expect(wrapper.text()).not.toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('小C助理')
-    expect(wrapper.text()).toContain('固定员工')
+    expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
     expect(wrapper.text()).toContain('全设备协同调度')
     expect(wrapper.text()).toContain('Codex')
+    expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
@@ -232,8 +237,9 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('固定员工')
+    expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
+    expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
 
     const input = wrapper.find('.im-compose--codex input')
