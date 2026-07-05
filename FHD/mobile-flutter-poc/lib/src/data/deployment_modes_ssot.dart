@@ -6,7 +6,10 @@ class DeploymentModesSsot {
 
   static const defaultMode = "safe";
   static const modeIds = <String>["absolute_safe", "safe", "performance"];
-  static const mobileLanFirstConnections = <String>["lan_direct", "public_relay_with_lan_fallback"];
+  static const mobileLanFirstConnections = <String>[
+    "lan_direct",
+    "public_relay_with_lan_fallback"
+  ];
 
   static bool mobileConnectionPrefersLan(String value) =>
       mobileLanFirstConnections.contains(value.trim());
