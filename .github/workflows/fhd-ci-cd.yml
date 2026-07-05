@@ -588,6 +588,65 @@ jobs:
           build-args: |
             BUILD_DATE=${{ fromJSON(steps.meta.outputs.json).labels['org.opencontainers.image.created'] }}
 
+  release-verify:
+    name: release-verify
+    needs: [backend-test, frontend-test, frontend-e2e, pack-verify, arch-fitness]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_VERIFY_SKIP_E2E: "1"
+      RELEASE_VERIFY_SKIP_PACK: "0"
+      RELEASE_VERIFY_SKIP_DESKTOP: "0"
+      XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
+      XCAGI_TENANT_STRICT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: FHD/frontend/package-lock.json
+
+      - name: Install backend test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt -r deploy/requirements-dev.txt
+
+      - name: Install frontend deps
+        working-directory: FHD/frontend
+        run: npm ci
+
+      - name: Install desktop deps
+        working-directory: FHD/desktop
+        run: npm ci
+
+      - name: Run release_verify.sh
+        run: bash scripts/dev/release_verify.sh
+
+  desktop-build-smoke:
+    name: desktop-build-smoke
+    needs: [frontend-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: FHD/desktop/package-lock.json
+      - name: Desktop tsc build
+        working-directory: FHD/desktop
+        run: |
+          npm ci
+          npm run build
+
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
   ssot-drift-gate:

@@ -134,6 +134,7 @@ Thumbs.db
 !frontend/.env.generic
 !frontend/.env.minimal
 scripts/package/upload-release.env
+scripts/package/mac-signing.env
 .secrets/
 *.der
 **/chroma/
