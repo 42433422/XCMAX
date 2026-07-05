@@ -98,6 +98,84 @@ class TestDesktopStatus:
         data = r.json()
         assert data["desktopMode"] is False
 
+    def test_status_includes_db_recovery_ok_when_env_unset(self, client: TestClient) -> None:
+        """未设置 XCAGI_DESKTOP_DB_RECOVERY 时 dbRecovery.action 应为 'ok'。"""
+        import os as _os
+
+        _os.environ.pop("XCAGI_DESKTOP_DB_RECOVERY", None)
+        with (
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={
+                    "root": Path("/tmp/x"),
+                    "data": Path("/tmp/x/data"),
+                    "mods": Path("/tmp/x/mods"),
+                    "models": Path("/tmp/x/models"),
+                },
+            ),
+            patch(
+                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
+                return_value=(MagicMock(), MagicMock()),
+            ),
+            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+        ):
+            r = client.get("/api/desktop/status")
+        data = r.json()
+        assert data["dbRecovery"]["action"] == "ok"
+        assert "lastBackup" in data
+
+    def test_status_includes_db_recovery_restored(self, client: TestClient, monkeypatch) -> None:
+        """XCAGI_DESKTOP_DB_RECOVERY=restored:xxx 时 dbRecovery 应反映恢复来源。"""
+        monkeypatch.setenv("XCAGI_DESKTOP_DB_RECOVERY", "restored:xcagi-v1-20260705.db")
+        with (
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={
+                    "root": Path("/tmp/x"),
+                    "data": Path("/tmp/x/data"),
+                    "mods": Path("/tmp/x/mods"),
+                    "models": Path("/tmp/x/models"),
+                },
+            ),
+            patch(
+                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
+                return_value=(MagicMock(), MagicMock()),
+            ),
+            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+        ):
+            r = client.get("/api/desktop/status")
+        data = r.json()
+        assert data["dbRecovery"]["action"] == "restored"
+        assert data["dbRecovery"]["detail"] == "xcagi-v1-20260705.db"
+
+    def test_status_includes_db_recovery_corrupt_no_backup(
+        self, client: TestClient, monkeypatch
+    ) -> None:
+        """XCAGI_DESKTOP_DB_RECOVERY=corrupt_no_backup 时 dbRecovery.action 应为 'corrupt_no_backup'。"""
+        monkeypatch.setenv("XCAGI_DESKTOP_DB_RECOVERY", "corrupt_no_backup")
+        with (
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value={
+                    "root": Path("/tmp/x"),
+                    "data": Path("/tmp/x/data"),
+                    "mods": Path("/tmp/x/mods"),
+                    "models": Path("/tmp/x/models"),
+                },
+            ),
+            patch(
+                "app.fastapi_routes.desktop_runtime.load_or_create_profile",
+                return_value=(MagicMock(), MagicMock()),
+            ),
+            patch("app.fastapi_routes.desktop_runtime.resolve_storage_mode", return_value="sqlite"),
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+        ):
+            r = client.get("/api/desktop/status")
+        data = r.json()
+        assert data["dbRecovery"]["action"] == "corrupt_no_backup"
+
 
 class TestDownloadModel:
     def test_support_bundle_requires_login(self, anon_client: TestClient) -> None:

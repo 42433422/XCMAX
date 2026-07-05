@@ -11,5 +11,5 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["main.ts", "preload.ts", "updater.ts", "build/**/*.cjs"]
+  "include": ["main.ts", "preload.ts", "updater.ts", "build/**/*.cjs", "**/*.test.ts"]
 }
