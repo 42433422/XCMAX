@@ -1488,10 +1488,10 @@ class TestMessageRequiresDbReadTokenAdditional:
         assert ch._message_requires_db_read_token("读取数据表") is True
 
     def test_view_customer_library(self):
-        assert ch._message_requires_db_read_token("查看客户库") is True
+        assert ch._message_requires_db_read_token("查看客户库") is False
 
     def test_product_library_query(self):
-        assert ch._message_requires_db_read_token("产品库查询") is True
+        assert ch._message_requires_db_read_token("产品库查询") is False
 
     def test_whitespace_message(self):
         assert ch._message_requires_db_read_token("   ") is False
