@@ -56,13 +56,15 @@ def _reset_schema_state():
 
 @pytest.fixture
 def client():
-    from app.infrastructure.auth.dependencies import require_identified_user
+    from app.infrastructure.auth.dependencies import get_current_user, require_identified_user
 
     app = FastAPI()
     app.include_router(router)
     mock_user = MagicMock()
     mock_user.user_id = 1
     app.dependency_overrides[require_identified_user] = lambda: mock_user
+    # list/send/mark_read 三端点已改依赖 get_current_user(手机 Bearer 兼容),一并 override
+    app.dependency_overrides[get_current_user] = lambda: mock_user
     return TestClient(app, raise_server_exceptions=False)
 
 
