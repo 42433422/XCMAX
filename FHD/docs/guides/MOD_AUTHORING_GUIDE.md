@@ -218,6 +218,30 @@ mods/<mod_id>/
 
 ---
 
+## 4b. 行业包 manifest（`*-industry`）
+
+中性行业包（如 `coating-industry`、`attendance-industry`）除 §4 通用字段外，须满足 **七段契约**，JSON Schema 见 [`contracts/industry_package.schema.json`](../../contracts/industry_package.schema.json)。发版前由 `tests/release_gate/test_industry_package_contract.py` 校验。
+
+| 契约段 | manifest 字段 | 说明 |
+|---|---|---|
+| 数据模型 | `industry.subsystems` | **必填**；`products` / `customers` / `orders` / `shipment-records` |
+| 菜单映射 | `frontend.menu` + `frontend.pro_entry_path` | menu 可为 `[]`（账号定制 Mod 提供菜单） |
+| 导入模板 | `import_templates[]` | 可选；`{id, label, path, mime?}` |
+| 审批规则 | `approval_profile[]` | 可选；`{tool_id, action, trigger}` |
+| AI 员工 | `workflow_employees[]` | 可选；L2 行业包通常为空，见账号定制 Mod |
+| 测试样例 | `samples[]` | 可选；`{id, path, description?}` |
+| 迁移脚本 | `migrations` | 可选；`{schema_version, scripts_dir?}` |
+
+行业包额外常用字段：
+
+- `legacy_mod_ids[]` — 关联账号定制 Mod（与 `config/industry_mod_aliases.json` 对齐）
+- `onboarding.custom_mod_ids` / `custom_line_hint` — 首启引导文案
+- `ui_labels` / `ui_starter_pack` — 侧栏与对话 starter 文案（考勤等行业推荐）
+
+`industry.id` 必须与 [`config/industry_baseline.json`](../../config/industry_baseline.json) 中 `industry_packages` 的键一致；`manifest.id` 必须与同条目的 `mod_id` 一致。
+
+---
+
 ## 5. 后端契约：路由、生命周期、动态加载
 
 ### 5.1 路由注册（推荐形态）

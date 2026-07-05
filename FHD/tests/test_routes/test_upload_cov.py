@@ -10,14 +10,24 @@ import pytest
 from fastapi.testclient import TestClient
 
 
-def _make_client():
+def _make_client(*, authenticated: bool = True):
     from fastapi import FastAPI
 
     from app.fastapi_routes.upload import router
+    from app.infrastructure.auth.dependencies import get_logged_in_user
 
     app = FastAPI()
     app.include_router(router)
+    if authenticated:
+        app.dependency_overrides[get_logged_in_user] = lambda: MagicMock(id=1, is_active=True)
     return TestClient(app, raise_server_exceptions=False)
+
+
+class TestUploadAuth:
+    def test_upload_requires_login(self):
+        client = _make_client(authenticated=False)
+        resp = client.post("/api/upload/temp")
+        assert resp.status_code == 401
 
 
 class TestAllowedFile:

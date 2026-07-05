@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 平台七柱 Wave 0（2026-07-05 · v10 线内迭代）
+
+- **feat(contracts)**：`industry_package.schema.json` + release_gate 校验 `*-industry` manifest；MOD_AUTHORING_GUIDE §4b
+- **feat(risk)**：`config/risk_actions.registry.json` SSOT；`planner.get_tool_registry` 收敛至 execution registry
+- **feat(security)**：`LOCAL_DATA_POLICY.md`；诊断包/上传/模型 API 需登录；日志脱敏；`purge_local_temp_data.py`
+
 ### 发版红线七柱（2026-07-05 · v10 线内迭代）
 
 - **chore(repo)**：`.codex-artifacts/`、`templates/admin-vue-dist/`、`release_train_history/` gitignore；admin 构建产物改 CI 生成

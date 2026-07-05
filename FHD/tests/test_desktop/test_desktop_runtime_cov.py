@@ -273,7 +273,7 @@ class TestBuildSupportBundleZip:
         # Add a .db backup file
         (dirs["backups"] / "xcagi-1.0-20260101.db").write_bytes(b"db")
         # Add a log file
-        (dirs["logs"] / "xcagi.log").write_bytes(b"log content")
+        (dirs["logs"] / "xcagi.log").write_bytes(b"Authorization: Bearer secret123\n")
 
         cfg = {
             "data_dir": str(tmp_path),
@@ -294,6 +294,10 @@ class TestBuildSupportBundleZip:
         names = zf.namelist()
         assert "manifest.json" in names
         assert "README.txt" in names
+        if "logs/xcagi.log" in names:
+            log_body = zf.read("logs/xcagi.log").decode("utf-8", errors="replace")
+            assert "secret123" not in log_body
+            assert "<redacted>" in log_body
 
     def test_bundle_includes_log(self, tmp_path):
         from app.desktop_runtime.support_bundle import build_support_bundle_zip

@@ -12,8 +12,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.desktop_runtime.migrate import export_config
+from app.security.log_redaction import redact_log_text
 
 from .paths import ensure_desktop_dirs, is_desktop_mode
+
+
+def _redact_log_bytes(chunk: bytes) -> bytes:
+    text = chunk.decode("utf-8", errors="replace")
+    return redact_log_text(text).encode("utf-8", errors="replace")
 
 
 def _tail_bytes(path: Path, max_bytes: int = 2_097_152) -> bytes | None:
@@ -91,10 +97,10 @@ def build_support_bundle_zip(
         for name in ("xcagi.log", "xcagi.log.1", "xcagi.log.2"):
             chunk = _tail_bytes(logs_dir / name)
             if chunk:
-                zf.writestr(f"logs/{name}", chunk)
+                zf.writestr(f"logs/{name}", _redact_log_bytes(chunk))
 
         if updater_chunk:
-            zf.writestr("logs/updater-events.jsonl", updater_chunk)
+            zf.writestr("logs/updater-events.jsonl", _redact_log_bytes(updater_chunk))
 
     buf.seek(0)
     return buf.getvalue()
