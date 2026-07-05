@@ -615,7 +615,9 @@ jobs:
           cache-dependency-path: FHD/frontend/package-lock.json
 
       - name: Install backend test deps
-        run: pip install -r requirements.txt -r requirements-base.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r deploy/requirements-server-api.txt -r deploy/requirements-dev.txt
 
       - name: Install frontend deps
         working-directory: FHD/frontend
