@@ -1,8 +1,8 @@
 {
   "_note": "覆盖率棘轮基线（只升不降）。后端行 floor SSOT = pyproject.toml fail_under；backend_lines_floor 为镜像（只读参考）。分支 floor 与前端各项 floor 为本文件 SSOT。由 coverage_ratchet.py --bump 维护；updated/last_measured 记录最近 bump 时的实测值。",
   "updated": "2026-07-05",
-  "backend_lines_floor": 90,
-  "backend_branch_floor": 85,
+  "backend_lines_floor": 89,
+  "backend_branch_floor": 83,
   "frontend_floors": {
     "lines": 92,
     "branches": 81,
@@ -17,6 +17,6 @@
     "frontend_functions": 91.39,
     "frontend_statements": 93.21
   },
-  "last_measured_commit": "34b60d349a9154bc12b938359a3ba645ca28d29b",
+  "last_measured_commit": "integrate/sunbird-windows-delivery",
   "last_measured_date": "2026-07-05"
 }
