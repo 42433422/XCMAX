@@ -2,7 +2,7 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import { api, clearAuthTokens } from '../api'
 import { ApiError } from '../infrastructure/http/client'
-import { ACCESS_TOKEN_KEY, getAccessToken } from '../infrastructure/storage/tokenStore'
+import { getAccessToken } from '../infrastructure/storage/tokenStore'
 import { buildLevelProfileDict, normalizeMeResponse } from '../domain/accountLevel'
 import type { CurrentUser } from '../domain/auth/types'
 
@@ -37,7 +37,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   const ADMIN_DIGEST_UNLOCK_KEY = 'modstore_admin_digest_unlock_expires'
   const adminDigestUnlockExpires = ref<string>(
-    (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY) : '') || '',
+    (typeof sessionStorage !== 'undefined'
+      ? sessionStorage.getItem(ADMIN_DIGEST_UNLOCK_KEY)
+      : '') || '',
   )
   const adminUiUnlocked = computed(() => {
     const exp = adminDigestUnlockExpires.value
@@ -57,7 +59,9 @@ export const useAuthStore = defineStore('auth', () => {
   }
   /** 当前会员档位标识（free / vip / vip_plus / svip1..svip8）。未登录或加载前为 "" */
   const membershipTier = computed(() => {
-    const t = String(membership.value?.tier || '').trim().toLowerCase()
+    const t = String(membership.value?.tier || '')
+      .trim()
+      .toLowerCase()
     return t || ''
   })
   function parseLevelProfile(profile: Record<string, unknown>) {
@@ -68,7 +72,14 @@ export const useAuthStore = defineStore('auth', () => {
     const nextMinRaw = profile.next_level_min_exp
     const nextMin = nextMinRaw === null || nextMinRaw === undefined ? null : Number(nextMinRaw)
     const progress = Math.max(0, Math.min(1, Number(profile.progress) || 0))
-    return { level, title, experience: exp, currentLevelMinExp: currentMin, nextLevelMinExp: nextMin, progress }
+    return {
+      level,
+      title,
+      experience: exp,
+      currentLevelMinExp: currentMin,
+      nextLevelMinExp: nextMin,
+      progress,
+    }
   }
 
   const levelProfile = computed(() => {
@@ -134,8 +145,7 @@ export const useAuthStore = defineStore('auth', () => {
       if (
         raw &&
         typeof raw === 'object' &&
-        ((raw as { ok?: boolean }).ok === false ||
-          (raw as { success?: boolean }).success === false)
+        ((raw as { ok?: boolean }).ok === false || (raw as { success?: boolean }).success === false)
       ) {
         clearAuthTokens()
         resetSession()
@@ -182,7 +192,7 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function hasToken(): boolean {
-    const raw = localStorage.getItem(ACCESS_TOKEN_KEY)
+    const raw = getAccessToken()
     return Boolean(raw && raw !== 'undefined' && raw !== 'null')
   }
 
