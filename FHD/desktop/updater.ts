@@ -28,7 +28,7 @@ export function isUpdateDownloaded(): boolean {
   return updateDownloaded
 }
 
-export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () => Promise<void>): void {
+export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
@@ -70,7 +70,7 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: () =
     if (result.response === 1) {
       try {
         if (beforeInstall) {
-          await beforeInstall()
+          await beforeInstall(info.version)
         }
         appendUpdaterEvent('install_start', { version: info.version })
         autoUpdater.quitAndInstall(false, true)
@@ -113,17 +113,17 @@ export async function checkForUpdates(): Promise<unknown> {
   return autoUpdater.checkForUpdates()
 }
 
-export async function installUpdate(beforeInstall?: () => Promise<void>): Promise<void> {
+export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
   if (!updateDownloaded) {
     throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
   }
   if (beforeInstall) {
-    await beforeInstall()
+    await beforeInstall('manual')
   }
   autoUpdater.quitAndInstall(false, true)
 }
 
-async function verifyLatestMetadataSignature(): Promise<void> {
+export async function verifyLatestMetadataSignature(): Promise<void> {
   const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (!publicKeyPem || !updateUrl) {
@@ -138,6 +138,11 @@ async function verifyLatestMetadataSignature(): Promise<void> {
   }
 
   const content = await response.text()
+  await verifyMetadataSignatureText(content, publicKeyPem)
+}
+
+/** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */
+export async function verifyMetadataSignatureText(content: string, publicKeyPem: string): Promise<void> {
   const lines = content.split(/\r?\n/)
   const signatureLine = lines.find(line => line.startsWith('signature: ed25519:'))
   if (!signatureLine) {
@@ -151,4 +156,9 @@ async function verifyLatestMetadataSignature(): Promise<void> {
   if (!ok) {
     throw new Error('更新元数据 Ed25519 二次签名校验失败')
   }
+}
+
+/** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
+export function __resetUpdateDownloadedForTest(): void {
+  updateDownloaded = false
 }
