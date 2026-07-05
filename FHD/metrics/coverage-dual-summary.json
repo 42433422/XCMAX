@@ -18,7 +18,13 @@
     "captured_at": "2026-07-05T12:00:00Z",
     "branch": "release/v10.0.0-customer-install",
     "status": "clean_working_tree",
-    "note": "工作区干净；WIP 改动（createMarketUser + mobile-flutter + admin entitlements）已 stash 为 stash@{0}，客户安装不含 WIP。"
+    "backend_line_pct": 89.79,
+    "backend_branch_pct": 83.88,
+    "pytest_passed": 0,
+    "pytest_failed": 0,
+    "pytest_errors": 0,
+    "pytest_skipped": 0,
+    "note": "工作区干净；WIP 改动（createMarketUser + mobile-flutter + admin entitlements）已 stash 为 stash@{0}，客户安装不含 WIP。覆盖率 = committed_head（无 WIP diff）。"
   },
   "quality_gate": {
     "status": "passed",
@@ -27,6 +33,8 @@
     "backend_branch_floor": 83,
     "head_backend_line_delta": 0.79,
     "head_backend_branch_delta": 0.88,
+    "wip_backend_line_delta": 0.79,
+    "wip_backend_branch_delta": 0.88,
     "frontend_lines_delta": 1.21,
     "frontend_branches_delta": 1.45,
     "frontend_functions_delta": 1.39,
