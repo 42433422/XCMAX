@@ -180,7 +180,6 @@ def _validate_required_params(tool_id: str, action: str, params: dict | None) ->
     return True, ""
 
 
-
 def get_workflow_tool_registry() -> dict:
     """Return workflow tool registry loaded from config/risk_actions.registry.json."""
     from resources.config.risk_actions_loader import get_workflow_tools_from_registry

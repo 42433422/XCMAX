@@ -60,8 +60,7 @@ def seed_onboarding_demo_data(*, tenant_id: int, industry_id: str = "通用") ->
                 contact_person=str(customer_spec.get("contact_person") or "演示联系人"),
                 contact_phone=str(customer_spec.get("contact_phone") or "13800000000"),
                 contact_address=str(
-                    customer_spec.get("contact_address")
-                    or f"{profile.industry_id} · 首启演示地址"
+                    customer_spec.get("contact_address") or f"{profile.industry_id} · 首启演示地址"
                 ),
             )
             db.add(row)
@@ -91,8 +90,7 @@ def seed_onboarding_demo_data(*, tenant_id: int, industry_id: str = "通用") ->
                 name=demo_product_name,
                 model_number=str(product_spec.get("model_number") or "DEMO-001"),
                 specification=str(
-                    product_spec.get("specification")
-                    or f"{profile.industry_id} 首启样例 SKU"
+                    product_spec.get("specification") or f"{profile.industry_id} 首启样例 SKU"
                 ),
                 price=product_spec.get("price"),
                 quantity=int(product_spec.get("quantity") or 10),

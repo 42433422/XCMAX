@@ -1714,9 +1714,7 @@ class AIChatApplicationService:
                 "action": "workflow_confirmation_required",
                 "run_id": agent_run.run_id,
                 "agent_run_id": agent_run.run_id,
-                "data": _enrich_confirmation_inner(
-                    inner, action="workflow_confirmation_required"
-                ),
+                "data": _enrich_confirmation_inner(inner, action="workflow_confirmation_required"),
             },
         }
 

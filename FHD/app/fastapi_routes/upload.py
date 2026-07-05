@@ -37,7 +37,9 @@ def _ensure_upload_folder() -> None:
 
 
 @router.post("/temp")
-async def upload_temp(file: UploadFile | None = File(default=None), _user=Depends(get_logged_in_user)):
+async def upload_temp(
+    file: UploadFile | None = File(default=None), _user=Depends(get_logged_in_user)
+):
     try:
         _ensure_upload_folder()
         if file is None:
