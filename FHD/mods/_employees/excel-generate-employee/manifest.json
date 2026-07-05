@@ -3,7 +3,7 @@
   "name": "Excel 生成员",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据",
+  "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -20,8 +20,8 @@
   "workflow_employees": [
     {
       "id": "excel-generate-employee",
-      "label": "CSV 生成员",
-      "panel_title": "CSV 生成员",
+      "label": "Excel 生成员",
+      "panel_title": "Excel 生成员",
       "panel_summary": "上传 JSON，按 sheets 写出 outputs/output.xlsx。",
       "capabilities": [
         "data.json_read",
@@ -40,8 +40,8 @@
       "id": "excel-generate-employee",
       "version": "1.0.0",
       "artifact": "employee_pack",
-      "name": "CSV 生成员",
-      "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据"
+      "name": "Excel 生成员",
+      "description": "Excel生成员工：JSON 为中介，上传 .json（含 sheets 或 columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx，使用 direct_python，禁止编造表格数据"
     },
     "perception": {
       "type": "json",
@@ -55,9 +55,9 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是CSV 生成员。你负责根据 JSON（sheets/columns/rows）写出 outputs/output.xlsx。JSON 为中介；必须真实执行 direct_python，禁止编造表格内容。",
+        "system_prompt": "你是Excel 生成员。你负责根据 JSON（sheets/columns/rows，兼容 Excel 读取员 workbook.json）写出 outputs/output.xlsx。JSON 为中介；必须真实执行 direct_python，禁止编造表格内容。",
         "role": {
-          "name": "CSV 生成员",
+          "name": "Excel 生成员",
           "persona": "严谨的 Excel 生成员工",
           "tone": "professional",
           "expertise": [
@@ -89,7 +89,7 @@
     "collaboration": {
       "workflow": {
         "workflow_id": 0,
-        "name": "CSV 生成员"
+        "name": "Excel 生成员"
       }
     },
     "actions": {
