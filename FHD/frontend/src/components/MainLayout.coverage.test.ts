@@ -10,7 +10,6 @@
  *   - currentRouteName：matched 路由回退
  *   - useResizablePane 回调：enabled / onResizeStart / onResizeEnd
  *   - currentViewTitle：metaTitle 回退
- *   - resolveLegacyRouteFromModPath：approval-hub 路径
  *   - navigateToView：Mod 路由注册/跳转/legacy/csHost 各分支
  *   - watch(isAnyTutorialActive)：教程激活/失活
  *   - handleGlobalActivity / onSidebarMouseEnter / onHoverTriggerEnter / onHoverTriggerLeave
@@ -743,49 +742,6 @@ describe('MainLayout.vue - coverage ramp', () => {
       const { wrapper } = await mountMainLayout()
       await nextTick()
       expect(wrapper.vm.currentViewTitle).toBe('未知页面')
-      wrapper.unmount()
-    })
-  })
-
-  // ════════════════════════════════════════════════════════════════════
-  // resolveLegacyRouteFromModPath
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('resolveLegacyRouteFromModPath', () => {
-    it('approval-hub/workspace 路径返回 approval-workspace', async () => {
-      const { wrapper, router } = await mountMainLayout()
-      // router 有 approval-workspace 路由
-      const result = wrapper.vm.resolveLegacyRouteFromModPath('/mod/test/approval-hub/workspace')
-      expect(result).toEqual({ name: 'approval-workspace' })
-      wrapper.unmount()
-    })
-
-    it('以 /approval-hub 结尾的路径返回 approval-hub', async () => {
-      const { wrapper } = await mountMainLayout()
-      const result = wrapper.vm.resolveLegacyRouteFromModPath('/mod/test/approval-hub')
-      expect(result).toEqual({ name: 'approval-hub' })
-      wrapper.unmount()
-    })
-
-    it('最后一段匹配路由名时返回该路由', async () => {
-      const { wrapper } = await mountMainLayout()
-      // 'settings' 是已注册路由
-      const result = wrapper.vm.resolveLegacyRouteFromModPath('/some/path/settings')
-      expect(result).toEqual({ name: 'settings' })
-      wrapper.unmount()
-    })
-
-    it('无匹配时返回 null', async () => {
-      const { wrapper } = await mountMainLayout()
-      const result = wrapper.vm.resolveLegacyRouteFromModPath('/some/unknown/path')
-      expect(result).toBeNull()
-      wrapper.unmount()
-    })
-
-    it('路径含 query 和 hash 时正确解析', async () => {
-      const { wrapper } = await mountMainLayout()
-      const result = wrapper.vm.resolveLegacyRouteFromModPath('/mod/test/approval-hub/workspace?foo=bar#section')
-      expect(result).toEqual({ name: 'approval-workspace' })
       wrapper.unmount()
     })
   })

@@ -109,10 +109,9 @@ import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults'
 import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS } from '@/utils/coreNavLabel'
 import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
-import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
-import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
-import { resolveNavRouteName } from '@/constants/navRouteAliases'
+import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
+import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
@@ -291,7 +290,7 @@ const viewTitlesBase = {
   'chat-debug': '对话调试',
   'enterprise-customer-service': '外部客服',
   'internal-customer-service': '内部客服',
-  'admin-entitlements': '用户管理',
+  'admin-entitlements': '账号权益',
   'xcmax-admin': '服务器后台总览',
   'automation-policy': '自动化方针',
   'duty-time-architecture': '同时完成时间架构',
@@ -299,52 +298,7 @@ const viewTitlesBase = {
   'server-functions': '服务器功能模块',
 }
 
-const routeNameMap = {
-  '/': 'chat',
-  '/ai-ecosystem': 'ai-ecosystem',
-  '/brain': 'brain',
-  '/model-payment': 'model-payment',
-  '/kitten-finance': 'kitten-finance',
-  '/mod-store': 'mod-store',
-  '/products': 'products',
-  '/materials-list': 'materials-list',
-  '/materials': 'materials',
-  '/traditional-mode': 'traditional-mode',
-  '/business-docking': 'business-docking',
-  '/orders': 'orders',
-  '/orders/create': 'orders-create',
-  '/shipment-records': 'shipment-records',
-  '/customers': 'customers',
-  '/data-sources': 'data-sources',
-  '/wechat-contacts': 'wechat-contacts',
-  '/print': 'print',
-  '/printer-list': 'printer-list',
-  '/template-preview': 'template-preview',
-  '/console': 'console',
-  '/settings': 'settings',
-  '/im': 'im',
-  '/desktop-runtime': 'desktop-runtime',
-  '/tools': 'tools',
-  '/other-tools': 'other-tools',
-  '/workflow-employee-space': 'workflow-employee-space',
-  '/workflow-visualization': 'workflow-visualization',
-  '/purchase': 'purchase',
-  '/label-editor': 'label-editor',
-  '/batch-analyze': 'batch-analyze',
-  '/chat-debug': 'chat-debug',
-  '/enterprise-customer-service': 'enterprise-customer-service',
-  '/internal-customer-service': 'internal-customer-service',
-  '/approval-hub': 'approval-hub',
-  '/approval-hub/workspace': 'approval-hub',
-  '/approval-hub/flows': 'approval-hub',
-  '/approval-hub/rules': 'approval-hub',
-  '/inventory': 'inventory',
-  '/xcmax-admin': 'xcmax-admin',
-  '/automation-policy': 'automation-policy',
-  '/duty-time-architecture': 'duty-time-architecture',
-  '/duty-roster-graph': 'duty-roster-graph',
-  '/server-functions': 'server-functions',
-}
+const routeNameMap = SIDEBAR_ROUTE_NAME_MAP
 
 const currentRouteName = computed(() => {
   const modKey = modPathToSidebarKey.value[route.path]
@@ -413,103 +367,12 @@ const currentViewTitle = computed(() => {
   return '未知页面'
 })
 
-function resolveLegacyRouteFromModPath(modPath) {
-  const pathOnly = String(modPath || '').split('?')[0]?.split('#')[0] || ''
-  if (!pathOnly) return null
-  if (pathOnly.includes('/approval-hub/workspace') && router.hasRoute('approval-workspace')) {
-    return { name: 'approval-workspace' }
-  }
-  if (pathOnly.endsWith('/approval-hub') && router.hasRoute('approval-hub')) {
-    return { name: 'approval-hub' }
-  }
-  const lastSeg = pathOnly.split('/').filter(Boolean).pop()
-  if (lastSeg && router.hasRoute(lastSeg)) {
-    return { name: lastSeg }
-  }
-  return null
-}
-
 async function navigateToView(viewKey) {
-  const modItem = modMenuItems.value.find((m) => m.key === viewKey)
-  const routeName =
-    typeof viewKey === 'string'
-      ? resolveNavRouteName(viewKey, modItem?.path) || viewKey
-      : viewKey
-
-  if (modItem?.path) {
-    if (router.resolve(modItem.path).matched.length === 0) {
-      try {
-        const { registerAllModRoutesFromGlob, registerModRoutes } = await import(
-          '@/router/registerModRoutes'
-        )
-        await registerAllModRoutesFromGlob(router)
-        if (modsStore.modRoutes?.length) {
-          await registerModRoutes(router, modsStore.modRoutes)
-        }
-      } catch (e) {
-        console.warn('[MainLayout] 补注册 Mod 路由失败:', e)
-      }
-    }
-    if (router.resolve(modItem.path).matched.length > 0) {
-      await router.push(modItem.path)
-      return
-    }
-    const legacy = resolveLegacyRouteFromModPath(modItem.path)
-    if (legacy) {
-      await router.push(legacy)
-      return
-    }
-    const csHost = customerServiceHostPathFromModPath(modItem.path)
-    if (csHost) {
-      await router.push(csHost)
-      return
-    }
-    console.warn('[MainLayout] Mod 路由未注册，路径无效:', modItem.path)
-  }
-  // ERP/审批等 Mod 业务页：优先于宿主 route name（企业版与壳模式一致）
-  if (typeof routeName === 'string') {
-    const stripped = routeName.replace(/^mod-/, '')
-    const modBusinessPath = resolveHostBusinessPageRedirect(stripped) || resolveHostBusinessPageRedirect(routeName)
-    if (modBusinessPath) {
-      if (router.resolve(modBusinessPath).matched.length === 0) {
-        const { registerAllModRoutesFromGlob } = await import('@/router/registerModRoutes')
-        await registerAllModRoutesFromGlob(router)
-      }
-      if (router.resolve(modBusinessPath).matched.length > 0) {
-        await router.push(modBusinessPath)
-        return
-      }
-      const legacy = resolveLegacyRouteFromModPath(modBusinessPath)
-      if (legacy) {
-        await router.push(legacy)
-        return
-      }
-      const csHost = customerServiceHostPathFromModPath(modBusinessPath)
-      if (csHost) {
-        await router.push(csHost)
-        return
-      }
-    }
-  }
-  // 侧栏 key 与核心路由 name 一致，优先按名称跳转，避免 routeNameMap 漏配或反查顺序问题
-  const nameCandidate =
-    typeof routeName === 'string' ? routeName.replace(/^mod-/, '') : routeName
-  if (typeof nameCandidate === 'string' && router.hasRoute(nameCandidate)) {
-    await router.push({ name: nameCandidate })
-    return
-  }
-  if (typeof routeName === 'string' && router.hasRoute(routeName)) {
-    await router.push({ name: routeName })
-    return
-  }
-  const routePath = Object.entries(routeNameMap).find(
-    ([, name]) => name === viewKey
-  )?.[0]
-  if (routePath) {
-    await router.push(routePath)
-    return
-  }
-  console.warn('[MainLayout] 侧栏无对应路由:', viewKey)
+  await navigateFromSidebarKey(router, viewKey, {
+    modMenuItems: modMenuItems.value,
+    routeNameMap,
+    getModRoutes: () => modsStore.modRoutes,
+  })
 }
 
 const handleViewChange = (viewKey) => {

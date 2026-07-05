@@ -258,12 +258,12 @@ describe('useChatViewHost – coverage ramp', () => {
     addSpy.mockRestore()
   })
 
-  it('onMounted 注册 xcagi:switch-view 事件监听', async () => {
+  it('onMounted 不再注册 xcagi:switch-view（统一由 AppShellBridge 处理）', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     const deps = makeDeps()
     const { wrapper } = mountWithHost(deps)
     await nextTick()
-    expect(addSpy).toHaveBeenCalledWith('xcagi:switch-view', expect.any(Function))
+    expect(addSpy).not.toHaveBeenCalledWith('xcagi:switch-view', expect.any(Function))
     wrapper.unmount()
     addSpy.mockRestore()
   })
@@ -296,48 +296,6 @@ describe('useChatViewHost – coverage ramp', () => {
     expect(addSpy).toHaveBeenCalledWith('storage', expect.any(Function))
     wrapper.unmount()
     addSpy.mockRestore()
-  })
-
-  // ── xcagi:switch-view 事件处理 ──────────────────────────────────
-
-  it('xcagi:switch-view 事件触发 router.push', async () => {
-    const deps = makeDeps()
-    const { wrapper } = mountWithHost(deps)
-    await nextTick()
-
-    window.dispatchEvent(
-      new CustomEvent('xcagi:switch-view', { detail: { view: 'products' } }),
-    )
-    await nextTick()
-
-    expect(deps.router.push).toHaveBeenCalledWith({ name: 'products' })
-    wrapper.unmount()
-  })
-
-  it('xcagi:switch-view 事件无 detail 时不触发 router.push', async () => {
-    const deps = makeDeps()
-    const { wrapper } = mountWithHost(deps)
-    await nextTick()
-
-    window.dispatchEvent(new CustomEvent('xcagi:switch-view', {}))
-    await nextTick()
-
-    expect(deps.router.push).not.toHaveBeenCalled()
-    wrapper.unmount()
-  })
-
-  it('xcagi:switch-view 事件 detail.view 非字符串时不触发', async () => {
-    const deps = makeDeps()
-    const { wrapper } = mountWithHost(deps)
-    await nextTick()
-
-    window.dispatchEvent(
-      new CustomEvent('xcagi:switch-view', { detail: { view: 123 } }),
-    )
-    await nextTick()
-
-    expect(deps.router.push).not.toHaveBeenCalled()
-    wrapper.unmount()
   })
 
   // ── xcagi:pro-mode-changed 事件处理 ─────────────────────────────
@@ -1045,7 +1003,6 @@ describe('useChatViewHost – coverage ramp', () => {
     wrapper.unmount()
 
     expect(removeSpy).toHaveBeenCalledWith('xcagi:pro-task-status', expect.any(Function))
-    expect(removeSpy).toHaveBeenCalledWith('xcagi:switch-view', expect.any(Function))
     expect(removeSpy).toHaveBeenCalledWith('xcagi:pro-mode-changed', expect.any(Function))
     expect(removeSpy).toHaveBeenCalledWith('xcagi:assistant-push', expect.any(Function))
     expect(removeSpy).toHaveBeenCalledWith('storage', expect.any(Function))
