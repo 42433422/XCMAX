@@ -14,15 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
-    """Mod SSOT 已挂载考勤路由时，跳过宿主 compat 层避免重复注册。"""
-    from pathlib import Path
+    """仅当 taiyangniao-pro 的 /api/mod/* 已实际挂载时，跳过宿主 compat 层。"""
+    try:
+        from app.infrastructure.mods.mod_manager import get_mod_manager
 
-    fhd_root = Path(__file__).resolve().parents[3]
-    candidates = (
-        fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
-        fhd_root / "XCAGI" / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
-    )
-    return any(p.is_file() for p in candidates)
+        return "taiyangniao-pro" in get_mod_manager()._http_routes_registered
+    except RECOVERABLE_ERRORS:
+        return False
 
 
 def _load_taiyangniao_attendance_compat_router():
