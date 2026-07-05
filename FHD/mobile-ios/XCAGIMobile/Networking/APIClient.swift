@@ -367,10 +367,10 @@ final class APIClient: @unchecked Sendable {
 
     // MARK: - 超级员工开发(派工 + 轮询 + git 操作;对标 Android XcagiRepository)
 
-    /// 提交一条超级员工消息(codex / claude),返回派工回包(含 request_id / task_id / 即时直答)。
-    /// `tool` ∈ "codex" | "claude"。context 与桌面端一致(source/client_surface/mode)。
+    /// 提交一条超级员工消息(codex / cursor / claude / trae),返回派工回包(含 request_id / task_id / 即时直答)。
+    /// `tool` ∈ "codex" | "cursor" | "claude" | "trae"。context 与桌面端一致(source/client_surface/mode)。
     func postSuperEmployeeMessage(tool: String, message: String) async throws -> SuperEmployeeDispatchData {
-        let path = (tool == "claude") ? Self.claudeSuperEmployeeMessages : Self.codexSuperEmployeeMessages
+        let path = Self.superEmployeeMessagesPath(tool: tool)
         let body: [String: Any] = [
             "body": message,
             "message": message,
@@ -379,14 +379,23 @@ final class APIClient: @unchecked Sendable {
         return try await envelope(path, method: .post, body: body, of: SuperEmployeeDispatchData.self) ?? SuperEmployeeDispatchData()
     }
 
-    /// 拉取超级员工历史消息(codex / claude)。
+    /// 拉取超级员工历史消息(codex / cursor / claude / trae)。
     func superEmployeeMessages(tool: String, limit: Int = 80) async throws -> [SuperEmployeeMessage] {
-        let path = (tool == "claude") ? Self.claudeSuperEmployeeMessages : Self.codexSuperEmployeeMessages
+        let path = Self.superEmployeeMessagesPath(tool: tool)
         let data = try await envelope("\(path)?limit=\(limit)", of: SuperEmployeeMessagesData.self)
         return data?.messages ?? []
     }
 
-    /// 创建中继任务(对标 Android relayCreateTask)。kind 形如 codex.invoke / claude.invoke / git.merge。
+    private static func superEmployeeMessagesPath(tool: String) -> String {
+        switch tool.lowercased() {
+        case "cursor": return cursorSuperEmployeeMessages
+        case "claude": return claudeSuperEmployeeMessages
+        case "trae": return traeSuperEmployeeMessages
+        default: return codexSuperEmployeeMessages
+        }
+    }
+
+    /// 创建中继任务(对标 Android relayCreateTask)。kind 形如 codex.invoke / cursor.invoke / claude.invoke / trae.invoke / git.merge。
     @discardableResult
     func relayCreateTask(relayId: String, kind: String, payload: [String: Any]) async throws -> RelayTask {
         let body: [String: Any] = ["relay_id": relayId, "kind": kind, "payload": payload]
@@ -635,9 +644,11 @@ final class APIClient: @unchecked Sendable {
     static let aiGroupMember = "\(APIEndpoints.base)/ai-groups/{groupId}/members/{employeeId}"
     // 桌面工具菜单
     static let navMenu = "\(APIEndpoints.base)/nav-menu"
-    // 超级员工开发(管理端 codex / claude)
+    // 超级员工开发(管理端 codex / cursor / claude / trae)
     static let codexSuperEmployeeMessages = "\(APIEndpoints.base)/admin/codex-super-employee/messages"
+    static let cursorSuperEmployeeMessages = "\(APIEndpoints.base)/admin/cursor-super-employee/messages"
     static let claudeSuperEmployeeMessages = "\(APIEndpoints.base)/admin/claude-super-employee/messages"
+    static let traeSuperEmployeeMessages = "\(APIEndpoints.base)/admin/trae-super-employee/messages"
     // 企业库存(非 v1)
     static let inventoryItems = "api/inventory/items"
     // MODstore 账号(注销 / 验证码,走 modstoreBaseURL)

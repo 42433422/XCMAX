@@ -718,12 +718,7 @@ router.beforeEach(async (to, _from, next) => {
             await profile.refreshFromServer();
           }
           if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
-            if (isDesktopShell()) {
-              if (to.name !== 'chat') {
-                next({ name: 'chat', replace: true });
-                return;
-              }
-            } else {
+            if (!isDesktopShell()) {
               window.location.href = resolveAdminConsoleHomeUrl();
               next(false);
               return;

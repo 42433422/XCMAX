@@ -85,6 +85,13 @@ function makeMediaRecorderClass(mockRecorder: ReturnType<typeof createMockMediaR
   }
 }
 
+async function flushVoiceAsyncWork() {
+  for (let i = 0; i < 5; i += 1) {
+    await Promise.resolve()
+    await nextTick()
+  }
+}
+
 /** 简单的 MediaRecorder mock 类（用于权限拒绝等不会真正录音的场景） */
 function makeSimpleMediaRecorderClass(options: {
   isTypeSupported?: () => boolean
@@ -481,7 +488,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'))
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Network error'))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -492,7 +499,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
 
     await nextTick()
     await vi.advanceTimersByTimeAsync(10)
-    await nextTick()
+    await flushVoiceAsyncWork()
 
     expect(api.voiceButtonText.value).toContain('Network error')
   })
@@ -896,7 +903,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
       value: makeMediaRecorderClass(mockRecorder),
     })
 
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce('string error')
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue('string error')
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 
@@ -907,7 +914,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
 
     await nextTick()
     await vi.advanceTimersByTimeAsync(10)
-    await nextTick()
+    await flushVoiceAsyncWork()
 
     expect(api.voiceButtonText.value).toContain('语音识别失败')
   })

@@ -7,8 +7,8 @@
 
 安全：
 - ``User`` / ``Session`` 等不继承 mixin → 永不被过滤（登录 / 会话校验不受影响）。
-- 当前租户为 None（管理员 / 未登录 / 后台无上下文）→ 不过滤，看全部。
-- 默认 NULL 容忍（``tenant_id == 当前 OR IS NULL``）；``XCAGI_TENANT_STRICT=1`` 严格相等。
+- 当前租户为 None → fail-closed，业务模型读空，业务写入拒绝。
+- 默认严格相等；``XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE=1`` 仅迁移期允许 NULL 旧数据可见。
 - 逃生舱：``session.execute(stmt, execution_options={"skip_tenant_filter": True})``。
 """
 
@@ -17,11 +17,15 @@ from __future__ import annotations
 import logging
 import os
 
-from sqlalchemy import event, or_
+from sqlalchemy import event, false, or_
 from sqlalchemy.orm import Session, with_loader_criteria
 
 from app.db.mixins import TenantScopedMixin
-from app.infrastructure.tenant_scope import current_tenant_id, tenant_strict_mode
+from app.infrastructure.tenant_scope import (
+    TenantScopeError,
+    current_tenant_id,
+    tenant_legacy_null_visible,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,10 @@ def _strict_criteria(cls):
 
 def _null_tolerant_criteria(cls):
     return or_(cls.tenant_id == _NT_TID, cls.tenant_id.is_(None))
+
+
+def _deny_criteria(cls):
+    return false()
 
 
 # with_loader_criteria 的 lambda 通过闭包变量追踪绑定参数；用模块级变量承载当前 tid，
@@ -63,15 +71,15 @@ def install_tenant_filter() -> None:
         if execute_state.execution_options.get("skip_tenant_filter"):
             return
         tid = current_tenant_id()
-        if tid is None:
-            return
         global _STRICT_TID, _NT_TID
-        if tenant_strict_mode():
-            _STRICT_TID = tid
-            criteria = _strict_criteria
-        else:
+        if tid is None:
+            criteria = _deny_criteria
+        elif tenant_legacy_null_visible():
             _NT_TID = tid
             criteria = _null_tolerant_criteria
+        else:
+            _STRICT_TID = tid
+            criteria = _strict_criteria
         execute_state.statement = execute_state.statement.options(
             with_loader_criteria(TenantScopedMixin, criteria, include_aliases=True)
         )
@@ -79,10 +87,19 @@ def install_tenant_filter() -> None:
     @event.listens_for(Session, "before_flush")
     def _tenant_write_tag(session, flush_context, instances):  # noqa: ANN001
         tid = current_tenant_id()
-        if tid is None:
-            return
         for obj in session.new:
             if isinstance(obj, TenantScopedMixin) and getattr(obj, "tenant_id", None) is None:
+                if tid is None:
+                    if (os.environ.get("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE") or "").strip().lower() in (
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    ):
+                        continue
+                    raise TenantScopeError(
+                        f"{obj.__class__.__name__} 写入缺少 tenant_id，已拒绝"
+                    )
                 obj.tenant_id = tid
 
 

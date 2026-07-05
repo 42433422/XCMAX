@@ -54,8 +54,8 @@ for mod_id in "${IDS[@]}"; do
 done
 
 if [[ "${#MISSING[@]}" -gt 0 ]]; then
-  echo "Missing industry seed mod(s) under mods/: ${MISSING[*]}" >&2
-  exit 1
+  echo "WARN: Skipped missing industry seed mod(s): ${MISSING[*]}" >&2
 fi
 
-echo "Staged ${#IDS[@]} industry seed mod(s) for SKU ${SKU} -> ${STAGE_DIR}"
+staged_count=$((${#IDS[@]} - ${#MISSING[@]}))
+echo "Staged ${staged_count} industry seed mod(s) for SKU ${SKU} -> ${STAGE_DIR}"

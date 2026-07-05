@@ -755,6 +755,27 @@ def test_report_export_defaults(report_client: TestClient, mock_report_svc: Magi
     )
 
 
+def test_report_export_returns_xlsx_download(
+    report_client: TestClient, mock_report_svc: MagicMock
+) -> None:
+    mock_report_svc.export_to_excel.return_value = {
+        "success": True,
+        "data": b"xlsx-bytes",
+        "filename": "probe.xlsx",
+        "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }
+
+    r = report_client.post("/api/report/export", json={"filename": "probe"})
+
+    assert r.status_code == 200
+    assert r.content == b"xlsx-bytes"
+    assert (
+        r.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    assert r.headers["content-disposition"] == 'attachment; filename="probe.xlsx"'
+
+
 # ---------------------------------------------------------------------------
 # ai_assistant.py — remaining branches
 # ---------------------------------------------------------------------------

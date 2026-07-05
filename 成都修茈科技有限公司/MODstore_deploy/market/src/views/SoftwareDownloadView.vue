@@ -33,7 +33,7 @@
         {{
           platformTab === 'android'
             ? 'Android 客户端：AI 对话、能力市场与电脑端协同'
-            : '选择适合你的版本，在本地开始 AI 创作与自动化工作流'
+            : '下载企业版客户端，在本地开始 AI 创作与自动化工作流'
         }}
       </p>
 
@@ -58,34 +58,6 @@
           @click="platformTab = 'android'"
         >
           Android
-        </button>
-      </div>
-
-      <div
-        v-if="platformTab === 'desktop'"
-        class="sd-edition-switch"
-        role="tablist"
-        aria-label="选择版本"
-      >
-        <button
-          type="button"
-          role="tab"
-          class="sd-edition-switch__btn"
-          :class="{ 'sd-edition-switch__btn--active': edition === 'personal' }"
-          :aria-selected="edition === 'personal'"
-          @click="edition = 'personal'"
-        >
-          个人版
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="sd-edition-switch__btn sd-edition-switch__btn--enterprise"
-          :class="{ 'sd-edition-switch__btn--active': edition === 'enterprise' }"
-          :aria-selected="edition === 'enterprise'"
-          @click="edition = 'enterprise'"
-        >
-          企业版
         </button>
       </div>
 
@@ -120,33 +92,9 @@
         </template>
       </p>
 
-      <details v-if="platformTab === 'desktop'" class="sd-compare-fold">
-        <summary>版本功能对比</summary>
-        <div class="sd-compare-fold__grid">
-          <article class="sd-edition-card sd-edition-card--personal">
-            <h3>个人版</h3>
-            <p class="sd-edition-card__price">免费</p>
-            <ul>
-              <li>基础 AI 对话与创作</li>
-              <li>3 个员工配额</li>
-              <li>社区模板市场</li>
-              <li>5GB 云端存储</li>
-            </ul>
-          </article>
-          <article class="sd-edition-card sd-edition-card--enterprise">
-            <h3>企业版 <span class="sd-edition-card__badge">推荐</span></h3>
-            <p class="sd-edition-card__price">
-              <a :href="ENTERPRISE_MAILTO">联系商务</a>
-            </p>
-            <ul>
-              <li>完整 AI 创作与 ERP 能力</li>
-              <li>无限员工配额</li>
-              <li>团队协作与权限管理</li>
-              <li>私有云 / 本地部署</li>
-            </ul>
-          </article>
-        </div>
-      </details>
+      <p v-if="platformTab === 'desktop'" class="sd-enterprise-note">
+        企业版包含完整 AI 创作与 ERP 能力、团队协作、权限管理和私有化部署支持。
+      </p>
       </div>
     </div>
 
@@ -251,15 +199,12 @@ async function loadReleaseManifest() {
   }
 }
 
-const ENTERPRISE_MAILTO =
-  'mailto:970882904@qq.com?subject=' + encodeURIComponent('XC 企业版咨询')
-
 const macArch = detectMacDownloadArch()
 const macArchLabel = computed(() => macDownloadArchLabel(macArch))
 
 type PlatformTab = 'desktop' | 'android'
 const platformTab = ref<PlatformTab>('desktop')
-const edition = ref<XcagiProductSku>('personal')
+const edition = ref<XcagiProductSku>('enterprise')
 const isMobileViewport = ref(false)
 const isAndroidUa = ref(false)
 
@@ -276,31 +221,23 @@ const releaseContext = computed(() => {
   if (platformTab.value === 'android') {
     return `XC ${androidVersion.value}`
   }
-  const editionLabel = edition.value === 'personal' ? '个人版' : '企业版'
-  return `XC ${downloadVersion.value} · ${editionLabel}`
+  return `XC ${downloadVersion.value} · 企业版`
 })
 
 const releaseRows = computed<ReleaseRow[]>(() => {
   if (platformTab.value === 'android') {
     return [
       {
-        id: 'android-personal',
-        label: 'Android · 个人版',
-        platform: 'android',
-        sku: 'personal',
-        primary: true,
-      },
-      {
         id: 'android-enterprise',
         label: 'Android · 企业版',
-        meta: '可与个人版共存',
         platform: 'android',
         sku: 'enterprise',
+        primary: true,
       },
     ]
   }
 
-  const sku = edition.value
+  const sku: XcagiProductSku = 'enterprise'
   return [
     {
       id: `win-${sku}`,
@@ -461,7 +398,6 @@ const IconAndroid = () =>
   --sd-muted-2: rgba(255, 255, 255, 0.28);
   --sd-line: rgba(255, 255, 255, 0.1);
   --sd-surface: rgba(255, 255, 255, 0.06);
-  --accent-personal: #34d399;
   --accent-enterprise: #fbbf24;
   --sd-center-max: 640px;
   width: 100%;
@@ -590,37 +526,6 @@ const IconAndroid = () =>
   user-select: none;
 }
 
-.sd-edition-switch {
-  display: inline-flex;
-  margin-top: 1.1rem;
-  padding: 3px;
-  border-radius: 999px;
-  border: 1px solid var(--sd-line);
-  background: var(--sd-surface);
-}
-
-.sd-edition-switch__btn {
-  border: 0;
-  background: transparent;
-  padding: 0.35rem 1rem;
-  border-radius: 999px;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--sd-muted);
-  cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-
-.sd-edition-switch__btn--active {
-  color: #ecfdf5;
-  background: rgba(52, 211, 153, 0.28);
-}
-
-.sd-edition-switch__btn--enterprise.sd-edition-switch__btn--active {
-  color: #fffbeb;
-  background: rgba(251, 191, 36, 0.28);
-}
-
 .sd-release-context {
   width: min(100%, 440px);
   margin: clamp(1.5rem, 4vh, 2rem) 0 0;
@@ -688,12 +593,12 @@ const IconAndroid = () =>
 }
 
 .sd-release-row--primary .sd-release-row__action {
-  color: var(--accent-personal);
+  color: var(--accent-enterprise);
   font-weight: 600;
 }
 
 .sd-release-row--primary:hover .sd-release-row__action {
-  color: #6ee7b7;
+  color: #fde68a;
 }
 
 .sd-footnote {
@@ -710,85 +615,13 @@ const IconAndroid = () =>
   text-underline-offset: 2px;
 }
 
-.sd-compare-fold {
+.sd-enterprise-note {
   width: min(100%, 440px);
-  margin-top: 1.5rem;
+  margin: 1.5rem 0 0;
   text-align: left;
-}
-
-.sd-compare-fold summary {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
+  line-height: 1.65;
   color: var(--sd-muted);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-
-.sd-compare-fold summary::-webkit-details-marker {
-  display: none;
-}
-
-.sd-compare-fold summary::after {
-  content: ' ›';
-  opacity: 0.7;
-}
-
-.sd-compare-fold[open] summary::after {
-  content: '';
-}
-
-.sd-compare-fold__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-  margin-top: 0.85rem;
-}
-
-.sd-edition-card {
-  padding: 0.85rem;
-  border-radius: 12px;
-  border: 1px solid var(--sd-line);
-  background: var(--sd-surface);
-}
-
-.sd-edition-card h3 {
-  margin: 0 0 0.35rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-}
-
-.sd-edition-card__badge {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: #1c1917;
-  padding: 0.1rem 0.4rem;
-  border-radius: 4px;
-  background: var(--accent-enterprise);
-  vertical-align: middle;
-}
-
-.sd-edition-card__price {
-  margin: 0 0 0.5rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-}
-
-.sd-edition-card__price a {
-  color: var(--accent-enterprise);
-  text-decoration: none;
-}
-
-.sd-edition-card ul {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.sd-edition-card li {
-  font-size: 0.6875rem;
-  line-height: 1.5;
-  color: var(--sd-muted);
-  padding: 0.15rem 0;
 }
 
 .sd-dock {
@@ -860,10 +693,6 @@ const IconAndroid = () =>
 
   .sd-center {
     padding-top: 0.25rem;
-  }
-
-  .sd-compare-fold__grid {
-    grid-template-columns: 1fr;
   }
 
   .sd-release-row {

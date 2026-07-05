@@ -820,7 +820,7 @@ describe('router/index 覆盖率补齐', () => {
       expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
     })
 
-    it('desktop shell 内 enterprise admin 保持在内部智能对话，不跳外部 admin URL', async () => {
+    it('desktop shell 内 enterprise admin 可正常访问企业页面，不跳外部 admin URL', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockIsDesktopShell.mockReturnValue(true)
@@ -828,7 +828,7 @@ describe('router/index 覆盖率补齐', () => {
       mockAccountProfileStore.isAdminAccount = true
       await router.push('/settings')
       expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
-      expect(router.currentRoute.value.name).toBe('chat')
+      expect(router.currentRoute.value.name).toBe('settings')
     })
 
     it('enterprise + 有效 session + profile 未加载时调用 refresh', async () => {

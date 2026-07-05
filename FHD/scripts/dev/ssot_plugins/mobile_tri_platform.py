@@ -1,4 +1,4 @@
-"""mobile-tri-platform 域适配器：校验移动三端 SSOT、token 与性能监控入口。"""
+"""mobile-tri-platform 域适配器：校验 Flutter/OpenAPI/FastAPI 移动统一 SSOT。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,16 @@ from scripts.dev.ssot_plugins.base import ROOT, load_registry  # noqa: E402
 MOBILE_SSOT_DOC = ROOT / "docs" / "mobile_tri_platform_ssot.md"
 SSOT_INDEX = ROOT / "docs" / "SSOT_INDEX.md"
 TOKENS = ROOT / "config" / "mobile_design_tokens.json"
+OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
+FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
+FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
+
+FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
+FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md"
+FLUTTER_API = ROOT / "mobile-flutter-poc/lib/src/api/mobile_api.dart"
+FLUTTER_MODELS = ROOT / "mobile-flutter-poc/lib/src/api/mobile_models.dart"
+FLUTTER_REPOSITORY = ROOT / "mobile-flutter-poc/lib/src/data/mobile_repository.dart"
+FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
 
 ANDROID_THEME = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt"
 ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt"
@@ -32,8 +42,10 @@ HARMONY_PERF = ROOT / "mobile-harmony/entry/src/main/ets/state/PerformanceMonito
 
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
-    "Android 为主线",
-    "KMM 可引入，但只共享网络层/模型层",
+    "Flutter 统一前端",
+    "OpenAPI 统一前后端契约",
+    "FastAPI 统一后端业务",
+    "KMM 暂停作为主线",
     "设计 token 统一",
     "性能监控统一指标名",
     "mobile.api.latency",
@@ -112,6 +124,15 @@ def _check_registry(errors: list[str]) -> None:
     derived = set(domain.get("derived") or [])
     for rel in (
         "FHD/config/mobile_design_tokens.json",
+        "FHD/contracts/openapi.json",
+        "FHD/app/fastapi_routes/mobile_api.py",
+        "FHD/app/fastapi_routes/mobile_api_extensions.py",
+        "FHD/mobile-flutter-poc/README.md",
+        "FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md",
+        "FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart",
+        "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
+        "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
+        "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
         "FHD/mobile-ios/project.yml",
         "FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift",
         "FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets",
@@ -131,6 +152,47 @@ def _check_doc(errors: list[str]) -> None:
     index_text = _read_text(SSOT_INDEX, errors)
     if "mobile_tri_platform_ssot.md" not in index_text:
         errors.append("SSOT_INDEX.md 未登记 mobile_tri_platform_ssot.md")
+
+
+def _check_unified_stack(errors: list[str]) -> None:
+    flutter_readme = _read_text(FLUTTER_README, errors)
+    if flutter_readme and "Flutter proof of concept" not in flutter_readme:
+        errors.append("Flutter README 未声明 Flutter POC 主线")
+    flutter_unification = _read_text(FLUTTER_UNIFICATION, errors)
+    if flutter_unification and "Flutter POC exists to converge" not in flutter_unification:
+        errors.append("Flutter ANDROID_FIRST_UNIFICATION.md 未声明收敛移动产品线")
+    flutter_api = _read_text(FLUTTER_API, errors)
+    if flutter_api:
+        for snippet in ("XcagiMobileEndpoints", "api/mobile/v1", "X-XCAGI-Client"):
+            if snippet not in flutter_api:
+                errors.append(f"Flutter mobile_api.dart 缺少契约片段: {snippet}")
+    flutter_models = _read_text(FLUTTER_MODELS, errors)
+    if flutter_models and "class MobileEnvelope" not in flutter_models:
+        errors.append("Flutter mobile_models.dart 缺少 MobileEnvelope")
+    flutter_repository = _read_text(FLUTTER_REPOSITORY, errors)
+    if flutter_repository and "class MobileRepository" not in flutter_repository:
+        errors.append("Flutter mobile_repository.dart 缺少 MobileRepository")
+    flutter_theme = _read_text(FLUTTER_THEME, errors)
+    if flutter_theme and "Color(0xFF6366F1)" not in flutter_theme:
+        errors.append("Flutter app_theme.dart 未保留 token primary #6366F1")
+
+    openapi = _load_json(OPENAPI_CONTRACT, errors)
+    paths = openapi.get("paths") if isinstance(openapi, dict) else None
+    if isinstance(paths, dict):
+        for path in ("/api/mobile/v1/admin/home", "/api/mobile/v1/ai-groups"):
+            if path not in paths:
+                errors.append(f"contracts/openapi.json 缺少移动契约路径: {path}")
+
+    fastapi_mobile = _read_text(FASTAPI_MOBILE, errors)
+    if fastapi_mobile:
+        for snippet in ('APIRouter(prefix="/api/mobile/v1"', "router.include_router(extension_router)"):
+            if snippet not in fastapi_mobile:
+                errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
+    fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
+    if fastapi_ext:
+        for snippet in ('@extension_router.get("/admin/home")', '@extension_router.get("/ai-groups")'):
+            if snippet not in fastapi_ext:
+                errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
 
 
 def _check_tokens(errors: list[str]) -> None:
@@ -200,6 +262,7 @@ def check_drift() -> int:
     errors: list[str] = []
     _check_registry(errors)
     _check_doc(errors)
+    _check_unified_stack(errors)
     _check_tokens(errors)
     _check_platform_files(errors)
 
@@ -210,7 +273,7 @@ def check_drift() -> int:
         if len(errors) > 50:
             print(f"  ... 还有 {len(errors) - 50} 条", flush=True)
         return 1
-    print("mobile-tri-platform: OK（Android 主线 / KMM 边界 / 三端 token / 性能监控入口一致）", flush=True)
+    print("mobile-tri-platform: OK（Flutter 前端 / OpenAPI 契约 / FastAPI 后端 / 移动 token / 性能监控入口一致）", flush=True)
     return 0
 
 

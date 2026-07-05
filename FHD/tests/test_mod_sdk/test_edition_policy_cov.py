@@ -138,6 +138,7 @@ class TestEditionModIds:
 
         assert set(MINIMAL_HOST_MOD_IDS).issubset(set(result))
         assert set(GENERIC_HOST_MOD_IDS).issubset(set(result))
+        assert len(result) == len(set(result))
 
     def test_explicit_edition_arg_minimal(self):
         with patch("app.mod_sdk.edition_policy.bundled_mod_ids_for_sku", return_value=()):

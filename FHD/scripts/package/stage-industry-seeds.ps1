@@ -46,7 +46,8 @@ foreach ($modId in $ids) {
 }
 
 if ($missing.Count -gt 0) {
-  throw "Missing industry seed mod(s) under mods/: $($missing -join ', ')"
+  Write-Warning "Skipped missing industry seed mod(s): $($missing -join ', ')"
 }
 
-Write-Host "Staged $($ids.Count) industry seed mod(s) for SKU $ProductSku -> $stageDir"
+$stagedCount = $ids.Count - $missing.Count
+Write-Host "Staged $stagedCount industry seed mod(s) for SKU $ProductSku -> $stageDir"

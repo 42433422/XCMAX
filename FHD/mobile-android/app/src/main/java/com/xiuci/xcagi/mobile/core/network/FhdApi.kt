@@ -221,6 +221,8 @@ interface FhdApi {
     suspend fun mobileBridgeRequests(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("status") status: String? = null,
+        @Query("request_type") requestType: String? = null,
     ): MobileEnvelope<Map<String, Any?>>
 
     @PUT(ApiEndpoints.SERVICE_BRIDGE_REQUESTS_RESPOND)
@@ -233,6 +235,8 @@ interface FhdApi {
     suspend fun bridgeRequests(
         @Query("page") page: Int = 1,
         @Query("per_page") perPage: Int = 20,
+        @Query("status") status: String? = null,
+        @Query("request_type") requestType: String? = null,
     ): Map<String, Any?>
 
     @PUT("api/service-bridge/requests/{id}/respond")
@@ -252,6 +256,9 @@ interface FhdApi {
 
     @GET(ApiEndpoints.ONBOARDING_INDUSTRY_BASELINE)
     suspend fun mobileIndustryBaseline(@Query("industry_id") industryId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.ONBOARDING_SELECT_INDUSTRY)
+    suspend fun mobileSelectOnboardingIndustry(@Body body: Map<String, String>): MobileEnvelope<Map<String, Any?>>
 
     @POST(ApiEndpoints.INSTALL_HOST_FOUNDATION)
     suspend fun mobileInstallHostFoundation(@Query("edition") edition: String = "generic"): MobileEnvelope<Map<String, Any?>>
