@@ -54,7 +54,8 @@ def test_chat_db_read_grace_lifecycle() -> None:
 
 
 def test_message_requires_db_read_token() -> None:
-    assert _message_requires_db_read_token("查看数据库产品库") is True
+    assert _message_requires_db_read_token("查看数据库产品库") is False
+    assert _message_requires_db_read_token("查看数据库") is True
     assert _message_requires_db_read_token("你好") is False
 
 
@@ -69,9 +70,7 @@ def test_ensure_chat_db_read_authorized_no_token(_mock: MagicMock) -> None:
     "app.fastapi_routes.domains.conversation.helpers.effective_db_read_token", return_value="secret"
 )
 def test_ensure_chat_db_read_authorized_wrong_token(_mock: MagicMock) -> None:
-    ok, payload = _ensure_chat_db_read_authorized(
-        _req(), message="查看数据库产品库", provided_token="bad"
-    )
+    ok, payload = _ensure_chat_db_read_authorized(_req(), message="查看数据库", provided_token="bad")
     assert ok is False
     assert payload is not None
 
