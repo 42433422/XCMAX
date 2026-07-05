@@ -13,7 +13,7 @@ class BridgeScreen extends StatefulWidget {
     this.title = '服务桥接',
     this.sectionTitle = '待处理工单',
     this.emptyTitle = '暂无工单',
-    this.emptySubtitle = '工作台有新工单后会同步到这里',
+    this.emptySubtitle = '企业端有新工单后会同步到这里',
     this.replyTitle = '回复',
     this.replyPlaceholder = '输入处理意见或补充说明',
     this.submitText = '发送回复',

@@ -315,6 +315,8 @@ def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
         return None
     if not relay:
         return None
+    if relay.get("paired") is not True:
+        return None
     relay_id = str(relay.get("relay_id") or "").strip()
     if not relay_id:
         return None
@@ -4146,7 +4148,7 @@ def _extract_employee_reply_text(result: dict) -> str:
     if not isinstance(result, dict):
         return ""
     if not result.get("success"):
-        msg = result.get("message") or result.get("error")
+        msg = _extract_employee_failure_text(result)
         return f"⚠️ 员工执行失败：{msg or '未知错误'}"
     r = result.get("result") or {}
     if not isinstance(r, dict):
@@ -4164,6 +4166,38 @@ def _extract_employee_reply_text(result: dict) -> str:
         if v:
             return str(v)
     return str(r) if r else ""
+
+
+def _extract_employee_failure_text(result: dict) -> str:
+    for key in ("message", "error"):
+        value = result.get(key)
+        if value:
+            return str(value)
+    payload = result.get("result")
+    if not isinstance(payload, dict):
+        return ""
+    for key in ("message", "error", "summary", "cognition_error"):
+        value = payload.get(key)
+        if value:
+            return str(value)
+    outputs = payload.get("outputs")
+    if isinstance(outputs, list):
+        for out in outputs:
+            if not isinstance(out, dict):
+                continue
+            for key in ("error", "summary", "message", "text"):
+                value = out.get(key)
+                if value:
+                    return str(value)
+            nested = out.get("output")
+            if isinstance(nested, dict):
+                for key in ("error", "summary", "message", "text"):
+                    value = nested.get(key)
+                    if value:
+                        return str(value)
+            elif nested:
+                return str(nested)
+    return ""
 
 
 @extension_router.post("/employees/{employee_id}/chat/stream")
@@ -4203,9 +4237,12 @@ async def mobile_employee_chat_stream(
     conversation_id = str((body or {}).get("conversation_id") or "").strip()
     payload = {
         "trigger": "mobile_chat",
-        "source": "mobile",
+        "invoke_mode": "interactive_chat",
+        "source": "mobile_app",
         "conversation_id": conversation_id,
-        "client_surface": "mobile",
+        "client_surface": "mobile_app",
+        "mod_id": str((body or {}).get("mod_id") or "").strip(),
+        "employee_id": pid,
     }
 
     async def sse_gen():

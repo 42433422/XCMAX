@@ -657,6 +657,102 @@ void main() {
     expect(codex.timestampText, isNotEmpty);
   });
 
+  test('MobileRepository routes all super employees to real backend paths',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final api = _SuperEmployeeDirectApi(store);
+    final repository = MobileRepository(client: api);
+
+    final cursorReply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:cursor',
+        type: ConversationType.pinnedCursor,
+        title: '超级员工-Cursor',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '修复一个问题',
+    );
+    final claudeReply = await repository.sendMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:claude',
+        type: ConversationType.pinnedClaude,
+        title: '超级员工-Claude',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '分析一下',
+    );
+
+    expect(cursorReply, 'Cursor 真实后端回复');
+    expect(claudeReply.body, 'Claude 真实后端回复');
+    expect(api.postedTools, ['Cursor', 'Claude']);
+    final session = await store.load();
+    expect(session.cachedChatMessages['pinned:cursor'], hasLength(2));
+  });
+
+  test('MobileRepository ignores configured relay id without paired desktop',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final api = _ConfiguredRelayWithoutPairedDesktopApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:codex',
+        type: ConversationType.pinnedCodex,
+        title: '超级员工-Codex',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '不要卡队列',
+    );
+
+    expect(reply, 'Codex 直连回复');
+    expect(api.postedTools, ['Codex']);
+    expect(api.createdRelayTasks, 0);
+  });
+
+  test('MobileRepository ignores stale paired relay desktop', () async {
+    final store = MemoryMobileSessionStore();
+    final api = _StalePairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '不要再卡旧队列',
+    );
+
+    expect(reply, 'Trae 直连回复');
+    expect(api.postedTools, ['Trae']);
+    expect(api.createdRelayTasks, 0);
+  });
+
+  test('MobileRepository clears stale inflight relay without paired desktop',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        inflightRelayTasks: {'pinned:codex': 'stale-task'},
+      ),
+    );
+    final api = _ConfiguredRelayWithoutPairedDesktopApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.resumeRelayTask(
+      conversationId: 'pinned:codex',
+    );
+
+    expect(reply, isNull);
+    expect(api.statusCalls, 0);
+    expect((await store.load()).inflightRelayTasks, isEmpty);
+  });
+
   test('MobileRepository caches normal chat like Android streamChat', () async {
     final store = MemoryMobileSessionStore();
     final repository = MobileRepository(client: _PlainChatCacheApi(store));
@@ -692,6 +788,49 @@ void main() {
       (item) => item.id == 'pinned:assistant',
     );
     expect(assistant.subtitle, '普通回复');
+  });
+
+  test('MobileRepository routes employee chat to mobile employee SSE',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(userId: 1),
+    );
+    final api = _EmployeeChatRoutingApi(store);
+    final repository = MobileRepository(client: api);
+
+    final tokens = <String>[];
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'employee:admin-duty-employees:site-content-editor',
+        type: ConversationType.aiTask,
+        title: '内容运营员工',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '更新首页文案',
+      userId: 7,
+      onToken: tokens.add,
+    );
+
+    expect(reply, '员工回复');
+    expect(tokens, ['员工']);
+    expect(api.genericChatCalled, isFalse);
+    expect(api.capturedMessage, '更新首页文案');
+    expect(api.capturedEmployeeId, 'site-content-editor');
+    expect(api.capturedModId, 'admin-duty-employees');
+    expect(
+      api.capturedConversationId,
+      'employee:admin-duty-employees:site-content-editor',
+    );
+    expect(api.capturedUserId, 7);
+
+    final cached = (await store.load()).cachedChatMessages[
+        'employee:admin-duty-employees:site-content-editor'];
+    expect(cached, hasLength(2));
+    expect(cached?[0]['role'], 'user');
+    expect(cached?[0]['body'], '更新首页文案');
+    expect(cached?[1]['role'], 'assistant');
+    expect(cached?[1]['body'], '员工回复');
   });
 
   test('MobileRepository enterprise conversations parse Android mobile mods',
@@ -851,7 +990,7 @@ void main() {
     final employee = conversations.singleWhere(
       (item) => item.id == 'employee:admin-duty-employees:site-content-editor',
     );
-    expect(employee.badgeText, '高级设置');
+    expect(employee.badgeText, '服务器后台');
     expect(employee.badgeColor, 0xFFED7B2F);
   });
 
@@ -904,6 +1043,16 @@ void main() {
     expect(codex.subtitle, '全设备协同');
     expect(codex.timestampText, isEmpty);
     expect(codex.timestampMs, 0);
+  });
+
+  test('MobileRepository removes stale relay queue preview from AI groups',
+      () async {
+    final repository = MobileRepository(client: _AiGroupsStalePreviewApi());
+
+    final groups = await repository.loadAiGroups();
+
+    expect(groups.single.name, '超级开发部');
+    expect(groups.single.preview, isEmpty);
   });
 
   test(
@@ -1061,6 +1210,197 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
   }
 }
 
+class _AiGroupsStalePreviewApi extends MobileApiClient {
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> aiGroups() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'groups': [
+          {
+            'id': 'group-1',
+            'name': '超级开发部',
+            'member_count': 5,
+            'last_message_preview':
+                '超级员工-Codex：【超级员工-Codex 进度回访】\n状态：排队中\n负责：主负责人\n结果：还在服务器队列中，任务号：',
+            'last_message_at': '2026-07-05T17:16:57+00:00',
+          },
+        ],
+      },
+      raw: {},
+    );
+  }
+}
+
+class _SuperEmployeeDirectApi extends MobileApiClient {
+  _SuperEmployeeDirectApi(MobileSessionStore store)
+      : super(sessionStore: store);
+
+  final postedTools = <String>[];
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
+    String tool,
+    String body,
+  ) async {
+    postedTools.add(tool);
+    final data = <String, Object?>{
+      'message': {
+        'role': 'user',
+        'body': body,
+      },
+      'assistant_message': {
+        'role': 'assistant',
+        'body': '$tool 真实后端回复',
+      },
+      'dispatch': {'status': 'completed'},
+    };
+    return MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: data,
+      raw: data,
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {'items': []},
+      raw: {'items': []},
+    );
+  }
+}
+
+class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
+  _ConfiguredRelayWithoutPairedDesktopApi(MobileSessionStore store)
+      : super(
+          sessionStore: store,
+          config: const MobileApiConfig(relayId: 'configured-relay'),
+        );
+
+  final postedTools = <String>[];
+  var createdRelayTasks = 0;
+  var statusCalls = 0;
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'items': [
+          {
+            'relay_id': 'configured-relay',
+            'status': 'pending',
+          },
+        ],
+      },
+      raw: {
+        'items': [
+          {
+            'relay_id': 'configured-relay',
+            'status': 'pending',
+          },
+        ],
+      },
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateTask({
+    required String relayId,
+    required String kind,
+    required Map<String, Object?> payload,
+  }) async {
+    createdRelayTasks += 1;
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'task': {'task_id': 'should-not-be-created'},
+      },
+      raw: {
+        'task': {'task_id': 'should-not-be-created'},
+      },
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayTaskStatus(
+    String taskId,
+  ) async {
+    statusCalls += 1;
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'task': {
+          'task_id': 'stale-task',
+          'relay_id': 'configured-relay',
+          'status': 'queued',
+        },
+      },
+      raw: {
+        'task': {
+          'task_id': 'stale-task',
+          'relay_id': 'configured-relay',
+          'status': 'queued',
+        },
+      },
+    );
+  }
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
+    String tool,
+    String body,
+  ) async {
+    postedTools.add(tool);
+    return MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {'reply': '$tool 直连回复'},
+      raw: {'reply': '$tool 直连回复'},
+    );
+  }
+}
+
+class _StalePairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+  _StalePairedRelayApi(super.store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'items': [
+          {
+            'relay_id': 'old-paired-relay',
+            'status': 'paired',
+            'last_seen_at': '2026-06-29T16:22:16+00:00',
+            'updated_at': '2026-06-29T16:22:16+00:00',
+          },
+        ],
+      },
+      raw: {
+        'items': [
+          {
+            'relay_id': 'old-paired-relay',
+            'status': 'paired',
+            'last_seen_at': '2026-06-29T16:22:16+00:00',
+            'updated_at': '2026-06-29T16:22:16+00:00',
+          },
+        ],
+      },
+    );
+  }
+}
+
 class _PlainChatCacheApi extends MobileApiClient {
   _PlainChatCacheApi(MobileSessionStore store) : super(sessionStore: store);
 
@@ -1075,6 +1415,48 @@ class _PlainChatCacheApi extends MobileApiClient {
     onToken?.call('普通');
     onToken?.call('回复');
     return '普通回复';
+  }
+}
+
+class _EmployeeChatRoutingApi extends MobileApiClient {
+  _EmployeeChatRoutingApi(MobileSessionStore store)
+      : super(sessionStore: store);
+
+  bool genericChatCalled = false;
+  String capturedMessage = '';
+  String capturedEmployeeId = '';
+  String capturedModId = '';
+  String capturedConversationId = '';
+  int capturedUserId = 0;
+
+  @override
+  Future<String> streamChat(
+    String message, {
+    String? sessionId,
+    int userId = 0,
+    List<Map<String, String>> recentMessages = const [],
+    void Function(String token)? onToken,
+  }) async {
+    genericChatCalled = true;
+    return '不应走通用聊天';
+  }
+
+  @override
+  Future<String> streamEmployeeChat({
+    required String message,
+    required String employeeId,
+    required String modId,
+    required String conversationId,
+    int userId = 0,
+    void Function(String token)? onToken,
+  }) async {
+    capturedMessage = message;
+    capturedEmployeeId = employeeId;
+    capturedModId = modId;
+    capturedConversationId = conversationId;
+    capturedUserId = userId;
+    onToken?.call('员工');
+    return '员工回复';
   }
 }
 

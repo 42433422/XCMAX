@@ -194,7 +194,7 @@ class _MarketListScreenState extends State<MarketListScreen> {
                                 WeCell(
                                   title: data.capabilities[i].title,
                                   subtitle: data.capabilities[i].subtitle
-                                      .ifEmpty('从工作台同步的能力包'),
+                                      .ifEmpty('从企业端同步的能力包'),
                                   icon: Icons.extension,
                                   showArrow: false,
                                   showDivider: i < data.capabilities.length - 1,

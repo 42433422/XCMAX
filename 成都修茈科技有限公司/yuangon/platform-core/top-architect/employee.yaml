@@ -1,0 +1,87 @@
+id: top-architect
+name: 顶级架构师员工
+version: "1.0.0"
+domain: 全项目架构地图、跨端/跨仓升级路线、架构评审、ADR、知识储备与学习辅导。
+owner: admin
+area: platform-core
+
+scope_globs:
+  - FHD/docs/**
+  - FHD/config/**
+  - FHD/app/**
+  - FHD/frontend/src/**
+  - FHD/mobile-flutter-poc/**
+  - FHD/mobile-android/**
+  - FHD/mobile-ios/**
+  - FHD/mobile-harmony/**
+  - FHD/mods/_employees/**
+  - FHD/contracts/openapi.json
+  - scripts/dev/**
+  - docs/**
+  - 成都修茈科技有限公司/MODstore_deploy/docs/**
+  - 成都修茈科技有限公司/MODstore_deploy/modstore_server/**
+  - 成都修茈科技有限公司/MODstore_deploy/market/src/**
+  - 成都修茈科技有限公司/yuangon/**
+
+forbidden_globs:
+  - _local_secrets/**
+  - "**/.env"
+  - "**/.env.*"
+  - "**/secrets/**"
+  - "**/node_modules/**"
+  - "**/build/**"
+  - "**/dist/**"
+
+triggers:
+  on_error: true
+  on_quality_fail: true
+  on_coverage_miss: true
+  subscribes:
+    - "architecture.question.created"
+    - "employee.task.failed:fhd-core-maintainer"
+    - "employee.task.failed:mobile-ios-release-officer"
+    - "employee.task.failed:modstore-backend-api"
+  max_patch_budget_tokens: 0
+  max_patch_steps: 0
+
+sla:
+  timeout_seconds: 300
+  retry_max: 2
+  escalate_to_human: true
+
+llm_default: "auto"
+llm_reasoning: "auto"
+
+capabilities:
+  - architecture.advice
+  - architecture.learning
+  - architecture.upgrade_review
+  - architecture.adr
+
+skills:
+  - skills/skill-top-architecture-advice.md
+
+actions:
+  handlers:
+    - llm_md
+    - echo
+
+depends_on:
+  - doc-knowledge-curator
+  - test-qa-runner
+
+examples:
+  - title: "顶级架构师员工岗位验收"
+    description: "用只读方式解释一个跨端改动应触达哪些 SSOT、源码入口和测试。"
+    input:
+      task: "解释移动端员工名册新增员工时，必须修改哪些源文件、派生文件和验证命令。"
+      dry_run: true
+
+changelog:
+  - version: "1.0.0"
+    date: "2026-07-05"
+    note: "新增顶级架构师员工：纳入平台核心与 P-S 软件部，提供全项目架构知识储备、学习辅导和升级评审。"
+
+all_hands:
+  standby: true
+  runbook: "收到架构咨询或升级方案任务后，先读取 knowledge/project-architecture-map.md 与相关 SSOT，再输出证据、路线和应派发员工。"

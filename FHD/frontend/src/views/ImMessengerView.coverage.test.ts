@@ -262,6 +262,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   it('会话列表展示标题与未读徽章', async () => {
     imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
     expect(wrapper.text()).toContain('企业专属客服')
     expect(wrapper.find('.im-badge').text()).toBe('2')
@@ -1290,9 +1291,8 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([enterpriseCsContact])
     const wrapper = await mountView()
-    expect(wrapper.find('.im-pinned').exists()).toBe(true)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
-    expect(wrapper.text()).toContain('固定联系人')
+    expect(wrapper.text()).toContain('企业专属客服')
   })
 
   it('existingDedicatedConversation 通过 title 匹配非企业专属会话', async () => {

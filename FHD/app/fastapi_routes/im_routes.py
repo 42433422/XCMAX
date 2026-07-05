@@ -708,6 +708,8 @@ def trae_super_employee_invoke(
             return denied
         text = str(body.get("message") or body.get("body") or "").strip()
         context = body.get("context") if isinstance(body.get("context"), dict) else {}
+        workspace_id = str(body.get("workspace_id") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=workspace_id, base=context)
         result = TraeSuperEmployeeService().invoke(user_id=uid, message=text, context=context)
         return {"success": True, **result}
     except ValueError as exc:

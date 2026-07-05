@@ -189,7 +189,7 @@ class FixedPartnerProfileSpec {
           alias: 'AI助手',
           accountId: 'XCAGI-AI-C',
           summary: '负责智能对话、快速分析、识图入口和团队协同问答。',
-          source: 'XCAGI 标准版内置伙伴',
+          source: 'XCAGI 企业版内置伙伴',
           abilityLabels: const ['智能对话', '快速模式', '深度分析', '拍照识图'],
           circleLabels: const ['对话', '分析', '识图'],
           avatarFallback: AppAvatarFallback.assistant,

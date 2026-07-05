@@ -345,7 +345,7 @@ allRoutes.push(
     meta: { title: 'AI群聊' }
   },
   {
-    path: '/admin/entitlements',
+    path: isAdminConsoleSpa() ? '/entitlements' : '/admin/entitlements',
     name: 'admin-entitlements',
     component: () => import('../views/AdminEntitlementsView.vue'),
     meta: { title: '用户管理', requiresAdminAccount: true },

@@ -7,7 +7,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
     id: "506de49aa92342149885f648601ca3f0",
     name: "超级开发部",
     memberCount: 5,
-    preview: "超级员工-Codex：【超级员工-Codex 进度回访】\n状态：排队中\n负责：主负责人\n结果：还在服务器队列中，任务号：",
+    preview: "小C助理、Codex、Cursor、Claude、Trae 在群里协同处理开发任务。",
     timestampText: "12小时前",
     members: [
       AiGroupMember(
@@ -485,7 +485,7 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
   AiGroupConversation(
     id: "dept:prod_software",
     name: "P-S 软件部",
-    memberCount: 7,
+    memberCount: 8,
     preview: "",
     timestampText: "",
     members: [
@@ -508,6 +508,14 @@ const liveAiGroupSnapshot = <AiGroupConversation>[
         name: "数据库运维工程师",
         summary:
             "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
+        avatarUrl: null,
+        avatarKey: "",
+      ),
+      AiGroupMember(
+        employeeId: "top-architect",
+        name: "顶级架构师员工",
+        summary:
+            "掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。",
         avatarUrl: null,
         avatarKey: "",
       ),

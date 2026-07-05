@@ -70,26 +70,19 @@ class _AuthScreenState extends State<AuthScreen> {
   Widget build(BuildContext context) {
     final canLogin = _canLogin;
     final colors = AppTheme.colors(context);
+    final isEnterprise = AndroidProductSkuConfig.isEnterprise(
+      buildSku: MobileAndroidBuild.productSku,
+    );
     return Scaffold(
       backgroundColor: colors.surface,
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.fromLTRB(24, 26, 24, 28),
           children: [
-            Center(
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: Image.asset(
-                  appLauncherIconAsset,
-                  width: 72,
-                  height: 72,
-                  fit: BoxFit.contain,
-                ),
-              ),
-            ),
+            const Center(child: _AuthLogo()),
             const SizedBox(height: 12),
             Text(
-              'XCAGI',
+              isEnterprise ? 'XCAGI 手机控制端' : 'XCAGI 个人版',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textPrimary,
@@ -101,7 +94,9 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '注册或登录，连接 AI 工作台和电脑工具',
+              isEnterprise
+                  ? '连接服务器后台、企业工作台和电脑执行端'
+                  : '与官网 MODstore 同一账号，登录后可同步能力。',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,
@@ -132,20 +127,26 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             const SizedBox(height: 14),
             if (_mode == AuthLoginMode.password) ...[
-              _AccountKindSegment(
-                adminMode: _adminMode,
-                onChanged: (value) => setState(() => _adminMode = value),
-              ),
-              const SizedBox(height: 14),
+              if (isEnterprise) ...[
+                _AccountKindSegment(
+                  adminMode: _adminMode,
+                  onChanged: (value) => setState(() => _adminMode = value),
+                ),
+                const SizedBox(height: 14),
+              ],
               _AuthTextField(
                 controller: _usernameController,
-                hintText: _adminMode ? '账号' : '账号或邮箱',
+                hintText: _adminMode
+                    ? '管理员账号'
+                    : isEnterprise
+                        ? '账号或邮箱'
+                        : '请输入用户名',
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 14),
               _AuthTextField(
                 controller: _passwordController,
-                hintText: '请输入密码',
+                hintText: '密码',
                 obscureText: !_passwordVisible,
                 onChanged: (_) => setState(() {}),
                 suffix: IconButton(
@@ -181,15 +182,12 @@ class _AuthScreenState extends State<AuthScreen> {
                 },
               ),
               const SizedBox(height: 8),
-              _AuthTextField(
+              _OtpCodeField(
                 controller: _otpController,
-                hintText: '验证码',
-                keyboardType: TextInputType.number,
+                actionLabel: _codeButtonText,
+                actionEnabled: _canSendCode,
+                onAction: _sendCode,
                 onChanged: (_) => setState(() {}),
-                suffix: TextButton(
-                  onPressed: _canSendCode ? _sendCode : null,
-                  child: Text(_codeButtonText),
-                ),
               ),
             ],
             const SizedBox(height: 18),
@@ -210,19 +208,28 @@ class _AuthScreenState extends State<AuthScreen> {
               child: FilledButton(
                 onPressed: canLogin ? _login : null,
                 style: FilledButton.styleFrom(
+                  backgroundColor: colors.brand,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: colors.divider,
+                  disabledForegroundColor: colors.textSecondary,
+                  elevation: 0,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(24),
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 16,
+                    height: 1.38,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0,
                   ),
                 ),
                 child: Text(_loginButtonText),
               ),
             ),
             const SizedBox(height: 12),
-            OutlinedButton.icon(
-              onPressed: _openScan,
-              icon: const Icon(Icons.qr_code_scanner, size: 18),
-              label: const Text('扫码绑定/登录'),
-            ),
+            _ScanButton(onTap: _openScan),
+            const SizedBox(height: 10),
+            _RegisterLink(onTap: _openRegister),
             if (_mode == AuthLoginMode.password) ...[
               const SizedBox(height: 10),
               Row(
@@ -240,18 +247,6 @@ class _AuthScreenState extends State<AuthScreen> {
                     onTap: () => setState(() => _autoLogin = !_autoLogin),
                   ),
                 ],
-              ),
-            ],
-            if (_mode == AuthLoginMode.password &&
-                !AndroidProductSkuConfig.isEnterprise(
-                  buildSku: MobileAndroidBuild.productSku,
-                )) ...[
-              const SizedBox(height: 12),
-              Center(
-                child: TextButton(
-                  onPressed: _openRegister,
-                  child: const Text('账号注册'),
-                ),
               ),
             ],
             const SizedBox(height: 18),
@@ -290,8 +285,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   String get _loginButtonText {
     if (_loggingIn) return '登录中…';
-    if (_mode == AuthLoginMode.password && _adminMode) return '进入高级设置';
-    if (_mode == AuthLoginMode.password) return '进入 AI 工作台';
+    if (_mode == AuthLoginMode.password && _adminMode) return '进入服务器后台';
+    if (_mode == AuthLoginMode.password) return '进入企业工作台';
     return '登录';
   }
 
@@ -388,6 +383,29 @@ class _AuthScreenState extends State<AuthScreen> {
 const _termsUrl = 'https://xiu-ci.com/legal/terms';
 const _privacyUrl = 'https://xiu-ci.com/legal/privacy';
 
+class _AuthLogo extends StatelessWidget {
+  const _AuthLogo();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: SizedBox(
+        width: 72,
+        height: 72,
+        child: Center(
+          child: Image.asset(
+            appLauncherForegroundAsset,
+            width: 50,
+            height: 50,
+            fit: BoxFit.contain,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _LoginTab extends StatelessWidget {
   const _LoginTab({
     required this.label,
@@ -404,27 +422,31 @@ class _LoginTab extends StatelessWidget {
     final colors = AppTheme.colors(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        height: 42,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? colors.brandContainer : colors.surfaceHigh,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: selected ? colors.brand : colors.divider,
-            width: 0.8,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? colors.brand : colors.textSecondary,
-            fontSize: 14,
-            height: 1.36,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0,
-          ),
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? colors.textPrimary : colors.textSecondary,
+                fontSize: 16,
+                height: 1.38,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                letterSpacing: 0,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              height: 2.5,
+              decoration: BoxDecoration(
+                color: selected ? colors.brand : Colors.transparent,
+                borderRadius: BorderRadius.circular(1.25),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -442,24 +464,72 @@ class _AccountKindSegment extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: _LoginTab(
-            label: '账号登录',
-            selected: !adminMode,
-            onTap: () => onChanged(false),
+    final colors = AppTheme.colors(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surfaceHigh,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colors.divider, width: 0.5),
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _AccountKindSegmentItem(
+              label: '服务器后台',
+              selected: adminMode,
+              onTap: () => onChanged(true),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: _AccountKindSegmentItem(
+              label: '企业工作台',
+              selected: !adminMode,
+              onTap: () => onChanged(false),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountKindSegmentItem extends StatelessWidget {
+  const _AccountKindSegmentItem({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? colors.brand : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? Colors.white : colors.textSecondary,
+            fontSize: 14,
+            height: 1.29,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0,
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _LoginTab(
-            label: '高级设置',
-            selected: adminMode,
-            onTap: () => onChanged(true),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -515,7 +585,7 @@ class _AuthTextFieldState extends State<_AuthTextField> {
       height: 46,
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: _focused ? colors.brand : colors.divider,
           width: 1,
@@ -532,8 +602,8 @@ class _AuthTextFieldState extends State<_AuthTextField> {
               onChanged: widget.onChanged,
               style: TextStyle(
                 color: colors.textPrimary,
-                fontSize: 14,
-                height: 1.35,
+                fontSize: 15,
+                height: 1.4,
                 letterSpacing: 0,
               ),
               decoration: InputDecoration(
@@ -543,8 +613,8 @@ class _AuthTextFieldState extends State<_AuthTextField> {
                 contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                 hintStyle: TextStyle(
                   color: colors.textSecondary,
-                  fontSize: 14,
-                  height: 1.35,
+                  fontSize: 15,
+                  height: 1.4,
                   letterSpacing: 0,
                 ),
               ),
@@ -556,6 +626,261 @@ class _AuthTextFieldState extends State<_AuthTextField> {
               child: widget.suffix!,
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _OtpCodeField extends StatefulWidget {
+  const _OtpCodeField({
+    required this.controller,
+    required this.actionLabel,
+    required this.actionEnabled,
+    required this.onAction,
+    required this.onChanged,
+  });
+
+  final TextEditingController controller;
+  final String actionLabel;
+  final bool actionEnabled;
+  final VoidCallback onAction;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_OtpCodeField> createState() => _OtpCodeFieldState();
+}
+
+class _OtpCodeFieldState extends State<_OtpCodeField> {
+  final _focusNode = FocusNode();
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final digits = widget.controller.text.replaceAll(RegExp(r'\D'), '');
+    final cleanDigits = digits.length > 6 ? digits.substring(0, 6) : digits;
+    if (cleanDigits != widget.controller.text) {
+      widget.controller.value = TextEditingValue(
+        text: cleanDigits,
+        selection: TextSelection.collapsed(offset: cleanDigits.length),
+      );
+    }
+    final focusedIndex = cleanDigits.length.clamp(0, 5);
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '验证码',
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 16,
+                  height: 1.38,
+                  letterSpacing: 0,
+                ),
+              ),
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: widget.actionEnabled ? widget.onAction : null,
+                child: Text(
+                  widget.actionLabel,
+                  style: TextStyle(
+                    color: widget.actionEnabled
+                        ? colors.brand
+                        : colors.textSecondary,
+                    fontSize: 14,
+                    height: 1.36,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _focusNode.requestFocus(),
+          child: Stack(
+            children: [
+              Row(
+                children: [
+                  for (var index = 0; index < 6; index++) ...[
+                    Expanded(
+                      child: _OtpCell(
+                        char: index < cleanDigits.length
+                            ? cleanDigits[index]
+                            : '',
+                        focused: focusedIndex == index,
+                      ),
+                    ),
+                    if (index != 5) const SizedBox(width: 8),
+                  ],
+                ],
+              ),
+              Positioned(
+                left: 0,
+                top: 0,
+                child: Opacity(
+                  opacity: 0,
+                  child: SizedBox(
+                    width: 1,
+                    height: 1,
+                    child: TextField(
+                      controller: widget.controller,
+                      focusNode: _focusNode,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      onChanged: (value) {
+                        final normalized = value.replaceAll(RegExp(r'\D'), '');
+                        final next = normalized.length > 6
+                            ? normalized.substring(0, 6)
+                            : normalized;
+                        if (next != value) {
+                          widget.controller.value = TextEditingValue(
+                            text: next,
+                            selection:
+                                TextSelection.collapsed(offset: next.length),
+                          );
+                        }
+                        setState(() {});
+                        widget.onChanged(next);
+                      },
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        counterText: '',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OtpCell extends StatelessWidget {
+  const _OtpCell({
+    required this.char,
+    required this.focused,
+  });
+
+  final String char;
+  final bool focused;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      height: 48,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: focused ? colors.brand : colors.divider,
+          width: focused ? 1.5 : 1,
+        ),
+      ),
+      child: Text(
+        char,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: colors.textPrimary,
+          fontSize: 18,
+          height: 1.44,
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0,
+        ),
+      ),
+    );
+  }
+}
+
+class _ScanButton extends StatelessWidget {
+  const _ScanButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        height: 44,
+        decoration: BoxDecoration(
+          color: colors.brand.withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: colors.brand.withValues(alpha: 0.35),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.qr_code_scanner,
+              size: 18,
+              color: colors.brand,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '扫码绑定/登录',
+              style: TextStyle(
+                color: colors.brand,
+                fontSize: 15,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RegisterLink extends StatelessWidget {
+  const _RegisterLink({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Center(
+      child: InkWell(
+        key: const ValueKey('android-register-link'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text(
+            '账号注册',
+            style: TextStyle(
+              color: colors.brand,
+              fontSize: 13,
+              height: 1.31,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -581,12 +906,12 @@ class _LoginCheckbox extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            checked ? Icons.check_box : Icons.check_box_outline_blank,
+          _CheckBoxMark(
+            checked: checked,
             size: 18,
-            color: checked ? colors.brand : colors.textTertiary,
+            radius: 3,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
@@ -620,16 +945,13 @@ class _AgreementRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       child: Row(
         children: [
-          InkWell(
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: onToggle,
-            borderRadius: BorderRadius.circular(4),
-            child: Padding(
-              padding: const EdgeInsets.all(2),
-              child: Icon(
-                agreed ? Icons.check_box : Icons.check_box_outline_blank,
-                size: 20,
-                color: agreed ? colors.brand : colors.textTertiary,
-              ),
+            child: _CheckBoxMark(
+              checked: agreed,
+              size: 20,
+              radius: 4,
             ),
           ),
           const SizedBox(width: 8),
@@ -663,6 +985,40 @@ class _AgreementRow extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CheckBoxMark extends StatelessWidget {
+  const _CheckBoxMark({
+    required this.checked,
+    required this.size,
+    required this.radius,
+  });
+
+  final bool checked;
+  final double size;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: checked ? colors.brand : colors.divider,
+        borderRadius: BorderRadius.circular(radius),
+        border: checked ? null : Border.all(color: colors.divider, width: 0.5),
+      ),
+      alignment: Alignment.center,
+      child: checked
+          ? Icon(
+              Icons.check,
+              size: size == 20 ? 13 : 12,
+              color: Colors.white,
+            )
+          : null,
     );
   }
 }

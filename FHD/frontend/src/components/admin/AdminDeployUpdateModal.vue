@@ -357,18 +357,21 @@ watch(
   margin-bottom: 12px;
 }
 
+.deploy-update-banner.ok,
 .deploy-update-banner.is-ok {
   background: #ecfdf5;
   color: #065f46;
   border: 1px solid #a7f3d0;
 }
 
+.deploy-update-banner.warn,
 .deploy-update-banner.is-warn {
   background: #fffbeb;
   color: #92400e;
   border: 1px solid #fde68a;
 }
 
+.deploy-update-banner.info,
 .deploy-update-banner.is-info {
   background: #eff6ff;
   color: #1e40af;

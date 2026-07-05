@@ -229,7 +229,7 @@ class _IntroStep extends StatelessWidget {
         const _FlowBlock(
           icon: Icons.cloud_done,
           title: '移动端将独立连接 XCAGI 宿主',
-          body: '注册或登录后先同步账号、市场令牌和工作台会话，再按行业装齐基础能力。',
+          body: '注册或登录后先同步账号、市场令牌和企业会话，再按行业装齐基础能力。',
         ),
         const SizedBox(height: 14),
         SizedBox(

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   ACCESS_TOKEN_KEY,
   REFRESH_TOKEN_KEY,
@@ -67,5 +67,23 @@ describe('tokenStore', () => {
   it('getRefreshToken returns empty string when no token', () => {
     clearAuthTokens()
     expect(getRefreshToken()).toBe('')
+  })
+
+  it('is safe when localStorage is unavailable', () => {
+    const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'localStorage')
+    vi.stubGlobal('localStorage', undefined)
+
+    expect(getAccessToken()).toBe('')
+    expect(getRefreshToken()).toBe('')
+    expect(() =>
+      setAuthTokens({ access_token: 'access-1', refresh_token: 'refresh-1' }),
+    ).not.toThrow()
+    expect(() => clearAuthTokens()).not.toThrow()
+
+    if (descriptor) {
+      Object.defineProperty(globalThis, 'localStorage', descriptor)
+    } else {
+      vi.unstubAllGlobals()
+    }
   })
 })

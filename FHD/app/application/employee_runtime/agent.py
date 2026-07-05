@@ -19,6 +19,13 @@ from pathlib import Path
 from typing import Any
 
 from app.application.employee_runtime import executor as _ex
+from app.application.employee_runtime.chat_results import (
+    build_collaboration_context_result,
+    build_interactive_chat_fallback_result,
+    build_interactive_chat_reply_result,
+    is_collaboration_context_payload,
+    is_interactive_chat_payload,
+)
 from app.application.employee_runtime.loader import (
     build_employee_context,
     load_employee_pack_from_disk,
@@ -242,7 +249,10 @@ class EmployeeAgent:
                 )
                 return self._blocked_result(pack, task, handler_list, gate, t0)
 
-            upstream = self._run_upstream_collaboration(task, payload, manifest, config)
+            if not is_interactive_chat_payload(payload) and not is_collaboration_context_payload(
+                payload
+            ):
+                upstream = self._run_upstream_collaboration(task, payload, manifest, config)
             if upstream and upstream.get("node_outputs"):
                 payload["upstream_outputs"] = upstream["node_outputs"]
                 payload["collaboration"] = {
@@ -274,12 +284,34 @@ class EmployeeAgent:
             else:
                 memory = _ex._memory_light({"employee_id": employee_id})
                 reasoning = _ex._cognition_fhd(config, perceived, memory, task)
+                if reasoning.get("error") and is_collaboration_context_payload(payload):
+                    from app.application.employee_runtime.metrics import record_employee_run
+
+                    result = build_collaboration_context_result(
+                        self.employee_id,
+                        pack,
+                        manifest,
+                        task,
+                        handler_list,
+                        reasoning,
+                        t0,
+                        mem_ctx,
+                        degraded=True,
+                    )
+                    record_employee_run(
+                        employee_id,
+                        success=True,
+                        task=task,
+                        summary=self._summarize(result["result"]),
+                    )
+                    return result
                 if reasoning.get("error") and handler_list != ["direct_python"]:
-                    if self._is_interactive_chat_payload(payload):
+                    if is_interactive_chat_payload(payload):
                         from app.application.employee_runtime.metrics import record_employee_run
 
                         record_employee_run(employee_id, success=True, task=task)
-                        return self._interactive_chat_fallback_result(
+                        return build_interactive_chat_fallback_result(
+                            self.employee_id,
                             pack,
                             manifest,
                             task,
@@ -288,6 +320,52 @@ class EmployeeAgent:
                             t0,
                         )
                     return self._cognition_failed_result(pack, task, handler_list, reasoning, t0)
+
+            if is_collaboration_context_payload(payload):
+                from app.application.employee_runtime.metrics import record_employee_run
+
+                result = build_collaboration_context_result(
+                    self.employee_id,
+                    pack,
+                    manifest,
+                    task,
+                    handler_list,
+                    reasoning,
+                    t0,
+                    mem_ctx,
+                )
+                record_employee_run(
+                    employee_id,
+                    success=True,
+                    task=task,
+                    summary=self._summarize(result["result"]),
+                )
+                return result
+
+            if is_interactive_chat_payload(payload):
+                from app.application.employee_runtime.metrics import record_employee_run
+
+                chat_result = build_interactive_chat_reply_result(
+                    self.employee_id,
+                    pack,
+                    manifest,
+                    task,
+                    handler_list,
+                    reasoning,
+                    t0,
+                    upstream,
+                    mem_ctx,
+                )
+                summary = self._summarize(chat_result["result"])
+                record_employee_run(employee_id, success=True, task=task, summary=summary)
+                memory_mgr.remember(
+                    task,
+                    summary,
+                    user_id=user_id,
+                    session_id=session_id,
+                    success=True,
+                )
+                return chat_result
 
             agent_tools = (
                 self._build_agent_tools(manifest, config) if "agent" in handler_list else None
@@ -410,63 +488,6 @@ class EmployeeAgent:
                 "cognition_error": reasoning.get("error"),
             },
             "executed_at": datetime.now(UTC).isoformat(),
-        }
-
-    @staticmethod
-    def _is_interactive_chat_payload(payload: dict[str, Any]) -> bool:
-        mode = str(payload.get("invoke_mode") or payload.get("mode") or "").strip().lower()
-        source = str(payload.get("source") or payload.get("client_surface") or "").strip().lower()
-        return mode in {"interactive_chat", "chat", "dialog"} and source in {
-            "admin_im",
-            "mobile_im",
-            "employee_im",
-            "admin_console",
-            "mobile_app",
-        }
-
-    def _interactive_chat_fallback_result(
-        self,
-        pack: dict[str, Any],
-        manifest: dict[str, Any],
-        task: str,
-        handler_list: list[str],
-        reasoning: dict[str, Any],
-        t0: float,
-    ) -> dict[str, Any]:
-        employee_meta = (
-            manifest.get("employee") if isinstance(manifest.get("employee"), dict) else {}
-        )
-        label = str(
-            manifest.get("name")
-            or employee_meta.get("label")
-            or pack.get("pack_id")
-            or self.employee_id
-        ).strip()
-        text = (
-            f"我在，{label} 已接到消息。当前员工认知模型暂不可用，"
-            "所以先进入降级对话；你可以继续补充明确任务，涉及写库、改文件或高风险动作仍会走风险门和审批。"
-        )
-        return {
-            "employee_id": self.employee_id,
-            "pack": {"id": pack["pack_id"], "version": pack.get("version")},
-            "duration_ms": round((time.perf_counter() - t0) * 1000, 3),
-            "success": True,
-            "result": {
-                "task": task,
-                "handlers": handler_list,
-                "outputs": [
-                    {
-                        "handler": "interactive_chat_fallback",
-                        "ok": True,
-                        "output": text,
-                    }
-                ],
-                "summary": "interactive chat fallback",
-                "cognition_error": reasoning.get("error"),
-            },
-            "executed_at": datetime.now(UTC).isoformat(),
-            "source": "employee_runtime.local",
-            "degraded": True,
         }
 
 

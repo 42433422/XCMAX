@@ -109,6 +109,6 @@ void main() {
 
     expect(profiles.single.sourceLabel, '系统 AI 员工');
     expect(profiles.single.contactLine,
-        '高级设置 · AI号 site-content-editor · 入口 /api/admin/employees/site-content-editor');
+        '服务器后台 · AI号 site-content-editor · 入口 /api/admin/employees/site-content-editor');
   });
 }
