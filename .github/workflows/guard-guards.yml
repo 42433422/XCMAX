@@ -35,6 +35,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
   pull-requests: read
 
 jobs:
@@ -62,7 +63,7 @@ jobs:
           echo "PR 作者: $PR_AUTHOR"
 
           # 检查 PR 是否带 guard-approved label
-          LABELS=$(gh pr view "$PR_NUMBER" --json labels --jq '.labels[].name' 2>/dev/null || echo "")
+          LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name' 2>/dev/null || echo "")
 
           if echo "$LABELS" | grep -qx "guard-approved"; then
             echo ""
