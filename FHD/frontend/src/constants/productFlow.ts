@@ -3,6 +3,13 @@
  */
 
 import { ref, type Ref } from 'vue'
+import {
+  buildTenantScopedStorageKey,
+  readTenantScopedStorageItem,
+  removeTenantScopedStorageItem,
+  resolveTenantStorageScopeFromRuntime,
+  writeTenantScopedStorageItem,
+} from '@/utils/tenantStorageScope'
 
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
@@ -100,7 +107,10 @@ export function industryBaselineHint(industryId: string): string {
 export function readProductFlowCompleted(): boolean {
   if (typeof localStorage === 'undefined') return true
   try {
-    return localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED) === '1'
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const scoped = readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, scope)
+    if (scoped !== null) return scoped === '1'
+    return scope === 'local' && localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED) === '1'
   } catch {
     return true
   }
@@ -109,7 +119,11 @@ export function readProductFlowCompleted(): boolean {
 export function markProductFlowCompleted(): void {
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, '1', scope)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+    }
   } catch {
     /* ignore */
   }
@@ -121,7 +135,10 @@ export function markProductFlowCompleted(): void {
 export function readHostPackAcknowledged(): boolean {
   if (typeof localStorage === 'undefined') return true
   try {
-    return localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK) === '1'
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const scoped = readTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, scope)
+    if (scoped !== null) return scoped === '1'
+    return scope === 'local' && localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK) === '1'
   } catch {
     return true
   }
@@ -135,7 +152,10 @@ const hostPackAckRef: Ref<boolean> = ref(readHostPackAcknowledged())
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === LS_PRODUCT_FLOW_HOST_ACK) {
+    if (
+      e.key === LS_PRODUCT_FLOW_HOST_ACK ||
+      e.key === buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK)
+    ) {
       hostPackAckRef.value = readHostPackAcknowledged()
     }
   })
@@ -149,7 +169,11 @@ export function markHostPackAcknowledged(): void {
   hostPackAckRef.value = true
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, '1', scope)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+    }
   } catch {
     /* ignore */
   }
@@ -162,8 +186,13 @@ export function resetProductFlowState(): void {
   hostPackAckRef.value = false
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
-    localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+    const scope = resolveTenantStorageScopeFromRuntime()
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, scope)
+    if (scope === 'local') {
+      localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
+      localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+    }
   } catch {
     /* ignore */
   }

@@ -102,14 +102,12 @@ test('authenticated sidebar navigation stays inside the market router', async ({
 
   await page.goto('/workbench/home')
 
-  const sidebar = page.getByRole('navigation', { name: '工作台侧边栏' })
-  await expect(sidebar).toBeVisible()
-  await expect(sidebar.locator('.wb-sidebar-nav-links a[href="/ai-store"]')).toHaveAttribute('href', /\/ai-store$/)
+  await expect(page.getByRole('button', { name: '新对话' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'AI 市场' })).toHaveAttribute('href', /\/ai-store$/)
 
-  await page.locator('.wb-user-menu__trigger').click()
-
-  await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
+  await page.getByRole('button', { name: 'tester 菜单' }).click()
   await expect(page.getByRole('menuitem', { name: '钱包' })).toHaveAttribute('href', /\/wallet$/)
+  await expect(page.getByRole('menuitem', { name: '会员' })).toHaveAttribute('href', /\/plans$/)
 })
 
 test('plan purchase creates a checkout order for authenticated users', async ({ page }) => {
@@ -145,7 +143,7 @@ test('workbench shell target tabs switch between employee, workflow, mod and ski
   // Shell renders with employee target tab active
   await expect(page).toHaveURL(/\/workbench\/shell\/employee/)
 
-  // Unified workbench remains available as its own authenticated route.
+  // /workbench/unified remains the legacy unified workbench.
   await page.goto('/workbench/unified')
   await expect(page).toHaveURL(/\/workbench\/unified/)
 

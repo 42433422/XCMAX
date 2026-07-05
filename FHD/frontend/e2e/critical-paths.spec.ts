@@ -1,38 +1,21 @@
 import { test, expect } from '@playwright/test';
 import {
   installE2eShellMocks,
-  csrfHeaders,
   captureEvidence,
-  E2E_USER,
-  E2E_PASSWORD,
   isFullStack,
+  loginBrowserSession,
 } from './helpers';
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
     if (!isFullStack()) {
       await installE2eShellMocks(page);
+    } else {
+      await loginBrowserSession(page);
     }
   });
 
-  test('01 login — credentials establish session', async ({ page, request }) => {
-    if (isFullStack()) {
-      const headers = await csrfHeaders(request);
-      const loginResp = await request.post('/api/auth/login', {
-        headers,
-        data: {
-          username: E2E_USER,
-          password: E2E_PASSWORD,
-          account_kind: 'personal',
-        },
-        timeout: 20_000,
-      });
-      expect(loginResp.status(), await loginResp.text()).toBeLessThan(500);
-      const body = await loginResp.json().catch(() => ({}));
-      const accepted = loginResp.ok() || body?.success === true;
-      expect(accepted, `login response: ${JSON.stringify(body)}`).toBeTruthy();
-    }
-
+  test('01 login — credentials establish session', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page.locator('#app')).toBeVisible();
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 });

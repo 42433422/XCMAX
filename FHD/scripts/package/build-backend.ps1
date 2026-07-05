@@ -15,13 +15,17 @@ $Version = $Version.TrimStart("v", "V")
 
 $skuFrontendMap = @{
   personal = 'minimal'
-  # 与 frontend/.env.development.local 企业网页 dev 对齐：generic 宿主 + VITE_XCAGI_PRODUCT_SKU
-  enterprise = 'generic'
+  enterprise = 'full'
 }
 if ($ProductSku) {
   if (-not $skuFrontendMap.ContainsKey($ProductSku)) {
     throw "Unknown ProductSku: $ProductSku"
   }
+  $buildDir = Join-Path $Root "build"
+  New-Item -ItemType Directory -Force -Path $buildDir | Out-Null
+  $skuJson = @{ sku = $ProductSku; schema_version = 1 } | ConvertTo-Json -Compress
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText((Join-Path $buildDir "product-sku.json"), "$skuJson`n", $utf8NoBom)
   $FrontendEdition = $skuFrontendMap[$ProductSku]
   & "$PSScriptRoot\stage-bundled-mods.ps1" -ProductSku $ProductSku
   & "$PSScriptRoot\stage-industry-seeds.ps1" -ProductSku $ProductSku
@@ -35,6 +39,7 @@ if (-not $SkipFrontend) {
   if ($ProductSku) {
     $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
   }
+  $env:VITE_XCAGI_EDITION = $FrontendEdition
   if ($FrontendEdition -eq 'minimal') {
     npm run build:minimal
   } elseif ($FrontendEdition -eq 'full') {
@@ -42,6 +47,7 @@ if (-not $SkipFrontend) {
   } else {
     npm run build
   }
+  Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
   if ($ProductSku) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }

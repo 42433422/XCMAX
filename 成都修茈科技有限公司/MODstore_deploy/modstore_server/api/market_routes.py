@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import shutil
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -47,6 +48,11 @@ from modstore_server.email_service import (
     generate_verification_code,
     send_verification_email,
 )
+from modstore_server.enterprise_entitlements import (
+    ENTERPRISE_ASSIGNABLE_MODS,
+    assert_enterprise_assignable_mod_id,
+    enterprise_assignable_mod_ids,
+)
 from modstore_server.models import (
     CatalogItem,
     Entitlement,
@@ -67,29 +73,16 @@ router = APIRouter(prefix="/api", tags=["market"])
 _get_current_user = get_current_user
 _require_admin = require_admin
 
-# 企业版桌面：管理员可分配给用户的行业/客户 Mod（与 FHD protected_client_mod_ids 对齐）
-ENTERPRISE_ASSIGNABLE_MODS: dict[str, str] = {
-    "attendance-industry": "考勤行业包",
-    "coating-industry": "涂料行业包",
-    "taiyangniao-pro": "太阳鸟 PRO",
-    "sz-qsm-pro": "深圳国商茂 PRO",
-}
-
 
 def _enterprise_assignable_mod_ids() -> frozenset[str]:
-    return frozenset(ENTERPRISE_ASSIGNABLE_MODS.keys())
+    return enterprise_assignable_mod_ids()
 
 
 def _assert_enterprise_assignable_mod_id(mod_id: str) -> str:
-    mid = (mod_id or "").strip()
-    if not mid:
-        raise HTTPException(400, "mod_id 无效")
-    if mid not in _enterprise_assignable_mod_ids():
-        raise HTTPException(
-            400,
-            f"mod_id 不在可分配客户 Mod 列表内（允许: {', '.join(sorted(_enterprise_assignable_mod_ids()))}）",
-        )
-    return mid
+    try:
+        return assert_enterprise_assignable_mod_id(mod_id)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 def _user_mod_ids_map(user_ids: list[int]) -> dict[int, list[str]]:
@@ -754,6 +747,49 @@ def api_wallet_admin_self_credit(body: AdminSelfCreditDTO, user: User = Depends(
         session.add(txn)
         session.commit()
         return {"ok": True, "new_balance": wallet.balance, "balance": wallet.balance}
+
+
+@router.post("/admin/users/{user_id}/wallet/credit")
+def api_admin_credit_user_wallet(
+    user_id: int,
+    body: AdminSelfCreditDTO,
+    user: User = Depends(_require_admin),
+):
+    """管理员为指定用户钱包加款。"""
+    amount = _wallet_money(body.amount)
+    if amount <= Decimal("0.00"):
+        raise HTTPException(400, "加款金额必须大于 0")
+
+    description = (body.description or "").strip() or "后台加款"
+    sf = get_session_factory()
+    with sf() as session:
+        target = session.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "用户不存在")
+        wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user_id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        wallet.balance = _wallet_money(wallet.balance) + amount
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user_id,
+            amount=amount,
+            txn_type="admin_credit",
+            status="completed",
+            description=description,
+            idempotency_key=f"admin_credit:{user_id}:{uuid.uuid4().hex}",
+        )
+        session.add(txn)
+        session.commit()
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "amount": _wallet_money_str(amount),
+            "balance": _wallet_money_str(wallet.balance),
+            "new_balance": _wallet_money_str(wallet.balance),
+        }
 
 
 def _wallet_money(value: Any) -> Decimal:
@@ -2159,6 +2195,49 @@ def api_enterprise_entitled_mod_ids(user: User = Depends(get_current_user)):
         "username": user.username,
         "mod_ids": mod_ids,
     }
+
+
+@router.get("/enterprise/customer-delivery-seeds/{pkg_id}/{version}/download")
+def api_enterprise_customer_delivery_seed_download(
+    pkg_id: str,
+    version: str,
+    mod_id: str = Query(""),
+    user: User = Depends(get_current_user),
+):
+    """Download an account-scoped customer seed after enterprise entitlement checks."""
+    from fastapi.responses import FileResponse
+
+    from modstore_server.catalog_store import files_dir, get_package
+    from modstore_server.models_db import get_user_mod_ids
+
+    pkg = get_package(pkg_id, version)
+    if not pkg:
+        raise HTTPException(404, "交付种子包不存在")
+
+    artifact = str(pkg.get("artifact") or "").strip().lower()
+    if artifact != "customer_delivery_seed":
+        raise HTTPException(404, "不是客户交付种子包")
+
+    account_mod_id = str(pkg.get("account_mod_id") or "").strip()
+    if not account_mod_id:
+        raise HTTPException(403, "交付种子包未绑定客户 Mod")
+
+    requested_mod_id = str(mod_id or account_mod_id).strip()
+    if requested_mod_id != account_mod_id:
+        raise HTTPException(403, "交付种子包与请求 Mod 不匹配")
+
+    entitled = set(get_user_mod_ids(int(user.id)))
+    if account_mod_id not in entitled:
+        raise HTTPException(403, "当前账号未授权该客户交付包")
+
+    name = str(pkg.get("stored_filename") or "").strip()
+    if not name:
+        raise HTTPException(404, "交付种子包无本地文件")
+    path = files_dir() / name
+    if not path.is_file():
+        raise HTTPException(404, "交付种子文件缺失")
+
+    return FileResponse(path, filename=path.name, media_type="application/zip")
 
 
 @router.get("/admin/wallets")

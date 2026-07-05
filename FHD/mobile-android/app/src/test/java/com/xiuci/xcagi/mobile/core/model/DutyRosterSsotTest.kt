@@ -6,9 +6,9 @@ import org.junit.Test
 
 class DutyRosterSsotTest {
     @Test
-    fun generatedRosterContainsFiftyFourUniqueEmployees() {
-        assertEquals(54, DutyRosterSsot.PLANNED_EMPLOYEE_COUNT)
-        assertEquals(54, DutyRosterSsot.PLANNED_EMPLOYEE_IDS.size)
+    fun generatedRosterContainsFiftyFiveUniqueEmployees() {
+        assertEquals(55, DutyRosterSsot.PLANNED_EMPLOYEE_COUNT)
+        assertEquals(55, DutyRosterSsot.PLANNED_EMPLOYEE_IDS.size)
         assertTrue(DutyRosterSsot.PLANNED_EMPLOYEE_IDS.contains("llm-ops-engineer"))
         assertTrue(DutyRosterSsot.PLANNED_EMPLOYEE_IDS.contains("mobile-harmony-release-officer"))
     }

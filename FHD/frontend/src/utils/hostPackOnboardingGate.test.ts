@@ -55,6 +55,9 @@ describe('hostPackOnboardingGate', () => {
   it('exempts onboarding and mod-store routes', () => {
     expect(shouldRouteToHostPackOnboarding('product-onboarding')).toBe(false)
     expect(shouldRouteToHostPackOnboarding('mod-store')).toBe(false)
+    expect(shouldRouteToHostPackOnboarding('employee-workflow')).toBe(false)
+    expect(shouldRouteToHostPackOnboarding('workflow-employee-space')).toBe(false)
+    expect(shouldRouteToHostPackOnboarding('workflow-employee-stitch-full')).toBe(false)
     expect(shouldRouteToHostPackOnboarding('chat')).toBe(true)
   })
 

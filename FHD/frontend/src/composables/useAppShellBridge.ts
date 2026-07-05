@@ -1,5 +1,6 @@
 import type { Router } from 'vue-router'
 import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
+import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 
 type ProModeController = {
   readProModeStateFromDom: () => boolean
@@ -62,7 +63,7 @@ export function useAppShellBridge(router: Router, proMode: ProModeController) {
       const view = (event as CustomEvent<{ view?: string }>).detail?.view
       if (view) {
         console.log('[AppShellBridge] xcagi:switch-view received, navigating to:', view)
-        router.push({ name: view })
+        void navigateFromSidebarKey(router, view)
       }
     }
     window.addEventListener('xcagi:switch-view', switchViewEvent)

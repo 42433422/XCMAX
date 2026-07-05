@@ -172,6 +172,12 @@ describe('llm api', () => {
     expect(req).toHaveBeenCalledWith('/api/llm/image', expect.objectContaining({ method: 'POST' }))
   })
 
+  it('llmGenerateVideo calls req with POST', async () => {
+    vi.mocked(req).mockResolvedValue({})
+    await llm.llmGenerateVideo('openai', 'sora', 'a cat walking', { size: '1280x720', seconds: 5 })
+    expect(req).toHaveBeenCalledWith('/api/llm/video', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('llmGeneratePptxBlob throws on non-ok response', async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: false,

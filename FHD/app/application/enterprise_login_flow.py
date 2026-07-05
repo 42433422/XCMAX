@@ -428,7 +428,21 @@ async def run_market_first_login(
     login_username = username
     if sku == "enterprise":
         if market_result is None and login_market_fn and password:
+            logger.info(
+                "enterprise market-first login start username=%s account_kind=%s sku=%s",
+                username,
+                account_kind,
+                sku,
+            )
             market_result = await login_market_fn(username, password)
+            logger.info(
+                "enterprise market-first login result username=%s success=%s is_enterprise=%s is_market_admin=%s base=%s",
+                username,
+                bool((market_result or {}).get("success")),
+                bool((market_result or {}).get("is_enterprise")),
+                bool((market_result or {}).get("is_market_admin")),
+                (market_result or {}).get("market_base_url"),
+            )
         if not (market_result or {}).get("success"):
             if account_kind == "admin" and password:
                 # 市场不可达的本地管理员应急登录：不阻断于本地 MFA
@@ -475,17 +489,36 @@ async def run_market_first_login(
                     }
                     return local_admin, None
             return None, market_auth_error_response(market_result or {})
-        # 账号档位改为登录后由 User.tier 派生（见 finalize_enterprise_login）。
-        # 前端登录入口的 account_kind 仅作 hint：不再因入口与市场身份不匹配而拒绝登录，
-        # 仅记录告警，消除“管理员从企业入口登录被拒”等历史摩擦。
         kind_err = validate_account_kind_for_market(
             account_kind,
             is_enterprise=bool((market_result or {}).get("is_enterprise")),
             is_market_admin=bool((market_result or {}).get("is_market_admin")),
         )
         if kind_err:
-            logger.info(
-                "account_kind hint 与市场身份不一致（已忽略，按 User.tier 派生）：%s", kind_err
+            logger.warning(
+                "enterprise market-first account kind rejected username=%s account_kind=%s is_enterprise=%s is_market_admin=%s message=%s",
+                username,
+                account_kind,
+                bool((market_result or {}).get("is_enterprise")),
+                bool((market_result or {}).get("is_market_admin")),
+                kind_err,
+            )
+            return None, JSONResponse(
+                {
+                    "success": False,
+                    "message": kind_err,
+                    "error": {
+                        "code": "ACCOUNT_KIND_MISMATCH",
+                        "message": kind_err,
+                    },
+                    "market_account": {
+                        "success": True,
+                        "market_base_url": (market_result or {}).get("market_base_url"),
+                        "is_enterprise": bool((market_result or {}).get("is_enterprise")),
+                        "is_market_admin": bool((market_result or {}).get("is_market_admin")),
+                    },
+                },
+                status_code=_login_client_http_status(403),
             )
         login_username = username or resolve_market_username(market_result or {})
         if not login_username:

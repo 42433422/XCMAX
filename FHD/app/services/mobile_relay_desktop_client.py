@@ -354,7 +354,7 @@ def register_desktop_relay(
             )
             resp.raise_for_status()
             payload = resp.json()
-    except (httpx.HTTPError, ValueError) as exc:
+    except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
         logger.warning("mobile relay desktop register failed: %s", exc)
         cached = cached_desktop_relay_payload()
         if cached:

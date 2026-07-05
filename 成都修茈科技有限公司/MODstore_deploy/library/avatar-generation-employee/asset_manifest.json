@@ -1,0 +1,16 @@
+{
+  "assets": [],
+  "templates": [],
+  "example_inputs": [],
+  "expected_outputs": [],
+  "rules": [
+    {
+      "filename": "avatar_taxonomy.md",
+      "preview": "真人、关系、动漫游戏、插画化本人、职业品牌、宠物吉祥物、兴趣符号、抽象氛围、默认极简。"
+    },
+    {
+      "filename": "prompt_presets.md",
+      "preview": "employee_avatar_sheet、xiaoc_human_aquatic、mobile_contact_avatar 三套已验证头像提示词预设。"
+    }
+  ]
+}

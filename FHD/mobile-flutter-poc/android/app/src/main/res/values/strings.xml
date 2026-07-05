@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">XCAGI 企业版</string>
+    <string name="company_name">成都修茈科技有限公司</string>
+    <string name="website_icp">蜀ICP备2026014056号-3A</string>
+    <string name="app_filing_number">蜀ICP备2026014056号-3A</string>
+    <string name="app_filing_beian_url">https://beian.miit.gov.cn/</string>
+    <string name="app_filing_subtitle">审核通过 2026-04-08</string>
+    <string name="app_filing_pending">APP 备案信息同步中</string>
+    <string name="company_icp">@string/website_icp</string>
+    <string name="brand_url">https://xiu-ci.com</string>
+</resources>

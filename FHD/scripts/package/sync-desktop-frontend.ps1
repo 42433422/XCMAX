@@ -16,7 +16,7 @@ $Src = Join-Path $Root 'templates\vue-dist'
 
 $skuEditionMap = @{
   personal   = 'minimal'
-  enterprise = 'generic'
+  enterprise = 'full'
 }
 
 if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
@@ -30,6 +30,7 @@ if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
     $Edition
   }
   $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
+  $env:VITE_XCAGI_EDITION = $buildEdition
   if ($buildEdition -eq 'minimal') {
     npm run build:minimal
   } elseif ($buildEdition -eq 'full') {
@@ -37,6 +38,7 @@ if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
   } else {
     npm run build
   }
+  Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
   Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   Pop-Location
 }

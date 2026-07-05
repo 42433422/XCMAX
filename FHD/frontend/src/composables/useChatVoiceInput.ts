@@ -1,4 +1,5 @@
 import { ref, computed, type Ref } from 'vue'
+import { apiFetch } from '@/utils/apiBase'
 
 const MIN_RECORD_MS = 300
 const MAX_RECORD_MS = 60_000
@@ -135,7 +136,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       const ext = extractMimeExtension(blob.type || voiceMimeType)
       const form = new FormData()
       form.append('file', blob, `chat-voice.${ext}`)
-      const resp = await fetch('/api/voice/transcribe', { method: 'POST', body: form })
+      const resp = await apiFetch('/api/voice/transcribe', { method: 'POST', body: form })
       const raw = await resp.text()
       let data: { success?: boolean; detail?: string; message?: string; error?: string; data?: { text?: string } } | null = null
       try {
