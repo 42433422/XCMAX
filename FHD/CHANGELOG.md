@@ -11,6 +11,7 @@
 - **fix(desktop)**：Electron 启动后端注入 `XCAGI_GLOBAL_RATE_LIMIT=0`；`XCAGI_DESKTOP_MODE` 下中间件跳过全局限流，`/api/platform-shell/*` 永不 429
 - **fix(frontend)**：桌面壳侧栏对行业 ERP 路由（print/products 等）强制优先宿主直跳，避免连点落到对话页
 - **fix(ci)**：`test_desktop_windows_runtime_matches_mac_shell_policy` 断言与当前 router 守卫对齐
+- **feat(release)**：macOS CI 通过 App Store Connect API 签发 Developer ID、`notarize.cjs` 公证、`latest-mac.yml` Ed25519 签名
 
 ### 太阳鸟 PRO Mod API 治根（2026-07-04 · v10 线内迭代）
 
