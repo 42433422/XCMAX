@@ -1632,6 +1632,12 @@ class TestRegisterDesktopRelaySuccess:
 
         assert result is not None
         assert result["relay_id"] == "r1"
+        call_body = mock_c.post.call_args[1]["json"]
+        capabilities = call_body["capabilities"]
+        assert capabilities["codex_cli"] is True
+        assert capabilities["trae_cli"] is True
+        assert capabilities["claude_cli"] is True
+        assert capabilities["cursor_cli"] is True
         mock_start.assert_called_once()
         # Config should be written
         assert cfg_file.is_file()

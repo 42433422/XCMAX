@@ -19,6 +19,10 @@
       <div class="page-header">
         <h2>服务器后台总览</h2>
         <div class="header-actions">
+          <button class="btn btn-primary" type="button" @click="openDeployModal">
+            <i class="fa fa-cloud-upload" aria-hidden="true"></i>
+            推送更新包
+          </button>
           <button class="btn btn-secondary" :disabled="refreshing" @click="refreshAll">
             <i class="fa fa-refresh" :class="{ 'fa-spin': refreshing }" aria-hidden="true"></i>
             {{ refreshing ? '刷新中...' : '刷新状态' }}
@@ -59,6 +63,35 @@
             <dt>版本</dt><dd>{{ remoteStatus.version || '—' }}</dd>
             <dt>部署时间</dt><dd>{{ remoteStatus.deployTime || '—' }}</dd>
           </dl>
+        </div>
+
+        <!-- 软件版本与更新包 -->
+        <div class="admin-card admin-card--release">
+          <div class="card-header">
+            <i class="fa fa-cloud-upload card-icon" aria-hidden="true"></i>
+            <h3>软件版本与更新包</h3>
+            <span class="status-badge" :class="deployBadgeClass">
+              {{ deployBadgeText }}
+            </span>
+          </div>
+          <dl class="card-info">
+            <dt>管理端版本</dt><dd>{{ deployStatus?.admin_local?.version || localStatus.version || '—' }}</dd>
+            <dt>管理端 Git</dt><dd class="mono small">{{ shortSha(deployStatus?.admin_local?.git_sha) }}</dd>
+            <dt>update 站版本</dt><dd>{{ deployStatus?.update_hub?.version || '—' }}</dd>
+            <dt>update 站 Git</dt><dd class="mono small">{{ shortSha(deployStatus?.update_hub?.git_sha) }}</dd>
+            <dt>企业端</dt>
+            <dd>{{ deployStatus?.enterprise?.reachable ? '在线' : '不可达' }}</dd>
+          </dl>
+          <p class="release-hint" :class="`is-${deployHintKind}`">
+            {{ deployHintText }}
+          </p>
+          <p v-if="deployStatusError" class="release-error">{{ deployStatusError }}</p>
+          <div class="card-actions">
+            <button class="btn btn-secondary btn-sm" :disabled="deployStatusLoading" @click="loadDeployStatus">
+              {{ deployStatusLoading ? '检测中...' : '检测版本' }}
+            </button>
+            <button class="btn btn-primary btn-sm" @click="openDeployModal">推送更新安装包</button>
+          </div>
         </div>
 
         <!-- 同步状态 -->
@@ -222,6 +255,7 @@
       </div>
       <XcmaxDashboardEmbed :src="timeArchEmbedUrl" title="同时完成时间架构" />
     </div>
+    <AdminDeployUpdateModal v-model="deployModalOpen" @done="handleDeployDone" />
   </div>
 </template>
 
@@ -231,10 +265,11 @@ export default { name: 'XCmaxAdminView' }
 </script>
 
 <script setup>
-import { onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
+import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref } from 'vue'
 import XCmaxAdminInfraTab from '@/components/admin/XCmaxAdminInfraTab.vue'
 import XCmaxAdminDutyTab from '@/components/admin/XCmaxAdminDutyTab.vue'
 import XcmaxDashboardEmbed from '@/components/admin/XcmaxDashboardEmbed.vue'
+import AdminDeployUpdateModal from '@host/components/admin/AdminDeployUpdateModal.vue'
 import {
   xcmaxAutomationPolicyEmbedUrl,
   xcmaxDutyTimeArchitectureEmbedUrl,
@@ -251,6 +286,7 @@ const activeTab = ref('overview')
 const automationEmbedUrl = xcmaxAutomationPolicyEmbedUrl()
 const timeArchEmbedUrl = xcmaxDutyTimeArchitectureEmbedUrl()
 import { api } from '@/api'
+import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import { appAlert } from '@/utils/appDialog'
 import { getPersonnelModApiBase } from '@/constants/personnelModApi'
 
@@ -272,12 +308,104 @@ const modules = ref([])
 const remoteEmployees = ref([])
 const recentErrors = ref([])
 const conflicts = ref([])
+const deployModalOpen = ref(false)
+const deployStatus = ref(null)
+const deployStatusLoading = ref(false)
+const deployStatusError = ref('')
 /** 首次进入时拉取；之后依赖缓存与「刷新状态」 */
 const overviewBootstrapped = ref(false)
+
+const deployBadgeText = computed(() => {
+  if (deployStatusLoading.value) return '检测中'
+  if (deployStatusError.value) return '异常'
+  const flags = deployStatus.value?.flags || {}
+  if (flags.needs_push || flags.needs_pack) return '待推送'
+  if (flags.enterprise_pending) return '已推送'
+  if (flags.up_to_date) return '最新'
+  if (deployStatus.value?.update_hub?.reachable === false) return '未连通'
+  return '待检测'
+})
+
+const deployBadgeClass = computed(() => {
+  if (deployStatusError.value || deployStatus.value?.update_hub?.reachable === false) return 'badge-err'
+  const flags = deployStatus.value?.flags || {}
+  if (flags.needs_push || flags.needs_pack) return 'badge-warn'
+  if (flags.enterprise_pending) return 'badge-info'
+  if (flags.up_to_date) return 'badge-ok'
+  return 'badge-dim'
+})
+
+const deployHintKind = computed(() => {
+  const flags = deployStatus.value?.flags || {}
+  if (deployStatusError.value) return 'error'
+  if (flags.needs_push || flags.needs_pack) return 'warn'
+  if (flags.enterprise_pending) return 'info'
+  if (flags.up_to_date) return 'ok'
+  return 'dim'
+})
+
+const deployHintText = computed(() => {
+  if (deployStatusError.value) return '版本检测失败，请检查管理端会话或 update 站配置。'
+  const flags = deployStatus.value?.flags || {}
+  const version = deployStatus.value?.admin_local?.version || deployStatus.value?.update_hub?.version || ''
+  if (flags.needs_pack) return `本地 ${version || '当前版本'} 尚未打包，推送时会先生成更新包。`
+  if (flags.needs_push) return `本地 ${version || '当前版本'} 比 update 站新，需要推送更新安装包。`
+  if (flags.enterprise_pending) return `新版本 ${version || deployStatus.value?.update_hub?.version || ''} 已推送到 update 站，企业端待拉取。`
+  if (flags.up_to_date) return `管理端与 update 站已同步${version ? `（${version}）` : ''}。`
+  return '点击检测版本，确认本地、update 站和企业端的软件版本。'
+})
 
 function sourceLabel(source) {
   const map = { local: '本地 Mod', remote: '服务器', core: '系统内置', employee: '员工包' }
   return map[source] || source || '未知'
+}
+
+function shortSha(value) {
+  const text = String(value || '').trim()
+  if (!text) return '—'
+  return text.length > 12 ? text.slice(0, 12) : text
+}
+
+function openDeployModal() {
+  deployModalOpen.value = true
+}
+
+function emitDeployStatusUpdated() {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(
+    new CustomEvent('xcagi:admin-deploy-updated', {
+      detail: {
+        text: deployBadgeText.value,
+        version:
+          deployStatus.value?.update_hub?.version ||
+          deployStatus.value?.admin_local?.version ||
+          '',
+        flags: deployStatus.value?.flags || {},
+      },
+    }),
+  )
+}
+
+async function loadDeployStatus() {
+  deployStatusLoading.value = true
+  deployStatusError.value = ''
+  try {
+    const r = await xcmaxAdminApi.checkDeployUpdates('stable')
+    const data = r?.data && typeof r.data === 'object' ? r.data : null
+    if (!data) throw new Error(r?.message || '版本检测失败')
+    deployStatus.value = data
+    emitDeployStatusUpdated()
+  } catch (e) {
+    deployStatus.value = null
+    deployStatusError.value = e instanceof Error ? e.message : String(e || '版本检测失败')
+    emitDeployStatusUpdated()
+  } finally {
+    deployStatusLoading.value = false
+  }
+}
+
+async function handleDeployDone() {
+  await loadDeployStatus()
 }
 
 async function loadLocalStatus() {
@@ -453,7 +581,14 @@ async function resolveConflict(id, action) {
 async function refreshAll() {
   refreshing.value = true
   try {
-    await Promise.all([loadLocalStatus(), loadRemoteStatus(), loadSyncStatus(), loadModules(), loadRemoteEmployees()])
+    await Promise.all([
+      loadLocalStatus(),
+      loadRemoteStatus(),
+      loadSyncStatus(),
+      loadModules(),
+      loadRemoteEmployees(),
+      loadDeployStatus(),
+    ])
     if (syncStatus.value.conflictCount > 0) await loadConflicts()
   } finally {
     refreshing.value = false
@@ -605,6 +740,10 @@ onBeforeUnmount(() => {
   grid-column: 1 / -1;
 }
 
+.admin-card--release {
+  border-color: rgba(37, 99, 235, 0.18);
+}
+
 .card-header {
   display: flex;
   align-items: center;
@@ -650,6 +789,50 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.release-hint {
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+}
+
+.release-hint.is-ok {
+  background: #ecfdf5;
+  color: #047857;
+  border-color: #bbf7d0;
+}
+
+.release-hint.is-warn {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+.release-hint.is-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.release-hint.is-error,
+.release-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.release-error {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  border: 1px solid #fecaca;
 }
 
 .status-badge {

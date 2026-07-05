@@ -45,9 +45,27 @@ export type DeployJobData = {
   error?: string;
 };
 
+export type ForcePushUserEntitlementsPayload = {
+  user: Partial<MarketAdminUser> & Record<string, unknown>;
+  profile: {
+    tier?: string;
+    industry_id?: string;
+    account_tier?: string;
+    budget_range?: string;
+    entitled_industries?: string[];
+  };
+  mod_ids?: string[];
+  wallet?: Record<string, unknown> | null;
+  workflow_employees?: Record<string, unknown>[];
+  installed_mods?: Record<string, unknown>[];
+};
+
 export const xcmaxAdminApi = {
   listUsers() {
     return api.get('/api/xcmax/admin/market/users');
+  },
+  createMarketUser(payload: { username: string; password: string; email: string; verification_code?: string }) {
+    return api.post('/api/xcmax/admin/market/users', payload);
   },
   listAssignableMods() {
     return api.get('/api/xcmax/admin/market/assignable-mods');
@@ -88,6 +106,12 @@ export const xcmaxAdminApi = {
   listWallets(limit = 500, offset = 0) {
     return api.get('/api/xcmax/admin/market/wallets', { limit, offset });
   },
+  creditWallet(userId: number, payload: { amount: number; description?: string }) {
+    return api.post(`/api/xcmax/admin/market/users/${userId}/wallet/credit`, payload);
+  },
+  forcePushUserEntitlements(userId: number, payload: ForcePushUserEntitlementsPayload) {
+    return api.post(`/api/xcmax/admin/market/users/${userId}/entitlements/push`, payload);
+  },
   startImpersonate(marketUserId: number, username: string) {
     return api.post('/api/xcmax/admin/impersonate', {
       market_user_id: marketUserId,
@@ -102,10 +126,14 @@ export const xcmaxAdminApi = {
   endImpersonate() {
     return api.post('/api/xcmax/admin/impersonate/end', {});
   },
-  checkDeployUpdates() {
-    return api.get<{ data?: DeployCheckData; message?: string }>(
-      '/api/xcmax/admin/deploy/check',
-    );
+  checkDeployUpdates(channel?: string) {
+    if (channel) {
+      return api.get<{ data?: DeployCheckData; message?: string }>(
+        '/api/xcmax/admin/deploy/check',
+        { channel },
+      );
+    }
+    return api.get<{ data?: DeployCheckData; message?: string }>('/api/xcmax/admin/deploy/check');
   },
   startDeployPush(body: Record<string, unknown>) {
     return api.post<{ data?: DeployJobData; message?: string }>(

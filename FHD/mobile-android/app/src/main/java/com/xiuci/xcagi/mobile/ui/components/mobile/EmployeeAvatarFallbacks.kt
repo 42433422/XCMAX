@@ -21,6 +21,7 @@ private val employeeAvatarFallbacks: Map<String, AppAvatarFallback> =
         "java-payment-bridge-officer" to AppAvatarFallback.EMP_JAVA_PAYMENT_BRIDGE_OFFICER,
         "market-frontend-dev" to AppAvatarFallback.EMP_MARKET_FRONTEND_DEV,
         "workbench-ux-stylist" to AppAvatarFallback.EMP_WORKBENCH_UX_STYLIST,
+        "top-architect" to AppAvatarFallback.EMP_FHD_CORE_MAINTAINER,
         "fhd-core-maintainer" to AppAvatarFallback.EMP_FHD_CORE_MAINTAINER,
         "vibe-coding-maintainer" to AppAvatarFallback.EMP_VIBE_CODING_MAINTAINER,
         "mods-and-eskill-curator" to AppAvatarFallback.EMP_MODS_AND_ESKILL_CURATOR,

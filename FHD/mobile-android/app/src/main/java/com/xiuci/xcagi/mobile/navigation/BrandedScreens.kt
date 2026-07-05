@@ -367,6 +367,14 @@ fun AuthScreen(
                 }
                 Spacer(Modifier.height(12.dp))
                 LoginScanButton(onClick = onScan)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                        "账号注册",
+                        fontSize = MaterialTheme.typography.bodySmall.fontSize,
+                        fontWeight = FontWeight.Medium,
+                        color = XcagiTheme.extra.brandBlue,
+                        modifier = Modifier.clickable(onClick = onRegister),
+                )
 
                 // ── 记住密码 / 免登录（密码模式） ──
                 if (loginMode == AuthLoginMode.PASSWORD) {
@@ -388,17 +396,6 @@ fun AuthScreen(
                                         label = "免登录"
                                 )
                         }
-                }
-
-                if (!isEnterprise && loginMode == AuthLoginMode.PASSWORD) {
-                        Spacer(Modifier.height(12.dp))
-                        Text(
-                                "个人版注册",
-                                fontSize = MaterialTheme.typography.bodySmall.fontSize,
-                                fontWeight = FontWeight.Medium,
-                                color = XcagiTheme.extra.brandBlue,
-                                modifier = Modifier.clickable(onClick = onRegister),
-                        )
                 }
 
                 Spacer(Modifier.height(18.dp))

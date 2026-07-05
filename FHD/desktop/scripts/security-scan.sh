@@ -12,6 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${DESKTOP_DIR}/../.." && pwd)"
 PARSER="${REPO_ROOT}/.github/scripts/parse-electronegativity-csv.js"
+SUPPRESSIONS="${REPO_ROOT}/.github/electronegativity-suppressions.json"
 
 GATE_SEVERITY="high"
 NO_BUILD=0
@@ -104,4 +105,11 @@ head -20 "${REPORT_DIR}/electronegativity.csv"
 
 # 6. 解析+门禁
 echo "[scan] parsing & gating..."
-node "${PARSER}" "${REPORT_DIR}/electronegativity.csv" --gate-severity "${GATE_SEVERITY}"
+if [ -f "${SUPPRESSIONS}" ]; then
+  node "${PARSER}" "${REPORT_DIR}/electronegativity.csv" \
+    --gate-severity "${GATE_SEVERITY}" \
+    --suppressions "${SUPPRESSIONS}"
+else
+  node "${PARSER}" "${REPORT_DIR}/electronegativity.csv" \
+    --gate-severity "${GATE_SEVERITY}"
+fi

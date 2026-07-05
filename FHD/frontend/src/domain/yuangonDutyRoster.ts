@@ -51,6 +51,7 @@ export const YUANGON_AREAS: Record<string, { label: string; ids: string[] }> = {
   'platform-core': {
     label: '平台核心',
     ids: [
+      'top-architect',
       'fhd-core-maintainer',
       'vibe-coding-maintainer',
       'mods-and-eskill-curator',
@@ -166,6 +167,7 @@ export const YUANGON_PKG_ROLE_LABELS: Record<string, string> = {
   'site-content-editor': '静态站内容编辑员',
   'task-router-officer': '任务派发员',
   'test-qa-runner': '测试质量运行员',
+  'top-architect': '顶级架构师员工',
   'user-customer-service-officer': '用户客服员工',
   'vibe-coding-maintainer': 'Vibe-Coding 维护员',
   'workbench-ux-stylist': '工作台 UX 设计员',
@@ -227,6 +229,7 @@ export const YUANGON_PKG_DESCRIPTIONS: Record<string, string> = {
   'site-content-editor': '维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。',
   'task-router-officer': '把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。',
   'test-qa-runner': '负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。',
+  'top-architect': '掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。',
   'user-customer-service-officer': '面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。',
   'vibe-coding-maintainer': '全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。',
   'workbench-ux-stylist': '专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。',
@@ -364,6 +367,7 @@ export const SIX_LINE_DEPARTMENTS: Record<string, DutyDepartment> = {
     five_line_id: 'prod_software',
     subzones: {
       'core-coding': { label: '核心编码 P2', ids: [
+        'top-architect',
         'fhd-core-maintainer',
         'vibe-coding-maintainer',
       ] },

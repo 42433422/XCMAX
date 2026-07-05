@@ -68,7 +68,7 @@ class _AboutScreenState extends State<AboutScreen> {
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.asset(
-                        appLauncherIconAsset,
+                        appLauncherForegroundAsset,
                         width: 72,
                         height: 72,
                         fit: BoxFit.contain,

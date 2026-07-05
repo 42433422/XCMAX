@@ -25,4 +25,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/avatars/
+    - assets/brand/
     - android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png

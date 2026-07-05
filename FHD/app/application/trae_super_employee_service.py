@@ -1,9 +1,7 @@
 """Trae super-employee dispatch channel.
 
-Trae CN currently exposes a VS Code-style command line entry, not a stable
-headless agent interface. This service registers Trae as a first-class
-super-employee and routes real work through the shared relay / Para dispatcher.
-Local CLI direct execution is deliberately disabled to avoid false completion.
+Trae is a first-class super-employee backed by the shared dispatch engine and
+the enterprise ``trae-cli`` headless agent when local direct execution is used.
 """
 
 from __future__ import annotations

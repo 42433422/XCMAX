@@ -584,6 +584,64 @@ async def admin_list_market_users(request: Request):
     return await _market_admin_proxy(request, "GET", "/api/admin/users")
 
 
+@router.post("/admin/market/users", response_model=None)
+async def admin_create_market_user(
+    request: Request,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    from app.application.session_account_meta import audit_admin_action
+    from app.fastapi_routes.market_account import register_market_user
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    username = str(payload.get("username") or "").strip()
+    password = str(payload.get("password") or "")
+    email = str(payload.get("email") or "").strip()
+    verification_code = str(payload.get("verification_code") or payload.get("code") or "").strip()
+    if not username or not password:
+        return JSONResponse(
+            {"success": False, "message": "username、password 必填"},
+            status_code=422,
+        )
+    if len(password) < 6:
+        return JSONResponse(
+            {"success": False, "message": "password 至少 6 位"},
+            status_code=422,
+        )
+    if not email:
+        email = f"{username.lower()}@xcagi.local"
+
+    result = await register_market_user(username, password, email, verification_code)
+    if not result.get("success"):
+        return JSONResponse(
+            {
+                "success": False,
+                "message": result.get("message") or "创建账号失败",
+                "data": result.get("raw"),
+            },
+            status_code=400,
+        )
+
+    audit_admin_action(
+        request,
+        "create_market_user",
+        target_user_id=result.get("market_user_id"),
+        detail=f"username={username}",
+    )
+    return {
+        "success": True,
+        "data": {
+            "market_user_id": result.get("market_user_id"),
+            "username": username,
+            "email": email,
+            "market_base_url": result.get("market_base_url"),
+            "raw": result.get("raw"),
+        },
+    }
+
+
 @router.get("/admin/market/assignable-mods", response_model=None)
 async def admin_list_assignable_mods(request: Request):
     return await _market_admin_proxy(request, "GET", "/api/admin/enterprise/assignable-mods")
@@ -600,6 +658,39 @@ async def admin_list_wallets(request: Request):
     return await _market_admin_proxy(
         request, "GET", f"/api/admin/wallets?limit={limit}&offset={offset}"
     )
+
+
+@router.post("/admin/market/users/{user_id}/wallet/credit", response_model=None)
+async def admin_credit_user_wallet(
+    request: Request,
+    user_id: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    from app.application.session_account_meta import audit_admin_action
+
+    try:
+        amount = float(payload.get("amount") or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    if amount <= 0:
+        return JSONResponse(
+            {"success": False, "message": "加款金额必须大于 0"},
+            status_code=422,
+        )
+    description = str(payload.get("description") or "").strip() or "后台加款"
+    out = await _market_admin_proxy(
+        request,
+        "POST",
+        f"/api/admin/users/{user_id}/wallet/credit",
+        json_body={"amount": amount, "description": description},
+    )
+    audit_admin_action(
+        request,
+        "credit_user_wallet",
+        target_user_id=user_id,
+        detail=f"amount={amount}",
+    )
+    return out
 
 
 @router.get("/admin/market/users/{user_id}/mods", response_model=None)
@@ -652,6 +743,27 @@ async def admin_set_user_enterprise(
 
 
 _VALID_TIERS = {"personal", "enterprise", "admin"}
+
+
+def _clean_string_list(raw: Any) -> list[str]:
+    if not isinstance(raw, list):
+        return []
+    result: list[str] = []
+    for item in raw:
+        text = str(item or "").strip()
+        if text and text not in result:
+            result.append(text)
+    return result
+
+
+def _truthy(raw: Any) -> bool:
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)):
+        return raw != 0
+    if isinstance(raw, str):
+        return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return False
 
 
 @router.put("/admin/users/{user_id}/profile", response_model=None)
@@ -819,6 +931,100 @@ async def admin_list_user_profiles(request: Request):
     except RECOVERABLE_ERRORS as exc:
         logger.warning("读取用户 profile 列表失败: %s", exc)
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+
+
+@router.post("/admin/market/users/{user_id}/entitlements/push", response_model=None)
+async def admin_force_push_user_entitlements(
+    request: Request,
+    user_id: int,
+    payload: dict[str, Any] = Body(default_factory=dict),
+):
+    """把账号权益完整快照强制推送到企业端同步链路。
+
+    这个接口服务管理端的“账号权益”页，不进入代管会话，也不污染桌面端当前登录态。
+    """
+    from app.application.session_account_meta import audit_admin_action
+    from app.application.xcmax_sync_app import push_outbox
+    from app.services.xcmax_sync_service import record_change
+
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+
+    user_data = payload.get("user") if isinstance(payload.get("user"), dict) else {}
+    profile_data = payload.get("profile") if isinstance(payload.get("profile"), dict) else {}
+    wallet_data = payload.get("wallet") if isinstance(payload.get("wallet"), dict) else None
+
+    username = str(user_data.get("username") or payload.get("username") or "").strip()
+    if not username:
+        return JSONResponse({"success": False, "message": "username 必填"}, status_code=422)
+
+    tier = str(profile_data.get("tier") or user_data.get("tier") or "").strip().lower()
+    if tier not in _VALID_TIERS:
+        tier = "enterprise" if _truthy(user_data.get("is_enterprise")) else "personal"
+    industry_id = str(profile_data.get("industry_id") or user_data.get("industry_id") or "通用").strip()
+    entitled_industries = _clean_string_list(profile_data.get("entitled_industries"))
+    if industry_id and industry_id not in entitled_industries:
+        entitled_industries.append(industry_id)
+
+    snapshot = {
+        "market_user_id": str(user_id),
+        "username": username,
+        "email": str(user_data.get("email") or payload.get("email") or "").strip(),
+        "is_admin": _truthy(user_data.get("is_admin")),
+        "is_enterprise": _truthy(user_data.get("is_enterprise")) or tier == "enterprise",
+        "profile": {
+            "username": username,
+            "tier": tier,
+            "industry_id": industry_id or "通用",
+            "account_tier": str(profile_data.get("account_tier") or "").strip(),
+            "budget_range": str(profile_data.get("budget_range") or "").strip(),
+            "entitled_industries": entitled_industries,
+        },
+        "mod_ids": _clean_string_list(payload.get("mod_ids")),
+        "wallet": wallet_data,
+        "workflow_employees": payload.get("workflow_employees")
+        if isinstance(payload.get("workflow_employees"), list)
+        else [],
+        "installed_mods": payload.get("installed_mods")
+        if isinstance(payload.get("installed_mods"), list)
+        else [],
+        "source": "admin_entitlements_force_push",
+        "meta": {
+            "updated_at_ms": int(time.time() * 1000),
+            "target": "enterprise",
+            "push_mode": "forced",
+        },
+    }
+
+    change_id = record_change(
+        "account_entitlements",
+        str(user_id),
+        "sync",
+        snapshot,
+        actor="admin",
+    )
+    if change_id < 0:
+        return JSONResponse(
+            {"success": False, "message": "写入账号权益同步队列失败"},
+            status_code=500,
+        )
+
+    push_result = push_outbox(remote_host=REMOTE_HOST, remote_port=REMOTE_PORT)
+    audit_admin_action(
+        request,
+        "force_push_user_entitlements",
+        target_user_id=user_id,
+        detail=f"username={username}; change_id={change_id}; sent={push_result.get('sent')}",
+    )
+    return {
+        "success": True,
+        "data": {
+            "change_id": change_id,
+            "snapshot": snapshot,
+            "push": push_result,
+        },
+    }
 
 
 @router.get("/admin/wechat/groups", response_model=None)
@@ -1482,7 +1688,8 @@ def _probe_remote_health_sync() -> dict[str, Any]:
     t0 = time.time()
     try:
         req = urllib.request.Request(remote_url, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        direct_opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with direct_opener.open(req, timeout=5) as resp:
             latency_ms = round((time.time() - t0) * 1000)
             body = json.loads(resp.read(4096).decode("utf-8", errors="replace"))
             return {
@@ -1516,6 +1723,63 @@ def _probe_remote_health_sync() -> dict[str, Any]:
 async def remote_status():
     """探测远端服务器连接状态（轻量 HTTP GET /api/health）。"""
     return await asyncio.to_thread(_probe_remote_health_sync)
+
+
+@router.get("/admin/deploy/check", response_model=None)
+async def admin_deploy_check(request: Request, channel: str = Query("stable")):
+    """管理端检查本地版本、update 中转站版本、企业端待更新状态。"""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    normalized_channel = "staging" if str(channel).strip() == "staging" else "stable"
+    from app.application.admin_deploy_push import check_deploy_updates
+
+    data = await asyncio.to_thread(check_deploy_updates, normalized_channel)
+    return {"success": True, "data": data}
+
+
+@router.post("/admin/deploy/push", response_model=None)
+async def admin_deploy_push(request: Request, body: dict[str, Any] = Body(default_factory=dict)):
+    """管理端推送更新包到 update 中转站；企业端自行拉取。"""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    payload = dict(body or {})
+    channel = "staging" if str(payload.get("channel") or "").strip() == "staging" else "stable"
+    options = {
+        "include_backend": bool(payload.get("include_backend", True)),
+        "include_frontend": bool(payload.get("include_frontend", True)),
+        "skip_pack": bool(payload.get("skip_pack", False)),
+        "channel": channel,
+    }
+    ssh_key = str(payload.get("ssh_key") or "").strip()
+    if ssh_key:
+        options["ssh_key"] = ssh_key
+    try:
+        from app.application.admin_deploy_push import start_deploy_push
+
+        job = await start_deploy_push(options)
+        return {"success": True, "data": job.to_dict()}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("admin deploy push failed to start: %s", exc)
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=409)
+
+
+@router.get("/admin/deploy/jobs/{job_id}", response_model=None)
+async def admin_deploy_job(request: Request, job_id: str):
+    """查询管理端更新包推送任务。"""
+    gate = _require_market_admin_session(request)
+    if gate is not None:
+        return gate
+    normalized_job_id = "".join(ch for ch in str(job_id or "") if ch.isalnum() or ch in "-_")[:128]
+    if not normalized_job_id:
+        return JSONResponse({"success": False, "message": "job_id 无效"}, status_code=400)
+    from app.application.admin_deploy_push import get_deploy_job
+
+    job = get_deploy_job(normalized_job_id)
+    if job is None:
+        return JSONResponse({"success": False, "message": "推送任务不存在"}, status_code=404)
+    return {"success": True, "data": job.to_dict()}
 
 
 # ---------------------------------------------------------------------------

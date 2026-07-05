@@ -14,6 +14,7 @@ const mockSetUserEnterprise = vi.fn().mockResolvedValue({ success: true })
 const mockStartImpersonate = vi.fn().mockResolvedValue({ bridge_token: 'test-token', enterprise_launch_path: '/chat' })
 const mockGetUserProfiles = vi.fn().mockResolvedValue({ data: {} })
 const mockSetUserProfile = vi.fn().mockResolvedValue({ success: true })
+const mockForcePushUserEntitlements = vi.fn().mockResolvedValue({ data: { push: { sent: 1, failed: 0 } } })
 
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
@@ -26,6 +27,8 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     startImpersonate: (uid: number, name: string) => mockStartImpersonate(uid, name),
     getUserProfiles: () => mockGetUserProfiles(),
     setUserProfile: (uid: number, payload: unknown) => mockSetUserProfile(uid, payload),
+    forcePushUserEntitlements: (uid: number, payload: unknown) =>
+      mockForcePushUserEntitlements(uid, payload),
   },
 }))
 

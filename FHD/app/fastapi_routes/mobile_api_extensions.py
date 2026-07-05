@@ -315,6 +315,8 @@ def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
         return None
     if not relay:
         return None
+    if relay.get("paired") is not True:
+        return None
     relay_id = str(relay.get("relay_id") or "").strip()
     if not relay_id:
         return None
