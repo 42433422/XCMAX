@@ -85,7 +85,7 @@ class AndroidProductSkuConfig {
     String? remoteSku,
   }) {
     return isEnterprise(buildSku: buildSku, remoteSku: remoteSku)
-        ? '企业版'
+        ? '标准版'
         : '个人版';
   }
 }

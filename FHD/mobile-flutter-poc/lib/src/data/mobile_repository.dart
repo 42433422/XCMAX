@@ -81,7 +81,7 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '管理端' : '已安装',
+        badgeText: adminMode ? '高级设置' : '已安装',
         badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
         states: conversationStates,
       ),
@@ -109,7 +109,7 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? '管理端' : '已安装',
+        badgeText: adminMode ? '高级设置' : '已安装',
         badgeColor: adminMode ? _badgeAdminColor : _badgeInstalledColor,
         states: conversationStates,
       ),
@@ -121,7 +121,7 @@ class MobileRepository {
       final response = await _client.adminHome();
       if (!response.success) {
         throw MobileRepositoryException(
-          response.message.ifEmpty('管理端移动数据加载失败'),
+          response.message.ifEmpty('移动数据加载失败'),
         );
       }
 
@@ -532,7 +532,7 @@ class MobileRepository {
     );
     if (!response.success) {
       throw MobileRepositoryException(
-        response.message.ifEmpty(adminMode ? '服务器后台账号或密码错误' : '用户名或密码错误'),
+        response.message.ifEmpty(adminMode ? '账号或密码错误' : '用户名或密码错误'),
       );
     }
     await _client.persistLoginSession(
@@ -842,7 +842,7 @@ class MobileRepository {
 
     final relayId = await _relayIdForSuperEmployeeDispatch();
     if (relayId.isEmpty) {
-      throw MobileRepositoryException('未绑定电脑执行端，无法执行 $cleanOp');
+      throw MobileRepositoryException('未绑定电脑工具，无法执行 $cleanOp');
     }
 
     final created = await _client.relayCreateTask(
@@ -876,18 +876,18 @@ class MobileRepository {
       final currentStatus = _stringField(current, 'status');
       lastStatus = currentStatus.ifEmpty(lastStatus);
       if (currentStatus == 'done' || currentStatus == 'completed') {
-        return _relayTaskResultText(current).ifEmpty('电脑执行端已完成任务。');
+        return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
       }
       if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
         throw MobileRepositoryException(
-          _relayTaskResultText(current).ifEmpty('电脑执行端执行失败'),
+          _relayTaskResultText(current).ifEmpty('电脑工具执行失败'),
         );
       }
     }
     throw MobileRepositoryException(
       lastStatus.isEmpty
-          ? '电脑执行端暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。'
-          : '电脑执行端仍处于 $lastStatus，任务仍在后台运行，可稍后回到此会话查看。',
+          ? '电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。'
+          : '电脑工具仍处于 $lastStatus，任务仍在后台运行，可稍后回到此会话查看。',
     );
   }
 
@@ -962,7 +962,7 @@ class MobileRepository {
         switch (currentStatus) {
           case 'running':
           case 'assigned':
-            onToken?.call('\n电脑执行端正在运行 $toolLabel。');
+            onToken?.call('\n电脑工具正在运行 $toolLabel。');
             break;
           case 'queued':
             onToken?.call('\n任务仍在服务器队列中。');
@@ -972,17 +972,17 @@ class MobileRepository {
       }
       if (currentStatus == 'done' || currentStatus == 'completed') {
         await _setInflightRelayTask(conversationId, '');
-        return _relayTaskResultText(current).ifEmpty('电脑执行端已完成任务。');
+        return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
       }
       if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
         await _setInflightRelayTask(conversationId, '');
         throw MobileRepositoryException(
-          _relayTaskResultText(current).ifEmpty('电脑执行端执行失败'),
+          _relayTaskResultText(current).ifEmpty('电脑工具执行失败'),
         );
       }
     }
     throw const MobileRepositoryException(
-      '电脑执行端暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。',
+      '电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。',
     );
   }
 
@@ -1788,7 +1788,7 @@ class MarketCapability {
         _stringField(json, 'summary'),
         _stringField(json, 'subtitle'),
         _stringField(json, 'version'),
-        '从企业端同步的能力包',
+        '从工作台同步的能力包',
       ]),
       payload: json,
     );
@@ -2556,7 +2556,7 @@ ModInfo _normalizeAdminDutyMod(ModInfo mod) {
     name: mod.name,
     version: mod.version,
     description:
-        '$plannedAdminEmployeeCount 位管理端 duty AI 员工与 ${mod.frontendMenu.length} 个管理功能入口',
+        '$plannedAdminEmployeeCount 位系统 AI 员工与 ${mod.frontendMenu.length} 个管理功能入口',
     author: mod.author,
     primary: mod.primary,
     industry: mod.industry,
@@ -2810,7 +2810,7 @@ extension on String {
   String contactChannelLabel() {
     switch (trim()) {
       case 'admin-duty':
-        return '管理端工作台';
+        return '高级设置';
       case 'mobile':
       case 'mobile-chat':
         return '手机端会话';

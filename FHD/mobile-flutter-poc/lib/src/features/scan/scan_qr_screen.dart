@@ -351,7 +351,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   void _showAuthQrConfirm(AuthQrPayload payload) {
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
-    final targetLabel = payload.accountKind == 'admin' ? '管理端' : '企业端';
+    final targetLabel = payload.accountKind == 'admin' ? '高级设置' : '工作台';
     final rootContext = context;
     final colors = AppTheme.colors(rootContext);
     showModalBottomSheet<void>(
@@ -423,8 +423,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                     controller: usernameController,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
-                      hintText:
-                          payload.accountKind == 'admin' ? '管理员账号' : '企业账号',
+                      hintText: payload.accountKind == 'admin' ? '账号' : '账号',
                       filled: true,
                       fillColor: sheetColors.surfaceHigh,
                       border: OutlineInputBorder(

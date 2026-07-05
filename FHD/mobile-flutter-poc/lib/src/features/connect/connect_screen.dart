@@ -46,7 +46,7 @@ class ConnectScreen extends StatelessWidget {
                     const SizedBox(height: 16),
                     Text(
                       key: const ValueKey('connect_title'),
-                      'XCAGI 手机控制端',
+                      'XCAGI',
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: colors.textPrimary,
@@ -61,7 +61,7 @@ class ConnectScreen extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(horizontal: 40),
                       child: Text(
                         key: const ValueKey('connect_description'),
-                        '绑定服务器后台、企业工作台或电脑执行端后，手机可远程调动员工和 Codex。',
+                        '绑定云端工作台或电脑工具后，手机可远程调动 AI 员工和 Codex。',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: colors.textSecondary,

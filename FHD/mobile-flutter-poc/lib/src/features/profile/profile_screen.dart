@@ -30,9 +30,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final MobileApiClient _api;
   late final ImagePicker _imagePicker;
   late Future<WalletBalanceData> _walletFuture;
-  var _displayName = 'admin';
+  var _displayName = 'XCAGI 用户';
   var _avatarPath = '';
-  var _accountKindLabel = '管理员账号';
+  var _accountKindLabel = '账号';
   var _serverModeLabel = '远程同步可用';
   var _profilePage = const MobileProfilePageConfig.disabled();
   var _syncing = false;
@@ -93,7 +93,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         children: [
                           WeCell(
                             title: '扫码绑定',
-                            subtitle: '绑定服务器后台、企业工作台或电脑执行端',
+                            subtitle: '绑定云端工作台或电脑工具',
                             icon: Icons.qr_code_2,
                             iconColor: Theme.of(context).colorScheme.secondary,
                             iconBg: Theme.of(context)
@@ -439,9 +439,9 @@ String _profileAccountKindLabel(String accountKind, String fallback) {
   switch (accountKind.trim().toLowerCase()) {
     case 'admin':
     case 'admin_portal':
-      return '管理员账号';
+      return '账号';
     case 'enterprise':
-      return '企业账号';
+      return '账号';
     case 'personal':
       return '个人账号';
     default:

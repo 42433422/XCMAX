@@ -225,7 +225,7 @@ class _EmployeeNotFoundState extends StatelessWidget {
             ),
             const SizedBox(height: 6),
             Text(
-              '稍后刷新或从企业端同步数据',
+              '稍后刷新或从工作台同步数据',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: colors.textSecondary,

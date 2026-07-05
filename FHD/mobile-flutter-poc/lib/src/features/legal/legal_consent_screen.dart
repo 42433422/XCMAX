@@ -11,7 +11,7 @@ class LegalConsentScreen extends StatefulWidget {
   const LegalConsentScreen({
     super.key,
     this.api,
-    this.legalVersion = 'enterprise-v1',
+    this.legalVersion = 'public-v1',
     this.onAccepted,
     this.onAbout,
   });
@@ -80,7 +80,7 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                '企业智能工作平台',
+                'AI 工作平台',
                 style: TextStyle(
                   color: foreground.withValues(alpha: 0.7),
                   fontSize: 14,

@@ -664,7 +664,7 @@ class _EcosystemSyncHint extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '点这里重新同步管理端员工。',
+                      '点这里重新同步 AI 员工。',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodySmall?.copyWith(
