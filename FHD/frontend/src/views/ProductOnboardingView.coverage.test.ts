@@ -1568,6 +1568,29 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     }
   })
 
+  it('finishHostPackFlow：流程已完成但 host-pack 未确认时仍写入侧栏确认', async () => {
+    const { wrapper } = await mountComponent({
+      route: { step: 'host-pack' },
+      baseline: createBaselinePlan({ baseline_ready: true }),
+    })
+    await flushPromises()
+    await flushPromises()
+    mockContainer.readProductFlowCompleted.mockReturnValue(true)
+    mockContainer.flowState.markProductFlowCompleted.mockClear()
+    mockContainer.flowState.markHostPackAcknowledged.mockClear()
+    mockContainer.flowState.completeFlowAndGoChat.mockClear()
+
+    const buttons = wrapper.findAll('.actions .btn.primary')
+    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
+    expect(enterChatBtn).toBeTruthy()
+    await enterChatBtn!.trigger('click')
+    await flushPromises()
+
+    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
+    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
+  })
+
   it('finishHostPackFlow：baselineOk 且 fromTutorial 时调用 returnFromTutorial', async () => {
     mockContainer.flowState = createFlowState({
       refreshDeliverable: vi.fn(async () => ({ deliverable: true })),

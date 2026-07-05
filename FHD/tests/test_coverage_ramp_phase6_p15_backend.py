@@ -3689,9 +3689,9 @@ class TestCCCatalogUrl:
         with patch.dict(os.environ, {"XCAGI_CATALOG_BASE_URL": "https://x.com/v1"}):
             assert cc._catalog_url("/v1/packages") == "https://x.com/v1/packages"
 
-    def test_catalog_url_no_v1_prefix_kept(self) -> None:
+    def test_catalog_url_api_prefix_uses_origin(self) -> None:
         with patch.dict(os.environ, {"XCAGI_CATALOG_BASE_URL": "https://x.com/v1"}):
-            assert cc._catalog_url("/api/x") == "https://x.com/v1/api/x"
+            assert cc._catalog_url("/api/x") == "https://x.com/api/x"
 
 
 class TestCCMarketItemToPackageRow:
@@ -4131,6 +4131,38 @@ class TestCCCatalogDownloadTo:
             await cc.catalog_download_to("/packages/p1/1.0.0/download", dest)
             assert dest.exists()
             assert dest.read_bytes() == b"data1data2"
+
+    @pytest.mark.asyncio
+    async def test_catalog_download_to_merges_auth_headers(self, tmp_path) -> None:
+        dest = tmp_path / "pkg.zip"
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.aread = AsyncMock(return_value=b"")
+
+        async def _aiter_bytes():
+            yield b"x"
+
+        mock_resp.aiter_bytes = _aiter_bytes
+
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_stream_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        mock_client = MagicMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.stream = MagicMock(return_value=mock_stream_ctx)
+
+        with patch("httpx.AsyncClient", return_value=mock_client):
+            await cc.catalog_download_to(
+                "/packages/p1/1.0.0/download",
+                dest,
+                headers={"Authorization": "Bearer account-token"},
+            )
+
+        assert mock_client.stream.call_args.kwargs["headers"]["Authorization"] == (
+            "Bearer account-token"
+        )
 
     @pytest.mark.asyncio
     async def test_catalog_download_to_4xx_raises_502(self, tmp_path) -> None:

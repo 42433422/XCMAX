@@ -196,11 +196,12 @@ export function useVisibleNavItems() {
       return true
     }) as ResolvedSidebarMenuItem[]
 
-    // 引导第三步完成（或已装账号定制）后，平台壳主导航长出行业业务核心项。
-    // 这些项独立于 erp-domain-bridge 的 hidden override（壳模式改用宿主槽位承载），
+    // 引导第三步完成（或已装账号定制）后，主导航长出行业业务核心项。
+    // 企业完整包下客户 ERP 场景会抑制通用 bridge 的重复菜单，也需要用宿主槽位承载。
     // 仅取行业/定制 label 覆盖；其同名 mod 入口会在 merge 阶段因占用宿主槽位被去重。
     const industryDelivery: ResolvedSidebarMenuItem[] = []
-    if (!adminShell && isPlatformShellMode() && exposeIndustrySidebar.value) {
+    const shouldInjectIndustryDelivery = exposeIndustrySidebar.value
+    if (!adminShell && shouldInjectIndustryDelivery) {
       for (const item of INDUSTRY_DELIVERY_CORE_ITEMS) {
         const override = coreMenuOverrides.value.get(item.key)
         industryDelivery.push({

@@ -734,9 +734,9 @@ function openModStore() {
 function finishHostPackFlow() {
   invalidateHostPackCompletionCache()
   if (baselineOk.value) {
+    flow.markHostPackAcknowledged()
     if (!readProductFlowCompleted()) {
       flow.markProductFlowCompleted()
-      flow.markHostPackAcknowledged()
     }
     if (fromTutorial.value) {
       returnFromTutorial()

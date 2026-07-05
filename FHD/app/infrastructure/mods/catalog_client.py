@@ -49,6 +49,13 @@ def _catalog_headers() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"} if token else {}
 
 
+def _catalog_origin_url() -> str:
+    parsed = urlparse(catalog_base_url())
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return catalog_base_url()
+
+
 def _catalog_url(path: str) -> str:
     parsed = urlparse(path)
     if parsed.scheme in {"http", "https"}:
@@ -56,6 +63,8 @@ def _catalog_url(path: str) -> str:
     clean = path if path.startswith("/") else f"/{path}"
     if clean.startswith("/v1/"):
         clean = clean[3:]
+    if clean.startswith("/api/"):
+        return f"{_catalog_origin_url()}{clean}"
     return f"{catalog_base_url()}{clean}"
 
 
@@ -211,13 +220,21 @@ async def _fetch_market_catalog_rows() -> list[dict[str, Any]]:
     return out
 
 
-async def catalog_download_to(path: str, dest: Path) -> None:
+async def catalog_download_to(
+    path: str,
+    dest: Path,
+    *,
+    headers: dict[str, str] | None = None,
+) -> None:
     """Stream a catalog artifact into ``dest``."""
     url = _catalog_url(path)
     dest.parent.mkdir(parents=True, exist_ok=True)
+    request_headers = _catalog_headers()
+    if headers:
+        request_headers.update(headers)
     try:
         async with httpx.AsyncClient(timeout=None, trust_env=False) as client:
-            async with client.stream("GET", url, headers=_catalog_headers()) as resp:
+            async with client.stream("GET", url, headers=request_headers) as resp:
                 if resp.status_code >= 400:
                     text = await resp.aread()
                     raise HTTPException(

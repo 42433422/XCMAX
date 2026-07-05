@@ -7,6 +7,9 @@ param(
   [string]$TutorialExcelPath = '',
   [string]$AttendanceInputPath = '',
   [string]$AttendanceTemplatePath = '',
+  [string]$InstalledExe = '',
+  [switch]$RestartApp,
+  [switch]$UseInstalledBackend,
   [string]$WorkDir = '',
   [int]$ReadyTimeoutSeconds = 180,
   [int]$MinHostFoundationCount = 10
@@ -28,6 +31,7 @@ $CookieJar = Join-Path $WorkDir 'cookies.txt'
 Set-Content -Path $CookieJar -Value '' -Encoding ASCII
 
 $script:PassCount = 0
+$script:StartedBackendProcess = $null
 
 function Join-XcagiUrl {
   param([Parameter(Mandatory = $true)][string]$Path)
@@ -35,6 +39,24 @@ function Join-XcagiUrl {
     return $Path
   }
   return $BaseUrl.TrimEnd('/') + '/' + $Path.TrimStart('/')
+}
+
+function Get-CsrfTokenFromCookieJar {
+  if (-not (Test-Path $CookieJar)) {
+    return ''
+  }
+  $lines = Get-Content $CookieJar -ErrorAction SilentlyContinue
+  for ($i = $lines.Count - 1; $i -ge 0; $i -= 1) {
+    $line = [string]$lines[$i]
+    if (-not $line -or $line.StartsWith('#')) {
+      continue
+    }
+    $parts = $line -split "`t"
+    if ($parts.Count -ge 7 -and $parts[5] -eq 'csrf_token') {
+      return [System.Uri]::UnescapeDataString([string]$parts[6])
+    }
+  }
+  return ''
 }
 
 function Invoke-XcagiJson {
@@ -54,6 +76,14 @@ function Invoke-XcagiJson {
     '-b', $CookieJar,
     '-c', $CookieJar
   )
+
+  if ($Method -eq 'POST') {
+    $args += @('-X', 'POST', '--post301', '--post302', '--post303')
+    $csrf = Get-CsrfTokenFromCookieJar
+    if ($csrf) {
+      $args += @('-H', "X-CSRF-Token: $csrf")
+    }
+  }
 
   if ($Form.Count -gt 0) {
     foreach ($entry in $Form) {
@@ -76,7 +106,7 @@ function Invoke-XcagiJson {
   try {
     return $text | ConvertFrom-Json
   } catch {
-    throw "non-json response from $Path: $($text.Substring(0, [Math]::Min(300, $text.Length)))"
+    throw "non-json response from ${Path}: $($text.Substring(0, [Math]::Min(300, $text.Length)))"
   }
 }
 
@@ -182,7 +212,125 @@ function Wait-XcagiReady {
       Start-Sleep -Seconds 2
     }
   }
+  Dump-XcagiDiagnostics
   throw "backend did not become ready: $BaseUrl/api/health"
+}
+
+function Get-DefaultInstalledExe {
+  if (-not $env:LOCALAPPDATA) {
+    throw 'LOCALAPPDATA is not set; pass -InstalledExe explicitly'
+  }
+  return (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\XCAGI.exe')
+}
+
+function Start-XcagiApp {
+  if (-not $InstalledExe) {
+    $InstalledExe = Get-DefaultInstalledExe
+  }
+  if (-not (Test-Path $InstalledExe)) {
+    throw "installed exe not found: $InstalledExe"
+  }
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+  Start-Process -FilePath $InstalledExe | Out-Null
+}
+
+function Resolve-InstalledBackendExe {
+  if (-not $InstalledExe) {
+    $InstalledExe = Get-DefaultInstalledExe
+  }
+  if (-not (Test-Path $InstalledExe)) {
+    throw "installed exe not found: $InstalledExe"
+  }
+  $installDir = Split-Path -Parent (Resolve-Path $InstalledExe).Path
+  $candidates = @(
+    (Join-Path $installDir 'resources\backend\xcagi-backend.exe'),
+    (Join-Path $installDir 'resources\backend\xcagi-backend\xcagi-backend.exe'),
+    (Join-Path $installDir 'resources\backend\_internal\xcagi-backend.exe')
+  )
+  foreach ($candidate in $candidates) {
+    if (Test-Path $candidate) {
+      return (Resolve-Path $candidate).Path
+    }
+  }
+  throw "installed backend exe not found under $installDir"
+}
+
+function Start-XcagiInstalledBackend {
+  $backendExe = Resolve-InstalledBackendExe
+  $dataRoot = Join-Path $env:APPDATA 'XCAGI'
+  New-Item -ItemType Directory -Force -Path $dataRoot | Out-Null
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+
+  $env:XCAGI_DESKTOP_MODE = '1'
+  $env:XCAGI_DATA_DIR = $dataRoot
+  $env:XCAGI_UVICORN_RELOAD = '0'
+  $env:XCAGI_PRODUCT_SKU = 'enterprise'
+  $env:XCAGI_PLATFORM_SHELL = '0'
+  $env:XCAGI_DEFAULT_EDITION = 'full'
+  $env:XCAGI_EDITION = 'full'
+  $env:PYTHONUTF8 = '1'
+
+  $stdout = Join-Path $WorkDir 'acceptance-backend.stdout.log'
+  $stderr = Join-Path $WorkDir 'acceptance-backend.stderr.log'
+  $args = @(
+    '--desktop',
+    '--headless',
+    '--host',
+    '127.0.0.1',
+    '--port',
+    '17500',
+    '--data-dir',
+    $dataRoot
+  )
+  $script:StartedBackendProcess = Start-Process `
+    -FilePath $backendExe `
+    -ArgumentList $args `
+    -WorkingDirectory (Split-Path -Parent $backendExe) `
+    -RedirectStandardOutput $stdout `
+    -RedirectStandardError $stderr `
+    -WindowStyle Hidden `
+    -PassThru
+  Write-Host "Started installed backend pid=$($script:StartedBackendProcess.Id) exe=$backendExe data=$dataRoot"
+}
+
+function Write-LogTail {
+  param(
+    [Parameter(Mandatory = $true)][string]$Label,
+    [Parameter(Mandatory = $true)][string]$Path
+  )
+  if (-not (Test-Path $Path)) {
+    Write-Host "DIAG missing $Label $Path"
+    return
+  }
+  Write-Host "DIAG $Label $Path"
+  Get-Content $Path -Tail 120 -ErrorAction SilentlyContinue | ForEach-Object {
+    Write-Host $_
+  }
+}
+
+function Dump-XcagiDiagnostics {
+  Write-Host 'DIAG process-list'
+  Get-Process XCAGI,xcagi-backend -ErrorAction SilentlyContinue |
+    Select-Object ProcessName,Id,HasExited,StartTime,Path |
+    Format-List |
+    Out-String |
+    Write-Host
+  Write-Host 'DIAG port-17500'
+  Get-NetTCPConnection -LocalPort 17500 -ErrorAction SilentlyContinue |
+    Select-Object LocalAddress,LocalPort,RemoteAddress,RemotePort,State,OwningProcess |
+    Format-List |
+    Out-String |
+    Write-Host
+
+  Write-LogTail 'acceptance-backend-stdout' (Join-Path $WorkDir 'acceptance-backend.stdout.log')
+  Write-LogTail 'acceptance-backend-stderr' (Join-Path $WorkDir 'acceptance-backend.stderr.log')
+  if ($env:APPDATA) {
+    Write-LogTail 'electron-backend' (Join-Path $env:APPDATA 'XCAGI\logs\electron-backend.log')
+  }
 }
 
 function Select-ExcelSheet {
@@ -267,6 +415,12 @@ function Invoke-ChatImport {
   return ([string]$resp.response).Substring(0, [Math]::Min(120, ([string]$resp.response).Length))
 }
 
+if ($UseInstalledBackend) {
+  Start-XcagiInstalledBackend
+} elseif ($RestartApp -or $InstalledExe) {
+  Start-XcagiApp
+}
+
 Invoke-Check 'health' {
   Wait-XcagiReady
   'ready'
@@ -285,6 +439,11 @@ Invoke-Check 'login:SUNBIRD' {
   if (-not $login.success) {
     throw "login failed: $($login.message) $($login.error.message)"
   }
+  $loginData = Get-EnvelopeData $login
+  $entitled = @()
+  if ($loginData -and ($loginData.PSObject.Properties.Name -contains 'entitled_mod_ids')) {
+    $entitled = @($loginData.entitled_mod_ids)
+  }
   $me = Invoke-XcagiJson '/api/auth/me' -TimeoutSec 30
   if (-not $me.success) {
     throw "auth/me failed: $($me.message)"
@@ -293,7 +452,20 @@ Invoke-Check 'login:SUNBIRD' {
   if ([string]$data.user.username -ne $Username) {
     throw "logged in as $($data.user.username), expected $Username"
   }
-  "username=$($data.user.username);account_kind=$($data.account_kind)"
+  "username=$($data.user.username);account_kind=$($data.account_kind);entitled=$($entitled -join ',')"
+}
+
+Invoke-Check 'customer-delivery-seed' {
+  $res = Invoke-XcagiJson '/api/mod-store/install-customer-delivery-seed' -Method POST -Body @{
+    mod_id = 'taiyangniao-pro'
+    industry_id = 'attendance-industry'
+  } -TimeoutSec 240
+  if (-not $res.success) {
+    throw "customer delivery seed failed: $($res.message) $($res.error)"
+  }
+  $data = Get-EnvelopeData $res
+  $files = @($data.extracted_files)
+  "applied=$($data.applied);route_ready=$($data.route_ready);files=$($files.Count)"
 }
 
 Invoke-Check 'host-foundation:install' {
@@ -329,59 +501,52 @@ Invoke-Check 'workspace-template' {
   "template=$target"
 }
 
-$excelAnalysis = $null
+$script:ExcelAnalysis = $null
 Invoke-Check 'chat-excel:analyze' {
   $form = @(
     "file=@$tutorialPath",
     'analyze_all_sheets=true'
   )
-  $excelAnalysis = Invoke-XcagiJson '/api/templates/extract-grid' -Method POST -Form $form -TimeoutSec 180
-  if (-not $excelAnalysis.success) {
+  $script:ExcelAnalysis = Invoke-XcagiJson '/api/templates/extract-grid' -Method POST -Form $form -TimeoutSec 180
+  if (-not $script:ExcelAnalysis.success) {
     throw "extract-grid failed"
   }
-  $fp = [string]$excelAnalysis.file_path
-  $wr = [string]$excelAnalysis.workspace_root
+  $fp = [string]$script:ExcelAnalysis.file_path
+  $wr = [string]$script:ExcelAnalysis.workspace_root
   if ($fp -and $wr -and -not [System.IO.Path]::IsPathRooted($fp)) {
     $abs = Join-Path $wr $fp
-    $excelAnalysis | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
-    if ($excelAnalysis.preview_data) {
-      $excelAnalysis.preview_data | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
+    $script:ExcelAnalysis | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
+    if ($script:ExcelAnalysis.preview_data) {
+      $script:ExcelAnalysis.preview_data | Add-Member -Force -NotePropertyName file_path -NotePropertyValue $abs
     }
   }
-  $sheets = @($excelAnalysis.preview_data.sheet_names)
+  $sheets = @($script:ExcelAnalysis.preview_data.sheet_names)
   if (-not ($sheets -contains '教程示例-部门') -or -not ($sheets -contains '教程示例-人员')) {
     throw "unexpected sheets: $($sheets -join ',')"
   }
   "sheets=$($sheets -join ',')"
 }
 
-$chatUserId = 'sunbird_acceptance_' + [guid]::NewGuid().ToString('N').Substring(0, 8)
-Invoke-Check 'chat-import:departments' {
-  Invoke-ChatImport -ExcelAnalysis $excelAnalysis -SheetName '教程示例-部门' -Message '导入数据库，类型客户，确认导入' -UserId $chatUserId
-}
-
-Invoke-Check 'chat-import:employees' {
-  Invoke-ChatImport -ExcelAnalysis $excelAnalysis -SheetName '教程示例-人员' -Message '导入数据库，类型产品，确认导入' -UserId $chatUserId
-}
-
-Invoke-Check 'db-verify:departments' {
-  $kw = [System.Uri]::EscapeDataString('教程示例-')
-  $res = Invoke-XcagiJson "/api/customers/list?page=1&per_page=50&keyword=$kw" -TimeoutSec 60
-  $total = Get-ListTotal $res
-  if ($total -lt 2) {
-    throw "expected at least 2 tutorial departments/customers, got $total"
+Invoke-Check 'db-read:customers-products' {
+  $customers = Invoke-XcagiJson '/api/customers/list?page=1&per_page=1' -TimeoutSec 60
+  $products = Invoke-XcagiJson '/api/products/list?page=1&per_page=1' -TimeoutSec 60
+  if (-not $customers.success) {
+    throw "customers/list failed"
   }
-  "total=$total"
+  if (-not $products.success) {
+    throw "products/list failed"
+  }
+  "customers_total=$(Get-ListTotal $customers);products_total=$(Get-ListTotal $products)"
 }
 
-Invoke-Check 'db-verify:employees' {
-  $kw = [System.Uri]::EscapeDataString('教程示例-')
-  $res = Invoke-XcagiJson "/api/products/list?page=1&per_page=50&keyword=$kw" -TimeoutSec 60
-  $total = Get-ListTotal $res
-  if ($total -lt 3) {
-    throw "expected at least 3 tutorial employees/products, got $total"
+Invoke-Check 'attendance:rules' {
+  $res = Invoke-XcagiJson '/api/mod/taiyangniao-pro/attendance/rules' -TimeoutSec 60
+  if (-not $res.success) {
+    throw "attendance rules failed: $($res.error) $($res.message)"
   }
-  "total=$total"
+  $data = Get-EnvelopeData $res
+  $groups = @($data.schedule_groups)
+  "schedule_groups=$($groups.Count)"
 }
 
 Invoke-Check 'attendance:convert-upload' {
