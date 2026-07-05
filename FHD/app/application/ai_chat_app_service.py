@@ -2421,7 +2421,11 @@ class AIChatApplicationService:
 
         # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
         # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
-        if profile == "normal" and not explicit_workflow_tool_intent and not smart_workflow_intent:
+        if (
+            profile == "normal"
+            and not explicit_workflow_tool_intent
+            and not smart_workflow_intent
+        ):
             return None
 
         # 专业界面默认画像：发货单/开单句式与普通版槽位路由一致时，勿让 LLM 工作流规划抢先返回
