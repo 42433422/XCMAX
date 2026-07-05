@@ -243,7 +243,7 @@ def test_process_chat_connection_error(chat_svc: AIChatApplicationService) -> No
 
     chat_svc.ai_service.chat = _fail
     with patch.object(chat_svc, "_persist_chat_turn"):
-        out = chat_svc.process_chat("u1", "查库存", context={})
+        out = chat_svc.process_chat("u1", "请解释一个不会命中规则的普通问题", context={})
     assert out["success"] is False
     assert "连接" in out["message"] or "网络" in out["response"] or "不可用" in out["response"]
 
