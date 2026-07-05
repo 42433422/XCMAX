@@ -1,27 +1,73 @@
 /**
- * electron-builder afterSign 钩子。
- *
- * 当前 electron-builder.yml 中 mac.notarize = false，因此此处不执行 Apple 公证。
- * 保留钩子以满足 afterSign 配置引用，避免 electron-builder 因找不到模块而失败。
- *
- * 未来启用公证时，在此处调用 @electron/notarize（已在 devDependencies 中）:
- *
- *   const { notarize } = require('@electron/notarize')
- *   exports.default = async function afterSign(context) {
- *     const { appOutDir, electronPlatformName } = context
- *     if (electronPlatformName !== 'darwin') return
- *     const appName = context.packager.appInfo.productFilename
- *     await notarize({
- *       appBundleId: context.packager.appInfo.id,
- *       appPath: `${appOutDir}/${appName}.app`,
- *       appleId: process.env.APPLE_ID,
- *       appleIdPassword: process.env.APPLE_APP_SPECIFIC_PASSWORD,
- *       teamId: process.env.APPLE_TEAM_ID
- *     })
- *   }
+ * electron-builder afterSign：Developer ID 签名后提交 Apple 公证（notarytool + API Key）。
  */
+const fs = require('node:fs')
+const os = require('node:os')
+const path = require('node:path')
+const { notarize } = require('@electron/notarize')
+
+function resolveApiKeyPath() {
+  const explicit = (process.env.APP_STORE_CONNECT_API_KEY_PATH || '').trim()
+  if (explicit && fs.existsSync(explicit)) return explicit
+  const keyId = (process.env.APP_STORE_CONNECT_API_KEY_ID || '').trim()
+  const homeP8 = path.join(
+    os.homedir(),
+    '.appstoreconnect/private_keys',
+    `AuthKey_${keyId}.p8`,
+  )
+  if (keyId && fs.existsSync(homeP8)) return homeP8
+  const b64 = (process.env.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 || '').trim()
+  if (b64 && keyId) {
+    const dir = path.join(os.homedir(), '.config/xcagi')
+    fs.mkdirSync(dir, { recursive: true })
+    const target = path.join(dir, `AuthKey_${keyId}.p8`)
+    fs.writeFileSync(target, Buffer.from(b64, 'base64'), { mode: 0o600 })
+    return target
+  }
+  return ''
+}
+
 exports.default = async function afterSign(context) {
-  // notarize: false — 当前无操作。
-  // 保留 context 参数以匹配 electron-builder 钩子签名。
-  void context
+  if (context.electronPlatformName !== 'darwin') return
+
+  const appName = context.packager.appInfo.productFilename
+  const appPath = `${context.appOutDir}/${appName}.app`
+  const apiKeyPath = resolveApiKeyPath()
+  const apiKeyId = (process.env.APP_STORE_CONNECT_API_KEY_ID || '').trim()
+  const apiIssuer = (process.env.APP_STORE_CONNECT_API_ISSUER_ID || '').trim()
+  const appleId = (process.env.APPLE_ID || '').trim()
+  const appleIdPassword = (
+    process.env.APPLE_APP_SPECIFIC_PASSWORD || process.env.APPLE_ID_PASSWORD || ''
+  ).trim()
+  const teamId = (process.env.APPLE_TEAM_ID || process.env.IOS_TEAM_ID || '').trim()
+
+  if (apiKeyPath && apiKeyId && apiIssuer) {
+    console.log(`[notarize] notarytool via API key for ${appPath}`)
+    await notarize({
+      tool: 'notarytool',
+      appPath,
+      appleApiKey: apiKeyPath,
+      appleApiKeyId: apiKeyId,
+      appleApiIssuer: apiIssuer,
+    })
+    console.log('[notarize] done (API key)')
+    return
+  }
+
+  if (appleId && appleIdPassword && teamId) {
+    console.log(`[notarize] notarytool via Apple ID for ${appPath}`)
+    await notarize({
+      tool: 'notarytool',
+      appPath,
+      appleId,
+      appleIdPassword,
+      teamId,
+    })
+    console.log('[notarize] done (Apple ID)')
+    return
+  }
+
+  console.log(
+    '[notarize] skipped: set App Store Connect API key or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID',
+  )
 }

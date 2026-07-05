@@ -16,7 +16,6 @@ on:
 permissions:
   contents: write
 
-
 defaults:
   run:
     working-directory: FHD
@@ -140,9 +139,12 @@ jobs:
   macos:
     runs-on: macos-latest
     env:
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+      IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      APPLE_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -156,14 +158,49 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             FHD/desktop/package-lock.json
+      - name: Install macOS signing dependencies
+        run: pip install PyJWT requests cryptography
+      - name: Provision Developer ID certificate
+        run: python scripts/package/provision_mac_developer_id.py
       - name: Build macOS enterprise installer
         shell: bash
         run: |
+          set -euo pipefail
+          CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          if [ -z "${CSC_NAME}" ]; then
+            echo "::error::Developer ID Application certificate missing after provision step"
+            security find-identity -v -p codesigning || true
+            exit 1
+          fi
+          export CSC_NAME
+          echo "Using CSC_NAME=${CSC_NAME}"
           v="${{ github.event.inputs.version || github.ref_name }}"
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          scripts/package/build-installer.sh "$v" enterprise
+          PYTHON=python3 scripts/package/build-installer.sh "$v" enterprise
+      - name: Verify macOS codesign
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#FHD/}"
+          v="${v#v}"
+          v="${v#V}"
+          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
+          test -n "${dmg}"
+          echo "Verifying ${dmg}"
+          codesign -dv --verbose=4 "${dmg}" 2>&1 | tee /tmp/codesign.txt
+          if grep -q 'Signature=adhoc' /tmp/codesign.txt; then
+            echo "::error::DMG is still adhoc-signed"
+            exit 1
+          fi
+          hdiutil attach -nobrowse -quiet "${dmg}"
+          app="$(find /Volumes -maxdepth 2 -name 'XCAGI.app' -print -quit)"
+          test -n "${app}"
+          codesign --verify --deep --strict --verbose=2 "${app}"
+          spctl -a -vv --type install "${app}" || echo "::warning::spctl assess may require stapled notarization ticket"
+          hdiutil detach "$(dirname "${app}")" -quiet || true
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos
