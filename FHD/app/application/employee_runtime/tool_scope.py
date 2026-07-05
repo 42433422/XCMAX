@@ -195,7 +195,10 @@ def resolve_employee_tools(
             add(n)
 
     if read_only:
-        selected = [n for n in selected if n not in WRITE_TOOLS]
+        from resources.config.risk_actions_loader import list_write_tools
+
+        blocked = set(list_write_tools())
+        selected = [n for n in selected if n not in blocked]
 
     return [base[n] for n in selected] or None
 

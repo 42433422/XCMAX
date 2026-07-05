@@ -34,7 +34,7 @@ def test_risk_registry_file_exists():
 def test_action_classes_complete():
     reg = load_risk_registry()
     classes = set((reg.get("action_classes") or {}).keys())
-    assert REQUIRED_CLASSES <= classes
+    assert classes >= REQUIRED_CLASSES
 
 
 def test_registry_tools_parity():
