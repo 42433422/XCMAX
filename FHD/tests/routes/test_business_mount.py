@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -54,7 +55,11 @@ def test_register_business_routes_smoke() -> None:
     assert "taiyangniao_attendance_compat" in registry.names()
 
 
-def test_mod_taiyangniao_pro_exposes_attendance_api_when_routes_registered(
+def test_mod_taiyangniao_pro_exposes_attendance_api_true_when_ssot_present() -> None:
+    assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is True
+
+
+def test_mod_taiyangniao_pro_exposes_attendance_api_via_mod_manager_when_no_ssot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _Mgr:
@@ -64,10 +69,11 @@ def test_mod_taiyangniao_pro_exposes_attendance_api_when_routes_registered(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         lambda: _Mgr(),
     )
-    assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is True
+    with patch.object(Path, "is_file", return_value=False):
+        assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is True
 
 
-def test_mod_taiyangniao_pro_exposes_attendance_api_false_when_not_mounted(
+def test_mod_taiyangniao_pro_exposes_attendance_api_false_without_ssot_or_mod(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class _Mgr:
@@ -77,7 +83,8 @@ def test_mod_taiyangniao_pro_exposes_attendance_api_false_when_not_mounted(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         lambda: _Mgr(),
     )
-    assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is False
+    with patch.object(Path, "is_file", return_value=False):
+        assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is False
 
 
 def test_load_taiyangniao_attendance_compat_router_skips_when_mod_routes_mounted(

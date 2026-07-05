@@ -14,7 +14,16 @@ logger = logging.getLogger(__name__)
 
 
 def _mod_taiyangniao_pro_exposes_attendance_api() -> bool:
-    """仅当 taiyangniao-pro 的 /api/mod/* 已实际挂载时，跳过宿主 compat 层。"""
+    """Mod SSOT 存在 attendance 蓝图时跳过宿主 compat，避免与 mod 重复注册。"""
+    from pathlib import Path
+
+    fhd_root = Path(__file__).resolve().parents[3]
+    candidates = (
+        fhd_root / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+        fhd_root / "XCAGI" / "mods" / "taiyangniao-pro" / "backend" / "blueprints.py",
+    )
+    if any(p.is_file() for p in candidates):
+        return True
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
 
