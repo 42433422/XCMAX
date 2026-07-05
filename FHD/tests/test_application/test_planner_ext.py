@@ -301,7 +301,7 @@ class TestValidateRequiredParamsExtended:
 class TestGetToolRegistryExtended:
     def test_all_expected_tools(self):
         reg = get_tool_registry()
-        expected_tools = ["products", "customers", "shipment_generate"]
+        expected_tools = ["products", "customers", "shipment_orders"]
         for tool in expected_tools:
             assert tool in reg, f"Missing tool: {tool}"
 

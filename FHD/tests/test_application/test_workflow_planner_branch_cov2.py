@@ -597,7 +597,7 @@ class TestGetToolRegistry:
     def test_returns_dict_with_expected_tools(self) -> None:
         registry = get_tool_registry()
         assert isinstance(registry, dict)
-        assert "price_list" in registry
+        assert "shipment_orders" in registry
         assert "products" in registry
         assert "customers" in registry
         assert "business_db" in registry

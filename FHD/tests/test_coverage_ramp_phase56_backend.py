@@ -251,7 +251,7 @@ def test_validate_plan_graph_errors() -> None:
 
 def test_get_tool_registry_has_core_tools() -> None:
     reg = get_tool_registry()
-    assert "price_list" in reg
+    assert "shipment_orders" in reg
     assert "products" in reg
     assert reg["customers"]["actions"]["query"]["risk"] == "low"
 
