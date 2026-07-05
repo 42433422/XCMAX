@@ -22,7 +22,7 @@ from app.fastapi_routes.health_k8s import router
 
 @pytest.fixture
 def client() -> TestClient:
-    app = FastAPI()
+    app = FastAPI(version="10.0.0")
     app.include_router(router)
     return TestClient(app)
 
@@ -132,7 +132,7 @@ class TestDetails:
         assert r.status_code == 200
         data = r.json()
         assert data["status"] == "healthy"
-        assert data["version"] == "3.0.0"
+        assert data["version"] == "10.0.0"
         assert data["system"]["cpu_percent"] == 10.0
         assert data["system"]["memory_percent"] == 50.0
 

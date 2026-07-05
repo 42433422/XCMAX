@@ -3,9 +3,11 @@
 桌面模式 + SQLite 下，FastAPI lifespan 启动一个 daemon 线程：
 1. 启动后延迟几分钟（避开启动 IO 高峰）
 2. 检查今天是否已有备份，没有则立即备份一次
-3. 之后每 24 小时备份一次
-4. 保留最近 N 天的备份，超出则清理老旧备份
-5. 主进程退出时通过 Event 信号让线程优雅退出
+3. 周日额外创建一份 weekly 备份（保留 4 周，满足灾备硬约束）
+4. 之后每 24 小时备份一次
+5. 清理超期备份：daily 保留 7 天，weekly 保留 28 天
+6. 若配置了 ``XCAGI_EXTERNAL_BACKUP_DIR``（如 USB 盘），同步复制到外部目录
+7. 主进程退出时通过 Event 信号让线程优雅退出
 
 不引入新依赖，仅用 threading。Celery/Redis 在桌面模式已禁用，不能依赖。
 """
@@ -14,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -31,8 +34,12 @@ _INITIAL_DELAY_SECONDS = 180
 # 循环检查间隔。不到 24h 也可，但每次循环会判断"今天是否已备份"，
 # 所以频繁检查不会导致频繁备份。
 _POLL_INTERVAL_SECONDS = 3600
-# 备份保留天数。超过则清理（按 mtime）。
+# daily 备份保留天数（按 mtime 清理）。
 _RETENTION_DAYS = 7
+# weekly 备份保留天数（周日额外创建一份，保留 4 周，满足灾备硬约束）。
+_RETENTION_WEEKLY_DAYS = 28
+# 周日额外创建 weekly 备份的文件名标记。
+_WEEKLY_MARKER = "weekly"
 
 _lock = threading.Lock()
 _stop_event: threading.Event | None = None
@@ -99,7 +106,7 @@ def _scheduler_loop(stop_event: threading.Event, data_dir: str | os.PathLike[str
 
 
 def _run_once(data_dir: str | os.PathLike[str] | None) -> None:
-    """单轮：检查今天是否已备份，没有则备份；然后清理老旧备份。"""
+    """单轮：检查今天是否已备份，没有则备份；周日额外建 weekly；然后清理老旧备份。"""
     dirs = ensure_desktop_dirs(data_dir)
     backups_dir = dirs["backups"]
 
@@ -108,10 +115,56 @@ def _run_once(data_dir: str | os.PathLike[str] | None) -> None:
         result = backup_database(data_dir, version=version)
         if result is not None:
             logger.info("scheduled backup created: %s", result.name)
+            _sync_to_external(result)
+            # 周日额外复制一份为 weekly 备份（保留 4 周，灾备硬约束）。
+            if datetime.now().weekday() == 6:  # 0=Monday, 6=Sunday
+                weekly = _make_weekly_copy(result)
+                if weekly is not None:
+                    _sync_to_external(weekly)
         else:
             logger.warning("scheduled backup failed (see migrate.backup_database logs)")
 
     _cleanup_old_backups(backups_dir, retention_days=_RETENTION_DAYS)
+
+
+def _make_weekly_copy(daily_backup: Path) -> Path | None:
+    """把周日的 daily 备份复制一份为 weekly 标记文件，保留 4 周。
+
+    文件名格式：xcagi-{version}-weekly-{stamp}.db
+    复制而非重新备份，避免对运行中的库再做一次 sqlite3.backup()。
+    """
+    parts = daily_backup.stem.split("-")
+    if len(parts) < 3 or _WEEKLY_MARKER in parts:
+        return None
+    # parts: ["xcagi", "{version}", "{stamp}"] → 插入 weekly 标记
+    weekly_name = f"{'-'.join(parts[:-1])}-{_WEEKLY_MARKER}-{parts[-1]}.db"
+    weekly_path = daily_backup.parent / weekly_name
+    try:
+        shutil.copy2(daily_backup, weekly_path)
+        logger.info("weekly backup created: %s", weekly_path.name)
+        return weekly_path
+    except OSError as exc:
+        logger.warning("failed to create weekly copy %s: %s", weekly_path, exc)
+        return None
+
+
+def _sync_to_external(backup_file: Path) -> None:
+    """若配置了 XCAGI_EXTERNAL_BACKUP_DIR，把备份复制到外部目录（如 USB 盘）。
+
+    外部目录不可用（USB 未插入）时仅记录 warning，不阻塞主流程。
+    满足硬约束：备份须同时存于本地和外部，避免单点失效。
+    """
+    external = (os.environ.get("XCAGI_EXTERNAL_BACKUP_DIR") or "").strip()
+    if not external:
+        return
+    target_dir = Path(external).expanduser()
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(backup_file, target_dir / backup_file.name)
+        logger.info("backup synced to external: %s", target_dir / backup_file.name)
+    except OSError as exc:
+        # USB 未插入 / 权限不足 / 磁盘满 —— 仅警告，本地备份已成功
+        logger.warning("external backup sync failed (non-fatal): %s", exc)
 
 
 def _has_backup_today(backups_dir: Path) -> bool:
@@ -119,10 +172,12 @@ def _has_backup_today(backups_dir: Path) -> bool:
 
     定时备份文件名格式：xcagi-{version}-{YYYYMMDDHHMMSS}.db
     只看文件名里的日期前缀（YYYYMMDD），不看 mtime（mtime 可能被复制操作改）。
+    weekly 备份（含 weekly 标记）也算"今天的备份"，避免周日重复跑 daily。
     """
     today = datetime.now().strftime("%Y%m%d")
     for path in backups_dir.glob("xcagi-*.db"):
-        # 文件名格式 xcagi-{version}-{stamp}.db，stamp 是 %Y%m%d%H%M%S
+        # 文件名格式 xcagi-{version}-{stamp}.db 或 xcagi-{version}-weekly-{stamp}.db
+        # 取末尾的 stamp 段（14 位数字）
         parts = path.stem.split("-")
         if len(parts) >= 3:
             stamp = parts[-1]
@@ -134,20 +189,27 @@ def _has_backup_today(backups_dir: Path) -> bool:
 def _cleanup_old_backups(backups_dir: Path, retention_days: int) -> None:
     """清理超过保留天数的定时备份。
 
-    只清理 xcagi-*.db（定时备份产生的），不动 *.bak（用户手动备份产生的）。
-    按 mtime 排序，保留最近 retention_days 天的。
+    - daily 备份（xcagi-{version}-{stamp}.db）：保留 retention_days 天
+    - weekly 备份（xcagi-{version}-weekly-{stamp}.db）：保留 _RETENTION_WEEKLY_DAYS 天
+    - *.bak（用户手动备份）：不动
     """
     if not backups_dir.is_dir():
         return
 
-    cutoff = datetime.now() - timedelta(days=retention_days)
-    cutoff_ts = cutoff.timestamp()
+    now = datetime.now()
+    daily_cutoff = (now - timedelta(days=retention_days)).timestamp()
+    weekly_cutoff = (now - timedelta(days=_RETENTION_WEEKLY_DAYS)).timestamp()
 
     for path in backups_dir.glob("xcagi-*.db"):
         try:
-            if path.stat().st_mtime < cutoff_ts:
+            mtime = path.stat().st_mtime
+            is_weekly = _WEEKLY_MARKER in path.stem
+            cutoff = weekly_cutoff if is_weekly else daily_cutoff
+            if mtime < cutoff:
                 path.unlink()
-                logger.info("cleaned up old backup: %s", path.name)
+                logger.info(
+                    "cleaned up %s backup: %s", "weekly" if is_weekly else "daily", path.name
+                )
         except OSError as exc:
             logger.warning("failed to clean up old backup %s: %s", path, exc)
 
