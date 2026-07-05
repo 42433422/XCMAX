@@ -94,6 +94,9 @@ vi.mock('@/composables/useEnterpriseScopedWorkflowRegistry', () => ({
 }))
 
 vi.mock('@/utils/workflowEmployeeRegistry', () => ({
+  loadWorkflowEmployeeRegistry: vi.fn(async () => ({ version: 1, employees: [] })),
+  loadWorkflowEmployeeRegistryCached: vi.fn(async () => ({ version: 1, employees: [] })),
+  mergeModManifestEntries: vi.fn((registry: { employees: unknown[] }) => registry.employees),
   resolveLabel: (entry: { id: string }, resolver: (k: string) => string) => {
     const map: Record<string, string> = {
       wechat_msg: '微信消息员工',
