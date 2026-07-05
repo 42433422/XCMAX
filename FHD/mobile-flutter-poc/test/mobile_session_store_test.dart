@@ -1002,6 +1002,16 @@ void main() {
     expect(codex.timestampMs, 0);
   });
 
+  test('MobileRepository removes stale relay queue preview from AI groups',
+      () async {
+    final repository = MobileRepository(client: _AiGroupsStalePreviewApi());
+
+    final groups = await repository.loadAiGroups();
+
+    expect(groups.single.name, '超级开发部');
+    expect(groups.single.preview, isEmpty);
+  });
+
   test(
       'MobileRepository AI employees use Android cached mod infos on refresh failure',
       () async {
@@ -1153,6 +1163,29 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
         'success': true,
         'data': {'items': []}
       },
+    );
+  }
+}
+
+class _AiGroupsStalePreviewApi extends MobileApiClient {
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> aiGroups() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'groups': [
+          {
+            'id': 'group-1',
+            'name': '超级开发部',
+            'member_count': 5,
+            'last_message_preview':
+                '超级员工-Codex：【超级员工-Codex 进度回访】\n状态：排队中\n负责：主负责人\n结果：还在服务器队列中，任务号：',
+            'last_message_at': '2026-07-05T17:16:57+00:00',
+          },
+        ],
+      },
+      raw: {},
     );
   }
 }
