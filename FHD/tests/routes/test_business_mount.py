@@ -54,11 +54,40 @@ def test_register_business_routes_smoke() -> None:
     assert "taiyangniao_attendance_compat" in registry.names()
 
 
-def test_mod_taiyangniao_pro_exposes_attendance_api_when_ssot_present() -> None:
+def test_mod_taiyangniao_pro_exposes_attendance_api_when_routes_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mgr:
+        _http_routes_registered = {"taiyangniao-pro"}
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: _Mgr(),
+    )
     assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is True
 
 
-def test_load_taiyangniao_attendance_compat_router_skips_when_mod_present() -> None:
+def test_mod_taiyangniao_pro_exposes_attendance_api_false_when_not_mounted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Mgr:
+        _http_routes_registered: set[str] = set()
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: _Mgr(),
+    )
+    assert business_mount._mod_taiyangniao_pro_exposes_attendance_api() is False
+
+
+def test_load_taiyangniao_attendance_compat_router_skips_when_mod_routes_mounted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        business_mount,
+        "_mod_taiyangniao_pro_exposes_attendance_api",
+        lambda: True,
+    )
     router = business_mount._load_taiyangniao_attendance_compat_router()
     assert router.routes == []
 
