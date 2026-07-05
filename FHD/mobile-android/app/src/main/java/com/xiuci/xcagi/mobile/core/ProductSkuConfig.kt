@@ -21,7 +21,7 @@ object ProductSkuConfig {
         get() = if (isEnterprise) "enterprise" else "personal"
 
     val displayEditionLabel: String
-        get() = if (isEnterprise) "企业版" else "个人版"
+        get() = if (isEnterprise) "标准版" else "个人版"
 
     /** 运行时有效 SKU：优先使用后端返回值（防止装错 flavor）， 兜底使用编译时 BuildConfig 值。 */
     var remoteSku: String = ""

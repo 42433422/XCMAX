@@ -136,7 +136,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '问题反馈',
-                        subtitle: '提交后进入企业支持队列',
+                        subtitle: '提交后进入专业支持队列',
                         icon: Icons.bug_report,
                         iconColor: colors.warning,
                         iconBg: colors.warning.withValues(alpha: 0.14),
@@ -172,7 +172,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     children: [
                       WeCell(
                         title: '检查更新',
-                        subtitle: '获取企业版移动端最新构建',
+                        subtitle: '获取标准版移动端最新构建',
                         icon: Icons.system_update,
                         iconColor: colors.success,
                         iconBg:
