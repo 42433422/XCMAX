@@ -7,6 +7,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, nextTick } from 'vue'
+import * as apiBase from '@/utils/apiBase'
 import { useChatVoiceInput } from './useChatVoiceInput'
 
 // ── BlobEvent polyfill（jsdom 不提供） ────────────────────────────────
@@ -869,7 +870,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
     })
 
     const longMsg = 'A'.repeat(100)
-    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error(longMsg))
+    vi.spyOn(apiBase, 'apiFetch').mockRejectedValueOnce(new Error(longMsg))
 
     const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
 

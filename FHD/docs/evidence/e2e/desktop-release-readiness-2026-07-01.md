@@ -13,7 +13,7 @@
 - 修复租户隔离测试默认上下文与 compat DB 原始 SQL 写入测试的 tenant scope，使业务写入 fail-closed 与旧测试模型兼容。
 - 修复 Product/PurchaseUnit 仓储在 tenant filter 下的查询与批量写入路径。
 - 修复 shipment event-primary 测试在 NeuroBus ready 分支的 async mock 设置。
-- 修复 MODstore digest/employee SSOT 路径与 duty roster 派发表覆盖。
+- 修复 MODstore digest/employee 路径与 duty roster 派发表覆盖。
 - 修复移动 relay 重复注册测试、auth 扩展路由 market profile mock、移动 admin duty roster 期望。
 - 修复 NeuroBus bridge 把需要 `NeuroDomain.on()` 的 handler 当 `NeuroBus` handler 二次注册的问题；order/customer/payment/wechat 现在由 DomainRegistry 管理。
 - 修复 `agentRunEvents.generated.ts` 生成的 TypeScript union 语法。
@@ -27,7 +27,7 @@
   - `32988 passed, 29 skipped, 1 xpassed, 55 warnings in 390.78s`
 - `cd FHD && .venv/bin/python -m pytest tests/test_neuro_bus_handler_registry.py tests/neuro/test_register_all_domains_complete.py -q`
   - `15 passed`
-- 关键租户/仓储/移动/SSOT/route targeted 套件：
+- 关键租户/仓储/移动/路由/route targeted 套件：
   - `1549 passed, 1 warning`
 - compat DB + tenant scope focused：
   - `142 passed`
