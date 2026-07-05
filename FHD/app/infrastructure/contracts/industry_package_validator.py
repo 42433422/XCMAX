@@ -31,11 +31,12 @@ def validate_industry_manifest(path: Path | str) -> list[str]:
     if not isinstance(data, dict):
         return ["manifest root must be an object"]
 
-    try:
-        import jsonschema
-        from jsonschema import Draft202012Validator
-    except ImportError:
+    import importlib.util
+
+    if importlib.util.find_spec("jsonschema") is None:
         return ["jsonschema package required for industry manifest validation"]
+
+    from jsonschema import Draft202012Validator
 
     schema = _load_json(_SCHEMA_PATH)
     validator = Draft202012Validator(schema)

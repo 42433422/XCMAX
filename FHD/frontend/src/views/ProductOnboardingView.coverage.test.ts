@@ -756,7 +756,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示"进入智能对话"按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示"下一步：写入演示数据"按钮', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -764,8 +764,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
-    expect(enterChatBtn).toBeTruthy()
+    const nextBtn = buttons.find((b) => b.text().includes('下一步：写入演示数据'))
+    expect(nextBtn).toBeTruthy()
   })
 
   it('host-pack 步骤：点击"重新检测"按钮触发 refreshStatus', async () => {
@@ -1447,7 +1447,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     const items = wrapper.findAll('.step-rail-item')
-    expect(items.length).toBe(3)
+    expect(items.length).toBe(5)
   })
 
   it('step-rail：当前步骤标记 active', async () => {
@@ -1580,10 +1580,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     mockContainer.flowState.markHostPackAcknowledged.mockClear()
     mockContainer.flowState.completeFlowAndGoChat.mockClear()
 
-    const buttons = wrapper.findAll('.actions .btn.primary')
-    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
-    expect(enterChatBtn).toBeTruthy()
-    await enterChatBtn!.trigger('click')
+    const skipChatBtn = wrapper.find('.actions .btn.link')
+    expect(skipChatBtn.text()).toContain('先进入对话，稍后再补')
+    await skipChatBtn.trigger('click')
     await flushPromises()
 
     expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
