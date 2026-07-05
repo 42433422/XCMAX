@@ -19,6 +19,20 @@ from app.fastapi_routes.desktop_runtime import router
 
 @pytest.fixture
 def client() -> TestClient:
+    from unittest.mock import MagicMock
+
+    from app.infrastructure.auth.dependencies import get_logged_in_user
+
+    app = FastAPI()
+    app.state.mods_full_load_done = True
+    app.state.mods_background_load_scheduled = False
+    app.include_router(router)
+    app.dependency_overrides[get_logged_in_user] = lambda: MagicMock(id=1, is_active=True)
+    return TestClient(app)
+
+
+@pytest.fixture
+def anon_client() -> TestClient:
     app = FastAPI()
     app.state.mods_full_load_done = True
     app.state.mods_background_load_scheduled = False
@@ -86,6 +100,11 @@ class TestDesktopStatus:
 
 
 class TestDownloadModel:
+    def test_support_bundle_requires_login(self, anon_client: TestClient) -> None:
+        with patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True):
+            r = anon_client.get("/api/desktop/support-bundle")
+        assert r.status_code == 401
+
     def test_invalid_request_body(self, client: TestClient) -> None:
         r = client.post("/api/desktop/models/download", json={})
         # 422 from pydantic validation, or 400 if handler runs

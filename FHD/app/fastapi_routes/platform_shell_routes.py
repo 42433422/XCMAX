@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Body, File, Request, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -275,8 +275,16 @@ async def platform_shell_permission_matrix(request: Request):
 
 
 @router.post("/office-sample-upload")
-async def platform_shell_office_sample_upload(file: UploadFile = File(...)):
+async def platform_shell_office_sample_upload(
+    request: Request,
+    file: UploadFile = File(...),
+):
     """教程 / 办公包演示：把样本存到 workspace/uploads/tutorial。"""
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    user = resolve_session_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
     data = await _save_workspace_upload(file, subdir="tutorial")
     return {"success": True, "data": data}
 
@@ -291,8 +299,16 @@ async def platform_shell_workspace_root():
 
 
 @router.post("/chat-office-file-upload")
-async def platform_shell_chat_office_file_upload(file: UploadFile = File(...)):
+async def platform_shell_chat_office_file_upload(
+    request: Request,
+    file: UploadFile = File(...),
+):
     """智能对话上传：存到 workspace/uploads/chat，并返回 workspace_root 供办公员工读取。"""
+    from app.infrastructure.auth.dependencies import resolve_session_user
+
+    user = resolve_session_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="请先登录")
     data = await _save_workspace_upload(file, subdir="chat")
     return {"success": True, "data": data}
 

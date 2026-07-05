@@ -518,9 +518,33 @@ function runBackendMigration(): Promise<void> {
   })
 }
 
+async function cookieHeaderForBackend(): Promise<string> {
+  const url = `http://127.0.0.1:${DEFAULT_PORT}/`
+  const cookies = await session.defaultSession.cookies.get({ url })
+  if (!cookies.length) {
+    return ''
+  }
+  return cookies.map(c => `${c.name}=${c.value}`).join('; ')
+}
+
 async function exportSupportBundleInteractive(): Promise<void> {
   try {
-    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/support-bundle`)
+    const cookie = await cookieHeaderForBackend()
+    const headers: Record<string, string> = {}
+    if (cookie) {
+      headers.Cookie = cookie
+    }
+    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/support-bundle`, {
+      headers
+    })
+    if (res.status === 401) {
+      void dialog.showMessageBox({
+        type: 'warning',
+        title: APP_NAME,
+        message: '请先登录后再导出诊断包'
+      })
+      return
+    }
     if (!res.ok) {
       void dialog.showErrorBox(APP_NAME, `导出失败：HTTP ${res.status}`)
       return
