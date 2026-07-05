@@ -790,6 +790,49 @@ void main() {
     expect(assistant.subtitle, '普通回复');
   });
 
+  test('MobileRepository routes employee chat to mobile employee SSE',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(userId: 1),
+    );
+    final api = _EmployeeChatRoutingApi(store);
+    final repository = MobileRepository(client: api);
+
+    final tokens = <String>[];
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'employee:admin-duty-employees:site-content-editor',
+        type: ConversationType.aiTask,
+        title: '内容运营员工',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '更新首页文案',
+      userId: 7,
+      onToken: tokens.add,
+    );
+
+    expect(reply, '员工回复');
+    expect(tokens, ['员工']);
+    expect(api.genericChatCalled, isFalse);
+    expect(api.capturedMessage, '更新首页文案');
+    expect(api.capturedEmployeeId, 'site-content-editor');
+    expect(api.capturedModId, 'admin-duty-employees');
+    expect(
+      api.capturedConversationId,
+      'employee:admin-duty-employees:site-content-editor',
+    );
+    expect(api.capturedUserId, 7);
+
+    final cached = (await store.load()).cachedChatMessages[
+        'employee:admin-duty-employees:site-content-editor'];
+    expect(cached, hasLength(2));
+    expect(cached?[0]['role'], 'user');
+    expect(cached?[0]['body'], '更新首页文案');
+    expect(cached?[1]['role'], 'assistant');
+    expect(cached?[1]['body'], '员工回复');
+  });
+
   test('MobileRepository enterprise conversations parse Android mobile mods',
       () async {
     final store = MemoryMobileSessionStore();
@@ -1372,6 +1415,48 @@ class _PlainChatCacheApi extends MobileApiClient {
     onToken?.call('普通');
     onToken?.call('回复');
     return '普通回复';
+  }
+}
+
+class _EmployeeChatRoutingApi extends MobileApiClient {
+  _EmployeeChatRoutingApi(MobileSessionStore store)
+      : super(sessionStore: store);
+
+  bool genericChatCalled = false;
+  String capturedMessage = '';
+  String capturedEmployeeId = '';
+  String capturedModId = '';
+  String capturedConversationId = '';
+  int capturedUserId = 0;
+
+  @override
+  Future<String> streamChat(
+    String message, {
+    String? sessionId,
+    int userId = 0,
+    List<Map<String, String>> recentMessages = const [],
+    void Function(String token)? onToken,
+  }) async {
+    genericChatCalled = true;
+    return '不应走通用聊天';
+  }
+
+  @override
+  Future<String> streamEmployeeChat({
+    required String message,
+    required String employeeId,
+    required String modId,
+    required String conversationId,
+    int userId = 0,
+    void Function(String token)? onToken,
+  }) async {
+    capturedMessage = message;
+    capturedEmployeeId = employeeId;
+    capturedModId = modId;
+    capturedConversationId = conversationId;
+    capturedUserId = userId;
+    onToken?.call('员工');
+    return '员工回复';
   }
 }
 

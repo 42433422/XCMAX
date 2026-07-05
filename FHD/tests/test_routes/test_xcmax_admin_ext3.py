@@ -363,9 +363,7 @@ class TestProbeRemoteHealthSync:
         with (
             patch(
                 "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
-                return_value=MagicMock(
-                    open=MagicMock(side_effect=ConnectionError("network fail"))
-                ),
+                return_value=MagicMock(open=MagicMock(side_effect=ConnectionError("network fail"))),
             ),
             patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ConnectionError,)),
         ):

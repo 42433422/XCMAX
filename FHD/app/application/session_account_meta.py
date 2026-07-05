@@ -324,7 +324,7 @@ def audit_admin_action(
     detail: str = "",
 ) -> None:
     try:
-        from app.fastapi_routes.legacy_helpers import _session_id_from_request
+        from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
 
         sid = _session_id_from_request(request)
         meta = load_session_account_meta(sid) if sid else None

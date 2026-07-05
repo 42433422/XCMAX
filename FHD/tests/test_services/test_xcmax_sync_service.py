@@ -215,7 +215,10 @@ class TestPushOutbox:
 
         opener = _mock_http_opener(mock_resp)
         with (
-            patch("app.services.xcmax_sync_service._direct_cookie_opener", return_value=(opener, MagicMock())),
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
             patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -242,7 +245,10 @@ class TestPushOutbox:
             side_effect=urllib.error.HTTPError("url", 500, "Internal", {}, None)
         )
         with (
-            patch("app.services.xcmax_sync_service._direct_cookie_opener", return_value=(opener, MagicMock())),
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
             patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -270,7 +276,10 @@ class TestPushOutbox:
             side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None)
         )
         with (
-            patch("app.services.xcmax_sync_service._direct_cookie_opener", return_value=(opener, MagicMock())),
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
             patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -293,7 +302,10 @@ class TestPushOutbox:
         ]
         opener = _mock_http_opener(side_effect=ConnectionError("refused"))
         with (
-            patch("app.services.xcmax_sync_service._direct_cookie_opener", return_value=(opener, MagicMock())),
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
             patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -327,7 +339,10 @@ class TestPushOutbox:
 
         opener = _mock_http_opener(mock_resp)
         with (
-            patch("app.services.xcmax_sync_service._direct_cookie_opener", return_value=(opener, MagicMock())),
+            patch(
+                "app.services.xcmax_sync_service._direct_cookie_opener",
+                return_value=(opener, MagicMock()),
+            ),
             patch("app.services.xcmax_sync_service._prime_csrf_cookie", return_value=""),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
@@ -365,7 +380,9 @@ class TestPullFromRemote:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp),
+            patch(
+                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+            ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = pull_from_remote(remote_host="127.0.0.1", remote_port=8080)
@@ -384,7 +401,9 @@ class TestPullFromRemote:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp),
+            patch(
+                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+            ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = pull_from_remote()
@@ -417,7 +436,9 @@ class TestPullFromRemote:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp),
+            patch(
+                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+            ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = pull_from_remote(since_cursor=42)
@@ -434,7 +455,9 @@ class TestPullFromRemote:
         mock_resp.__exit__ = MagicMock(return_value=False)
 
         with (
-            patch("app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp),
+            patch(
+                "app.services.xcmax_sync_service._DIRECT_HTTP_OPENER.open", return_value=mock_resp
+            ),
             patch("app.db.xcmax_sync.SyncDb", return_value=mock_db),
         ):
             result = pull_from_remote()

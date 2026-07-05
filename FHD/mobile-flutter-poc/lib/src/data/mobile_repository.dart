@@ -702,6 +702,18 @@ class MobileRepository {
       return _assistantMessage(conversation.id, reply);
     }
 
+    final employeeRef = _employeeConversationRef(conversation.id);
+    if (employeeRef != null) {
+      final reply = await _client.streamEmployeeChat(
+        message: text,
+        employeeId: employeeRef.employeeId,
+        modId: employeeRef.modId,
+        conversationId: conversation.id,
+        userId: await _loadCurrentUserId(),
+      );
+      return _assistantMessage(conversation.id, reply.ifEmpty('已收到。'));
+    }
+
     final response = await _client.chat(
       text,
       sessionId: conversation.id,
@@ -752,6 +764,31 @@ class MobileRepository {
         return reply.ifEmpty('已收到，我会继续处理。');
       }
       final reply = await _postSuperEmployeeMessage(tool, text);
+      _throwIfCancelled(isCancelled);
+      await _cacheChatMessage(
+        conversation.id,
+        role: ChatRole.assistant,
+        body: reply,
+      );
+      return reply;
+    }
+
+    final employeeRef = _employeeConversationRef(conversation.id);
+    if (employeeRef != null) {
+      await _cacheChatMessage(
+        conversation.id,
+        role: ChatRole.user,
+        body: text,
+      );
+      final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
+      final reply = await _client.streamEmployeeChat(
+        message: text,
+        employeeId: employeeRef.employeeId,
+        modId: employeeRef.modId,
+        conversationId: conversation.id,
+        userId: effectiveUserId,
+        onToken: onToken,
+      );
       _throwIfCancelled(isCancelled);
       await _cacheChatMessage(
         conversation.id,
@@ -2738,6 +2775,27 @@ List<ConversationItem> _employeeConversationItems(
   }
 
   return items;
+}
+
+class _EmployeeConversationRef {
+  const _EmployeeConversationRef({
+    required this.modId,
+    required this.employeeId,
+  });
+
+  final String modId;
+  final String employeeId;
+}
+
+_EmployeeConversationRef? _employeeConversationRef(String raw) {
+  final value = raw.trim();
+  if (!value.startsWith('employee:')) return null;
+  final parts = value.split(':');
+  if (parts.length < 3) return null;
+  final modId = parts[1].trim();
+  final employeeId = parts[2].trim();
+  if (modId.isEmpty || employeeId.isEmpty) return null;
+  return _EmployeeConversationRef(modId: modId, employeeId: employeeId);
 }
 
 List<ConversationItem> _fixedConversationItems({
