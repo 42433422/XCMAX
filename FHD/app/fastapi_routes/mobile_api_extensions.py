@@ -2951,6 +2951,12 @@ async def mobile_install_customer_delivery_seed(
         data = await install_customer_delivery_seed_package(
             mod_id=mod_id,
             industry_id=industry_id,
+            market_token=str(
+                body.get("market_access_token")
+                or body.get("market_token")
+                or body.get("token")
+                or ""
+            ),
         )
         return format_mobile_response(
             data=data,

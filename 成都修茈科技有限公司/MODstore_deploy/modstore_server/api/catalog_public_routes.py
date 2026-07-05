@@ -30,6 +30,10 @@ from modstore_server.vector_store import insert_embedding, query_similar
 router = APIRouter(prefix="/v1", tags=["catalog"])
 
 
+def _is_customer_delivery_seed(row: Dict[str, Any] | None) -> bool:
+    return str((row or {}).get("artifact") or "").strip().lower() == "customer_delivery_seed"
+
+
 def _invalidate_catalog_list_caches(pkg_id: Any = None, version: Any = None) -> None:
     """Best-effort cache invalidation after a write.
 
@@ -74,6 +78,9 @@ def api_list_packages(
     if cached is not None:
         return cached
     rows, total = list_packages(artifact=artifact, q=q, limit=limit, offset=offset)
+    rows = [r for r in rows if not _is_customer_delivery_seed(r)]
+    if artifact and str(artifact).strip().lower() == "customer_delivery_seed":
+        total = 0
     result = {"packages": rows, "total": total, "limit": limit, "offset": offset}
     cache.set_json(ck, result, ttl_seconds=300)
     return result
@@ -88,7 +95,7 @@ def api_get_package(pkg_id: str, version: str):
     if cached is not None:
         return cached
     r = get_package(pkg_id, version)
-    if not r:
+    if not r or _is_customer_delivery_seed(r):
         raise HTTPException(404, "未找到该版本")
     cache.set_json(ck, r, ttl_seconds=600)
     return r
@@ -99,7 +106,8 @@ def api_package_versions(pkg_id: str):
     pid = (pkg_id or "").strip()
     if not pid:
         raise HTTPException(400, "pkg_id 无效")
-    return {"pkg_id": pid, "versions": list_versions(pid)}
+    versions = [r for r in list_versions(pid) if not _is_customer_delivery_seed(r)]
+    return {"pkg_id": pid, "versions": versions}
 
 
 class PromoteBody(BaseModel):
@@ -157,6 +165,8 @@ def api_download(pkg_id: str, version: str):
     r = get_package(pkg_id, version)
     if not r:
         raise HTTPException(404, "未找到")
+    if _is_customer_delivery_seed(r):
+        raise HTTPException(404, "客户交付种子包需授权下载")
     name = r.get("stored_filename")
     if not name:
         raise HTTPException(404, "该记录无本地文件")

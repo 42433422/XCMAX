@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from app.mod_sdk.customer_delivery import delivery_for_industry_mod, list_customer_deliveries
+from app.mod_sdk.customer_delivery import (
+    delivery_for_account_custom_mod,
+    delivery_for_industry_mod,
+    list_customer_deliveries,
+)
 from app.mod_sdk.industry_mod_aliases import (
     canonical_mod_id,
     canonical_mod_id_for_industry,
@@ -30,3 +34,9 @@ def test_customer_delivery_has_brand_not_in_baseline():
     assert row.get("customer_brand") == "太阳鸟 PRO"
     deliveries = list_customer_deliveries()
     assert any(d.get("industry_mod_id") == "coating-industry" for d in deliveries)
+
+
+def test_customer_delivery_custom_mod_accepts_industry_mod_id():
+    row = delivery_for_account_custom_mod("taiyangniao-pro", "attendance-industry")
+    assert row is not None
+    assert row.get("delivery_seed_package", {}).get("pkg_id") == "sunbird-delivery-seed"
