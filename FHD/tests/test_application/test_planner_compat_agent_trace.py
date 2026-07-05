@@ -156,7 +156,10 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
             "app.application.planner_compat_service._ensure_vector_index_if_needed",
             return_value=None,
         ),
-        patch("app.application.planner_compat_service._xcagi_chat_timeout_seconds", return_value=30.0),
+        patch(
+            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+            return_value=30.0,
+        ),
         patch(
             "app.application.planner_compat_service._attach_compat_chat_trace",
             side_effect=lambda payload, *_args, **_kwargs: payload,
@@ -164,7 +167,11 @@ async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
         patch(
             "app.application.planner_compat_service._execute_ai_chat_mainline",
             new_callable=AsyncMock,
-            return_value={"success": True, "response": "mainline", "data": {"text": "mainline"}},
+            return_value={
+                "success": True,
+                "response": "mainline",
+                "data": {"text": "mainline"},
+            },
         ) as mock_mainline,
         patch("app.application.planner_compat_service.run_agent_chat") as mock_legacy,
     ):
