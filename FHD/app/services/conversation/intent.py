@@ -139,36 +139,32 @@ class IntentMixin:
         if is_offline_mode:
             logger.info("[INTENT] 离线模式：使用本地蒸馏规则识别")
             intent_result = await self.offline_intent_service.recognize(message)
-        elif self._is_pro_source(source):
-            if self._neuro_stack_enabled():
-                from app.neuro_bus.integrations.intent_integration import (
-                    get_neuro_intent_recognizer,
-                )
-
-                logger.info("[INTENT] 使用 neuro + unified_recognizer (pro mode)")
-                neuro_r = get_neuro_intent_recognizer().recognize(
-                    message,
-                    user_id,
-                    context=None,
-                    context_data=request_context,
-                )
-                intent_result = self._convert_neuro_intent_bridge(neuro_r)
-            else:
-                logger.info("[INTENT] 使用 unified_recognizer (pro mode)")
-                recognizer_result = self.unified_recognizer.recognize(
-                    message,
-                    context=None,
-                    context_data=request_context,
-                )
-                intent_result = self._convert_recognizer_result(recognizer_result)
         elif self._should_use_rule_only_intent(request_context):
             logger.info(
                 "[INTENT] rule_only_fast（跳过意图 DeepSeek，仅规则；可设 XCAGI_SKIP_INTENT_LLM=1 或 context.skip_intent_llm）"
             )
             intent_result = self._intent_rule_only_fast(message)
+        elif self._neuro_stack_enabled():
+            from app.neuro_bus.integrations.intent_integration import (
+                get_neuro_intent_recognizer,
+            )
+
+            logger.info("[INTENT] 使用 neuro + unified_recognizer (online)")
+            neuro_r = get_neuro_intent_recognizer().recognize(
+                message,
+                user_id,
+                context=None,
+                context_data=request_context,
+            )
+            intent_result = self._convert_neuro_intent_bridge(neuro_r)
         else:
-            logger.info("[INTENT] 使用 deepseek_intent_service (普通模式)")
-            intent_result = await self.online_intent_service.recognize(message)
+            logger.info("[INTENT] 使用 unified_recognizer (online)")
+            recognizer_result = self.unified_recognizer.recognize(
+                message,
+                context=None,
+                context_data=request_context,
+            )
+            intent_result = self._convert_recognizer_result(recognizer_result)
 
         intent_result["ai_mode"] = ai_mode
         try:

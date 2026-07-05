@@ -8,20 +8,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from app.services.intent_trainer import (
-        HAS_YAML,
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        IntentDataset,
-        IntentExample,
-        compute_metrics,
-        load_training_data,
-        split_data,
-    )
-except ImportError:
-    pytest.skip("intent_trainer 依赖不可用", allow_module_level=True)
+from app.services.intent_trainer import (
+    HAS_YAML,
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    IntentDataset,
+    IntentExample,
+    compute_metrics,
+    load_training_data,
+    split_data,
+)
 
 
 class TestIntentLabels:

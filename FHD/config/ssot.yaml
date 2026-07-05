@@ -175,6 +175,31 @@ domains:
     check: python scripts/dev/service_topology_ssot.py check
     sync: python scripts/dev/service_topology_ssot.py generate --apply
 
+  - name: deployment-modes
+    owner: platform-runtime
+    enabled: true
+    # AI 部署模式 SSOT：统一内网/外网、手机局域网直连、性能模式三档策略。
+    ssot: FHD/config/deployment_modes.yaml
+    derived:
+      - FHD/config/deployment_modes.generated.json
+      - FHD/frontend/src/constants/deploymentModes.generated.ts
+      - FHD/mobile-flutter-poc/lib/src/data/deployment_modes_ssot.dart
+    mode: sync+verify
+    check: python3 scripts/dev/deployment_modes_ssot.py check
+    sync: python3 scripts/dev/deployment_modes_ssot.py generate --apply
+
+  - name: database-storage
+    owner: platform-runtime
+    enabled: true
+    # 数据库存储 SSOT：SQLite/PG 模式、SQLite -> PG 同步计划、桌面 database.json profile 策略。
+    ssot: FHD/config/database_storage_modes.yaml
+    derived:
+      - FHD/config/database_storage_modes.generated.json
+      - FHD/frontend/src/constants/databaseStorageModes.generated.ts
+    mode: sync+verify
+    check: python3 scripts/dev/database_storage_ssot.py check
+    sync: python3 scripts/dev/database_storage_ssot.py generate --apply
+
   - name: mobile-tri-platform
     owner: mobile-platform
     enabled: true

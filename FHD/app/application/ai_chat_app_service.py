@@ -231,6 +231,49 @@ class AIChatApplicationService:
 
             return resp
 
+        try:
+            from app.application.workflow.chat_deterministic_fast_paths import (
+                try_deterministic_chat_reply,
+            )
+
+            fhd_root = resolve_fhd_repo_root(anchor=Path(__file__).resolve())
+            deterministic_reply = try_deterministic_chat_reply(
+                message,
+                runtime_context=ctx,
+                workspace_root=str(fhd_root) if fhd_root else None,
+            )
+        except RECOVERABLE_ERRORS:
+            logger.debug("deterministic chat fast path skipped", exc_info=True)
+            deterministic_reply = None
+        if deterministic_reply is not None:
+            reply_text = str(
+                deterministic_reply.get("response") or deterministic_reply.get("text") or ""
+            ).strip()
+            payload = {
+                "success": True,
+                "message": "处理完成",
+                "response": reply_text,
+                "data": {
+                    "text": reply_text,
+                    "action": "deterministic_reply",
+                    "data": {
+                        "intent": "deterministic_chat_reply",
+                        "thinking_steps": deterministic_reply.get("thinking_steps"),
+                    },
+                },
+            }
+            return _finalize(
+                self._attach_deterministic_workflow_trace(
+                    payload,
+                    user_id=user_id,
+                    message=message,
+                    source=source,
+                    context=ctx,
+                    file_context=file_context or {},
+                    intent="deterministic_chat_reply",
+                )
+            )
+
         self._handle_confirmation_flow(user_id, message, file_context)
         workflow_result = self._try_handle_dynamic_workflow(
             user_id=user_id,
@@ -1602,6 +1645,86 @@ class AIChatApplicationService:
         return db_object and db_action
 
     @staticmethod
+    def _looks_like_smart_workflow_intent(
+        text: str, context: dict[str, Any] | None = None
+    ) -> bool:
+        """Whether a non-pro chat turn should be allowed into executable planning.
+
+        This keeps casual chat on the lightweight path, but lets ordinary
+        desktop/mobile chat use the same agentic tool routing as pro mode for
+        concrete tool/data/employee/file requests.
+        """
+        t = str(text or "").strip()
+        if not t:
+            return False
+        if AIChatApplicationService._looks_like_explicit_workflow_tool_intent(t):
+            return True
+
+        ctx = context if isinstance(context, dict) else {}
+        for key in (
+            "excel_analysis",
+            "file_analysis",
+            "file_context",
+            "multimodal_attachments",
+            "attachments",
+            "files",
+            "artifacts",
+            "ocr",
+            "ocr_result",
+            "excel_index_id",
+            "excel_vector_index_id",
+        ):
+            if ctx.get(key):
+                return True
+
+        lower = t.lower()
+        controlled_db = any(
+            k in t
+            for k in (
+                "数据库",
+                "查库",
+                "读库",
+                "写库",
+                "业务库",
+                "产品库",
+                "客户库",
+                "物料库",
+                "原材料",
+                "发货记录",
+                "出货记录",
+            )
+        ) or any(k in lower for k in ("database", " db ", "business_db", "products table"))
+        controlled_action = any(
+            k in t
+            for k in (
+                "查",
+                "查询",
+                "读取",
+                "统计",
+                "多少",
+                "几条",
+                "列出",
+                "新增",
+                "添加",
+                "写入",
+                "更新",
+                "删除",
+                "导入",
+                "入库",
+            )
+        ) or any(k in lower for k in ("read", "query", "count", "list", "write", "update"))
+        if controlled_db and controlled_action:
+            return True
+
+        employee_request = any(k in t for k in ("员工", "超级员工", "调用", "交给", "执行")) or any(
+            k in lower for k in ("employee", "agent", "run", "execute")
+        )
+        if employee_request and any(k in t for k in ("员工", "超级员工", "调用", "交给")):
+            return True
+
+        return False
+
+    @staticmethod
     def _attach_deterministic_workflow_trace(
         payload: dict[str, Any],
         *,
@@ -1791,10 +1914,11 @@ class AIChatApplicationService:
         if not text:
             return None
         explicit_workflow_tool_intent = self._looks_like_explicit_workflow_tool_intent(text)
+        smart_workflow_intent = self._looks_like_smart_workflow_intent(text, context)
         has_pending_workflow = user_id in self._pending_workflows
         if (
             not self._is_pro_source(source)
-            and not explicit_workflow_tool_intent
+            and not smart_workflow_intent
             and not has_pending_workflow
         ):
             return None
@@ -2297,7 +2421,7 @@ class AIChatApplicationService:
 
         # 普通工具画像（含「普通界面 + 专业意图」）：未命中槽位时勿走 LLM 工作流规划，避免长时间阻塞在 plan()；
         # 交给下方主对话链路（DeepSeek 等），体验与普通聊天一致。
-        if profile == "normal" and not explicit_workflow_tool_intent:
+        if profile == "normal" and not explicit_workflow_tool_intent and not smart_workflow_intent:
             return None
 
         # 专业界面默认画像：发货单/开单句式与普通版槽位路由一致时，勿让 LLM 工作流规划抢先返回

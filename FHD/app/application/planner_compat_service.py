@@ -137,6 +137,80 @@ def _clear_legacy_tool_result_if_reply_has_no_records(reply: Any) -> None:
         logger.debug("legacy planner local tool trace clear skipped", exc_info=True)
 
 
+def _env_truthy(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _use_ai_chat_mainline(runtime_context: dict[str, Any] | None) -> bool:
+    ctx = runtime_context if isinstance(runtime_context, dict) else {}
+    if ctx.get("use_legacy_chat_adapter") is True:
+        return False
+    if ctx.get("use_ai_chat_mainline") is True:
+        return True
+    if _env_truthy("XCAGI_USE_LEGACY_CHAT_ADAPTER"):
+        return False
+    # Many legacy unit tests patch run_agent_chat directly. Keep pytest on the
+    # historical path unless a test opts in, while production defaults to the
+    # unified AIChatApplicationService mainline.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return False
+    return True
+
+
+def _legacy_chat_fallback_allowed(runtime_context: dict[str, Any] | None) -> bool:
+    ctx = runtime_context if isinstance(runtime_context, dict) else {}
+    if ctx.get("allow_legacy_chat_adapter") is True:
+        return True
+    if _env_truthy("XCAGI_ALLOW_LEGACY_CHAT_FALLBACK"):
+        return True
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
+def _merge_kitten_attachments(
+    payload: dict[str, Any], kitten_extra: dict[str, Any] | None
+) -> dict[str, Any]:
+    if not kitten_extra:
+        return payload
+    enriched = dict(payload)
+    data = enriched.get("data") if isinstance(enriched.get("data"), dict) else {}
+    data = dict(data)
+    for key, value in kitten_extra.items():
+        if value is not None:
+            data[key] = value
+    enriched["data"] = data
+    return enriched
+
+
+async def _execute_ai_chat_mainline(
+    body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
+    runtime_context: dict[str, Any],
+    *,
+    message: str | None = None,
+    kitten_extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    from app.application.ai_chat_app_service import AIChatApplicationService
+
+    service = AIChatApplicationService()
+    file_context = runtime_context.get("file_context")
+    if not isinstance(file_context, dict):
+        file_context = runtime_context.get("file_analysis")
+    if not isinstance(file_context, dict):
+        file_context = {}
+    message_text = str(message if message is not None else getattr(body, "message", "") or "")
+
+    payload = await asyncio.to_thread(
+        service.process_chat,
+        user_id=str(getattr(body, "user_id", None) or "default"),
+        message=message_text,
+        context=dict(runtime_context or {}),
+        source=getattr(body, "source", None),
+        file_context=file_context,
+    )
+    if not isinstance(payload, dict):
+        payload = _xcagi_compat_reply_payload(str(payload))
+    return _merge_kitten_attachments(payload, kitten_extra)
+
+
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> dict[str, Any]:
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
@@ -213,6 +287,46 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
     timeout = _xcagi_chat_timeout_seconds()
     pre_run = None
     planner_runtime_context = dict(runtime_context or {})
+    if body.system_prompt:
+        planner_runtime_context["system_prompt"] = body.system_prompt
+    if body.db_write_token:
+        planner_runtime_context["db_write_token_present"] = True
+    if _use_ai_chat_mainline(planner_runtime_context):
+        try:
+            payload = await asyncio.wait_for(
+                _execute_ai_chat_mainline(
+                    body,
+                    planner_runtime_context,
+                    kitten_extra=kitten_extra or None,
+                ),
+                timeout=timeout,
+            )
+            if payload.get("run_id") or payload.get("agent_run_id"):
+                return payload
+            return _attach_compat_chat_trace(
+                payload,
+                body,
+                message=body.message,
+                runtime_context=planner_runtime_context,
+                channel="compat_chat_mainline",
+            )
+        except TimeoutError:
+            payload = _xcagi_chat_timeout_error_payload(timeout)
+            return _attach_compat_chat_trace(
+                payload,
+                body,
+                message=body.message,
+                runtime_context=planner_runtime_context,
+                channel="compat_chat_mainline",
+            )
+        except RECOVERABLE_ERRORS as e:
+            if not _legacy_chat_fallback_allowed(planner_runtime_context):
+                raise _xcagi_chat_http_exc(e) from e
+            logger.warning(
+                "AIChatApplicationService mainline failed; legacy fallback explicitly allowed: %s",
+                e,
+                exc_info=True,
+            )
     try:
         workspace_root = os.environ.get("WORKSPACE_ROOT", os.getcwd())
         llm_client = create_modstore_openai_client_from_request(request)
@@ -402,6 +516,63 @@ async def execute_compat_chat_batch(
             continue
         pre_run = None
         planner_runtime_context = dict(runtime_context or {})
+        if body.system_prompt:
+            planner_runtime_context["system_prompt"] = body.system_prompt
+        if body.db_write_token:
+            planner_runtime_context["db_write_token_present"] = True
+        if _use_ai_chat_mainline(planner_runtime_context):
+            try:
+                payload = await asyncio.wait_for(
+                    _execute_ai_chat_mainline(
+                        body,
+                        planner_runtime_context,
+                        message=txt,
+                    ),
+                    timeout=timeout,
+                )
+                results.append(
+                    payload
+                    if payload.get("run_id") or payload.get("agent_run_id")
+                    else _attach_compat_chat_trace(
+                        payload,
+                        body,
+                        message=txt,
+                        runtime_context=planner_runtime_context,
+                        channel="compat_chat_batch_mainline",
+                    )
+                )
+                continue
+            except TimeoutError:
+                payload = _xcagi_chat_timeout_error_payload(timeout)
+                results.append(
+                    _attach_compat_chat_trace(
+                        payload,
+                        body,
+                        message=txt,
+                        runtime_context=planner_runtime_context,
+                        channel="compat_chat_batch_mainline",
+                    )
+                )
+                continue
+            except RECOVERABLE_ERRORS as e:
+                if not _legacy_chat_fallback_allowed(planner_runtime_context):
+                    err = _xcagi_chat_http_exc(e)
+                    results.append(
+                        {
+                            "success": False,
+                            "message": err.detail if isinstance(err.detail, str) else str(err.detail),
+                            "response": err.detail
+                            if isinstance(err.detail, str)
+                            else str(err.detail),
+                            "data": {"error": str(e)},
+                        }
+                    )
+                    continue
+                logger.warning(
+                    "AIChatApplicationService batch mainline failed; legacy fallback explicitly allowed: %s",
+                    e,
+                    exc_info=True,
+                )
         try:
             try:
                 pre_run = start_legacy_chat_run(

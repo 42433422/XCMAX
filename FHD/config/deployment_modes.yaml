@@ -1,0 +1,67 @@
+version: 1
+default_mode: safe
+
+modes:
+  - id: absolute_safe
+    level: 1
+    label: 绝对安全模式
+    badge: 1级 | 内网 + SQLite
+    summary: 数据最安全，桌面端与移动端优先局域网直连，AI 不走外网。
+    network_scope: lan
+    ai_mode: offline
+    database_mode: local_sqlite
+    mobile_connection: lan_direct
+    performance_profile: conservative
+    allows_outbound: false
+    requires_postgresql: false
+    features:
+      - 本地部署
+      - 零出网
+      - 最高数据安全
+
+  - id: safe
+    level: 2
+    label: 安全模式
+    badge: 2级 | 外网 + SQLite
+    summary: 解放 AI 能力，业务数据仍保留在本机 SQLite。
+    network_scope: public
+    ai_mode: online
+    database_mode: local_sqlite
+    mobile_connection: public_relay_with_lan_fallback
+    performance_profile: balanced
+    allows_outbound: true
+    requires_postgresql: false
+    features:
+      - AI 能力增强
+      - 数据本地留存
+      - 安全与效率平衡
+
+  - id: performance
+    level: 3
+    label: 性能模式
+    badge: 3级 | 外网 + PostgreSQL
+    summary: 全面释放 AI 性能、长期记忆能力与工具调用，适合真实 AI 员工协作。
+    network_scope: public
+    ai_mode: online
+    database_mode: remote_postgresql
+    mobile_connection: public_relay_with_lan_fallback
+    performance_profile: performance
+    allows_outbound: true
+    requires_postgresql: true
+    features:
+      - PostgreSQL 向量索引
+      - 长期记忆
+      - 工具调用
+      - 高性能协作
+
+mobile_connection_policy:
+  lan_direct:
+    desktop_listen_service: desktop-fhd
+    pair_via_qr: true
+    super_employee_execution: lan_first_with_relay_fallback
+    description: 手机和桌面端在同一局域网内使用桌面端地址直连。
+  public_relay_with_lan_fallback:
+    desktop_listen_service: desktop-fhd
+    pair_via_qr: true
+    super_employee_execution: lan_first_with_relay_fallback
+    description: 优先使用公网/中继 AI 能力，局域网配对仍可作为手机端直连入口。

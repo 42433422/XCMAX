@@ -5,7 +5,7 @@
 ### 方法 1: 运行自动化测试脚本
 ```bash
 cd e:\FHD
-python scripts/test_template_export.py
+python scripts/archive/2026-07/test_template_export.py
 ```
 
 **预期结果**:

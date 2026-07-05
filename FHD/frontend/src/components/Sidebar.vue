@@ -92,6 +92,14 @@
           >
             {{ adminDeployStatusText }}
           </span>
+          <span
+            v-if="entitlementSyncStatusText"
+            class="sidebar-update-chip"
+            :class="`is-${entitlementSyncStatusTone}`"
+            :title="entitlementSyncStatusTitle"
+          >
+            {{ entitlementSyncStatusText }}
+          </span>
         </div>
         <div
           v-if="primaryModChip && !isAdminConsoleSpa()"
@@ -153,6 +161,7 @@ import {
 import { SETTINGS_MENU_ITEM, sidebarLayoutSeedKeys } from '@/constants/coreMenuCatalog'
 import { useVisibleNavItems } from '@/composables/useVisibleNavItems'
 import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
+import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
 
@@ -210,6 +219,10 @@ const expandedKeys = ref(new Set())
 const adminDeployStatus = ref(null)
 const adminDeployStatusError = ref('')
 const adminDeployStatusLoading = ref(false)
+const entitlementSyncStatus = ref(null)
+const entitlementSyncStatusError = ref('')
+const entitlementSyncLoading = ref(false)
+const entitlementSyncNoticeUntil = ref(0)
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -218,6 +231,8 @@ let boundWindowPointerCancel = null
 let dragMoveRaf = 0
 let pendingDragPoint = null
 let adminDeployPollTimer = null
+let entitlementSyncPollTimer = null
+let entitlementSyncNoticeTimer = null
 /** @type {{ key: string, midY: number }[]} */
 let menuHitCache = []
 
@@ -315,6 +330,11 @@ const currentModeText = computed(() => {
 })
 
 const shouldShowAdminDeployStatus = computed(() => isAdminConsoleSpa() && isAdminAccount.value)
+const shouldShowEntitlementSyncStatus = computed(() => {
+  if (isAdminConsoleSpa()) return false
+  if (!accountProfileStore.loaded) return false
+  return Boolean(accountProfileStore.marketUserId || displayBrand.value)
+})
 
 function displayVersion(value) {
   const text = String(value || '').trim()
@@ -362,6 +382,113 @@ const adminDeployStatusTitle = computed(() => {
   ].filter(Boolean).join(' · ')
 })
 
+const entitlementSyncHasFreshNotice = computed(() => entitlementSyncNoticeUntil.value > Date.now())
+
+const entitlementSyncStatusTone = computed(() => {
+  if (entitlementSyncStatusError.value) return 'error'
+  if (entitlementSyncLoading.value && !entitlementSyncStatus.value) return 'muted'
+  if (entitlementSyncHasFreshNotice.value) return 'info'
+  if (entitlementSyncStatus.value?.has_snapshot) return 'ok'
+  return 'muted'
+})
+
+const entitlementSyncStatusText = computed(() => {
+  if (!shouldShowEntitlementSyncStatus.value) return ''
+  if (entitlementSyncStatusError.value) return '权益未同步'
+  if (entitlementSyncLoading.value && !entitlementSyncStatus.value) return '权益同步中'
+  if (entitlementSyncHasFreshNotice.value) return '权益已更新'
+  if (entitlementSyncStatus.value?.has_snapshot) return '权益已同步'
+  return ''
+})
+
+const entitlementSyncStatusTitle = computed(() => {
+  if (entitlementSyncStatusError.value) return entitlementSyncStatusError.value
+  const snap = entitlementSyncStatus.value?.snapshot || {}
+  const profile = snap.profile || {}
+  const mods = Array.isArray(snap.mod_ids) ? snap.mod_ids.join('、') : ''
+  return [
+    snap.username ? `账号 ${snap.username}` : '',
+    profile.tier ? `等级 ${profile.tier}` : '',
+    profile.industry_id ? `行业 ${profile.industry_id}` : '',
+    mods ? `Mod ${mods}` : '',
+  ].filter(Boolean).join(' · ')
+})
+
+function entitlementSyncStorageKey() {
+  const accountKey =
+    accountProfileStore.marketUserId ||
+    accountProfileStore.impersonatingMarketUserId ||
+    displayBrand.value ||
+    'current'
+  return `xcagi_entitlements_seen_${accountKey}`
+}
+
+function accountEntitlementSignature() {
+  return JSON.stringify({
+    kind: accountProfileStore.accountKind || '',
+    brand: displayBrand.value || '',
+    marketUserId: accountProfileStore.marketUserId || '',
+    tier: accountProfileStore.tier || '',
+    accountTier: accountProfileStore.accountTier || '',
+    budgetRange: accountProfileStore.budgetRange || '',
+    membership: accountProfileStore.marketMembershipTier || '',
+    industries: accountProfileStore.entitledIndustries || [],
+  })
+}
+
+function fallbackEntitlementSyncStatus(updatedAtMs = 0) {
+  return {
+    has_snapshot: true,
+    updated_at_ms: updatedAtMs,
+    account: {
+      market_user_id: accountProfileStore.marketUserId,
+      username: displayBrand.value || '',
+      account_kind: accountProfileStore.accountKind,
+      market_is_enterprise: accountProfileStore.marketIsEnterprise,
+      market_is_admin: accountProfileStore.marketIsAdmin,
+    },
+    snapshot: {
+      market_user_id:
+        accountProfileStore.marketUserId == null ? '' : String(accountProfileStore.marketUserId),
+      username: displayBrand.value || '',
+      is_admin: accountProfileStore.marketIsAdmin,
+      is_enterprise: accountProfileStore.marketIsEnterprise,
+      profile: {
+        tier: accountProfileStore.tier || accountProfileStore.accountKind || '',
+        account_tier: accountProfileStore.accountTier || '',
+        budget_range: accountProfileStore.budgetRange || '',
+        industry_id: (accountProfileStore.entitledIndustries || [])[0] || '',
+        entitled_industries: accountProfileStore.entitledIndustries || [],
+      },
+      mod_ids: (modsForUi.value || []).map((m) => String(m.id || '')).filter(Boolean),
+      meta: {
+        updated_at_ms: updatedAtMs,
+        target: 'account_profile',
+        push_mode: 'pull_fallback',
+      },
+    },
+  }
+}
+
+function markEntitlementSyncNotice(updatedAtMs) {
+  if (!updatedAtMs) return
+  const isFresh = Math.abs(Date.now() - updatedAtMs) <= 24 * 60 * 60 * 1000
+  try {
+    localStorage.setItem(entitlementSyncStorageKey(), String(updatedAtMs))
+  } catch {
+    /* ignore storage failures */
+  }
+  if (!isFresh) return
+  entitlementSyncNoticeUntil.value = Date.now() + 45_000
+  if (entitlementSyncNoticeTimer != null) {
+    window.clearTimeout(entitlementSyncNoticeTimer)
+  }
+  entitlementSyncNoticeTimer = window.setTimeout(() => {
+    entitlementSyncNoticeUntil.value = 0
+    entitlementSyncNoticeTimer = null
+  }, 45_000)
+}
+
 const syncProIntentExperience = () => {
   proIntentExperienceEnabled.value = localStorage.getItem(PRO_INTENT_EXPERIENCE_KEY) === '1'
 }
@@ -407,6 +534,87 @@ function syncAdminDeployStatusPolling() {
   }
 }
 
+async function refreshEntitlementSyncStatus(options = {}) {
+  if (!shouldShowEntitlementSyncStatus.value || entitlementSyncLoading.value) return
+  entitlementSyncLoading.value = true
+  entitlementSyncStatusError.value = ''
+  const beforeSignature = accountEntitlementSignature()
+  try {
+    if (options.pull) {
+      await primeCsrfCookie()
+      await xcmaxAdminApi.pullSync()
+      await accountProfileStore.refreshFromServer()
+    }
+    let statusData = null
+    try {
+      const res = await xcmaxAdminApi.getCurrentEntitlementsSyncStatus()
+      statusData = res?.data || null
+    } catch {
+      const afterSignature = accountEntitlementSignature()
+      const changedAtMs =
+        beforeSignature && afterSignature && beforeSignature !== afterSignature ? Date.now() : 0
+      statusData = fallbackEntitlementSyncStatus(changedAtMs)
+      if (changedAtMs > 0) {
+        markEntitlementSyncNotice(changedAtMs)
+        window.dispatchEvent(
+          new CustomEvent('xcagi:account-entitlements-updated', {
+            detail: { updated_at_ms: changedAtMs, snapshot: statusData.snapshot },
+          }),
+        )
+      }
+    }
+    entitlementSyncStatus.value = statusData
+    const updatedAtMs = Number(statusData?.updated_at_ms || 0)
+    if (updatedAtMs > 0) {
+      let seen = ''
+      try {
+        seen = localStorage.getItem(entitlementSyncStorageKey()) || ''
+      } catch {
+        seen = ''
+      }
+      if (String(updatedAtMs) !== seen) {
+        markEntitlementSyncNotice(updatedAtMs)
+        window.dispatchEvent(
+          new CustomEvent('xcagi:account-entitlements-updated', {
+            detail: { updated_at_ms: updatedAtMs, snapshot: statusData?.snapshot || null },
+          }),
+        )
+      }
+    }
+  } catch (e) {
+    entitlementSyncStatusError.value =
+      e instanceof Error ? e.message : String(e || '权益同步失败')
+  } finally {
+    entitlementSyncLoading.value = false
+  }
+}
+
+function stopEntitlementSyncPolling() {
+  if (entitlementSyncPollTimer != null) {
+    window.clearInterval(entitlementSyncPollTimer)
+    entitlementSyncPollTimer = null
+  }
+}
+
+function startEntitlementSyncPolling() {
+  if (!shouldShowEntitlementSyncStatus.value || entitlementSyncPollTimer != null) return
+  void refreshEntitlementSyncStatus({ pull: true })
+  entitlementSyncPollTimer = window.setInterval(() => {
+    void refreshEntitlementSyncStatus({ pull: true })
+  }, 30_000)
+}
+
+function syncEntitlementSyncPolling() {
+  if (shouldShowEntitlementSyncStatus.value) {
+    startEntitlementSyncPolling()
+  } else {
+    stopEntitlementSyncPolling()
+    entitlementSyncStatus.value = null
+    entitlementSyncStatusError.value = ''
+    entitlementSyncNoticeUntil.value = 0
+  }
+}
+
 const lastSelectViewAt = new Map()
 
 const selectView = (key) => {
@@ -449,6 +657,10 @@ watch(() => props.activeView, (viewKey) => {
 
 watch(shouldShowAdminDeployStatus, () => {
   syncAdminDeployStatusPolling()
+})
+
+watch(shouldShowEntitlementSyncStatus, () => {
+  syncEntitlementSyncPolling()
 })
 
 const toggleProMode = () => {
@@ -654,11 +866,17 @@ onMounted(async () => {
     void modsStore.initialize()
   }
   syncAdminDeployStatusPolling()
+  syncEntitlementSyncPolling()
 })
 
 onBeforeUnmount(() => {
   clearReorderGesture()
   stopAdminDeployStatusPolling()
+  stopEntitlementSyncPolling()
+  if (entitlementSyncNoticeTimer != null) {
+    window.clearTimeout(entitlementSyncNoticeTimer)
+    entitlementSyncNoticeTimer = null
+  }
   window.removeEventListener('storage', syncProIntentExperience)
   window.removeEventListener('xcagi:pro-intent-experience-changed', syncProIntentExperience)
   window.removeEventListener('xcagi:admin-deploy-updated', refreshAdminDeployStatus)

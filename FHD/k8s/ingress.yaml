@@ -1,0 +1,34 @@
+# CI SSOT: Ingress for xcagi-fhd-api.
+# Routes https://xiu-ci.com/fhd-api/* -> service xcagi:5100
+# Requires ingress-nginx controller installed in cluster.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: xcagi-ingress
+  namespace: __NAMESPACE__
+  labels:
+    app: xcagi
+    component: fhd-api
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - xiu-ci.com
+      secretName: xiu-ci-tls
+  rules:
+    - host: xiu-ci.com
+      http:
+        paths:
+          - path: /fhd-api
+            pathType: Prefix
+            backend:
+              service:
+                name: xcagi
+                port:
+                  number: 5100

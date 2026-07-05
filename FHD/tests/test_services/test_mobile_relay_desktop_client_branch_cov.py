@@ -1007,6 +1007,29 @@ class TestExecuteTaskAdditional:
         call_kwargs = mock_svc.invoke.call_args[1]
         assert call_kwargs["context"]["branch"] == "feature/existing"
 
+    def test_workspace_root_from_payload_is_forwarded_to_context(self) -> None:
+        task = {
+            "kind": "trae.invoke",
+            "payload": {
+                "message": "修复 Trae 工作目录",
+                "workspace_root": "/Users/a4243342/Desktop/XCMAX",
+                "context": {"client_surface": "mobile"},
+            },
+        }
+        mock_svc = MagicMock()
+        mock_svc.invoke.return_value = {
+            "dispatch": {"status": "completed"},
+            "assistant_message": {"status": "completed", "body": "ok"},
+        }
+        with patch(
+            "app.services.mobile_relay_desktop_client.TraeSuperEmployeeService",
+            return_value=mock_svc,
+        ):
+            _execute_task(task)
+        call_kwargs = mock_svc.invoke.call_args[1]
+        assert call_kwargs["context"]["workspace_root"] == "/Users/a4243342/Desktop/XCMAX"
+        assert call_kwargs["context"]["source"] == "mobile_relay"
+
     def test_mode_cleared_when_code(self) -> None:
         task = {
             "kind": "codex.invoke",

@@ -599,6 +599,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     branch = str(payload.get("branch") or "").strip()
+    workspace_root = str(
+        context.get("workspace_root") or payload.get("workspace_root") or ""
+    ).strip()
     # 群派工(AI 交流圈/超级开发部群)是**明确工单**，带 work_order_id / assigned_task /
     # client_surface=ai_group；自由聊天面没有这些信号。两者都经中继下发，但只有工单需要真执行。
     orig_surface = str(context.get("client_surface") or "").strip().lower()
@@ -619,6 +622,8 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     }
     if branch and not str(context.get("branch") or "").strip():
         context["branch"] = branch
+    if workspace_root and not str(context.get("workspace_root") or "").strip():
+        context["workspace_root"] = workspace_root
     if is_work_order:
         # 工单：保持 mode=code，让 _is_task_intent 判为开发任务 → 走 _cli_work_prompt 真改文件，
         # 而不是当成"普通对话通道"回避执行(那正是任务以 blocked 收场的根因)。

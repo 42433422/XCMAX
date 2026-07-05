@@ -7,6 +7,7 @@ Covers:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -210,3 +211,77 @@ class TestDownloadModel:
             )
         # Either 200 with zip or some other success-ish code
         assert r.status_code in (200, 201, 202, 400, 500)
+
+
+class TestDesktopDeploymentModes:
+    def test_deployment_status_uses_ssot_catalog(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'data' / 'xcagi.db'}")
+
+        r = client.get("/api/desktop/deployment")
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["currentMode"] == "safe"
+        assert {item["id"] for item in data["modes"]} >= {
+            "absolute_safe",
+            "safe",
+            "performance",
+        }
+        assert data["effective"]["databaseMode"] == "local_sqlite"
+
+    def test_performance_mode_requires_postgres_url(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+
+        r = client.put("/api/desktop/deployment", json={"mode": "performance"})
+
+        assert r.status_code == 400
+        assert "PostgreSQL" in r.text or "postgresql" in r.text
+
+    def test_performance_mode_writes_profiles_and_sync_plan(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        pg_url = "postgresql+psycopg://user:secret@127.0.0.1:5432/xcagi"
+
+        r = client.put(
+            "/api/desktop/deployment",
+            json={"mode": "performance", "postgresUrl": pg_url},
+        )
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["mode"] == "performance"
+        assert data["database"]["storageMode"] == "remote_postgresql"
+        assert "migrate_sqlite_to_postgres.py" in data["syncPlan"]["syncCommand"]
+        db_profile = json.loads((tmp_path / "config" / "database.json").read_text())
+        deployment_profile = json.loads((tmp_path / "config" / "deployment.json").read_text())
+        assert db_profile["mode"] == "remote"
+        assert db_profile["remote"]["enabled"] is True
+        assert db_profile["remote"]["database_url"] == pg_url
+        assert deployment_profile["mode"] == "performance"
+
+    def test_absolute_safe_mode_returns_to_local_sqlite(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XCAGI_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+
+        r = client.put("/api/desktop/deployment", json={"mode": "absolute_safe"})
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["mode"] == "absolute_safe"
+        assert data["database"]["storageMode"] == "local_sqlite"
+        db_profile = json.loads((tmp_path / "config" / "database.json").read_text())
+        assert db_profile["mode"] == "local"
+        assert db_profile["remote"]["enabled"] is False

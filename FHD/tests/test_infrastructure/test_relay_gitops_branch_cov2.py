@@ -63,6 +63,39 @@ class TestGitHelper:
             root = relay_gitops._repo_root()
             assert root == "/a/b/c/d"
 
+    def test_repo_root_from_payload_uses_verified_workspace_root(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        with patch.object(relay_gitops, "_repo_root", return_value="/fallback"):
+            root = relay_gitops._repo_root_from_payload(
+                {"context": {"workspace_root": str(tmp_path)}}
+            )
+        assert root == str(tmp_path)
+
+    def test_repo_root_from_payload_rejects_non_git_workspace(self, tmp_path: Path) -> None:
+        with (
+            patch.object(relay_gitops, "_repo_root", return_value="/fallback"),
+            patch.object(
+                relay_gitops,
+                "resolve_verified_relay_workspace_root",
+                return_value="",
+            ),
+        ):
+            root = relay_gitops._repo_root_from_payload({"workspace_root": str(tmp_path)})
+        assert root == "/fallback"
+
+    def test_repo_root_from_payload_uses_inferred_workspace_root(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        with (
+            patch.object(relay_gitops, "_repo_root", return_value="/fallback"),
+            patch.object(
+                relay_gitops,
+                "resolve_verified_relay_workspace_root",
+                return_value=str(tmp_path),
+            ),
+        ):
+            root = relay_gitops._repo_root_from_payload({})
+        assert root == str(tmp_path)
+
     def test_merge_base_branch_uses_env_var(self) -> None:
         with patch.dict("os.environ", {"XCMAX_GIT_MERGE_BASE": "develop"}):
             assert relay_gitops._merge_base_branch("/repo") == "develop"

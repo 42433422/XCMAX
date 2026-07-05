@@ -1,6 +1,8 @@
 package com.xiuci.xcagi.mobile
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +12,7 @@ import android.security.keystore.KeyProperties
 import android.util.Base64
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
+import androidx.core.app.ActivityCompat
 import androidx.core.content.FileProvider
 import androidx.core.content.ContextCompat
 import androidx.datastore.core.DataStore
@@ -44,6 +47,7 @@ private const val DeltaFormatCopyDataV1 = "xcagi-copy-data-v1"
 private const val SessionFileName = "xcagi_session.json"
 private const val LegacySessionDataStorePath = "datastore/xcagi_session_enterprise.preferences_pb"
 private const val LegacySessionMigrationMarkerName = "xcagi_session_legacy_migrated"
+private const val RecordAudioPermissionRequestCode = 4242
 
 private data class PackageDeltaSpec(
     val available: Boolean,
@@ -66,6 +70,7 @@ private data class PackageDeltaSpec(
 class MainActivity : FlutterFragmentActivity() {
     private var deepLinkChannel: MethodChannel? = null
     private var pendingDeepLinkRoute: String? = null
+    private var pendingRecordAudioPermissionResult: MethodChannel.Result? = null
     private val legacySessionDataStore: DataStore<Preferences> by lazy {
         PreferenceDataStoreFactory.create(
             produceFile = { File(filesDir, LegacySessionDataStorePath) },
@@ -166,6 +171,15 @@ class MainActivity : FlutterFragmentActivity() {
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
+            "xcagi/permissions",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "ensureRecordAudio" -> ensureRecordAudioPermission(result)
+                else -> result.notImplemented()
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
             "xcagi/content_uri",
         ).setMethodCallHandler { call, result ->
             if (call.method != "readBytes") {
@@ -188,6 +202,18 @@ class MainActivity : FlutterFragmentActivity() {
                 }
             }
         }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != RecordAudioPermissionRequestCode) return
+        val granted = grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        pendingRecordAudioPermissionResult?.success(granted)
+        pendingRecordAudioPermissionResult = null
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -256,6 +282,30 @@ class MainActivity : FlutterFragmentActivity() {
                         BiometricManager.Authenticators.DEVICE_CREDENTIAL,
                 )
                 .build(),
+        )
+    }
+
+    private fun ensureRecordAudioPermission(result: MethodChannel.Result) {
+        val alreadyGranted =
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        if (alreadyGranted) {
+            result.success(true)
+            return
+        }
+        if (pendingRecordAudioPermissionResult != null) {
+            result.error(
+                "PERMISSION_REQUEST_IN_PROGRESS",
+                "录音权限请求正在进行",
+                null,
+            )
+            return
+        }
+        pendingRecordAudioPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECORD_AUDIO),
+            RecordAudioPermissionRequestCode,
         )
     }
 

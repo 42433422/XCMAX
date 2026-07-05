@@ -13,6 +13,7 @@ import { ref, type Ref, nextTick } from 'vue'
 /* ── mock functions ── */
 const mockApiGet = vi.fn().mockResolvedValue({ data: {}, success: false })
 const mockApiPost = vi.fn().mockResolvedValue({ success: true })
+const mockApiPut = vi.fn().mockResolvedValue({ success: true })
 const mockAuthApiValidateSession = vi.fn().mockResolvedValue({ success: false })
 const mockAuthApiGetCurrentUser = vi.fn().mockResolvedValue({ success: false, data: { user: null, permissions: [] } })
 const mockAuthApiLogout = vi.fn().mockResolvedValue({})
@@ -208,6 +209,7 @@ vi.mock('@/api', () => ({
   default: {
     get: (...args: unknown[]) => mockApiGet(...args),
     post: (...args: unknown[]) => mockApiPost(...args),
+    put: (...args: unknown[]) => mockApiPut(...args),
   },
   ApiError: class ApiError extends Error {},
 }))
@@ -439,13 +441,14 @@ describe('SettingsView.vue – basic settings', () => {
     wrapper.unmount()
   })
 
-  it('AI mode select has online and offline options', async () => {
+  it('AI mode select has deployment mode options', async () => {
     const wrapper = await mountSettings()
     const select = wrapper.find('#settings-ai-mode')
     const options = select.findAll('option')
     const values = options.map(o => o.attributes('value'))
-    expect(values).toContain('online')
-    expect(values).toContain('offline')
+    expect(values).toContain('absolute_safe')
+    expect(values).toContain('safe')
+    expect(values).toContain('performance')
     wrapper.unmount()
   })
 })

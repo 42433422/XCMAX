@@ -2125,8 +2125,9 @@ class MobileApiClient {
 
   Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
     String tool,
-    String body,
-  ) async {
+    String body, {
+    String baseUrl = '',
+  }) async {
     final json = await postJson(
       XcagiMobileEndpoints.superEmployeeMessages(tool),
       {
@@ -2134,6 +2135,7 @@ class MobileApiClient {
         'message': body,
         'context': const {'source': 'mobile', 'client_surface': 'mobile'},
       },
+      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
