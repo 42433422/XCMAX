@@ -18,6 +18,8 @@
         @collapse-message="collapseMessage"
         @toggle-message-tts="toggleMessageTts"
         @shipment-download-click="handleShipmentDownloadClick"
+        @approval-confirm="confirmWorkflowFromCard"
+        @approval-cancel="cancelWorkflowFromCard"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -244,6 +246,8 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  confirmWorkflowFromCard,
+  cancelWorkflowFromCard,
   confirmTask,
   refetchTaskOrderNumber,
   setCustomOrderNumber,

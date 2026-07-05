@@ -220,6 +220,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     attachThinkingStepsToLastAiMessage,
     attachTodoStepsToLastAiMessage,
     attachWorkflowTraceToLastAiMessage,
+    attachApprovalCardToLastAiMessage,
     attachContextSummaryToLastAiMessage,
     syncTaskFromChatResponse,
   } = responseAttach
@@ -1132,6 +1133,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         attachThinkingStepsToLastAiMessage(payload)
         attachTodoStepsToLastAiMessage(payload)
         attachWorkflowTraceToLastAiMessage(payload)
+        attachApprovalCardToLastAiMessage(payload)
         if (!payload.task && (payload.autoAction?.type === 'show_products_float' || payload.autoAction?.type === 'show_products')) {
           currentTask.value = null
         }
@@ -1262,6 +1264,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
         attachThinkingStepsToLastAiMessage(wrap)
         attachTodoStepsToLastAiMessage(wrap)
         attachWorkflowTraceToLastAiMessage(wrap)
+        attachApprovalCardToLastAiMessage(wrap)
         if (wrap.task) {
           showTaskConfirm(wrap.task)
           emitAssistantPush({
@@ -1366,6 +1369,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           attachThinkingStepsToLastAiMessage(lastOk)
           attachTodoStepsToLastAiMessage(lastOk)
           attachWorkflowTraceToLastAiMessage(lastOk)
+          attachApprovalCardToLastAiMessage(lastOk)
         }
         const lastTask = [...results].reverse().find((p) => p.task)
         if (lastTask?.task) {
@@ -1407,6 +1411,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       attachThinkingStepsToLastAiMessage(data)
       attachTodoStepsToLastAiMessage(data)
       attachWorkflowTraceToLastAiMessage(data)
+      attachApprovalCardToLastAiMessage(data)
 
       if (data.task) {
         showTaskConfirm(data.task)
@@ -1429,6 +1434,28 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     } else {
       await addAndSaveMessage('处理失败: ' + (data.message || '未知错误'), 'ai')
     }
+  }
+
+  async function confirmWorkflowFromCard() {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
+        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
+        break
+      }
+    }
+    await sendMessage('确认')
+  }
+
+  async function cancelWorkflowFromCard() {
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
+        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
+        break
+      }
+    }
+    await sendMessage('取消')
   }
 
   async function sendMessage(message: string) {
@@ -1562,6 +1589,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     scrollToBottom,
     syncProModeState: dbGate.syncProModeState,
     sendMessage,
+    confirmWorkflowFromCard,
+    cancelWorkflowFromCard,
     confirmTask,
     refetchTaskOrderNumber,
     setCustomOrderNumber,

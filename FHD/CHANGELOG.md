@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
+
+- **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
+- **feat(onboarding)**：首启 seed 按 manifest `industry.subsystems` 映射演示客户/产品；前端 seed/AI 文案随行业变化
+- **feat(chat)**：`approval_card` 结构化 payload + `ChatApprovalInlineCard` 内联确认/取消
+- **feat(risk)**：`ApprovalService` 读取 registry `approval: always` 作为 YAML 规则补充
+
 ### 平台七柱 Wave 0（2026-07-05 · v10 线内迭代）
 
 - **feat(contracts)**：`industry_package.schema.json` + release_gate 校验 `*-industry` manifest；MOD_AUTHORING_GUIDE §4b

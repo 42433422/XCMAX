@@ -240,6 +240,8 @@ mods/<mod_id>/
 
 `industry.id` 必须与 [`config/industry_baseline.json`](../../config/industry_baseline.json) 中 `industry_packages` 的键一致；`manifest.id` 必须与同条目的 `mod_id` 一致。
 
+**脚手架（Wave 2）**：`bash scripts/dev/scaffold-industry-mod.sh <行业名> <mod-id> [显示名]` — 从 `coating-industry` 模板复制并校验 schema。
+
 ---
 
 ## 5. 后端契约：路由、生命周期、动态加载
