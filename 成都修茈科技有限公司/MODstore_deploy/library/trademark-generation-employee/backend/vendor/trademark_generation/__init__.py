@@ -1,0 +1,1 @@
+"""Trademark generation runtime helpers."""

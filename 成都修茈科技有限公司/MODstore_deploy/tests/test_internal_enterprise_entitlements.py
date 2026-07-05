@@ -9,7 +9,7 @@ def test_internal_ensure_enterprise_profile_grants_only_requested_mods(client, m
     monkeypatch.setenv("XCAGI_MARKET_INTERNAL_API_KEY", "unit-test-internal-key")
 
     from modstore_server.auth_service import register_user
-    from modstore_server.models_db import get_user_mod_ids
+    from modstore_server.db.catalog import get_user_mod_ids
 
     username = f"enterprise-grant-{uuid.uuid4().hex[:10]}"
     user = register_user(username, "pass123", f"{username}@example.com")

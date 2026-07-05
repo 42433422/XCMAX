@@ -734,7 +734,7 @@ def api_internal_cs_intake_ensure_enterprise_profile(
             target.is_enterprise = True
         added_mod_ids: list[str] = []
         if requested_mod_ids:
-            from modstore_server.models_catalog import UserMod
+            from modstore_server.db.catalog import UserMod
 
             existing = {
                 str(row[0])

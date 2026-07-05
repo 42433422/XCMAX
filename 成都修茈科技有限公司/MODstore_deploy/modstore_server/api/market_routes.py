@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import shutil
+import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -746,6 +747,49 @@ def api_wallet_admin_self_credit(body: AdminSelfCreditDTO, user: User = Depends(
         session.add(txn)
         session.commit()
         return {"ok": True, "new_balance": wallet.balance, "balance": wallet.balance}
+
+
+@router.post("/admin/users/{user_id}/wallet/credit")
+def api_admin_credit_user_wallet(
+    user_id: int,
+    body: AdminSelfCreditDTO,
+    user: User = Depends(_require_admin),
+):
+    """管理员为指定用户钱包加款。"""
+    amount = _wallet_money(body.amount)
+    if amount <= Decimal("0.00"):
+        raise HTTPException(400, "加款金额必须大于 0")
+
+    description = (body.description or "").strip() or "后台加款"
+    sf = get_session_factory()
+    with sf() as session:
+        target = session.query(User).filter(User.id == user_id).first()
+        if not target:
+            raise HTTPException(404, "用户不存在")
+        wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
+        if not wallet:
+            wallet = Wallet(user_id=user_id, balance=0.0)
+            session.add(wallet)
+            session.flush()
+        wallet.balance = _wallet_money(wallet.balance) + amount
+        wallet.updated_at = datetime.now(timezone.utc)
+        txn = Transaction(
+            user_id=user_id,
+            amount=amount,
+            txn_type="admin_credit",
+            status="completed",
+            description=description,
+            idempotency_key=f"admin_credit:{user_id}:{uuid.uuid4().hex}",
+        )
+        session.add(txn)
+        session.commit()
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "amount": _wallet_money_str(amount),
+            "balance": _wallet_money_str(wallet.balance),
+            "new_balance": _wallet_money_str(wallet.balance),
+        }
 
 
 def _wallet_money(value: Any) -> Decimal:
