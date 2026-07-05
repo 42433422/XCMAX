@@ -3,7 +3,7 @@
   "name": "Excel 读取员",
   "version": "1.0.0",
   "author": "XCAGI",
-  "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
+  "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格",
   "artifact": "employee_pack",
   "scope": "global",
   "dependencies": {
@@ -20,9 +20,9 @@
   "workflow_employees": [
     {
       "id": "excel-full-read-employee",
-      "label": "Excel 生成员",
-      "panel_title": "Excel 生成员",
-      "panel_summary": "上传 .xlsx，全量读取 sheet/表头/单元格并输出 workbook.json。",
+      "label": "Excel 读取员",
+      "panel_title": "Excel 读取员",
+      "panel_summary": "上传 .xlsx，全量读取 sheet/表头/单元格并输出可交接的 workbook.json。",
       "capabilities": [
         "excel.full_read",
         "data.json_export"
@@ -40,8 +40,8 @@
       "id": "excel-full-read-employee",
       "version": "1.0.0",
       "artifact": "employee_pack",
-      "name": "Excel 生成员",
-      "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、表头、数据与单元格内容，输出 JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格"
+      "name": "Excel 读取员",
+      "description": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格"
     },
     "perception": {
       "type": "excel",
@@ -55,9 +55,9 @@
     },
     "cognition": {
       "agent": {
-        "system_prompt": "你是Excel 生成员。你负责将用户上传的 xlsx 全量解析为 outputs/workbook.json（含 sheet、表头、单元格）。必须真实执行 direct_python，禁止 LLM 编造单元格数据。",
+        "system_prompt": "你是Excel 读取员。你负责将用户上传的 xlsx 全量解析为 outputs/workbook.json（含 sheet、columns、rows、表头、单元格）。必须真实执行 direct_python，禁止 LLM 编造单元格数据。",
         "role": {
-          "name": "Excel 生成员",
+          "name": "Excel 读取员",
           "persona": "严谨的 Excel 全量读取员工",
           "tone": "professional",
           "expertise": [
@@ -89,7 +89,7 @@
     "collaboration": {
       "workflow": {
         "workflow_id": 0,
-        "name": "Excel 生成员"
+        "name": "Excel 读取员"
       }
     },
     "actions": {
