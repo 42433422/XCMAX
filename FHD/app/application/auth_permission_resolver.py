@@ -72,10 +72,7 @@ def resolve_permissions(
     route_allowed = True
     route_reason = ""
     r = str(route or "").strip()
-    if r.startswith("/api/admin") and kind != "admin":
-        route_allowed = False
-        route_reason = "admin_only"
-    elif r.startswith("/api/xcmax-admin") and kind != "admin":
+    if (r.startswith("/api/admin") or r.startswith("/api/xcmax-admin")) and kind != "admin":
         route_allowed = False
         route_reason = "admin_only"
     elif "employee" in r and r.endswith("/execute"):

@@ -67,7 +67,7 @@ def build_support_bundle_zip(
         manifest["modsLoaded"] = [
             str(m.get("id") or "") for m in get_mod_manager().list_all_mods() if m.get("id")
         ][:200]
-    except Exception:
+    except Exception:  # noqa: BLE001
         manifest["modsLoaded"] = []
 
     buf = io.BytesIO()

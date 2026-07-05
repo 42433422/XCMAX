@@ -96,7 +96,6 @@ def read_workspace_output_files(
 ) -> list[dict[str, Any]]:
     from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 
-    root = Path(workspace_root).resolve()
     out: list[dict[str, Any]] = []
     for raw in file_paths:
         rel = str(raw or "").strip().lstrip("/")
