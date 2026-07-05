@@ -32,6 +32,8 @@ library/*
 !library/.gitkeep
 !library/avatar-generation-employee/
 !library/avatar-generation-employee/**
+!library/trademark-generation-employee/
+!library/trademark-generation-employee/**
 debug_sandbox/
 web/node_modules/
 web/dist/
