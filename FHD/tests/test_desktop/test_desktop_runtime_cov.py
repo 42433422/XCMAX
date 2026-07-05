@@ -44,7 +44,11 @@ class TestBackupDatabase:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         db = data_dir / "xcagi.db"
-        db.write_bytes(b"SQLite data")
+        # 写入一个真实的 SQLite 库，sqlite3.backup() 要求源库是有效的 SQLite 文件
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
         backups_dir = tmp_path / "backups"
         backups_dir.mkdir()
 

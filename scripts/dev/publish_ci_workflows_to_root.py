@@ -113,6 +113,13 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-ios",
         "working-directory: FHD/mobile-ios",
     )
+    # desktop-build-smoke job runs from repo root (no workflow-level defaults),
+    # so working-directory: desktop must be rewritten to FHD/desktop.
+    # Use \n anchor to avoid clobbering "working-directory: desktop-shell".
+    content = content.replace(
+        "working-directory: desktop\n",
+        "working-directory: FHD/desktop\n",
+    )
     # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
     content = content.replace("path: mobile-ios/build/", "path: FHD/mobile-ios/build/")
     content = re.sub(r"(?m)^([ \t]+)(dist/deploy/)", r"\1FHD/\2", content)
