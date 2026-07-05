@@ -101,6 +101,15 @@ _EXCEL_IMPORT_QTY_MEASURE_RE = re.compile(
 )
 
 
+def _enrich_confirmation_inner(inner: dict[str, Any], *, action: str) -> dict[str, Any]:
+    """Attach structured approval_card for Chat inline confirm UI (Wave 2)."""
+    from app.application.workflow.approval_card import build_approval_card_payload
+
+    enriched = dict(inner)
+    enriched["approval_card"] = build_approval_card_payload(action=action, inner=inner)
+    return enriched
+
+
 class AIChatApplicationService:
     """
     AI 聊天应用服务
@@ -1680,6 +1689,20 @@ class AIChatApplicationService:
             f"检测到写库步骤（{', '.join(blocking_nodes) or 'import'}），"
             "回复「确认」继续执行，回复「取消」终止。"
         )
+        inner = {
+            "run_id": agent_run.run_id,
+            "agent_run_id": agent_run.run_id,
+            "plan_id": plan.plan_id,
+            "intent": plan.intent,
+            "thinking_steps": thinking_steps,
+            "todo": plan.todo_steps,
+            "artifact_count": len(artifact_payloads),
+            "artifacts": artifact_payloads,
+            "blocking_nodes": blocking_nodes,
+            "reason": "导入会写入业务数据库，需确认后执行",
+            "approval_required": False,
+            "approval_nodes": [],
+        }
         return {
             "success": True,
             "message": "处理完成",
@@ -1691,20 +1714,7 @@ class AIChatApplicationService:
                 "action": "workflow_confirmation_required",
                 "run_id": agent_run.run_id,
                 "agent_run_id": agent_run.run_id,
-                "data": {
-                    "run_id": agent_run.run_id,
-                    "agent_run_id": agent_run.run_id,
-                    "plan_id": plan.plan_id,
-                    "intent": plan.intent,
-                    "thinking_steps": thinking_steps,
-                    "todo": plan.todo_steps,
-                    "artifact_count": len(artifact_payloads),
-                    "artifacts": artifact_payloads,
-                    "blocking_nodes": blocking_nodes,
-                    "reason": "导入会写入业务数据库，需确认后执行",
-                    "approval_required": False,
-                    "approval_nodes": [],
-                },
+                "data": _enrich_confirmation_inner(inner, action="workflow_confirmation_required"),
             },
         }
 
@@ -2227,6 +2237,11 @@ class AIChatApplicationService:
                                 plan=plan,
                             )
 
+                    approval_inner = {
+                        "plan_id": plan.plan_id,
+                        "approval_required": True,
+                        "approval_nodes": approval_nodes,
+                    }
                     return {
                         "success": True,
                         "message": "处理完成",
@@ -2234,11 +2249,9 @@ class AIChatApplicationService:
                         "data": {
                             "text": "已提交审批请求，请等待审批完成后继续。",
                             "action": "approval_pending",
-                            "data": {
-                                "plan_id": plan.plan_id,
-                                "approval_required": True,
-                                "approval_nodes": approval_nodes,
-                            },
+                            "data": _enrich_confirmation_inner(
+                                approval_inner, action="approval_pending"
+                            ),
                         },
                     }
 
@@ -2388,6 +2401,18 @@ class AIChatApplicationService:
                 f"检测到需确认步骤（{', '.join(blocking_nodes) or 'workflow'}），"
                 "回复「确认」继续执行，回复「取消」终止。"
             )
+            confirm_inner = {
+                "run_id": agent_run.run_id,
+                "agent_run_id": agent_run.run_id,
+                "plan_id": plan.plan_id,
+                "intent": plan.intent,
+                "thinking_steps": thinking_steps,
+                "todo": plan.todo_steps,
+                "blocking_nodes": blocking_nodes,
+                "reason": reason,
+                "approval_required": False,
+                "approval_nodes": [],
+            }
             return {
                 "success": True,
                 "message": "处理完成",
@@ -2399,18 +2424,9 @@ class AIChatApplicationService:
                     "action": "workflow_confirmation_required",
                     "run_id": agent_run.run_id,
                     "agent_run_id": agent_run.run_id,
-                    "data": {
-                        "run_id": agent_run.run_id,
-                        "agent_run_id": agent_run.run_id,
-                        "plan_id": plan.plan_id,
-                        "intent": plan.intent,
-                        "thinking_steps": thinking_steps,
-                        "todo": plan.todo_steps,
-                        "blocking_nodes": blocking_nodes,
-                        "reason": reason,
-                        "approval_required": False,
-                        "approval_nodes": [],
-                    },
+                    "data": _enrich_confirmation_inner(
+                        confirm_inner, action="workflow_confirmation_required"
+                    ),
                 },
             }
 
@@ -2461,6 +2477,19 @@ class AIChatApplicationService:
                 "回复「确认」继续执行，回复「取消」终止。"
                 f"{approval_info if has_approval_requirement else ''}"
             )
+            risk_inner = {
+                "plan_id": plan.plan_id,
+                "intent": plan.intent,
+                "thinking_steps": thinking_steps,
+                "todo": plan.todo_steps,
+                "blocking_nodes": decision.blocking_nodes,
+                "reason": decision.reason,
+                "approval_required": has_approval_requirement,
+                "approval_nodes": [
+                    {"node_id": n.node_id, "tool_id": n.tool_id, "action": n.action}
+                    for n in approval_required_nodes
+                ],
+            }
             payload: dict[str, Any] = {
                 "success": True,
                 "message": "处理完成",
@@ -2468,19 +2497,9 @@ class AIChatApplicationService:
                 "data": {
                     "text": response_text,
                     "action": "workflow_confirmation_required",
-                    "data": {
-                        "plan_id": plan.plan_id,
-                        "intent": plan.intent,
-                        "thinking_steps": thinking_steps,
-                        "todo": plan.todo_steps,
-                        "blocking_nodes": decision.blocking_nodes,
-                        "reason": decision.reason,
-                        "approval_required": has_approval_requirement,
-                        "approval_nodes": [
-                            {"node_id": n.node_id, "tool_id": n.tool_id, "action": n.action}
-                            for n in approval_required_nodes
-                        ],
-                    },
+                    "data": _enrich_confirmation_inner(
+                        risk_inner, action="workflow_confirmation_required"
+                    ),
                 },
             }
             if agent_run_id:

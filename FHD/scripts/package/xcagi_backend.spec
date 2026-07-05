@@ -26,6 +26,7 @@ for item in [
     "alembic",
     ".env.example",
     "alembic.ini",
+    "scripts/backup",
 ]:
     datas.extend(add_data(item))
 

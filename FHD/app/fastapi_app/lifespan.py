@@ -78,9 +78,22 @@ async def lifespan(app: FastAPI):
     mark_startup("lifespan_ready")
     logger.info("✅ FastAPI 应用启动完成")
 
+    try:
+        from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+
+        start_backup_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    try:
+        from app.desktop_runtime.backup_scheduler import stop_backup_scheduler
+
+        stop_backup_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 桌面端定时备份调度器关闭失败: %s", exc)
     try:
         from app.application.employee_runtime.scheduler import stop_employee_scheduler
 

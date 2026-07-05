@@ -133,7 +133,7 @@ class _LongTailScreenState extends State<LongTailScreen> {
 
 String _financePreview(String raw) {
   if (raw.trim().isEmpty) {
-    return '连接企业后端后显示收入、成本、毛利与应付摘要';
+    return '连接工作台后端后显示收入、成本、毛利与应付摘要';
   }
   return raw
       .replaceAll('{', '')

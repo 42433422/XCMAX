@@ -66,7 +66,7 @@ void main() {
     expect(source, contains('get() = effectiveSku == "enterprise"'));
     expect(source, contains('get() = effectiveSku == "personal"'));
     expect(source, contains('get() = if (isEnterprise) "enterprise"'));
-    expect(source, contains('get() = if (isEnterprise) "企业版"'));
+    expect(source, contains('get() = if (isEnterprise) "标准版"'));
 
     expect(
       AndroidProductSkuConfig.effectiveSku(
@@ -96,7 +96,7 @@ void main() {
       AndroidProductSkuConfig.displayEditionLabel(
         buildSku: MobileAndroidBuild.productSku,
       ),
-      '企业版',
+      '标准版',
     );
 
     AndroidProductSkuConfig.setRemoteSku(' personal ');

@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "currency": "CNY",
+  "source": "太阳鸟家具成本基础库",
+  "price_note": "内置价只作为首次核算模板，真实报价前必须按最近采购批次、供应商报价和本厂工价更新。",
+  "materials": [
+    {
+      "material_code": "SNB-MAT-STEEL-TUBE-20X20",
+      "name": "铁管 20x20 方管",
+      "category": "金属管材",
+      "specification": "20x20x1.0mm，黑色喷涂/床架/台脚",
+      "unit": "米",
+      "quantity": 0,
+      "unit_price": 7.5,
+      "warehouse_location": "基础成本库",
+      "description": "用于床架、梳妆台、床头柜铁脚；真实单价按采购批次更新。"
+    },
+    {
+      "material_code": "SNB-MAT-STEEL-TUBE-25X25",
+      "name": "铁管 25x25 方管",
+      "category": "金属管材",
+      "specification": "25x25x1.0mm，承重框架",
+      "unit": "米",
+      "quantity": 0,
+      "unit_price": 9.8,
+      "warehouse_location": "基础成本库",
+      "description": "用于床架主框、加固结构；真实单价按采购批次更新。"
+    },
+    {
+      "material_code": "SNB-MAT-STEEL-ROUND-LEG",
+      "name": "铁圆管床脚",
+      "category": "金属管材",
+      "specification": "直径38mm，床脚/支撑脚",
+      "unit": "米",
+      "quantity": 0,
+      "unit_price": 13.5,
+      "warehouse_location": "基础成本库",
+      "description": "用于床脚或圆管支撑件；真实单价按采购批次更新。"
+    },
+    {
+      "material_code": "SNB-MAT-MFC-18MM",
+      "name": "三胺板 18mm",
+      "category": "板材",
+      "specification": "18mm 三聚氰胺饰面板，按展开面积核算",
+      "unit": "平方米",
+      "quantity": 0,
+      "unit_price": 45,
+      "warehouse_location": "基础成本库",
+      "description": "用于床头板、柜体、桌面等；按平方米录入用量。"
+    },
+    {
+      "material_code": "SNB-MAT-MFC-15MM",
+      "name": "三胺板 15mm",
+      "category": "板材",
+      "specification": "15mm 三聚氰胺饰面板，抽屉/背板/层板",
+      "unit": "平方米",
+      "quantity": 0,
+      "unit_price": 38,
+      "warehouse_location": "基础成本库",
+      "description": "用于抽屉、隔板、辅助面板；按平方米录入用量。"
+    },
+    {
+      "material_code": "SNB-MAT-EDGE-BANDING",
+      "name": "封边条",
+      "category": "辅料",
+      "specification": "PVC 封边，常规色",
+      "unit": "米",
+      "quantity": 0,
+      "unit_price": 1.2,
+      "warehouse_location": "基础成本库",
+      "description": "用于三胺板外露边封边；按延米核算。"
+    },
+    {
+      "material_code": "SNB-MAT-HARDWARE-SET",
+      "name": "五金配件包",
+      "category": "辅料",
+      "specification": "螺丝、连接件、拉手等通用件",
+      "unit": "套",
+      "quantity": 0,
+      "unit_price": 8,
+      "warehouse_location": "基础成本库",
+      "description": "按产品结构配置数量，可拆分成具体拉手/螺丝/连接件。"
+    },
+    {
+      "material_code": "SNB-PKG-CARTON-SET",
+      "name": "纸箱包材",
+      "category": "包材",
+      "specification": "外箱/内盒，按产品套数核算",
+      "unit": "套",
+      "quantity": 0,
+      "unit_price": 12,
+      "warehouse_location": "基础成本库",
+      "description": "床、柜、桌不同规格应维护独立包材规格。"
+    },
+    {
+      "material_code": "SNB-PKG-EPE-FOAM",
+      "name": "珍珠棉/泡沫",
+      "category": "包材",
+      "specification": "EPE 珍珠棉、泡沫护板",
+      "unit": "平方米",
+      "quantity": 0,
+      "unit_price": 3.5,
+      "warehouse_location": "基础成本库",
+      "description": "用于板件、金属件防护；按展开面积核算。"
+    },
+    {
+      "material_code": "SNB-PKG-CORNER-GUARD",
+      "name": "护角",
+      "category": "包材",
+      "specification": "纸护角/泡沫护角",
+      "unit": "个",
+      "quantity": 0,
+      "unit_price": 0.35,
+      "warehouse_location": "基础成本库",
+      "description": "用于板件四角和外箱防护。"
+    },
+    {
+      "material_code": "SNB-PKG-TAPE-STRAP",
+      "name": "胶带/打包带",
+      "category": "包材",
+      "specification": "封箱胶带、打包带、标签耗材",
+      "unit": "套",
+      "quantity": 0,
+      "unit_price": 1.2,
+      "warehouse_location": "基础成本库",
+      "description": "按单件或单套产品包材耗用核算。"
+    },
+    {
+      "material_code": "SNB-LABOR-CUTTING",
+      "name": "开料工时费",
+      "category": "工时费",
+      "specification": "板材开料、排孔、基础加工",
+      "unit": "小时",
+      "quantity": 0,
+      "unit_price": 35,
+      "warehouse_location": "基础成本库",
+      "description": "用于板件开料工序；按工艺路线录入小时数。"
+    },
+    {
+      "material_code": "SNB-LABOR-WELDING",
+      "name": "焊接/打磨工时费",
+      "category": "工时费",
+      "specification": "铁架焊接、打磨、修整",
+      "unit": "小时",
+      "quantity": 0,
+      "unit_price": 38,
+      "warehouse_location": "基础成本库",
+      "description": "用于铁架、脚架等金属结构工序。"
+    },
+    {
+      "material_code": "SNB-LABOR-ASSEMBLY",
+      "name": "组装工时费",
+      "category": "工时费",
+      "specification": "床架/柜体/台面组装",
+      "unit": "小时",
+      "quantity": 0,
+      "unit_price": 32,
+      "warehouse_location": "基础成本库",
+      "description": "用于产品总装工序。"
+    },
+    {
+      "material_code": "SNB-LABOR-PACKING",
+      "name": "包装工时费",
+      "category": "工时费",
+      "specification": "套袋、护角、装箱、封箱",
+      "unit": "小时",
+      "quantity": 0,
+      "unit_price": 28,
+      "warehouse_location": "基础成本库",
+      "description": "用于包装部工时核算。"
+    },
+    {
+      "material_code": "SNB-LABOR-QC",
+      "name": "质检工时费",
+      "category": "工时费",
+      "specification": "出厂检查、复核、拍照留档",
+      "unit": "小时",
+      "quantity": 0,
+      "unit_price": 30,
+      "warehouse_location": "基础成本库",
+      "description": "用于出厂质检和复核工时。"
+    }
+  ],
+  "bom_templates": [
+    {
+      "template_code": "SNB-BOM-BED-MFC-STEEL",
+      "name": "铁架三胺板床",
+      "description": "对应图片中的铁架床/三胺板床头基础拆解模板。",
+      "components": [
+        { "material_code": "SNB-MAT-STEEL-TUBE-25X25", "quantity": 10.5 },
+        { "material_code": "SNB-MAT-STEEL-ROUND-LEG", "quantity": 2.4 },
+        { "material_code": "SNB-MAT-MFC-18MM", "quantity": 2.8 },
+        { "material_code": "SNB-MAT-EDGE-BANDING", "quantity": 9 },
+        { "material_code": "SNB-MAT-HARDWARE-SET", "quantity": 1 },
+        { "material_code": "SNB-PKG-CARTON-SET", "quantity": 1.2 },
+        { "material_code": "SNB-PKG-EPE-FOAM", "quantity": 6 },
+        { "material_code": "SNB-LABOR-CUTTING", "quantity": 0.8 },
+        { "material_code": "SNB-LABOR-WELDING", "quantity": 1 },
+        { "material_code": "SNB-LABOR-ASSEMBLY", "quantity": 1.3 },
+        { "material_code": "SNB-LABOR-PACKING", "quantity": 0.6 },
+        { "material_code": "SNB-LABOR-QC", "quantity": 0.2 }
+      ]
+    },
+    {
+      "template_code": "SNB-BOM-NIGHTSTAND-MFC-STEEL",
+      "name": "三胺板铁脚床头柜",
+      "description": "对应图片中的床头柜基础拆解模板。",
+      "components": [
+        { "material_code": "SNB-MAT-STEEL-TUBE-20X20", "quantity": 3.6 },
+        { "material_code": "SNB-MAT-MFC-15MM", "quantity": 1.15 },
+        { "material_code": "SNB-MAT-EDGE-BANDING", "quantity": 7 },
+        { "material_code": "SNB-MAT-HARDWARE-SET", "quantity": 1 },
+        { "material_code": "SNB-PKG-CARTON-SET", "quantity": 1 },
+        { "material_code": "SNB-PKG-EPE-FOAM", "quantity": 2.2 },
+        { "material_code": "SNB-LABOR-CUTTING", "quantity": 0.45 },
+        { "material_code": "SNB-LABOR-WELDING", "quantity": 0.35 },
+        { "material_code": "SNB-LABOR-ASSEMBLY", "quantity": 0.55 },
+        { "material_code": "SNB-LABOR-PACKING", "quantity": 0.25 },
+        { "material_code": "SNB-LABOR-QC", "quantity": 0.1 }
+      ]
+    },
+    {
+      "template_code": "SNB-BOM-DRESSER-MFC-STEEL",
+      "name": "三胺板铁脚梳妆台",
+      "description": "对应图片中的梳妆台基础拆解模板。",
+      "components": [
+        { "material_code": "SNB-MAT-STEEL-TUBE-20X20", "quantity": 5.2 },
+        { "material_code": "SNB-MAT-MFC-18MM", "quantity": 1.8 },
+        { "material_code": "SNB-MAT-MFC-15MM", "quantity": 1.4 },
+        { "material_code": "SNB-MAT-EDGE-BANDING", "quantity": 14 },
+        { "material_code": "SNB-MAT-HARDWARE-SET", "quantity": 1.5 },
+        { "material_code": "SNB-PKG-CARTON-SET", "quantity": 1.2 },
+        { "material_code": "SNB-PKG-EPE-FOAM", "quantity": 4.5 },
+        { "material_code": "SNB-LABOR-CUTTING", "quantity": 0.9 },
+        { "material_code": "SNB-LABOR-WELDING", "quantity": 0.45 },
+        { "material_code": "SNB-LABOR-ASSEMBLY", "quantity": 1.1 },
+        { "material_code": "SNB-LABOR-PACKING", "quantity": 0.45 },
+        { "material_code": "SNB-LABOR-QC", "quantity": 0.15 }
+      ]
+    }
+  ]
+}

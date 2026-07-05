@@ -1195,8 +1195,16 @@ async def local_employee_execute(
     body: dict[str, Any] = Body(default_factory=dict),
 ):
     """管理端本机员工执行入口：绕开远端代理，直接调用 FHD employee_runtime。"""
+    from app.application.auth_permission_resolver import require_allowed
     from app.application.employee_runtime.executor import execute_employee_task_local
+    from app.application.employee_runtime.result_verifier import verify_employee_run_result
+    from app.application.employee_runtime.run_ledger import (
+        create_employee_run_log,
+        finish_employee_run_log,
+    )
+    from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+    from app.infrastructure.auth.dependencies import resolve_session_user
 
     sid = _session_id_from_request(request)
     if not sid:
@@ -1204,6 +1212,16 @@ async def local_employee_execute(
             {"success": False, "message": "请先登录"},
             status_code=401,
         )
+    user = resolve_session_user(request)
+    if user is None:
+        return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    meta = enrich_session_meta_with_tenant(sid, user)
+    require_allowed(
+        user=user,
+        account_kind=str(meta.get("account_kind") or "admin"),
+        session_meta=meta,
+        route=f"/local/employees/{employee_id}/execute",
+    )
     pid = str(employee_id or "").strip()
     if not pid:
         return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
@@ -1219,22 +1237,75 @@ async def local_employee_execute(
             payload[key] = body[key]
     payload.setdefault("trigger", "admin_execute")
     try:
-        user_id = int(body.get("user_id") or 0)
+        user_id = int(body.get("user_id") or getattr(user, "id", 0) or 0)
     except (TypeError, ValueError):
         user_id = 0
-    result = execute_employee_task_local(
-        pid,
-        task,
-        payload,
-        user_id=user_id,
-        workspace_root=str(body.get("workspace_root") or "").strip() or None,
-        session_id=str(body.get("session_id") or sid),
+    retry_max = max(1, min(int(body.get("retry_max") or 3), 5))
+    tenant_id = meta.get("tenant_id")
+    run_id = create_employee_run_log(
+        employee_id=pid,
+        input_payload={"task": task, **payload},
+        tenant_id=int(tenant_id) if tenant_id else None,
+        session_id=sid,
+        user_id=user_id or None,
+    )
+    result: dict[str, Any] = {"success": False, "message": "未执行"}
+    last_error = ""
+    for attempt in range(1, retry_max + 1):
+        result = execute_employee_task_local(
+            pid,
+            task,
+            payload,
+            user_id=user_id,
+            workspace_root=str(body.get("workspace_root") or "").strip() or None,
+            session_id=str(body.get("session_id") or sid),
+        )
+        ok, reason = verify_employee_run_result(pid, result if isinstance(result, dict) else {})
+        if ok and result.get("success") is not False:
+            finish_employee_run_log(
+                run_id,
+                status="success",
+                output=result if isinstance(result, dict) else {},
+                attempts=attempt,
+                verified=True,
+            )
+            return {
+                "success": True,
+                "source": "local",
+                "run_id": run_id,
+                "attempts": attempt,
+                "data": result,
+            }
+        last_error = reason or str(result.get("message") or result.get("error") or "执行失败")
+    finish_employee_run_log(
+        run_id,
+        status="failed",
+        output=result if isinstance(result, dict) else {},
+        error=last_error,
+        attempts=retry_max,
+        verified=False,
     )
     return {
-        "success": bool(result.get("success")),
+        "success": False,
         "source": "local",
+        "run_id": run_id,
+        "attempts": retry_max,
+        "message": last_error,
         "data": result,
     }
+
+
+@router.get("/local/employees/{employee_id}/runs", response_model=None)
+async def local_employee_runs(request: Request, employee_id: str, limit: int = 50):
+    from app.application.employee_runtime.run_ledger import list_employee_run_logs
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    if not _session_id_from_request(request):
+        return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+    return {"success": True, "data": list_employee_run_logs(pid, limit=limit)}
 
 
 @router.get("/local/employees/{employee_id}/manifest", response_model=None)
@@ -1788,9 +1859,9 @@ async def _sync_sse_generator(request: Request, since_cursor: int):
 async def list_conflicts(limit: int = Query(50, ge=1, le=500)):
     """列出 inbox 中待处理的冲突条目。"""
     try:
-        from app.services.admin_sync_service import list_sync_conflicts
+        from app.application.admin_sync_app_service import list_admin_sync_conflicts
 
-        data = list_sync_conflicts(limit=limit)
+        data = list_admin_sync_conflicts(limit=limit)
         return {"success": True, "data": data, "count": len(data)}
     except Exception as exc:  # noqa: BLE001
         return {"success": True, "data": [], "count": 0, "note": str(exc)}
@@ -1805,19 +1876,19 @@ async def resolve_conflict(inbox_id: int, body: dict):
 
         db = SyncDb()
         if action == "apply":
+            from app.application.admin_sync_app_service import fetch_admin_inbox_row
             from app.application.xcmax_sync_app import entity_appliers
-            from app.services.admin_sync_service import fetch_inbox_row
 
-            row = fetch_inbox_row(inbox_id)
+            row = fetch_admin_inbox_row(inbox_id)
             if row:
                 applier = entity_appliers().get(row["entity_type"])
                 if applier:
                     applier(row)
             db.mark_inbox_applied(inbox_id)
         else:
-            from app.services.admin_sync_service import mark_inbox_skipped
+            from app.application.admin_sync_app_service import mark_admin_inbox_skipped
 
-            mark_inbox_skipped(inbox_id)
+            mark_admin_inbox_skipped(inbox_id)
         return {"success": True, "inbox_id": inbox_id, "action": action}
     except Exception as exc:  # noqa: BLE001
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)

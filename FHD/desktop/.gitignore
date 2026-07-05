@@ -1,3 +1,9 @@
 node_modules/
 dist/
 *.log
+# tsc 编译产物（main.js / updater.js / preload.js）由 build 时生成，不入仓
+/main.js
+/updater.js
+/preload.js
+/coverage/
+/.vitest-cache/

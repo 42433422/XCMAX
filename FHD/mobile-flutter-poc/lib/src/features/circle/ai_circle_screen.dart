@@ -241,7 +241,7 @@ class _AiCircleHeader extends StatelessWidget {
                       ),
                       const SizedBox(height: 5),
                       Text(
-                        '${employees.length} 位智能伙伴正在企业账号里值守',
+                        '${employees.length} 位智能伙伴正在账号里值守',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -301,7 +301,7 @@ class _AiCircleHeader extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '企业账号生态',
+                        '账号生态',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(

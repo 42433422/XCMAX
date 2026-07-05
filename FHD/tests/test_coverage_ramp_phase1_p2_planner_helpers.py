@@ -53,8 +53,8 @@ def _http_request(**headers: str) -> Request:
 
 def test_get_tool_registry_core_entries() -> None:
     reg = get_tool_registry()
-    assert "import_excel" in reg
-    assert reg["shipment_generate"]["actions"]["generate"]["risk"] == "medium"
+    assert "excel_import" in reg
+    assert reg["shipment_orders"]["actions"]["generate"]["risk"] == "high"
 
 
 def test_filter_tool_registry_normal_profile() -> None:

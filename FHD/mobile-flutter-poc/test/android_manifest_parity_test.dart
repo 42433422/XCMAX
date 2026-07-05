@@ -27,7 +27,7 @@ void main() {
       'android/app/src/main/kotlin/com/xiuci/xcagi/xcagi_flutter_poc/MainActivity.kt',
     ).readAsStringSync();
 
-    expect(strings, contains('<string name="app_name">XCAGI 企业版</string>'));
+    expect(strings, contains('<string name="app_name">XCAGI</string>'));
     expect(gradle, contains('namespace = "com.xiuci.xcagi.mobile"'));
     expect(gradle,
         contains('applicationId = "com.xiuci.xcagi.mobile.enterprise"'));
