@@ -93,6 +93,39 @@ def _save_workspace_prefs(owner_id: str, prefs: dict[str, Any]) -> None:
     )
 
 
+def workspace_owner_id_from_user(user: Any) -> str | None:
+    """Resolve the persisted workspace owner for a DB-backed user object."""
+    tid = _safe_positive_int(getattr(user, "tenant_id", None) if user is not None else None)
+    if tid is not None:
+        return f"tenant:{tid}"
+    uid = _safe_positive_int(getattr(user, "id", None) if user is not None else None)
+    if uid is not None:
+        return f"session:{uid}"
+    return None
+
+
+def _industry_mod_id_for_workspace(industry_id: str, explicit_mod_id: str = "") -> str:
+    iid = str(industry_id or "").strip()
+    mid = str(explicit_mod_id or "").strip()
+    if mid or not iid:
+        return mid
+    try:
+        from app.mod_sdk.industry_seed import industry_mod_id_for
+
+        mid = str(industry_mod_id_for(iid) or "").strip()
+        if mid:
+            return mid
+    except RECOVERABLE_ERRORS:
+        logger.exception("industry_mod_id_for failed for industry=%s", iid)
+    try:
+        from app.mod_sdk.industry_mod_aliases import canonical_mod_id_for_industry
+
+        return str(canonical_mod_id_for_industry(iid) or "").strip()
+    except RECOVERABLE_ERRORS:
+        logger.exception("canonical_mod_id_for_industry failed for industry=%s", iid)
+        return ""
+
+
 def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, Any]:
     """浅合并顶层字段；workflow_ai_employees 做 dict 合并。"""
     owner = str(owner_id or "").strip()
@@ -118,6 +151,75 @@ def patch_workspace_prefs(owner_id: str, partial: dict[str, Any]) -> dict[str, A
 
     _save_workspace_prefs(owner, merged)
     return merged
+
+
+def bind_selected_industry_for_user(
+    user: Any,
+    industry_id: str,
+    *,
+    industry_mod_id: str = "",
+    owner_id: str | None = None,
+) -> dict[str, Any]:
+    """Bind selected industry to both User SSOT fields and tenant workspace prefs."""
+    iid = str(industry_id or "").strip()
+    if not iid or user is None:
+        return {}
+    resolved_owner = str(owner_id or "").strip() or workspace_owner_id_from_user(user)
+    uid = _safe_positive_int(getattr(user, "id", None))
+    try:
+        if uid is not None:
+            from app.application.entitled_industries_init import init_entitled_industries_for_user
+            from app.db.models.user import User
+            from app.db.session import get_db
+
+            with get_db() as db:
+                db_user = db.query(User).filter(User.id == uid).first()
+                if db_user is not None:
+                    db_user.industry_id = iid
+                    tier = str(getattr(db_user, "tier", "") or "personal").strip().lower()
+                    db_user.entitled_industries = init_entitled_industries_for_user(tier, iid)
+                    db.commit()
+                    resolved_owner = resolved_owner or workspace_owner_id_from_user(db_user)
+    except RECOVERABLE_ERRORS:
+        logger.exception("bind_selected_industry_for_user user update failed uid=%s", uid)
+
+    if not resolved_owner:
+        return {}
+    partial: dict[str, Any] = {"selected_industry_id": iid}
+    mid = _industry_mod_id_for_workspace(iid, industry_mod_id)
+    if mid:
+        partial["industry_mod_id"] = mid
+    return patch_workspace_prefs(resolved_owner, partial)
+
+
+def bind_selected_industry_for_username(
+    username: str,
+    industry_id: str,
+    *,
+    industry_mod_id: str = "",
+) -> dict[str, Any]:
+    """Registration helper: bind industry for the newly created local user."""
+    uname = str(username or "").strip()
+    iid = str(industry_id or "").strip()
+    if not uname or not iid:
+        return {}
+    try:
+        from app.db.models.user import User
+        from app.db.session import get_db
+
+        with get_db() as db:
+            user = db.query(User).filter(User.username == uname).first()
+            if user is None:
+                return {}
+            return bind_selected_industry_for_user(
+                user,
+                iid,
+                industry_mod_id=industry_mod_id,
+                owner_id=workspace_owner_id_from_user(user),
+            )
+    except RECOVERABLE_ERRORS:
+        logger.exception("bind_selected_industry_for_username failed username=%s", uname)
+        return {}
 
 
 def get_selected_industry_id(owner_id: str | None) -> str | None:
@@ -158,9 +260,12 @@ def save_selected_industry(
 
 __all__ = [
     "WORKSPACE_PREFS_KEY",
+    "bind_selected_industry_for_user",
+    "bind_selected_industry_for_username",
     "get_selected_industry_id",
     "get_workspace_prefs",
     "patch_workspace_prefs",
     "resolve_workspace_owner_id",
     "save_selected_industry",
+    "workspace_owner_id_from_user",
 ]

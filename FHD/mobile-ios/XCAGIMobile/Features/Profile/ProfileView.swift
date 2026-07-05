@@ -55,7 +55,13 @@ struct ProfileView: View {
                     } label: {
                         HStack(spacing: Theme.Space.md) {
                             ZStack(alignment: .bottomTrailing) {
-                                AvatarView(text: displayName, url: vm.avatarUrl.isEmpty ? nil : vm.avatarUrl, size: 56)
+                                AvatarView(
+                                    text: displayName,
+                                    url: vm.avatarUrl.isEmpty ? nil : vm.avatarUrl,
+                                    fallback: .user,
+                                    size: 56,
+                                    cornerRadius: MessageAvatarLayout.headerAvatarCornerRadius
+                                )
                                 Image(systemName: "photo.fill")
                                     .font(.system(size: 9, weight: .bold))
                                     .foregroundColor(.white)
@@ -314,7 +320,10 @@ private struct ProfileEditorSheet: View {
                     HStack {
                         Spacer()
                         AvatarView(text: draft.isEmpty ? displayName : draft,
-                                   url: avatarUrl.isEmpty ? nil : avatarUrl, size: 76)
+                                   url: avatarUrl.isEmpty ? nil : avatarUrl,
+                                   fallback: .user,
+                                   size: 76,
+                                   cornerRadius: MessageAvatarLayout.emptyStateAvatarCornerRadius)
                         Spacer()
                     }
                     .listRowBackground(Color.clear)

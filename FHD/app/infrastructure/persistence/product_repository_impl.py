@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.application.ports.product_repository import ProductRepository
 from app.db.models.product import Product
 from app.db.session import get_db
+from app.infrastructure.tenant_scope import apply_tenant_filter, tenant_id_for_write
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -277,7 +278,10 @@ class SQLAlchemyProductRepository(ProductRepository):
                     if "purchase_units" in (tinsp.get_table_names() or []):
                         purchase_units_authoritative = True
                         rows = (
-                            cs.query(PurchaseUnitModel.unit_name)
+                            apply_tenant_filter(
+                                cs.query(PurchaseUnitModel.unit_name),
+                                PurchaseUnitModel,
+                            )
                             .filter(PurchaseUnitModel.unit_name.isnot(None))
                             .filter(PurchaseUnitModel.is_active.is_(True))
                             .distinct()
@@ -298,7 +302,10 @@ class SQLAlchemyProductRepository(ProductRepository):
             with get_db() as db:
                 insp = inspect(db.bind)
                 if "products" in (insp.get_table_names() or []):
-                    for u in db.query(Product.unit).distinct().all():
+                    rows = (
+                        apply_tenant_filter(db.query(Product.unit), Product).distinct().all()
+                    )
+                    for u in rows:
                         if u and u[0] is not None:
                             add_label(u[0], from_products=True)
         except RECOVERABLE_ERRORS:
@@ -418,6 +425,7 @@ class SQLAlchemyProductRepository(ProductRepository):
 
             batch_size = 100
             now = datetime.now()
+            tenant_id = tenant_id_for_write()
 
             with get_db() as db:
                 for batch_start in range(0, len(products_data), batch_size):
@@ -448,6 +456,7 @@ class SQLAlchemyProductRepository(ProductRepository):
                                     "brand": data.get("brand"),
                                     "unit": data.get("unit", "个"),
                                     "is_active": data.get("is_active", 1),
+                                    "tenant_id": tenant_id,
                                     "created_at": now,
                                     "updated_at": now,
                                 }

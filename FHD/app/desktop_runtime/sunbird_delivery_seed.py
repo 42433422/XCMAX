@@ -1,4 +1,4 @@
-"""太阳鸟交付：首次启动同步业务文件并写入主库 products/customers。"""
+"""太阳鸟交付：同步业务文件；仅在已绑定租户上下文时写入主库。"""
 
 from __future__ import annotations
 
@@ -115,7 +115,7 @@ def sync_sunbird_delivery_files(data_root: Path | None = None) -> int:
 
 
 def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
-    """若存在 sunbird-roster.json 且未应用，则写入主库人员/部门。返回是否执行了写入。"""
+    """若存在 sunbird-roster.json 且未应用，则写入当前租户人员/部门。"""
     if data_root is None:
         try:
             from app.desktop_runtime.paths import get_desktop_data_dir
@@ -147,6 +147,16 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
     employees = raw.get("employees") if isinstance(raw, dict) else None
     if not isinstance(employees, list) or not employees:
         logger.warning("太阳鸟花名册无 employees: %s", roster_file)
+        return False
+
+    try:
+        from app.infrastructure.tenant_scope import current_tenant_id
+
+        tenant_id = current_tenant_id()
+    except RECOVERABLE_ERRORS:
+        tenant_id = None
+    if tenant_id is None:
+        logger.warning("太阳鸟花名册未写入主库：缺少当前租户上下文")
         return False
 
     try:
@@ -199,6 +209,7 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
                         unit=dept or "个",
                         price=0,
                         is_active=1,
+                        tenant_id=int(tenant_id),
                     )
                 )
                 prod_rows += 1
@@ -210,6 +221,7 @@ def apply_sunbird_roster_seed_if_needed(data_root: Path | None = None) -> bool:
                             contact_person="",
                             contact_phone="",
                             contact_address="",
+                            tenant_id=int(tenant_id),
                         )
                     )
                     cust_rows += 1

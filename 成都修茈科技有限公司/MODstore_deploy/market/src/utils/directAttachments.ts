@@ -54,6 +54,7 @@ export function directFileExt(filename: string): string {
 
 export function directFileKind(filename: string, mime = ''): DirectAttachmentKind {
   const ext = directFileExt(filename)
+  if (VISION_IMAGE_EXTENSIONS.includes(ext as (typeof VISION_IMAGE_EXTENSIONS)[number]) || String(mime).startsWith('image/')) return 'vision'
   if (ext === 'xlsx' || ext === 'xlsm' || ext === 'xls') return 'excel'
   if (ext === 'pdf') return 'pdf'
   if (ext === 'docx') return 'word'

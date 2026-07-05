@@ -54,6 +54,46 @@ except Exception:  # pragma: no cover - 个别桌面/缺依赖环境允许后续
 
 
 @pytest.fixture(autouse=True)
+def _default_enterprise_tenant_scope_for_tests(request):
+    """普通后端测试默认运行在企业租户上下文中。
+
+    生产代码仍然 fail-closed；这里补的是单测环境缺少 HTTP request/session 中间件时的
+    租户上下文。专门验证无租户 fail-closed 的测试文件必须保持 None。
+    """
+    if request.node.fspath.basename == "test_tenant_scope.py":
+        yield
+        return
+    from app.infrastructure.tenant_scope import tenant_scope
+
+    with tenant_scope(1):
+        yield
+
+
+@pytest.fixture(autouse=True)
+def _compat_db_coverage_ramp_tenant_scope(request, monkeypatch):
+    """Root-level coverage-ramp compat DB tests use narrow legacy mock schemas."""
+    if request.node.fspath.basename not in {
+        "test_coverage_ramp_phase3_p1_deep_backend.py",
+        "test_coverage_ramp_phase6_p17_backend.py",
+    }:
+        yield
+        return
+
+    import app.infrastructure.persistence.compat_db.writes as writes
+
+    def _append_scope(where_parts, bind, column_names, *, table_name):  # type: ignore[no-untyped-def]
+        where_parts.append("tenant_id = :tenant_id")
+        bind["tenant_id"] = 1
+
+    def _require_scope(column_names, *, table_name):  # type: ignore[no-untyped-def]
+        return 1
+
+    monkeypatch.setattr(writes, "_append_tenant_scope_or_raise", _append_scope)
+    monkeypatch.setattr(writes, "_require_tenant_id_or_raise", _require_scope)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _isolate_edition_and_product_sku_env(monkeypatch):
     """
     全量后端测试顺序敏感：其它用例或桌面 product-sku.json 会留下

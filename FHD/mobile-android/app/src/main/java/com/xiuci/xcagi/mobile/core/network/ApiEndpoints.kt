@@ -45,6 +45,7 @@ object ApiEndpoints {
     const val PLATFORM_SHELL = "$BASE/platform-shell"
     const val ONBOARDING_INDUSTRIES = "$BASE/onboarding/industries"
     const val ONBOARDING_INDUSTRY_BASELINE = "$BASE/onboarding/industry-baseline"
+    const val ONBOARDING_SELECT_INDUSTRY = "$BASE/onboarding/select-industry"
     const val INSTALL_HOST_FOUNDATION = "$BASE/mod-store/install-host-foundation"
     const val INSTALL_MOD = "$BASE/mod-store/install"
     const val INSTALL_INDUSTRY_SEED = "$BASE/mod-store/install-industry-seed"

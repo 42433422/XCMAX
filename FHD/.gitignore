@@ -17,6 +17,8 @@ eggs/
 lib/
 !scripts/deploy/lib/
 !scripts/deploy/lib/**
+!mobile-flutter-poc/lib/
+!mobile-flutter-poc/lib/**
 lib64/
 parts/
 sdist/

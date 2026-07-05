@@ -111,7 +111,7 @@ printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-
 # Electron NSIS（宿主 electron-builder 可交叉编译 win）
 (cd desktop && [ -d node_modules ] || npm install)
 (cd desktop && npm run build)
-for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_internal'" "180_000"; do
+for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_internal'" "return 17500" "backendHealthMs" "180_000"; do
   if ! grep -Fq "${marker}" desktop/dist/main.js; then
     echo "[err] Electron main bundle is stale; missing marker: ${marker}" >&2
     exit 1

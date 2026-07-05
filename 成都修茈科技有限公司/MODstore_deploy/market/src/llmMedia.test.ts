@@ -3,6 +3,7 @@ import {
   pickImageModel,
   pickVideoModel,
   providerHasImageCapability,
+  providerHasVideoCapability,
   resolveMediaProviderModel,
 } from './llmMedia'
 
@@ -64,5 +65,20 @@ describe('llmMedia', () => {
         ],
       }),
     ).toBe('cogvideox-2')
+  })
+
+  it('uses Doubao video fallback even when catalog omits media model rows', () => {
+    const block = {
+      provider: 'doubao',
+      supports_openai_images: true,
+      models_detailed: [{ id: 'doubao-pro-32k', category: 'llm' }],
+      media_counts: { video: 0 },
+    }
+    expect(providerHasVideoCapability(block)).toBe(true)
+    const r = resolveMediaProviderModel('video', {
+      preferences: { provider: 'doubao', model: 'doubao-pro-32k' },
+      providers: [block],
+    })
+    expect(r).toEqual({ provider: 'doubao', model: 'doubao-seedance-2-0-260128' })
   })
 })

@@ -34,7 +34,7 @@ class TenantScopedMixin:
 
     仅业务模型继承；``User`` / ``Session`` / ``Tenant`` / RBAC 等**不**继承，
     故全局租户过滤（app/db/tenant_filter.py）永不波及登录与会话校验。
-    nullable：存量未打标数据为 NULL，配合 NULL 容忍过滤不被隐藏。
+    nullable 仅用于兼容旧库补列；默认查询不会读取 NULL 存量业务数据。
     """
 
     tenant_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)

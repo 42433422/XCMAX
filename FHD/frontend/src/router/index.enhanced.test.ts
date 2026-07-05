@@ -336,7 +336,7 @@ describe('router/index enhanced', () => {
     expect(router.currentRoute.value.name).toBe('settings')
   })
 
-  it('redirects admin account to admin console in enterprise mode', async () => {
+  it('redirects browser admin account to admin console in enterprise mode', async () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockAccountProfileStore.isAdminAccount = true
@@ -344,6 +344,17 @@ describe('router/index enhanced', () => {
     // Admin account should be redirected to admin console
     // The guard calls window.location.href which we can't easily test
     // but we can verify the navigation was aborted
+  })
+
+  it('allows desktop shell admin account to use enterprise pages', async () => {
+    mockIsEnterpriseEdition.mockReturnValue(true)
+    mockValidateEnterpriseSession.mockResolvedValue(true)
+    mockIsDesktopShell.mockReturnValue(true)
+    mockAccountProfileStore.loaded = true
+    mockAccountProfileStore.isAdminAccount = true
+    await router.push('/settings')
+    expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('settings')
   })
 
   // ── product onboarding ──────────────────────────────────

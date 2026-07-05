@@ -226,8 +226,17 @@ struct GroupGridAvatar: View {
                                 ForEach(0..<cols, id: \.self) { c in
                                     let idx = r * cols + c
                                     if idx < n {
-                                        AvatarView(text: shown[idx].name ?? "AI",
-                                                   url: shown[idx].avatar, size: cell)
+                                        AvatarView(
+                                            text: shown[idx].name ?? "AI",
+                                            url: shown[idx].avatar,
+                                            fallback: aiGroupAvatarFallback(
+                                                employeeId: shown[idx].employeeId,
+                                                name: shown[idx].name ?? "",
+                                                avatarKey: shown[idx].avatarKey ?? ""
+                                            ),
+                                            size: cell,
+                                            cornerRadius: 8
+                                        )
                                     } else {
                                         Color.clear.frame(width: cell, height: cell)
                                     }
@@ -333,7 +342,13 @@ struct AiGroupCreateView: View {
                             HStack(spacing: Theme.Space.md) {
                                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                                     .foregroundColor(checked ? Theme.brand : .secondary)
-                                AvatarView(text: e.name, url: e.avatarUrl, size: 40)
+                                AvatarView(
+                                    text: e.name,
+                                    url: e.avatarUrl,
+                                    fallback: aiGroupAvatarFallback(employeeId: e.employeeId, name: e.name),
+                                    size: MessageAvatarLayout.bubbleAvatarSize,
+                                    cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius
+                                )
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(e.name).fontWeight(.medium).foregroundColor(.primary).lineLimit(1)
                                     Text(e.summary).font(.caption).foregroundColor(.secondary).lineLimit(1)
@@ -610,7 +625,13 @@ private struct GroupBubble: View {
             HStack(alignment: .top, spacing: Theme.Space.sm) {
                 if isUser { Spacer(minLength: 40) }
                 if !isUser {
-                    AvatarView(text: message.senderName ?? "AI", url: message.senderAvatar, size: 40)
+                    AvatarView(
+                        text: message.senderName ?? "AI",
+                        url: message.senderAvatar,
+                        fallback: aiGroupAvatarFallback(employeeId: message.senderId, name: message.senderName ?? ""),
+                        size: MessageAvatarLayout.bubbleAvatarSize,
+                        cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius
+                    )
                         .onTapGesture { onTapAvatar() }
                 }
                 VStack(alignment: isUser ? .trailing : .leading, spacing: 2) {
@@ -626,7 +647,12 @@ private struct GroupBubble: View {
                 }
                 if !isUser { Spacer(minLength: 40) }
                 if isUser {
-                    AvatarView(text: userName.isEmpty ? "我" : userName, size: 40)
+                    AvatarView(
+                        text: userName.isEmpty ? "我" : userName,
+                        fallback: .user,
+                        size: MessageAvatarLayout.bubbleAvatarSize,
+                        cornerRadius: MessageAvatarLayout.bubbleAvatarCornerRadius
+                    )
                 }
             }
             .padding(.top, 8).padding(.bottom, 2)
@@ -681,7 +707,17 @@ private struct GroupMembersSheet: View {
                 Section("群成员(\(group.memberCount ?? (group.members?.count ?? 0)))") {
                     ForEach(group.members ?? [], id: \.self) { m in
                         HStack(spacing: Theme.Space.md) {
-                            AvatarView(text: m.name ?? "AI", url: m.avatar, size: 38)
+                            AvatarView(
+                                text: m.name ?? "AI",
+                                url: m.avatar,
+                                fallback: aiGroupAvatarFallback(
+                                    employeeId: m.employeeId,
+                                    name: m.name ?? "",
+                                    avatarKey: m.avatarKey ?? ""
+                                ),
+                                size: 38,
+                                cornerRadius: 8
+                            )
                             Text(m.name ?? "AI 成员").foregroundColor(.primary)
                             Spacer()
                             if let id = m.employeeId {
@@ -706,7 +742,13 @@ private struct GroupMembersSheet: View {
                                 Task { await onAdd(emp) }
                             } label: {
                                 HStack(spacing: Theme.Space.md) {
-                                    AvatarView(text: emp.name, url: emp.avatarUrl, size: 38)
+                                    AvatarView(
+                                        text: emp.name,
+                                        url: emp.avatarUrl,
+                                        fallback: aiGroupAvatarFallback(employeeId: emp.employeeId, name: emp.name),
+                                        size: 38,
+                                        cornerRadius: 8
+                                    )
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(emp.name).foregroundColor(.primary).lineLimit(1)
                                         Text(emp.summary).font(.caption).foregroundColor(.secondary).lineLimit(1)

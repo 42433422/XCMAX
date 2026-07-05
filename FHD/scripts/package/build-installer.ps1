@@ -114,6 +114,8 @@ Assert-TextFileContains `
     "packagedBackendCandidates",
     "electron-backend.log",
     "backend', '_internal'",
+    "return 17500",
+    "backendHealthMs",
     "180_000"
   )
 npm version $Version --no-git-tag-version --allow-same-version

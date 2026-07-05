@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 
@@ -54,8 +55,46 @@ def run_bulk_import(payload: dict[str, Any]) -> dict[str, Any]:
     return {"success": True, "imported": len(items), "customer_name": customer_name}
 
 
+def _parse_price(value: Any) -> float:
+    """Parse legacy product price cells used by compat import/write routes."""
+    if value is None:
+        return 0.0
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, int | float | Decimal):
+        return float(value)
+    text = str(value).strip()
+    if not text:
+        return 0.0
+    text = (
+        text.replace(",", "")
+        .replace("￥", "")
+        .replace("¥", "")
+        .replace("元", "")
+        .strip()
+    )
+    try:
+        return float(Decimal(text))
+    except (InvalidOperation, ValueError):
+        return 0.0
+
+
+def _norm_model(model_number: Any, name: Any = "", specification: Any = "") -> str:
+    """Return a stable model number fallback for legacy product imports."""
+    raw = str(model_number or "").strip()
+    if raw:
+        return raw.upper()
+    parts = [str(name or "").strip(), str(specification or "").strip()]
+    seed = "-".join(part for part in parts if part)
+    seed = re.sub(r"\s+", "-", seed)
+    seed = re.sub(r"[^0-9A-Za-z\u4e00-\u9fff._-]+", "-", seed).strip("-._")
+    return (seed or "AUTO-MODEL")[:120]
+
+
 __all__ = [
     "_norm_header",
+    "_norm_model",
+    "_parse_price",
     "resolve_customer_excel_columns",
     "run_bulk_import",
 ]
@@ -63,8 +102,6 @@ __all__ = [
 
 _LOST_LEGACY_SYMBOLS = frozenset(
     {
-        "_parse_price",
-        "_norm_model",
         "run_customers_excel_import_bytes",
     }
 )

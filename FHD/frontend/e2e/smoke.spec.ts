@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { installE2eShellMocks, isFullStack } from './helpers';
+import { installE2eShellMocks, isFullStack, loginBrowserSession } from './helpers';
 
 const DB_READ_TOKEN = '61408693';
 
@@ -7,6 +7,8 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
   test.beforeEach(async ({ page }) => {
     if (!isFullStack()) {
       await installE2eShellMocks(page);
+    } else {
+      await loginBrowserSession(page);
     }
   });
 
@@ -48,6 +50,9 @@ test.describe('XCAGI 前端冒烟 @5001', () => {
   test('http://localhost:5001 与 127.0.0.1 行为一致（Windows IPv6 localhost）', async ({
     page,
   }) => {
+    if (isFullStack()) {
+      await loginBrowserSession(page, 'http://localhost:5001');
+    }
     await page.goto('http://localhost:5001/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     await expect(page.locator('#app')).toBeVisible();
     await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 20_000 });
