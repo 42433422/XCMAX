@@ -439,6 +439,7 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
     },
@@ -494,6 +495,7 @@ function runBackendMigration(): Promise<void> {
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
         XCAGI_UVICORN_RELOAD: '0',
+        XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
       },
