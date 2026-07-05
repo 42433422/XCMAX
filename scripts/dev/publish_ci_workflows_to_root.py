@@ -24,7 +24,6 @@ defaults:
 """.strip()
 
 WORKFLOW_RENAMES = {
-    "deploy.yml": "fhd-deploy.yml",
     "ci-cd.yml": "fhd-ci-cd.yml",
     "release-gate-ci.yml": "fhd-release-gate-ci.yml",
     "ci-mobile-android.yml": "fhd-ci-mobile-android.yml",
@@ -38,7 +37,6 @@ WORKFLOW_RENAMES = {
     "modstore-tests.yml": "fhd-modstore-tests.yml",
     "intent-benchmark.yml": "fhd-intent-benchmark.yml",
     "slo-metrics-collect.yml": "fhd-slo-metrics-collect.yml",
-    "preview-env.yml": "fhd-preview-env.yml",
 }
 
 MOD_RENAMES = {
@@ -58,10 +56,6 @@ def _insert_defaults(content: str, defaults: str) -> str:
 
 
 def _prefix_fhd_paths(content: str, out_name: str) -> str:
-    content = content.replace(
-        "gh workflow run deploy.yml",
-        "gh workflow run fhd-deploy.yml",
-    )
     for wf in (
         "release-desktop.yml",
         "release-web.yml",
@@ -119,6 +113,13 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: mobile-ios",
         "working-directory: FHD/mobile-ios",
     )
+    # desktop-build-smoke job runs from repo root (no workflow-level defaults),
+    # so working-directory: desktop must be rewritten to FHD/desktop.
+    # Use \n anchor to avoid clobbering "working-directory: desktop-shell".
+    content = content.replace(
+        "working-directory: desktop\n",
+        "working-directory: FHD/desktop\n",
+    )
     # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
     content = content.replace("path: mobile-ios/build/", "path: FHD/mobile-ios/build/")
     content = re.sub(r"(?m)^([ \t]+)(dist/deploy/)", r"\1FHD/\2", content)
@@ -169,6 +170,22 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     content = content.replace(
         "path: market/playwright-report/",
         f"path: {mod_root}/market/playwright-report/",
+    )
+    content = content.replace(
+        ".github/workflows/market-e2e.yml",
+        f".github/workflows/{out_name}",
+    )
+    content = content.replace(
+        "working-directory: market",
+        "working-directory: 成都修茈科技有限公司/MODstore_deploy/market",
+    )
+    content = content.replace(
+        "cache-dependency-path: market/package-lock.json",
+        "cache-dependency-path: 成都修茈科技有限公司/MODstore_deploy/market/package-lock.json",
+    )
+    content = content.replace(
+        "path: market/playwright-report/",
+        "path: 成都修茈科技有限公司/MODstore_deploy/market/playwright-report/",
     )
     content = content.replace(
         "working-directory: desktop-shell",

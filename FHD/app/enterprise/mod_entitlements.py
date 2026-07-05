@@ -449,12 +449,14 @@ async def reload_enterprise_mods_after_login() -> None:
         from app.infrastructure.mods.mod_manager import (
             get_mod_manager,
             load_mod_routes,
+            mount_entitled_client_mod_api_routes,
         )
 
         mm = get_mod_manager()
         mm.load_all_mods()
         app = get_fastapi_app()
         load_mod_routes(app, mm)
+        mount_entitled_client_mod_api_routes(app)
     except RECOVERABLE_ERRORS:
         logger.exception("reload_enterprise_mods_after_login failed")
 

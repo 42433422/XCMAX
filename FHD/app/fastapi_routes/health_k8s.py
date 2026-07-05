@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 import psutil
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
@@ -203,7 +203,7 @@ def readiness():
 
 
 @router.get("/health/details")
-def health_details():
+def health_details(request: Request):
     checks = {
         "database": _check_database(),
         "redis": _check_redis(),
@@ -216,7 +216,7 @@ def health_details():
         {
             "status": "healthy" if ok else "degraded",
             "timestamp": datetime.now(UTC).isoformat(),
-            "version": "3.0.0",
+            "version": request.app.version,
             "checks": checks,
             "system": _system_info(),
         }

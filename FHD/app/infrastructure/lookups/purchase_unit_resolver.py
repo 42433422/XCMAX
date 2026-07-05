@@ -16,6 +16,7 @@ except ImportError:
     _HAS_PYPINYIN = False
 
 from app.db.models import PurchaseUnit
+from app.infrastructure.tenant_scope import apply_tenant_filter
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,7 @@ def resolve_purchase_unit(input_unit: str) -> ResolvedPurchaseUnit | None:
         return None
 
     with get_db() as db:
-        customers = db.query(PurchaseUnit).all()
+        customers = apply_tenant_filter(db.query(PurchaseUnit), PurchaseUnit).all()
         customer_names = [c.unit_name for c in customers if getattr(c, "unit_name", None)]
 
         pinyin_map: dict[str, tuple[str, list[str], str]] = {}

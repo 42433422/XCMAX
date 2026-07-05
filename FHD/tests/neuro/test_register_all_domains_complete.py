@@ -71,6 +71,38 @@ class TestRegisterDomainHandlersOnly:
             # Product should still be registered
             product_register.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_domain_registry_handlers_are_not_registered_as_bus_handlers(self):
+        mock_bus = MagicMock()
+        order_register = MagicMock()
+        customer_register = MagicMock()
+        payment_register = MagicMock()
+        wechat_register = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "app.neuro_bus.domains.order_domain_handlers": MagicMock(
+                    register_order_domain_handlers=order_register
+                ),
+                "app.neuro_bus.domains.customer_domain_handlers": MagicMock(
+                    register_customer_domain_handlers=customer_register
+                ),
+                "app.neuro_bus.domains.payment_domain_handlers": MagicMock(
+                    register_payment_domain_handlers=payment_register
+                ),
+                "app.neuro_bus.domains.wechat_domain_handlers": MagicMock(
+                    register_wechat_domain_handlers=wechat_register
+                ),
+            },
+        ):
+            await register_domain_handlers_only(mock_bus)
+
+        order_register.assert_not_called()
+        customer_register.assert_not_called()
+        payment_register.assert_not_called()
+        wechat_register.assert_not_called()
+
 
 class TestRegisterAllDomainsComplete:
     """测试 register_all_domains_complete 函数。"""

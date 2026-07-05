@@ -1,0 +1,299 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://xcagi.local/schemas/industry_package.schema.json",
+  "title": "XCAGI Industry Package Manifest",
+  "type": "object",
+  "allOf": [{ "$ref": "#/$defs/neutralIndustryPackage" }],
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[\\w.]+)?(\\+[\\w.]+)?$"
+    },
+    "modId": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+    },
+    "backendShell": {
+      "type": "object",
+      "required": ["entry"],
+      "properties": {
+        "entry": { "type": "string", "minLength": 1 },
+        "init": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "frontendShell": {
+      "type": "object",
+      "required": ["routes", "pro_entry_path", "menu"],
+      "properties": {
+        "routes": { "type": "string", "minLength": 1 },
+        "pro_entry_path": { "type": "string", "pattern": "^/" },
+        "menu": {
+          "type": "array",
+          "items": { "type": "object" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "onboardingBinding": {
+      "type": "object",
+      "properties": {
+        "custom_line_hint": { "type": "string" },
+        "custom_mod_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modId" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "validatorSpec": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["oneOf", "not_expired", "min", "max", "pattern"]
+        },
+        "params": {}
+      },
+      "additionalProperties": true
+    },
+    "fieldDescriptor": {
+      "type": "object",
+      "required": ["key", "label", "type"],
+      "properties": {
+        "key": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "type": {
+          "type": "string",
+          "enum": ["text", "number", "date", "enum"]
+        },
+        "required": { "type": "boolean" },
+        "unit": { "type": "string" },
+        "semantic": {
+          "type": "string",
+          "enum": [
+            "model",
+            "entity_name",
+            "spec",
+            "price",
+            "primary_qty",
+            "secondary_qty",
+            "derived",
+            "foreign_ref",
+            "expiry",
+            "batch"
+          ]
+        },
+        "validators": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/validatorSpec" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "derivationRule": {
+      "type": "object",
+      "required": ["op", "args"],
+      "properties": {
+        "op": {
+          "type": "string",
+          "enum": ["mul", "add", "sub", "div"]
+        },
+        "args": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "subsystemSchema": {
+      "type": "object",
+      "required": ["label", "entity", "fields"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "entity": { "type": "string", "minLength": 1 },
+        "visible": { "type": "boolean" },
+        "fields": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/fieldDescriptor" },
+          "minItems": 1
+        },
+        "rules": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/derivationRule" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "industryProfile": {
+      "type": "object",
+      "required": ["id", "subsystems"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "units": { "type": "object" },
+        "quantity_fields": { "type": "object" },
+        "product_fields": { "type": "object" },
+        "order_types": { "type": "object" },
+        "intent_keywords": { "type": "object" },
+        "print_config": { "type": "object" },
+        "subsystems": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "enum": ["products", "customers", "orders", "shipment-records"]
+          },
+          "additionalProperties": { "$ref": "#/$defs/subsystemSchema" }
+        }
+      },
+      "additionalProperties": true
+    },
+    "importTemplate": {
+      "type": "object",
+      "required": ["id", "label", "path"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "label": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "mime": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "approvalRule": {
+      "type": "object",
+      "required": ["tool_id", "action"],
+      "properties": {
+        "tool_id": { "type": "string", "minLength": 1 },
+        "action": { "type": "string", "minLength": 1 },
+        "trigger": {
+          "type": "string",
+          "enum": ["always", "interactive", "never"]
+        },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "sampleRef": {
+      "type": "object",
+      "required": ["id", "path"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "migrationsBlock": {
+      "type": "object",
+      "required": ["schema_version"],
+      "properties": {
+        "schema_version": { "type": "integer", "minimum": 1 },
+        "scripts_dir": { "type": "string", "default": "migrations" }
+      },
+      "additionalProperties": false
+    },
+    "uiStarterItem": {
+      "type": "object",
+      "required": ["label", "text"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "hint": { "type": "string" },
+        "text": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "neutralIndustryPackage": {
+      "type": "object",
+      "required": [
+        "id",
+        "name",
+        "version",
+        "backend",
+        "frontend",
+        "industry"
+      ],
+      "properties": {
+        "id": {
+          "allOf": [
+            { "$ref": "#/$defs/modId" },
+            { "pattern": "-industry$" }
+          ]
+        },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semver" },
+        "author": { "type": "string" },
+        "description": { "type": "string" },
+        "primary": { "type": "boolean" },
+        "legacy_mod_ids": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modId" }
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "backend": { "$ref": "#/$defs/backendShell" },
+        "frontend": { "$ref": "#/$defs/frontendShell" },
+        "onboarding": { "$ref": "#/$defs/onboardingBinding" },
+        "hooks": { "type": "object" },
+        "industry": { "$ref": "#/$defs/industryProfile" },
+        "import_templates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/importTemplate" }
+        },
+        "approval_profile": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/approvalRule" }
+        },
+        "workflow_employees": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "samples": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/sampleRef" }
+        },
+        "migrations": { "$ref": "#/$defs/migrationsBlock" },
+        "ui_labels": { "type": "object" },
+        "ui_starter_pack": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/uiStarterItem" }
+        },
+        "comms": { "type": "object" }
+      },
+      "additionalProperties": true
+    },
+    "accountCustomMod": {
+      "type": "object",
+      "required": ["id", "name", "version", "backend", "dependencies"],
+      "not": {
+        "required": ["industry"]
+      },
+      "properties": {
+        "id": { "$ref": "#/$defs/modId" },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "$ref": "#/$defs/semver" },
+        "author": { "type": "string" },
+        "description": { "type": "string" },
+        "primary": { "type": "boolean" },
+        "dependencies": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": { "type": "string" }
+        },
+        "backend": { "$ref": "#/$defs/backendShell" },
+        "frontend": { "$ref": "#/$defs/frontendShell" },
+        "workflow_employees": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "hooks": { "type": "object" },
+        "comms": { "type": "object" }
+      },
+      "additionalProperties": true
+    }
+  }
+}

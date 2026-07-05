@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
+const mockApiFetch = vi.hoisted(() => vi.fn())
+const mockReadCsrfTokenFromCookie = vi.hoisted(() => vi.fn(() => 'csrf-token'))
+
 vi.mock('./offlineTts', () => ({
   synthesizeOffline: vi.fn().mockResolvedValue({ audio: new Float32Array([0, 0]), samplingRate: 16000 }),
   playOfflinePcm: vi.fn().mockResolvedValue(undefined),
@@ -11,12 +14,11 @@ vi.mock('./offlineTts', () => ({
 }))
 
 vi.mock('./apiBase', () => ({
-  getApiBase: () => 'http://localhost:8000',
+  apiFetch: mockApiFetch,
 }))
 
 vi.mock('./csrfCookie', () => ({
-  readCsrfTokenFromCookie: () => 'csrf-token',
-  shouldAttachCsrfHeader: () => true,
+  readCsrfTokenFromCookie: mockReadCsrfTokenFromCookie,
 }))
 
 class MockUtterance {
@@ -67,6 +69,9 @@ import {
 
 describe('tts speak branches', () => {
   beforeEach(() => {
+    mockApiFetch.mockReset()
+    mockReadCsrfTokenFromCookie.mockReset()
+    mockReadCsrfTokenFromCookie.mockReturnValue('csrf-token')
     localStorage.clear()
     setEngineMode('system')
     installSpeechMocks()
@@ -91,7 +96,7 @@ describe('tts speak branches', () => {
 
   it('speakText online mode falls back to browser on fetch failure', async () => {
     setEngineMode('online')
-    global.fetch = vi.fn().mockRejectedValue(new Error('network')) as typeof fetch
+    mockApiFetch.mockRejectedValue(new Error('network'))
     const onError = vi.fn()
     await speakText('测试在线回退', { onError })
     expect(onError).toHaveBeenCalled()
@@ -99,13 +104,14 @@ describe('tts speak branches', () => {
 
   it('speakText online mode plays audio on success', async () => {
     setEngineMode('online')
-    global.fetch = vi.fn().mockResolvedValue({
+    mockApiFetch.mockResolvedValue({
       ok: true,
+      status: 200,
       json: async () => ({
         success: true,
         data: { audioBase64: 'data:audio/mp3;base64,AAAA' },
       }),
-    }) as typeof fetch
+    })
 
     class MockAudio {
       onended: (() => void) | null = null
@@ -121,6 +127,37 @@ describe('tts speak branches', () => {
     const onEnd = vi.fn()
     await speakText('在线播放', { onEnd })
     expect(onEnd).toHaveBeenCalled()
+    expect(mockApiFetch).toHaveBeenCalledWith('/api/tts', expect.objectContaining({ method: 'POST' }))
+  })
+
+  it('speakText online mode primes csrf cookie before posting when missing', async () => {
+    setEngineMode('online')
+    mockReadCsrfTokenFromCookie.mockReturnValueOnce('').mockReturnValue('csrf-token')
+    mockApiFetch
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ success: true }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: { audioBase64: 'data:audio/mp3;base64,AAAA' },
+        }),
+      })
+
+    class MockAudio {
+      onended: (() => void) | null = null
+      onerror: (() => void) | null = null
+      src = ''
+      play = vi.fn().mockImplementation(async () => {
+        this.onended?.()
+      })
+      pause = vi.fn()
+    }
+    vi.stubGlobal('Audio', MockAudio)
+
+    await speakText('冷启动在线朗读')
+    expect(mockApiFetch.mock.calls[0]?.[0]).toBe('/api/health')
+    expect(mockApiFetch.mock.calls[1]?.[0]).toBe('/api/tts')
   })
 
   it('speakText offline mode synthesizes offline', async () => {

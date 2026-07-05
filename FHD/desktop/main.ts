@@ -8,6 +8,7 @@ import {
   ipcMain,
   nativeImage,
   screen,
+  session,
   shell
 } from 'electron'
 import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
@@ -17,25 +18,32 @@ import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
 import { checkForUpdates, configureUpdater, installUpdate } from './updater'
+import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 
 const APP_NAME = 'XCAGI'
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
+// 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
+// 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 
-/** macOS 12+「隔空播放接收器」占用 :5000，TCP 可达但返回 AirTunes 空 403 → Electron 白屏。 */
-function resolveDefaultDesktopPort(): number {
+/** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
+export function resolveDefaultDesktopPort(): number {
   const env = process.env.XCAGI_DESKTOP_PORT
   if (env) {
-    return Number(env)
+    const port = Number(env)
+    if (Number.isFinite(port) && port > 0 && port < 65536) {
+      return Math.floor(port)
+    }
   }
-  return process.platform === 'darwin' ? 17500 : 5000
+  return 17500
 }
 
-const DEFAULT_PORT = resolveDefaultDesktopPort()
+export const DEFAULT_PORT = resolveDefaultDesktopPort()
 
 /** 检测 127.0.0.1:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
-function isPortAvailable(port: number): Promise<boolean> {
+export function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const tester = net.createServer()
     tester.once('error', () => resolve(false))
@@ -47,10 +55,10 @@ function isPortAvailable(port: number): Promise<boolean> {
 }
 
 /** 端口被占时给用户的引导文案。 */
-function portOccupiedHint(port: number): string {
+export function portOccupiedHint(port: number): string {
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? '\n\nmacOS「隔空播放接收器」常占用 5000，请在系统设置 → 通用 → 隔空播放接收器 中关闭，或设置环境变量 XCAGI_DESKTOP_PORT=17500 后重启。'
+    port === 5000
+      ? '\n\n5000 是历史开发端口，容易被系统服务或本机代理占用；正式桌面版默认端口为 17500。'
       : ''
   return (
     `端口 ${port} 已被占用，XCAGI 后端无法启动。\n\n` +
@@ -59,14 +67,14 @@ function portOccupiedHint(port: number): string {
   )
 }
 
-type ProductSku = 'personal' | 'enterprise'
+export type ProductSku = 'personal' | 'enterprise'
 
-const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
+export const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
   personal: 'minimal',
   enterprise: 'full'
 }
 
-const SKU_UPDATE_URL: Record<ProductSku, string> = {
+export const SKU_UPDATE_URL: Record<ProductSku, string> = {
   personal: 'https://update.xcagi.com/releases/stable/personal/',
   enterprise: 'https://update.xcagi.com/releases/stable/enterprise/'
 }
@@ -76,14 +84,14 @@ const SKU_UPDATE_URL: Record<ProductSku, string> = {
  * 对应私钥存 GitHub Secrets: XCAGI_UPDATE_ED25519_PRIVATE_KEY（CI 签名用）。
  * 签名脚本: FHD/scripts/dev/sign_update_metadata.py
  */
-const ED25519_PUBLIC_KEY_PEM = [
+export const ED25519_PUBLIC_KEY_PEM = [
   '-----BEGIN PUBLIC KEY-----',
-  'MCowBQYDK2VwAyEAQTSb+dYGOM3dwJkMcrTysZz1uUaUB9oCIFga2k+iHBc=',
+  'MCowBQYDK2VwAyEAO6AeYJ05qwfSgpGR7+FZiL6cY0uGtSJVRqIiws3P6N8=',
   '-----END PUBLIC KEY-----'
 ].join('\n')
 
 /** 企业版与网页 :5001 一致：完整侧栏，不强制 ?shell=1 */
-function desktopInitialUrl(): string {
+export function desktopInitialUrl(): string {
   const base = `http://127.0.0.1:${DEFAULT_PORT}/`
   if (readPackagedProductSku() === 'enterprise') {
     return base
@@ -91,7 +99,7 @@ function desktopInitialUrl(): string {
   return `${base}?shell=1`
 }
 
-function readPackagedProductSku(): ProductSku | null {
+export function readPackagedProductSku(): ProductSku | null {
   if (!app.isPackaged) {
     const sku = String(process.env.XCAGI_PRODUCT_SKU || '').trim().toLowerCase()
     if (sku === 'personal' || sku === 'enterprise') {
@@ -106,7 +114,7 @@ function readPackagedProductSku(): ProductSku | null {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sku?: string }
+      const raw = JSON.parse(readJsonTextFile(filePath)) as { sku?: string }
       const sku = String(raw.sku || '').trim().toLowerCase()
       if (sku === 'personal' || sku === 'enterprise') {
         return sku
@@ -118,7 +126,18 @@ function readPackagedProductSku(): ProductSku | null {
   return null
 }
 
-function backendEditionEnv(): Record<string, string> {
+export function readJsonTextFile(filePath: string): string {
+  const buffer = fs.readFileSync(filePath)
+  let text: string
+  if (buffer.length >= 2 && buffer[0] === 0xff && buffer[1] === 0xfe) {
+    text = buffer.toString('utf16le')
+  } else {
+    text = buffer.toString('utf8')
+  }
+  return text.replace(/^\uFEFF/, '')
+}
+
+export function backendEditionEnv(): Record<string, string> {
   const sku = readPackagedProductSku()
   if (!sku) {
     // dev 模式未指定 SKU：默认 generic，与前端 generic 构建产物一致。
@@ -268,7 +287,7 @@ function packagedBackendHealthTimeoutMs(): number {
   return process.platform === 'win32' ? 180_000 : 120_000
 }
 
-/** 须确认 uvicorn /api/health，避免 macOS AirPlay 占 5000 时 TCP 误判就绪。 */
+/** 须确认 uvicorn /api/health，避免 TCP 可达但不是 XCAGI 后端时误判就绪。 */
 async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
@@ -278,7 +297,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
       })
       const server = (response.headers.get('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
-        startupMarks.tcp5000Ms = Date.now() - (startupMarks.backendSpawnMs ?? started)
+        startupMarks.backendHealthMs = Date.now() - (startupMarks.backendSpawnMs ?? started)
         return
       }
       if (server.includes('airtunes')) {
@@ -290,8 +309,8 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     await new Promise(resolve => setTimeout(resolve, 500))
   }
   const airplayHint =
-    process.platform === 'darwin' && port === 5000
-      ? ' macOS「隔空播放接收器」占用 5000，请在系统设置中关闭，或设置 XCAGI_DESKTOP_PORT=17500。'
+    port === 5000
+      ? ' 5000 是历史开发端口，正式桌面版默认端口为 17500；请清理 XCAGI_DESKTOP_PORT 后重启。'
       : ''
   const firstBootHint = app.isPackaged
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
@@ -303,13 +322,13 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
 
 type DesktopStartupMarks = {
   backendSpawnMs?: number
-  tcp5000Ms?: number
+  backendHealthMs?: number
   desktopStatusMs?: number
 }
 
 const startupMarks: DesktopStartupMarks = {}
 
-function readPackagedAppVersion(): string {
+export function readPackagedAppVersion(): string {
   if (!app.isPackaged) return 'dev'
   const candidates = [
     path.join(process.resourcesPath, 'backend', 'version.txt'),
@@ -318,7 +337,7 @@ function readPackagedAppVersion(): string {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = fs.readFileSync(filePath, 'utf8').trim()
+      const raw = readJsonTextFile(filePath).trim()
       if (filePath.endsWith('version.txt')) return raw || 'unknown'
       const json = JSON.parse(raw) as { sku?: string; schema_version?: number }
       return `${json.sku || 'enterprise'}-${json.schema_version ?? 1}`
@@ -330,7 +349,7 @@ function readPackagedAppVersion(): string {
 }
 
 /** 前端 hash 变更时须清 Electron 缓存，避免旧 index-*.js 引用已不存在的 chunk。 */
-function readFrontendCacheKey(): string {
+export function readFrontendCacheKey(): string {
   const base = readPackagedAppVersion()
   const indexCandidates = [
     path.join(process.resourcesPath, 'backend', '_internal', 'templates', 'vue-dist', 'index.html'),
@@ -351,7 +370,7 @@ function readFrontendCacheKey(): string {
   return base
 }
 
-function shouldClearFrontendCache(): boolean {
+export function shouldClearFrontendCache(): boolean {
   const marker = path.join(app.getPath('userData'), 'frontend-cache-version.txt')
   const current = readFrontendCacheKey()
   try {
@@ -362,20 +381,20 @@ function shouldClearFrontendCache(): boolean {
   }
 }
 
-function markFrontendCacheCleared(): void {
+export function markFrontendCacheCleared(): void {
   const marker = path.join(app.getPath('userData'), 'frontend-cache-version.txt')
   fs.writeFileSync(marker, readFrontendCacheKey(), 'utf8')
 }
 
 /** 分阶段就绪：TCP 后即可出窗；desktop/status 软等待，不阻塞 60s 全量 Mod。 */
-async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<boolean> {
+async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<Record<string, unknown> | null> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
       const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`)
       if (response.ok) {
         startupMarks.desktopStatusMs = Date.now() - (startupMarks.backendSpawnMs ?? started)
-        return true
+        return (await response.json()) as Record<string, unknown>
       }
     } catch {
       /* backend still importing routers */
@@ -383,7 +402,47 @@ async function waitForBackendStatus(port: number, timeoutMs = 15_000): Promise<b
     await new Promise(resolve => setTimeout(resolve, 400))
   }
   console.warn(`[xcagi-desktop] /api/desktop/status 未在 ${timeoutMs}ms 内就绪，仍加载前端`)
-  return false
+  return null
+}
+
+/**
+ * 检查启动自检 + 自动恢复状态，必要时弹窗提示用户。
+ *
+ * 后端启动时 recover_if_corrupt 会检测主库：
+ * - action=ok：库健康，不弹
+ * - action=restored：库损坏但已从备份恢复，弹警告（数据可能回退到上次备份）
+ * - action=corrupt_no_backup：库损坏且无可用备份，弹错误（严重，可能丢失数据）
+ */
+async function showDbRecoveryDialogIfNeeded(status: Record<string, unknown> | null): Promise<void> {
+  if (!status) return
+  const recovery = status.dbRecovery as { action?: string; detail?: string | null } | undefined
+  if (!recovery || recovery.action === 'ok') return
+
+  if (recovery.action === 'corrupt_no_backup') {
+    await dialog.showMessageBox({
+      type: 'error',
+      title: APP_NAME,
+      message: '数据库损坏且无可用备份',
+      detail:
+        'XCAGI 启动时检测到数据库损坏，但未找到可用的备份文件。\n\n' +
+        '应用仍会启动，但可能无法访问历史数据。请从菜单「导出诊断包」收集日志后联系技术支持。\n' +
+        '建议尽快从外部备份（如 USB 备份）恢复 data/xcagi.db。'
+    })
+    return
+  }
+
+  if (recovery.action === 'restored') {
+    const fromBackup = recovery.detail || '未知备份'
+    await dialog.showMessageBox({
+      type: 'warning',
+      title: APP_NAME,
+      message: '数据库已从备份自动恢复',
+      detail:
+        `XCAGI 启动时检测到数据库损坏，已自动从备份恢复：${fromBackup}\n\n` +
+        '最近一次备份之后产生的数据可能丢失。请检查关键业务数据是否完整。\n' +
+        '如需手动恢复更早的备份，请从菜单「打开数据目录」找到 backups/ 文件夹。'
+    })
+  }
 }
 
 async function startBackend(): Promise<void> {
@@ -423,6 +482,7 @@ async function startBackend(): Promise<void> {
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
       XCAGI_UVICORN_RELOAD: '0',
+      XCAGI_GLOBAL_RATE_LIMIT: '0',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
     },
@@ -468,6 +528,28 @@ async function startBackend(): Promise<void> {
   })
 }
 
+async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
+  // 更新前的回滚准备：备份当前 backend，写入 marker
+  // 这样更新后首次启动失败时可以自动还原
+  try {
+    await prepareRollback(toVersion)
+  } catch (e) {
+    // 备份失败不阻断更新（electron-updater 自身有重试机制）
+    console.warn(`[xcagi-rollback] prepareRollback 失败，继续更新但不支持回滚: ${e instanceof Error ? e.message : e}`)
+  }
+  await runBackendMigration()
+}
+
+/** 触发回滚但吞掉自身错误，避免回滚失败导致二次崩溃 */
+async function triggerRollbackSafe(reason: string): Promise<void> {
+  try {
+    await triggerRollback(reason)
+    writeBackendLog(`[rollback] 已触发回滚：${reason}\n`)
+  } catch (e) {
+    writeBackendLog(`[rollback] 回滚失败：${e instanceof Error ? e.message : e}\n`)
+  }
+}
+
 function runBackendMigration(): Promise<void> {
   const executable = backendExecutable()
   return new Promise((resolve, reject) => {
@@ -478,6 +560,7 @@ function runBackendMigration(): Promise<void> {
         XCAGI_DESKTOP_MODE: '1',
         XCAGI_DATA_DIR: app.getPath('userData'),
         XCAGI_UVICORN_RELOAD: '0',
+        XCAGI_GLOBAL_RATE_LIMIT: '0',
         ...backendEditionEnv(),
         PYTHONUTF8: '1'
       },
@@ -500,9 +583,33 @@ function runBackendMigration(): Promise<void> {
   })
 }
 
+async function cookieHeaderForBackend(): Promise<string> {
+  const url = `http://127.0.0.1:${DEFAULT_PORT}/`
+  const cookies = await session.defaultSession.cookies.get({ url })
+  if (!cookies.length) {
+    return ''
+  }
+  return cookies.map(c => `${c.name}=${c.value}`).join('; ')
+}
+
 async function exportSupportBundleInteractive(): Promise<void> {
   try {
-    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/support-bundle`)
+    const cookie = await cookieHeaderForBackend()
+    const headers: Record<string, string> = {}
+    if (cookie) {
+      headers.Cookie = cookie
+    }
+    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/support-bundle`, {
+      headers
+    })
+    if (res.status === 401) {
+      void dialog.showMessageBox({
+        type: 'warning',
+        title: APP_NAME,
+        message: '请先登录后再导出诊断包'
+      })
+      return
+    }
     if (!res.ok) {
       void dialog.showErrorBox(APP_NAME, `导出失败：HTTP ${res.status}`)
       return
@@ -577,6 +684,41 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
+export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+    const port = expectedPort ?? DEFAULT_PORT
+    return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
+  } catch {
+    return false
+  }
+}
+
+function configureDesktopMediaPermissions(): void {
+  const ses = session.defaultSession
+  ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const requestUrl =
+      (details as { requestingUrl?: string } | undefined)?.requestingUrl || webContents.getURL()
+    callback(wantsAudio && isTrustedDesktopOrigin(requestUrl))
+  })
+  ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    const mediaTypes = ((details as { mediaTypes?: string[] } | undefined)?.mediaTypes || [])
+      .map(type => String(type))
+    const wantsAudio =
+      permission === 'media' &&
+      (mediaTypes.length === 0 || mediaTypes.includes('audio') || mediaTypes.includes('microphone'))
+    const origin = requestingOrigin || webContents?.getURL() || ''
+    return wantsAudio && isTrustedDesktopOrigin(origin)
+  })
+}
+
 function stopBackend(): void {
   const child = backendProcess
   backendProcess = null
@@ -605,6 +747,7 @@ async function createWindow(): Promise<void> {
     minWidth: 1180,
     minHeight: 760,
     title: APP_NAME,
+    autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -622,6 +765,10 @@ async function createWindow(): Promise<void> {
   winOpts.show = false
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  if (process.platform !== 'darwin') {
+    mainWindow.setAutoHideMenuBar(true)
+    mainWindow.setMenuBarVisibility(false)
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -650,6 +797,23 @@ async function createWindow(): Promise<void> {
     if (mainWindow) tagDesktopWebContents(mainWindow)
   })
 
+  // 防止渲染进程导航到本机后端以外的来源（electronegativity LimitNavigation HIGH）。
+  // 桌面端只加载 127.0.0.1:DEFAULT_PORT，任何外部跳转一律拦截。
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+      event.preventDefault()
+      console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
+    }
+  })
+  // window.open / target=_blank 由系统浏览器打开，不在 Electron 内开新窗口。
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+      return { action: 'allow' }
+    }
+    void shell.openExternal(url)
+    return { action: 'deny' }
+  })
+
   await mainWindow.loadURL(desktopInitialUrl(), {
     extraHeaders: 'Cache-Control: no-cache\r\n'
   })
@@ -660,17 +824,18 @@ async function createWindow(): Promise<void> {
   mainWindow.show()
   mainWindow.focus()
 
-  void waitForBackendStatus(DEFAULT_PORT).then(ok => {
+  void waitForBackendStatus(DEFAULT_PORT).then(status => {
     console.info(
       '[xcagi-desktop] startup',
       JSON.stringify({
         ...startupMarks,
-        desktopStatusOk: ok
+        desktopStatusOk: status !== null
       })
     )
+    void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow, runBackendMigration)
+  configureUpdater(mainWindow, runBackendMigrationWithRollback)
 }
 
 function createMenu(): void {
@@ -746,120 +911,177 @@ function createTray(): void {
     Menu.buildFromTemplate([
       { label: '显示 XCAGI', click: () => mainWindow?.show() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
+      { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
+      { label: '检查更新', click: () => void checkForUpdates() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }
     ])
   )
 }
 
-const gotLock = app.requestSingleInstanceLock()
-if (!gotLock) {
-  app.quit()
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      mainWindow.focus()
-    }
-  })
-
-  app.on('before-quit', () => {
-    app.isQuitting = true
-    stopBackend()
-  })
-
-  app.whenReady().then(async () => {
-    const sku = readPackagedProductSku()
-    if (sku && !process.env.XCAGI_UPDATE_URL) {
-      process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
-    }
-    // 嵌入 Ed25519 公钥，启用 update 元数据二次签名校验
-    if (!process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY) {
-      process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = ED25519_PUBLIC_KEY_PEM
-    }
-    function getLanIPv4(): string {
-      const nets = networkInterfaces()
-      for (const name of Object.keys(nets)) {
-        for (const iface of nets[name] || []) {
-          if (iface.family === 'IPv4' && !iface.internal) {
-            return iface.address
-          }
-        }
-      }
-      return '127.0.0.1'
-    }
-
-    ipcMain.handle('xcagi:pairing-qr', async () => {
-      const host = getLanIPv4()
-      const port = DEFAULT_PORT
-      const nonce = crypto.randomBytes(12).toString('base64url')
-      const exp = Math.floor(Date.now() / 1000) + 300
-      try {
-        const res = await fetch(`http://127.0.0.1:${port}/api/mobile/v1/pairing/issue`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ host, port })
-        })
-        if (res.ok) {
-          const json = (await res.json()) as { data?: { nonce?: string; exp?: number; host?: string; port?: number } }
-          if (json?.data?.nonce) {
-            return JSON.stringify(json.data)
-          }
-        }
-      } catch {
-        /* backend offline — return local payload */
-      }
-      return JSON.stringify({ host, port, nonce, exp })
-    })
-
-    ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
-    ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
-    ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
-    ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigration))
-    ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
-      const n = Math.max(0, Math.floor(Number(count) || 0))
-      if (process.platform === 'darwin' || process.platform === 'linux') {
-        app.setBadgeCount(n)
-        return
-      }
+function bootstrap(): void {
+  const gotLock = app.requestSingleInstanceLock()
+  if (!gotLock) {
+    app.quit()
+  } else {
+    app.on('second-instance', () => {
       if (mainWindow) {
-        mainWindow.flashFrame(n > 0)
+        if (mainWindow.isMinimized()) mainWindow.restore()
+        mainWindow.focus()
       }
     })
-    ipcMain.handle(
-      'xcagi:show-notification',
-      (_event, payload: { title?: string; body?: string }) => {
-        const title = String(payload?.title || APP_NAME).trim() || APP_NAME
-        const body = String(payload?.body || '').trim()
-        if (!Notification.isSupported()) {
-          return { ok: false, reason: 'unsupported' }
-        }
-        new Notification({ title, body }).show()
-        return { ok: true }
+
+    app.on('before-quit', () => {
+      app.isQuitting = true
+      stopBackend()
+    })
+
+    app.whenReady().then(async () => {
+      const sku = readPackagedProductSku()
+      if (sku && !process.env.XCAGI_UPDATE_URL) {
+        process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
       }
-    )
+      // 嵌入 Ed25519 公钥，启用 update 元数据二次签名校验
+      if (!process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY) {
+        process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY = ED25519_PUBLIC_KEY_PEM
+      }
+      function getLanIPv4(): string {
+        const nets = networkInterfaces()
+        for (const name of Object.keys(nets)) {
+          for (const iface of nets[name] || []) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+              return iface.address
+            }
+          }
+        }
+        return '127.0.0.1'
+      }
 
-    createMenu()
-    createTray()
-    await startBackend()
-    if (!backendProcess) {
-      // 端口被占或后端可执行文件缺失，startBackend 已弹错误框，直接退出
-      app.quit()
-      return
-    }
-    try {
-      await createWindow()
-    } catch (error) {
-      void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
-      app.quit()
-    }
-  })
+      ipcMain.handle('xcagi:pairing-qr', async () => {
+        const host = getLanIPv4()
+        const port = DEFAULT_PORT
+        const nonce = crypto.randomBytes(12).toString('base64url')
+        const exp = Math.floor(Date.now() / 1000) + 300
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/api/mobile/v1/pairing/issue`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ host, port })
+          })
+          if (res.ok) {
+            const json = (await res.json()) as { data?: { nonce?: string; exp?: number; host?: string; port?: number } }
+            if (json?.data?.nonce) {
+              return JSON.stringify(json.data)
+            }
+          }
+        } catch {
+          /* backend offline — return local payload */
+        }
+        return JSON.stringify({ host, port, nonce, exp })
+      })
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow()
-    }
-  })
+      ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
+      ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
+      ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
+      ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
+        const n = Math.max(0, Math.floor(Number(count) || 0))
+        if (process.platform === 'darwin' || process.platform === 'linux') {
+          app.setBadgeCount(n)
+          return
+        }
+        if (mainWindow) {
+          mainWindow.flashFrame(n > 0)
+        }
+      })
+      ipcMain.handle(
+        'xcagi:show-notification',
+        (_event, payload: { title?: string; body?: string }) => {
+          const title = String(payload?.title || APP_NAME).trim() || APP_NAME
+          const body = String(payload?.body || '').trim()
+          if (!Notification.isSupported()) {
+            return { ok: false, reason: 'unsupported' }
+          }
+          new Notification({ title, body }).show()
+          return { ok: true }
+        }
+      )
+
+      configureDesktopMediaPermissions()
+      createMenu()
+      createTray()
+
+      // 更新后首次启动观察期：检查 rollback marker
+      const pendingRollback = checkPendingRollback()
+      if (pendingRollback) {
+        writeBackendLog(`[rollback] 观察期：更新后首次启动 from=${pendingRollback.fromVersion} to=${pendingRollback.toVersion}\n`)
+      }
+      // 如果上次发生过回滚，提示用户
+      const appliedRollback = checkRollbackApplied()
+      if (appliedRollback) {
+        void dialog.showMessageBox({
+          type: 'info',
+          title: APP_NAME,
+          message: `XCAGI 已自动回滚到上一版本 ${appliedRollback.toVersion}`,
+          detail: `原因：${appliedRollback.reason}\n\n当前版本仍可正常使用。如问题持续，请联系支持。`
+        })
+      }
+
+      try {
+        await startBackend()
+        if (!backendProcess) {
+          // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
+          // 如果是更新后首次启动，触发回滚
+          if (pendingRollback) {
+            await triggerRollbackSafe('startBackend 失败：端口被占或 backend 可执行文件缺失')
+            void dialog.showErrorBox(APP_NAME, '更新后启动失败，已自动回滚到上一版本。请重启 XCAGI。')
+          }
+          app.quit()
+          return
+        }
+        try {
+          await createWindow()
+          // 启动成功：提交回滚（删除 marker，保留备份）
+          if (pendingRollback) {
+            commitRollback()
+            writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error)
+          writeBackendLog(`[rollback] createWindow 失败: ${msg}\n`)
+          if (pendingRollback) {
+            await triggerRollbackSafe(`createWindow 失败: ${msg}`)
+            void dialog.showErrorBox(APP_NAME, '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。')
+          } else {
+            void dialog.showErrorBox(APP_NAME, msg)
+          }
+          app.quit()
+        }
+      } catch (error) {
+        // startBackend 或 waitForBackendHealth 抛错（health 超时）
+        const msg = error instanceof Error ? error.message : String(error)
+        writeBackendLog(`[rollback] startBackend 抛错: ${msg}\n`)
+        if (pendingRollback) {
+          await triggerRollbackSafe(`后端启动失败: ${msg}`)
+          void dialog.showErrorBox(APP_NAME, '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。')
+        } else {
+          void dialog.showErrorBox(APP_NAME, msg)
+        }
+        app.quit()
+      }
+    })
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void createWindow()
+      }
+    })
+  }
+}
+
+// 单测环境设置 XCAGI_DESKTOP_TEST=1 跳过启动逻辑，只测纯函数
+if (!process.env.XCAGI_DESKTOP_TEST) {
+  bootstrap()
 }
 
 declare global {

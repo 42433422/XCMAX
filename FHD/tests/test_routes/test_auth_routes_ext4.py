@@ -664,13 +664,55 @@ class TestAuthRegister:
                         "raw": {"user": {"email": "a@b.com"}},
                         "token": "tok",
                         "refresh_token": "rtok",
+                        "market_user_id": 61,
                     }
                 ),
             ),
             patch(
                 "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
                 return_value=True,
+            ) as mock_jit,
+            patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
+        ):
+            mock_service = MagicMock()
+            mock_service.login.return_value = {"success": False, "message": "no user"}
+            mock_get.return_value = mock_service
+            result = await auth_register(
+                request,
+                {
+                    "username": "u",
+                    "password": "pass123",
+                    "email": "a@b.com",
+                    "industry_id": "涂料",
+                },
+            )
+        assert isinstance(result, JSONResponse)
+        mock_jit.assert_called_once()
+        assert result.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_enterprise_market_enterprise_profile_failure(self):
+        from app.fastapi_routes.domains.auth.routes import auth_register
+
+        request = MagicMock()
+        with (
+            patch("app.mod_sdk.product_skus.resolve_product_sku", return_value="enterprise"),
+            patch(
+                "app.fastapi_routes.market_account.register_market_user",
+                new=AsyncMock(
+                    return_value={
+                        "success": True,
+                        "raw": {"user": {"id": 61, "email": "a@b.com"}},
+                        "token": "tok",
+                        "refresh_token": "rtok",
+                        "market_user_id": 61,
+                    }
+                ),
             ),
+            patch(
+                "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",
+                return_value=True,
+            ) as mock_jit,
             patch("app.application.auth_app_service.get_auth_app_service") as mock_get,
         ):
             mock_service = MagicMock()
@@ -682,6 +724,7 @@ class TestAuthRegister:
             )
         assert isinstance(result, JSONResponse)
         assert result.status_code == 500
+        mock_jit.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_enterprise_full_success(self):
@@ -698,8 +741,13 @@ class TestAuthRegister:
                         "raw": {"user": {"email": "a@b.com"}},
                         "token": "tok",
                         "refresh_token": "rtok",
+                        "market_user_id": 61,
                     }
                 ),
+            ),
+            patch(
+                "app.fastapi_routes.market_account.ensure_market_enterprise_profile",
+                new=AsyncMock(return_value={"success": True}),
             ),
             patch(
                 "app.fastapi_routes.domains.auth.routes._jit_create_local_user_for_enterprise",

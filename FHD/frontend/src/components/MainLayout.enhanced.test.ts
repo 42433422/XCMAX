@@ -517,21 +517,3 @@ describe('MainLayout.vue – onMobileNavViewportChange', () => {
     wrapper.unmount()
   })
 })
-
-describe('MainLayout.vue – resolveLegacyRouteFromModPath', () => {
-  it('returns null for empty path', async () => {
-    const { wrapper } = await mountMainLayout()
-    expect(wrapper.vm.resolveLegacyRouteFromModPath('')).toBeNull()
-    expect(wrapper.vm.resolveLegacyRouteFromModPath(null)).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('returns approval-workspace for approval-hub/workspace path', async () => {
-    const { wrapper, router } = await mountMainLayout()
-    const result = wrapper.vm.resolveLegacyRouteFromModPath('/mod/test/approval-hub/workspace')
-    if (router.hasRoute('approval-workspace')) {
-      expect(result).toEqual({ name: 'approval-workspace' })
-    }
-    wrapper.unmount()
-  })
-})

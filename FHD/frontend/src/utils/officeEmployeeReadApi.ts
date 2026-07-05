@@ -1,5 +1,11 @@
 import { primeCsrfCookie } from '@/api/core'
-import { EXCEL_FULL_READ_EMPLOYEE_ID, WORD_FULL_READ_EMPLOYEE_ID } from '@/constants/officeEmployeePack'
+import {
+  CSV_FULL_READ_EMPLOYEE_ID,
+  EXCEL_FULL_READ_EMPLOYEE_ID,
+  PDF_FULL_READ_EMPLOYEE_ID,
+  PPT_FULL_READ_EMPLOYEE_ID,
+  WORD_FULL_READ_EMPLOYEE_ID,
+} from '@/constants/officeEmployeePack'
 import type { ExcelAnalysisResult, ExcelFieldInfo, ExcelSheetDetail } from '@/types/excel'
 import type { JsonValue } from '@/types/json'
 import { apiFetch } from '@/utils/apiBase'
@@ -10,7 +16,32 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 const CHAT_OFFICE_UPLOAD = '/api/platform-shell/chat-office-file-upload'
 const TUTORIAL_OFFICE_UPLOAD = '/api/platform-shell/office-sample-upload'
 const WORKSPACE_ROOT_PATH = '/api/platform-shell/workspace-root'
+const WORKSPACE_READ_FILES = '/api/platform-shell/workspace-read-files'
 const EXTRACT_GRID_UPLOAD_PATH = '/api/templates/extract-grid'
+
+const OFFICE_DOCKING_EXTENSIONS = new Set([
+  '.xlsx',
+  '.xlsm',
+  '.xls',
+  '.csv',
+  '.docx',
+  '.doc',
+  '.pdf',
+  '.pptx',
+  '.ppt',
+])
+
+const EMPLOYEE_BY_EXTENSION: Record<string, string> = {
+  '.xlsx': EXCEL_FULL_READ_EMPLOYEE_ID,
+  '.xlsm': EXCEL_FULL_READ_EMPLOYEE_ID,
+  '.xls': EXCEL_FULL_READ_EMPLOYEE_ID,
+  '.csv': CSV_FULL_READ_EMPLOYEE_ID,
+  '.docx': WORD_FULL_READ_EMPLOYEE_ID,
+  '.doc': WORD_FULL_READ_EMPLOYEE_ID,
+  '.pdf': PDF_FULL_READ_EMPLOYEE_ID,
+  '.pptx': PPT_FULL_READ_EMPLOYEE_ID,
+  '.ppt': PPT_FULL_READ_EMPLOYEE_ID,
+}
 
 let cachedWorkspaceRoot = ''
 
@@ -93,7 +124,51 @@ export async function uploadChatOfficeFile(file: File): Promise<OfficeFileUpload
 
 const EMPLOYEE_RUN_PATHS: Record<string, string> = {
   [EXCEL_FULL_READ_EMPLOYEE_ID]: `/api/mod/${EXCEL_FULL_READ_EMPLOYEE_ID}/employees/${EXCEL_FULL_READ_EMPLOYEE_ID}/run`,
+  [CSV_FULL_READ_EMPLOYEE_ID]: `/api/mod/${CSV_FULL_READ_EMPLOYEE_ID}/employees/${CSV_FULL_READ_EMPLOYEE_ID}/run`,
+  [PDF_FULL_READ_EMPLOYEE_ID]: `/api/mod/${PDF_FULL_READ_EMPLOYEE_ID}/employees/${PDF_FULL_READ_EMPLOYEE_ID}/run`,
+  [PPT_FULL_READ_EMPLOYEE_ID]: `/api/mod/${PPT_FULL_READ_EMPLOYEE_ID}/employees/${PPT_FULL_READ_EMPLOYEE_ID}/run`,
   [WORD_FULL_READ_EMPLOYEE_ID]: `/api/mod/${WORD_FULL_READ_EMPLOYEE_ID}/employees/${WORD_FULL_READ_EMPLOYEE_ID}/run`,
+}
+
+export type OfficeEmployeeOutputFile = {
+  path: string
+  kind: 'json' | 'text' | 'binary'
+  json?: Record<string, unknown>
+  text?: string
+}
+
+export function isOfficeDockingFileSupported(fileName: string): boolean {
+  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : ''
+  return OFFICE_DOCKING_EXTENSIONS.has(ext)
+}
+
+export function resolveOfficeReadEmployeeForFile(fileName: string): string {
+  const ext = fileName.includes('.') ? `.${fileName.split('.').pop()?.toLowerCase()}` : ''
+  return EMPLOYEE_BY_EXTENSION[ext] || ''
+}
+
+export async function readOfficeEmployeeOutputs(
+  workspaceRoot: string,
+  paths: string[],
+): Promise<OfficeEmployeeOutputFile[]> {
+  const relPaths = paths.map((p) => asString(p).trim()).filter(Boolean)
+  if (!relPaths.length) return []
+  await ensureCsrf()
+  const res = await apiFetch(WORKSPACE_READ_FILES, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace_root: workspaceRoot, file_paths: relPaths }),
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || body?.success === false) {
+    throw new Error(String(body?.message || body?.error || `读取输出文件失败 HTTP ${res.status}`))
+  }
+  return asArray<Record<string, unknown>>(body?.data?.files).map((row) => ({
+    path: asString(row.path),
+    kind: (asString(row.kind) as OfficeEmployeeOutputFile['kind']) || 'text',
+    json: asRecord(row.json),
+    text: asString(row.text),
+  }))
 }
 
 export type OfficeFileUploadResult = {
@@ -125,18 +200,21 @@ export async function runOfficeEmployeeRead(
   employeeId: string,
   filePath: string,
   workspaceRoot: string,
+  options?: { outputRelpath?: string },
 ): Promise<Record<string, unknown>> {
   const path = EMPLOYEE_RUN_PATHS[employeeId]
   if (!path) throw new Error(`未知办公员工：${employeeId}`)
   await ensureCsrf()
+  const payload: Record<string, unknown> = {
+    file_path: filePath,
+    workspace_root: workspaceRoot,
+    action: 'convert',
+  }
+  if (options?.outputRelpath) payload.output_relpath = options.outputRelpath
   const res = await apiFetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      file_path: filePath,
-      workspace_root: workspaceRoot,
-      action: 'convert',
-    }),
+    body: JSON.stringify(payload),
   })
   const body = await res.json().catch(() => ({}))
   if (!res.ok || body?.success === false) {

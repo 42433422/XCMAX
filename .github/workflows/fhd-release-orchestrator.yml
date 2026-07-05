@@ -8,15 +8,6 @@ on:
       - "FHD/v10.*"
       - "FHD/v*"
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Target environment for K8s deploy dispatch"
-        required: true
-        default: production
-        type: choice
-        options:
-          - staging
-          - production
 
 permissions:
   contents: write
@@ -54,25 +45,9 @@ jobs:
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
 
-  dispatch-k8s-deploy:
-    needs: verify-version-anchors
-    runs-on: ubuntu-latest
-    steps:
-      - name: Trigger K8s deploy workflow
-        working-directory: .
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          ENV="${{ github.event.inputs.environment || 'production' }}"
-          if [[ "${{ github.ref }}" == refs/tags/* ]] && [[ "${{ github.ref }}" == *-rc* ]]; then
-            ENV=staging
-          fi
-          gh workflow run fhd-deploy.yml \
-            -f "environment=${ENV}" \
-            -f strategy=rolling \
-            --ref "${{ github.ref_name }}"
+  # dispatch-k8s-deploy 已随假 k8s 路径退役（2026-07-01 运维根治）。
+  # 服务器部署由 fhd-ci-cd.yml 的 cvm-push-release 承担——它在 FHD/v* tag push
+  # 时同样触发（含 sha256 manifest → 服务器端健康门/自动回滚），无需在此二次分发。
 
   dispatch-client-releases:
     needs: verify-version-anchors

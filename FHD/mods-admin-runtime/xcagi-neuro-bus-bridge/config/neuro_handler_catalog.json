@@ -17,12 +17,14 @@
       "domain_id": "order",
       "host_module": "app.neuro_bus.domains.order_domain_handlers",
       "register_fn": "register_order_domain_handlers",
+      "managed_by": "domain_registry",
       "optional": true
     },
     {
       "domain_id": "customer",
       "host_module": "app.neuro_bus.domains.customer_domain_handlers",
       "register_fn": "register_customer_domain_handlers",
+      "managed_by": "domain_registry",
       "optional": true
     },
     {
@@ -34,6 +36,7 @@
       "domain_id": "payment",
       "host_module": "app.neuro_bus.domains.payment_domain_handlers",
       "register_fn": "register_payment_domain_handlers",
+      "managed_by": "domain_registry",
       "optional": true
     },
     {
@@ -45,6 +48,7 @@
       "domain_id": "wechat",
       "host_module": "app.neuro_bus.domains.wechat_domain_handlers",
       "register_fn": "register_wechat_domain_handlers",
+      "managed_by": "domain_registry",
       "optional": true
     },
     {

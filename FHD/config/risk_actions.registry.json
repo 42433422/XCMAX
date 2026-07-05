@@ -1,0 +1,1280 @@
+{
+  "schema_version": 1,
+  "action_classes": {
+    "business_db.write": {
+      "risk": "medium",
+      "approval": "interactive",
+      "requires_write_approval": true
+    },
+    "im.send": {
+      "risk": "medium",
+      "approval": "always"
+    },
+    "permission.grant": {
+      "risk": "high",
+      "approval": "always"
+    },
+    "payment.charge": {
+      "risk": "high",
+      "approval": "always"
+    },
+    "bulk_import": {
+      "risk": "high",
+      "approval": "interactive",
+      "requires_write_approval": true
+    },
+    "delete.batch": {
+      "risk": "high",
+      "approval": "always"
+    }
+  },
+  "tools": {
+    "customers": {
+      "description": "购买单位管理",
+      "availability": "shared",
+      "actions": {
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "ensure_exists": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "unit_name"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "unit_name"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        },
+        "batch_delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "ids"
+          ],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        }
+      }
+    },
+    "products": {
+      "description": "产品管理",
+      "availability": "shared",
+      "actions": {
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "exists": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "name_or_model",
+            "unit_name"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared",
+          "action_class": "business_db.write"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        },
+        "batch_create": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "products"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import"
+        },
+        "batch_delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "ids"
+          ],
+          "availability": "shared",
+          "action_class": "delete.batch"
+        }
+      }
+    },
+    "materials": {
+      "description": "原材料仓库与列表管理",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "name"
+          ],
+          "availability": "shared"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        },
+        "batch_delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "export": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "shipment_records": {
+      "description": "出货记录管理",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "create": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "unit_name"
+          ],
+          "availability": "shared"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        },
+        "export": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "inventory": {
+      "description": "库存仓库、库位、入库、出库与调拨管理",
+      "availability": "shared",
+      "actions": {
+        "create_storage_location": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "update_storage_location": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "location_id"
+          ],
+          "availability": "shared"
+        },
+        "create_warehouse": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "update_warehouse": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "warehouse_id"
+          ],
+          "availability": "shared"
+        },
+        "delete_warehouse": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "warehouse_id"
+          ],
+          "availability": "shared"
+        },
+        "stock_in": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "product_id",
+            "warehouse_id",
+            "quantity"
+          ],
+          "availability": "shared"
+        },
+        "stock_out": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "product_id",
+            "warehouse_id",
+            "quantity"
+          ],
+          "availability": "shared"
+        },
+        "transfer": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "product_id",
+            "from_warehouse_id",
+            "to_warehouse_id",
+            "quantity"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "purchase": {
+      "description": "采购供应商、采购订单与采购入库管理",
+      "availability": "shared",
+      "actions": {
+        "create_supplier": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "update_supplier": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "supplier_id"
+          ],
+          "availability": "shared"
+        },
+        "delete_supplier": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "supplier_id"
+          ],
+          "availability": "shared"
+        },
+        "create_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "update_order": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared"
+        },
+        "approve_order": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared"
+        },
+        "cancel_order": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "order_id"
+          ],
+          "availability": "shared"
+        },
+        "create_inbound": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "finance": {
+      "description": "财务凭证交易管理",
+      "availability": "shared",
+      "actions": {
+        "create_transaction": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "transaction_type",
+            "amount"
+          ],
+          "availability": "shared"
+        },
+        "update_transaction": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "transaction_id"
+          ],
+          "availability": "shared"
+        },
+        "delete_transaction": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "transaction_id"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "generate_office_document": {
+      "description": "生成可下载的 Office 文档",
+      "availability": "shared",
+      "actions": {
+        "execute": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "timeout_seconds": 120
+        }
+      }
+    },
+    "excel_vector_index": {
+      "description": "Excel 向量索引与语义查询",
+      "availability": "shared",
+      "actions": {
+        "execute": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 120
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "index_id",
+            "query"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "ocr": {
+      "description": "OCR 图片文字识别、结构化提取与文本分析",
+      "availability": "shared",
+      "actions": {
+        "recognize": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 120
+        },
+        "request": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "request_id",
+            "image_url"
+          ],
+          "availability": "shared"
+        },
+        "extract": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "text"
+          ],
+          "availability": "shared"
+        },
+        "analyze": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "text"
+          ],
+          "availability": "shared"
+        },
+        "recognize_and_extract": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 120
+        }
+      }
+    },
+    "shipment_orders": {
+      "description": "发货单生成、打印和订单副作用管理",
+      "availability": "shared",
+      "actions": {
+        "generate": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "unit_name",
+            "products"
+          ],
+          "availability": "shared"
+        },
+        "generate_batch": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "shipments"
+          ],
+          "availability": "shared"
+        },
+        "print": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "clear_shipment": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "purchase_unit"
+          ],
+          "availability": "shared"
+        },
+        "set_sequence": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "sequence"
+          ],
+          "availability": "shared"
+        },
+        "reset_sequence": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "clear_all": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "business_event": {
+      "description": "业务 API 事件发布桥接",
+      "availability": "shared",
+      "actions": {
+        "print_label": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "document_name"
+          ],
+          "availability": "shared"
+        },
+        "inventory_update": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "product_id"
+          ],
+          "availability": "shared"
+        },
+        "shipment_create": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "unit_name"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "system_maintenance": {
+      "description": "系统维护、数据库备份恢复与性能维护操作",
+      "availability": "shared",
+      "actions": {
+        "set_default_printer": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "printer_name"
+          ],
+          "availability": "shared"
+        },
+        "enable_startup": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "disable_startup": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "backup_database": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "timeout_seconds": 120
+        },
+        "delete_database_backup": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "backup_file"
+          ],
+          "availability": "shared"
+        },
+        "restore_database": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "backup_file"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 120
+        },
+        "clear_performance_cache": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "invalidate_performance_cache": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "keys"
+          ],
+          "availability": "shared"
+        },
+        "reinitialize_performance": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared",
+          "timeout_seconds": 120
+        }
+      }
+    },
+    "template_extract": {
+      "description": "Excel 模板结构提取与网格预览",
+      "availability": "shared",
+      "actions": {
+        "extract": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "excel_analyzer": {
+      "description": "Excel 模板结构分析技能",
+      "availability": "shared",
+      "actions": {
+        "analyze": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "excel_toolkit": {
+      "description": "Excel 文件查看与结构检查技能",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "merged": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "styles": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "structure": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "label_template_generator": {
+      "description": "从标签图片生成可复用标签模板代码",
+      "availability": "shared",
+      "actions": {
+        "execute": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "image_path"
+          ],
+          "availability": "shared",
+          "timeout_seconds": 120
+        }
+      }
+    },
+    "document_template": {
+      "description": "文档/Excel 模板库创建、更新与删除",
+      "availability": "shared",
+      "actions": {
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "update": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "id"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "business_docking": {
+      "description": "业务对接与模板网格提取",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "extract": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "preview": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "template_preview": {
+      "description": "模板预览与管理",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "create": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "wechat": {
+      "description": "微信联系人与消息缓存管理",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "refresh_contact_cache": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "refresh_messages_cache": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "print": {
+      "description": "标签与文档打印",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "print_label": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "print_document": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "test": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "printer_name"
+          ],
+          "availability": "shared"
+        },
+        "save_printer_selection": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "workflow_label_dispatch": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "model_number"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "printer_list": {
+      "description": "打印机列表与默认打印机设置",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "set_default": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "printer_name"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "settings": {
+      "description": "系统设置与运行环境配置",
+      "availability": "shared",
+      "actions": {
+        "view": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "get_system_info": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "get_startup_config": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "enable_startup": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "disable_startup": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [],
+          "availability": "shared"
+        }
+      }
+    },
+    "employee": {
+      "description": "调用本机已安装的 AI 员工 employee_pack。先用 list 查看员工包；已知 employee_id 时用 execute 真正运行员工，返回员工运行时结果。",
+      "availability": "shared",
+      "actions": {
+        "list": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "shared"
+        },
+        "execute": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "task"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "business_db": {
+      "description": "受控业务数据库读写工具。只允许通过业务服务访问 customers、products、materials、shipment_records，不接受任意 SQL。read 用于查询，write 用于create/update/delete 等受控写入。",
+      "availability": "shared",
+      "actions": {
+        "read": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "entity"
+          ],
+          "availability": "shared"
+        },
+        "write": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "entity",
+            "operation",
+            "payload"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "dataset_rag": {
+      "description": "Dataset/RAG 文档库工具。用于文档入库、检索问答、版本治理、索引重建和文档删除。",
+      "availability": "shared",
+      "actions": {
+        "ingest_document": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id"
+          ],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id",
+            "query"
+          ],
+          "availability": "shared"
+        },
+        "diff_versions": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "dataset_id",
+            "source",
+            "from_version"
+          ],
+          "availability": "shared"
+        },
+        "rollback_version": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id",
+            "source",
+            "target_version"
+          ],
+          "availability": "shared"
+        },
+        "rebuild_index": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id"
+          ],
+          "availability": "shared"
+        },
+        "cancel_rebuild": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id",
+            "job_id"
+          ],
+          "availability": "shared"
+        },
+        "delete_document": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "dataset_id",
+            "document_id"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "memory_v2": {
+      "description": "Memory v2 记忆生命周期工具。用于创建候选、确认、拒绝、修正和删除可治理记忆。",
+      "availability": "shared",
+      "actions": {
+        "propose_candidate": {
+          "risk": "medium",
+          "idempotent": true,
+          "required_params": [
+            "user_id",
+            "memory_type",
+            "key",
+            "value"
+          ],
+          "availability": "shared"
+        },
+        "confirm": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "user_id",
+            "memory_id"
+          ],
+          "availability": "shared"
+        },
+        "reject": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "user_id",
+            "memory_id"
+          ],
+          "availability": "shared"
+        },
+        "correct": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "user_id",
+            "memory_id"
+          ],
+          "availability": "shared"
+        },
+        "delete": {
+          "risk": "high",
+          "idempotent": false,
+          "required_params": [
+            "user_id",
+            "memory_id"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "normal_slot_dispatch": {
+      "description": "普通版槽位：产品查询浮窗、发货单编号预览（与 /api/ai/unified_chat 同源）",
+      "availability": "normal_only",
+      "actions": {
+        "product_query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "normal_only"
+        },
+        "shipment_preview": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [],
+          "availability": "normal_only"
+        }
+      }
+    },
+    "excel_analysis": {
+      "description": "Excel文件智能分析：读取内容、分析结构、统计汇总、自然语言查询",
+      "availability": "shared",
+      "actions": {
+        "read": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "structure": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        },
+        "query": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path",
+            "question"
+          ],
+          "availability": "shared"
+        },
+        "statistics": {
+          "risk": "low",
+          "idempotent": true,
+          "required_params": [
+            "file_path"
+          ],
+          "availability": "shared"
+        }
+      }
+    },
+    "excel_import": {
+      "description": "Excel 解析记录入库工具。只接受结构化 records 或待确认 pending_import_id，不接受任意 SQL。",
+      "availability": "shared",
+      "actions": {
+        "execute_import": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "pending_import_id"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import"
+        },
+        "import_records": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "records"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import"
+        }
+      }
+    },
+    "unit_products_import": {
+      "description": "从已分析的 unit_products .db 文件导入客户和产品。写入业务数据库前必须经过 AgentRun 确认。",
+      "availability": "shared",
+      "actions": {
+        "execute_import": {
+          "risk": "medium",
+          "idempotent": false,
+          "required_params": [
+            "saved_name",
+            "unit_name"
+          ],
+          "availability": "shared",
+          "action_class": "bulk_import"
+        }
+      }
+    }
+  }
+}

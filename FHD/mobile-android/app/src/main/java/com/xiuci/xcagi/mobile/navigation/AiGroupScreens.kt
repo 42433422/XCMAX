@@ -93,6 +93,7 @@ import com.xiuci.xcagi.mobile.ui.components.mobile.AppAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageActionMenu
 import com.xiuci.xcagi.mobile.ui.components.mobile.MessageAvatarLayout
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeField
+import com.xiuci.xcagi.mobile.ui.components.mobile.employeeAvatarFallback
 import com.xiuci.xcagi.mobile.ui.components.mobile.rememberHaptics
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -100,18 +101,7 @@ import com.xiuci.xcagi.mobile.core.model.AiGroupMemberDto
 import kotlin.math.ceil
 
 private fun aiGroupAvatarFallback(employeeId: String, name: String = "", avatarKey: String = ""): AppAvatarFallback {
-    val key = avatarKey.trim().lowercase()
-    val id = employeeId.trim().lowercase()
-    val label = name.trim().lowercase()
-    val isXiaoc = id == "xcagi-assistant" || id == "xiaoc-assistant" || label.contains("小c")
-    return when {
-        isXiaoc -> AppAvatarFallback.ASSISTANT
-        key == "codex" || id.contains("codex") || label.contains("codex") -> AppAvatarFallback.CODEX
-        key == "cursor" || id.contains("cursor") || label.contains("cursor") -> AppAvatarFallback.CURSOR
-        key == "claude" || id.contains("claude") || label.contains("claude") -> AppAvatarFallback.CLAUDE
-        key == "trae" || id.contains("trae") || label.contains("trae") -> AppAvatarFallback.TRAE
-        else -> AppAvatarFallback.AI_EMPLOYEE
-    }
+    return employeeAvatarFallback(employeeId, name, avatarKey)
 }
 
 private enum class GroupWorkMode {

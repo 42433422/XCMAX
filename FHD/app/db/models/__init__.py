@@ -1,6 +1,7 @@
 from app.db.models.agent import AgentRunRecord
 from app.db.models.ai_circle import AiCircleComment, AiCirclePost, AiCircleReaction
 from app.db.models.ai_employee import AiEmployeeProfile
+from app.db.models.employee_run_log import EmployeeRunLog
 from app.db.models.neuro_event_log import NeuroEventLog
 from app.db.models.butler_profile import ButlerUserProfile
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
@@ -60,6 +61,7 @@ __all__ = [
     "AiCircleReaction",
     "AiCircleComment",
     "AiEmployeeProfile",
+    "EmployeeRunLog",
     "ImConversation",
     "ImConversationMember",
     "ImMessage",

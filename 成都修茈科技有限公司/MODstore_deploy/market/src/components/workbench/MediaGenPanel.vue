@@ -61,7 +61,7 @@
             </figcaption>
           </figure>
         </div>
-        <p v-else-if="!busy" class="mg-tip">可视化效果取决于后端供应商；当前演示模式会以「占位图 + 文本说明」形式返回，便于把生成入口先打通。</p>
+        <p v-else-if="!busy" class="mg-tip">可视化效果取决于已配置的生图模型；未返回图片时会直接提示供应商或模型错误。</p>
       </section>
 
       <section v-else-if="activeTab === 'video'" class="mg-body">
@@ -91,11 +91,11 @@
           <button type="button" class="mg-btn mg-btn--primary" :disabled="busy || !videoPrompt.trim()" @click="onGenVideo">
             {{ busy ? '提交中…' : '生成视频' }}
           </button>
-          <button type="button" class="mg-btn mg-btn--ghost" @click="$emit('insert', videoInsertText)" :disabled="!videoResultText">把说明插入对话</button>
+          <button type="button" class="mg-btn mg-btn--ghost" @click="$emit('insert', videoInsertText)" :disabled="!videoResultText">把结果插入对话</button>
         </div>
         <p v-if="error" class="mg-error" role="alert">{{ error }}</p>
         <pre v-if="videoResultText" class="mg-outline">{{ videoResultText }}</pre>
-        <p v-else-if="!busy" class="mg-tip">视频生成依赖已配置的视频模型；演示模式会先返回任务说明，接入供应商后可在此预览成片。</p>
+        <p v-else-if="!busy" class="mg-tip">视频生成依赖已配置的视频模型；提交成功后会返回上游任务状态和可用的预览地址。</p>
       </section>
 
       <section v-else-if="activeTab === 'ppt'" class="mg-body">
@@ -167,15 +167,15 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 export type MediaGenTabId = 'image' | 'video' | 'ppt' | 'doc'
 
 export interface MediaGenVideoResult {
-  status: 'pending' | 'done'
+  status: 'pending' | 'processing' | 'succeeded' | 'failed' | 'done'
   message: string
   previewUrl?: string
 }
 
 export interface MediaGenRunner {
-  /** 生图：返回 N 张 url（演示版可返回占位图 / data:url） */
+  /** 生图：返回 N 张真实图片 url 或 data:url。 */
   generateImages: (prompt: string, opts: { size: string; style: string; count: number }) => Promise<string[]>
-  /** 生视频：演示版返回任务说明；接入后返回 previewUrl */
+  /** 生视频：提交真实上游任务，返回任务状态和可用 previewUrl。 */
   generateVideo?: (prompt: string, opts: { aspect: string; durationSec: number }) => Promise<MediaGenVideoResult>
   /** 生 PPT 大纲：返回 markdown 文本 */
   generatePptOutline: (topic: string, audience: string, pages: number) => Promise<string>

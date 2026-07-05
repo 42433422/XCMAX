@@ -45,6 +45,10 @@ def rate_limit_app():
     def ping():
         return {"success": True}
 
+    @app.get("/api/platform-shell/deliverable-status")
+    def deliverable():
+        return {"success": True}
+
     app.add_middleware(GlobalRateLimitMiddleware)
     app.add_middleware(AuthRateLimitMiddleware)
     return app
@@ -78,3 +82,24 @@ def test_global_rate_limit_returns_429(monkeypatch, rate_limit_app):
     r = client.get("/api/other/ping")
     assert r.status_code == 429
     assert r.json().get("code") == "RATE_LIMITED"
+
+
+def test_global_rate_limit_disabled_in_desktop_mode(monkeypatch, rate_limit_app):
+    monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "0")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT", "1")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT_MAX", "1")
+    monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("CACHE_REDIS_URL", "")
+    client = TestClient(rate_limit_app)
+    for _ in range(5):
+        assert client.get("/api/other/ping").status_code == 200
+
+
+def test_global_rate_limit_skips_platform_shell(monkeypatch, rate_limit_app):
+    monkeypatch.setenv("XCAGI_AUTH_RATE_LIMIT", "0")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT", "1")
+    monkeypatch.setenv("XCAGI_GLOBAL_RATE_LIMIT_MAX", "1")
+    monkeypatch.setenv("CACHE_REDIS_URL", "")
+    client = TestClient(rate_limit_app)
+    for _ in range(5):
+        assert client.get("/api/platform-shell/deliverable-status").status_code == 200

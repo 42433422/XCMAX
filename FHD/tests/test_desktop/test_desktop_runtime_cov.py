@@ -44,7 +44,11 @@ class TestBackupDatabase:
         data_dir = tmp_path / "data"
         data_dir.mkdir()
         db = data_dir / "xcagi.db"
-        db.write_bytes(b"SQLite data")
+        # 写入一个真实的 SQLite 库，sqlite3.backup() 要求源库是有效的 SQLite 文件
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
         backups_dir = tmp_path / "backups"
         backups_dir.mkdir()
 
@@ -273,7 +277,7 @@ class TestBuildSupportBundleZip:
         # Add a .db backup file
         (dirs["backups"] / "xcagi-1.0-20260101.db").write_bytes(b"db")
         # Add a log file
-        (dirs["logs"] / "xcagi.log").write_bytes(b"log content")
+        (dirs["logs"] / "xcagi.log").write_bytes(b"Authorization: Bearer secret123\n")
 
         cfg = {
             "data_dir": str(tmp_path),
@@ -294,6 +298,10 @@ class TestBuildSupportBundleZip:
         names = zf.namelist()
         assert "manifest.json" in names
         assert "README.txt" in names
+        if "logs/xcagi.log" in names:
+            log_body = zf.read("logs/xcagi.log").decode("utf-8", errors="replace")
+            assert "secret123" not in log_body
+            assert "<redacted>" in log_body
 
     def test_bundle_includes_log(self, tmp_path):
         from app.desktop_runtime.support_bundle import build_support_bundle_zip

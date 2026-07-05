@@ -12,6 +12,13 @@ from app.utils.rate_limiter import check_rate_limit
 
 
 def _global_rate_limit_enabled() -> bool:
+    if (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return False
     return (os.environ.get("XCAGI_GLOBAL_RATE_LIMIT") or "1").strip().lower() in {
         "1",
         "true",
@@ -45,6 +52,8 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
         if not path.startswith("/api/"):
             return await call_next(request)
         if path.startswith(("/api/health", "/api/system/health", "/metrics")):
+            return await call_next(request)
+        if path.startswith("/api/platform-shell/"):
             return await call_next(request)
 
         client = request.client.host if request.client else "unknown"

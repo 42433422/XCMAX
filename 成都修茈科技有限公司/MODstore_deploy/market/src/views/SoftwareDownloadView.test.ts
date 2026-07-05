@@ -124,7 +124,8 @@ describe('SoftwareDownloadView', () => {
     const wrapper = await mountView()
 
     expect(fetch).toHaveBeenCalledWith('/download-release.json', { cache: 'no-store' })
-    expect(wrapper.text()).toContain('XC 11.2.3 · 个人版')
+    expect(wrapper.text()).toContain('XC 11.2.3 · 企业版')
+    expect(wrapper.text()).not.toContain('个人版')
     expect(wrapper.text()).toContain('安装包约 777 MB')
 
     await findButton(wrapper, 'Windows 64 位').trigger('click')
@@ -146,8 +147,8 @@ describe('SoftwareDownloadView', () => {
     await flushPromises()
 
     expect(nativeDownload).toHaveBeenCalledWith({
-      url: 'https://dl.xiu-ci.com/xcagi-v10.0.0/personal/XCAGI-Personal-Setup-10.0.0-x64.exe',
-      filename: 'XCAGI-Personal-Setup-10.0.0-x64.exe',
+      url: 'https://dl.xiu-ci.com/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe',
+      filename: 'XCAGI-Enterprise-Setup-10.0.0-x64.exe',
     })
     expect(anchorClick).not.toHaveBeenCalled()
   })
@@ -166,19 +167,18 @@ describe('SoftwareDownloadView', () => {
     expect(anchorClick).toHaveBeenCalledTimes(1)
   })
 
-  it('ignores non-json manifests, switches editions, and sends Android downloads through location', async () => {
+  it('ignores non-json manifests and sends enterprise Android downloads through location', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(textResponse()))
     const wrapper = await mountView()
 
-    expect(wrapper.text()).toContain('XC 10.0.0 · 个人版')
-
-    await findButton(wrapper, '企业版').trigger('click')
     expect(wrapper.text()).toContain('XC 10.0.0 · 企业版')
     expect(wrapper.text()).toContain('完整 AI 创作与 ERP 能力')
+    expect(wrapper.text()).not.toContain('个人版')
 
     await findButton(wrapper, 'Android').trigger('click')
     expect(wrapper.text()).toContain('Android 客户端')
     expect(wrapper.text()).toContain('Android · 企业版')
+    expect(wrapper.text()).not.toContain('Android · 个人版')
     expect(wrapper.text()).toContain('隐私政策')
 
     await findButton(wrapper, 'Android · 企业版').trigger('click')

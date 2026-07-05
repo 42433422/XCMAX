@@ -71,6 +71,18 @@ def delivery_for_account_custom_mod(
     if not mid:
         return None
     rows = deliveries_for_industry(iid) if iid else list_customer_deliveries()
+    if iid and not rows:
+        row = delivery_for_industry_mod(iid)
+        rows = [row] if row else []
+    if iid and not rows:
+        try:
+            from app.mod_sdk.industry_mod_aliases import canonical_mod_id
+
+            canonical = canonical_mod_id(iid)
+            row = delivery_for_industry_mod(canonical)
+            rows = [row] if row else []
+        except RECOVERABLE_ERRORS:
+            rows = []
     for row in rows:
         if str(row.get("legacy_mod_id") or "").strip() == mid:
             return row

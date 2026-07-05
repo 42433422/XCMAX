@@ -3,6 +3,13 @@
  */
 
 import { ref, type Ref } from 'vue'
+import {
+  buildTenantScopedStorageKey,
+  readTenantScopedStorageItem,
+  removeTenantScopedStorageItem,
+  resolveTenantStorageScopeFromRuntime,
+  writeTenantScopedStorageItem,
+} from '@/utils/tenantStorageScope'
 
 export const LS_PRODUCT_FLOW_COMPLETED = 'xcagi_product_flow_completed'
 export const LS_PRODUCT_FLOW_HOST_ACK = 'xcagi_product_flow_host_ack'
@@ -20,7 +27,13 @@ export function readOnboardingReturnPath(raw: unknown): string {
   return '/'
 }
 
-export type ProductFlowStepId = 'welcome' | 'host-pack' | 'industry' | 'done'
+export type ProductFlowStepId =
+  | 'welcome'
+  | 'host-pack'
+  | 'industry'
+  | 'seed-demo'
+  | 'first-ai-task'
+  | 'done'
 
 export interface ProductFlowStepMeta {
   id: ProductFlowStepId
@@ -49,8 +62,20 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
     subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
   },
   {
-    id: 'done',
+    id: 'seed-demo',
     index: 4,
+    title: '首笔业务数据',
+    subtitle: '写入 1 个演示客户与 1 个演示产品，便于工作台验收',
+  },
+  {
+    id: 'first-ai-task',
+    index: 5,
+    title: 'AI 读写验收',
+    subtitle: '让 AI 列出刚创建的演示客户并总结，验证读写闭环',
+  },
+  {
+    id: 'done',
+    index: 6,
     title: '开始使用',
     subtitle: '进入智能对话与日常操作',
   },
@@ -100,7 +125,10 @@ export function industryBaselineHint(industryId: string): string {
 export function readProductFlowCompleted(): boolean {
   if (typeof localStorage === 'undefined') return true
   try {
-    return localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED) === '1'
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const scoped = readTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, scope)
+    if (scoped !== null) return scoped === '1'
+    return scope === 'local' && localStorage.getItem(LS_PRODUCT_FLOW_COMPLETED) === '1'
   } catch {
     return true
   }
@@ -109,7 +137,11 @@ export function readProductFlowCompleted(): boolean {
 export function markProductFlowCompleted(): void {
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, '1', scope)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_COMPLETED, '1')
+    }
   } catch {
     /* ignore */
   }
@@ -121,7 +153,10 @@ export function markProductFlowCompleted(): void {
 export function readHostPackAcknowledged(): boolean {
   if (typeof localStorage === 'undefined') return true
   try {
-    return localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK) === '1'
+    const scope = resolveTenantStorageScopeFromRuntime()
+    const scoped = readTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, scope)
+    if (scoped !== null) return scoped === '1'
+    return scope === 'local' && localStorage.getItem(LS_PRODUCT_FLOW_HOST_ACK) === '1'
   } catch {
     return true
   }
@@ -135,7 +170,10 @@ const hostPackAckRef: Ref<boolean> = ref(readHostPackAcknowledged())
 
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
-    if (e.key === LS_PRODUCT_FLOW_HOST_ACK) {
+    if (
+      e.key === LS_PRODUCT_FLOW_HOST_ACK ||
+      e.key === buildTenantScopedStorageKey(LS_PRODUCT_FLOW_HOST_ACK)
+    ) {
       hostPackAckRef.value = readHostPackAcknowledged()
     }
   })
@@ -149,7 +187,11 @@ export function markHostPackAcknowledged(): void {
   hostPackAckRef.value = true
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+    const scope = resolveTenantStorageScopeFromRuntime()
+    writeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, '1', scope)
+    if (scope === 'local') {
+      localStorage.setItem(LS_PRODUCT_FLOW_HOST_ACK, '1')
+    }
   } catch {
     /* ignore */
   }
@@ -162,8 +204,13 @@ export function resetProductFlowState(): void {
   hostPackAckRef.value = false
   if (typeof localStorage === 'undefined') return
   try {
-    localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
-    localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+    const scope = resolveTenantStorageScopeFromRuntime()
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_COMPLETED, scope)
+    removeTenantScopedStorageItem(LS_PRODUCT_FLOW_HOST_ACK, scope)
+    if (scope === 'local') {
+      localStorage.removeItem(LS_PRODUCT_FLOW_COMPLETED)
+      localStorage.removeItem(LS_PRODUCT_FLOW_HOST_ACK)
+    }
   } catch {
     /* ignore */
   }
@@ -173,6 +220,8 @@ export function parseFlowStepQuery(raw: unknown): ProductFlowStepId {
   const s = String(raw || '').trim().toLowerCase()
   if (s === 'host-pack' || s === 'host') return 'host-pack'
   if (s === 'industry' || s === 'mod') return 'industry'
+  if (s === 'seed-demo' || s === 'seed') return 'seed-demo'
+  if (s === 'first-ai-task' || s === 'ai-demo') return 'first-ai-task'
   if (s === 'done' || s === 'finish') return 'done'
   return 'welcome'
 }

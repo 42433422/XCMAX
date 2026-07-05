@@ -9,6 +9,17 @@ VERSION="${VERSION#V}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
+MAC_SIGNING_ENV="${ROOT}/scripts/package/mac-signing.env"
+if [ -f "${MAC_SIGNING_ENV}" ]; then
+  set -a
+  # shellcheck source=/dev/null
+  source "${MAC_SIGNING_ENV}"
+  set +a
+  if [ -n "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE:-}" ] && [ -f "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}" ]; then
+    export XCAGI_UPDATE_ED25519_PRIVATE_KEY="$(cat "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}")"
+  fi
+fi
+
 sku_label() {
   case "$1" in
     personal) echo Personal ;;

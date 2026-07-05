@@ -640,11 +640,23 @@ async def mod_store_install_customer_delivery_seed(request: Request) -> ModStore
     except RECOVERABLE_ERRORS:
         logger.warning("customer delivery seed entitlement check skipped", exc_info=True)
 
+    market_token = ""
+    try:
+        from app.fastapi_routes.market_account import resolve_valid_market_access_token
+        from app.infrastructure.auth.dependencies import session_id_from_request
+
+        sid = session_id_from_request(request)
+        if sid:
+            market_token = await resolve_valid_market_access_token(sid) or ""
+    except RECOVERABLE_ERRORS:
+        logger.warning("customer delivery seed token resolve skipped", exc_info=True)
+
     from app.mod_sdk.customer_delivery_seed import install_customer_delivery_seed_package
 
     data = await install_customer_delivery_seed_package(
         mod_id=mod_id,
         industry_id=industry_id,
+        market_token=market_token,
     )
     return ModStoreInstallResult(
         success=bool(data.get("success")),
@@ -740,8 +752,10 @@ async def mod_store_rebuild_index() -> ModStoreRebuildResponse:
 
 
 async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
-    """将仓库内置 _employees/xcagi-host-foundation-employee 复制到用户 mods 目录（若尚未存在）。"""
+    """将内置 _employees/xcagi-host-foundation-employee 复制到用户 mods 目录（若尚未存在）。"""
     import shutil
+    import sys
+    from pathlib import Path
 
     from app.infrastructure.mods.employee_registry import employees_root, get_employee_registry
     from app.mod_sdk.host_foundation import HOST_FOUNDATION_EMPLOYEE_PACK_ID
@@ -750,12 +764,35 @@ async def _ensure_host_foundation_employee_on_disk() -> tuple[bool, str]:
     dest = os.path.join(employees_root(mm_root), HOST_FOUNDATION_EMPLOYEE_PACK_ID)
     if os.path.isdir(dest):
         return True, "employee pack present"
-    src = os.path.join(mm_root, "_employees", HOST_FOUNDATION_EMPLOYEE_PACK_ID)
-    if not os.path.isdir(src):
-        return False, f"内置员工包目录缺失：{src}"
+    candidates = [Path(mm_root) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID]
+    if (
+        getattr(sys, "frozen", False)
+        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
+        or os.environ.get("XCAGI_SEED_MODS_DIR")
+    ):
+        from app.mod_sdk.edition_policy import bundled_mods_dir
+
+        bundled = bundled_mods_dir()
+        if bundled is not None:
+            candidates.append(Path(bundled) / "_employees" / HOST_FOUNDATION_EMPLOYEE_PACK_ID)
+    src = next((p for p in candidates if os.path.isdir(str(p))), None)
+    if src is None:
+        checked = "；".join(str(p) for p in candidates)
+        return False, f"内置员工包目录缺失：{checked}"
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     shutil.copytree(src, dest)
     return True, "employee pack seeded"
+
+
+def _can_materialize_host_foundation_without_employee_marker() -> bool:
+    """Packaged builds can seed host bridges without the employee marker pack."""
+    import sys
+
+    return bool(
+        getattr(sys, "frozen", False)
+        or os.environ.get("XCAGI_BUNDLED_MODS_DIR")
+        or os.environ.get("XCAGI_SEED_MODS_DIR")
+    )
 
 
 async def _install_host_foundation_internal(edition: str | None) -> ModStoreInstallResult:
@@ -763,8 +800,11 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
     from app.mod_sdk.host_foundation import materialize_host_foundation_bridges
 
     ok, msg = await _ensure_host_foundation_employee_on_disk()
+    employee_seed_warning = ""
     if not ok:
-        return ModStoreInstallResult(success=False, message=msg, data=None)
+        if not _can_materialize_host_foundation_without_employee_marker():
+            return ModStoreInstallResult(success=False, message=msg, data=None)
+        employee_seed_warning = msg
     ed = (edition or resolve_edition() or "generic").strip().lower()
     if ed not in ("minimal", "generic", "full"):
         ed = "generic"
@@ -777,8 +817,12 @@ async def _install_host_foundation_internal(edition: str | None) -> ModStoreInst
             message=f"展开宿主 bridge 失败：{exc}",
             data={"edition": ed, "missing_mod_ids": [], "ready": False},
         )
+    if employee_seed_warning and isinstance(data, dict):
+        data = {**data, "employee_seed_warning": employee_seed_warning}
     if data.get("ready"):
         message = f"宿主基础能力员工包已就绪（bridge {data.get('installed_count')}/{data.get('expected_count')}）"
+        if employee_seed_warning:
+            message += f"；员工包标记未复制（{employee_seed_warning}）"
         success = True
     else:
         missing = data.get("missing_mod_ids") or []

@@ -44,6 +44,13 @@ class ApprovalService:
                     return True
                 elif trigger == "conditional":
                     return self._evaluate_conditions(rule.get("conditions", {}), node)
+        try:
+            from resources.config.risk_actions_loader import get_action_approval
+
+            if get_action_approval(node.tool_id, node.action) == "always":
+                return True
+        except Exception:  # noqa: BLE001
+            logger.debug("risk_actions registry lookup skipped", exc_info=True)
         return False
 
     def _evaluate_conditions(self, conditions: dict[str, Any], node: WorkflowNode) -> bool:

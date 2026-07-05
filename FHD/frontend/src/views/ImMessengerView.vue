@@ -1771,6 +1771,10 @@ function disconnectWs(clearTimer = true): void {
     reconnectTimer = null;
   }
   if (ws) {
+    ws.onopen = null;
+    ws.onclose = null;
+    ws.onerror = null;
+    ws.onmessage = null;
     ws.close();
     ws = null;
   }

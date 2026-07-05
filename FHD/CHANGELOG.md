@@ -6,6 +6,42 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
+
+- **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
+- **feat(onboarding)**：首启 seed 按 manifest `industry.subsystems` 映射演示客户/产品；前端 seed/AI 文案随行业变化
+- **feat(chat)**：`approval_card` 结构化 payload + `ChatApprovalInlineCard` 内联确认/取消
+- **feat(risk)**：`ApprovalService` 读取 registry `approval: always` 作为 YAML 规则补充
+
+### 平台七柱 Wave 0（2026-07-05 · v10 线内迭代）
+
+- **feat(contracts)**：`industry_package.schema.json` + release_gate 校验 `*-industry` manifest；MOD_AUTHORING_GUIDE §4b
+- **feat(risk)**：`config/risk_actions.registry.json` SSOT；`planner.get_tool_registry` 收敛至 execution registry
+- **feat(security)**：`LOCAL_DATA_POLICY.md`；诊断包/上传/模型 API 需登录；日志脱敏；`purge_local_temp_data.py`
+
+### 发版红线七柱（2026-07-05 · v10 线内迭代）
+
+- **chore(repo)**：`.codex-artifacts/`、`templates/admin-vue-dist/`、`release_train_history/` gitignore；admin 构建产物改 CI 生成
+- **ci**：`vue-tsc` / `mypy` / `build:strict` 硬门禁；新增 `release-verify`、`desktop-build-smoke` job 与 `scripts/dev/release_verify.sh`
+- **feat(platform)**：办公文件平台管道（五类 upload/parse/review/confirm）、Chat 办公对接入口
+- **feat(onboarding)**：通用首启 `seed-demo` + `first-ai-task` 步骤与 `/api/platform-shell/onboarding/seed-demo`
+- **feat(auth)**：`auth_permission_resolver` 统一 Mod 权益 + RBAC；CI 默认 `XCAGI_TENANT_STRICT=1`
+- **feat(employee)**：`employee_run_logs` 表、run ledger、结果验收与 Admin `/local/employees/{id}/runs`
+- **fix(desktop)**：updater 失败保留当前版本 + 诊断包含 updater 事件与 mods 列表
+
+### 桌面通用交付修复（2026-07-05 · v10 线内迭代）
+
+- **fix(desktop)**：Electron 启动后端注入 `XCAGI_GLOBAL_RATE_LIMIT=0`；`XCAGI_DESKTOP_MODE` 下中间件跳过全局限流，`/api/platform-shell/*` 永不 429
+- **fix(frontend)**：桌面壳侧栏对行业 ERP 路由（print/products 等）强制优先宿主直跳，避免连点落到对话页
+- **fix(ci)**：`test_desktop_windows_runtime_matches_mac_shell_policy` 断言与当前 router 守卫对齐
+- **feat(release)**：macOS CI 通过 App Store Connect API 签发 Developer ID、`notarize.cjs` 公证、`latest-mac.yml` Ed25519 签名
+
+### 太阳鸟 PRO Mod API 治根（2026-07-04 · v10 线内迭代）
+
+- **fix(mod)**：登录后 `mount_entitled_client_mod_api_routes` 为 entitlement 客户 Mod 执行 load + `/api/mod/{id}/*` 挂载；动态挂载后 `ensure_spa_fallback_last` 避免被 SPA catch-all 抢先 404
+- **fix(mod)**：`business.py` compat 跳过条件改为检查 `_http_routes_registered`，不再仅凭磁盘 `blueprints.py` 存在
+- **fix(mod)**：Registry 无元数据时 `_resolve_mod_metadata_for_http` 从磁盘 manifest 补全，支持冷启动后按需挂载
+
 ### 企业定价 · 预算档位永久购买（2026-06-21 · v10 线内迭代）
 
 - **feat(billing)**：`saas_plans.json` 按预算四档永久购买定价（¥49,999 / ¥199,999 / ¥499,999 / ¥999,999）+ 30 天试用 ¥99

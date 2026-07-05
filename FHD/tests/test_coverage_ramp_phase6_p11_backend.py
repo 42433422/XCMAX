@@ -1219,9 +1219,6 @@ async def test_reload_active_loads_mods(monkeypatch: pytest.MonkeyPatch) -> None
     mock_mm.load_all_mods.return_value = ["taiyangniao-pro"]
     mock_app = MagicMock()
 
-    def _ensure(mod_id: str, session_id: str | None = None) -> bool:
-        return True
-
     monkeypatch.setattr(
         "app.infrastructure.mods.mod_manager.get_mod_manager",
         lambda: mock_mm,
@@ -1231,8 +1228,8 @@ async def test_reload_active_loads_mods(monkeypatch: pytest.MonkeyPatch) -> None
         lambda app, mm: None,
     )
     monkeypatch.setattr(
-        "app.infrastructure.mods.mod_manager.ensure_mod_api_ready",
-        _ensure,
+        "app.infrastructure.mods.mod_manager.mount_entitled_client_mod_api_routes",
+        lambda app, session_id=None: ["taiyangniao-pro"],
     )
     monkeypatch.setattr(
         "app.fastapi_app.get_fastapi_app",

@@ -28,6 +28,7 @@ import json
 import os
 import sqlite3
 import tempfile
+from contextlib import ExitStack
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -72,6 +73,34 @@ def _session_id(sid: str = "sid123"):
         "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
         return_value=sid,
     )
+
+
+def _local_employee_execute_session_patches():
+    """Patches for local_employee_execute auth chain (sid + resolve_session_user + require_allowed).
+
+    Route calls _session_id_from_request → resolve_session_user → enrich_session_meta_with_tenant
+    → require_allowed before reaching validation branches. Without these patches, requests
+    return 401 before hitting the targeted branches.
+    """
+    mock_user = MagicMock(id=1)
+    return [
+        patch(
+            "app.fastapi_routes.domains.misc.helpers._session_id_from_request",
+            return_value="sid",
+        ),
+        patch(
+            "app.infrastructure.auth.dependencies.resolve_session_user",
+            return_value=mock_user,
+        ),
+        patch(
+            "app.application.session_account_meta.enrich_session_meta_with_tenant",
+            return_value={"tenant_id": 1, "account_kind": "admin"},
+        ),
+        patch(
+            "app.application.auth_permission_resolver.require_allowed",
+            return_value=None,
+        ),
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -861,19 +890,25 @@ class TestLocalEmployeeExecuteBranches:
 
     def test_empty_employee_id_returns_400(self, client: TestClient):
         """Line 1198: empty employee_id → 400."""
-        with _session_id("sid"):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
             resp = client.post("/api/xcmax/local/employees/ /execute", json={"task": "t"})
         assert resp.status_code == 400
 
     def test_empty_task_returns_400(self, client: TestClient):
         """Line 1201: empty task → 400."""
-        with _session_id("sid"):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
             resp = client.post("/api/xcmax/local/employees/emp1/execute", json={"task": "  "})
         assert resp.status_code == 400
 
     def test_input_data_not_dict_returns_400(self, client: TestClient):
         """Lines 1204-1205: input_data not dict → 400."""
-        with _session_id("sid"):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": "t", "input_data": "not-a-dict"},
@@ -882,13 +917,33 @@ class TestLocalEmployeeExecuteBranches:
 
     def test_input_data_none_ok(self, client: TestClient):
         """Line 1206: input_data None → uses empty dict."""
-        with (
-            _session_id("sid"),
-            patch(
-                "app.application.employee_runtime.executor.execute_employee_task_local",
-                return_value={"success": True},
-            ),
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.executor.execute_employee_task_local",
+                    return_value={"success": True},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                    return_value=(True, "ok"),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                    return_value="run-1",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                    return_value=None,
+                )
+            )
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": "t", "input_data": None},
@@ -897,13 +952,33 @@ class TestLocalEmployeeExecuteBranches:
 
     def test_invalid_user_id_defaults_to_zero(self, client: TestClient):
         """Lines 1213-1214: invalid user_id → 0."""
-        with (
-            _session_id("sid"),
-            patch(
-                "app.application.employee_runtime.executor.execute_employee_task_local",
-                return_value={"success": True},
-            ) as mock_exec,
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
+            mock_exec = stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.executor.execute_employee_task_local",
+                    return_value={"success": True},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                    return_value=(True, "ok"),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                    return_value="run-1",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                    return_value=None,
+                )
+            )
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={"task": "t", "user_id": "abc"},
@@ -914,13 +989,33 @@ class TestLocalEmployeeExecuteBranches:
 
     def test_approved_write_propagated_to_payload(self, client: TestClient):
         """Lines 1207-1209: approved_write/allow_write/write_token/approval_token propagated."""
-        with (
-            _session_id("sid"),
-            patch(
-                "app.application.employee_runtime.executor.execute_employee_task_local",
-                return_value={"success": True},
-            ) as mock_exec,
-        ):
+        with ExitStack() as stack:
+            for cm in _local_employee_execute_session_patches():
+                stack.enter_context(cm)
+            mock_exec = stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.executor.execute_employee_task_local",
+                    return_value={"success": True},
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.result_verifier.verify_employee_run_result",
+                    return_value=(True, "ok"),
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.create_employee_run_log",
+                    return_value="run-1",
+                )
+            )
+            stack.enter_context(
+                patch(
+                    "app.application.employee_runtime.run_ledger.finish_employee_run_log",
+                    return_value=None,
+                )
+            )
             resp = client.post(
                 "/api/xcmax/local/employees/emp1/execute",
                 json={

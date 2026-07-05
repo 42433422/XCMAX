@@ -114,7 +114,7 @@ python scripts/dev/ssot_cli.py enable <domain> --on|--off
 | deploy-scripts | lint | FHD/scripts/deploy/ | deploy_scripts.py（shebang/set -e） | 无 | OK（有警告） |
 | deps | sync+verify | FHD/pyproject.toml | deps.py（pyproject vs requirements*.txt） | 无（需人工 reconcile） | OK（server-api/ml 包名集合一致，0 漂移） |
 | error-codes | lint | FHD/app/http/error_codes.py | error_codes.py（常量自洽） | 无 | OK |
-| k8s-manifests | verify | FHD/k8s/ | k8s.py（SSOT vs XCAGI/k8s） | 无（derived 已弃用） | OK（XCAGI/k8s 已清理，0 漂移） |
+| ~~k8s-manifests~~ | — | ~~FHD/k8s/~~ | — | — | 已退役（2026-07-01 运维根治：假 k8s 路径整体删除，生产=单 CVM 发布链） |
 
 ### 补登记 2 域（2026-06-23，此前游离于注册表外）
 

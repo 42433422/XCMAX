@@ -31,6 +31,7 @@ const mockContainer = vi.hoisted(() => ({
   markHostPackSkippedThisSession: vi.fn(),
   readBuildEdition: vi.fn(),
   isEnterpriseEdition: vi.fn(),
+  patchWorkspacePrefs: vi.fn(),
   // productFlow 工具
   setRuntimeOnboardingOpenIndustryIds: vi.fn(),
   readProductFlowCompleted: vi.fn(),
@@ -95,6 +96,10 @@ vi.mock('@/composables/useTutorialCatalog', () => ({
 vi.mock('@/utils/hostPackOnboardingGate', () => ({
   invalidateHostPackCompletionCache: mockContainer.invalidateHostPackCompletionCache,
   markHostPackSkippedThisSession: mockContainer.markHostPackSkippedThisSession,
+}))
+
+vi.mock('@/utils/workspacePrefsApi', () => ({
+  patchWorkspacePrefs: mockContainer.patchWorkspacePrefs,
 }))
 
 vi.mock('@/constants/productFlow', async () => {
@@ -278,6 +283,7 @@ async function mountComponent(options: {
     mockContainer.installCustomerDeliverySeed.mockResolvedValue({ success: true, message: '' })
     mockContainer.autoOnboardWorkflowEmployeesFromMods.mockResolvedValue([])
     mockContainer.appAlert.mockResolvedValue(undefined)
+    mockContainer.patchWorkspacePrefs.mockResolvedValue({ success: true, data: {} })
     mockContainer.promptAdvancedTutorialAfterInstall.mockResolvedValue('dismissed')
     mockContainer.readProductFlowCompleted.mockReturnValue(false)
   }
@@ -496,6 +502,9 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
+    expect(mockContainer.patchWorkspacePrefs).toHaveBeenCalledWith(
+      expect.objectContaining({ selected_industry_id: '涂料' }),
+    )
     expect(replaceSpy).toHaveBeenCalled()
     const callArg = replaceSpy.mock.calls[replaceSpy.mock.calls.length - 1][0]
     expect(callArg.query.step).toBe('host-pack')
@@ -533,6 +542,21 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await nextBtn.trigger('click')
     await flushPromises()
     expect(replaceSpy).toHaveBeenCalled()
+  })
+
+  it('industry 步骤：行业绑定失败时停留在当前步骤', async () => {
+    const { wrapper, router } = await mountComponent({ route: { step: 'industry' } })
+    await flushPromises()
+    mockContainer.patchWorkspacePrefs.mockRejectedValue(new Error('bind fail'))
+    const replaceSpy = vi.spyOn(router, 'replace')
+    const chip = wrapper.findAll('.industry-pick--open .industry-chip')[0]
+    await chip.trigger('click')
+    await flushPromises()
+    const nextBtn = wrapper.find('.actions .btn.primary')
+    await nextBtn.trigger('click')
+    await flushPromises()
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('bind fail')
+    expect(replaceSpy).not.toHaveBeenCalled()
   })
 
   it('industry 步骤：industryStore 已加载但行业不同时直接进入下一步（不再调用 switchIndustry）', async () => {
@@ -732,7 +756,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     expect(wrapper.find('.account-custom-empty-hint').exists()).toBe(true)
   })
 
-  it('host-pack 步骤：baselineOk 时显示"进入智能对话"按钮', async () => {
+  it('host-pack 步骤：baselineOk 时显示"下一步：写入演示数据"按钮', async () => {
     const { wrapper } = await mountComponent({
       route: { step: 'host-pack' },
       baseline: createBaselinePlan({ baseline_ready: true }),
@@ -740,8 +764,8 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     const buttons = wrapper.findAll('.actions .btn.primary')
-    const enterChatBtn = buttons.find((b) => b.text().includes('进入智能对话'))
-    expect(enterChatBtn).toBeTruthy()
+    const nextBtn = buttons.find((b) => b.text().includes('下一步：写入演示数据'))
+    expect(nextBtn).toBeTruthy()
   })
 
   it('host-pack 步骤：点击"重新检测"按钮触发 refreshStatus', async () => {
@@ -1423,7 +1447,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const { wrapper } = await mountComponent()
     await flushPromises()
     const items = wrapper.findAll('.step-rail-item')
-    expect(items.length).toBe(3)
+    expect(items.length).toBe(5)
   })
 
   it('step-rail：当前步骤标记 active', async () => {
@@ -1542,6 +1566,28 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
       expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
       expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
     }
+  })
+
+  it('finishHostPackFlow：流程已完成但 host-pack 未确认时仍写入侧栏确认', async () => {
+    const { wrapper } = await mountComponent({
+      route: { step: 'host-pack' },
+      baseline: createBaselinePlan({ baseline_ready: true }),
+    })
+    await flushPromises()
+    await flushPromises()
+    mockContainer.readProductFlowCompleted.mockReturnValue(true)
+    mockContainer.flowState.markProductFlowCompleted.mockClear()
+    mockContainer.flowState.markHostPackAcknowledged.mockClear()
+    mockContainer.flowState.completeFlowAndGoChat.mockClear()
+
+    const skipChatBtn = wrapper.find('.actions .btn.link')
+    expect(skipChatBtn.text()).toContain('先进入对话，稍后再补')
+    await skipChatBtn.trigger('click')
+    await flushPromises()
+
+    expect(mockContainer.flowState.markProductFlowCompleted).not.toHaveBeenCalled()
+    expect(mockContainer.flowState.markHostPackAcknowledged).toHaveBeenCalled()
+    expect(mockContainer.flowState.completeFlowAndGoChat).toHaveBeenCalled()
   })
 
   it('finishHostPackFlow：baselineOk 且 fromTutorial 时调用 returnFromTutorial', async () => {

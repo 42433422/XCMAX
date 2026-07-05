@@ -10,6 +10,8 @@
 | 构建 | `npm run build` → `FHD/templates/admin-vue-dist/`（Vite 配置：`frontend/adminConsole.vite.config.js`） |
 | 访问 | **http://127.0.0.1:5003/admin/**（需先构建；管理员账号） |
 
+**产物分类（发版 SSOT）**：`templates/admin-vue-dist/` 与 `templates/vue-dist/` 同为 **CI/本地构建产物**，已 gitignore，发版前由 `npm run build` 生成；`.codex-artifacts/` 为 Agent 本地 smoke 验证目录，勿提交。
+
 企业端 `frontend` 为通用 SKU，不含运维顶栏与太阳鸟默认 Mod；访问 `/xcmax-admin` → `/admin/`，`/taiyangniao-pro` → `/sunbird/`。
 
 ## 构建顺序（发版）
