@@ -15,6 +15,9 @@ _archive/.redacted-snapshots/
 # 本地 APK 构建产物（发版见 FHD/.github/workflows/release-android.yml）
 release-apk/
 
+# Agent/Codex 本地 smoke 验证产物（跨子模块）
+**/.codex-artifacts/
+
 # 全局 Python/IDE/构建产物（FHD/.gitignore 已覆盖大多数，此处为根级兜底）
 __pycache__/
 *.py[cod]

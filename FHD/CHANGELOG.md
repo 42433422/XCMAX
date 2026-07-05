@@ -6,6 +6,16 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 发版红线七柱（2026-07-05 · v10 线内迭代）
+
+- **chore(repo)**：`.codex-artifacts/`、`templates/admin-vue-dist/`、`release_train_history/` gitignore；admin 构建产物改 CI 生成
+- **ci**：`vue-tsc` / `mypy` / `build:strict` 硬门禁；新增 `release-verify`、`desktop-build-smoke` job 与 `scripts/dev/release_verify.sh`
+- **feat(platform)**：办公文件平台管道（五类 upload/parse/review/confirm）、Chat 办公对接入口
+- **feat(onboarding)**：通用首启 `seed-demo` + `first-ai-task` 步骤与 `/api/platform-shell/onboarding/seed-demo`
+- **feat(auth)**：`auth_permission_resolver` 统一 Mod 权益 + RBAC；CI 默认 `XCAGI_TENANT_STRICT=1`
+- **feat(employee)**：`employee_run_logs` 表、run ledger、结果验收与 Admin `/local/employees/{id}/runs`
+- **fix(desktop)**：updater 失败保留当前版本 + 诊断包含 updater 事件与 mods 列表
+
 ### 桌面通用交付修复（2026-07-05 · v10 线内迭代）
 
 - **fix(desktop)**：Electron 启动后端注入 `XCAGI_GLOBAL_RATE_LIMIT=0`；`XCAGI_DESKTOP_MODE` 下中间件跳过全局限流，`/api/platform-shell/*` 永不 429

@@ -12,7 +12,18 @@ export const OFFICE_EMPLOYEE_PKG_IDS = [
 ] as const
 
 export const EXCEL_FULL_READ_EMPLOYEE_ID = 'excel-full-read-employee'
+export const CSV_FULL_READ_EMPLOYEE_ID = 'csv-full-read-employee'
+export const PDF_FULL_READ_EMPLOYEE_ID = 'pdf-full-read-employee'
+export const PPT_FULL_READ_EMPLOYEE_ID = 'ppt-full-read-employee'
 export const WORD_FULL_READ_EMPLOYEE_ID = 'word-full-read-employee'
+
+export const OFFICE_FULL_READ_EMPLOYEE_IDS = [
+  EXCEL_FULL_READ_EMPLOYEE_ID,
+  CSV_FULL_READ_EMPLOYEE_ID,
+  PDF_FULL_READ_EMPLOYEE_ID,
+  PPT_FULL_READ_EMPLOYEE_ID,
+  WORD_FULL_READ_EMPLOYEE_ID,
+] as const
 
 /** 办公员工附属包1：JSON 量化报告 + 智慧分析可视化图表员工。 */
 export const OFFICE_AUX_PACK_1_PKG_IDS = [

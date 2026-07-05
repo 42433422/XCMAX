@@ -202,6 +202,12 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     bindAllExcelSheetsToChat,
   } = excelCtx
 
+  function stageExcelAnalysisContext(payload: Record<string, unknown>): void {
+    lastExcelAnalysisContext.value = payload
+    const sid = String(sessionId.value || '').trim() || 'default'
+    persistExcelAnalysisContext(sid, payload)
+  }
+
   const responseAttach = useChatResponseAttach({
     messages,
     lastRequestContextSummary,
@@ -1584,5 +1590,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     isStartPrintMessage,
     ttsEnabled,
     setTtsEnabled,
+    addAndSaveMessage,
+    stageExcelAnalysisContext,
   }
 }
