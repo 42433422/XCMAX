@@ -28,6 +28,43 @@ $skuUpdateUrls = @{
   enterprise = 'https://update.xcagi.com/releases/stable/enterprise/'
 }
 
+function Assert-TextFileContains {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string[]]$Markers,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if (-not (Test-Path $Path)) {
+    throw "$Label missing: $Path"
+  }
+  $content = Get-Content $Path -Raw
+  foreach ($marker in $Markers) {
+    if (-not $content.Contains($marker)) {
+      throw "$Label is stale or incomplete; missing marker '$marker' in $Path"
+    }
+  }
+}
+
+function Assert-FileExists {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Label
+  )
+  if (-not (Test-Path $Path)) {
+    throw "$Label missing: $Path"
+  }
+}
+
+function Write-SkuJson {
+  param(
+    [Parameter(Mandatory = $true)][string]$Path,
+    [Parameter(Mandatory = $true)][string]$Sku
+  )
+  $json = @{ sku = $Sku; schema_version = 1 } | ConvertTo-Json -Compress
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($Path, "$json`n", $utf8NoBom)
+}
+
 $label = $skuLabels[$ProductSku]
 $releaseRoot = Join-Path $Root "release\xcagi-v$Version"
 $outSubdir = if ($InstallerOutputSubdir) { $InstallerOutputSubdir } else { $ProductSku }
@@ -51,12 +88,15 @@ if (-not $SkipBackend) {
   python -m pip install "Pillow>=10.2.0" -q
 }
 
-$skuJson = Join-Path $Root "build\product-sku.json"
+$backendExe = Join-Path $Root "dist\xcagi-backend\xcagi-backend.exe"
+Assert-FileExists $backendExe "Windows backend executable"
+
 $desktopSku = Join-Path $Root "desktop\resources\product-sku.json"
-if (Test-Path $skuJson) {
-  Copy-Item $skuJson $desktopSku -Force
-} else {
-  @{ sku = $ProductSku; schema_version = 1 } | ConvertTo-Json | Set-Content $desktopSku -Encoding UTF8
+Write-SkuJson -Path $desktopSku -Sku $ProductSku
+$backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
+$backendSkuDir = Split-Path $backendSku -Parent
+if (Test-Path $backendSkuDir) {
+  Write-SkuJson -Path $backendSku -Sku $ProductSku
 }
 
 & "$PSScriptRoot\create-installer-assets.ps1"
@@ -67,6 +107,15 @@ if (-not (Test-Path "node_modules")) {
 }
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }
+Assert-TextFileContains `
+  -Path (Join-Path $Root "desktop\dist\main.js") `
+  -Label "Electron main bundle" `
+  -Markers @(
+    "packagedBackendCandidates",
+    "electron-backend.log",
+    "backend', '_internal'",
+    "180_000"
+  )
 npm version $Version --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
@@ -78,6 +127,10 @@ npx electron-builder --win nsis zip --x64 --publish never `
   "--config.nsis.artifactName=$ebArtifact" `
   "--config.extraMetadata.productSku=$ProductSku"
 Pop-Location
+
+Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
+Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
+Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
 
 $nsisExe = Get-ChildItem $outDir -Filter "XCAGI-$label-Setup-*.exe" -File -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending |

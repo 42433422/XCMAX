@@ -294,6 +294,9 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
     except RECOVERABLE_ERRORS as exc:
         logger.warning("desktop relay registration skipped: %s", exc)
         return None
+    except Exception as exc:
+        logger.warning("desktop relay registration skipped after unexpected failure: %s", exc)
+        return None
     if not relay:
         return None
     public_relay = dict(relay)
@@ -818,9 +821,10 @@ async def mobile_customers(
         )
     from app.db.models import Customer
     from app.db.session import get_db
+    from app.infrastructure.tenant_scope import apply_tenant_filter
 
     with get_db() as db:
-        q = db.query(Customer)
+        q = apply_tenant_filter(db.query(Customer), Customer)
         total = q.count()
         rows = q.offset((page - 1) * per_page).limit(per_page).all()
         items = [
@@ -2772,6 +2776,60 @@ async def mobile_industry_baseline(
         return format_mobile_response(data=data)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile industry baseline failed")
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=500),
+            status_code=500,
+        )
+
+
+@extension_router.post("/onboarding/select-industry", response_model=dict[str, Any])
+async def mobile_select_onboarding_industry(
+    body: dict[str, Any],
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    """Persist the mobile onboarding industry selection to the shared workspace SSOT."""
+    if user is None:
+        return _mobile_unauthorized_response()
+    industry_id = str(body.get("industry_id") or body.get("industryId") or "").strip()
+    industry_mod_id = str(body.get("industry_mod_id") or body.get("industryModId") or "").strip()
+    if not industry_id:
+        return JSONResponse(
+            format_mobile_response(None, "缺少 industry_id", success=False, code=400),
+            status_code=400,
+        )
+    try:
+        from app.application.tenant_workspace_prefs import bind_selected_industry_for_user
+        from app.fastapi_routes.market_account import (
+            grant_market_enterprise_entitlements_for_session,
+        )
+
+        data = bind_selected_industry_for_user(
+            user,
+            industry_id,
+            industry_mod_id=industry_mod_id,
+        )
+        try:
+            market_entitlements = await grant_market_enterprise_entitlements_for_session(
+                _mobile_session_id_from_request(request),
+                industry_id,
+            )
+        except RECOVERABLE_ERRORS as exc:
+            logger.exception("mobile select onboarding industry market sync failed")
+            market_entitlements = {"success": False, "message": str(exc)}
+        if not market_entitlements.get("success"):
+            logger.warning(
+                "mobile onboarding industry saved while market entitlement sync failed: "
+                "industry=%s message=%s",
+                industry_id,
+                market_entitlements.get("message"),
+            )
+        return format_mobile_response(
+            data={**(data or {}), "market_entitlements": market_entitlements},
+            message="行业已绑定到当前账号",
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("mobile select onboarding industry failed")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,

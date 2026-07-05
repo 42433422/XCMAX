@@ -112,6 +112,7 @@ import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { resolveHostBusinessPageRedirect } from '@/utils/hostBusinessPageRedirect'
 import { customerServiceHostPathFromModPath } from '@/utils/customerServicePagePaths'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
+import { resolveNavRouteName } from '@/constants/navRouteAliases'
 import { useModRoutes } from '@/composables/useModRoutes'
 import FloatingChatAssistant from './FloatingChatAssistant.vue'
 import PaneResizeHandle from './PaneResizeHandle.vue'
@@ -412,13 +413,6 @@ const currentViewTitle = computed(() => {
   return '未知页面'
 })
 
-/** 侧栏 key → 实际叶子路由，避免父级 redirect 触发连续两次导航 */
-const SIDEBAR_ROUTE_ALIASES = {
-  'approval-hub': 'approval-workspace',
-  'mod-approval-hub': 'approval-workspace',
-  'employee-workflow': 'workflow-employee-space',
-}
-
 function resolveLegacyRouteFromModPath(modPath) {
   const pathOnly = String(modPath || '').split('?')[0]?.split('#')[0] || ''
   if (!pathOnly) return null
@@ -436,10 +430,12 @@ function resolveLegacyRouteFromModPath(modPath) {
 }
 
 async function navigateToView(viewKey) {
-  const routeName =
-    typeof viewKey === 'string' ? SIDEBAR_ROUTE_ALIASES[viewKey] || viewKey : viewKey
-
   const modItem = modMenuItems.value.find((m) => m.key === viewKey)
+  const routeName =
+    typeof viewKey === 'string'
+      ? resolveNavRouteName(viewKey, modItem?.path) || viewKey
+      : viewKey
+
   if (modItem?.path) {
     if (router.resolve(modItem.path).matched.length === 0) {
       try {

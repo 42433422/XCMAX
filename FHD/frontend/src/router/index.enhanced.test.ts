@@ -25,6 +25,7 @@ const {
   mockValidateEnterpriseSession,
   mockIsAdminConsoleSpa,
   mockResolveAdminConsoleHomeUrl,
+  mockIsDesktopShell,
   mockModsStore,
   mockAccountProfileStore,
 } = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ const {
   mockValidateEnterpriseSession: vi.fn().mockResolvedValue(true),
   mockIsAdminConsoleSpa: vi.fn(() => false),
   mockResolveAdminConsoleHomeUrl: vi.fn(() => '/admin'),
+  mockIsDesktopShell: vi.fn(() => false),
   mockModsStore: {
     clientModsUiOff: false,
     mods: [] as unknown[],
@@ -119,6 +121,10 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+}))
+
+vi.mock('@/utils/desktopShell', () => ({
+  isDesktopShell: mockIsDesktopShell,
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -215,6 +221,7 @@ describe('router/index enhanced', () => {
     vi.clearAllMocks()
     mockIsAdminConsoleSpa.mockReturnValue(false)
     mockIsEnterpriseEdition.mockReturnValue(false)
+    mockIsDesktopShell.mockReturnValue(false)
     mockFetchProductSku.mockResolvedValue('generic')
     mockShouldRouteToProductOnboarding.mockReturnValue(false)
     mockShouldRouteToHostPackOnboarding.mockReturnValue(false)
