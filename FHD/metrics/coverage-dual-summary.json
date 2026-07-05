@@ -37,7 +37,7 @@
     "head_backend_line_delta": -3.93,
     "head_backend_branch_delta": -9.78,
     "wip_backend_line_delta": -14.44,
-    "wip_backend_branch_delta": -22.2
+    "wip_backend_branch_delta": -21.2
   },
   "ratchet_floors": {
     "backend_line": 89,
