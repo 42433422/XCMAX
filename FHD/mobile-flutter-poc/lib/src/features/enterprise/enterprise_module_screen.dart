@@ -24,7 +24,7 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.aiOpen({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '开放智控',
-      status: '请在电脑端工作台模块中使用',
+      status: '请在电脑端企业模块中使用',
       actionText: '返回',
       onAction: onAction,
     );
@@ -33,7 +33,7 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.brain({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '智脑集成',
-      status: '员工编排由工作台模块承载',
+      status: '员工编排由企业端模块承载',
       actionText: '打开能力库',
       onAction: onAction,
     );
@@ -42,8 +42,8 @@ class EnterpriseModuleScreen extends StatelessWidget {
   factory EnterpriseModuleScreen.modStore({VoidCallback? onAction}) {
     return EnterpriseModuleScreen(
       title: '能力库',
-      status: '安装与授权由工作台统一管理',
-      actionText: '查看工作台模块',
+      status: '安装与授权由企业端和管理端统一管理',
+      actionText: '查看企业模块',
       onAction: onAction,
     );
   }

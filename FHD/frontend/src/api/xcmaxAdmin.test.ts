@@ -21,6 +21,13 @@ describe('xcmaxAdminApi', () => {
     expect(api.get).toHaveBeenCalledWith('/api/xcmax/admin/market/users')
   })
 
+  it('createMarketUser calls POST /api/xcmax/admin/market/users', async () => {
+    const payload = { username: 'u1', password: 'XC888888', email: 'u1@xcagi.local' }
+    await xcmaxAdminApi.createMarketUser(payload)
+    const api = (await import('./core')).default
+    expect(api.post).toHaveBeenCalledWith('/api/xcmax/admin/market/users', payload)
+  })
+
   it('listAssignableMods calls GET /api/xcmax/admin/market/assignable-mods', async () => {
     await xcmaxAdminApi.listAssignableMods()
     const api = (await import('./core')).default
@@ -61,6 +68,27 @@ describe('xcmaxAdminApi', () => {
     await xcmaxAdminApi.setUserEnterprise(5, false)
     const api = (await import('./core')).default
     expect(api.put).toHaveBeenCalledWith('/api/xcmax/admin/market/users/5/enterprise?is_enterprise=false')
+  })
+
+  it('creditWallet calls POST with amount and description', async () => {
+    const payload = { amount: 100, description: '后台加款' }
+    await xcmaxAdminApi.creditWallet(5, payload)
+    const api = (await import('./core')).default
+    expect(api.post).toHaveBeenCalledWith('/api/xcmax/admin/market/users/5/wallet/credit', payload)
+  })
+
+  it('forcePushUserEntitlements calls POST with snapshot payload', async () => {
+    const payload = {
+      user: { id: 5, username: 'enterprise' },
+      profile: { tier: 'enterprise', industry_id: '通用' },
+      mod_ids: ['mod1'],
+    }
+    await xcmaxAdminApi.forcePushUserEntitlements(5, payload)
+    const api = (await import('./core')).default
+    expect(api.post).toHaveBeenCalledWith(
+      '/api/xcmax/admin/market/users/5/entitlements/push',
+      payload,
+    )
   })
 
   it('startImpersonate calls POST with market_user_id and username', async () => {

@@ -381,7 +381,12 @@ class TestProbeRemoteHealthSync:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_response
+        with patch(
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
+        ):
             result = _probe_remote_health_sync()
             assert result["success"] is True
             assert result["data"]["reachable"] is True
@@ -390,9 +395,11 @@ class TestProbeRemoteHealthSync:
 
     def test_failed_probe(self):
         """Should return unreachable when remote is not reachable."""
+        mock_opener = MagicMock()
+        mock_opener.open.side_effect = ConnectionError("connection refused")
         with patch(
-            "urllib.request.urlopen",
-            side_effect=ConnectionError("connection refused"),
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
         ):
             result = _probe_remote_health_sync()
             assert result["success"] is True
@@ -401,9 +408,11 @@ class TestProbeRemoteHealthSync:
 
     def test_timeout_probe(self):
         """Should return unreachable when remote times out."""
+        mock_opener = MagicMock()
+        mock_opener.open.side_effect = TimeoutError("timed out")
         with patch(
-            "urllib.request.urlopen",
-            side_effect=TimeoutError("timed out"),
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
         ):
             result = _probe_remote_health_sync()
             assert result["data"]["reachable"] is False
@@ -415,7 +424,12 @@ class TestProbeRemoteHealthSync:
         mock_response.__enter__ = MagicMock(return_value=mock_response)
         mock_response.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_response):
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_response
+        with patch(
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
+        ):
             result = _probe_remote_health_sync()
             assert result["data"]["host"] == REMOTE_HOST
             assert result["data"]["port"] == REMOTE_PORT

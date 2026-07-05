@@ -276,6 +276,7 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
     return {
         "relay_id": relay_id,
         "pairing_code": pairing_code,
+        "paired": bool(config.get("paired")),
         **({"expires_at": expires_at} if expires_at else {}),
         **({"exp": exp} if exp > 0 else {}),
         "relay_base_url": base_url,
@@ -292,7 +293,20 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
 
 def cached_desktop_relay_payload() -> dict[str, Any] | None:
     """Return the public part of the persisted relay binding, if available."""
-    return _public_payload_from_config(_read_config())
+    config = _read_config()
+    payload = _public_payload_from_config(config)
+    if payload is not None:
+        return payload
+    if not config.get("paired"):
+        return None
+    relay_id = str(config.get("relay_id") or "").strip()
+    if not relay_id:
+        return None
+    return {
+        "relay_id": relay_id,
+        "relay_base_url": str(config.get("relay_base_url") or "") or _relay_base_url(),
+        "paired": True,
+    }
 
 
 def _write_config(data: dict[str, Any]) -> None:
@@ -340,6 +354,8 @@ def register_desktop_relay(
             "claude_cli": True,
             "cursor": True,
             "cursor_cli": True,
+            "trae": True,
+            "trae_cli": True,
             "desktop": True,
             "host": host,
             "port": int(port),

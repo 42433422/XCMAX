@@ -3,7 +3,7 @@
  * 解析 electronegativity CSV 报告,按严重程度统计并执行门禁。
  *
  * 用法:
- *   node parse-electronegativity-csv.js <csv-path> [--gate-severity high|medium|low]
+ *   node parse-electronegativity-csv.js <csv-path> [--gate-severity high|medium|low] [--suppressions <path>]
  *
  * 默认门禁: 任何 HIGH 严重程度 finding 即失败(exit 1)。
  * 输出: 写入 $GITHUB_STEP_SUMMARY(若存在),并在 stdout 打印统计。
@@ -20,14 +20,18 @@ const path = require('node:path')
 function parseArgs(argv) {
   const args = argv.slice(2)
   if (args.length === 0) {
-    console.error('用法: parse-electronegativity-csv.js <csv-path> [--gate-severity high|medium|low]')
+    console.error('用法: parse-electronegativity-csv.js <csv-path> [--gate-severity high|medium|low] [--suppressions <path>]')
     process.exit(2)
   }
   const csvPath = args[0]
   let gateSeverity = 'high'
+  let suppressionsPath = null
   for (let i = 1; i < args.length; i++) {
     if (args[i] === '--gate-severity' && args[i + 1]) {
       gateSeverity = String(args[i + 1]).toLowerCase()
+      i++
+    } else if (args[i] === '--suppressions' && args[i + 1]) {
+      suppressionsPath = String(args[i + 1])
       i++
     }
   }
@@ -36,10 +40,9 @@ function parseArgs(argv) {
     console.error(`--gate-severity 取值无效: ${gateSeverity} (应为 high|medium|low|informational)`)
     process.exit(2)
   }
-  return { csvPath, gateSeverity, gateLevel: order[gateSeverity] }
+  return { csvPath, gateSeverity, gateLevel: order[gateSeverity], suppressionsPath }
 }
 
-// 解析单行 CSV,处理双引号转义("")。返回字段数组,空行返回 null。
 function parseCsvLine(line) {
   if (line === '') return null
   const fields = []
@@ -82,19 +85,25 @@ function severityLevel(name) {
   return order[String(name).trim().toLowerCase()] ?? -1
 }
 
-function loadSuppressions(csvPath) {
-  const candidates = [
-    path.join(path.dirname(csvPath), '..', 'electronegativity-suppressions.json'),
+function loadSuppressions(csvPath, suppressionsPath) {
+  const explicit = suppressionsPath ? [suppressionsPath] : []
+  const cwdCandidates = [
     path.join(process.cwd(), '.github', 'electronegativity-suppressions.json'),
-    path.join(path.dirname(csvPath), 'electronegativity-suppressions.json'),
+    path.join(process.cwd(), '..', '.github', 'electronegativity-suppressions.json'),
+    path.join(process.cwd(), '..', '..', '.github', 'electronegativity-suppressions.json'),
   ]
+  const candidates = [...explicit, ...cwdCandidates]
   for (const p of candidates) {
     if (fs.existsSync(p)) {
       try {
         const data = JSON.parse(fs.readFileSync(p, 'utf8'))
-        if (Array.isArray(data)) return data
+        if (Array.isArray(data)) {
+          console.log(`[load-suppressions] using: ${p} (${data.length} rules)`)
+          return data
+        }
+        console.error(`[load-suppressions] not an array: ${p}`)
       } catch (err) {
-        console.error(`⚠️  suppressions 文件解析失败 ${p}: ${err.message}`)
+        console.error(`[load-suppressions] parse failed ${p}: ${err.message}`)
       }
     }
   }
@@ -121,7 +130,7 @@ function isSuppressed(finding, suppressions) {
 }
 
 function main() {
-  const { csvPath, gateSeverity, gateLevel } = parseArgs(process.argv)
+  const { csvPath, gateSeverity, gateLevel, suppressionsPath } = parseArgs(process.argv)
   if (!fs.existsSync(csvPath)) {
     console.error(`CSV 文件不存在: ${csvPath}`)
     process.exit(2)
@@ -129,7 +138,6 @@ function main() {
   const raw = fs.readFileSync(csvPath, 'utf8')
   const lines = raw.split(/\r?\n/)
 
-  // 第一行是表头: issue, severity, confidence, filename, location, sample, description, url
   if (lines.length === 0) {
     console.error('CSV 为空')
     process.exit(2)
@@ -140,10 +148,7 @@ function main() {
     process.exit(2)
   }
 
-  const suppressions = loadSuppressions(csvPath)
-  if (suppressions.length > 0) {
-    console.log(`📋 已加载 ${suppressions.length} 条 suppressions 规则`)
-  }
+  const suppressions = loadSuppressions(csvPath, suppressionsPath)
 
   const findings = []
   const suppressed = []
@@ -171,7 +176,6 @@ function main() {
 
   const blocking = findings.filter(f => severityLevel(f.severity) >= gateLevel)
 
-  // 输出到 GitHub Step Summary(若可用)
   const stepSummaryPath = process.env.GITHUB_STEP_SUMMARY
   const summaryLines = []
   summaryLines.push('## Electronegativity 安全扫描报告')

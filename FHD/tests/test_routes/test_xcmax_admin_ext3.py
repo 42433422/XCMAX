@@ -327,7 +327,12 @@ class TestProbeRemoteHealthSync:
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_resp
+        with patch(
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
+        ):
             result = admin_routes._probe_remote_health_sync()
         assert result["success"] is True
         assert result["data"]["reachable"] is True
@@ -344,14 +349,22 @@ class TestProbeRemoteHealthSync:
         mock_resp.__enter__ = MagicMock(return_value=mock_resp)
         mock_resp.__exit__ = MagicMock(return_value=False)
 
-        with patch("urllib.request.urlopen", return_value=mock_resp):
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_resp
+        with patch(
+            "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+            return_value=mock_opener,
+        ):
             result = admin_routes._probe_remote_health_sync()
         assert result["data"]["version"] == "abc123"
 
     def test_network_error_returns_unreachable(self):
         """When network error occurs, should return unreachable."""
         with (
-            patch("urllib.request.urlopen", side_effect=ConnectionError("network fail")),
+            patch(
+                "app.fastapi_routes.xcmax_admin.urllib.request.build_opener",
+                return_value=MagicMock(open=MagicMock(side_effect=ConnectionError("network fail"))),
+            ),
             patch("app.fastapi_routes.xcmax_admin.RECOVERABLE_ERRORS", (ConnectionError,)),
         ):
             result = admin_routes._probe_remote_health_sync()

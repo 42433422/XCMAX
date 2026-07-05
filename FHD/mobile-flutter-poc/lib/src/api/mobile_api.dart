@@ -63,6 +63,9 @@ class XcagiMobileEndpoints {
       '$base/service-bridge/requests/{id}/respond';
   static const csInfo = '$base/cs/info';
   static const csMessages = '$base/cs/messages';
+  static const adminCsInbox = '$base/im/cs/inbox';
+  static const adminCsInboxMessagesTemplate = '$base/im/cs/inbox/{id}/messages';
+  static const adminCsInboxReplyTemplate = '$base/im/cs/inbox/{id}/reply';
   static const mods = '$base/mods';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
@@ -121,6 +124,8 @@ class XcagiMobileEndpoints {
   static const inventoryItems = 'api/inventory/items';
   static const legacyModsList = 'api/mods/';
   static const imMessagesTemplate = 'api/im/conversations/{id}/messages';
+  static const employeeChatStreamTemplate =
+      '$base/employees/{employeeId}/chat/stream';
 
   static String superEmployeeMessages(String tool) {
     switch (tool.trim().toLowerCase()) {
@@ -167,6 +172,14 @@ class XcagiMobileEndpoints {
     return serviceBridgeRequestsRespond.replaceFirst('{id}', '$id');
   }
 
+  static String adminCsInboxMessages(int id) {
+    return adminCsInboxMessagesTemplate.replaceFirst('{id}', '$id');
+  }
+
+  static String adminCsInboxReply(int id) {
+    return adminCsInboxReplyTemplate.replaceFirst('{id}', '$id');
+  }
+
   static String aiGroupMessages(String groupId) {
     return aiGroupMessagesTemplate.replaceFirst(
       '{groupId}',
@@ -188,6 +201,13 @@ class XcagiMobileEndpoints {
     return aiGroupMemberTemplate
         .replaceFirst('{groupId}', Uri.encodeComponent(groupId))
         .replaceFirst('{employeeId}', Uri.encodeComponent(employeeId));
+  }
+
+  static String employeeChatStream(String employeeId) {
+    return employeeChatStreamTemplate.replaceFirst(
+      '{employeeId}',
+      Uri.encodeComponent(employeeId),
+    );
   }
 
   static String aiGroupPin(String groupId) {
@@ -1189,6 +1209,26 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<Map<String, Object?>>> adminCsInbox() async {
+    final json = await getJson(XcagiMobileEndpoints.adminCsInbox);
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> adminCsMessages(int id) async {
+    final json = await getJson(XcagiMobileEndpoints.adminCsInboxMessages(id));
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> replyAdminCs({
+    required int id,
+    required String body,
+  }) async {
+    final json = await postJson(XcagiMobileEndpoints.adminCsInboxReply(id), {
+      'body': body.trim(),
+    });
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> login({
     required String username,
     required String password,
@@ -1980,6 +2020,96 @@ class MobileApiClient {
       }
     }
     return buffer.toString().ifEmpty('（无回复）');
+  }
+
+  Future<String> streamEmployeeChat({
+    required String message,
+    required String employeeId,
+    required String modId,
+    required String conversationId,
+    int userId = 0,
+    void Function(String token)? onToken,
+  }) async {
+    final body = <String, Object?>{
+      'message': message,
+      'conversation_id': conversationId,
+      'mod_id': modId,
+      'employee_id': employeeId,
+    };
+
+    final request = await _open(
+      'POST',
+      XcagiMobileEndpoints.employeeChatStream(employeeId),
+    );
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    if (userId > 0) {
+      request.headers.set('X-User-ID', '$userId');
+    }
+    final bytes = utf8.encode(jsonEncode(body));
+    request.contentLength = bytes.length;
+    request.add(bytes);
+
+    final response = await request.close().timeout(_config.timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final text = await utf8.decodeStream(response).timeout(_config.timeout);
+      final body = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+      throw MobileApiException(
+        statusCode: response.statusCode,
+        message: body['message']?.toString() ??
+            body['error']?.toString() ??
+            'HTTP ${response.statusCode}',
+        body: body,
+      );
+    }
+
+    final buffer = StringBuffer();
+    await for (final line
+        in response.transform(utf8.decoder).transform(const LineSplitter())) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      final payload = trimmed.substring('data:'.length).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+
+      final json = _asObjectMap(jsonDecode(payload));
+      final eventType = json['type']?.toString() ?? '';
+      switch (eventType) {
+        case 'token':
+          final token = json['text']?.toString() ?? '';
+          if (token.isNotEmpty) {
+            buffer.write(token);
+            onToken?.call(token);
+          }
+          break;
+        case 'done':
+          final result = json['result'];
+          final finalText = _chatResultText(result).ifEmpty(buffer.toString());
+          return finalText.ifEmpty('（员工未回复）');
+        case 'error':
+          throw MobileApiException(
+            statusCode: response.statusCode,
+            message: json['message']?.toString() ?? '员工对话流错误',
+            body: json,
+          );
+        default:
+          final error = json['error']?.toString() ?? '';
+          if (error.isNotEmpty) {
+            throw MobileApiException(
+              statusCode: response.statusCode,
+              message: error,
+              body: json,
+            );
+          }
+          final token = json['text']?.toString() ?? '';
+          if (token.isNotEmpty) {
+            buffer.write(token);
+            onToken?.call(token);
+          }
+          if (json['done'] == true) {
+            return buffer.toString().ifEmpty('（员工未回复）');
+          }
+      }
+    }
+    return buffer.toString().ifEmpty('（员工未回复）');
   }
 
   Future<MobileEnvelope<List<SuperEmployeeMessage>>> superEmployeeMessages(

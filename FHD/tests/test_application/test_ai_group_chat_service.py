@@ -1794,6 +1794,52 @@ def test_backfill_existing_empty_groups(tmp_path: Path):
     assert by_key3["ops_acquisition"]["member_count"] == 1
 
 
+def test_backfill_appends_new_roster_employee_without_restoring_removed(
+    tmp_path: Path,
+):
+    """旧部门群在 roster 新增员工后补齐，但不反复加回用户移除过的旧员工。"""
+    old_emps = [
+        {
+            "employee_id": "e1",
+            "mod_id": "m1",
+            "name": "小销",
+            "summary": "获客",
+            "department_key": "ops_acquisition",
+        },
+    ]
+    svc = make_service(tmp_path, employees=old_emps)
+    groups = svc.list_groups(user_id=1)
+    by_key = {g["department_key"]: g for g in groups}
+    assert by_key["ops_acquisition"]["member_count"] == 2
+
+    new_emps = [
+        *old_emps,
+        {
+            "employee_id": "e2",
+            "mod_id": "m1",
+            "name": "新架构师",
+            "summary": "新编制",
+            "department_key": "ops_acquisition",
+        },
+    ]
+    svc2 = make_service(tmp_path, employees=new_emps)
+    groups2 = svc2.list_groups(user_id=1)
+    ops_group = {g["department_key"]: g for g in groups2}["ops_acquisition"]
+    assert {m["employee_id"] for m in ops_group["members"]} >= {
+        "xcagi-assistant",
+        "e1",
+        "e2",
+    }
+
+    svc2.remove_member(user_id=1, group_id="dept:ops_acquisition", employee_id="e1")
+    groups3 = svc2.list_groups(user_id=1)
+    ops_group3 = {g["department_key"]: g for g in groups3}["ops_acquisition"]
+    assert {m["employee_id"] for m in ops_group3["members"]} == {
+        "xcagi-assistant",
+        "e2",
+    }
+
+
 # ── Enterprise 模式（4 部门）──
 
 

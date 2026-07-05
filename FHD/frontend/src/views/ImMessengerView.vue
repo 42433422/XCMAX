@@ -30,73 +30,39 @@
           {{ imConnectionLabel }}
         </div>
 
-        <div v-if="pinnedContacts.length" class="im-pinned">
-          <div class="im-section-label">{{ pinnedSectionLabel }}</div>
-          <ul class="im-conv-list im-conv-list--pinned">
-            <li
-              v-for="ct in pinnedContacts"
-              :key="`pinned-${ct.id}`"
-              :class="[
-                'im-conv-item',
-                'im-conv-item--pinned',
-                { active: isPinnedContactActive(ct) },
-              ]"
-              @click="activatePinnedEntry(ct)"
-            >
-              <span
-                :class="[
-                  'im-avatar',
-                  {
-                    'im-avatar--super-tool': superEmployeeAvatarKey(ct),
-                    [`im-avatar--${superEmployeeAvatarKey(ct)}`]: superEmployeeAvatarKey(ct),
-                    'im-avatar--employee': isDutyEmployeeEntry(ct),
-                  },
-                ]"
-                aria-hidden="true"
-              >
-                <img
-                  v-if="superEmployeeAvatarSrc(ct)"
-                  class="im-super-tool-icon"
-                  :src="superEmployeeAvatarSrc(ct) || undefined"
-                  alt=""
-                  decoding="async"
-                  draggable="false"
-                />
-                <template v-else>{{ pinnedAvatarText(ct) }}</template>
-              </span>
-              <div class="im-conv-main">
-                <div class="im-conv-title">{{ ct.display_name }}</div>
-                <div class="im-conv-preview">{{ pinnedEntryPreview(ct) }}</div>
-              </div>
-              <i
-                :class="[
-                  'fa',
-                  isDutyEmployeeEntry(ct) ? 'fa-id-badge' : 'fa-thumb-tack',
-                  'im-pin',
-                  { 'im-pin--employee': isDutyEmployeeEntry(ct) },
-                ]"
-                aria-hidden="true"
-              ></i>
-            </li>
-          </ul>
-        </div>
-
-        <ul v-if="visibleConversations.length" class="im-conv-list">
+        <ul v-if="sidebarListItems.length" class="im-conv-list">
           <li
-            v-for="c in visibleConversations"
-            :key="c.id"
-            :class="['im-conv-item', { active: c.id === activeConversationId }]"
-            @click="selectConversation(c.id)"
+            v-for="item in sidebarListItems"
+            :key="item.key"
+            :class="sidebarItemClasses(item)"
+            @click="selectSidebarItem(item)"
           >
-            <span class="im-avatar" aria-hidden="true">{{ avatarText(c.title) }}</span>
+            <span :class="sidebarItemAvatarClasses(item)" aria-hidden="true">
+              <img
+                v-if="sidebarItemSuperAvatarSrc(item)"
+                class="im-super-tool-icon"
+                :src="sidebarItemSuperAvatarSrc(item) || undefined"
+                alt=""
+                decoding="async"
+                draggable="false"
+              />
+              <template v-else>{{ sidebarItemAvatarText(item) }}</template>
+            </span>
             <div class="im-conv-main">
-              <div class="im-conv-title">{{ c.title }}</div>
-              <div class="im-conv-preview">{{ c.last_message_preview || '暂无消息' }}</div>
+              <div class="im-conv-title">{{ sidebarItemTitle(item) }}</div>
+              <div class="im-conv-preview">{{ sidebarItemPreview(item) }}</div>
             </div>
-            <span v-if="c.unread_count > 0" class="im-badge">{{ c.unread_count }}</span>
+            <i
+              v-if="item.kind === 'pinned'"
+              :class="sidebarItemPinClasses(item)"
+              aria-hidden="true"
+            ></i>
+            <span v-else-if="sidebarItemUnread(item) > 0" class="im-badge">
+              {{ sidebarItemUnread(item) }}
+            </span>
           </li>
         </ul>
-        <div v-else-if="!pinnedContacts.length" class="im-empty im-empty--list">
+        <div v-else class="im-empty im-empty--list">
           <i class="fa fa-comments-o" aria-hidden="true"></i>
           <p>还没有会话</p>
           <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="openContactPicker">
@@ -476,6 +442,9 @@ type DutyEmployeeEntry = {
 
 type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
 type PinnedImEntry = ImContact | SystemEmployeeEntry;
+type ImSidebarListItem =
+  | { kind: 'pinned'; key: string; entry: PinnedImEntry }
+  | { kind: 'conversation'; key: string; conversation: ImConversationSummary };
 type CodexDisplayMessage = CodexSuperEmployeeMessage & {
   streaming?: boolean;
   synthetic?: boolean;
@@ -625,10 +594,6 @@ const visibleConversations = computed(() =>
   ),
 );
 
-const pinnedSectionLabel = computed(() =>
-  isAdminCustomerServiceConsole.value ? '固定员工' : '固定联系人',
-);
-
 const imConnectionClass = computed(() => {
   if (wsConnected.value) return 'is-on';
   if (imApiReachable.value) return 'is-api-on';
@@ -740,6 +705,29 @@ const pinnedContacts = computed<PinnedImEntry[]>(() => {
     return [CODEX_SUPER_EMPLOYEE_ENTRY, CURSOR_SUPER_EMPLOYEE_ENTRY, CLAUDE_SUPER_EMPLOYEE_ENTRY, ...dutyEmployees.value];
   }
   return contacts.value.filter((c) => isEnterpriseDedicatedContact(c));
+});
+
+const sidebarListItems = computed<ImSidebarListItem[]>(() => {
+  const pinnedConversationIds = new Set<number>();
+  for (const entry of pinnedContacts.value) {
+    if (isSuperEmployeeEntry(entry) || isDutyEmployeeEntry(entry)) continue;
+    const conv = existingDedicatedConversation(entry);
+    if (conv) pinnedConversationIds.add(conv.id);
+  }
+  return [
+    ...pinnedContacts.value.map((entry) => ({
+      kind: 'pinned' as const,
+      key: `pinned-${entry.id}`,
+      entry,
+    })),
+    ...visibleConversations.value
+      .filter((conversation) => !pinnedConversationIds.has(conversation.id))
+      .map((conversation) => ({
+        kind: 'conversation' as const,
+        key: `conversation-${conversation.id}`,
+        conversation,
+      })),
+  ];
 });
 
 const superCliTools = computed(() =>
@@ -1068,6 +1056,76 @@ function isPinnedContactActive(contact: PinnedImEntry): boolean {
   }
   const conv = existingDedicatedConversation(contact);
   return !!conv && conv.id === activeConversationId.value;
+}
+
+function isSidebarItemActive(item: ImSidebarListItem): boolean {
+  return item.kind === 'pinned'
+    ? isPinnedContactActive(item.entry)
+    : item.conversation.id === activeConversationId.value;
+}
+
+function sidebarItemClasses(item: ImSidebarListItem) {
+  return [
+    'im-conv-item',
+    { 'im-conv-item--pinned': item.kind === 'pinned' },
+    { active: isSidebarItemActive(item) },
+  ];
+}
+
+function sidebarItemAvatarClasses(item: ImSidebarListItem) {
+  if (item.kind === 'conversation') return ['im-avatar'];
+  const entry = item.entry;
+  const avatarKey = superEmployeeAvatarKey(entry);
+  return [
+    'im-avatar',
+    {
+      'im-avatar--super-tool': avatarKey,
+      [`im-avatar--${avatarKey}`]: avatarKey,
+      'im-avatar--employee': isDutyEmployeeEntry(entry),
+    },
+  ];
+}
+
+function sidebarItemPinClasses(item: ImSidebarListItem) {
+  if (item.kind !== 'pinned') return [];
+  return [
+    'fa',
+    isDutyEmployeeEntry(item.entry) ? 'fa-id-badge' : 'fa-thumb-tack',
+    'im-pin',
+    { 'im-pin--employee': isDutyEmployeeEntry(item.entry) },
+  ];
+}
+
+function sidebarItemTitle(item: ImSidebarListItem): string {
+  return item.kind === 'pinned' ? item.entry.display_name : item.conversation.title;
+}
+
+function sidebarItemPreview(item: ImSidebarListItem): string {
+  return item.kind === 'pinned'
+    ? pinnedEntryPreview(item.entry)
+    : item.conversation.last_message_preview || '暂无消息';
+}
+
+function sidebarItemAvatarText(item: ImSidebarListItem): string {
+  return item.kind === 'pinned'
+    ? pinnedAvatarText(item.entry)
+    : avatarText(item.conversation.title);
+}
+
+function sidebarItemSuperAvatarSrc(item: ImSidebarListItem): string | null {
+  return item.kind === 'pinned' ? superEmployeeAvatarSrc(item.entry) : null;
+}
+
+function sidebarItemUnread(item: ImSidebarListItem): number {
+  return item.kind === 'conversation' ? item.conversation.unread_count || 0 : 0;
+}
+
+function selectSidebarItem(item: ImSidebarListItem): void {
+  if (item.kind === 'pinned') {
+    void activatePinnedEntry(item.entry);
+    return;
+  }
+  void selectConversation(item.conversation.id);
 }
 
 function closeOverlappingAssistantFloat(): void {
@@ -1908,24 +1966,6 @@ onUnmounted(() => {
   background: #f53f3f;
 }
 
-.im-pinned {
-  border-top: 1px solid rgba(31, 35, 41, 0.04);
-  border-bottom: 1px solid rgba(31, 35, 41, 0.06);
-  padding: 2px 0 6px;
-}
-.im-sidebar--employees .im-pinned {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  flex-direction: column;
-}
-.im-section-label {
-  padding: 6px 16px 2px;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--xc-color-muted, #86909c);
-}
-
 .im-conv-list {
   list-style: none;
   margin: 0;
@@ -1933,21 +1973,10 @@ onUnmounted(() => {
   overflow-y: auto;
   flex: 1;
 }
-.im-conv-list--pinned {
-  overflow: visible;
-  flex: none;
-  padding-top: 2px;
-  padding-bottom: 0;
-}
-.im-sidebar--employees .im-conv-list--pinned {
+.im-sidebar--employees > .im-conv-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-}
-.im-sidebar--employees > .im-conv-list:not(.im-conv-list--pinned) {
-  flex: 0 0 auto;
-  max-height: 150px;
-  border-top: 1px solid rgba(31, 35, 41, 0.06);
 }
 .im-conv-item {
   display: flex;

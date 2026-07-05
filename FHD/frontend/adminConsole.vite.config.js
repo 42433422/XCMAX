@@ -107,6 +107,14 @@ export default defineConfig(() => ({
         replacement: path.join(hostConstants, 'modRouteGlob.full.ts'),
       },
       {
+        find: '@/data/workflow-employee-docs.json',
+        replacement: path.join(hostRoot, 'public/workflow-employee-docs.json'),
+      },
+      {
+        find: '@/data/workflow-employees.json',
+        replacement: path.join(hostRoot, 'public/workflow-employees.json'),
+      },
+      {
         find: '@admin-console-inject/adminHostRoutes',
         replacement: path.join(adminSrc, 'adminHostRoutes.ts'),
       },

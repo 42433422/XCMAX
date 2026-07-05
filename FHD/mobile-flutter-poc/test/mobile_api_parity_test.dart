@@ -539,6 +539,10 @@ void main() {
       'api/mobile/v1/ai-groups/group%201/members/emp%201',
     );
     expect(
+      XcagiMobileEndpoints.employeeChatStream('emp 1'),
+      'api/mobile/v1/employees/emp%201/chat/stream',
+    );
+    expect(
       XcagiMobileEndpoints.aiGroupPin('group 1'),
       'api/mobile/v1/ai-groups/group%201/pin',
     );
@@ -858,6 +862,84 @@ void main() {
           {'role': 'user', 'content': '继续'},
         ],
       },
+    });
+  });
+
+  test('employee chat stream mirrors Android SSE envelope', () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final httpClient = HttpClient();
+    addTearDown(() => httpClient.close(force: true));
+    addTearDown(() => server.close(force: true));
+
+    Map<String, Object?>? capturedBody;
+    String? capturedClient;
+    String? capturedAccept;
+    String? capturedUserId;
+    String? capturedPath;
+    String? capturedAuthorization;
+    final requestDone = server.first.then((request) async {
+      capturedPath = request.uri.path;
+      capturedClient = request.headers.value('X-XCAGI-Client');
+      capturedAccept = request.headers.value(HttpHeaders.acceptHeader);
+      capturedUserId = request.headers.value('X-User-ID');
+      capturedAuthorization =
+          request.headers.value(HttpHeaders.authorizationHeader);
+      capturedBody =
+          jsonDecode(await utf8.decodeStream(request)) as Map<String, Object?>;
+      request.response.statusCode = HttpStatus.ok;
+      request.response.headers.contentType =
+          ContentType.parse('text/event-stream; charset=utf-8');
+      request.response.write(
+        'data: {"type":"token","text":"已连接"}\n\n',
+      );
+      request.response.write(
+        'data: {"type":"token","text":"员工回复"}\n\n',
+      );
+      request.response.write(
+        'data: {"type":"done","result":{"response":"员工回复"}}\n\n',
+      );
+      await request.response.close();
+    });
+
+    final api = MobileApiClient(
+      config: MobileApiConfig(
+        baseUrl: 'http://${server.address.address}:${server.port}/',
+      ),
+      sessionStore: MemoryMobileSessionStore(
+        const MobileSessionData(
+          accessToken: 'fhd-access',
+          sessionId: 'session-1',
+        ),
+      ),
+      httpClient: httpClient,
+    );
+
+    final tokens = <String>[];
+    final result = await api.streamEmployeeChat(
+      message: '继续',
+      employeeId: 'site-content-editor',
+      modId: 'admin-duty-employees',
+      conversationId: 'employee:admin-duty-employees:site-content-editor',
+      userId: 7,
+      onToken: tokens.add,
+    );
+    await requestDone;
+
+    expect(result, '员工回复');
+    expect(tokens, ['已连接', '员工回复']);
+    expect(
+      capturedPath,
+      '/api/mobile/v1/employees/site-content-editor/chat/stream',
+    );
+    expect(capturedClient, 'android');
+    expect(capturedAccept, 'text/event-stream');
+    expect(capturedUserId, '7');
+    expect(capturedAuthorization, 'Bearer fhd-access');
+    expect(capturedBody, {
+      'message': '继续',
+      'conversation_id': 'employee:admin-duty-employees:site-content-editor',
+      'mod_id': 'admin-duty-employees',
+      'employee_id': 'site-content-editor',
     });
   });
 }

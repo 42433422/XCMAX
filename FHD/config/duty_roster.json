@@ -182,6 +182,7 @@
         "core-coding": {
           "label": "核心编码 P2",
           "ids": [
+            "top-architect",
             "fhd-core-maintainer",
             "vibe-coding-maintainer"
           ]
@@ -305,6 +306,7 @@
     "platform-core": {
       "label": "平台核心",
       "ids": [
+        "top-architect",
         "fhd-core-maintainer",
         "vibe-coding-maintainer",
         "mods-and-eskill-curator",

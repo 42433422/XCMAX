@@ -62,6 +62,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
+    final cameraEnabled = widget.enableCamera;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -90,7 +91,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (widget.enableCamera && !_scanned)
+                      if (cameraEnabled && !_scanned)
                         IconButton(
                           onPressed: _toggleTorch,
                           icon: Icon(
@@ -112,20 +113,25 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (widget.enableCamera)
+                      if (cameraEnabled) ...[
                         MobileScanner(
                           controller: _scannerController,
                           fit: BoxFit.cover,
                           onDetect: _onDetect,
                           errorBuilder: (context, error) {
                             return _ScannerUnavailable(
-                                onOpenManual: _showManualInput);
+                              onRequestPermission: _requestCameraPermission,
+                              onOpenManual: _showManualInput,
+                            );
                           },
-                        )
-                      else
-                        Container(color: Colors.black),
-                      const Positioned.fill(child: _ScannerOverlay()),
-                      if (_pairing)
+                        ),
+                        const Positioned.fill(child: _ScannerOverlay()),
+                      ] else
+                        _ScannerUnavailable(
+                          onRequestPermission: _requestCameraPermission,
+                          onOpenManual: _showManualInput,
+                        ),
+                      if (cameraEnabled && _pairing)
                         Positioned.fill(
                           child: Container(
                             color: Colors.black.withValues(alpha: 0.38),
@@ -136,7 +142,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                             ),
                           ),
                         ),
-                      if (_pickingAlbum)
+                      if (cameraEnabled && _pickingAlbum)
                         Positioned.fill(
                           child: Container(
                             color: Colors.black.withValues(alpha: 0.38),
@@ -147,39 +153,40 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                             ),
                           ),
                         ),
-                      Positioned(
-                        bottom: 42,
-                        left: 32,
-                        right: 32,
-                        child: Column(
-                          children: [
-                            Text(
-                              '将电脑端显示的配对二维码放入框内，即可自动扫描',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 13,
-                                height: 1.31,
-                                letterSpacing: 0,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextButton(
-                              onPressed: _showManualInput,
-                              child: Text(
-                                '输入设备码',
+                      if (cameraEnabled && !_scanned)
+                        Positioned(
+                          bottom: 42,
+                          left: 32,
+                          right: 32,
+                          child: Column(
+                            children: [
+                              Text(
+                                '将电脑端显示的配对二维码放入框内，即可自动扫描',
+                                textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: colors.brand,
-                                  fontSize: 14,
-                                  height: 1.36,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.white.withValues(alpha: 0.6),
+                                  fontSize: 13,
+                                  height: 1.31,
                                   letterSpacing: 0,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: _showManualInput,
+                                child: Text(
+                                  '输入设备码',
+                                  style: TextStyle(
+                                    color: colors.brand,
+                                    fontSize: 14,
+                                    height: 1.36,
+                                    fontWeight: FontWeight.w500,
+                                    letterSpacing: 0,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),
@@ -208,6 +215,13 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     } catch (_) {
       if (mounted) setState(() => _flashOn = !_flashOn);
     }
+  }
+
+  Future<void> _requestCameraPermission() async {
+    if (!widget.enableCamera) return;
+    try {
+      await _scannerController.start();
+    } catch (_) {}
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -351,7 +365,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   void _showAuthQrConfirm(AuthQrPayload payload) {
     final usernameController = TextEditingController();
     final passwordController = TextEditingController();
-    final targetLabel = payload.accountKind == 'admin' ? '高级设置' : '工作台';
+    final targetLabel = androidAuthQrTargetLabel(payload.accountKind);
+    final usernameHint = androidAuthQrUsernameHint(payload.accountKind);
     final rootContext = context;
     final colors = AppTheme.colors(rootContext);
     showModalBottomSheet<void>(
@@ -423,7 +438,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                     controller: usernameController,
                     textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
-                      hintText: payload.accountKind == 'admin' ? '账号' : '账号',
+                      hintText: usernameHint,
                       filled: true,
                       fillColor: sheetColors.surfaceHigh,
                       border: OutlineInputBorder(
@@ -447,7 +462,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   ),
                   const SizedBox(height: 16),
                   WeBlockButton(
-                    text: submitting ? '确认中…' : '确认登录',
+                    text: submitting ? '确认中…' : '确认$targetLabel登录',
                     onPressed: submit,
                     enabled: !submitting,
                   ),
@@ -702,8 +717,12 @@ class _PairingDigitBox extends StatelessWidget {
 }
 
 class _ScannerUnavailable extends StatelessWidget {
-  const _ScannerUnavailable({required this.onOpenManual});
+  const _ScannerUnavailable({
+    required this.onRequestPermission,
+    required this.onOpenManual,
+  });
 
+  final VoidCallback onRequestPermission;
   final VoidCallback onOpenManual;
 
   @override
@@ -728,16 +747,38 @@ class _ScannerUnavailable extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           TextButton(
+            onPressed: onRequestPermission,
+            child: Text(
+              '授予相机权限',
+              style: TextStyle(color: colors.brand),
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
             onPressed: onOpenManual,
             child: Text(
               '输入设备码',
-              style: TextStyle(color: colors.brand),
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+                height: 1.36,
+                fontWeight: FontWeight.w500,
+                letterSpacing: 0,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+}
+
+String androidAuthQrTargetLabel(String accountKind) {
+  return accountKind.trim().toLowerCase() == 'admin' ? '管理端' : '企业端';
+}
+
+String androidAuthQrUsernameHint(String accountKind) {
+  return accountKind.trim().toLowerCase() == 'admin' ? '管理员账号' : '企业账号';
 }
 
 class _ScannerOverlay extends StatefulWidget {

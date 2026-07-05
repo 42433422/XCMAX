@@ -4,7 +4,7 @@
 不触碰现有人际 IM（``ImConversation`` 等）以零回归。
 
 SSOT 架构（双模式）：
-- **admin 模式**（管理端）：6 部门 + 54 个编制员工均来自 ``config/duty_roster.json``；
+- **admin 模式**（管理端）：6 部门 + 编制员工均来自 ``config/duty_roster.json``；
   ``duty_employee_registry.json`` 与 employee manifest 只补展示元数据。
 - **enterprise 模式**（企业端）：4 部门（工具层/执行层/服务层/管理层）+ 上架员工（MODstore）+ 未上架员工（宿主定制）
 
@@ -334,6 +334,10 @@ def _with_required_group_members(members: list[dict[str, Any]]) -> list[dict[str
 
 def _is_required_group_member(employee_id: str) -> bool:
     return str(employee_id or "").strip() in _REQUIRED_GROUP_MEMBER_IDS
+
+
+def _member_employee_id(member: dict[str, Any]) -> str:
+    return str(member.get("employee_id") or member.get("id") or "").strip()
 
 
 def _normalize_branch_context(raw: Any) -> str:
@@ -666,7 +670,7 @@ class AiGroupChatService:
         if not groups:
             groups = self._seed_department_groups(user_id)
         else:
-            # 回填：早期种子群成员为空，首次访问时按编制补员（仅一次，用户后续移人不会被覆盖）。
+            # 回填：旧群会按最新编制补齐新增员工，避免 roster 升级后手机仍显示旧人数。
             self._backfill_department_members(groups)
             self._ensure_required_members(user_id)
             self._ensure_special_group_names(user_id)
@@ -826,20 +830,17 @@ class AiGroupChatService:
         return name
 
     def _backfill_department_members(self, groups: list[dict[str, Any]]) -> None:
-        """对未补过员的部门群一次性填入编制成员。
+        """按最新编制补齐部门群成员。
 
-        判定标志：部门群（``department_key`` 非空）且 ``members_seeded`` 未置 True。
-        补员后写 ``members_seeded=True`` 并持久化；用户手动移人后不会再次自动加回。
+        早期版本只在 ``members_seeded`` 为空时补一次员，新增编制员工不会进入旧群。
+        管理端部门群应反映当前员工 SSOT，因此每次访问都只追加 SSOT 新增员工；
+        已同步过又被用户手动移出的员工不会反复加回。
         """
         if self._mode != "admin":
             # 企业端 4 部门初始只保留必备小C助理，不自动铺员工（按需/装 mod 后由生态同步进入）。
             return
         targets = [
-            g
-            for g in groups
-            if isinstance(g, dict)
-            and str(g.get("department_key") or "").strip()
-            and not g.get("members_seeded")
+            g for g in groups if isinstance(g, dict) and str(g.get("department_key") or "").strip()
         ]
         if not targets:
             return
@@ -874,19 +875,35 @@ class AiGroupChatService:
             if not isinstance(g, dict):
                 continue
             dk = str(g.get("department_key") or "").strip()
-            if not dk or g.get("members_seeded"):
+            if not dk:
                 continue
-            existing = {
-                str(m.get("employee_id")) for m in g.get("members", []) if isinstance(m, dict)
-            }
+            existing = {_member_employee_id(m) for m in g.get("members", []) if isinstance(m, dict)}
+            existing.discard("")
             fresh = members_by_dept.get(dk, [])
+            roster_ids = {_member_employee_id(m) for m in fresh if _member_employee_id(m)}
+            seeded_raw = g.get("members_seeded_employee_ids")
+            if isinstance(seeded_raw, list):
+                seeded_ids = {str(item).strip() for item in seeded_raw if str(item).strip()}
+            else:
+                seeded_ids = set()
             merged = list(g.get("members", []))
             for m in fresh:
-                if str(m.get("employee_id")) not in existing:
+                employee_id = _member_employee_id(m)
+                if not employee_id:
+                    continue
+                if employee_id not in existing and employee_id not in seeded_ids:
                     merged.append(m)
-            g["members"] = merged
-            g["members_seeded"] = True
-            changed = True
+                    existing.add(employee_id)
+            next_seeded_ids = sorted(seeded_ids | roster_ids)
+            if (
+                merged != g.get("members")
+                or not g.get("members_seeded")
+                or g.get("members_seeded_employee_ids") != next_seeded_ids
+            ):
+                g["members"] = merged
+                g["members_seeded"] = True
+                g["members_seeded_employee_ids"] = next_seeded_ids
+                changed = True
         if changed:
             self._rewrite_groups(all_groups)
 
@@ -3635,13 +3652,23 @@ class AiGroupChatService:
             members_by_dept = {}
         seeded: list[dict[str, Any]] = []
         for key, label in pairs:
+            members = _with_required_group_members(members_by_dept.get(key, []))
+            roster_ids = sorted(
+                {
+                    _member_employee_id(member)
+                    for member in members_by_dept.get(key, [])
+                    if _member_employee_id(member)
+                }
+            )
             seeded.append(
                 {
                     "id": f"dept:{key}",
                     "user_id": int(user_id),
                     "name": label,
                     "department_key": key,
-                    "members": _with_required_group_members(members_by_dept.get(key, [])),
+                    "members": members,
+                    "members_seeded": bool(roster_ids),
+                    "members_seeded_employee_ids": roster_ids,
                     "is_pinned": False,
                     "is_hidden": False,
                     "is_followed": True,

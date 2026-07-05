@@ -15,7 +15,7 @@ class DutyRosterEmployee {
 }
 
 const adminDutyModId = 'admin-duty-employees';
-const plannedAdminEmployeeCount = 55;
+const plannedAdminEmployeeCount = 56;
 
 const adminDutyRosterEmployees = <DutyRosterEmployee>[
   DutyRosterEmployee(
@@ -130,6 +130,12 @@ const adminDutyRosterEmployees = <DutyRosterEmployee>[
     label: '工作台 UX 设计员',
     summary:
         '专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。',
+  ),
+  DutyRosterEmployee(
+    id: 'top-architect',
+    label: '顶级架构师员工',
+    summary:
+        '掌握 XCMAX/FHD/MODstore/移动端/员工体系的全局架构地图，负责架构答疑、学习辅导、升级路线、ADR、跨端影响评审与风险拆解；默认只读分析，变更需派发给对应岗位执行。',
   ),
   DutyRosterEmployee(
     id: 'fhd-core-maintainer',

@@ -55,6 +55,67 @@ def _err_class(m):
     return list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
 
 
+def test_extract_employee_reply_text_uses_nested_output_error(m):
+    result = {
+        "success": False,
+        "result": {
+            "outputs": [
+                {
+                    "handler": "direct_python",
+                    "output": {"ok": False, "error": "不支持的 handler：direct_python"},
+                }
+            ]
+        },
+    }
+
+    assert "不支持的 handler：direct_python" in m._extract_employee_reply_text(result)
+
+
+@pytest.mark.asyncio
+async def test_mobile_employee_chat_stream_marks_interactive_payload(m, monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_execute(employee_id, message, payload, **kwargs):
+        captured.update(
+            {
+                "employee_id": employee_id,
+                "message": message,
+                "payload": payload,
+                "kwargs": kwargs,
+            }
+        )
+        return {"success": True, "result": {"outputs": [{"output": "员工已回复"}]}}
+
+    from app.application.employee_runtime import executor
+
+    monkeypatch.setattr(executor, "execute_employee_task_local", fake_execute)
+
+    response = await m.mobile_employee_chat_stream(
+        "emp-1",
+        MagicMock(),
+        user=_user(9),
+        body={
+            "message": "你好",
+            "conversation_id": "employee:mod-1:emp-1",
+            "mod_id": "mod-1",
+        },
+    )
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
+
+    payload = captured["payload"]
+    assert captured["employee_id"] == "emp-1"
+    assert captured["message"] == "你好"
+    assert payload["invoke_mode"] == "interactive_chat"
+    assert payload["source"] == "mobile_app"
+    assert payload["client_surface"] == "mobile_app"
+    assert payload["conversation_id"] == "employee:mod-1:emp-1"
+    assert payload["mod_id"] == "mod-1"
+    assert captured["kwargs"]["user_id"] == 9
+    assert any('"type": "done"' in chunk for chunk in chunks)
+
+
 # ============================================================
 # _mobile_session_id_from_request
 # ============================================================
@@ -298,8 +359,23 @@ class TestCachedDesktopRelayForAccountBinding:
             result = m._cached_desktop_relay_for_account_binding()
         assert result is None
 
+    def test_relay_unpaired_returns_none(self, m):
+        """branch: relay has relay_id but is not paired → None."""
+        with patch(
+            "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
+            return_value={
+                "relay_id": "pending-r1",
+                "relay_base_url": "http://relay",
+                "expires_at": "2026-12-31",
+                "exp": 9999,
+                "paired": False,
+            },
+        ):
+            result = m._cached_desktop_relay_for_account_binding()
+        assert result is None
+
     def test_relay_valid_returns_dict(self, m):
-        """branch: relay has relay_id → return dict."""
+        """branch: paired relay has relay_id → return dict."""
         with patch(
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
             return_value={
@@ -307,6 +383,7 @@ class TestCachedDesktopRelayForAccountBinding:
                 "relay_base_url": "http://relay",
                 "expires_at": "2026-12-31",
                 "exp": 9999,
+                "paired": True,
             },
         ):
             result = m._cached_desktop_relay_for_account_binding()
@@ -316,10 +393,16 @@ class TestCachedDesktopRelayForAccountBinding:
         assert result["exp"] == 9999
 
     def test_relay_valid_with_empty_fields(self, m):
-        """branch: relay has relay_id but other fields empty."""
+        """branch: paired relay has relay_id but other fields empty."""
         with patch(
             "app.services.mobile_relay_desktop_client.cached_desktop_relay_payload",
-            return_value={"relay_id": "r2", "relay_base_url": "", "expires_at": "", "exp": None},
+            return_value={
+                "relay_id": "r2",
+                "relay_base_url": "",
+                "expires_at": "",
+                "exp": None,
+                "paired": True,
+            },
         ):
             result = m._cached_desktop_relay_for_account_binding()
         assert result is not None

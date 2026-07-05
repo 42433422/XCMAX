@@ -9,9 +9,9 @@ import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/group_grid_avatar.dart';
-import '../bridge/bridge_screen.dart';
 import '../chat/chat_screen.dart';
 import '../contacts/contacts_screen.dart';
+import '../cs/admin_cs_console_screen.dart';
 import '../cs/cs_chat_screen.dart';
 import '../discover/discover_screen.dart';
 import '../groups/ai_group_screens.dart';
@@ -70,14 +70,9 @@ class _MessageListScreenState extends State<MessageListScreen> {
       ...groups,
       ...items,
     ];
-    final hasEcosystemEmployees = widget.items.any(
-      (item) => item.type == ConversationType.aiTask,
-    );
-    final showEcosystemHint = !hasEcosystemEmployees && _query.trim().isEmpty;
     final showEmptyState = conversationEntries.isEmpty;
     final entries = <Object>[
       ...conversationEntries,
-      if (showEcosystemHint) const _EcosystemSyncHintEntry(),
       if (showEmptyState) _ConversationEmptyEntry(loading: widget.loading),
     ];
     final employeeCount = widget.items
@@ -108,11 +103,6 @@ class _MessageListScreenState extends State<MessageListScreen> {
                   padding: EdgeInsets.zero,
                   itemBuilder: (context, index) {
                     final entry = entries[index];
-                    if (entry is _EcosystemSyncHintEntry) {
-                      return _EcosystemSyncHint(
-                        onRefresh: widget.onRefresh ?? () async {},
-                      );
-                    }
                     if (entry is _ConversationEmptyEntry) {
                       return _ConversationEmptyState(loading: entry.loading);
                     }
@@ -133,9 +123,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
                   separatorBuilder: (_, index) {
                     final current = entries[index];
                     final next = entries[index + 1];
-                    if (current is _EcosystemSyncHintEntry ||
-                        next is _EcosystemSyncHintEntry ||
-                        current is _ConversationEmptyEntry ||
+                    if (current is _ConversationEmptyEntry ||
                         next is _ConversationEmptyEntry) {
                       return const SizedBox.shrink();
                     }
@@ -192,7 +180,7 @@ class _MessageListScreenState extends State<MessageListScreen> {
     if (_isAdminCustomerServiceConversation(item)) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => BridgeScreen.customerService(repository: _repository),
+          builder: (_) => AdminCsConsoleScreen(repository: _repository),
         ),
       );
       return;
@@ -608,78 +596,10 @@ String _messageHeaderSubtitle(MobileMeData account, int employeeCount) {
   return buffer.toString();
 }
 
-class _EcosystemSyncHintEntry {
-  const _EcosystemSyncHintEntry();
-}
-
 class _ConversationEmptyEntry {
   const _ConversationEmptyEntry({required this.loading});
 
   final bool loading;
-}
-
-class _EcosystemSyncHint extends StatelessWidget {
-  const _EcosystemSyncHint({required this.onRefresh});
-
-  final Future<void> Function() onRefresh;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    final textTheme = Theme.of(context).textTheme;
-    return Material(
-      color: colors.surface,
-      child: InkWell(
-        onTap: onRefresh,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: colors.surfaceHigh,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.sync,
-                  size: 19,
-                  color: colors.textTertiary,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '账号生态待同步',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyMedium?.copyWith(
-                        color: colors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '点这里重新同步 AI 员工。',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodySmall?.copyWith(
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ConversationEmptyState extends StatelessWidget {

@@ -106,6 +106,10 @@ def build_employee_dispatch_map(
                 eid_s = str(eid).strip()
                 if eid_s and (not planned_ids or eid_s in planned_ids):
                     out[eid_s].add(dispatch)
+    for eid in planned_ids:
+        eid_s = str(eid).strip()
+        if eid_s and eid_s not in out:
+            out[eid_s].add(DISPATCH_PS)
     # 移动发布岗位强制归入 P-App（覆盖部门映射可能给到的 P-S/P-W）。
     for eid in APP_LANE_EMPLOYEE_IDS:
         out[eid] = {DISPATCH_APP}

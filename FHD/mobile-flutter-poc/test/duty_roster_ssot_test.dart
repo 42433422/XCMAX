@@ -9,8 +9,16 @@ void main() {
         .where((item) => item.type == ConversationType.aiTask)
         .toList(growable: false);
 
-    expect(plannedAdminEmployeeCount, 55);
+    expect(plannedAdminEmployeeCount, 56);
     expect(adminDutyRosterEmployees, hasLength(plannedAdminEmployeeCount));
     expect(employeeItems, hasLength(plannedAdminEmployeeCount));
+    expect(
+      adminDutyRosterEmployees.map((employee) => employee.id),
+      contains('top-architect'),
+    );
+    expect(
+      adminDutyRosterEmployees.map((employee) => employee.label),
+      contains('顶级架构师员工'),
+    );
   });
 }

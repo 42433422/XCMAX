@@ -14,6 +14,7 @@ const mockStartImpersonate = vi.fn()
 const mockGetUserProfiles = vi.fn()
 const mockSetUserProfile = vi.fn()
 const mockListWallets = vi.fn()
+const mockForcePushUserEntitlements = vi.fn()
 
 vi.mock('@/api/xcmaxAdmin', () => ({
   xcmaxAdminApi: {
@@ -27,6 +28,8 @@ vi.mock('@/api/xcmaxAdmin', () => ({
     getUserProfiles: () => mockGetUserProfiles(),
     setUserProfile: (uid: number, payload: unknown) => mockSetUserProfile(uid, payload),
     listWallets: () => mockListWallets(),
+    forcePushUserEntitlements: (uid: number, payload: unknown) =>
+      mockForcePushUserEntitlements(uid, payload),
   },
 }))
 
@@ -60,6 +63,7 @@ function setupDefaultMocks() {
   mockListUserMods.mockResolvedValue({ mod_ids: [] })
   mockGetUserProfiles.mockResolvedValue({ data: {} })
   mockListWallets.mockResolvedValue({ items: [{ user_id: 1, balance: 100.5 }] })
+  mockForcePushUserEntitlements.mockResolvedValue({ data: { push: { sent: 1, failed: 0 } } })
   mockApiFetch.mockResolvedValue({
     ok: true,
     json: () => Promise.resolve({ data: { installed: [], available: [], last_sync_at: '' } }),
@@ -423,5 +427,39 @@ describe('AdminEntitlementsView functions', () => {
     const vm = wrapper.vm as any
     // Should not throw, walletMap should be empty
     expect(vm.walletMap.size).toBe(0)
+  })
+
+  it('forcePushSelectedEntitlements sends selected account snapshot', async () => {
+    const wrapper = await mountComponent()
+    await selectUser(wrapper)
+    const vm = wrapper.vm as any
+    vm.profileEditing.tier = 'enterprise'
+    vm.profileEditing.industry_id = '考勤'
+    vm.profileEditing.entitled_industries = []
+    vm.userModIds = ['mod1']
+    await vm.forcePushSelectedEntitlements()
+    expect(mockForcePushUserEntitlements).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        user: expect.objectContaining({ username: 'admin', is_enterprise: true }),
+        profile: expect.objectContaining({
+          tier: 'enterprise',
+          industry_id: '考勤',
+          entitled_industries: expect.arrayContaining(['考勤']),
+        }),
+        mod_ids: ['mod1'],
+        wallet: expect.objectContaining({ balance: 100.5 }),
+      }),
+    )
+    expect(mockAppAlert).toHaveBeenCalledWith('已强制推送企业端：发送 1 条，失败 0 条')
+  })
+
+  it('forcePushSelectedEntitlements shows error on failure', async () => {
+    const wrapper = await mountComponent()
+    await selectUser(wrapper)
+    const vm = wrapper.vm as any
+    mockForcePushUserEntitlements.mockRejectedValue(new Error('push failed'))
+    await vm.forcePushSelectedEntitlements()
+    expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('强制推送失败'))
   })
 })
