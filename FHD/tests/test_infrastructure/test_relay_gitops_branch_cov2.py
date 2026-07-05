@@ -65,11 +65,19 @@ class TestGitHelper:
 
     def test_repo_root_from_payload_uses_verified_workspace_root(self, tmp_path: Path) -> None:
         (tmp_path / ".git").mkdir()
-        with patch.object(relay_gitops, "_repo_root", return_value="/fallback"):
+        with (
+            patch.object(relay_gitops, "_repo_root", return_value="/fallback"),
+            patch.object(
+                relay_gitops,
+                "resolve_verified_relay_workspace_root",
+                return_value=str(tmp_path),
+            ) as mock_resolve,
+        ):
             root = relay_gitops._repo_root_from_payload(
                 {"context": {"workspace_root": str(tmp_path)}}
             )
         assert root == str(tmp_path)
+        mock_resolve.assert_called_once_with({"workspace_root": str(tmp_path)})
 
     def test_repo_root_from_payload_rejects_non_git_workspace(self, tmp_path: Path) -> None:
         with (

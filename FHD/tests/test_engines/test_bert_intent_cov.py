@@ -15,6 +15,15 @@ for _mod in ("torch", "transformers"):
 # torch.cuda.is_available must return a real bool, not a MagicMock
 import torch  # noqa: E402 — imported after stub
 
+if not hasattr(torch, "cuda"):
+    torch.cuda = MagicMock()
+if not hasattr(torch, "softmax"):
+    torch.softmax = MagicMock()
+if not hasattr(torch, "max"):
+    torch.max = MagicMock()
+if not hasattr(torch, "no_grad"):
+    torch.no_grad = MagicMock()
+
 torch.cuda.is_available = lambda: False
 
 from app.ai_engines.bert.intent_service import (  # noqa: E402

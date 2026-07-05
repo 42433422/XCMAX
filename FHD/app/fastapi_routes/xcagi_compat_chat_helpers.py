@@ -57,6 +57,10 @@ _CHAT_RAW_DB_STRONG_RE = re.compile(
     r"(原始|raw|SQL|sql|表结构|schema|全库|整库|数据表|数据库文件|导出数据库|备份数据库)",
     re.IGNORECASE,
 )
+_CHAT_DB_READ_INTENT_RE = re.compile(
+    r"(查看|查询|检索|读取|看|浏览|导出).*(数据库|数据表|表结构|schema|sql|SQL|raw|原始|全库|整库|数据库文件|产品库|客户库|物料库|业务库)",
+    re.IGNORECASE,
+)
 
 
 def _chat_request_subject(request: Request) -> str:
