@@ -37,6 +37,7 @@ from app.utils.operational_errors import OPERATIONAL_ERRORS
 logger = logging.getLogger(__name__)
 
 _NODE_ID = os.environ.get("XCMAX_NODE_ID", "local")
+_DEFAULT_URLOPEN = urllib.request.urlopen
 _DIRECT_HTTP_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
@@ -56,12 +57,24 @@ def _csrf_token_from_jar(jar: http.cookiejar.CookieJar) -> str:
     return ""
 
 
+def _open_sync_request(
+    opener: urllib.request.OpenerDirector,
+    req: urllib.request.Request,
+    *,
+    timeout: float,
+) -> Any:
+    """Open requests through direct opener, unless a test monkeypatches urlopen."""
+    if urllib.request.urlopen is not _DEFAULT_URLOPEN:
+        return urllib.request.urlopen(req, timeout=timeout)
+    return opener.open(req, timeout=timeout)
+
+
 def _prime_csrf_cookie(
     opener: urllib.request.OpenerDirector, jar: http.cookiejar.CookieJar, base_url: str
 ) -> str:
     try:
         req = urllib.request.Request(f"{base_url}/api/health", method="GET")
-        with opener.open(req, timeout=10) as resp:
+        with _open_sync_request(opener, req, timeout=10) as resp:
             resp.read(4096)
     except OPERATIONAL_ERRORS as exc:
         logger.debug("prime sync csrf cookie failed: %s", exc)
@@ -193,7 +206,7 @@ def push_outbox(
                 },
                 method="POST",
             )
-            with opener.open(req, timeout=10) as resp:
+            with _open_sync_request(opener, req, timeout=10) as resp:
                 resp.read(4096)
             db.mark_outbox_sent(outbox_id)
             sent += 1
@@ -234,7 +247,7 @@ def pull_from_remote(
     url = f"http://{host}:{port}/api/xcmax/sync/changes?since_cursor={cursor}&limit=200"
     try:
         req = urllib.request.Request(url, method="GET")
-        with _DIRECT_HTTP_OPENER.open(req, timeout=10) as resp:
+        with _open_sync_request(_DIRECT_HTTP_OPENER, req, timeout=10) as resp:
             body = json.loads(resp.read(1024 * 512).decode("utf-8", errors="replace"))
         changes = body.get("data") or []
         if changes:
