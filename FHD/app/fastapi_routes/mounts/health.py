@@ -18,7 +18,7 @@ def register_health_routes(app: FastAPI) -> None:
     async def health_check():
         payload: dict = {
             "status": "healthy",
-            "version": "1.0.0",
+            "version": app.version,
             "service": "xcagi-fastapi",
         }
         try:

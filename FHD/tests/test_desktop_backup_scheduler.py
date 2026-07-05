@@ -21,6 +21,8 @@ import pytest
 from app.desktop_runtime.backup_scheduler import (
     _cleanup_old_backups,
     _has_backup_today,
+    _make_weekly_copy,
+    _sync_to_external,
     get_last_backup_info,
     start_backup_scheduler,
     stop_backup_scheduler,
@@ -216,3 +218,163 @@ class TestSchedulerLifecycle:
     def test_stop_is_noop_when_not_started(self):
         # 没启动过直接 stop 不应抛异常
         stop_backup_scheduler()
+
+
+# ----------------------------------------------------------------------------
+# _make_weekly_copy
+# ----------------------------------------------------------------------------
+
+
+class TestMakeWeeklyCopy:
+    def test_creates_weekly_copy_with_correct_name(self, tmp_path, monkeypatch):
+        """weekly 副本文件名格式：xcagi-{version}-weekly-{stamp}.db"""
+        _reset_desktop_env(monkeypatch)
+        daily = tmp_path / "xcagi-10.0.0-20260705123000.db"
+        daily.write_bytes(b"backup-content")
+
+        result = _make_weekly_copy(daily)
+
+        assert result is not None
+        assert result.name == "xcagi-10.0.0-weekly-20260705123000.db"
+        assert result.exists()
+        assert result.read_bytes() == b"backup-content"
+
+    def test_returns_none_for_already_weekly_file(self, tmp_path, monkeypatch):
+        """已经是 weekly 的文件不应再复制一次。"""
+        _reset_desktop_env(monkeypatch)
+        weekly = tmp_path / "xcagi-10.0.0-weekly-20260705123000.db"
+        weekly.write_bytes(b"x")
+
+        result = _make_weekly_copy(weekly)
+
+        assert result is None
+
+    def test_returns_none_for_malformed_name(self, tmp_path, monkeypatch):
+        """文件名不符合 xcagi-{version}-{stamp}.db 格式时返回 None。"""
+        _reset_desktop_env(monkeypatch)
+        bad = tmp_path / "random.db"
+        bad.write_bytes(b"x")
+
+        result = _make_weekly_copy(bad)
+
+        assert result is None
+
+
+# ----------------------------------------------------------------------------
+# _sync_to_external
+# ----------------------------------------------------------------------------
+
+
+class TestSyncToExternal:
+    def test_noop_when_env_not_set(self, tmp_path, monkeypatch):
+        """未配置 XCAGI_EXTERNAL_BACKUP_DIR 时不同步。"""
+        _reset_desktop_env(monkeypatch)
+        monkeypatch.delenv("XCAGI_EXTERNAL_BACKUP_DIR", raising=False)
+        backup = tmp_path / "xcagi-10.0.0-20260705123000.db"
+        backup.write_bytes(b"x")
+
+        _sync_to_external(backup)  # 不应抛异常
+
+    def test_copies_to_external_dir(self, tmp_path, monkeypatch):
+        """配置了外部目录时，备份文件被复制过去。"""
+        _reset_desktop_env(monkeypatch)
+        external = tmp_path / "usb"
+        monkeypatch.setenv("XCAGI_EXTERNAL_BACKUP_DIR", str(external))
+        backup = tmp_path / "xcagi-10.0.0-20260705123000.db"
+        backup.write_bytes(b"backup-content")
+
+        _sync_to_external(backup)
+
+        dest = external / backup.name
+        assert dest.exists()
+        assert dest.read_bytes() == b"backup-content"
+
+    def test_warns_when_external_unavailable(self, tmp_path, monkeypatch, caplog):
+        """外部目录不可写（如 USB 未插入）时仅警告，不抛异常。"""
+        _reset_desktop_env(monkeypatch)
+        # 指向一个不存在的根路径，mkdir 会失败（在 macOS/Linux 上模拟）
+        monkeypatch.setenv("XCAGI_EXTERNAL_BACKUP_DIR", "/nonexistent-root-xyz/usb")
+        backup = tmp_path / "xcagi-10.0.0-20260705123000.db"
+        backup.write_bytes(b"x")
+
+        # 不应抛异常
+        _sync_to_external(backup)
+
+
+# ----------------------------------------------------------------------------
+# _cleanup_old_backups — weekly 保留策略
+# ----------------------------------------------------------------------------
+
+
+class TestCleanupWeeklyBackups:
+    def test_weekly_backup_kept_beyond_daily_retention(self, tmp_path, monkeypatch):
+        """weekly 备份在 7 天后不应被清理（保留 28 天）。"""
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        backups_dir = dirs["backups"]
+
+        # 10 天前的 weekly 备份（超过 daily 7 天，但小于 weekly 28 天）
+        old_stamp = (datetime.now() - timedelta(days=10)).strftime("%Y%m%d%H%M%S")
+        weekly_file = backups_dir / f"xcagi-10.0.0-weekly-{old_stamp}.db"
+        weekly_file.write_bytes(b"x")
+        old_ts = (datetime.now() - timedelta(days=10)).timestamp()
+        os.utime(weekly_file, (old_ts, old_ts))
+
+        _cleanup_old_backups(backups_dir, retention_days=7)
+
+        assert weekly_file.exists(), "weekly backup should be kept (within 28-day retention)"
+
+    def test_weekly_backup_removed_after_28_days(self, tmp_path, monkeypatch):
+        """weekly 备份超过 28 天应被清理。"""
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        backups_dir = dirs["backups"]
+
+        old_stamp = (datetime.now() - timedelta(days=30)).strftime("%Y%m%d%H%M%S")
+        weekly_file = backups_dir / f"xcagi-10.0.0-weekly-{old_stamp}.db"
+        weekly_file.write_bytes(b"x")
+        old_ts = (datetime.now() - timedelta(days=30)).timestamp()
+        os.utime(weekly_file, (old_ts, old_ts))
+
+        _cleanup_old_backups(backups_dir, retention_days=7)
+
+        assert not weekly_file.exists(), "weekly backup older than 28 days should be removed"
+
+    def test_daily_and_weekly_cleaned_independently(self, tmp_path, monkeypatch):
+        """daily 7 天清理，weekly 28 天清理，两者独立。"""
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        backups_dir = dirs["backups"]
+
+        # 10 天前的 daily（应被清理）
+        daily_stamp = (datetime.now() - timedelta(days=10)).strftime("%Y%m%d%H%M%S")
+        daily_file = backups_dir / f"xcagi-10.0.0-{daily_stamp}.db"
+        daily_file.write_bytes(b"x")
+        daily_ts = (datetime.now() - timedelta(days=10)).timestamp()
+        os.utime(daily_file, (daily_ts, daily_ts))
+
+        # 10 天前的 weekly（应保留）
+        weekly_file = backups_dir / f"xcagi-10.0.0-weekly-{daily_stamp}.db"
+        weekly_file.write_bytes(b"x")
+        os.utime(weekly_file, (daily_ts, daily_ts))
+
+        _cleanup_old_backups(backups_dir, retention_days=7)
+
+        assert not daily_file.exists(), "daily backup older than 7 days should be removed"
+        assert weekly_file.exists(), "weekly backup within 28 days should be kept"
+
+
+# ----------------------------------------------------------------------------
+# _has_backup_today — weekly 也算今天的备份
+# ----------------------------------------------------------------------------
+
+
+class TestHasBackupTodayWeekly:
+    def test_weekly_backup_counts_as_today(self, tmp_path, monkeypatch):
+        """今天的 weekly 备份也应算"今天已备份"，避免周日重复跑 daily。"""
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        (dirs["backups"] / f"xcagi-10.0.0-weekly-{today}120000.db").write_bytes(b"x")
+
+        assert _has_backup_today(dirs["backups"]) is True
