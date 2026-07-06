@@ -4,6 +4,11 @@
       使用 XCAGI App「探索 → 识别」扫描下方二维码，手机将与本机宿主绑定并互通。
     </p>
 
+    <div class="mobile-pairing__status" :class="`mobile-pairing__status--${connectionTone}`">
+      <span class="mobile-pairing__status-dot" aria-hidden="true"></span>
+      <span>{{ connectionStatusText }}</span>
+    </div>
+
     <div class="mobile-pairing__panel">
       <div class="mobile-pairing__qr-wrap" aria-live="polite">
         <div v-if="loading" class="mobile-pairing__qr-state">
@@ -79,6 +84,7 @@ import {
   resolvePairingPortHint,
   type PairingPayload,
 } from '@/api/mobilePairing';
+import { apiFetch } from '@/utils/apiBase';
 
 const loading = ref(false);
 const qrDataUrl = ref('');
@@ -95,6 +101,55 @@ let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
 const countdown = computed(() => Math.max(0, expiresAt.value - nowSec.value));
+
+/**
+ * 绑定/中继状态：与手机端「我的 → 服务」的 server_mode_label 用同一套词汇（服务器中继 / 已绑定），
+ * 避免用户在电脑上只能看到出码，猜不到手机到底连没连上。
+ */
+const pairingStatusPaired = ref(false);
+const pairingStatusMobileUsername = ref('');
+const pairingStatusLastSyncAt = ref(0); // unix 秒
+const pairingStatusLoaded = ref(false);
+let statusPollTimer: ReturnType<typeof setInterval> | null = null;
+
+const STALE_SYNC_SEC = 5 * 60; // 超过 5 分钟没同步过，视为中继可能不通
+
+const connectionTone = computed<'connected' | 'stale' | 'pending'>(() => {
+  if (!pairingStatusPaired.value) return 'pending';
+  if (!pairingStatusLastSyncAt.value) return 'stale';
+  const age = nowSec.value - pairingStatusLastSyncAt.value;
+  return age <= STALE_SYNC_SEC ? 'connected' : 'stale';
+});
+
+const connectionStatusText = computed(() => {
+  if (!pairingStatusLoaded.value) return '正在查询连接状态…';
+  if (!pairingStatusPaired.value) return '尚未绑定手机，扫码或输入下方设备码即可连接';
+  const who = pairingStatusMobileUsername.value
+    ? `已连接：${pairingStatusMobileUsername.value} 的手机`
+    : '已连接手机';
+  return connectionTone.value === 'connected'
+    ? `${who} · 服务器中继正常`
+    : `${who} · 中继暂时不通，请检查网络`;
+});
+
+async function refreshPairingStatus() {
+  try {
+    const res = await apiFetch('/api/desktop/mobile-pairing-status');
+    if (!res.ok) return;
+    const data = (await res.json()) as {
+      paired?: boolean;
+      mobileUsername?: string;
+      lastRelaySyncAt?: number;
+    };
+    pairingStatusPaired.value = Boolean(data.paired);
+    pairingStatusMobileUsername.value = String(data.mobileUsername || '');
+    pairingStatusLastSyncAt.value = Number(data.lastRelaySyncAt || 0);
+  } catch {
+    // 状态查询失败不影响二维码本身的展示
+  } finally {
+    pairingStatusLoaded.value = true;
+  }
+}
 
 function pairingDisplayCode(payload: PairingPayload): string {
   const qrJson = payload.qr_json || {};
@@ -185,10 +240,18 @@ onMounted(() => {
     nowSec.value = Math.floor(Date.now() / 1000);
   }, 1000);
   void refreshQr();
+  void refreshPairingStatus();
+  statusPollTimer = setInterval(() => {
+    void refreshPairingStatus();
+  }, 15_000);
 });
 
 onBeforeUnmount(() => {
   clearTimers();
+  if (statusPollTimer) {
+    clearInterval(statusPollTimer);
+    statusPollTimer = null;
+  }
 });
 </script>
 
@@ -204,6 +267,48 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.55;
   color: #475569;
+}
+
+.mobile-pairing__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  width: fit-content;
+}
+
+.mobile-pairing__status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mobile-pairing__status--connected {
+  color: #047857;
+  background: #d1fae5;
+}
+.mobile-pairing__status--connected .mobile-pairing__status-dot {
+  background: #10b981;
+}
+
+.mobile-pairing__status--stale {
+  color: #b45309;
+  background: #fef3c7;
+}
+.mobile-pairing__status--stale .mobile-pairing__status-dot {
+  background: #f59e0b;
+}
+
+.mobile-pairing__status--pending {
+  color: #475569;
+  background: #e2e8f0;
+}
+.mobile-pairing__status--pending .mobile-pairing__status-dot {
+  background: #94a3b8;
 }
 
 .mobile-pairing__panel {

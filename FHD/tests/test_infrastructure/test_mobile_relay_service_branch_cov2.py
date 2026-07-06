@@ -338,6 +338,16 @@ class TestPublicDesktop:
         result = MobileRelayService._public_desktop(MagicMock(), data)
         assert result["status"] == "pending"
 
+    def test_includes_mobile_username_when_present(self) -> None:
+        """desktop_runtime 的「已连接：xxx 的手机」状态展示依赖此字段透传。"""
+        data = {"status": "paired", "mobile_username": "张三"}
+        result = MobileRelayService._public_desktop(MagicMock(), data)
+        assert result["mobile_username"] == "张三"
+
+    def test_mobile_username_defaults_to_empty_string(self) -> None:
+        result = MobileRelayService._public_desktop(MagicMock(), {})
+        assert result["mobile_username"] == ""
+
     def test_includes_all_fields(self) -> None:
         data = {
             "relay_id": "r1",

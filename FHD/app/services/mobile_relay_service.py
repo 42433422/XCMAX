@@ -745,4 +745,6 @@ class MobileRelayService:
             "last_seen_at": data.get("last_seen_at") or "",
             "created_at": data.get("created_at") or "",
             "updated_at": data.get("updated_at") or "",
+            # 已绑定手机的账号名；供桌面端设置页展示「已连接：xxx 的手机」，与手机端「服务」文案对齐。
+            "mobile_username": data.get("mobile_username") or "",
         }
