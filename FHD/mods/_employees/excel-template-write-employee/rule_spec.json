@@ -1,0 +1,30 @@
+{
+  "brief": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，使用 direct_python 按 phases（clear_ranges/cell_writes/formula_writes/retain_sheets）回填模板，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格。",
+  "mode": "direct_python_file_transform",
+  "accepted_extensions": [
+    ".json"
+  ],
+  "default_action": "convert",
+  "default_output_relpath": "outputs/filled.xlsx",
+  "runtime_kind": "excel_template_write",
+  "output_schema": [
+    "output_path",
+    "report_path",
+    "cells_written",
+    "formulas_written",
+    "cells_cleared",
+    "violations",
+    "expected"
+  ],
+  "requirements": [
+    "Use direct_python only; handlers must be [\"direct_python\"].",
+    "Input is plan.json (or payload.plan); template resolved from payload.template_path/template_relpath, bundled templates/, or plan.template.path.",
+    "Execute phases in order: clear_ranges, cell_writes, formula_writes, retain_sheets/remove_sheets.",
+    "Preserve template styles, merged cells and existing formulas; never evaluate formulas.",
+    "Writes hitting protected_ranges are skipped and recorded as violations; payload.strict_protected fails instead.",
+    "Write outputs/filled.xlsx and write_report.json; pass plan.expected through untouched for QC.",
+    "Never claim success unless the filled workbook is actually written.",
+    "Return {ok, summary, items, warnings, error, meta}."
+  ],
+  "pack_id": "excel-template-write-employee"
+}

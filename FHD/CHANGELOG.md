@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · 读取员/模板写入员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-template-write-employee`（Excel 模板写入员）：模板 xlsx + `plan.json` 写入计划 → 回填结果，phases（clear_ranges/cell_writes/formula_writes/retain_sheets）顺序执行，模板样式/合并/既有公式保真，`protected_ranges` 拒写并记 violation，输出 `outputs/filled.xlsx` + `write_report.json`（透传 `expected` 供质检员对账）
+- **feat(employee)**：`excel-full-read-employee` workbook.json 每 sheet 新增 `merged_ranges`，cells 非 General 时输出 `number_format`（模板结构识别 / 回填保真前置）
+- **test(mods)**：`test_excel_template_write_employee.py` 覆盖读取员新字段、写入员全阶段、保护区、读→计划→写→重读闭环；太阳鸟真实模板（909 行 × 85 列、979 合并区、1944 SUMIF）冒烟通过
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod

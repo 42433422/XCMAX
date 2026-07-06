@@ -103,7 +103,7 @@ def _cell_payload(ws, row: int, col: int, *, formula_ws=None) -> Dict[str, Any]:
         if isinstance(fcell.value, str) and fcell.value.startswith("="):
             formula = fcell.value
     data_type = getattr(cell, "data_type", None)
-    return {
+    out = {
         "row": row,
         "col": col,
         "letter": letter,
@@ -112,6 +112,21 @@ def _cell_payload(ws, row: int, col: int, *, formula_ws=None) -> Dict[str, Any]:
         "formula": formula,
         "data_type": str(data_type) if data_type is not None else None,
     }
+    # 数字格式仅在非默认时输出（缺省即 General），模板类表格（如 [DBNum1]）靠它做回填保真。
+    number_format = getattr(cell, "number_format", None)
+    if number_format and number_format != "General":
+        out["number_format"] = str(number_format)
+    return out
+
+
+def _merged_ranges(ws, formula_ws=None) -> List[str]:
+    """合并单元格范围（如 ``A1:D1``）；模板类表格（人员块/竖向合并表头）识别依赖它。"""
+    source = ws
+    ranges = getattr(getattr(source, "merged_cells", None), "ranges", None)
+    if not ranges and formula_ws is not None:
+        source = formula_ws
+        ranges = getattr(getattr(source, "merged_cells", None), "ranges", None)
+    return sorted(str(rng) for rng in (ranges or []))
 
 
 def _sheet_to_dict(ws, formula_ws=None, *, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -177,6 +192,7 @@ def _sheet_to_dict(ws, formula_ws=None, *, payload: Dict[str, Any]) -> Dict[str,
         "cells": cells,
         "cell_count": len(cells),
         "row_count": len(rows_out),
+        "merged_ranges": _merged_ranges(ws, formula_ws),
     }
 
 

@@ -8,26 +8,36 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-EMPLOYEE_ID = "excel-full-read-employee"
-EMPLOYEE_LABEL = "Excel 读取员"
-SYSTEM_PROMPT = "你是Excel 读取员。你必须按 direct_python 方式处理真实文件，读取 payload 中的 file_path/path/excel_path，必要时使用打包模板，成功条件是实际写出输出文件。任何输入缺失、模板缺失、转换模块异常都要返回明确错误，禁止编造已完成。"
+EMPLOYEE_ID = "excel-template-write-employee"
+EMPLOYEE_LABEL = "Excel 模板写入员"
+SYSTEM_PROMPT = "你是Excel 模板写入员。你必须按 direct_python 方式执行 plan.json 写入计划，把值/公式回填进模板 xlsx，保留模板样式、合并单元格与既有公式，拒绝写入保护区。成功条件是实际写出回填结果文件与 write_report.json。任何计划缺失、模板缺失、sheet 不匹配都要返回明确错误，禁止编造已完成。"
 RULE_SPEC = {
-    "brief": "Excel读取员工：上传 .xlsx/.xlsm，使用 direct_python 全量读取 sheet、自动识别表头、输出 columns/rows/cells JSON 中介 outputs/workbook.json，禁止 LLM 编造单元格。",
+    "brief": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，使用 direct_python 按 phases（clear_ranges/cell_writes/formula_writes/retain_sheets）回填模板，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格。",
     "mode": "direct_python_file_transform",
-    "accepted_extensions": [".xlsx", ".xlsm"],
+    "accepted_extensions": [".json"],
     "default_action": "convert",
-    "default_output_relpath": "outputs/workbook.json",
-    "runtime_kind": "excel_full_read",
-    "output_schema": ["sheets", "columns", "headers", "rows", "cells", "merged_ranges", "meta"],
+    "default_output_relpath": "outputs/filled.xlsx",
+    "runtime_kind": "excel_template_write",
+    "output_schema": [
+        "output_path",
+        "report_path",
+        "cells_written",
+        "formulas_written",
+        "cells_cleared",
+        "violations",
+        "expected",
+    ],
     "requirements": [
         'Use direct_python only; handlers must be ["direct_python"].',
-        "Parse .xlsx/.xlsm with openpyxl; write outputs/workbook.json.",
-        "JSON must include sheets[].name, columns, flat rows, headers, cells (row/col/value/formula), meta.",
-        "Sheets must expose merged_ranges; cells carry number_format when not General (template introspection).",
-        "Never claim success unless workbook.json is actually written.",
+        "Input is plan.json (or payload.plan); template resolved from payload.template_path/template_relpath, bundled templates/, or plan.template.path.",
+        "Execute phases in order: clear_ranges, cell_writes, formula_writes, retain_sheets/remove_sheets.",
+        "Preserve template styles, merged cells and existing formulas; never evaluate formulas.",
+        "Writes hitting protected_ranges are skipped and recorded as violations; payload.strict_protected fails instead.",
+        "Write outputs/filled.xlsx and write_report.json; pass plan.expected through untouched for QC.",
+        "Never claim success unless the filled workbook is actually written.",
         "Return {ok, summary, items, warnings, error, meta}.",
     ],
-    "pack_id": "excel-full-read-employee",
+    "pack_id": "excel-template-write-employee",
 }
 
 
@@ -75,12 +85,14 @@ def _workspace_root(ctx: Dict[str, Any], payload: Dict[str, Any]) -> Path:
     return Path(str(raw)).expanduser()
 
 
-def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
+def _resolve_input(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
     raw = str(
-        payload.get("file_path") or payload.get("path") or payload.get("excel_path") or ""
+        payload.get("file_path") or payload.get("path") or payload.get("plan_path") or ""
     ).strip()
     if not raw:
-        raise FileNotFoundError("缺少 file_path：请上传或指定要处理的文件。")
+        if isinstance(payload.get("plan"), dict):
+            return None
+        raise FileNotFoundError("缺少 file_path：请上传 plan.json 写入计划，或在 payload.plan 传入计划对象。")
     p = Path(raw).expanduser()
     if not p.is_absolute():
         p = _workspace_root(ctx, payload) / raw
@@ -93,7 +105,7 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
     rel = str(
         payload.get("output_relpath")
         or RULE_SPEC.get("default_output_relpath")
-        or "outputs/employee_output.xlsx"
+        or "outputs/filled.xlsx"
     ).strip()
     p = Path(rel).expanduser()
     if not p.is_absolute():
@@ -104,23 +116,23 @@ def _resolve_output(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Path:
 
 def _resolve_template(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Optional[Path]:
     raw = str(
-        payload.get("template_relpath")
+        payload.get("template_path")
+        or payload.get("template_relpath")
         or RULE_SPEC.get("default_template_relpath")
         or RULE_SPEC.get("template_relpath")
         or ""
     ).strip()
-    if not raw:
-        return None
     candidates = []
-    p = Path(raw).expanduser()
-    if p.is_absolute():
-        candidates.append(p)
-    else:
-        candidates.append(_workspace_root(ctx, payload) / raw)
-        candidates.append(_pack_root() / raw)
-        candidates.append(_pack_root() / "backend" / "templates" / raw)
-        if raw.startswith("backend/"):
-            candidates.append(_pack_root() / raw[len("backend/") :])
+    if raw:
+        p = Path(raw).expanduser()
+        if p.is_absolute():
+            candidates.append(p)
+        else:
+            candidates.append(_workspace_root(ctx, payload) / raw)
+            candidates.append(_pack_root() / raw)
+            candidates.append(_pack_root() / "backend" / "templates" / raw)
+            if raw.startswith("backend/"):
+                candidates.append(_pack_root() / raw[len("backend/") :])
     for cand in candidates:
         if cand.is_file():
             return cand
@@ -145,7 +157,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
             {"employee": EMPLOYEE_LABEL, "rule_spec": RULE_SPEC},
             meta={"handler": "direct_python", "action": "help"},
         )
-    if action not in ("convert", "upload", "转换", ""):
+    if action not in ("convert", "upload", "转换", "回填", ""):
         return _err(
             f"不支持的 action：{action}", meta={"handler": "direct_python", "action": action}
         )
@@ -153,7 +165,7 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         vendor_dir = _pack_root() / "vendor"
         if str(vendor_dir) not in sys.path:
             sys.path.insert(0, str(vendor_dir))
-        from excel_full_read.convert import convert_file
+        from excel_template_write.convert import convert_file
 
         src = _resolve_input(payload, ctx)
         out = _resolve_output(payload, ctx)
@@ -163,21 +175,26 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
         )
         if asyncio.iscoroutine(result):
             result = await result
+        run_warnings: List[str] = []
         if isinstance(result, dict):
             result.setdefault("output_path", str(out))
             result.setdefault("template_path", str(template or ""))
+            run_warnings = [str(w) for w in (result.get("warnings") or [])]
         else:
             result = {
                 "output_path": str(out),
                 "template_path": str(template or ""),
                 "result": result,
             }
-        if not out.is_file():
+        produced = Path(str(result.get("output_path") or out))
+        if not produced.is_file():
             return _err(
-                f"转换未生成输出文件：{out}", meta={"handler": "direct_python", "action": "convert"}
+                f"回填未生成输出文件：{produced}",
+                meta={"handler": "direct_python", "action": "convert"},
             )
         normalized = _ok(
             result,
+            warnings=run_warnings,
             meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
         )
         return {
@@ -191,6 +208,6 @@ async def run(payload: Dict[str, Any], ctx: Dict[str, Any]) -> Dict[str, Any]:
     except Exception as exc:  # noqa: BLE001
         return _err(
             str(exc),
-            warnings=["请检查输入文件、模板文件和题目规则是否匹配。"],
+            warnings=["请检查 plan.json 写入计划、模板文件与 sheet 名是否匹配。"],
             meta={"handler": "direct_python", "action": "convert", "runtime": "generated_python"},
         )

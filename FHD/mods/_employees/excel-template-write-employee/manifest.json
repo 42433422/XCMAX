@@ -1,0 +1,129 @@
+{
+  "id": "excel-template-write-employee",
+  "name": "Excel 模板写入员",
+  "version": "1.0.0",
+  "author": "XCAGI",
+  "description": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，按 phases 回填模板生成结果，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格",
+  "artifact": "employee_pack",
+  "scope": "global",
+  "dependencies": {
+    "xcagi": ">=1.0.0"
+  },
+  "employee": {
+    "id": "excel-template-write-employee",
+    "label": "Excel 模板写入员",
+    "capabilities": [
+      "excel.template_write",
+      "excel.plan_execute"
+    ]
+  },
+  "workflow_employees": [
+    {
+      "id": "excel-template-write-employee",
+      "label": "Excel 模板写入员",
+      "panel_title": "Excel 模板写入员",
+      "panel_summary": "上传写入计划 plan.json，按计划把值/公式回填进模板 xlsx 并输出 write_report.json。",
+      "capabilities": [
+        "excel.template_write",
+        "excel.plan_execute"
+      ],
+      "api_base_path": "employees/excel-template-write-employee",
+      "entry_action": "run"
+    }
+  ],
+  "backend": {
+    "entry": "blueprints",
+    "init": "mod_init"
+  },
+  "employee_config_v2": {
+    "identity": {
+      "id": "excel-template-write-employee",
+      "version": "1.0.0",
+      "artifact": "employee_pack",
+      "name": "Excel 模板写入员",
+      "description": "Excel模板写入员工：上传 plan.json 写入计划 + 模板 .xlsx/.xlsm，按 phases 回填模板生成结果，保留样式与既有公式，保护区拒写，输出 outputs/filled.xlsx 与 write_report.json，禁止 LLM 编造单元格"
+    },
+    "perception": {
+      "type": "file_or_text",
+      "accepted_extensions": [
+        ".json"
+      ]
+    },
+    "memory": {
+      "type": "session"
+    },
+    "cognition": {
+      "agent": {
+        "system_prompt": "你是Excel 模板写入员。你负责按 plan.json 写入计划把值/公式回填进模板 xlsx（保留样式、合并单元格与既有公式，保护区拒写），并写出 write_report.json。必须真实执行 direct_python，禁止 LLM 编造单元格数据。",
+        "role": {
+          "name": "Excel 模板写入员",
+          "persona": "严谨的模板回填执行员工",
+          "tone": "professional",
+          "expertise": [
+            "模板回填",
+            "写入计划执行",
+            "公式与格式保真"
+          ]
+        },
+        "behavior_rules": [
+          "必须真实执行写入计划，禁止编造单元格。",
+          "成功必须以写出回填结果与 write_report.json 为准。",
+          "计划或模板缺失、sheet 不匹配时明确报错，不得声称已完成。",
+          "落在保护区的写入必须跳过并记录 violation。"
+        ],
+        "few_shot_examples": [],
+        "model": {
+          "provider": "auto",
+          "model_name": "auto",
+          "temperature": 0.1,
+          "max_tokens": 2000,
+          "top_p": 0.9
+        }
+      },
+      "skills": [
+        {
+          "name": "excel.template_write",
+          "brief": "按 plan.json 把值/公式回填进模板 xlsx。"
+        },
+        {
+          "name": "excel.plan_execute",
+          "brief": "执行 clear_ranges/cell_writes/formula_writes/retain_sheets 阶段并输出 write_report.json。"
+        }
+      ]
+    },
+    "collaboration": {
+      "workflow": {
+        "workflow_id": 0,
+        "name": "Excel 模板写入员"
+      }
+    },
+    "actions": {
+      "handlers": [
+        "direct_python"
+      ],
+      "direct_python": {
+        "module": "excel_template_write_employee",
+        "action": "convert",
+        "default_output_relpath": "outputs/filled.xlsx",
+        "default_template_relpath": "",
+        "default_use_personnel_roster": false
+      }
+    }
+  },
+  "metadata": {
+    "framework_version": "2.0.0",
+    "created_by": "asset_pipeline"
+  },
+  "actions": {
+    "handlers": [
+      "direct_python"
+    ],
+    "direct_python": {
+      "module": "excel_template_write_employee",
+      "action": "convert",
+      "default_output_relpath": "outputs/filled.xlsx",
+      "default_template_relpath": "",
+      "default_use_personnel_roster": false
+    }
+  }
+}
