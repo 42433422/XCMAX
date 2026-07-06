@@ -10,9 +10,12 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 
@@ -33,6 +36,19 @@ fun DesktopToolWebView(
     onUrlOverride: ((String) -> Boolean)? = null,
     onBack: () -> Unit = {},
 ) {
+    // 安全门：本容器会附带 Authorization 头与 token 注入，非信任 host 拒绝加载。
+    if (!UrlHostPolicy.isTrustedWebViewUrl(url)) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            WeTopBar(title = title, onBack = onBack)
+            Text(
+                "页面地址不受信任，已阻止加载",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(24.dp),
+            )
+        }
+        return
+    }
     val injectMarket = shouldInjectMarketTokens(url) && marketAccess.isNotBlank()
     val injectFhd = shouldInjectFhdSession(url) && fhdAccess.isNotBlank()
     val injectScript = injectMarket || injectFhd

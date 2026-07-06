@@ -31,18 +31,21 @@ fun buildTokenInjectScript(
     """.trimIndent()
 }
 
+/**
+ * 是否注入 MODstore market token。
+ *
+ * 安全修复：旧实现 `url.contains("xiu-ci.com")` 是子串匹配，
+ * `https://evil.com/?xiu-ci.com` 即可骗取 token；现委托 [UrlHostPolicy]
+ * 做严格 host 解析（HTTPS + 精确域/子域）。
+ */
 fun shouldInjectMarketTokens(url: String): Boolean =
-    url.contains("xiu-ci.com", ignoreCase = true)
+    UrlHostPolicy.shouldInjectMarketTokens(url)
 
-/** 局域网 FHD Web 页：注入 session cookie 供 SPA credentials 鉴权 */
-fun shouldInjectFhdSession(url: String): Boolean {
-    if (shouldInjectMarketTokens(url)) return false
-    val lower = url.lowercase()
-    return lower.startsWith("http://") &&
-        (
-            lower.contains("127.0.0.1") ||
-                lower.contains("192.168.") ||
-                lower.contains("10.") ||
-                lower.contains("localhost")
-            )
-}
+/**
+ * 局域网 FHD Web 页：注入 session cookie 供 SPA credentials 鉴权。
+ *
+ * 安全修复：旧实现 `lower.contains("10.")` 会匹配 `http://evil.com/10.html`；
+ * 现要求 host 为字面 loopback / RFC1918 私网 IPv4 / localhost。
+ */
+fun shouldInjectFhdSession(url: String): Boolean =
+    UrlHostPolicy.shouldInjectFhdSession(url)
