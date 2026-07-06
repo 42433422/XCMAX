@@ -378,6 +378,7 @@ import { authApi } from '@/api/auth';
 import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';
 import { useXcmaxSync } from '@/composables/useXcmaxSync';
+import { useRoute } from 'vue-router';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import { userFacingErrorMessage } from '@/utils/userFacingError';
 import {
@@ -600,6 +601,7 @@ const isAdminCustomerServiceConsole = ref(false);
 
 const { playIncoming, playOutgoing } = useImSounds();
 const { onImMessage, onImReadState } = useXcmaxSync();
+const route = useRoute();
 
 let ws: WebSocket | null = null;
 let offSyncMessage: (() => void) | null = null;
@@ -1869,6 +1871,15 @@ onMounted(async () => {
   });
   connectWs();
   await Promise.all([loadContacts(), loadConversations(), loadDutyEmployees()]);
+  // 从流程可视化「联系员工」跳转：?employee=<id> 预选该员工会话（对话已持久化）。
+  const requestedEmployee = String(route.query.employee || '').trim();
+  if (requestedEmployee) {
+    const match = dutyEmployees.value.find((e) => e.id === requestedEmployee);
+    if (match) {
+      await activatePinnedEntry(match);
+      return;
+    }
+  }
   if (isAdminCustomerServiceConsole.value && !activeConversationId.value) {
     closeOverlappingAssistantFloat();
     activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY;
