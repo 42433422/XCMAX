@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 智能对话消息渲染增强（2026-07-06 · v10 线内迭代）
+
+- **feat(chat)**：主对话消息列表接入代码块「复制」按钮点击 + Mermaid 流程图渲染（此前 `v-html` 渲染出结构但未接线，按钮点了没反应、Mermaid 不渲染）
+- **feat(chat)**：AI 气泡新增「复制」按钮，整条回复一键复制为纯文本（保留换行、还原实体）
+- **refactor(chat)**：代码复制 + Mermaid 后处理抽为 `useMarkdownPostRender` 共享，MessageBody 与主列表复用（行为不变，MessageBody 37 项测试全绿）
+
 ### 智能对话体验打磨（2026-07-06 · v10 线内迭代）
 
 - **feat(chat)**：首 token 前空白气泡改为 `ChatTypingIndicator` 打字动效（可带工具进度），loading 行补 `aria-live`
