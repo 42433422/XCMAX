@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 智能对话体验打磨（2026-07-06 · v10 线内迭代）
+
+- **feat(chat)**：首 token 前空白气泡改为 `ChatTypingIndicator` 打字动效（可带工具进度），loading 行补 `aria-live`
+- **feat(chat)**：流式时发送键变「停止」——持有 AbortController，用户主动停止保留已生成部分并标「（已停止生成）」，与超时/网络中断区分
+- **feat(chat)**：流式失败文案改走 `userFacingErrorMessage`（不再暴露原始 HTTP/异常）；失败气泡加「重试」按钮重发最近一条用户消息
+- **feat(chat)**：发送中禁用输入框与发送按钮；输入/发送/停止补 `aria-label`
+
 ### 流程可视化员工节点可操作化（2026-07-06 · v10 线内迭代 · P1 路径五）
 
 - **feat(frontend)**：`DutyRosterWorkflowLoopView` 员工卡从装饰卡升级为可操作节点——安装状态复用编制 health（已安装·可对话 / 本机未安装 / Catalog 未登记）；触发方式与关键环节复用 `workflowEmployeeDocs`（不再手写静态文案）；已安装「联系员工」（跳 IM 预选，对话持久化）+「查看编制」，未安装「安装员工包」+「仅查看编制」
