@@ -500,12 +500,31 @@ type DutyEmployeeChatMessage = {
   status?: string;
 };
 
-type EmployeeExecuteResponse = {
-  success?: boolean;
-  message?: string;
-  source?: string;
-  data?: unknown;
+type DutyImMessageApi = {
+  id?: number | string;
+  body?: string;
+  created_at?: string;
+  is_self?: boolean;
 };
+
+type DutyEmployeeImResponse = {
+  success?: boolean;
+  conversation_id?: number;
+  messages?: DutyImMessageApi[];
+};
+
+function mapDutyImMessages(rows: DutyImMessageApi[] | undefined): DutyEmployeeChatMessage[] {
+  return (rows || []).map((m) => {
+    const role: 'user' | 'assistant' = m.is_self ? 'user' : 'assistant';
+    return {
+      id: String(m.id ?? `${role}-${m.created_at ?? Date.now()}`),
+      role,
+      body: String(m.body ?? ''),
+      created_at: String(m.created_at ?? new Date().toISOString()),
+      status: role === 'assistant' ? '已回复' : '已发送',
+    };
+  });
+}
 
 const CODEX_STREAM_PLACEHOLDER_ID = '__codex_streaming_reply__';
 const CODEX_POLL_INTERVAL_MS = 2400;
@@ -931,71 +950,6 @@ function appendDutyEmployeeMessage(employeeId: string, message: DutyEmployeeChat
     const el = dutyEmployeeScrollEl.value;
     if (el) el.scrollTop = el.scrollHeight;
   });
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function firstTextFromRecord(record: Record<string, unknown> | null, keys: string[]): string {
-  if (!record) return '';
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === 'string' && value.trim()) return value.trim();
-    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
-  }
-  return '';
-}
-
-function textFromEmployeeOutputs(record: Record<string, unknown> | null): string {
-  const outputs = Array.isArray(record?.outputs) ? record.outputs : [];
-  const parts: string[] = [];
-  for (const item of outputs) {
-    const out = asRecord(item);
-    if (!out) continue;
-    const directText = firstTextFromRecord(out, ['output', 'message', 'summary', 'error', 'result']);
-    if (directText) {
-      parts.push(directText);
-      continue;
-    }
-    const nestedOutput = asRecord(out.output);
-    const nestedText = firstTextFromRecord(nestedOutput, ['reply', 'response', 'message', 'summary', 'result', 'error']);
-    if (nestedText) parts.push(nestedText);
-  }
-  return parts.join('\n\n').trim();
-}
-
-function shortJson(value: unknown): string {
-  try {
-    const text = JSON.stringify(value, null, 2);
-    return text.length > 1200 ? `${text.slice(0, 1200)}…` : text;
-  } catch {
-    return '';
-  }
-}
-
-function dutyEmployeeReplyFromExecution(result: EmployeeExecuteResponse, entry: DutyEmployeeEntry): string {
-  const root = asRecord(result);
-  const data = asRecord(result.data);
-  const nestedResult = asRecord(data?.result);
-  const success = result.success !== false && data?.success !== false;
-  const text =
-    textFromEmployeeOutputs(nestedResult)
-    || textFromEmployeeOutputs(data)
-    || firstTextFromRecord(data, ['message', 'output', 'reply', 'response', 'stdout'])
-    || firstTextFromRecord(nestedResult, ['message', 'output', 'reply', 'response'])
-    || firstTextFromRecord(data, ['result', 'summary'])
-    || firstTextFromRecord(nestedResult, ['result', 'summary'])
-    || firstTextFromRecord(root, ['message']);
-  const errorText =
-    firstTextFromRecord(data, ['error', 'detail'])
-    || firstTextFromRecord(nestedResult, ['error', 'detail'])
-    || firstTextFromRecord(root, ['error', 'detail']);
-  if (!success) return `执行失败：${errorText || text || '员工运行时未返回详细原因'}`;
-  if (text) return text;
-  return `${entry.display_name} 已完成执行，但没有返回可读文本。${shortJson(result.data) ? `\n${shortJson(result.data)}` : ''}`;
 }
 
 function isEnterpriseDedicatedContact(contact: ImContact): boolean {
@@ -1450,6 +1404,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     messages.value = [];
     hasMoreHistory.value = false;
     closeContactPicker();
+    await loadDutyEmployeeMessages(entry);
     await nextTick();
     const el = dutyEmployeeScrollEl.value;
     if (el) el.scrollTop = el.scrollHeight;
@@ -1613,28 +1568,20 @@ async function onDutyEmployeeSend(): Promise<void> {
     status: 'sent',
   });
   try {
-    const result = await api.post<EmployeeExecuteResponse>(
-      `/api/xcmax/local/employees/${encodeURIComponent(entry.id)}/execute`,
-      {
-        task: text,
-        user_id: localUserId.value || 0,
-        input_data: {
-          source: 'admin_im',
-          client_surface: 'admin_console',
-          invoke_mode: 'interactive_chat',
-          allow_medium_risk: true,
-          employee_id: entry.id,
-          employee_name: entry.display_name,
-        },
-      },
+    // 持久化 + 同源：用户消息与员工回复都落到 boss↔员工 IM 会话，管理端刷新不丢、
+    // 手机端读同一会话（PRODUCT_POLISH_CHECKLIST P1 路径三）。
+    const result = await api.post<DutyEmployeeImResponse>(
+      `/api/admin/employees/${encodeURIComponent(entry.id)}/messages`,
+      { message: text, display_name: entry.display_name },
     );
-    appendDutyEmployeeMessage(entry.id, {
-      id: `${localId}-assistant`,
-      role: 'assistant',
-      body: dutyEmployeeReplyFromExecution(result, entry),
-      created_at: new Date().toISOString(),
-      status: result.success === false ? '失败' : '已回复',
-    });
+    const mapped = mapDutyImMessages(result.messages);
+    if (mapped.length) {
+      dutyEmployeeMessages.value = { ...dutyEmployeeMessages.value, [entry.id]: mapped };
+      void nextTick(() => {
+        const el = dutyEmployeeScrollEl.value;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    }
   } catch (error) {
     appendDutyEmployeeMessage(entry.id, {
       id: `${localId}-error`,
@@ -1645,6 +1592,19 @@ async function onDutyEmployeeSend(): Promise<void> {
     });
   } finally {
     dutyEmployeeBusy.value = false;
+  }
+}
+
+async function loadDutyEmployeeMessages(entry: DutyEmployeeEntry): Promise<void> {
+  // 拉取该员工 1:1 IM 历史填充对话区；失败时静默（保留已有本地消息，不打断切换）。
+  try {
+    const result = await api.get<DutyEmployeeImResponse>(
+      `/api/admin/employees/${encodeURIComponent(entry.id)}/messages`,
+    );
+    const mapped = mapDutyImMessages(result.messages);
+    dutyEmployeeMessages.value = { ...dutyEmployeeMessages.value, [entry.id]: mapped };
+  } catch {
+    /* 历史加载失败不阻断进入会话；发送时仍可写入 */
   }
 }
 
