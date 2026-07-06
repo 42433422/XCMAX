@@ -25,6 +25,7 @@
     "infer output rules.json is a proposal: evidence.confidences + open_questions for human confirmation; never fabricate structure.",
     "When host provides ctx.call_llm (and payload.use_llm is not false), refine the heuristic draft with LLM proposals (bands / key_col / clear_zone / open questions); every proposal must pass deterministic validation before adoption; adopted/rejected recorded in evidence.llm.",
     "compile: rules.json + records (payload.records / records_path / bundled {rules, records}) -> plan.json following excel-template-write plan_version=1 contract.",
+    "solidify: bundled {source_workbook, golden_workbook|expected_records, rules} + ctx.call_llm -> LLM writes produce_records(source_workbook, rules) Python script; loop static-safety-check -> sandbox run -> records contract check -> golden diff (deterministic reverse-read of golden workbook); solidify only on full green: outputs/transform.py + solidify_report.json (iterations evidence, script sha256, rules_ref); monthly reruns then need zero LLM.",
     "compile validates day/band/entry bounds, drops out-of-roster keys with reasons, emits expected block and meta.rules_ref sha256 for QC.",
     "Never claim success unless rules.json / plan.json is actually written.",
     "Return {ok, summary, items, warnings, error, meta}."

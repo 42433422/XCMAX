@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · 固化循环（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：规则映射员新增 `solidify` 动作（`solidify.py` + `golden.py`）：LLM 把业务转换规则写成 `produce_records(source_workbook, rules)` Python 脚本（窄接口，管道其余保持白盒）；循环「生成→静态安全检查→沙箱执行→records 契约校验→金样对账→diff 喂回重写」，全绿才固化 `transform.py` + `solidify_report.json`（迭代证据+sha256+rules_ref）；金样判据 = 金样 xlsx 按 rules 确定性反读 records 逐槽 diff；固化后每月运行零 LLM
+- **test(mods)**：`test_excel_rules_solidify.py` 7 用例：反读器往返、diff 三态、固化一轮过/反馈迭代/黑名单拒绝/失败留证、convert 层端到端；**太阳鸟金样端到端**：金样=太阳鸟单体转化真实钉钉表（4557 行/69 人），固化循环金样对账 3842/3842 槽全匹配，零 LLM 复跑数据区 30240 格逐格 0 差异——固化管道完整复现太阳鸟转化
+
 ### 表格员工闭环 · LLM 协作（2026-07-06 · v10 线内迭代）
 
 - **feat(employee)**：规则映射员接 LLM 精修（`llm_refine.py`）：LLM 基于表头/块文本样本回答 open_questions（bands 多带布局/键列兜底/clear_zone 边界），**每条提议经确定性验证**（越块/公式区重叠/覆盖率）才采纳，采纳与拒绝全留痕 `evidence.llm`；无 `ctx.call_llm` 或 `use_llm=false` 时与纯启发式一致

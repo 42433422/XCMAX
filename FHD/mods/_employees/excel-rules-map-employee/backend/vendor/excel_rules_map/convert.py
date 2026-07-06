@@ -15,9 +15,11 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .compile_plan import compile_plan
+from .compile_plan import compile_plan, rules_ref
+from .golden import extract_records_from_workbook
 from .infer import infer_rules
 from .llm_refine import llm_refine_rules
+from .solidify import solidify_transform
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -36,7 +38,14 @@ def _detect_action(data: Optional[Dict[str, Any]], payload: Dict[str, Any]) -> s
         return "infer"
     if explicit in ("compile", "编译", "plan"):
         return "compile"
+    if explicit in ("solidify", "固化"):
+        return "solidify"
     if isinstance(data, dict):
+        if isinstance(data.get("source_workbook"), dict) and (
+            isinstance(data.get("golden_workbook"), dict)
+            or isinstance(data.get("expected_records"), list)
+        ):
+            return "solidify"
         if isinstance(data.get("sheets"), list):
             return "infer"
         if data.get("rules_version") or data.get("template_map") or data.get("rules"):
@@ -44,8 +53,9 @@ def _detect_action(data: Optional[Dict[str, Any]], payload: Dict[str, Any]) -> s
     if payload.get("records") is not None or payload.get("rules") is not None:
         return "compile"
     raise ValueError(
-        "无法判定 action：请上传 workbook.json（infer）或 rules.json（compile），"
-        "或在 payload.action 显式指定 infer/compile。"
+        "无法判定 action：请上传 workbook.json（infer）、rules.json（compile），"
+        "或组合 {source_workbook, golden_workbook, rules}（solidify）；"
+        "也可在 payload.action 显式指定。"
     )
 
 
@@ -160,6 +170,73 @@ async def convert_file(
             "confidences": evidence["confidences"],
             "open_questions": evidence["open_questions"],
             "llm": evidence.get("llm") or {"used": False},
+            "output_schema": list(rule_spec.get("output_schema") or []),
+        }
+
+    if action == "solidify":
+        if not callable(ctx.get("call_llm")) or payload.get("use_llm") is False:
+            raise ValueError("solidify 需要宿主 LLM 服务（ctx.call_llm），且 use_llm 不能关闭。")
+        if not isinstance(data, dict):
+            raise ValueError(
+                "solidify 需要上传组合 JSON：{source_workbook, golden_workbook|expected_records, rules?}"
+            )
+        source_workbook = data.get("source_workbook")
+        if not isinstance(source_workbook, dict):
+            raise ValueError("solidify 缺少 source_workbook（读取员读源表的 workbook.json）")
+        rules = data.get("rules") if isinstance(data.get("rules"), dict) else payload.get("rules")
+        if not isinstance(rules, dict):
+            raise ValueError("solidify 缺少 rules：请在组合 JSON 或 payload.rules 提供固化结构规则。")
+        expected_records = data.get("expected_records")
+        if not isinstance(expected_records, list):
+            golden_workbook = data.get("golden_workbook")
+            if not isinstance(golden_workbook, dict):
+                raise ValueError(
+                    "solidify 缺少金样：请提供 golden_workbook（金样输出经读取员转 JSON）或 expected_records。"
+                )
+            expected_records = extract_records_from_workbook(golden_workbook, rules)
+
+        result = await solidify_transform(
+            source_workbook,
+            rules,
+            expected_records,
+            ctx["call_llm"],
+            business_context=str(payload.get("business_context") or ""),
+            max_iterations=int(payload.get("max_iterations") or 4),
+        )
+        script_path = output_dir / "transform.py"
+        report_path = output_dir / "solidify_report.json"
+        if result.get("script"):
+            script_path.write_text(result["script"], encoding="utf-8")
+        report = {
+            "ok": result["ok"],
+            "script_path": str(script_path) if result.get("script") else "",
+            "script_sha256": result.get("script_sha256") or "",
+            "rules_ref": rules_ref(rules),
+            "expected_slots": len(expected_records),
+            "diff": result.get("diff"),
+            "iterations": result.get("iterations") or [],
+        }
+        report_path.write_text(
+            json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
+        )
+        if not result["ok"]:
+            attempts = len(report["iterations"])
+            last_err = next(
+                (it.get("error") for it in reversed(report["iterations"]) if it.get("error")),
+                "金样对账未通过",
+            )
+            raise ValueError(
+                f"固化失败（{attempts} 轮迭代）：{last_err}；证据见 {report_path.name}"
+            )
+        return {
+            "action": "solidify",
+            "output_path": str(script_path),
+            "report_path": str(report_path),
+            "script_sha256": report["script_sha256"],
+            "rules_ref": report["rules_ref"],
+            "iterations": len(report["iterations"]),
+            "diff_stats": (result.get("diff") or {}).get("stats"),
+            "records_count": len(result.get("records") or []),
             "output_schema": list(rule_spec.get("output_schema") or []),
         }
 

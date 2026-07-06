@@ -46,6 +46,23 @@ records 两种形态（可混用）：
 
 输出 `outputs/plan.json`：模板写入员 `plan_version=1` 契约 + `expected`（对账基准）+ `meta.rules_ref`（规则内容 sha256，产物可追溯规则版本）。
 
+### 3. `solidify`：LLM 把业务转换规则固化成 Python 脚本
+
+输入：组合 JSON `{"source_workbook": 源表workbook.json, "golden_workbook": 金样输出workbook.json | "expected_records": [...], "rules": 固化结构规则}`；需要宿主 LLM（`ctx.call_llm`）。`payload.business_context` 可口述业务规则辅助 LLM。
+
+固化循环（窄接口：LLM 只写 records 生产者，管道其余保持白盒）：
+
+```
+LLM 生成 produce_records(source_workbook, rules) 脚本
+  → 静态安全检查（禁文件/网络/子进程/eval）
+  → 沙箱执行 → records 契约校验（key/day/band/entries 边界）
+  → 金样对账：金样 xlsx 按 rules 确定性反读出期望 records，与脚本产出逐槽 diff
+  → 全绿 → 固化 outputs/transform.py + solidify_report.json（迭代证据+sha256+rules_ref）
+  → 未过 → diff 样本喂回 LLM 重写（默认最多 4 轮）
+```
+
+固化后每月运行**零 LLM**：固化脚本 → compile → 写入员 → 质检员，全确定性、可复现。
+
 ## 固化建议
 
-`rules.json` 提案经人确认（补 `bands`、修 `clear_zone`、填 `policy`）后入库固化，配套金样（输入样本 + 期望输出）做回归门禁；模板改版时重新 infer 比对 diff。
+`rules.json` 提案经人确认（补 `bands`、修 `clear_zone`、填 `policy`）后入库固化，配套金样（输入样本 + 期望输出）做回归门禁；模板改版时重新 infer 比对 diff。业务转换逻辑用 `solidify` 沉淀为 `transform.py`，与 rules.json 同版本管理。
