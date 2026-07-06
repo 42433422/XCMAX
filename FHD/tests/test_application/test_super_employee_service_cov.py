@@ -910,8 +910,8 @@ class TestCleanCliStdout:
 
 
 class TestDispatchReply:
-    # _dispatch_reply 已统一返回"思考中..."避免向用户暴露派工实现细节。
-    # 以下测试验证该方法对各种 dispatch 状态均返回约定占位语。
+    # _dispatch_reply 按派工结果返回诚实状态文案（PRODUCT_POLISH_CHECKLIST P1 路径四）：
+    # 仅派工真实被接受时返回"思考中..."；排队/无设备/失败必须说明原因与下一步。
 
     def test_para_accepted(self, tmp_path):
         svc = _make_svc(tmp_path)
@@ -941,17 +941,24 @@ class TestDispatchReply:
     def test_no_device_reason(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"queued": True, "reason": "para_no_online_codex_device"}
-        assert svc._dispatch_reply(dispatch) == "思考中..."
+        reply = svc._dispatch_reply(dispatch)
+        assert "没有在线" in reply
+        assert "Codex" in reply
+        assert "思考中" not in reply
 
     def test_queued_reason(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"queued": True, "reason": "other_reason"}
-        assert svc._dispatch_reply(dispatch) == "思考中..."
+        reply = svc._dispatch_reply(dispatch)
+        assert "等待队列" in reply
+        assert "思考中" not in reply
 
     def test_not_accepted_not_queued(self, tmp_path):
         svc = _make_svc(tmp_path)
         dispatch = {"accepted": False, "queued": False}
-        assert svc._dispatch_reply(dispatch) == "思考中..."
+        reply = svc._dispatch_reply(dispatch)
+        assert "派发失败" in reply
+        assert "思考中" not in reply
 
 
 # ─────────────── _should_reply_with_cli ─────────────────────────

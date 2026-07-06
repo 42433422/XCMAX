@@ -48,7 +48,8 @@ def test_codex_super_employee_invoke_writes_outbox_when_dispatch_not_configured(
     assert Path(dispatch["outbox_path"]).is_file()
     assert result["employee"]["id"] == "codex-super-employee"
     assert [m["role"] for m in result["messages"]] == ["user", "system"]
-    assert result["assistant_message"]["body"] == "思考中..."
+    # 排队未接单时必须诚实告知等待状态，不得用"思考中"包装假成功。
+    assert "等待队列" in result["assistant_message"]["body"]
     assert result["assistant_message"]["kind"] == "dispatcher"
 
 

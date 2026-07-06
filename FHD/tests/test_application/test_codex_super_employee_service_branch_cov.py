@@ -2185,24 +2185,29 @@ class TestDispatchReplyBoundary:
     """_dispatch_reply 的派工回复。
 
     签名: _dispatch_reply(self, dispatch: dict) -> str
-    始终返回 "思考中..."
+    accepted=True 返回"思考中..."；排队/无设备/失败返回诚实状态文案。
     """
 
-    def test_returns_thinking_message(self, tmp_path):
+    def test_accepted_returns_thinking_message(self, tmp_path):
         svc = _make_svc(tmp_path)
-        reply = svc._dispatch_reply({"status": "queued"})
+        reply = svc._dispatch_reply({"accepted": True, "task_id": "t1"})
         assert "思考" in reply
 
-    def test_returns_same_for_any_dispatch(self, tmp_path):
+    def test_queued_and_failed_are_distinct_from_accepted(self, tmp_path):
         svc = _make_svc(tmp_path)
-        reply1 = svc._dispatch_reply({"status": "queued"})
-        reply2 = svc._dispatch_reply({"status": "accepted", "task_id": "t1"})
-        assert reply1 == reply2
+        queued = svc._dispatch_reply({"queued": True})
+        failed = svc._dispatch_reply({"accepted": False, "queued": False})
+        accepted = svc._dispatch_reply({"accepted": True})
+        assert "等待队列" in queued
+        assert "派发失败" in failed
+        assert accepted != queued
+        assert accepted != failed
 
     def test_empty_dispatch(self, tmp_path):
         svc = _make_svc(tmp_path)
         reply = svc._dispatch_reply({})
         assert isinstance(reply, str)
+        assert reply
 
 
 # ─────────────── _write_outbox ───────────────────────────────────

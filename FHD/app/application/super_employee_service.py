@@ -1100,10 +1100,22 @@ class SuperEmployeeService:
         return self._messages.write_outbox(request, status=status, accepted=accepted, reason=reason)
 
     def _dispatch_reply(self, dispatch: dict[str, Any]) -> str:
-        # 统一对外提示为"思考中..."，避免暴露派工细节导致用户误以为卡住。
-        # 派工细节仍保留在 dispatch 字典中供前端/日志使用。
-        _ = dispatch  # 保留参数签名兼容性
-        return "思考中..."
+        # 诚实状态文案（PRODUCT_POLISH_CHECKLIST P1 路径四）：只有派工被真实接受时
+        # 才说"思考中"；排队/无设备/失败必须说清原因和下一步，不得包装成假成功。
+        if dispatch.get("accepted") is True:
+            return "思考中..."
+        reason = str(dispatch.get("reason") or "")
+        if "no_online" in reason or "no_device" in reason:
+            return (
+                f"当前没有在线的 {self._p.display_tool} 执行设备，任务已保存。"
+                "请先启动电脑执行端并完成绑定，设备上线后重新发送即可继续。"
+            )
+        if dispatch.get("queued"):
+            return (
+                "任务已进入等待队列，但电脑执行端尚未接单。"
+                "请确认电脑执行端已启动并在线，任务会在其上线后自动继续。"
+            )
+        return "任务派发失败，请确认电脑执行端已启动并完成绑定后重试。"
 
     def _message_row(
         self,
