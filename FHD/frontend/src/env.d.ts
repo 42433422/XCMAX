@@ -11,6 +11,7 @@ interface Window {
     platform: NodeJS.Platform;
     versions: Record<string, string>;
     getDataDir: () => Promise<string>;
+    openDataDir?: () => Promise<void>;
     checkForUpdates: () => Promise<unknown>;
     installUpdate: () => Promise<void>;
     onUpdateEvent: (callback: (event: unknown) => void) => () => void;

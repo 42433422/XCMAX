@@ -6,7 +6,20 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
-### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
+### 桌面版体验修复（2026-07-06 · v10 线内迭代）
+
+- **feat(desktop)**：Electron 启动即显示原生 splash 窗（品牌 + 阶段文案「启动本地服务/等待就绪/加载界面」），主窗就绪后关闭；首启 2–3 分钟不再黑屏无反馈
+- **feat(desktop)**：端口 17500 被占时自动尝试 17501–17509 备用端口（全占才提示，文案面向最终用户）；新增 `xcagi:open-data-dir` IPC
+- **fix(frontend)**：冷加载/F5 深链白屏治理——路由守卫悬挂超 250ms 显示「页面加载中…」指示；`validateEnterpriseSessionCached` 单飞合并冷启动并发校验
+- **perf(backend)**：企业 SKU `session/validate` 的市场令牌校验加 60s TTL 缓存，消除每次校验一次远端 `xiu-ci.com` 往返的放大（实测冷启动内容出现 26.8s → 亚秒级重复校验）
+- **feat(auth)**：市场不可达（网络/5xx）时企业用户本地离线登录兜底（此前成功登录过的设备），响应带 `offline_login=true`；前端登录后显示可关闭的「离线模式」横幅；4xx 凭据拒绝不放行
+- **feat(frontend)**：登录页 `ACCOUNT_KIND_MISMATCH` 错误下渲染「前往管理员入口登录」按钮，管理员误入企业入口不再死锁
+- **feat(frontend)**：侧栏取消 15s 无操作自动折叠，改顶栏手动折叠按钮 + localStorage 记忆；折叠态保留点击展开
+- **fix(i18n)**：默认锁定 zh-CN（浏览器语言不再触发自动 en-US），杜绝设置页/任务面板中英混排；用户显式切换仍生效
+- **feat(frontend)**：侧栏补「能力库」直达入口；企业用户角色放开「AI群聊」，菜单与路由一致
+- **feat(frontend)**：AI 群聊空态由常驻「加载中…」改真实加载态 + 「创建第一个群聊」引导；信息页无会话时提供「发起会话」引导
+- **feat(desktop)**：桌面运行时页用户向改造——打开数据目录按钮、上次备份卡片 + 「立即备份」（新增 `POST /api/desktop/backup-now`）、electron-updater 事件译为可读文案（不再输出原始 JSON）
+- **feat(frontend)**：设置-关于显示「上次检查更新」时间
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
 - **feat(onboarding)**：首启 seed 按 manifest `industry.subsystems` 映射演示客户/产品；前端 seed/AI 文案随行业变化

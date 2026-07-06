@@ -4,7 +4,6 @@
       class="sidebar-shell"
       :class="{ collapsed: sidebarCollapsed }"
       :style="sidebarShellStyle"
-      @mouseenter="onSidebarMouseEnter"
     >
       <Sidebar
         :active-view="currentRouteName"
@@ -20,18 +19,13 @@
         @reset="resetSidebarWidth"
       />
     </div>
-    <div
-      v-if="isSidebarFeatureEnabled && sidebarCollapsed"
-      class="sidebar-hover-trigger"
-      @mouseenter="onHoverTriggerEnter"
-      @mouseleave="onHoverTriggerLeave"
-    >
+    <div v-if="isSidebarFeatureEnabled && sidebarCollapsed" class="sidebar-hover-trigger">
       <button
         class="sidebar-peek-button"
         type="button"
         aria-label="展开侧边栏"
         title="展开侧边栏"
-        @click="onHoverTriggerClick"
+        @click="expandSidebar"
       >
         ▶
       </button>
@@ -54,7 +48,28 @@
           {{ endingImpersonation ? '结束中…' : '结束代管' }}
         </button>
       </div>
+      <div
+        v-if="offlineNotice"
+        class="offline-login-bar"
+        role="status"
+        data-testid="offline-login-bar"
+      >
+        <span class="offline-login-bar__text">离线模式：{{ offlineNotice }}</span>
+        <button type="button" class="offline-login-bar__dismiss" @click="dismissOfflineNotice">
+          知道了
+        </button>
+      </div>
       <div class="top-bar">
+        <button
+          v-if="isSidebarFeatureEnabled"
+          type="button"
+          class="sidebar-toggle-btn"
+          :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
+          @click="toggleSidebarCollapsed"
+        >
+          <i class="fa fa-bars" aria-hidden="true"></i>
+        </button>
         <div class="page-title-wrap">
           <div class="page-kicker">{{ topKickerText }}</div>
           <div class="page-title">{{ currentViewTitle }}</div>
@@ -110,6 +125,7 @@ import { getIndustryPreset } from '@/constants/industryPresets'
 import { resolveCoreNavLabel, INDUSTRY_MENU_LABELS } from '@/utils/coreNavLabel'
 import { isClientModeTiersUiEnabled } from '@/constants/clientModeTiers'
 import { isChatSidebarActive, normalizeSidebarActiveKey } from '@/utils/sidebarActiveKey'
+import { clearOfflineLoginNotice, readOfflineLoginNotice } from '@/utils/offlineLoginNotice'
 import { SIDEBAR_ROUTE_NAME_MAP } from '@/constants/sidebarRouteNameMap'
 import { navigateFromSidebarKey } from '@/utils/sidebarNavigation'
 import { useModRoutes } from '@/composables/useModRoutes'
@@ -156,19 +172,48 @@ const {
 } = storeToRefs(accountProfileStore)
 const endingImpersonation = ref(false)
 const { modMenuItems } = useModRoutes()
-const SIDEBAR_INACTIVITY_MS = 15000
-const SIDEBAR_HOVER_OPEN_MS = 1000
 const SIDEBAR_DISABLE_MQ = '(max-width: 767px)'
 const MOBILE_BOTTOM_NAV_MQ = '(max-width: 768px)'
 const SIDEBAR_PANE_KEY = 'main-layout.sidebar'
-const ACTIVITY_EVENTS = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart']
-const sidebarCollapsed = ref(false)
+/** 侧栏折叠为用户手动操作并记忆；不再做“无操作 15s 自动收起”（桌面 ERP 用户依赖侧栏定位） */
+const LS_SIDEBAR_COLLAPSED = 'xcagi_sidebar_collapsed'
+const sidebarCollapsed = ref(readSidebarCollapsedPreference())
 const isSidebarFeatureEnabled = ref(true)
-let sidebarCollapseTimer = null
-let sidebarHoverTimer = null
 let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
+const offlineNotice = ref(readOfflineLoginNotice())
+
+function readSidebarCollapsedPreference() {
+  try {
+    return window.localStorage.getItem(LS_SIDEBAR_COLLAPSED) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistSidebarCollapsedPreference(collapsed) {
+  try {
+    window.localStorage.setItem(LS_SIDEBAR_COLLAPSED, collapsed ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+
+function toggleSidebarCollapsed() {
+  sidebarCollapsed.value = !sidebarCollapsed.value
+  persistSidebarCollapsedPreference(sidebarCollapsed.value)
+}
+
+function expandSidebar() {
+  sidebarCollapsed.value = false
+  persistSidebarCollapsedPreference(false)
+}
+
+function dismissOfflineNotice() {
+  offlineNotice.value = ''
+  clearOfflineLoginNotice()
+}
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
@@ -333,15 +378,6 @@ const {
   minSize: 220,
   maxSize: 360,
   enabled: () => isSidebarFeatureEnabled.value && !sidebarCollapsed.value,
-  onResizeStart: () => {
-    clearSidebarCollapseTimer()
-    clearSidebarHoverTimer()
-  },
-  onResizeEnd: () => {
-    if (isSidebarFeatureEnabled.value && !sidebarCollapsed.value) {
-      scheduleSidebarAutoCollapse()
-    }
-  },
 })
 
 /** 顶栏与页面标题：仅核心 + 行业（与侧栏 resolveCoreNavLabel / INDUSTRY_MENU_LABELS 同源），不含 Mod menu_overrides */
@@ -383,88 +419,20 @@ function openSettings() {
   void router.push({ name: 'settings' })
 }
 
-const clearSidebarCollapseTimer = () => {
-  if (sidebarCollapseTimer) {
-    window.clearTimeout(sidebarCollapseTimer)
-    sidebarCollapseTimer = null
-  }
-}
-
-const clearSidebarHoverTimer = () => {
-  if (sidebarHoverTimer) {
-    window.clearTimeout(sidebarHoverTimer)
-    sidebarHoverTimer = null
-  }
-}
-
-const ensureSidebarExpandedForTutorial = () => {
-  clearSidebarCollapseTimer()
-  clearSidebarHoverTimer()
-  if (isSidebarFeatureEnabled.value) {
-    sidebarCollapsed.value = false
-  }
-}
-
-const scheduleSidebarAutoCollapse = () => {
-  clearSidebarCollapseTimer()
-  if (isAnyTutorialActive.value) return
-  if (!isSidebarFeatureEnabled.value || sidebarCollapsed.value) return
-  sidebarCollapseTimer = window.setTimeout(() => {
-    if (isAnyTutorialActive.value) return
-    sidebarCollapsed.value = true
-  }, SIDEBAR_INACTIVITY_MS)
-}
-
+// 教程运行时确保侧栏展开（教程步骤需要点击侧栏项）；不改变用户记忆的偏好
 watch(isAnyTutorialActive, (active) => {
-  if (active) {
-    ensureSidebarExpandedForTutorial()
-    return
-  }
-  if (isSidebarFeatureEnabled.value && !sidebarCollapsed.value) {
-    scheduleSidebarAutoCollapse()
+  if (active && isSidebarFeatureEnabled.value) {
+    sidebarCollapsed.value = false
   }
 })
-
-const handleGlobalActivity = () => {
-  if (!isSidebarFeatureEnabled.value) return
-  if (sidebarCollapsed.value) return
-  scheduleSidebarAutoCollapse()
-}
-
-const onSidebarMouseEnter = () => {
-  handleGlobalActivity()
-}
-
-const onHoverTriggerEnter = () => {
-  if (!isSidebarFeatureEnabled.value || !sidebarCollapsed.value) return
-  clearSidebarHoverTimer()
-  sidebarHoverTimer = window.setTimeout(() => {
-    sidebarCollapsed.value = false
-    scheduleSidebarAutoCollapse()
-  }, SIDEBAR_HOVER_OPEN_MS)
-}
-
-const onHoverTriggerLeave = () => {
-  clearSidebarHoverTimer()
-}
-
-const onHoverTriggerClick = () => {
-  clearSidebarHoverTimer()
-  sidebarCollapsed.value = false
-  scheduleSidebarAutoCollapse()
-}
 
 const onViewportChange = (event) => {
   const matches = Boolean(event?.matches)
   isSidebarFeatureEnabled.value = !matches
-  clearSidebarHoverTimer()
-  clearSidebarCollapseTimer()
   if (!isSidebarFeatureEnabled.value) {
     sidebarCollapsed.value = false
     stopSidebarResize()
-    return
   }
-  scheduleSidebarAutoCollapse()
 }
 
 const onMobileNavViewportChange = (event) => {
@@ -508,18 +476,10 @@ onMounted(async () => {
       mobileBottomNavMedia.addListener(onMobileNavViewportChange)
     }
   }
-  ACTIVITY_EVENTS.forEach((eventName) => {
-    window.addEventListener(eventName, handleGlobalActivity, { passive: true })
-  })
 })
 
 onBeforeUnmount(() => {
   stopSidebarResize()
-  clearSidebarHoverTimer()
-  clearSidebarCollapseTimer()
-  ACTIVITY_EVENTS.forEach((eventName) => {
-    window.removeEventListener(eventName, handleGlobalActivity)
-  })
   if (!sidebarViewportMedia) return
   if (typeof sidebarViewportMedia.removeEventListener === 'function') {
     sidebarViewportMedia.removeEventListener('change', onViewportChange)
@@ -669,6 +629,55 @@ onBeforeUnmount(() => {
 .impersonate-bar__end:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.offline-login-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  background: linear-gradient(90deg, #fefce8, #fef9c3);
+  border-bottom: 1px solid #fde047;
+  color: #854d0e;
+  font-size: 13px;
+}
+
+.offline-login-bar__dismiss {
+  border: 1px solid #facc15;
+  background: #fff;
+  color: #a16207;
+  border-radius: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sidebar-toggle-btn {
+  margin-right: 10px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  color: #0b72d9;
+  border-color: rgba(11, 114, 217, 0.35);
+  background: rgba(239, 246, 255, 0.96);
 }
 
 .top-bar-settings-btn {

@@ -173,6 +173,77 @@ describe('main — isPortAvailable', () => {
   })
 })
 
+describe('main — resolveAvailableDesktopPort', () => {
+  it('returns preferred port when free', async () => {
+    const { resolveAvailableDesktopPort } = await import('./main.js')
+    const port = 38200 + Math.floor(Math.random() * 100)
+    expect(await resolveAvailableDesktopPort(port, 3)).toBe(port)
+  })
+
+  it('falls back to the next port when preferred is occupied', async () => {
+    const { resolveAvailableDesktopPort } = await import('./main.js')
+    const net = await import('node:net')
+    const server = net.createServer()
+    await new Promise<void>(resolve => {
+      server.listen(0, '127.0.0.1', () => resolve())
+    })
+    const occupied = (server.address() as { port: number }).port
+    try {
+      expect(await resolveAvailableDesktopPort(occupied, 3)).toBe(occupied + 1)
+    } finally {
+      server.close()
+    }
+  })
+
+  it('returns null when all candidate ports are occupied', async () => {
+    const { resolveAvailableDesktopPort } = await import('./main.js')
+    const net = await import('node:net')
+    const base = await new Promise<{ server: import('node:net').Server; port: number }>(resolve => {
+      const server = net.createServer()
+      server.listen(0, '127.0.0.1', () => {
+        resolve({ server, port: (server.address() as { port: number }).port })
+      })
+    })
+    const second = net.createServer()
+    await new Promise<void>(resolve => {
+      second.listen(base.port + 1, '127.0.0.1', () => resolve())
+    })
+    try {
+      expect(await resolveAvailableDesktopPort(base.port, 2)).toBeNull()
+    } finally {
+      base.server.close()
+      second.close()
+    }
+  })
+
+  it('never returns a port >= 65536', async () => {
+    const { resolveAvailableDesktopPort } = await import('./main.js')
+    const result = await resolveAvailableDesktopPort(65535, 10)
+    expect(result === null || result < 65536).toBe(true)
+  })
+})
+
+describe('main — currentDesktopPort', () => {
+  it('defaults to DEFAULT_PORT and reflects test override', async () => {
+    const { currentDesktopPort, DEFAULT_PORT, setActiveDesktopPortForTests } = await import('./main.js')
+    expect(currentDesktopPort()).toBe(DEFAULT_PORT)
+    setActiveDesktopPortForTests(DEFAULT_PORT + 3)
+    expect(currentDesktopPort()).toBe(DEFAULT_PORT + 3)
+    setActiveDesktopPortForTests(DEFAULT_PORT)
+  })
+})
+
+describe('main — splashHtml', () => {
+  it('contains brand, phase element and boot hint', async () => {
+    const { splashHtml } = await import('./main.js')
+    const html = splashHtml()
+    expect(html).toContain('XCAGI')
+    expect(html).toContain('id="phase"')
+    expect(html).toContain('正在启动')
+    expect(html).toContain('首次启动')
+  })
+})
+
 describe('main — portOccupiedHint', () => {
   it('includes the port number and env var guidance', async () => {
     const { portOccupiedHint } = await import('./main.js')

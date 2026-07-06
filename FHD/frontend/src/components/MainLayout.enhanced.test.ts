@@ -435,51 +435,40 @@ describe('MainLayout.vue – resolveModBadgeSuffix', () => {
   })
 })
 
-describe('MainLayout.vue – sidebar timers', () => {
-  it('clearSidebarCollapseTimer clears the timer', async () => {
+describe('MainLayout.vue – sidebar manual collapse (auto collapse removed)', () => {
+  it('toggleSidebarCollapsed flips and persists collapsed state', async () => {
     const { wrapper } = await mountMainLayout()
-    const timer = window.setTimeout(() => {}, 10000)
-    wrapper.vm.sidebarCollapseTimer = timer
-    wrapper.vm.clearSidebarCollapseTimer()
-    expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('clearSidebarHoverTimer clears the timer', async () => {
-    const { wrapper } = await mountMainLayout()
-    const timer = window.setTimeout(() => {}, 10000)
-    wrapper.vm.sidebarHoverTimer = timer
-    wrapper.vm.clearSidebarHoverTimer()
-    expect(wrapper.vm.sidebarHoverTimer).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('scheduleSidebarAutoCollapse does not schedule when sidebar is already collapsed', async () => {
-    const { wrapper } = await mountMainLayout()
-    wrapper.vm.sidebarCollapsed = true
     wrapper.vm.isSidebarFeatureEnabled = true
-    wrapper.vm.scheduleSidebarAutoCollapse()
-    // Timer should not be set
-    expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
+    expect(wrapper.vm.sidebarCollapsed).toBe(false)
+    wrapper.vm.toggleSidebarCollapsed()
+    expect(wrapper.vm.sidebarCollapsed).toBe(true)
+    expect(window.localStorage.getItem('xcagi_sidebar_collapsed')).toBe('1')
+    wrapper.vm.toggleSidebarCollapsed()
+    expect(wrapper.vm.sidebarCollapsed).toBe(false)
+    window.localStorage.removeItem('xcagi_sidebar_collapsed')
     wrapper.unmount()
   })
 
-  it('scheduleSidebarAutoCollapse does not schedule when feature is disabled', async () => {
+  it('expandSidebar expands and persists', async () => {
     const { wrapper } = await mountMainLayout()
+    wrapper.vm.isSidebarFeatureEnabled = true
+    wrapper.vm.toggleSidebarCollapsed()
+    expect(wrapper.vm.sidebarCollapsed).toBe(true)
+    wrapper.vm.expandSidebar()
+    expect(wrapper.vm.sidebarCollapsed).toBe(false)
+    window.localStorage.removeItem('xcagi_sidebar_collapsed')
+    wrapper.unmount()
+  })
+
+  it('sidebar stays open with no interaction (no 15s auto collapse)', async () => {
+    vi.useFakeTimers()
+    const { wrapper } = await mountMainLayout()
+    wrapper.vm.isSidebarFeatureEnabled = true
     wrapper.vm.sidebarCollapsed = false
-    wrapper.vm.isSidebarFeatureEnabled = false
-    wrapper.vm.scheduleSidebarAutoCollapse()
-    expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
-    wrapper.unmount()
-  })
-
-  it('ensureSidebarExpandedForTutorial expands sidebar', async () => {
-    const { wrapper } = await mountMainLayout()
-    wrapper.vm.sidebarCollapsed = true
-    wrapper.vm.isSidebarFeatureEnabled = true
-    wrapper.vm.ensureSidebarExpandedForTutorial()
+    vi.advanceTimersByTime(30000)
     expect(wrapper.vm.sidebarCollapsed).toBe(false)
     wrapper.unmount()
+    vi.useRealTimers()
   })
 })
 

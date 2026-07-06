@@ -308,7 +308,19 @@
       </main>
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
-        <p>选择左侧会话开始聊天</p>
+        <p>{{ sidebarListItems.length ? '选择左侧会话开始聊天' : '还没有会话' }}</p>
+        <p v-if="!sidebarListItems.length" class="im-chat-empty-sub">
+          与同事或 AI 员工发起第一段对话，消息会同步到手机端。
+        </p>
+        <button
+          v-if="!sidebarListItems.length"
+          type="button"
+          class="im-btn im-btn--primary"
+          :disabled="busy"
+          @click="openContactPicker"
+        >
+          发起会话
+        </button>
       </main>
     </div>
 
@@ -2162,6 +2174,11 @@ onUnmounted(() => {
 .im-chat--empty .fa {
   font-size: 42px;
   opacity: 0.35;
+}
+.im-chat-empty-sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--xc-color-muted, #a0a6b1);
 }
 .im-load-more {
   margin: 10px auto 0;

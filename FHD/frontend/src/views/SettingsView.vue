@@ -870,6 +870,9 @@
             <p class="muted settings-about-version">
               {{ $t('settings.currentVersion', { version: appVersionLabel }) }}
             </p>
+            <p v-if="isDesktopShell && lastUpdateCheckLabel" class="muted settings-about-version">
+              {{ $t('settings.lastUpdateCheck', { time: lastUpdateCheckLabel }) }}
+            </p>
             <div class="settings-about-actions">
               <button
                 v-if="isDesktopShell"
@@ -922,6 +925,7 @@ import { useModsStore } from '@/stores/mods';
 import { useAccountProfileStore } from '@/stores/accountProfile';
 import packageJson from '../../package.json';
 import { appAlert, appConfirm } from '@/utils/appDialog';
+import { readUpdateCheckTime, rememberUpdateCheckTime } from '@/utils/desktopUpdateCheckTime';
 import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
 import { getIndustryPreset } from '@/constants/industryPresets';
 import { isProtectedClientModId } from '@/constants/protectedMods';
@@ -1838,6 +1842,14 @@ const sampleCountWarning = ref('');
 const aboutUpdateBusy = ref(false);
 const aboutUpdateMessage = ref('');
 const aboutUpdateError = ref(false);
+const lastUpdateCheckAt = ref(readUpdateCheckTime());
+const lastUpdateCheckLabel = computed(() => {
+  if (!lastUpdateCheckAt.value) return '';
+  const d = new Date(lastUpdateCheckAt.value);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+});
 const currentDbPath = ref('');
 const databaseStorageLabel = ref('');
 const desktopDatabaseVisible = ref(false);
@@ -2285,6 +2297,7 @@ async function onCheckForUpdates() {
   try {
     await window.xcagiDesktop.checkForUpdates();
     aboutUpdateMessage.value = t('settings.updateCheckStarted');
+    lastUpdateCheckAt.value = rememberUpdateCheckTime();
   } catch (e: unknown) {
     aboutUpdateMessage.value = `${t('settings.updateCheckFailed')}：${errorMessage(e)}`;
     aboutUpdateError.value = true;

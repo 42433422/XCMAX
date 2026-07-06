@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory, START_LOCATION, type NavigationGuardNext, type RouteLocationNormalized, type RouteRecordRaw } from 'vue-router';
 import { useLanGate } from '@/composables/useLanGate';
+import { installRoutePendingIndicator } from '@/composables/useRoutePending';
 import {
   isPlatformShellModeEnabled,
   isShellEditionBuild,
@@ -461,6 +462,10 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 });
+
+// 须先于业务守卫注册：冷启动初始导航在 app.use(router) 时就会触发，
+// 守卫链（SKU/会话/权益）耗时期间由 App.vue 顶部指示器提示「页面加载中」。
+installRoutePendingIndicator(router);
 
 router.beforeEach(async (to, _from, next) => {
   if (to.name === 'duty-roster-graph') {

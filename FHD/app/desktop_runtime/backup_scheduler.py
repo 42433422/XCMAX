@@ -214,6 +214,32 @@ def _cleanup_old_backups(backups_dir: Path, retention_days: int) -> None:
             logger.warning("failed to clean up old backup %s: %s", path, exc)
 
 
+def run_backup_now(data_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
+    """立即执行一次数据库备份（用户在桌面运行时页手动触发）。
+
+    与定时备份共用 backup_database（sqlite3.backup 热备），成功后同步外部目录并清理超期。
+    返回 {"success": bool, "path": str|None, "filename": str|None, "size": int|None}。
+    """
+    version = os.environ.get("XCAGI_VERSION", "unknown")
+    result = backup_database(data_dir, version=version)
+    if result is None:
+        return {"success": False, "path": None, "filename": None, "size": None}
+    _sync_to_external(result)
+    try:
+        dirs = ensure_desktop_dirs(data_dir)
+        _cleanup_old_backups(dirs["backups"], retention_days=_RETENTION_DAYS)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("manual backup cleanup skipped: %s", exc)
+    stat = result.stat()
+    logger.info("manual backup created: %s", result.name)
+    return {
+        "success": True,
+        "path": str(result),
+        "filename": result.name,
+        "size": stat.st_size,
+    }
+
+
 def get_last_backup_info(data_dir: str | os.PathLike[str] | None = None) -> dict[str, Any]:
     """返回最近一次备份信息，供 /api/desktop/status 暴露给前端/Electron。
 

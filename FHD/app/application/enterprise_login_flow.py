@@ -409,6 +409,93 @@ async def finalize_enterprise_login(
     return result
 
 
+def _market_result_unreachable(market_result: dict[str, Any] | None) -> bool:
+    """市场是否因网络/服务故障不可达（区别于凭据被拒的 4xx）。"""
+    res = market_result or {}
+    if res.get("success"):
+        return False
+    code = str(res.get("error_code") or "").strip()
+    if code == "MARKET_AUTH_UNAVAILABLE":
+        return True
+    try:
+        status = int(res.get("status_code") or 0)
+    except (TypeError, ValueError):
+        status = 0
+    return status >= 500
+
+
+OFFLINE_LOGIN_MESSAGE = "市场服务暂时不可达，已使用本机账号离线登录；商店与权益同步等在线功能恢复联网后自动可用。"
+
+
+async def _offline_enterprise_login_fallback(
+    *,
+    username: str,
+    password: str,
+    totp_code: str | None,
+    account_kind: AccountKind,
+    market_result: dict[str, Any] | None,
+    auth_app_service: Any,
+    sku: str,
+) -> tuple[dict[str, Any] | None, JSONResponse | None] | None:
+    """市场不可达时的企业用户离线登录；本地凭据无效时返回 None（继续走原错误路径）。"""
+    try:
+        local = auth_app_service.login(username, password, totp_code=totp_code)
+    except RECOVERABLE_ERRORS:
+        logger.exception("offline enterprise login fallback failed username=%s", username)
+        return None
+    if not local.get("success"):
+        return None
+    user_role = str((local.get("user") or {}).get("role") or "")
+    if user_role == "admin":
+        # 与在线路径一致：管理员不得从企业入口进入
+        kind_err = validate_account_kind_for_market(
+            account_kind, is_enterprise=True, is_market_admin=True
+        )
+        if kind_err:
+            return None, JSONResponse(
+                {
+                    "success": False,
+                    "message": kind_err,
+                    "error": {"code": "ACCOUNT_KIND_MISMATCH", "message": kind_err},
+                },
+                status_code=_login_client_http_status(403),
+            )
+    session_id = local.get("session_id")
+    if session_id:
+        local = await finalize_enterprise_login(
+            result=local,
+            session_id=str(session_id),
+            market_result=market_result,
+            account_kind=account_kind,
+            username=username,
+            sku=sku,
+            skip_market_sync=True,
+        )
+        # 离线宽限：该设备此前以企业身份登录过，沿用企业权益（与 admin 应急路径同精神）
+        persist_session_account_meta(
+            str(session_id),
+            account_kind=account_kind,
+            company_brand=str(local.get("company_brand") or ""),
+            market_user_id=None,
+            market_is_admin=False,
+            market_is_enterprise=True,
+            tenant_id=(int(local["tenant_id"]) if local.get("tenant_id") else None),
+        )
+    local["account_kind"] = account_kind
+    local["market_is_admin"] = False
+    local["market_is_enterprise"] = True
+    local["offline_login"] = True
+    local["market_account"] = {
+        "success": False,
+        "market_base_url": (market_result or {}).get("market_base_url"),
+        "message": OFFLINE_LOGIN_MESSAGE,
+    }
+    logger.warning(
+        "enterprise offline login fallback used username=%s (market unreachable)", username
+    )
+    return local, None
+
+
 async def run_market_first_login(
     *,
     username: str,
@@ -444,6 +531,24 @@ async def run_market_first_login(
                 (market_result or {}).get("market_base_url"),
             )
         if not (market_result or {}).get("success"):
+            if (
+                account_kind != "admin"
+                and password
+                and _market_result_unreachable(market_result)
+            ):
+                # 市场不可达（网络/5xx，非凭据被拒）：企业用户本地离线登录兜底。
+                # 仅当该设备此前成功登录过（本地已有同名用户与口令）才会放行。
+                offline = await _offline_enterprise_login_fallback(
+                    username=username,
+                    password=password,
+                    totp_code=totp_code,
+                    account_kind=account_kind,
+                    market_result=market_result,
+                    auth_app_service=auth_app_service,
+                    sku=sku,
+                )
+                if offline is not None:
+                    return offline
             if account_kind == "admin" and password:
                 # 市场不可达的本地管理员应急登录：不阻断于本地 MFA
                 local_admin = auth_app_service.login(username, password, enforce_mfa=False)

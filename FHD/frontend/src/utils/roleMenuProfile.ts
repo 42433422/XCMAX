@@ -20,6 +20,8 @@ export type AccountRoleSource = {
 const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
   'chat',
   'im',
+  // AI 群聊路由对企业用户可达，侧栏入口同步放开（菜单与路由保持一致）
+  'ai-groups',
   'ai-ecosystem',
   'employee-workflow',
   'workflow-employee-space',

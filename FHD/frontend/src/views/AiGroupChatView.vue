@@ -22,7 +22,14 @@
             </div>
           </div>
         </button>
-        <div v-if="!groups.length" class="aigc-empty">加载中…</div>
+        <div v-if="!groups.length && groupsLoading" class="aigc-empty">加载中…</div>
+        <div v-if="!groups.length && !groupsLoading" class="aigc-empty aigc-empty--guide">
+          <p>还没有 AI 群聊。</p>
+          <p class="aigc-empty__sub">创建一个群，把多个 AI 员工拉进来协同答复。</p>
+          <button type="button" class="aigc-text-btn aigc-empty__cta" @click="onCreateGroup">
+            ＋ 创建第一个群聊
+          </button>
+        </div>
       </div>
     </aside>
 
@@ -162,6 +169,7 @@ import { groupSendingLabel, resolveAiGroupMessageUi } from '@/utils/aiGroupMessa
 type PickEmployee = { employee_id: string; mod_id: string; name: string; avatar: string; summary: string };
 
 const groups = ref<AiGroup[]>([]);
+const groupsLoading = ref(true);
 const activeGroup = ref<AiGroup | null>(null);
 const messages = ref<AiGroupMessage[]>([]);
 const employees = ref<PickEmployee[]>([]);
@@ -210,11 +218,14 @@ function messageAvatarSrc(message: AiGroupMessage): string | null {
 }
 
 async function loadGroups(): Promise<void> {
+  groupsLoading.value = true;
   try {
     groups.value = await fetchAiGroups('admin');
     if (!activeGroup.value && groups.value.length) await selectGroup(groups.value[0]);
   } catch {
     /* 静默：保留旧值 */
+  } finally {
+    groupsLoading.value = false;
   }
 }
 
@@ -390,4 +401,8 @@ onMounted(() => {
 .aigc-text-btn--danger { color: #e34d59; border-color: #f0c2c5; }
 .aigc-empty { color: var(--color-text-2, #999); font-size: 13px; padding: 20px; text-align: center; }
 .aigc-empty--sm { padding: 8px; text-align: left; }
+.aigc-empty--guide { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.aigc-empty--guide p { margin: 0; }
+.aigc-empty__sub { font-size: 12px; color: var(--color-text-3, #b0b0b0); }
+.aigc-empty__cta { margin-top: 8px; }
 </style>

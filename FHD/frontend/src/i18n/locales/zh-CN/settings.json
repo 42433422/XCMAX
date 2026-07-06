@@ -79,6 +79,7 @@
     "updateUnavailable": "当前环境不支持自动更新",
     "aboutDebugHint": "账号能力由服务器授权与本机 Mod 交付决定。",
     "online": "XCauto",
-    "offline": "离线"
+    "offline": "离线",
+    "lastUpdateCheck": "上次检查更新：{time}"
   }
 }

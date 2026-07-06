@@ -60,6 +60,7 @@ def clear_session_entitlements() -> None:
     _cached_entitled_client_mod_ids = None
     _cached_account_kind = "enterprise"
     _cached_market_is_admin = False
+    invalidate_entitlements_sync_throttle()
 
 
 def set_session_entitlements(
@@ -388,6 +389,44 @@ def _augment_entitled_for_username(username: str, current: set[str] | None) -> s
     return augment_entitled_client_mod_ids_for_username(username, current)
 
 
+# 同会话权益同步节流：session/validate 等高频入口每次都触发「远端 user_mods 拉取 +
+# Mod 重载」，冷启动的并发校验会串成数十秒队列。短窗口内直接复用上次结果；
+# 登录/登出（set_session_entitlements 之外的 clear）会清空节流缓存。
+_SYNC_THROTTLE_TTL_S = 60.0
+_sync_throttle: dict[str, tuple[float, set[str]]] = {}
+_SYNC_THROTTLE_MAX = 256
+
+
+def invalidate_entitlements_sync_throttle(session_id: str | None = None) -> None:
+    if session_id is None:
+        _sync_throttle.clear()
+        return
+    _sync_throttle.pop((session_id or "").strip(), None)
+
+
+def _throttled_entitlements(sid: str) -> set[str] | None:
+    import time as _time
+
+    entry = _sync_throttle.get(sid)
+    if not entry:
+        return None
+    expires_at, ids = entry
+    if _time.monotonic() >= expires_at:
+        _sync_throttle.pop(sid, None)
+        return None
+    return set(ids)
+
+
+def _remember_synced_entitlements(sid: str, ids: set[str]) -> None:
+    import time as _time
+
+    if not sid:
+        return
+    if len(_sync_throttle) >= _SYNC_THROTTLE_MAX:
+        _sync_throttle.clear()
+    _sync_throttle[sid] = (_time.monotonic() + _SYNC_THROTTLE_TTL_S, set(ids))
+
+
 async def sync_entitlements_for_session(session_id: str) -> set[str]:
     """企业版：优先用修茈市场 token 刷新 user_mods 权益；失败则回退 session 行缓存。"""
     if not enterprise_mod_filter_active():
@@ -395,6 +434,9 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
     sid = (session_id or "").strip()
     if not sid:
         return set()
+    throttled = _throttled_entitlements(sid)
+    if throttled is not None:
+        return throttled
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
 
@@ -416,6 +458,7 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
             )
             persist_entitlements_to_session_row(sid, client_ids)
             await reload_enterprise_mods_after_login()
+            _remember_synced_entitlements(sid, client_ids)
             return client_ids
         restore_entitlements_from_session_row(sid)
         cached = _augment_entitled_for_username(
@@ -429,6 +472,7 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
                 account_kind=_cached_account_kind,
                 market_is_admin=_cached_market_is_admin,
             )
+            _remember_synced_entitlements(sid, cached)
         return cached
     except RECOVERABLE_ERRORS:
         logger.exception("sync_entitlements_for_session failed")

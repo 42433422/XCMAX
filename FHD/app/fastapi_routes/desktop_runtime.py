@@ -233,6 +233,22 @@ def _resolve_last_backup(dirs: dict) -> dict[str, str | int | None]:
         return {"path": None, "filename": None, "timestamp": None, "size": None}
 
 
+@router.post("/backup-now")
+def backup_now(_user=Depends(get_logged_in_user)):
+    """立即备份本地 SQLite（桌面运行时页「立即备份」按钮）。仅桌面模式；需登录。"""
+    if not is_desktop_mode():
+        raise HTTPException(status_code=409, detail="手动备份仅在桌面模式下可用")
+    db_url = os.environ.get("DATABASE_URL", "")
+    if not db_url.startswith("sqlite"):
+        raise HTTPException(status_code=409, detail="当前为远程数据库模式，请在数据库侧执行备份")
+    from app.desktop_runtime.backup_scheduler import run_backup_now
+
+    result = run_backup_now(os.environ.get("XCAGI_DATA_DIR"))
+    if not result.get("success"):
+        raise HTTPException(status_code=500, detail="备份失败，请查看后端日志")
+    return {"success": True, "backup": result}
+
+
 @router.get("/models")
 def list_models(_user=Depends(get_logged_in_user)):
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))

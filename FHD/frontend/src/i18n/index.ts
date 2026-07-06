@@ -6,10 +6,15 @@ const LOCALE_KEY = 'xcagi_locale'
 
 function detectLocale(): string {
   if (typeof window === 'undefined') return 'zh-CN'
-  const stored = window.localStorage.getItem(LOCALE_KEY)
-  if (stored === 'en-US' || stored === 'zh-CN') return stored
-  const nav = navigator.language || ''
-  return nav.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
+  try {
+    const stored = window.localStorage.getItem(LOCALE_KEY)
+    if (stored === 'en-US' || stored === 'zh-CN') return stored
+  } catch {
+    /* ignore */
+  }
+  // 词条覆盖尚不完整：默认统一 zh-CN，避免浏览器语言为英文时出现中英混排；
+  // 用户在设置中显式切换后（localStorage 有值）才使用 en-US。
+  return 'zh-CN'
 }
 
 export const i18n = createI18n({

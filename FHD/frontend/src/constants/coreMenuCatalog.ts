@@ -42,6 +42,8 @@ export const CORE_MENU_ITEMS_BASE: CoreMenuCatalogItem[] = [
   { key: 'im', name: '信息', iconClass: 'fa-envelope-o' },
   { key: 'ai-groups', name: 'AI群聊', iconClass: 'fa-users' },
   { key: 'ai-ecosystem', name: '智能生态', iconClass: 'fa-sitemap' },
+  // 能力库（员工商店）此前只能从智能生态卡片进入，路由可达但侧栏无入口；补齐直达项
+  { key: 'mod-store', name: '能力库', iconClass: 'fa-puzzle-piece' },
   EMPLOYEE_WORKFLOW_MENU_ITEM,
 ]
 

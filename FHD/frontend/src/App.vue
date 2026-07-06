@@ -4,6 +4,7 @@ import LegacyFloatPanels from '@/components/shell/LegacyFloatPanels.vue'
 import AppGlobalProviders from '@/components/shell/AppGlobalProviders.vue'
 import VirtualCursorOverlay from '@/components/aiopen/VirtualCursorOverlay.vue'
 import { useAppBoot } from '@/composables/useAppBoot'
+import { routePendingRef } from '@/composables/useRoutePending'
 
 const {
   hideChrome,
@@ -12,6 +13,9 @@ const {
   handleToggleProMode,
   isAdminConsoleSpa,
 } = useAppBoot()
+
+// 指示器安装在 router 模块（须先于初始导航）；这里只读状态
+const routePending = routePendingRef()
 </script>
 
 <template>
@@ -19,6 +23,10 @@ const {
     <LegacyFloatPanels v-if="!hideChrome" />
     <AppGlobalProviders :show-lan-gate="!isAdminConsoleSpa()" />
     <VirtualCursorOverlay />
+    <div v-if="routePending" class="route-pending-pill" role="status" aria-live="polite">
+      <span class="route-pending-spinner" aria-hidden="true"></span>
+      <span>页面加载中…</span>
+    </div>
 
     <router-view v-if="hideChrome" />
     <MainLayout
@@ -67,6 +75,41 @@ const {
   flex: 1 1 auto;
   min-height: 0;
   width: 100%;
+}
+
+.route-pending-pill {
+  position: fixed;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4000;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(147, 197, 253, 0.65);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.18);
+  color: #1e3a8a;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.route-pending-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(37, 99, 235, 0.25);
+  border-top-color: #2563eb;
+  animation: route-pending-spin 0.8s linear infinite;
+}
+
+@keyframes route-pending-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .route-view-shell {

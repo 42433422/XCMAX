@@ -42,7 +42,21 @@ export function resolveDefaultDesktopPort(): number {
 
 export const DEFAULT_PORT = resolveDefaultDesktopPort()
 
-/** 检测 127.0.0.1:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
+/** 首选端口被占时自动尝试的备用端口数量（17500 → 17501…17509） */
+export const PORT_FALLBACK_ATTEMPTS = 10
+
+/** 运行时实际使用的端口：首选被占时可能落到备用端口 */
+let activePort = DEFAULT_PORT
+
+export function currentDesktopPort(): number {
+  return activePort
+}
+
+export function setActiveDesktopPortForTests(port: number): void {
+  activePort = port
+}
+
+/** 检测 127.0.0.1:port 是否可绑定（未被占用）。启动前必须预检。 */
 export function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
     const tester = net.createServer()
@@ -54,15 +68,31 @@ export function isPortAvailable(port: number): Promise<boolean> {
   })
 }
 
-/** 端口被占时给用户的引导文案。 */
+/** 首选端口被占时自动向后尝试备用端口；全部被占返回 null。 */
+export async function resolveAvailableDesktopPort(
+  preferred = DEFAULT_PORT,
+  attempts = PORT_FALLBACK_ATTEMPTS
+): Promise<number | null> {
+  for (let i = 0; i < attempts; i++) {
+    const candidate = preferred + i
+    if (candidate >= 65536) break
+    if (await isPortAvailable(candidate)) {
+      return candidate
+    }
+  }
+  return null
+}
+
+/** 首选与备用端口全部被占时给用户的引导文案。 */
 export function portOccupiedHint(port: number): string {
   const airplayHint =
     port === 5000
       ? '\n\n5000 是历史开发端口，容易被系统服务或本机代理占用；正式桌面版默认端口为 17500。'
       : ''
   return (
-    `端口 ${port} 已被占用，XCAGI 后端无法启动。\n\n` +
-    `请关闭占用该端口的程序后重试，或设置环境变量 XCAGI_DESKTOP_PORT 指定其他端口后重启 XCAGI。` +
+    `本机端口 ${port}–${port + PORT_FALLBACK_ATTEMPTS - 1} 均被占用，XCAGI 无法启动本地服务。\n\n` +
+    `请关闭占用这些端口的程序后重新打开 XCAGI。\n` +
+    `（高级：也可设置环境变量 XCAGI_DESKTOP_PORT 指定其他端口。）` +
     airplayHint
   )
 }
@@ -92,7 +122,7 @@ export const ED25519_PUBLIC_KEY_PEM = [
 
 /** 企业版与网页 :5001 一致：完整侧栏，不强制 ?shell=1 */
 export function desktopInitialUrl(): string {
-  const base = `http://127.0.0.1:${DEFAULT_PORT}/`
+  const base = `http://127.0.0.1:${currentDesktopPort()}/`
   if (readPackagedProductSku() === 'enterprise') {
     return base
   }
@@ -166,10 +196,84 @@ export function backendEditionEnv(): Record<string, string> {
 }
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
 let backendProcess: ChildProcessWithoutNullStreams | null = null
 let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
 let restartCount = 0
+
+/** 启动 splash 的内嵌 HTML（data URL，不依赖打包资源）。 */
+export function splashHtml(): string {
+  return [
+    '<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">',
+    '<style>',
+    'html,body{margin:0;height:100%;overflow:hidden;user-select:none;',
+    'font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;',
+    'background:linear-gradient(135deg,#edf5fb 0%,#e7eef6 48%,#eef3f8 100%);}',
+    '.wrap{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}',
+    '.logo{font-size:34px;font-weight:800;letter-spacing:.08em;color:#1d4ed8;}',
+    '.bar{width:220px;height:4px;border-radius:999px;background:rgba(37,99,235,.15);overflow:hidden;}',
+    '.bar i{display:block;height:100%;width:40%;border-radius:999px;background:#2563eb;',
+    'animation:slide 1.2s ease-in-out infinite;}',
+    '@keyframes slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}',
+    '#phase{font-size:13px;color:#475569;min-height:18px;}',
+    '.hint{font-size:11px;color:#94a3b8;}',
+    '</style></head><body><div class="wrap">',
+    '<div class="logo">XCAGI</div>',
+    '<div class="bar"><i></i></div>',
+    '<div id="phase">正在启动…</div>',
+    '<div class="hint">首次启动需要初始化本地数据，可能耗时较长</div>',
+    '</div></body></html>'
+  ].join('')
+}
+
+/** 启动即出画面：主窗要等后端 health，splash 先让用户看到进程活着。 */
+function createSplashWindow(): void {
+  if (splashWindow) return
+  try {
+    splashWindow = new BrowserWindow({
+      width: 380,
+      height: 240,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      show: false,
+      alwaysOnTop: false,
+      backgroundColor: '#eef3f8',
+      webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true }
+    })
+    const icon = shellIconPath()
+    if (fs.existsSync(icon)) {
+      splashWindow.setIcon(nativeImage.createFromPath(icon))
+    }
+    splashWindow.on('closed', () => {
+      splashWindow = null
+    })
+    void splashWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(splashHtml())}`)
+    splashWindow.once('ready-to-show', () => splashWindow?.show())
+  } catch {
+    splashWindow = null
+  }
+}
+
+/** 更新 splash 阶段文案（后端启动 → 等待服务就绪 → 加载界面）。 */
+function setSplashPhase(text: string): void {
+  const win = splashWindow
+  if (!win || win.isDestroyed()) return
+  const safe = JSON.stringify(text)
+  void win.webContents
+    .executeJavaScript(`(() => { const el = document.getElementById('phase'); if (el) el.textContent = ${safe}; })()`)
+    .catch(() => { })
+}
+
+function closeSplashWindow(): void {
+  const win = splashWindow
+  splashWindow = null
+  if (win && !win.isDestroyed()) {
+    win.close()
+  }
+}
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -214,7 +318,7 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
         '--host',
         '127.0.0.1',
         '--port',
-        String(DEFAULT_PORT),
+        String(currentDesktopPort()),
         '--data-dir',
         dataDir
       ],
@@ -232,7 +336,7 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
       '--host',
       '127.0.0.1',
       '--port',
-      String(DEFAULT_PORT),
+      String(currentDesktopPort()),
       '--data-dir',
       dataDir
     ],
@@ -462,14 +566,18 @@ async function startBackend(): Promise<void> {
     return
   }
 
-  // 桌面模式不做端口避让：启动前预检 DEFAULT_PORT，被占则直接引导用户，避免后端
-  // 启动后立即退出再触发无意义的自动重启。
-  const portFree = await isPortAvailable(DEFAULT_PORT)
-  if (!portFree) {
+  // 启动前预检：首选端口被占时自动尝试备用端口（17500…17509），
+  // 全部被占才提示用户，避免后端起来即退出再触发无意义的自动重启。
+  const resolvedPort = await resolveAvailableDesktopPort(DEFAULT_PORT)
+  if (resolvedPort == null) {
     const hint = portOccupiedHint(DEFAULT_PORT)
-    writeBackendLog(`[error] port ${DEFAULT_PORT} occupied, abort backend spawn\n`)
+    writeBackendLog(`[error] ports ${DEFAULT_PORT}..${DEFAULT_PORT + PORT_FALLBACK_ATTEMPTS - 1} occupied, abort backend spawn\n`)
     void dialog.showErrorBox(APP_NAME, hint)
     return
+  }
+  if (resolvedPort !== activePort) {
+    writeBackendLog(`[port] preferred ${DEFAULT_PORT} occupied, falling back to ${resolvedPort}\n`)
+    activePort = resolvedPort
   }
 
   startupMarks.backendSpawnMs = Date.now()
@@ -584,7 +692,7 @@ function runBackendMigration(): Promise<void> {
 }
 
 async function cookieHeaderForBackend(): Promise<string> {
-  const url = `http://127.0.0.1:${DEFAULT_PORT}/`
+  const url = `http://127.0.0.1:${currentDesktopPort()}/`
   const cookies = await session.defaultSession.cookies.get({ url })
   if (!cookies.length) {
     return ''
@@ -599,7 +707,7 @@ async function exportSupportBundleInteractive(): Promise<void> {
     if (cookie) {
       headers.Cookie = cookie
     }
-    const res = await fetch(`http://127.0.0.1:${DEFAULT_PORT}/api/desktop/support-bundle`, {
+    const res = await fetch(`http://127.0.0.1:${currentDesktopPort()}/api/desktop/support-bundle`, {
       headers
     })
     if (res.status === 401) {
@@ -689,7 +797,7 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?
   try {
     const parsed = new URL(rawUrl)
     const hostAllowed = parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
-    const port = expectedPort ?? DEFAULT_PORT
+    const port = expectedPort ?? currentDesktopPort()
     return parsed.protocol === 'http:' && hostAllowed && parsed.port === String(port)
   } catch {
     return false
@@ -782,7 +890,9 @@ async function createWindow(): Promise<void> {
     })
   }
 
-  await waitForBackendHealth(DEFAULT_PORT)
+  setSplashPhase('正在等待本地服务就绪…')
+  await waitForBackendHealth(currentDesktopPort())
+  setSplashPhase('正在加载界面…')
 
   if (shouldClearFrontendCache()) {
     try {
@@ -798,16 +908,16 @@ async function createWindow(): Promise<void> {
   })
 
   // 防止渲染进程导航到本机后端以外的来源（electronegativity LimitNavigation HIGH）。
-  // 桌面端只加载 127.0.0.1:DEFAULT_PORT，任何外部跳转一律拦截。
+  // 桌面端只加载 127.0.0.1:{activePort}，任何外部跳转一律拦截。
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+    if (!isTrustedDesktopOrigin(url, currentDesktopPort())) {
       event.preventDefault()
       console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
     }
   })
   // window.open / target=_blank 由系统浏览器打开，不在 Electron 内开新窗口。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+    if (isTrustedDesktopOrigin(url, currentDesktopPort())) {
       return { action: 'allow' }
     }
     void shell.openExternal(url)
@@ -821,10 +931,11 @@ async function createWindow(): Promise<void> {
   if (process.platform === 'darwin') {
     ensureMacWindowInWorkArea(mainWindow)
   }
+  closeSplashWindow()
   mainWindow.show()
   mainWindow.focus()
 
-  void waitForBackendStatus(DEFAULT_PORT).then(status => {
+  void waitForBackendStatus(currentDesktopPort()).then(status => {
     console.info(
       '[xcagi-desktop] startup',
       JSON.stringify({
@@ -937,6 +1048,8 @@ function bootstrap(): void {
     })
 
     app.whenReady().then(async () => {
+      // 主窗要等后端 health（首启可达 2–3 分钟），splash 让用户立即看到启动画面
+      createSplashWindow()
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
@@ -959,7 +1072,7 @@ function bootstrap(): void {
 
       ipcMain.handle('xcagi:pairing-qr', async () => {
         const host = getLanIPv4()
-        const port = DEFAULT_PORT
+        const port = currentDesktopPort()
         const nonce = crypto.randomBytes(12).toString('base64url')
         const exp = Math.floor(Date.now() / 1000) + 300
         try {
@@ -981,6 +1094,7 @@ function bootstrap(): void {
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
+      ipcMain.handle('xcagi:open-data-dir', () => shell.openPath(app.getPath('userData')))
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
       ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
@@ -1028,10 +1142,12 @@ function bootstrap(): void {
       }
 
       try {
+        setSplashPhase('正在启动本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
           // 如果是更新后首次启动，触发回滚
+          closeSplashWindow()
           if (pendingRollback) {
             await triggerRollbackSafe('startBackend 失败：端口被占或 backend 可执行文件缺失')
             void dialog.showErrorBox(APP_NAME, '更新后启动失败，已自动回滚到上一版本。请重启 XCAGI。')
@@ -1049,6 +1165,7 @@ function bootstrap(): void {
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error)
           writeBackendLog(`[rollback] createWindow 失败: ${msg}\n`)
+          closeSplashWindow()
           if (pendingRollback) {
             await triggerRollbackSafe(`createWindow 失败: ${msg}`)
             void dialog.showErrorBox(APP_NAME, '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。')
@@ -1061,6 +1178,7 @@ function bootstrap(): void {
         // startBackend 或 waitForBackendHealth 抛错（health 超时）
         const msg = error instanceof Error ? error.message : String(error)
         writeBackendLog(`[rollback] startBackend 抛错: ${msg}\n`)
+        closeSplashWindow()
         if (pendingRollback) {
           await triggerRollbackSafe(`后端启动失败: ${msg}`)
           void dialog.showErrorBox(APP_NAME, '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。')

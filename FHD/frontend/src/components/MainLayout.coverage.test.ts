@@ -645,80 +645,54 @@ describe('MainLayout.vue - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('onResizeStart 回调：清理 collapse 和 hover timer', async () => {
+  })
+
+  // ════════════════════════════════════════════════════════════════════
+  // 手动折叠：toggleSidebarCollapsed / expandSidebar（自动折叠已移除）
+  // ════════════════════════════════════════════════════════════════════
+
+  describe('手动折叠与记忆', () => {
+    it('toggleSidebarCollapsed 切换折叠并写入 localStorage', async () => {
       const { wrapper } = await mountMainLayout()
-      const config = testState.resizablePaneConfig!
-      const onResizeStart = config.onResizeStart as () => void
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
 
-      // 设置 timer
-      wrapper.vm.sidebarCollapseTimer = window.setTimeout(() => {}, 10000)
-      wrapper.vm.sidebarHoverTimer = window.setTimeout(() => {}, 10000)
+      wrapper.vm.toggleSidebarCollapsed()
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
+      expect(window.localStorage.getItem('xcagi_sidebar_collapsed')).toBe('1')
 
-      onResizeStart()
-
-      expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
-      expect(wrapper.vm.sidebarHoverTimer).toBeNull()
+      wrapper.vm.toggleSidebarCollapsed()
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      expect(window.localStorage.getItem('xcagi_sidebar_collapsed')).toBe('0')
       wrapper.unmount()
     })
 
-    it('onResizeEnd 回调：sidebar 启用且未折叠时 scheduleSidebarAutoCollapse', async () => {
-      const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+    it('expandSidebar 展开并持久化', async () => {
       const { wrapper } = await mountMainLayout()
-      const config = testState.resizablePaneConfig!
-      const onResizeEnd = config.onResizeEnd as () => void
+      wrapper.vm.toggleSidebarCollapsed()
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
 
-      setTimeoutSpy.mockClear()
-      onResizeEnd()
-      // scheduleSidebarAutoCollapse 应调用 setTimeout
-      expect(setTimeoutSpy).toHaveBeenCalled()
+      wrapper.vm.expandSidebar()
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      expect(window.localStorage.getItem('xcagi_sidebar_collapsed')).toBe('0')
       wrapper.unmount()
-      setTimeoutSpy.mockRestore()
     })
 
-    it('onResizeEnd 回调：sidebar 禁用时不 schedule', async () => {
-      // 通过 matchMedia 禁用 sidebar（匹配 SIDEBAR_DISABLE_MQ）
-      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
-        matches: query === '(max-width: 767px)',
-        media: query,
-        onchange: null,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        dispatchEvent: vi.fn(),
-      }))
-
-      const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
+    it('挂载时读取 localStorage 折叠偏好', async () => {
+      window.localStorage.setItem('xcagi_sidebar_collapsed', '1')
       const { wrapper } = await mountMainLayout()
-      const config = testState.resizablePaneConfig!
-      const onResizeEnd = config.onResizeEnd as () => void
-
-      setTimeoutSpy.mockClear()
-      onResizeEnd()
-      // sidebar 禁用时不应调度 auto collapse
-      expect(setTimeoutSpy).not.toHaveBeenCalled()
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
+      window.localStorage.removeItem('xcagi_sidebar_collapsed')
       wrapper.unmount()
-      setTimeoutSpy.mockRestore()
     })
 
-    it('onResizeEnd 回调：sidebar 折叠时不 schedule', async () => {
+    it('无操作 15 秒后不再自动折叠（回归守卫）', async () => {
       vi.useFakeTimers()
       const { wrapper } = await mountMainLayout()
-      const config = testState.resizablePaneConfig!
-      const onResizeEnd = config.onResizeEnd as () => void
-
-      // 先触发 auto-collapse 让 sidebarCollapsed = true
-      onResizeEnd()
-      vi.advanceTimersByTime(15000) // SIDEBAR_INACTIVITY_MS
-
-      // 现在 sidebarCollapsed 应为 true，onResizeEnd 不应调度新 timer
-      const setTimeoutSpy = vi.spyOn(window, 'setTimeout')
-      onResizeEnd()
-      expect(setTimeoutSpy).not.toHaveBeenCalled()
-
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
+      vi.advanceTimersByTime(20000)
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
       wrapper.unmount()
       vi.useRealTimers()
-      setTimeoutSpy.mockRestore()
     })
   })
 
@@ -906,25 +880,22 @@ describe('MainLayout.vue - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('教程失活且 sidebar 启用时 schedule auto collapse', async () => {
+    it('教程失活后不再自动折叠（自动折叠已移除）', async () => {
+      vi.useFakeTimers()
       const { wrapper } = await mountMainLayout()
       wrapper.vm.isSidebarFeatureEnabled = true
       wrapper.vm.sidebarCollapsed = false
 
-      // 先激活教程
+      // 激活再失活教程
       testState.onboardingTutorialStore.active = true
       await nextTick()
-
-      // 清除 timer
-      wrapper.vm.sidebarCollapseTimer = null
-
-      // 失活教程
       testState.onboardingTutorialStore.active = false
       await nextTick()
 
-      // 应调度 auto collapse
-      expect(wrapper.vm.sidebarCollapseTimer).not.toBeNull()
+      vi.advanceTimersByTime(20000)
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
       wrapper.unmount()
+      vi.useRealTimers()
     })
 
     it('legacy tutorial 激活也触发展开', async () => {
@@ -942,99 +913,33 @@ describe('MainLayout.vue - coverage ramp', () => {
   })
 
   // ════════════════════════════════════════════════════════════════════
-  // handleGlobalActivity / onSidebarMouseEnter
+  // 折叠态 peek 按钮：expandSidebar
   // ════════════════════════════════════════════════════════════════════
 
-  describe('handleGlobalActivity / onSidebarMouseEnter', () => {
-    it('sidebar 启用且未折叠时 onSidebarMouseEnter 调度 auto collapse', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.isSidebarFeatureEnabled = true
-      wrapper.vm.sidebarCollapsed = false
-      wrapper.vm.sidebarCollapseTimer = null
-
-      await wrapper.find('.sidebar-shell').trigger('mouseenter')
-      expect(wrapper.vm.sidebarCollapseTimer).not.toBeNull()
-      wrapper.unmount()
-    })
-
-    it('sidebar 禁用时 onSidebarMouseEnter 不调度', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.isSidebarFeatureEnabled = false
-      wrapper.vm.sidebarCollapseTimer = null
-
-      await wrapper.find('.sidebar-shell').trigger('mouseenter')
-      expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
-      wrapper.unmount()
-    })
-
-    it('sidebar 折叠时 handleGlobalActivity 不调度', async () => {
+  describe('折叠态 peek 按钮', () => {
+    it('点击 peek 按钮立即展开 sidebar', async () => {
       const { wrapper } = await mountMainLayout()
       wrapper.vm.isSidebarFeatureEnabled = true
       wrapper.vm.sidebarCollapsed = true
-      wrapper.vm.sidebarCollapseTimer = null
+      await nextTick()
 
-      wrapper.vm.handleGlobalActivity()
-      expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
-      wrapper.unmount()
-    })
-
-    it('全局 mousemove 事件触发 handleGlobalActivity', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.isSidebarFeatureEnabled = true
-      wrapper.vm.sidebarCollapsed = false
-      wrapper.vm.sidebarCollapseTimer = null
-
-      window.dispatchEvent(new Event('mousemove'))
-      expect(wrapper.vm.sidebarCollapseTimer).not.toBeNull()
-      wrapper.unmount()
-    })
-  })
-
-  // ════════════════════════════════════════════════════════════════════
-  // onHoverTriggerEnter / onHoverTriggerLeave / onHoverTriggerClick
-  // ════════════════════════════════════════════════════════════════════
-
-  describe('onHoverTriggerEnter / onHoverTriggerLeave / onHoverTriggerClick', () => {
-    it('onHoverTriggerClick 立即展开 sidebar', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.isSidebarFeatureEnabled = true
-      wrapper.vm.sidebarCollapsed = true
-
-      wrapper.vm.onHoverTriggerClick()
+      await wrapper.find('.sidebar-peek-button').trigger('click')
       expect(wrapper.vm.sidebarCollapsed).toBe(false)
-      // 应调度 auto collapse
-      expect(wrapper.vm.sidebarCollapseTimer).not.toBeNull()
       wrapper.unmount()
     })
 
-    it('onHoverTriggerEnter 在 sidebar 禁用时不操作', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.isSidebarFeatureEnabled = false
-      wrapper.vm.sidebarCollapsed = true
-
-      wrapper.vm.onHoverTriggerEnter()
-      // 不应设置 hover timer
-      expect(wrapper.vm.sidebarHoverTimer).toBeNull()
-      wrapper.unmount()
-    })
-
-    it('onHoverTriggerEnter 在 sidebar 已展开时不操作', async () => {
+    it('展开后不会自动重新折叠', async () => {
+      vi.useFakeTimers()
       const { wrapper } = await mountMainLayout()
       wrapper.vm.isSidebarFeatureEnabled = true
-      wrapper.vm.sidebarCollapsed = false
+      wrapper.vm.sidebarCollapsed = true
+      await nextTick()
 
-      wrapper.vm.onHoverTriggerEnter()
-      expect(wrapper.vm.sidebarHoverTimer).toBeNull()
+      wrapper.vm.expandSidebar()
+      vi.advanceTimersByTime(20000)
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
       wrapper.unmount()
-    })
-
-    it('onHoverTriggerLeave 清理 hover timer', async () => {
-      const { wrapper } = await mountMainLayout()
-      wrapper.vm.sidebarHoverTimer = window.setTimeout(() => {}, 10000)
-
-      wrapper.vm.onHoverTriggerLeave()
-      expect(wrapper.vm.sidebarHoverTimer).toBeNull()
-      wrapper.unmount()
+      vi.useRealTimers()
     })
   })
 
@@ -1150,15 +1055,17 @@ describe('MainLayout.vue - coverage ramp', () => {
       wrapper.unmount()
     })
 
-    it('matches=false 时启用 sidebar 并调度 auto collapse', async () => {
+    it('matches=false 时启用 sidebar 且不自动折叠', async () => {
+      vi.useFakeTimers()
       const { wrapper } = await mountMainLayout()
       wrapper.vm.isSidebarFeatureEnabled = false
-      wrapper.vm.sidebarCollapseTimer = null
 
       wrapper.vm.onViewportChange({ matches: false })
       expect(wrapper.vm.isSidebarFeatureEnabled).toBe(true)
-      expect(wrapper.vm.sidebarCollapseTimer).not.toBeNull()
+      vi.advanceTimersByTime(20000)
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
       wrapper.unmount()
+      vi.useRealTimers()
     })
 
     it('matches=undefined 时视为 false', async () => {
@@ -1278,21 +1185,21 @@ describe('MainLayout.vue - coverage ramp', () => {
   })
 
   // ════════════════════════════════════════════════════════════════════
-  // scheduleSidebarAutoCollapse - isAnyTutorialActive 守卫
+  // 顶栏折叠按钮
   // ════════════════════════════════════════════════════════════════════
 
-  describe('scheduleSidebarAutoCollapse - tutorial 守卫', () => {
-    it('教程激活时不调度 auto collapse', async () => {
+  describe('顶栏折叠按钮', () => {
+    it('点击顶栏折叠按钮切换 sidebarCollapsed', async () => {
       const { wrapper } = await mountMainLayout()
-      testState.onboardingTutorialStore.active = true
-      await nextTick()
-
       wrapper.vm.isSidebarFeatureEnabled = true
-      wrapper.vm.sidebarCollapsed = false
-      wrapper.vm.sidebarCollapseTimer = null
+      await nextTick()
+      const btn = wrapper.find('.sidebar-toggle-btn')
+      expect(btn.exists()).toBe(true)
 
-      wrapper.vm.scheduleSidebarAutoCollapse()
-      expect(wrapper.vm.sidebarCollapseTimer).toBeNull()
+      await btn.trigger('click')
+      expect(wrapper.vm.sidebarCollapsed).toBe(true)
+      await btn.trigger('click')
+      expect(wrapper.vm.sidebarCollapsed).toBe(false)
       wrapper.unmount()
     })
   })

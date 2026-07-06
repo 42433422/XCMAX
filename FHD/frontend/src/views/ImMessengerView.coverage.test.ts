@@ -288,11 +288,27 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
 
   // ===== 3. 聊天区域 =====
 
-  it('未选择会话时显示空聊天区域', async () => {
+  it('未选择会话且无会话时显示引导空态（含发起会话）', async () => {
     imMocks.fetchImConversations.mockResolvedValue([])
     imMocks.fetchImContacts.mockResolvedValue([normalContact])
     const wrapper = await mountView()
     expect(wrapper.find('.im-chat--empty').exists()).toBe(true)
+    expect(wrapper.text()).toContain('还没有会话')
+    expect(wrapper.text()).toContain('发起会话')
+  })
+
+  it('有会话但未选择时提示选择左侧会话', async () => {
+    imMocks.fetchImConversations.mockResolvedValue([sampleConversation])
+    imMocks.fetchImContacts.mockResolvedValue([normalContact])
+    const wrapper = await mountView()
+    // 组件挂载会自动选中首个会话；强制清空选中后应显示「选择左侧会话开始聊天」
+    const vm = wrapper.vm as unknown as {
+      activeConversationId: number | null
+      activeSystemEntry: unknown
+    }
+    vm.activeConversationId = null
+    vm.activeSystemEntry = null
+    await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('选择左侧会话开始聊天')
   })
 

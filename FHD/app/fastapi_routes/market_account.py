@@ -803,6 +803,43 @@ async def refresh_session_market_token(session_id: str) -> str:
     return access
 
 
+# 市场令牌校验 TTL 缓存：session/validate 等高频入口每次都打远端 /api/auth/me 会把
+# 冷启动首屏耦合在市场网络往返上（实测单次 2–14s）。同一 session 的校验结果在短窗口内
+# 直接复用；令牌刷新（401 路径）会主动失效缓存，令牌失效最长感知延迟为一个 TTL。
+_MARKET_TOKEN_VALIDATION_TTL_S = 60.0
+_market_token_validation_cache: dict[str, tuple[str, float]] = {}
+_MARKET_TOKEN_VALIDATION_CACHE_MAX = 512
+
+
+def invalidate_market_token_validation_cache(session_id: str | None = None) -> None:
+    if session_id is None:
+        _market_token_validation_cache.clear()
+        return
+    _market_token_validation_cache.pop((session_id or "").strip(), None)
+
+
+def _cached_validated_market_token(sid: str) -> str | None:
+    entry = _market_token_validation_cache.get(sid)
+    if not entry:
+        return None
+    token, expires_at = entry
+    if time.monotonic() >= expires_at:
+        _market_token_validation_cache.pop(sid, None)
+        return None
+    return token
+
+
+def _remember_validated_market_token(sid: str, token: str) -> None:
+    if not sid or not token:
+        return
+    if len(_market_token_validation_cache) >= _MARKET_TOKEN_VALIDATION_CACHE_MAX:
+        _market_token_validation_cache.clear()
+    _market_token_validation_cache[sid] = (
+        token,
+        time.monotonic() + _MARKET_TOKEN_VALIDATION_TTL_S,
+    )
+
+
 async def resolve_valid_market_access_token(session_id: str) -> str:
     """Return a working market access token, refreshing when /api/auth/me returns 401."""
     from app.application.surface_audit_demo_account import is_local_demo_market_token
@@ -817,6 +854,9 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
         return ""
     if is_local_demo_market_token(tok):
         return tok
+    cached = _cached_validated_market_token(sid)
+    if cached == tok:
+        return tok
     me = await _proxy_json(
         "GET", "/api/auth/me", authorization=f"Bearer {tok}", return_error_payload=True
     )
@@ -825,16 +865,22 @@ async def resolve_valid_market_access_token(session_id: str) -> str:
             "market unreachable during token validation (session_id=%s), using local token",
             sid[:8] if sid else "",
         )
+        _remember_validated_market_token(sid, tok)
         return tok
     if isinstance(me, dict) and me.get("__proxy_error__"):
         if _proxy_error_http_status(me) == 401:
+            invalidate_market_token_validation_cache(sid)
             refreshed = await refresh_session_market_token(sid)
-            return _normalize_bearer_token(refreshed)
+            refreshed_tok = _normalize_bearer_token(refreshed)
+            _remember_validated_market_token(sid, refreshed_tok)
+            return refreshed_tok
         logger.warning(
             "market /api/auth/me error status=%s, using local token",
             me.get("status_code"),
         )
+        _remember_validated_market_token(sid, tok)
         return tok
+    _remember_validated_market_token(sid, tok)
     return tok
 
 

@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+
+const apiPostMock = vi.hoisted(() => vi.fn())
+vi.mock('@/api/core', async (importOriginal) => {
+  const actual = (await importOriginal()) as Record<string, unknown>
+  return {
+    ...actual,
+    api: { ...(actual.api as Record<string, unknown>), post: apiPostMock },
+  }
+})
+
 import DesktopRuntimeView from './DesktopRuntimeView.vue'
 
 describe('DesktopRuntimeView', () => {
@@ -203,7 +213,7 @@ describe('DesktopRuntimeView', () => {
     await updateBtn.trigger('click')
     await flushPromises()
     expect(checkForUpdates).toHaveBeenCalled()
-    expect(wrapper.find('pre').exists()).toBe(true)
+    expect(wrapper.text()).toContain('上次检查')
   })
 
   it('subscribes to update events on mount when desktop shell available', async () => {
@@ -222,7 +232,7 @@ describe('DesktopRuntimeView', () => {
     wrapper.unmount()
   })
 
-  it('renders update events section when events exist', async () => {
+  it('renders readable update events when events arrive', async () => {
     const onUpdateEvent = vi.fn()
     ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {
       checkForUpdates: vi.fn(),
@@ -235,10 +245,66 @@ describe('DesktopRuntimeView', () => {
     const wrapper = mount(DesktopRuntimeView)
     await flushPromises()
     const cb = onUpdateEvent.mock.calls[0][0] as (event: unknown) => void
-    cb({ type: 'update', version: '2.0' })
+    cb({ type: 'update-available', data: { version: '2.0' } })
+    cb({ type: 'download-progress', data: { percent: 42 } })
     await flushPromises()
-    expect(wrapper.find('pre').exists()).toBe(true)
-    expect(wrapper.find('pre').text()).toContain('update')
+    expect(wrapper.text()).toContain('发现新版本 2.0')
+    expect(wrapper.text()).toContain('正在下载更新（42%）')
+  })
+
+  it('renders backup section with backup-now button', async () => {
+    mockFetch(
+      {
+        desktopMode: true,
+        dataDir: '/data',
+        database: '',
+        modsDir: '',
+        modelsDir: '',
+        lastBackup: { filename: 'xcagi-10.0.0-20260706.db', timestamp: '2026-07-06T08:00:00', size: 2048 },
+      },
+      { models: [] },
+    )
+    const wrapper = mount(DesktopRuntimeView)
+    await flushPromises()
+    expect(wrapper.text()).toContain('数据备份')
+    expect(wrapper.text()).toContain('xcagi-10.0.0-20260706.db')
+    const backupBtn = wrapper.findAll('button').find((b) => b.text().includes('立即备份'))
+    expect(backupBtn).toBeTruthy()
+  })
+
+  it('triggers backup-now API when backup button clicked', async () => {
+    apiPostMock.mockResolvedValue({ success: true, backup: { filename: 'b.db', size: 1024 } })
+    mockFetch(
+      { desktopMode: true, dataDir: '/d', database: '', modsDir: '', modelsDir: '' },
+      { models: [] },
+    )
+    const wrapper = mount(DesktopRuntimeView)
+    await flushPromises()
+    const backupBtn = wrapper.findAll('button').find((b) => b.text().includes('立即备份'))!
+    await backupBtn.trigger('click')
+    await flushPromises()
+    expect(apiPostMock).toHaveBeenCalledWith('/api/desktop/backup-now', {})
+    expect(wrapper.text()).toContain('备份完成')
+  })
+
+  it('renders open data dir button when desktop shell exposes openDataDir', async () => {
+    const openDataDir = vi.fn().mockResolvedValue(undefined)
+    ;(window as unknown as { xcagiDesktop?: unknown }).xcagiDesktop = {
+      checkForUpdates: vi.fn(),
+      onUpdateEvent: vi.fn(),
+      openDataDir,
+    }
+    mockFetch(
+      { desktopMode: true, dataDir: '/data', database: '', modsDir: '', modelsDir: '' },
+      { models: [] },
+    )
+    const wrapper = mount(DesktopRuntimeView)
+    await flushPromises()
+    const openBtn = wrapper.findAll('button').find((b) => b.text().includes('打开数据目录'))!
+    expect(openBtn).toBeTruthy()
+    await openBtn.trigger('click')
+    await flushPromises()
+    expect(openDataDir).toHaveBeenCalled()
   })
 
   it('renders databaseUrlRedacted when present', async () => {

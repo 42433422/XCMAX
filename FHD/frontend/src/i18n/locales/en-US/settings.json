@@ -79,6 +79,7 @@
     "updateUnavailable": "Automatic updates are not available in this environment",
     "aboutDebugHint": "Account capabilities are determined by server entitlement and local Mod delivery.",
     "online": "XCauto",
-    "offline": "Offline"
+    "offline": "Offline",
+    "lastUpdateCheck": "Last checked: {time}"
   }
 }

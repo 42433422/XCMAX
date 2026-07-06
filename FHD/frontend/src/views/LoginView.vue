@@ -21,6 +21,7 @@ import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
+import { rememberOfflineLoginNotice } from '@/utils/offlineLoginNotice';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -34,6 +35,8 @@ const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
 const errorMessage = ref('');
+/** 最近一次登录失败的 error code（如 ACCOUNT_KIND_MISMATCH），用于渲染可操作引导 */
+const lastErrorCode = ref('');
 const altLoginHint = ref('');
 const oidcEnabled = ref(false);
 const loginMode = ref<'password' | 'phone' | 'qr'>('password');
@@ -186,6 +189,12 @@ async function completeLoginSuccess(raw: Record<string, unknown>) {
     raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
       ? (raw.data as Record<string, unknown>)
       : raw;
+  if (raw?.offline_login === true || loginUser?.offline_login === true) {
+    const marketAccount = (loginUser?.market_account ?? raw?.market_account) as
+      | { message?: string }
+      | undefined;
+    rememberOfflineLoginNotice(marketAccount?.message);
+  }
   const accountUsername = String(loginUser?.username || username.value || phone.value || '').trim();
   if (isEnterpriseEdition.value) {
     try {
@@ -276,6 +285,7 @@ async function pollQrStatus() {
 function switchLoginMode(mode: 'password' | 'phone' | 'qr') {
   loginMode.value = mode;
   errorMessage.value = '';
+  lastErrorCode.value = '';
   altLoginHint.value = '';
   if (mode === 'qr') {
     void startQrLogin();
@@ -285,13 +295,21 @@ function switchLoginMode(mode: 'password' | 'phone' | 'qr') {
   }
 }
 
+function extractLoginErrorCode(payload: Record<string, unknown> | null | undefined): string {
+  const r = payload && typeof payload === 'object' ? payload : {};
+  const errObj = r.error && typeof r.error === 'object' ? (r.error as Record<string, unknown>) : null;
+  return (
+    (errObj && typeof errObj.code === 'string' && errObj.code.trim()) ||
+    (typeof r.error_code === 'string' && r.error_code.trim()) ||
+    ''
+  );
+}
+
 function formatLoginFailurePayload(payload: Record<string, unknown> | null | undefined): string {
   const r = payload && typeof payload === 'object' ? payload : {};
   const errObj = r.error && typeof r.error === 'object' ? (r.error as Record<string, unknown>) : null;
-  const errorCode =
-    (errObj && typeof errObj.code === 'string' && errObj.code.trim()) ||
-    (typeof r.error_code === 'string' && r.error_code.trim()) ||
-    '';
+  const errorCode = extractLoginErrorCode(r);
+  lastErrorCode.value = errorCode;
   const message =
     (typeof r.message === 'string' && r.message.trim()) ||
     (errObj && typeof errObj.message === 'string' && errObj.message.trim()) ||
@@ -338,6 +356,7 @@ async function submitLogin() {
   }
   loading.value = true;
   errorMessage.value = '';
+  lastErrorCode.value = '';
   try {
     const result =
       loginMode.value === 'phone'
@@ -545,6 +564,16 @@ async function submitLogin() {
               <span>{{ errorMessage }}</span>
             </div>
           </transition>
+
+          <button
+            v-if="errorMessage && lastErrorCode === 'ACCOUNT_KIND_MISMATCH'"
+            type="button"
+            class="login-error-action"
+            data-testid="login-go-admin-entrance"
+            @click="selectAdminLogin"
+          >
+            {{ $t('login.goAdminEntrance') }}
+          </button>
 
           <button class="login-submit" type="submit" :disabled="!canSubmit || loading">
             <span>{{ loading ? $t('login.submitting') : $t('login.submit') }}</span>
@@ -996,6 +1025,25 @@ async function submitLogin() {
 .login-error svg {
   flex: none;
   margin-top: 1px;
+}
+
+/* 错误下方的可操作引导（如管理员账号误入企业入口 → 一键去管理员入口） */
+.login-error-action {
+  width: 100%;
+  height: 40px;
+  border-radius: var(--xc-radius-md);
+  border: 1px solid rgba(37, 99, 235, 0.4);
+  background: rgba(239, 246, 255, 0.9);
+  color: #1d4ed8;
+  font-size: var(--xc-font-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.login-error-action:hover {
+  background: rgba(219, 234, 254, 0.95);
+  border-color: rgba(37, 99, 235, 0.6);
 }
 
 /* ─── 提交按钮 ─────────────────────────────────────────── */
