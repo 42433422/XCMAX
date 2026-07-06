@@ -161,6 +161,7 @@ class AiGroupConversation {
     required this.members,
     this.preview = '',
     this.timestampText = '',
+    this.timestampMs = 0,
     this.unreadCount = 0,
     this.isPinned = false,
     this.isHidden = false,
@@ -173,6 +174,7 @@ class AiGroupConversation {
   final List<AiGroupMember> members;
   final String preview;
   final String timestampText;
+  final int timestampMs;
   final int unreadCount;
   final bool isPinned;
   final bool isHidden;
@@ -185,6 +187,7 @@ class AiGroupConversation {
     List<AiGroupMember>? members,
     String? preview,
     String? timestampText,
+    int? timestampMs,
     int? unreadCount,
     bool? isPinned,
     bool? isHidden,
@@ -197,6 +200,7 @@ class AiGroupConversation {
       members: members ?? this.members,
       preview: preview ?? this.preview,
       timestampText: timestampText ?? this.timestampText,
+      timestampMs: timestampMs ?? this.timestampMs,
       unreadCount: unreadCount ?? this.unreadCount,
       isPinned: isPinned ?? this.isPinned,
       isHidden: isHidden ?? this.isHidden,

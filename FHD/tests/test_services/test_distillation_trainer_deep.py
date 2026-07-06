@@ -23,11 +23,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-_MISSING_MODULE = object()
-_ORIGINAL_ML_MODULES = {
-    name: sys.modules.get(name, _MISSING_MODULE)
-    for name in ("torch", "torch.optim", "torch.utils", "torch.utils.data", "transformers")
-}
+# Stubs are installed by tests/test_services/conftest.py at collection start.
+# This file previously carried its own stub installer + sys.modules restore
+# logic; the restore step broke collection of later files in this directory
+# (it popped torch from sys.modules, so the next file's
+# ``from app.services.distillation_trainer import ...`` failed silently).
 
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
@@ -186,11 +186,10 @@ def _install_torch_transformers_stubs() -> None:
     sys._xcmax_dt_stubs_installed = True
 
 
-_install_torch_transformers_stubs()
-
+# Stubs (if needed) are installed by tests/test_services/conftest.py.
 # Now safe to import the source module — its top-level imports will resolve
-# against the stubs.
-import torch  # noqa: E402  (the stub)
+# against the stubs (or the real library if torch is installed).
+import torch  # noqa: E402
 
 from app.services.distillation_trainer import (  # noqa: E402
     CHECKPOINT_DIR,
@@ -202,14 +201,7 @@ from app.services.distillation_trainer import (  # noqa: E402
     DistillationDataset,
     DistillationTrainer,
     main,
-)
-
-for _module_name, _original_module in _ORIGINAL_ML_MODULES.items():
-    if _original_module is _MISSING_MODULE:
-        sys.modules.pop(_module_name, None)
-    else:
-        sys.modules[_module_name] = _original_module
-
+)  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -6,10 +6,6 @@ from __future__ import annotations
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-pytest.importorskip("torch")
-
 from app.services.train_intent import (  # noqa: E402
     evaluate_model,
     main,

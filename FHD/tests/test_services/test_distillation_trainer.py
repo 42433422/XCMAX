@@ -22,16 +22,13 @@ except ImportError:
     torch_available = False
 
 # 条件导入被测模块
-try:
-    from app.services.distillation_trainer import (
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        DistillationDataset,
-        DistillationTrainer,
-    )
-except (ImportError, TypeError):
-    pytest.skip("distillation_trainer 依赖不可用", allow_module_level=True)
+from app.services.distillation_trainer import (
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    DistillationDataset,
+    DistillationTrainer,
+)
 
 
 class TestIntentLabels:

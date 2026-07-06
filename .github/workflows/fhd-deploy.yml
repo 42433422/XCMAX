@@ -1,0 +1,234 @@
+# CI SSOT: root-only workflow for K8s deployment of xcagi-fhd-api.
+# Source: this file is the SSOT (not synced from FHD/.github/workflows/).
+# Reason: K8s deploy operates at repo root with access to KUBE_CONFIG secret,
+# not suitable for FHD working-directory injection by publish_ci_workflows_to_root.py.
+name: fhd-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      strategy:
+        description: Deployment strategy
+        required: true
+        type: choice
+        default: rolling
+        options:
+          - rolling
+          - blue-green
+          - canary
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        default: staging
+        options:
+          - staging
+          - production
+      image_tag:
+        description: "Image tag (default: sha-<short sha>)"
+        required: false
+        type: string
+  workflow_call:
+    inputs:
+      strategy:
+        description: Deployment strategy
+        required: true
+        type: string
+        default: rolling
+      environment:
+        description: Target environment
+        required: true
+        type: string
+        default: staging
+      image_tag:
+        description: Image tag
+        required: false
+        type: string
+
+concurrency:
+  group: fhd-deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  resolve-image:
+    name: Resolve fhd-api image
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.img.outputs.image }}
+      sha: ${{ steps.img.outputs.sha }}
+      namespace: ${{ steps.ns.outputs.namespace }}
+    steps:
+      - name: Resolve image tag
+        id: img
+        run: |
+          if [ -n "${{ inputs.image_tag }}" ]; then
+            TAG="${{ inputs.image_tag }}"
+          else
+            SHA="${{ github.sha }}"
+            SHORT_SHA="${SHA:0:12}"
+            TAG="sha-${SHORT_SHA}"
+          fi
+          IMAGE="ghcr.io/42433422/xcmax/xcagi-fhd-api:${TAG}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "sha=${SHA:-${TAG}}" >> "$GITHUB_OUTPUT"
+          echo "Resolved image: ${IMAGE}"
+
+  kubeconfig-check:
+    name: Verify KUBE_CONFIG secret
+    runs-on: ubuntu-latest
+    needs: resolve-image
+    steps:
+      - name: Hard fail without KUBE_CONFIG
+        run: |
+          if [ -z "${{ secrets.KUBE_CONFIG }}" ] && [ -z "${{ secrets.KUBE_CONFIG_B64 }}" ]; then
+            echo "::error::KUBE_CONFIG (or KUBE_CONFIG_B64) secret is required for fhd-deploy."
+            echo "::error::Configure it in repo Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "KUBE_CONFIG secret present."
+
+  deploy-staging:
+    name: Deploy to staging
+    runs-on: ubuntu-latest
+    needs: [resolve-image, kubeconfig-check]
+    if: inputs.environment == 'staging'
+    environment:
+      name: staging
+    env:
+      NAMESPACE: xcagi-staging
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          if [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ]; then
+            echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "$HOME/.kube/config"
+          else
+            printf '%s' '${{ secrets.KUBE_CONFIG }}' > "$HOME/.kube/config"
+          fi
+          chmod 600 "$HOME/.kube/config"
+      - name: Render manifests
+        run: |
+          IMAGE="${{ needs.resolve-image.outputs.image }}"
+          NS="${NAMESPACE}"
+          mkdir -p rendered
+          for f in FHD/k8s/deployment.yaml FHD/k8s/service.yaml FHD/k8s/configmap.yaml FHD/k8s/hpa.yaml FHD/k8s/pdb.yaml FHD/k8s/ingress.yaml FHD/k8s/networkpolicy.yaml; do
+            sed "s|__DEPLOY_BACKEND_IMAGE__|${IMAGE}|g; s|__NAMESPACE__|${NS}|g" "$f" > "rendered/$(basename $f)"
+          done
+      - name: Apply (rolling)
+        if: inputs.strategy == 'rolling'
+        run: |
+          kubectl apply -f rendered/configmap.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/secret.yaml -n "${NAMESPACE}" || true
+          kubectl apply -f rendered/service.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/deployment.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/pdb.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/networkpolicy.yaml -n "${NAMESPACE}"
+      - name: Apply (blue-green)
+        if: inputs.strategy == 'blue-green'
+        run: |
+          # Deploy to preview deployment, switch service after health check
+          PREVIEW="xcagi-preview"
+          sed -i "s|name: xcagi$|name: ${PREVIEW}|" rendered/deployment.yaml
+          sed -i "s|app: xcagi$|app: ${PREVIEW}|" rendered/deployment.yaml
+          kubectl apply -f rendered/configmap.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/deployment.yaml -n "${NAMESPACE}"
+          kubectl -n "${NAMESPACE}" rollout status deployment/${PREVIEW} --timeout=300s
+      - name: Apply (canary)
+        if: inputs.strategy == 'canary'
+        run: |
+          # Use argo rollouts or kubectl patch for canary 10% -> 50% -> 100%
+          # Simplified: patch deployment with canary label and let HPA handle traffic split
+          kubectl apply -f rendered/configmap.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/deployment.yaml -n "${NAMESPACE}"
+          kubectl -n "${NAMESPACE}" patch deployment xcagi -p '{"metadata":{"annotations":{"canary":"true"}}}' || true
+      - name: Apply ingress + hpa
+        run: |
+          kubectl apply -f rendered/ingress.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/hpa.yaml -n "${NAMESPACE}"
+      - name: Rollout status
+        run: |
+          kubectl -n "${NAMESPACE}" rollout status deployment/xcagi --timeout=300s
+
+  deploy-production:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: [resolve-image, kubeconfig-check]
+    if: inputs.environment == 'production'
+    environment:
+      name: production
+      url: https://xiu-ci.com/fhd-api/api/health
+    env:
+      NAMESPACE: xcagi-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Configure kubectl
+        run: |
+          mkdir -p "$HOME/.kube"
+          if [ -n "${{ secrets.KUBE_CONFIG_B64 }}" ]; then
+            echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 -d > "$HOME/.kube/config"
+          else
+            printf '%s' '${{ secrets.KUBE_CONFIG }}' > "$HOME/.kube/config"
+          fi
+          chmod 600 "$HOME/.kube/config"
+      - name: Render manifests
+        run: |
+          IMAGE="${{ needs.resolve-image.outputs.image }}"
+          NS="${NAMESPACE}"
+          mkdir -p rendered
+          for f in FHD/k8s/deployment.yaml FHD/k8s/service.yaml FHD/k8s/configmap.yaml FHD/k8s/hpa.yaml FHD/k8s/pdb.yaml FHD/k8s/ingress.yaml FHD/k8s/networkpolicy.yaml; do
+            sed "s|__DEPLOY_BACKEND_IMAGE__|${IMAGE}|g; s|__NAMESPACE__|${NS}|g" "$f" > "rendered/$(basename $f)"
+          done
+      - name: Apply manifests
+        run: |
+          kubectl apply -f rendered/configmap.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/secret.yaml -n "${NAMESPACE}" || true
+          kubectl apply -f rendered/service.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/deployment.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/pdb.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/networkpolicy.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/ingress.yaml -n "${NAMESPACE}"
+          kubectl apply -f rendered/hpa.yaml -n "${NAMESPACE}"
+      - name: Rollout status
+        run: |
+          kubectl -n "${NAMESPACE}" rollout status deployment/xcagi --timeout=300s
+
+  health-check:
+    name: Post-deploy health check
+    runs-on: ubuntu-latest
+    needs: [resolve-image, deploy-staging, deploy-production]
+    if: always() && (needs.deploy-staging.result == 'success' || needs.deploy-production.result == 'success')
+    steps:
+      - name: Determine target URL
+        id: url
+        run: |
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            echo "url=https://xiu-ci.com/fhd-api/api/health" >> "$GITHUB_OUTPUT"
+          else
+            echo "url=https://staging.xiu-ci.com/fhd-api/api/health" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Curl health endpoint
+        run: |
+          URL="${{ steps.url.outputs.url }}"
+          echo "Checking ${URL}"
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -sf "${URL}" > /tmp/health.json 2>/dev/null; then
+              echo "Health check passed on attempt ${i}"
+              cat /tmp/health.json
+              exit 0
+            fi
+            echo "Attempt ${i} failed, retrying in 15s..."
+            sleep 15
+          done
+          echo "::error::Health check failed after 10 attempts"
+          exit 1

@@ -52,6 +52,17 @@ def load_or_create_profile(data_root: str | os.PathLike[str]) -> tuple[Path, dic
     return path, profile
 
 
+def save_profile(
+    data_root: str | os.PathLike[str], profile: dict[str, Any]
+) -> tuple[Path, dict[str, Any]]:
+    """Validate and persist a desktop database profile."""
+    path = profile_path(data_root)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    normalized = _normalize_profile(profile)
+    path.write_text(json.dumps(normalized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path, normalized
+
+
 def _is_valid_remote_database_url(url: str) -> bool:
     text = (url or "").strip()
     if not text:
@@ -63,6 +74,10 @@ def _is_valid_remote_database_url(url: str) -> bool:
     except ValueError:
         return False
     return parsed.scheme in {"postgresql", "postgresql+psycopg", "postgres"}
+
+
+def is_valid_remote_database_url(url: str) -> bool:
+    return _is_valid_remote_database_url(url)
 
 
 def apply_database_profile_to_env(

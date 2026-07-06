@@ -1,3 +1,4 @@
+import inspect
 import logging
 import os
 from typing import Any, cast
@@ -68,6 +69,12 @@ class IntentMixin:
             "intent_source": "rule_only_fast",
         }
 
+    def _async_online_intent_recognize(self) -> Any | None:
+        recognize = getattr(getattr(self, "online_intent_service", None), "recognize", None)
+        if inspect.iscoroutinefunction(recognize):
+            return recognize
+        return None
+
     def _neuro_stack_enabled(self) -> bool:
         from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled
 
@@ -120,6 +127,11 @@ class IntentMixin:
     ) -> dict[str, Any]:
         ai_mode = self._resolve_ai_mode(user_id)
         is_offline_mode = ai_mode == "offline"
+        rule_only_requested = self._should_use_rule_only_intent(request_context)
+        rule_only_available = callable(getattr(self, "intent_service", None))
+        online_intent_recognize = self._async_online_intent_recognize()
+        if rule_only_requested and not rule_only_available:
+            logger.warning("[INTENT] rule_only_fast requested but intent_service is unavailable")
 
         if self._neuro_stack_enabled() and not self._is_pro_source(source):
             from app.neuro_bus.integrations.intent_integration import try_neuro_reflex_intent
@@ -139,36 +151,35 @@ class IntentMixin:
         if is_offline_mode:
             logger.info("[INTENT] 离线模式：使用本地蒸馏规则识别")
             intent_result = await self.offline_intent_service.recognize(message)
-        elif self._is_pro_source(source):
-            if self._neuro_stack_enabled():
-                from app.neuro_bus.integrations.intent_integration import (
-                    get_neuro_intent_recognizer,
-                )
-
-                logger.info("[INTENT] 使用 neuro + unified_recognizer (pro mode)")
-                neuro_r = get_neuro_intent_recognizer().recognize(
-                    message,
-                    user_id,
-                    context=None,
-                    context_data=request_context,
-                )
-                intent_result = self._convert_neuro_intent_bridge(neuro_r)
-            else:
-                logger.info("[INTENT] 使用 unified_recognizer (pro mode)")
-                recognizer_result = self.unified_recognizer.recognize(
-                    message,
-                    context=None,
-                    context_data=request_context,
-                )
-                intent_result = self._convert_recognizer_result(recognizer_result)
-        elif self._should_use_rule_only_intent(request_context):
+        elif rule_only_requested and rule_only_available:
             logger.info(
                 "[INTENT] rule_only_fast（跳过意图 DeepSeek，仅规则；可设 XCAGI_SKIP_INTENT_LLM=1 或 context.skip_intent_llm）"
             )
             intent_result = self._intent_rule_only_fast(message)
+        elif self._neuro_stack_enabled():
+            from app.neuro_bus.integrations.intent_integration import (
+                get_neuro_intent_recognizer,
+            )
+
+            logger.info("[INTENT] 使用 neuro + unified_recognizer (online)")
+            neuro_r = get_neuro_intent_recognizer().recognize(
+                message,
+                user_id,
+                context=None,
+                context_data=request_context,
+            )
+            intent_result = self._convert_neuro_intent_bridge(neuro_r)
+        elif not self._is_pro_source(source) and online_intent_recognize is not None:
+            logger.info("[INTENT] 使用 online_intent_service (online)")
+            intent_result = await online_intent_recognize(message)
         else:
-            logger.info("[INTENT] 使用 deepseek_intent_service (普通模式)")
-            intent_result = await self.online_intent_service.recognize(message)
+            logger.info("[INTENT] 使用 unified_recognizer (online)")
+            recognizer_result = self.unified_recognizer.recognize(
+                message,
+                context=None,
+                context_data=request_context,
+            )
+            intent_result = self._convert_recognizer_result(recognizer_result)
 
         intent_result["ai_mode"] = ai_mode
         try:

@@ -59,6 +59,35 @@ def test_relay_workorder_uses_real_repo_when_env_set(repo_root, monkeypatch):
     assert cwd.resolve() == repo_root.resolve()
 
 
+def test_relay_workorder_rejects_untrusted_context_workspace_root(tmp_path, repo_root):
+    """移动中继显式带任意 git workspace_root → 不采信，避免客户端选择执行目录。"""
+    (tmp_path / ".git").mkdir()
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    cwd = svc._cli_workspace(
+        {
+            "source": "mobile_relay",
+            "force_cli_direct": True,
+            "workspace_root": str(tmp_path),
+        }
+    )
+    assert Path(cwd).resolve() == repo_root.resolve()
+    assert Path(cwd).resolve() != tmp_path.resolve()
+
+
+def test_relay_workorder_uses_inferred_verified_workspace_root(tmp_path, monkeypatch):
+    """旧手机包未传 workspace_root 时，桌面源码运行可回落到已验证的 XCMAX 仓库。"""
+    (tmp_path / ".git").mkdir()
+    svc = _svc()
+    svc._grant = CapabilityGrant.product()
+    monkeypatch.setattr(
+        "app.application.super_employee_service.resolve_verified_relay_workspace_root",
+        lambda _ctx: str(tmp_path),
+    )
+    cwd = Path(svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True}))
+    assert cwd.resolve() == tmp_path.resolve()
+
+
 def test_real_repo_ignored_for_nonrelay_product_request(repo_root, monkeypatch):
     """安全：非中继的产品请求即便配了 env 也不给真仓库，仍走隔离临时区。"""
     svc = _svc()
@@ -73,6 +102,10 @@ def test_relay_real_repo_requires_git_dir(tmp_path, monkeypatch):
     svc = _svc()
     svc._grant = CapabilityGrant.product()
     monkeypatch.setenv("XCMAX_RELAY_WORKSPACE_ROOT", str(tmp_path))
+    monkeypatch.setattr(
+        "app.application.relay_workspace._inferred_xcmax_repo_root",
+        lambda: "",
+    )
     cwd = svc._cli_workspace({"source": "mobile_relay", "force_cli_direct": True})
     assert cwd == svc._product_ephemeral_workspace()
 

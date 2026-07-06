@@ -10,11 +10,20 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.desktop_runtime import (
+    build_sqlite_to_postgres_sync_plan,
     ensure_desktop_dirs,
     is_desktop_mode,
+    is_valid_remote_database_url,
+    load_database_storage_catalog,
+    load_deployment_catalog,
+    load_or_create_deployment_profile,
     load_or_create_profile,
+    mode_by_id,
     redact_database_url,
+    resolve_effective_mode_id,
     resolve_storage_mode,
+    save_deployment_profile,
+    save_profile,
 )
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
@@ -30,6 +39,12 @@ class DownloadModelRequest(BaseModel):
     url: str
     sha256: str
     size: int | None = None
+
+
+class DeploymentSettingsUpdate(BaseModel):
+    mode: str
+    postgresUrl: str | None = None
+    postgres_url: str | None = None
 
 
 @router.get("/status")
@@ -68,6 +83,127 @@ def desktop_status(request: Request):
         "startupTiming": timing,
         "dbRecovery": db_recovery,
         "lastBackup": last_backup,
+    }
+
+
+@router.get("/deployment")
+def desktop_deployment_status():
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    catalog = load_deployment_catalog()
+    database_storage_catalog = load_database_storage_catalog()
+    deployment_path, deployment_profile = load_or_create_deployment_profile(dirs["root"], catalog)
+    db_profile_path, db_profile = load_or_create_profile(dirs["root"])
+    db_url = os.environ.get("DATABASE_URL", "")
+    storage_mode = resolve_storage_mode(db_url, db_profile)
+    current_mode_id = resolve_effective_mode_id(
+        catalog, deployment_profile, storage_mode=storage_mode
+    )
+    current_mode = mode_by_id(catalog, current_mode_id) or {}
+    remote = db_profile.get("remote") if isinstance(db_profile.get("remote"), dict) else {}
+    postgres_url = str(remote.get("database_url") or "").strip()
+    sqlite_path = str(dirs["data"] / "xcagi.db")
+    sync_plan = build_sqlite_to_postgres_sync_plan(
+        database_storage_catalog,
+        sqlite_path=sqlite_path,
+        postgres_url=postgres_url or "<postgres-url>",
+        data_root=str(dirs["root"]),
+    )
+    return {
+        "success": True,
+        "desktopMode": is_desktop_mode(),
+        "catalog": catalog,
+        "databaseStorageCatalog": database_storage_catalog,
+        "modes": catalog.get("modes") or [],
+        "currentMode": current_mode_id,
+        "currentModeDetail": current_mode,
+        "deploymentProfilePath": str(deployment_path),
+        "databaseProfilePath": str(db_profile_path),
+        "database": {
+            "storageMode": storage_mode,
+            "sqlitePath": sqlite_path,
+            "databaseUrlRedacted": redact_database_url(db_url),
+            "postgresUrlRedacted": redact_database_url(postgres_url),
+        },
+        "effective": {
+            "mode": current_mode_id,
+            "networkScope": current_mode.get("networkScope"),
+            "aiMode": current_mode.get("aiMode"),
+            "databaseMode": current_mode.get("databaseMode"),
+            "mobileConnection": current_mode.get("mobileConnection"),
+            "performanceProfile": current_mode.get("performanceProfile"),
+            "allowsOutbound": current_mode.get("allowsOutbound"),
+            "requiresPostgresql": current_mode.get("requiresPostgresql"),
+        },
+        "syncPlan": sync_plan,
+        "restartRequired": False,
+    }
+
+
+@router.put("/deployment")
+def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    catalog = load_deployment_catalog()
+    database_storage_catalog = load_database_storage_catalog()
+    mode_id = str(request.mode or "").strip()
+    mode = mode_by_id(catalog, mode_id)
+    if not mode:
+        raise HTTPException(status_code=400, detail=f"未知部署模式: {mode_id}")
+
+    _db_profile_path, db_profile = load_or_create_profile(dirs["root"])
+    remote = db_profile.get("remote") if isinstance(db_profile.get("remote"), dict) else {}
+    requested_pg_url = str(request.postgresUrl or request.postgres_url or "").strip()
+    existing_pg_url = str(remote.get("database_url") or "").strip()
+    postgres_url = requested_pg_url or existing_pg_url
+
+    requires_postgresql = bool(mode.get("requiresPostgresql"))
+    if requires_postgresql:
+        if not is_valid_remote_database_url(postgres_url):
+            raise HTTPException(
+                status_code=400,
+                detail="性能模式需要填写 postgresql/postgresql+psycopg 数据库连接地址",
+            )
+        save_profile(
+            dirs["root"],
+            {
+                "version": 1,
+                "mode": "remote",
+                "remote": {"enabled": True, "database_url": postgres_url},
+            },
+        )
+    else:
+        save_profile(
+            dirs["root"],
+            {
+                "version": 1,
+                "mode": "local",
+                "remote": {"enabled": False, "database_url": existing_pg_url},
+            },
+        )
+
+    deployment_path, deployment_profile = save_deployment_profile(dirs["root"], mode_id, catalog)
+    sqlite_path = str(dirs["data"] / "xcagi.db")
+    sync_plan = build_sqlite_to_postgres_sync_plan(
+        database_storage_catalog,
+        sqlite_path=sqlite_path,
+        postgres_url=postgres_url or "<postgres-url>",
+        data_root=str(dirs["root"]),
+    )
+    restart_required = requires_postgresql or os.environ.get("DATABASE_URL", "").startswith(
+        "postgres"
+    )
+    return {
+        "success": True,
+        "mode": deployment_profile["mode"],
+        "modeDetail": mode,
+        "deploymentProfilePath": str(deployment_path),
+        "databaseProfilePath": str(dirs["root"] / "config" / "database.json"),
+        "database": {
+            "storageMode": "remote_postgresql" if requires_postgresql else "local_sqlite",
+            "sqlitePath": sqlite_path,
+            "postgresUrlRedacted": redact_database_url(postgres_url),
+        },
+        "syncPlan": sync_plan if requires_postgresql else None,
+        "restartRequired": restart_required,
     }
 
 

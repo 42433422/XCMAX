@@ -9,22 +9,18 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from app.services.intent_trainer import (
-        HAS_YAML,
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        IntentDataset,
-        IntentExample,
-        compute_metrics,
-        load_training_data,
-        parse_nlu_yaml,
-        split_data,
-    )
-except ImportError:
-    pytest.skip("intent_trainer dependencies unavailable", allow_module_level=True)
-
+from app.services.intent_trainer import (
+    HAS_YAML,
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    IntentDataset,
+    IntentExample,
+    compute_metrics,
+    load_training_data,
+    parse_nlu_yaml,
+    split_data,
+)
 
 # ---------------------------------------------------------------------------
 # IntentExample
@@ -58,7 +54,7 @@ class TestIntentDataset:
         assert len(ds) == 2
 
     def test_getitem_known_label(self):
-        torch = pytest.importorskip("torch")
+        import torch
 
         examples = [IntentExample(text="发货", label="shipment_generate")]
         mock_tokenizer = MagicMock()
@@ -73,7 +69,7 @@ class TestIntentDataset:
         assert item["labels"].item() == LABEL_TO_ID["shipment_generate"]
 
     def test_getitem_unknown_label(self):
-        torch = pytest.importorskip("torch")
+        import torch
 
         examples = [IntentExample(text="test", label="nonexistent_label")]
         mock_tokenizer = MagicMock()

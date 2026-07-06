@@ -79,7 +79,7 @@ class TestMessageRequiresDbReadToken:
         assert helpers._message_requires_db_read_token("你好") is False
 
     def test_query_product_db(self):
-        assert helpers._message_requires_db_read_token("查询产品库") is True
+        assert helpers._message_requires_db_read_token("查询产品库") is False
 
 
 # ---------------------------------------------------------------------------

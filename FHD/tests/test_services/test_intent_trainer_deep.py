@@ -25,11 +25,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-_MISSING_MODULE = object()
-_ORIGINAL_ML_MODULES = {
-    name: sys.modules.get(name, _MISSING_MODULE)
-    for name in ("torch", "torch.utils", "torch.utils.data", "transformers")
-}
+# Stubs are installed by tests/test_services/conftest.py at collection start.
+# This file previously carried its own stub installer + sys.modules restore
+# logic; the restore step broke collection of later files in this directory
+# (it popped torch from sys.modules, so the next file's
+# ``from app.services.intent_trainer import ...`` failed silently).
 
 # ---------------------------------------------------------------------------
 # Stub heavy ML deps so the source module can be imported without torch /
@@ -169,8 +169,7 @@ def _install_torch_transformers_stubs() -> None:
     sys._xcmax_it_stubs_installed = True
 
 
-_install_torch_transformers_stubs()
-
+# Stubs (if needed) are installed by tests/test_services/conftest.py.
 # Now safe to import the source module.
 from app.services.intent_trainer import (  # noqa: E402
     HAS_YAML,
@@ -186,14 +185,7 @@ from app.services.intent_trainer import (  # noqa: E402
     parse_nlu_yaml,
     split_data,
     train_intent_model,
-)
-
-for _module_name, _original_module in _ORIGINAL_ML_MODULES.items():
-    if _original_module is _MISSING_MODULE:
-        sys.modules.pop(_module_name, None)
-    else:
-        sys.modules[_module_name] = _original_module
-
+)  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Helpers

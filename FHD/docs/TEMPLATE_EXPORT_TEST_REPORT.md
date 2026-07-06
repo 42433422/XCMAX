@@ -208,12 +208,12 @@
 
 ## 测试脚本
 
-测试脚本位置：[`scripts/test_template_export.py`](../scripts/test_template_export.py)
+测试脚本位置：[`scripts/archive/2026-07/test_template_export.py`](../scripts/archive/2026-07/test_template_export.py)
 
 ### 运行测试
 ```bash
 cd e:\FHD
-python scripts/test_template_export.py
+python scripts/archive/2026-07/test_template_export.py
 ```
 
 ### 预期输出

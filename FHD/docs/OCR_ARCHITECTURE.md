@@ -86,7 +86,7 @@ flowchart TB
 - **目标**：单一、可维护、中文与印刷体场景性价比最高的默认路径。
 - **替换对象**：历史栈中的 EasyOCR、纯 Tesseract 等（如 `XCAGI` 内 `OCRService` 以 `readtext` 为主的实现）。
 - **交付物**：统一 `OcrResult` 契约（文本、多边形框、置信度、行/段排序键），供规则引擎与表格对齐消费。
-- **仓库对照**：根目录 `scripts/test_paddleocr*.py`、`hybrid_table_recognition.py` 等可作为能力验证脚本，后续应收敛为可 import 的服务模块而非散脚本。
+- **仓库对照**：根目录 `scripts/test_paddleocr*.py`、`hybrid_table_recognition.py` 等可作为能力验证脚本，后续应收敛为可 import 的服务模块而非散脚本（已归档至 `scripts/archive/2026-07/`）。
 
 ### P0：后处理规则引擎（业务价值放大器）
 
@@ -102,7 +102,7 @@ flowchart TB
 
 - **触发**：版面分析判定为「强表格」或单据类型为出货单/对账单等。
 - **路径**：PaddleOCR 表格类 API（如 `TableRecognitionPipelineV2`、PP-Structure）与 **单元格级文本** 对齐；复杂合并单元格可结合 OpenCV 网格或专用表格模型。
-- **仓库对照**：`scripts/test_table_pipeline.py`、`test_ppstructure.py`、`ocr_table_*.py`。
+- **仓库对照**：`scripts/test_table_pipeline.py`、`test_ppstructure.py`、`ocr_table_*.py`（已归档至 `scripts/archive/2026-07/`）。
 
 ### P1：多引擎 Ensemble
 

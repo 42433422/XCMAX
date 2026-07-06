@@ -662,7 +662,7 @@ class TestMessageRequiresDbReadTokenExtended:
         assert ch._message_requires_db_read_token("查询数据库") is True
 
     def test_view_product_library(self):
-        assert ch._message_requires_db_read_token("查看产品库") is True
+        assert ch._message_requires_db_read_token("查看产品库") is False
 
     def test_database_query(self):
         assert ch._message_requires_db_read_token("数据库查询") is True

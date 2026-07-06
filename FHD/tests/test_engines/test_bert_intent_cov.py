@@ -15,6 +15,15 @@ for _mod in ("torch", "transformers"):
 # torch.cuda.is_available must return a real bool, not a MagicMock
 import torch  # noqa: E402 — imported after stub
 
+if not hasattr(torch, "cuda"):
+    torch.cuda = MagicMock()
+if not hasattr(torch, "softmax"):
+    torch.softmax = MagicMock()
+if not hasattr(torch, "max"):
+    torch.max = MagicMock()
+if not hasattr(torch, "no_grad"):
+    torch.no_grad = MagicMock()
+
 torch.cuda.is_available = lambda: False
 
 from app.ai_engines.bert.intent_service import (  # noqa: E402
@@ -150,21 +159,22 @@ class TestBertIntentClassifierLoadModel:
         """use_fp16=True calls model.half()."""
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
+        mock_model_loader = MagicMock()
+        mock_model_loader.from_pretrained.return_value = mock_model
+        mock_tokenizer_loader = MagicMock()
+        mock_tokenizer_loader.from_pretrained.return_value = mock_tokenizer
 
         clf = BertIntentClassifier(device="cpu", use_fp16=True)
 
-        with (
-            patch(
-                "app.ai_engines.bert.intent_service.AutoModelForSequenceClassification.from_pretrained",
-                return_value=mock_model,
-            ),
-            patch(
-                "app.ai_engines.bert.intent_service.BertTokenizer.from_pretrained",
-                return_value=mock_tokenizer,
-            ),
-        ):
-            clf.load_model()
+        import app.ai_engines.bert.intent_service as svc_mod
 
+        with (
+            patch.object(svc_mod, "AutoModelForSequenceClassification", mock_model_loader),
+            patch.object(svc_mod, "BertTokenizer", mock_tokenizer_loader),
+        ):
+            result = clf.load_model()
+
+        assert result is True
         mock_model.half.assert_called_once()
 
 

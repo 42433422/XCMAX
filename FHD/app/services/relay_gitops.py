@@ -20,6 +20,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
 logger = logging.getLogger(__name__)
 
 GIT_OP_KINDS = ("git.merge", "git.diff", "git.discard")
@@ -37,6 +39,17 @@ def _repo_root() -> str:
         if parent.name == "FHD":
             return str(parent.parent)
     return str(here.parents[3])
+
+
+def _repo_root_from_payload(payload: dict[str, Any] | None = None) -> str:
+    raw_payload = payload if isinstance(payload, dict) else {}
+    context = raw_payload.get("context") if isinstance(raw_payload.get("context"), dict) else {}
+    root = resolve_verified_relay_workspace_root(
+        {"workspace_root": raw_payload.get("workspace_root") or context.get("workspace_root")}
+    )
+    if root:
+        return root
+    return _repo_root()
 
 
 def _merge_base_branch(repo: str) -> str:
@@ -92,7 +105,7 @@ def _verify_merged(wt: str, base: str) -> tuple[bool, str]:
 
 
 def git_diff(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
-    repo = repo or _repo_root()
+    repo = repo or _repo_root_from_payload(payload)
     branch = _branch_from_payload(payload)
     if not branch:
         return {"ok": False, "_relay_status": "failed", "reply": "缺少分支名"}
@@ -116,7 +129,7 @@ def git_diff(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]
 
 
 def git_discard(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
-    repo = repo or _repo_root()
+    repo = repo or _repo_root_from_payload(payload)
     branch = _branch_from_payload(payload)
     if not branch:
         return {"ok": False, "_relay_status": "failed", "reply": "缺少分支名"}
@@ -132,7 +145,7 @@ def git_discard(payload: dict[str, Any], repo: str | None = None) -> dict[str, A
 
 
 def git_merge(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
-    repo = repo or _repo_root()
+    repo = repo or _repo_root_from_payload(payload)
     branch = _branch_from_payload(payload)
     if not branch:
         return {"ok": False, "_relay_status": "failed", "reply": "缺少分支名"}
