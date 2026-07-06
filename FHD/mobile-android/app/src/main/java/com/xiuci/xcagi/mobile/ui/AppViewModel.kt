@@ -1716,8 +1716,10 @@ constructor(
                         }
                         .onFailure {
                             analytics.log("login_fail", mapOf("method" to "password"))
-                            snack(it.message ?: "登录失败，请检查账号密码", true)
-                            onDone(false, it.message)
+                            // 原始 HTTP/SDK 文案不上屏：统一映射为产品级中文提示。
+                            val friendly = productErrorMessage(it.message, "登录失败，请检查账号密码")
+                            snack(friendly, true)
+                            onDone(false, friendly)
                         }
             }
 
@@ -1780,7 +1782,7 @@ constructor(
                         }
                         .onFailure {
                             analytics.log("login_fail", mapOf("method" to "phone"))
-                            snack(it.message ?: "操作失败，请稍后重试", true)
+                            snack(productErrorMessage(it.message, "登录失败，请稍后重试"), true)
                             onDone(false)
                         }
             }
@@ -2276,7 +2278,7 @@ constructor(
                                 _listError.value = "网络不可用，已显示本地缓存"
                             }
                         }
-                        .onFailure { err -> _listError.value = err.message ?: "加载失败" }
+                        .onFailure { err -> _listError.value = productErrorMessage(err.message, "加载失败，请稍后重试") }
                 _listLoading.value = false
             }
 
@@ -2293,7 +2295,7 @@ constructor(
                                 _detailJson.value = raw.toString()
                             }
                         }
-                        .onFailure { snack(it.message ?: "加载失败", true) }
+                        .onFailure { snack(productErrorMessage(it.message, "加载失败，请稍后重试"), true) }
                 _approvalDetailLoading.value = false
             }
 
@@ -2609,7 +2611,7 @@ constructor(
                 _listError.value = null
                 repo.inventory()
                         .onSuccess { lines -> _items.value = lines.map { ListItem(it, it) } }
-                        .onFailure { err -> _listError.value = err.message ?: "加载失败" }
+                        .onFailure { err -> _listError.value = productErrorMessage(err.message, "加载失败，请稍后重试") }
                 _listLoading.value = false
             }
 

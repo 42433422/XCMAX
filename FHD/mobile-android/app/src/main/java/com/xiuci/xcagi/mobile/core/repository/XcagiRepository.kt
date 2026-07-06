@@ -390,13 +390,24 @@ class XcagiRepository @Inject constructor(
 
     private fun loginErrorMessage(error: Throwable, accountKind: String): String {
         val http = error as? HttpException
+        val fallback = if (normalizeAccountKind(accountKind) == "admin") {
+            "服务器后台登录失败，请检查账号密码或稍后重试"
+        } else {
+            "登录失败，请检查账号密码或稍后重试"
+        }
         return when (http?.code()) {
+            401 -> "账号或密码不正确，或登录已过期，请重新登录"
             403 -> "服务器拒绝登录请求。请先扫码绑定后台/电脑执行端，或确认服务器已开放移动端登录。"
             500 -> "服务器登录接口异常，请稍后重试或切换到已绑定的后台地址。"
-            else -> error.message ?: if (normalizeAccountKind(accountKind) == "admin") {
-                "服务器后台登录失败"
-            } else {
-                "登录失败"
+            else -> {
+                // Retrofit/OkHttp 的默认 message 是 `HTTP 401 Unauthorized` 这类原始
+                // 英文行，不适合直接上屏；只透传中文产品文案，其余走 fallback。
+                val raw = error.message.orEmpty()
+                val isProductCopy = raw.isNotBlank() &&
+                    raw.any { it in '\u4e00'..'\u9fff' } &&
+                    !raw.contains("HTTP", ignoreCase = true) &&
+                    raw.length <= 80
+                if (isProductCopy) raw else fallback
             }
         }
     }
@@ -846,9 +857,11 @@ class XcagiRepository @Inject constructor(
             if (!response.success) {
                 null
             } else {
-                relayDesktopRows(response.data)
+                val rows = relayDesktopRows(response.data)
                     .filter { relayDesktopIsDispatchable(it) }
-                    .maxByOrNull { relayDesktopSortKey(it) }
+                // 优先派给有 poll 心跳的在线桌面；全部离线时保持原行为（最新绑定优先）。
+                rows.filter { it["online"] == true }.maxByOrNull { relayDesktopSortKey(it) }
+                    ?: rows.maxByOrNull { relayDesktopSortKey(it) }
             }
         } catch (_: Exception) {
             null
@@ -1407,7 +1420,10 @@ class XcagiRepository @Inject constructor(
                 }
             }
 
-            finalText = "已提交到超级员工-Codex，任务将在电脑端执行后回写。"
+            // 诚实状态：轮询超时说明电脑执行端尚未回写（可能离线），不得包装成
+            // 「将在电脑端执行后回写」的假成功文案（PRODUCT_POLISH_CHECKLIST P1 路径四）。
+            finalText = "任务已提交，但电脑执行端暂未回写结果（可能离线）。" +
+                "请确认电脑执行端已启动并在线，稍后回到本会话查看进度。"
             onDone(finalText)
         } catch (e: CancellationException) {
             throw e
@@ -2187,7 +2203,14 @@ class XcagiRepository @Inject constructor(
             }
             // 持久化在飞任务：刷新/重启后可恢复轮询，避免"任务状态丢了"。
             if (conversationId.isNotBlank()) sessionStore.setInflightRelayTask(conversationId, taskId)
-            onToken("思考中...")
+            // 诚实状态：服务端在建任务响应里回传桌面在线情况；离线时立刻告知等待原因，
+            // 而不是让用户对着"思考中"等满 5 分钟超时。
+            val desktopOnline = created.data?.get("desktop_online") as? Boolean ?: true
+            if (!desktopOnline) {
+                onToken("任务已入队，电脑执行端当前离线，上线后会自动执行。")
+            } else {
+                onToken("思考中...")
+            }
             pollRelayTask(taskId, toolLabel, conversationId, onToken, onDone, onError)
         } catch (e: CancellationException) {
             throw e
