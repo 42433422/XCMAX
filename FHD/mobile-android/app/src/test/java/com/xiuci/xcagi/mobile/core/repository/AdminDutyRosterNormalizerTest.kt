@@ -72,6 +72,30 @@ class AdminDutyRosterNormalizerTest {
     }
 
     @Test
+    fun missingEmployeesAreMarkedNotInstalledPlanned() {
+        // 服务端未返回的编制员工用本地 SSOT 兜底，必须标未安装/编制中，不假装在岗。
+        val missing = "llm-ops-engineer"
+        val cloudEmployees =
+            plannedIdsInOrder()
+                .filterNot { it == missing }
+                .map { WorkflowEmployeeInfo(id = it, label = it, installed = true, runnable = true) }
+        val mod =
+            ModInfo(
+                id = AdminDutyRosterNormalizer.ADMIN_DUTY_MOD_ID,
+                workflow_employees = cloudEmployees,
+            )
+
+        val normalized = AdminDutyRosterNormalizer.normalize(listOf(mod)).single()
+        val fallbackEmp = normalized.workflow_employees.first { it.id == missing }
+        assertFalse(fallbackEmp.installed)
+        assertFalse(fallbackEmp.runnable)
+        assertEquals("planned", fallbackEmp.source)
+        // 服务端返回的员工保持其安装态（本例 installed=true）
+        val presentEmp = normalized.workflow_employees.first { it.id != missing && it.id != "user-customer-service-officer" }
+        assertTrue(presentEmp.installed)
+    }
+
+    @Test
     fun nonDutyModsAreLeftUntouched() {
         val mod = ModInfo(id = "public-mod", workflow_employees = listOf(WorkflowEmployeeInfo(id = "x")))
 

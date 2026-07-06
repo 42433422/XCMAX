@@ -91,6 +91,8 @@ internal data class AiEmployeeProfile(
     val marketMaterialCategory: String,
     val marketLicenseScope: String,
     val marketSecurityLevel: String,
+    val installed: Boolean = true,
+    val runnable: Boolean = true,
     val avatarUrl: String? = null,
 ) {
     val key: String = "$modId:$employeeId"
@@ -137,6 +139,8 @@ internal fun List<ModInfo>.aiEmployeeProfiles(): List<AiEmployeeProfile> =
                     marketMaterialCategory = employee.market_material_category,
                     marketLicenseScope = employee.market_license_scope,
                     marketSecurityLevel = employee.market_security_level,
+                    installed = employee.installed,
+                    runnable = employee.runnable,
                     avatarUrl = employee.market_avatar?.takeIf { it.isNotBlank() }
                         ?: mod.avatar_url?.takeIf { it.isNotBlank() },
                 )

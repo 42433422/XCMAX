@@ -344,6 +344,11 @@ data class WorkflowEmployeeInfo(
     val api_base_path: String = "",
     val phone_channel: String = "",
     val workflow_placeholder: Boolean = false,
+    // 统一员工身份契约（后端 mobile_api_extensions._admin_employee_items）：
+    // 三端一致的安装/可执行/来源标记；缺省 installed=true 兼容旧后端（不误标未安装）。
+    val installed: Boolean = true,
+    val runnable: Boolean = true,
+    val source: String = "",
     val profile_source: String = "",
     val market_connected: Boolean = false,
     val market_pkg_id: String = "",
@@ -396,6 +401,9 @@ data class AdminMobileEmployeeInfo(
     val is_duty_employee: Boolean = false,
     val is_store_employee: Boolean = false,
     val status: String = "",
+    val installed: Boolean = true,
+    val runnable: Boolean = true,
+    val source: String = "",
     val api_base_path: String = "",
     val phone_channel: String = "",
     val profile_source: String = "",

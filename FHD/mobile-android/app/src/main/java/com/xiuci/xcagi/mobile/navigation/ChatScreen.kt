@@ -1473,13 +1473,33 @@ fun AiEmployeeListScreen(
                             Spacer(Modifier.width(MessageAvatarLayout.employeePickerAvatarTextGap))
 
                             Column(Modifier.weight(1f)) {
-                                Text(
-                                    employee.name,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
-                                    color = imTextPrimary(),
-                                    maxLines = 1,
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        employee.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                        color = imTextPrimary(),
+                                        maxLines = 1,
+                                    )
+                                    // 诚实状态：未安装编制员工标灰色「未安装」，不假装可用。
+                                    if (!employee.installed) {
+                                        Spacer(Modifier.width(Spacing.sm))
+                                        Surface(
+                                            color = Color(0xFFF0F1F3),
+                                            shape = RoundedCornerShape(4.dp),
+                                        ) {
+                                            Text(
+                                                "未安装",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = Color(0xFF6B7280),
+                                                modifier = Modifier.padding(
+                                                    horizontal = 6.dp,
+                                                    vertical = 1.dp,
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
                                 Spacer(Modifier.height(3.dp))
                                 Text(
                                     employee.summary,

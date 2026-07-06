@@ -1378,6 +1378,9 @@ constructor(
                             .ifBlank { imPreview }
                             .ifBlank { cachedConversationPreview(conversationId, previews) }
                             .ifBlank { employee.contactSubtitle(source) }
+                        // 诚实状态（PRODUCT_POLISH_CHECKLIST P0 路径二）：未安装编制员工标
+                        // 灰色「未安装」，不假装在岗；已安装沿用调用方 badge（管理端/已安装）。
+                        val notInstalled = !employee.installed
                         ConversationItem(
                                 id = conversationId,
                                 type = ConversationType.AI_TASK,
@@ -1386,6 +1389,13 @@ constructor(
                                 timestamp = timestamp,
                                 avatarUrl = avatarUrl,
                                 unreadCount = maxOf(employee.im_unread_count, imUnread),
+                                badgeText = if (notInstalled) "未安装" else badgeText,
+                                badgeColor =
+                                    if (notInstalled) {
+                                        androidx.compose.ui.graphics.Color(0xFF9CA3AF)
+                                    } else {
+                                        badgeColor
+                                    },
                         )
                     }
                 }

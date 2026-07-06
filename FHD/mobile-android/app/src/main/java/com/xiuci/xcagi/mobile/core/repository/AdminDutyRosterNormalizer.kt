@@ -84,6 +84,11 @@ internal object AdminDutyRosterNormalizer {
             api_base_path = "/api/admin/employees/$employeeId",
             phone_channel = "admin-duty",
             workflow_placeholder = false,
+            // 本地 SSOT 兜底：服务端未确认安装的编制员工按「未安装/编制中」呈现，
+            // 不假装在岗（与前端 fallbackDutyEmployees / 后端 planned 一致）。
+            installed = false,
+            runnable = false,
+            source = "planned",
             profile_source = "duty_roster",
         )
     }
