@@ -79,6 +79,16 @@
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
           <button
+            v-if="msg.role === 'ai' && !isStreamingShell(msg) && !isFailedMessage(msg)"
+            class="message-copy-btn"
+            :title="copiedMsgIdx === idx ? '已复制' : '复制回复'"
+            :aria-label="copiedMsgIdx === idx ? '已复制' : '复制回复'"
+            @click.stop="copyMessage(idx, msg)"
+          >
+            <i class="fa" :class="copiedMsgIdx === idx ? 'fa-check' : 'fa-copy'" aria-hidden="true"></i>
+            {{ copiedMsgIdx === idx ? '已复制' : '复制' }}
+          </button>
+          <button
             v-if="msg.role === 'ai' && isFailedMessage(msg) && !isLoading"
             class="message-retry-btn"
             title="重试"
@@ -116,10 +126,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, type Ref } from 'vue'
+import { nextTick, onMounted, ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { enhanceMarkdownContainer } from '@/composables/useMarkdownPostRender'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 
@@ -145,6 +156,32 @@ function isFailedMessage(msg: ChatMessage): boolean {
     .replace(/&nbsp;/gi, ' ')
     .trim()
   return text.startsWith('处理失败：')
+}
+
+/** 气泡 HTML → 可复制纯文本：保留换行、还原实体、去标签 */
+function messagePlainText(content: string): string {
+  const withBreaks = String(content || '').replace(/<br\s*\/?>/gi, '\n')
+  const div = document.createElement('div')
+  div.innerHTML = withBreaks
+  return (div.textContent || '').replace(/\u00a0/g, ' ').trim()
+}
+
+const copiedMsgIdx = ref(-1)
+let copiedResetTimer: ReturnType<typeof setTimeout> | null = null
+
+async function copyMessage(idx: number, msg: ChatMessage): Promise<void> {
+  const text = messagePlainText(msg.content)
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedMsgIdx.value = idx
+    if (copiedResetTimer) clearTimeout(copiedResetTimer)
+    copiedResetTimer = setTimeout(() => {
+      copiedMsgIdx.value = -1
+    }, 1400)
+  } catch {
+    /* 剪贴板不可用（如非安全上下文）时静默；用户可手动选择复制 */
+  }
 }
 
 const props = defineProps<{
@@ -178,6 +215,35 @@ watch(messagesHostRef, (el) => {
   if (!bag) return
   bag.value = el
 }, { immediate: true })
+
+// 渲染后增强：给代码块复制按钮接线 + 渲染 Mermaid 流程图（幂等，跳过已处理的块）。
+// 流式进行中跳过重型后处理（避免边生成边渲染抖动），流结束/消息变更后统一处理一次。
+let _enhanceRaf: number | null = null
+function scheduleMarkdownEnhance(): void {
+  if (props.isStreamingReply) return
+  if (_enhanceRaf !== null) return
+  _enhanceRaf = requestAnimationFrame(() => {
+    _enhanceRaf = null
+    void nextTick(() => enhanceMarkdownContainer(messagesHostRef.value))
+  })
+}
+
+onMounted(() => {
+  void nextTick(() => enhanceMarkdownContainer(messagesHostRef.value))
+})
+
+watch(
+  () => props.messages.map((m) => `${m.role}:${(m.content || '').length}`).join('|'),
+  () => scheduleMarkdownEnhance(),
+)
+
+// 流式结束（isStreamingReply true→false）后补一次完整增强，处理流式期间跳过的块。
+watch(
+  () => props.isStreamingReply,
+  (streaming) => {
+    if (!streaming) scheduleMarkdownEnhance()
+  },
+)
 </script>
 
 <style scoped>
@@ -200,7 +266,8 @@ watch(messagesHostRef, (el) => {
   font-size: 14px;
 }
 
-.message-retry-btn {
+.message-retry-btn,
+.message-copy-btn {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -213,7 +280,12 @@ watch(messagesHostRef, (el) => {
   cursor: pointer;
 }
 
-.message-retry-btn:hover {
+.message-retry-btn:hover,
+.message-copy-btn:hover {
   background: #f1f5f9;
+}
+
+.message-copy-btn {
+  color: var(--xc-color-text-secondary, #64748b);
 }
 </style>

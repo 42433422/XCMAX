@@ -76,4 +76,38 @@ describe('ChatMessageList', () => {
     ])
     expect(wrapper.find('.message-retry-btn').exists()).toBe(false)
   })
+
+  it('正常 AI 消息展示「复制」按钮，点击写入剪贴板', async () => {
+    const writeText = vi.fn(async () => {})
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+      writable: true,
+    })
+    const wrapper = mountList([
+      { role: 'ai', content: '第一行<br>第二行', time: '10:00' } as ChatMessage,
+    ])
+    const copyBtn = wrapper.find('.message-copy-btn')
+    expect(copyBtn.exists()).toBe(true)
+    await copyBtn.trigger('click')
+    expect(writeText).toHaveBeenCalledWith('第一行\n第二行')
+  })
+
+  it('失败消息与流式占位不展示复制按钮', () => {
+    const failed = mountList([
+      { role: 'ai', content: '处理失败：网络错误', time: '10:00' } as ChatMessage,
+    ])
+    expect(failed.find('.message-copy-btn').exists()).toBe(false)
+    const shell = mountList([
+      { role: 'ai', content: '', time: '10:00', streamingShell: true } as ChatMessage,
+    ])
+    expect(shell.find('.message-copy-btn').exists()).toBe(false)
+  })
+
+  it('用户消息不展示复制按钮', () => {
+    const wrapper = mountList([
+      { role: 'user', content: '我的问题', time: '10:00' } as ChatMessage,
+    ])
+    expect(wrapper.find('.message-copy-btn').exists()).toBe(false)
+  })
 })
