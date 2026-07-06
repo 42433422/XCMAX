@@ -240,6 +240,7 @@
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { apiFetch } from '@/utils/apiBase';
+import { userFacingErrorMessage } from '@/utils/userFacingError';
 import { fetchMarketCatalog, installHostFoundation, reloadEmployeePacks } from '@/api/modStore';
 import {
   catalogStoreCollection,
@@ -545,7 +546,7 @@ export default {
               errors.push(`${mod.name}：${res.message || '安装失败'}`);
             }
           } catch (e) {
-            errors.push(`${mod.name}：${e instanceof Error ? e.message : '安装失败'}`);
+            errors.push(`${mod.name}：${userFacingErrorMessage(e, '安装失败，请稍后重试')}`);
           } finally {
             mod.installationInProgress = false;
           }
@@ -579,7 +580,7 @@ export default {
           );
         }
       } catch (e) {
-        await appAlert(e instanceof Error ? e.message : '装包失败');
+        await appAlert(userFacingErrorMessage(e, '装包失败，请稍后重试'));
       } finally {
         bootstrapBusy.value = false;
         oneClickProgress.value = '';
@@ -783,12 +784,10 @@ export default {
               '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。';
             return true;
           }
-          loadError.value =
-            error instanceof Error
-              ? error.message
-              : fallbackError instanceof Error
-                ? fallbackError.message
-                : '加载市场目录失败，请检查网络后刷新。';
+          loadError.value = userFacingErrorMessage(
+            error instanceof Error ? error : fallbackError,
+            '加载市场目录失败，请检查网络后刷新。',
+          );
           allMods.value = [];
           return false;
         }
@@ -826,7 +825,7 @@ export default {
       } catch (error) {
         console.error('Failed to load mods:', error);
         if (!filteredMods.value.length) {
-          loadError.value = error instanceof Error ? error.message : '加载目录失败';
+          loadError.value = userFacingErrorMessage(error, '加载目录失败，请稍后重试');
         }
       } finally {
         loading.value = false;

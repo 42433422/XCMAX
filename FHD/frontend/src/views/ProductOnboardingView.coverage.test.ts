@@ -555,7 +555,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     const nextBtn = wrapper.find('.actions .btn.primary')
     await nextBtn.trigger('click')
     await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('bind fail')
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('行业绑定失败，请稍后重试')
     expect(replaceSpy).not.toHaveBeenCalled()
   })
 
@@ -886,7 +886,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('装包失败')
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('装包失败，请稍后重试')
   })
 
   it('runBootstrap：industryMissing 时调用 installIndustrySeed', async () => {

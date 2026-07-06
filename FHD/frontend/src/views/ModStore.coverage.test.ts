@@ -1145,7 +1145,7 @@ describe('ModStore.coverage – loadMods / loadMarketTab 错误路径', () => {
     mockApiFetch.mockRejectedValue(new Error('net error'))
     await vm.loadMods(true)
     await flushPromises()
-    expect((vm as any).loadError).toContain('net error')
+    expect((vm as any).loadError).toContain('加载目录失败')
     wrapper.unmount()
   })
 
@@ -1283,7 +1283,7 @@ describe('ModStore.coverage – runOneClickInstallAndOnboard', () => {
     const vm: any = wrapper.vm
     await vm.runOneClickInstallAndOnboard()
     await flushPromises()
-    expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('install fail'))
+    expect(mockAppAlert).toHaveBeenCalledWith(expect.stringContaining('装包失败'))
     wrapper.unmount()
   })
 

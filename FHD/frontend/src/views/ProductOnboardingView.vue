@@ -331,6 +331,7 @@ import {
   fetchOnboardingIndustryCatalog,
 } from '@/utils/platformShellApi'
 import { appAlert } from '@/utils/appDialog'
+import { userFacingErrorMessage } from '@/utils/userFacingError'
 import {
   promptAdvancedTutorialAfterInstall,
   resolveRouteNameFromPath,
@@ -625,7 +626,7 @@ async function runBootstrap() {
         }
       } catch (err) {
         installErrors.push(
-          `行业包：${err instanceof Error ? err.message : '安装失败'}`,
+          `行业包：${userFacingErrorMessage(err, '安装失败，请稍后重试')}`,
         )
       }
     }
@@ -637,7 +638,7 @@ async function runBootstrap() {
         }
       } catch (err) {
         installErrors.push(
-          `${modId}：${err instanceof Error ? err.message : '安装失败'}`,
+          `${modId}：${userFacingErrorMessage(err, '安装失败，请稍后重试')}`,
         )
       }
     }
@@ -650,7 +651,7 @@ async function runBootstrap() {
         }
       } catch (err) {
         installErrors.push(
-          `${modId} 交付数据：${err instanceof Error ? err.message : '安装失败'}`,
+          `${modId} 交付数据：${userFacingErrorMessage(err, '安装失败，请稍后重试')}`,
         )
       }
     }
@@ -698,7 +699,7 @@ async function runBootstrap() {
     }
     await appAlert(detailParts.join('\n') || '部分项目未装齐，可稍后在扩展市场继续安装。')
   } catch (err) {
-    await appAlert(err instanceof Error ? err.message : '装包失败')
+    await appAlert(userFacingErrorMessage(err, '装包失败，请稍后重试'))
   } finally {
     bootstrapBusy.value = false
   }
@@ -734,7 +735,7 @@ async function confirmIndustryAndNext() {
       /* 绑定已完成，目录刷新失败不阻断下一步 */
     }
   } catch (err) {
-    await appAlert(err instanceof Error ? err.message : '行业绑定失败，请稍后重试')
+    await appAlert(userFacingErrorMessage(err, '行业绑定失败，请稍后重试'))
     return
   } finally {
     loading.value = false
@@ -818,7 +819,7 @@ async function runSeedDemo() {
     queueWorkspacePrefsSync({ onboarding_seed_done: true })
     goStep('first-ai-task')
   } catch (e) {
-    seedSummary.value = e instanceof Error ? e.message : String(e)
+    seedSummary.value = userFacingErrorMessage(e, '生成演示数据失败，请稍后重试')
   } finally {
     seedBusy.value = false
   }
@@ -843,7 +844,7 @@ async function runFirstAiTask() {
       queueWorkspacePrefsSync({ onboarding_ai_demo_done: true })
     }
   } catch (e) {
-    aiDemoReply.value = e instanceof Error ? e.message : String(e)
+    aiDemoReply.value = userFacingErrorMessage(e, 'AI 演示调用失败，请稍后重试')
   } finally {
     aiDemoBusy.value = false
   }

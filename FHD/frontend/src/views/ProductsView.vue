@@ -151,6 +151,7 @@ import { api } from '@/api/index';
 import DataTable from '@/components/DataTable.vue';
 import ConfirmDialog from '@/components/ConfirmDialog.vue';
 import { appAlert } from '@/utils/appDialog';
+import { userFacingErrorMessage } from '@/utils/userFacingError';
 import { useCoreNavLabel } from '@/composables/useCoreNavLabel';
 import { useIndustryFieldSchema } from '@/composables/useIndustryFieldSchema';
 
@@ -372,7 +373,7 @@ const exportPriceList = async () => {
     URL.revokeObjectURL(url);
   } catch (e) {
     console.error('导出失败:', e);
-    await appAlert('导出失败: ' + (e.message || '未知错误'));
+    await appAlert('导出失败: ' + userFacingErrorMessage(e, '请稍后重试'));
   }
 };
 
@@ -404,7 +405,7 @@ const exportPriceListExcel = async () => {
     URL.revokeObjectURL(url);
   } catch (e) {
     console.error('Excel 导出失败:', e);
-    await appAlert('Excel 导出失败: ' + (e.message || '未知错误'));
+    await appAlert('Excel 导出失败: ' + userFacingErrorMessage(e, '请稍后重试'));
   }
 };
 
@@ -512,7 +513,7 @@ const handleImport = async (e) => {
     }
   } catch (err) {
     console.error('导入失败:', err);
-    await appAlert('导入失败: ' + (err.message || '未知错误'));
+    await appAlert('导入失败: ' + userFacingErrorMessage(err, '请稍后重试'));
   } finally {
     e.target.value = '';
   }

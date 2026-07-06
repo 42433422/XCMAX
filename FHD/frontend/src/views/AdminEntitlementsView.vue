@@ -390,6 +390,7 @@ import { computed, onMounted, ref } from 'vue';
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin';
 import { appAlert } from '@/utils/appDialog';
 import { apiFetch } from '@/utils/apiBase';
+import { userFacingErrorMessage } from '@/utils/userFacingError';
 import { INDUSTRY_PRESET_IDS } from '@/constants/industryPresets';
 
 type AdminUser = {
@@ -665,7 +666,7 @@ async function refreshLocalStatus() {
     installedMods.value = normalizeLocalCatalogRows(await catalogRes.json());
   } catch (e) {
     installedMods.value = [];
-    localStatusError.value = `本地安装状态读取失败：${e instanceof Error ? e.message : String(e)}`;
+    localStatusError.value = `本地安装状态读取失败：${userFacingErrorMessage(e, '请稍后重试')}`;
   }
   try {
     const syncRes = await apiFetch('/api/xcmax/sync/status');
@@ -675,7 +676,7 @@ async function refreshLocalStatus() {
     syncStatus.value = data as Record<string, unknown>;
   } catch (e) {
     syncStatus.value = null;
-    const msg = `同步状态读取失败：${e instanceof Error ? e.message : String(e)}`;
+    const msg = `同步状态读取失败：${userFacingErrorMessage(e, '请稍后重试')}`;
     localStatusError.value = localStatusError.value ? `${localStatusError.value}；${msg}` : msg;
   } finally {
     localStatusLoading.value = false;
@@ -795,7 +796,7 @@ async function createAccount() {
     createAccountOpen.value = false;
     await appAlert('账号已创建');
   } catch (e) {
-    await appAlert(`创建失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '创建失败，请稍后重试'));
   } finally {
     creatingAccount.value = false;
   }
@@ -821,7 +822,7 @@ async function creditSelectedWallet() {
     await loadWallets();
     await appAlert('加钱成功');
   } catch (e) {
-    await appAlert(`加钱失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '充值失败，请稍后重试'));
   } finally {
     creditingWallet.value = false;
   }
@@ -887,7 +888,7 @@ async function forcePushSelectedEntitlements() {
     const failed = Number(push.failed ?? 0);
     await appAlert(`已强制推送企业端：发送 ${sent} 条，失败 ${failed} 条`);
   } catch (e) {
-    await appAlert(`强制推送失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '强制推送失败，请稍后重试'));
   } finally {
     forcePushingEntitlements.value = false;
   }
@@ -910,7 +911,7 @@ async function selectUser(u: AdminUser) {
     userModIds.value = [...(data.mod_ids || data.data?.mod_ids || u.mod_ids || [])];
   } catch (e) {
     userModIds.value = [...(u.mod_ids || [])];
-    await appAlert(`加载用户 Mod 失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '加载用户 Mod 失败，请稍后重试'));
   }
 }
 
@@ -943,7 +944,7 @@ async function saveProfile() {
     profileEditing.value.entitled_industries = entitled;
     await appAlert('已保存');
   } catch (e) {
-    await appAlert(`保存失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '保存失败，请稍后重试'));
   } finally {
     profileSaving.value = false;
   }
@@ -961,7 +962,7 @@ async function bindMod() {
     await loadUsers();
     await appAlert('已绑定');
   } catch (e) {
-    await appAlert(`绑定失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '绑定失败，请稍后重试'));
   } finally {
     binding.value = false;
   }
@@ -974,7 +975,7 @@ async function unbindMod(modId: string) {
     userModIds.value = userModIds.value.filter((id) => id !== modId);
     await loadUsers();
   } catch (e) {
-    await appAlert(`解绑失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '解绑失败，请稍后重试'));
   }
 }
 
@@ -986,7 +987,7 @@ async function toggleEnterprise(ev: Event) {
     selectedUser.value.is_enterprise = checked;
     await loadUsers();
   } catch (e) {
-    await appAlert(`更新失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '更新失败，请稍后重试'));
   }
 }
 
@@ -1000,7 +1001,7 @@ async function startImpersonate() {
     await appAlert(`已进入代管：${selectedUser.value.username}`);
     window.location.href = '/';
   } catch (e) {
-    await appAlert(`代管失败：${e instanceof Error ? e.message : String(e)}`);
+    await appAlert(userFacingErrorMessage(e, '代管失败，请稍后重试'));
   } finally {
     impersonateLoading.value = false;
   }
@@ -1010,7 +1011,7 @@ onMounted(async () => {
   try {
     await Promise.all([loadUsers(), loadAssignable(), refreshLocalStatus(), loadWallets()]);
   } catch (e) {
-    loadError.value = e instanceof Error ? e.message : String(e);
+    loadError.value = userFacingErrorMessage(e, '加载失败，请稍后重试');
   }
 });
 </script>
