@@ -292,11 +292,14 @@ persona = apply_task_context(base, current_task)
   后台任务用 `with tenant_scope(tid): …` 显式设定。
 
 ### 安全策略
-- **NULL 容忍（默认）**：`tenant_id == 当前 OR IS NULL` —— 存量未打标数据不被隐藏。
-- **严格模式**：`XCAGI_TENANT_STRICT=1` → `tenant_id == 当前`（数据回填后启用，硬隔离）。
-- 当前租户为 None（管理员 / 未登录 / 后台无上下文）→ 不过滤，看全部。
-- 逃生舱：`session.execute(stmt, execution_options={"skip_tenant_filter": True})`。
-- 应急总开关：`XCAGI_DISABLE_TENANT_FILTER=1` 完全停用。
+> 与代码 [app/infrastructure/tenant_scope.py](../app/infrastructure/tenant_scope.py) 一致（2026-07-06 校正：此前文档误述为「NULL 容忍默认」，实际默认即严格）。
+
+- **严格隔离（默认）**：`tenant_id == 当前租户`；`tenant_id IS NULL` 存量数据**默认不可见**。
+- **当前租户为 None**（未登录 / 后台无上下文）→ **fail-closed**：读返回空，业务写入 `raise TenantScopeError`（非「看全部」）。
+- **迁移开关**：`XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE=1` → `tenant_id == 当前 OR IS NULL`，仅用于回填期临时可见存量数据。
+- **硬隔离保险丝**：`XCAGI_TENANT_STRICT=1` **强制严格**并**覆盖**上面的迁移开关（生产/CI 恒设，避免迁移开关误留导致 NULL 跨租户可见）。
+- 逃生舱：`session.execute(stmt, execution_options={"skip_tenant_filter": True})`（仅限受控后台任务）。
+- 应急总开关：`XCAGI_DISABLE_TENANT_FILTER=1` 完全停用（仅限故障应急）。
 
 ### 已纳入隔离的业务表（14）
 products / purchase_units / materials / shipment_records / financial_transactions /
@@ -306,8 +309,9 @@ warehouses / storage_locations / inventory_ledger / inventory_transactions。
 新增业务模型只需继承 `TenantScopedMixin` + 把表名加入 `ensure_business_tenant_id_columns` 与迁移 `2026_06_22_business_tenant_id.py` 即可自动隔离（无需改仓储）。
 
 ### 待办（硬隔离上线前）
-- 存量 `tenant_id IS NULL` 数据回填到对应租户；之后开 `XCAGI_TENANT_STRICT=1`。
+- 存量 `tenant_id IS NULL` 数据回填到对应租户（严格模式下这些行对任何租户不可见，回填前等于「隐藏」）。
 - 外围模型（ai / wechat / ai_circle / approval / miniprogram / service_request）如需隔离，按同一 mixin 模式纳入。
+- IM 直连会话已在应用层（`ImApplicationService.get_or_create_direct`）做同租户校验，堵住绕过联系人列表跨租户建联（2026-07-06）。
 
 ## 八、账户安全（登录加固）
 

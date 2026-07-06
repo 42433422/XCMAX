@@ -76,9 +76,21 @@ class TestApplyTenantFilter:
     def test_legacy_null_visible_requires_explicit_migration_flag(
         self, session_with_products, monkeypatch
     ):
+        # CI 恒设 XCAGI_TENANT_STRICT=1；本用例专测迁移开关，须先清除保险丝。
+        monkeypatch.delenv("XCAGI_TENANT_STRICT", raising=False)
         monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
         with tenant_scope(1):
             assert _names(session_with_products) == {"t1-only", "legacy-null"}
+
+    def test_strict_env_overrides_legacy_null_migration_flag(
+        self, session_with_products, monkeypatch
+    ):
+        # 保险丝：即使迁移开关误留在环境里，XCAGI_TENANT_STRICT=1 也强制严格，
+        # NULL 存量不得跨租户可见（生产/CI 恒设此开关）。
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        monkeypatch.setenv("XCAGI_TENANT_STRICT", "1")
+        with tenant_scope(1):
+            assert _names(session_with_products) == {"t1-only"}
 
     def test_model_without_tenant_column_unchanged(self):
         class _NoTenant:
@@ -151,6 +163,24 @@ class TestGlobalTenantEvent:
         with pytest.raises(TenantScopeError):
             db.commit()
         db.rollback()
+
+    def test_strict_env_forces_null_hidden_at_orm_event(self, db, monkeypatch):
+        # 全局 ORM 读事件同样尊重 XCAGI_TENANT_STRICT 保险丝。
+        from app.db.models.material import Material
+
+        with tenant_scope(1):
+            db.add(Material(material_code="a", name="t1", unit="个", quantity=0))
+            db.commit()
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE", "1")
+        db.add(Material(material_code="c", name="legacy", unit="个", quantity=0))
+        db.commit()
+        monkeypatch.delenv("XCAGI_TENANT_ALLOW_UNSCOPED_WRITE")
+        db.expire_all()
+
+        monkeypatch.setenv("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE", "1")
+        monkeypatch.setenv("XCAGI_TENANT_STRICT", "1")
+        with tenant_scope(1):
+            assert {m.name for m in db.query(Material).all()} == {"t1"}
 
     def test_auth_tables_not_filtered(self, db):
         # 关键：User 不继承 TenantScopedMixin → 即使在租户作用域内也不被过滤（登录安全）

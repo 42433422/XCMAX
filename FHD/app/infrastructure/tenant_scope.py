@@ -10,6 +10,8 @@
 - 当前租户为 None 时 fail-closed，业务查询返回空，业务写入拒绝。
 - 只有显式设置 ``XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE=1`` 才临时允许
   ``tenant_id IS NULL`` 存量数据对当前租户可见；这个开关仅用于受控迁移。
+- ``XCAGI_TENANT_STRICT=1`` **强制严格**，覆盖上面的迁移开关（生产/CI 硬隔离保险丝）：
+  即使误设了 LEGACY_NULL_VISIBLE，也不会让 NULL 存量跨租户可见。
 
 后台任务（无请求上下文）用 ``with tenant_scope(tid): ...`` 显式设定租户。
 """
@@ -85,13 +87,27 @@ def tenant_scope(tenant_id: int | None) -> Iterator[None]:
         reset_current_tenant_id(token)
 
 
+def tenant_strict_forced() -> bool:
+    """``XCAGI_TENANT_STRICT=1``：强制严格隔离，作为生产/CI 硬隔离保险丝。
+
+    置位后覆盖 ``XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE``——避免迁移开关误留在
+    生产/CI 环境导致 NULL 存量数据跨租户可见。
+    """
+    return _truthy_env("XCAGI_TENANT_STRICT")
+
+
 def tenant_strict_mode() -> bool:
     """是否启用严格租户过滤（默认启用）。"""
     return not tenant_legacy_null_visible()
 
 
 def tenant_legacy_null_visible() -> bool:
-    """是否临时允许当前租户读取 tenant_id IS NULL 的迁移期旧数据。"""
+    """是否临时允许当前租户读取 tenant_id IS NULL 的迁移期旧数据。
+
+    仅当迁移开关开启且 **未** 强制严格时才为真；``XCAGI_TENANT_STRICT=1`` 一票否决。
+    """
+    if tenant_strict_forced():
+        return False
     return _truthy_env("XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE")
 
 
@@ -175,5 +191,6 @@ __all__ = [
     "tenant_legacy_null_visible",
     "tenant_id_for_write",
     "tenant_scope",
+    "tenant_strict_forced",
     "tenant_strict_mode",
 ]
