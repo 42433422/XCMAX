@@ -674,6 +674,53 @@ class TestAiEmployeeMarketProfiles:
         assert "llm-ops-engineer" in ids
         assert "mobile-harmony-release-officer" in ids
 
+    def test_admin_employee_items_marks_installed_state_honestly(self, ext_mod):
+        """统一员工身份契约：installed/runnable/source/status 必须反映本机真实安装状态。
+
+        PRODUCT_POLISH_CHECKLIST P0 路径二：未安装员工不得假装在岗（on_duty）。
+        """
+        with patch.object(
+            ext_mod,
+            "_installed_employee_ids_safe",
+            return_value={"llm-ops-engineer"},
+        ):
+            items = ext_mod._admin_employee_items()
+
+        by_id = {str(item.get("id") or ""): item for item in items}
+        installed_item = by_id["llm-ops-engineer"]
+        assert installed_item["installed"] is True
+        assert installed_item["runnable"] is True
+        assert installed_item["source"] == "installed"
+        assert installed_item["status"] == "on_duty"
+
+        planned = [item for item in items if item["id"] != "llm-ops-engineer"]
+        assert planned, "roster 应包含未安装员工"
+        for item in planned:
+            assert item["installed"] is False
+            assert item["runnable"] is False
+            assert item["source"] == "planned"
+            assert item["status"] == "planned"
+
+    def test_admin_employee_items_expose_unified_contact_contract(self, ext_mod):
+        """三端同源契约字段：employee_id/display_name/contact_route/mobile_contact_route。"""
+        with patch.object(ext_mod, "_installed_employee_ids_safe", return_value=set()):
+            items = ext_mod._admin_employee_items()
+        assert items
+        for item in items:
+            eid = item["employee_id"]
+            assert eid == item["id"]
+            assert item["display_name"] == item["name"]
+            assert item["contact_route"] == f"/api/admin/employees/{eid}"
+            assert item["mobile_contact_route"] == (f"/api/mobile/v1/employees/{eid}/chat/stream")
+
+    def test_installed_employee_ids_safe_returns_empty_on_error(self, ext_mod):
+        """扫描失败按空集处理：宁可标未安装，不可假装在岗。"""
+        with patch(
+            "app.application.ops_closure_status._installed_employee_pack_ids",
+            side_effect=OSError("disk error"),
+        ):
+            assert ext_mod._installed_employee_ids_safe() == set()
+
 
 # ---------------------------------------------------------------------------
 # Auth QR confirm (direct handler test)

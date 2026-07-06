@@ -627,6 +627,16 @@ def _admin_duty_records_from_roster() -> list[dict[str, Any]]:
     return records
 
 
+def _installed_employee_ids_safe() -> set[str]:
+    """本机已安装员工包 ID（fail-safe：扫描失败按空集处理，宁可标未安装不可假装在岗）。"""
+    try:
+        from app.application.ops_closure_status import _installed_employee_pack_ids
+
+        return _installed_employee_pack_ids()
+    except RECOVERABLE_ERRORS:
+        return set()
+
+
 def _admin_employee_items(
     market_profiles: dict[str, dict[str, Any]] | None = None,
     *,
@@ -634,15 +644,21 @@ def _admin_employee_items(
     im_summary: dict[str, dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
+    installed_ids = _installed_employee_ids_safe()
     for raw in _admin_duty_records_from_roster():
         employee_id = str(raw.get("id") or raw.get("pkg_id") or "").strip()
         if not employee_id:
             continue
         name = _compact_text(raw.get("name") or employee_id)
         area = _compact_text(raw.get("yuangon_area") or raw.get("industry"))
+        installed = employee_id in installed_ids
+        # 统一员工身份契约（PRODUCT_POLISH_CHECKLIST P0 路径二）：三端消费同一批
+        # employee_id/installed/runnable/source；未安装员工必须标 planned，不得假装在岗。
         item = {
             "id": employee_id,
+            "employee_id": employee_id,
             "name": name,
+            "display_name": name,
             "label": name,
             "title": name,
             "panel_title": name,
@@ -655,8 +671,13 @@ def _admin_employee_items(
             "employee_source": _compact_text(raw.get("employee_source") or "duty_roster"),
             "is_duty_employee": bool(raw.get("is_duty_employee", True)),
             "is_store_employee": bool(raw.get("is_store_employee", False)),
-            "status": "on_duty",
+            "source": "installed" if installed else "planned",
+            "installed": installed,
+            "runnable": installed,
+            "status": "on_duty" if installed else "planned",
             "api_base_path": f"/api/admin/employees/{employee_id}",
+            "contact_route": f"/api/admin/employees/{employee_id}",
+            "mobile_contact_route": f"/api/mobile/v1/employees/{employee_id}/chat/stream",
             "phone_channel": "admin-duty",
             "workflow_placeholder": False,
             "stored_filename": _compact_text(raw.get("stored_filename")),
@@ -1341,7 +1362,8 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
     try:
         payload = dict(body.payload or {})
         payload.setdefault("user_id", uid)
-        task = MobileRelayService().create_task(
+        relay = MobileRelayService()
+        task = relay.create_task(
             user_id=uid,
             relay_id=body.relay_id,
             kind=body.kind,
@@ -1352,7 +1374,15 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
                 format_mobile_response(None, "未找到已绑定的电脑执行端", success=False, code=404),
                 status_code=404,
             )
-        return format_mobile_response(data={"task": task})
+        # 诚实状态：任务已入队是事实，但桌面离线时必须告知等待原因，避免手机端误认为
+        # 「已在执行」（PRODUCT_POLISH_CHECKLIST P1 路径四）。
+        desktop_online = bool(relay.desktop_online(user_id=uid, relay_id=body.relay_id))
+        message = (
+            "success" if desktop_online else "任务已入队，电脑执行端当前离线，上线后会自动执行"
+        )
+        return format_mobile_response(
+            data={"task": task, "desktop_online": desktop_online}, message=message
+        )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_create_task")
         return JSONResponse(
