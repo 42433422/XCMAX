@@ -1497,7 +1497,9 @@ class XcagiRepository @Inject constructor(
                 }
             }
 
-            finalText = "已提交到超级员工-Claude，任务将在电脑端执行后回写。"
+            // 诚实状态：轮询超时说明电脑执行端尚未回写（可能离线），不得包装成假成功。
+            finalText = "任务已提交，但电脑执行端暂未回写结果（可能离线）。" +
+                "请确认电脑执行端已启动并在线，稍后回到本会话查看进度。"
             onDone(finalText)
         } catch (e: CancellationException) {
             throw e
@@ -1571,7 +1573,9 @@ class XcagiRepository @Inject constructor(
                 }
             }
 
-            finalText = "已提交到超级员工-Cursor，任务将在电脑端执行后回写。"
+            // 诚实状态：轮询超时说明电脑执行端尚未回写（可能离线），不得包装成假成功。
+            finalText = "任务已提交，但电脑执行端暂未回写结果（可能离线）。" +
+                "请确认电脑执行端已启动并在线，稍后回到本会话查看进度。"
             onDone(finalText)
         } catch (e: CancellationException) {
             throw e
@@ -1645,7 +1649,9 @@ class XcagiRepository @Inject constructor(
                 }
             }
 
-            finalText = "已提交到超级员工-Trae，任务将在电脑端执行后回写。"
+            // 诚实状态：轮询超时说明电脑执行端尚未回写（可能离线），不得包装成假成功。
+            finalText = "任务已提交，但电脑执行端暂未回写结果（可能离线）。" +
+                "请确认电脑执行端已启动并在线，稍后回到本会话查看进度。"
             onDone(finalText)
         } catch (e: CancellationException) {
             throw e
