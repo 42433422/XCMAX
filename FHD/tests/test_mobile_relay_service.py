@@ -430,3 +430,71 @@ def test_completion_push_static_helper_swallows_push_exception(monkeypatch):
             "result": {"output": "已完成"},
         }
     )
+
+
+def test_is_desktop_online_branches():
+    """诚实在线判定：仅 paired + 近期心跳算在线；缺心跳/坏时间戳/未配对一律离线。"""
+    from datetime import UTC, datetime, timedelta
+
+    relay = _load_mobile_relay_service_module()
+    now = datetime.now(UTC).replace(microsecond=0)
+    fresh = now.isoformat()
+    stale = (now - timedelta(hours=2)).isoformat()
+
+    assert relay._is_desktop_online("paired", fresh) is True
+    assert relay._is_desktop_online("paired", stale) is False
+    assert relay._is_desktop_online("paired", "") is False
+    assert relay._is_desktop_online("paired", None) is False
+    assert relay._is_desktop_online("paired", "not-a-timestamp") is False
+    assert relay._is_desktop_online("pending", fresh) is False
+    # 无时区的 naive 时间戳按 UTC 处理
+    assert relay._is_desktop_online("paired", now.replace(tzinfo=None).isoformat()) is True
+
+
+def test_desktop_online_reflects_poll_heartbeat(monkeypatch, tmp_path):
+    """绑定后未 poll 视为离线；poll 心跳后在线；心跳过期回到离线（不得假装在线）。"""
+    relay = _load_mobile_relay_service_module()
+    engine = create_engine(f"sqlite:///{tmp_path / 'relay-online.db'}")
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def test_db():
+        db = session_factory()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    monkeypatch.setattr(relay, "get_db", test_db)
+    service = relay.MobileRelayService()
+    reg = service.register_desktop(
+        label="pc", device_id="mac-1", relay_base_url="https://r.test/api"
+    )
+    service.confirm_mobile(
+        user_id=7, username="t", relay_id=reg["relay_id"], code=reg["pairing_code"]
+    )
+
+    # 尚无 poll 心跳 → 离线
+    assert service.desktop_online(user_id=7, relay_id=reg["relay_id"]) is False
+    desktops = service.list_desktops(user_id=7)
+    assert desktops and desktops[0]["online"] is False
+
+    # 桌面 poll 一次 → 在线
+    service.poll_desktop(relay_id=reg["relay_id"], desktop_token=reg["desktop_token"])
+    assert service.desktop_online(user_id=7, relay_id=reg["relay_id"]) is True
+    assert service.list_desktops(user_id=7)[0]["online"] is True
+
+    # 心跳过期 → 离线
+    with test_db() as db:
+        db.execute(
+            relay.text("UPDATE mobile_relay_desktops SET last_seen_at = :old WHERE relay_id = :r"),
+            {"old": "2020-01-01T00:00:00+00:00", "r": reg["relay_id"]},
+        )
+    assert service.desktop_online(user_id=7, relay_id=reg["relay_id"]) is False
+
+    # 未绑定关系 → None（区别于离线）
+    assert service.desktop_online(user_id=99, relay_id=reg["relay_id"]) is None

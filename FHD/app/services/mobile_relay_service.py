@@ -74,6 +74,30 @@ def _public_base_url(raw: str) -> str:
     return value.rstrip("/") + "/"
 
 
+def _desktop_online_ttl_sec() -> int:
+    """桌面执行端多久没 poll 心跳算离线（默认 180s；poll 周期通常 ≤60s）。"""
+    try:
+        return max(30, int(os.environ.get("XCAGI_RELAY_DESKTOP_ONLINE_TTL_SEC") or "180"))
+    except (TypeError, ValueError):
+        return 180
+
+
+def _is_desktop_online(status: Any, last_seen_at: Any) -> bool:
+    """诚实在线判定：仅 paired 且最近有 poll 心跳才算在线，避免『假装在线』。"""
+    if str(status or "").strip() != "paired":
+        return False
+    raw = str(last_seen_at or "").strip()
+    if not raw:
+        return False
+    try:
+        seen = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=UTC)
+    return (datetime.now(UTC) - seen).total_seconds() <= _desktop_online_ttl_sec()
+
+
 class MobileRelayService:
     """Small SQL-backed relay used by phones and desktop runtimes."""
 
@@ -405,6 +429,29 @@ class MobileRelayService:
                 .all()
             )
             return [self._public_desktop(_row_dict(row)) for row in rows]
+
+    def desktop_online(self, *, user_id: int, relay_id: str) -> bool | None:
+        """None=无此绑定；bool=桌面执行端是否在线（最近有 poll 心跳）。"""
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT status, last_seen_at FROM mobile_relay_desktops
+                        WHERE relay_id = :relay_id
+                          AND mobile_user_id = :user_id
+                          AND status = 'paired'
+                        """
+                    ),
+                    {"relay_id": (relay_id or "").strip(), "user_id": int(user_id)},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            return _is_desktop_online(row.get("status"), row.get("last_seen_at"))
 
     def create_task(
         self,
@@ -743,6 +790,7 @@ class MobileRelayService:
             "paired_at": data.get("updated_at") if status == "paired" else "",
             "capabilities": capabilities,
             "last_seen_at": data.get("last_seen_at") or "",
+            "online": _is_desktop_online(status, data.get("last_seen_at")),
             "created_at": data.get("created_at") or "",
             "updated_at": data.get("updated_at") or "",
         }
