@@ -22,12 +22,15 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +43,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.xiuci.xcagi.mobile.core.db.NotificationCacheEntity
+import com.xiuci.xcagi.mobile.ui.AppViewModel
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 import com.xiuci.xcagi.mobile.ui.theme.Spacing
 import com.xiuci.xcagi.mobile.ui.theme.XcagiTheme
@@ -66,6 +71,26 @@ data class NotificationItem(
         val read: Boolean = false,
 )
 
+/** 服务端 channel（见 NotificationChannels.kt）→ 通知页分类图标/配色。未知 channel 兜底为系统通知。 */
+internal fun channelToNotificationType(channel: String): NotificationType =
+        when (channel) {
+            "xcagi_approval" -> NotificationType.ALERT
+            "xcagi_sync" -> NotificationType.SYSTEM
+            "xcagi_chat" -> NotificationType.ANNOUNCEMENT
+            "xcagi_system" -> NotificationType.SYSTEM
+            else -> NotificationType.SYSTEM
+        }
+
+internal fun NotificationCacheEntity.toNotificationItem(): NotificationItem =
+        NotificationItem(
+                id = id.toString(),
+                type = channelToNotificationType(channel),
+                title = title.ifBlank { "通知" },
+                content = body,
+                timestamp = createdAt,
+                read = read,
+        )
+
 /** 通知类型对应的主题色 */
 @Composable
 private fun NotificationType.tint(): Color =
@@ -80,56 +105,21 @@ private fun NotificationType.tint(): Color =
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NotificationListScreen(
+        vm: AppViewModel,
         onBack: () -> Unit,
 ) {
-    // 本地通知数据（后续可接入后端 API）
-    val notifications =
-            remember {
-                val now = System.currentTimeMillis()
-                val day = 24 * 60 * 60 * 1000L
-                listOf(
-                        NotificationItem(
-                                id = "1",
-                                type = NotificationType.ANNOUNCEMENT,
-                                title = "欢迎使用 XCAGI 企业版",
-                                content = "您的企业 AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看企业智能伙伴。",
-                                timestamp = now - 2 * 3600 * 1000,
-                        ),
-                        NotificationItem(
-                                id = "2",
-                                type = NotificationType.SYSTEM,
-                                title = "数据同步完成",
-                                content = "您的会话和 AI 员工列表已同步至最新状态。",
-                                timestamp = now - 5 * 3600 * 1000,
-                                read = true,
-                        ),
-                        NotificationItem(
-                                id = "3",
-                                type = NotificationType.UPDATE,
-                                title = "新功能：语音输入",
-                                content = "聊天页和客服页现已支持语音输入，点击麦克风按钮即可将语音转为文字。",
-                                timestamp = now - day,
-                        ),
-                        NotificationItem(
-                                id = "4",
-                                type = NotificationType.SUCCESS,
-                                title = "账号配对成功",
-                                content = "您的移动端已成功配对企业端，可以开始使用全部功能。",
-                                timestamp = now - 2 * day,
-                                read = true,
-                        ),
-                        NotificationItem(
-                                id = "5",
-                                type = NotificationType.ALERT,
-                                title = "请及时更新应用",
-                                content = "检测到新版本可用，建议尽快更新以获得最新功能和安全修复。",
-                                timestamp = now - 3 * day,
-                                read = true,
-                        ),
-                )
-            }
+    // 来自服务端一次性推送 + 本机 Room 历史（notification_cache），不再是硬编码样例数据。
+    // 服务端 /notifications/pending 消费即删（delivered=true 后不再返回），所以历史全靠本机持久化，
+    // 见 XcagiRepository.fetchPendingNotifications() 落库、PushPollWorker 后台轮询同步写入。
+    val history by vm.notificationHistory.collectAsState()
+    val notifications = remember(history) { history.map { it.toNotificationItem() } }
+    var refreshing by remember { mutableStateOf(true) }
 
-    var readIds by remember { mutableStateOf(setOf<String>()) }
+    LaunchedEffect(Unit) {
+        vm.refreshNotifications()
+        refreshing = false
+    }
+
     val dateFormatter = remember { SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()) }
 
     Scaffold(
@@ -146,11 +136,23 @@ fun NotificationListScreen(
                     Modifier.fillMaxSize().padding(padding),
                     contentAlignment = Alignment.Center,
             ) {
-                Text(
-                        "暂无通知",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                if (refreshing) {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+                } else {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                                "暂无通知",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(Spacing.sm))
+                        Text(
+                                "有系统公告、审批提醒时会在这里出现",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline,
+                        )
+                    }
+                }
             }
         } else {
             LazyColumn(
@@ -158,12 +160,11 @@ fun NotificationListScreen(
                     verticalArrangement = Arrangement.spacedBy(0.dp),
             ) {
                 items(notifications, key = { it.id }) { item ->
-                    val isRead = item.read || item.id in readIds
                     NotificationCell(
                             item = item,
-                            isRead = isRead,
+                            isRead = item.read,
                             dateText = dateFormatter.format(Date(item.timestamp)),
-                            onClick = { readIds = readIds + item.id },
+                            onClick = { vm.markNotificationRead(item.id.toLongOrNull() ?: return@NotificationCell) },
                     )
                 }
             }

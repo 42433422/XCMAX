@@ -602,6 +602,20 @@ constructor(
             repo.observeCachedModInfos()
                     .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 通知与公告：来自服务端一次性推送、落地本机 Room 后的历史列表（不再是硬编码样例数据）。 */
+    val notificationHistory =
+            repo.observeNotificationHistory()
+                    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 打开通知页时主动拉一次，避免只靠 15 分钟一次的后台 WorkManager 轮询。 */
+    fun refreshNotifications() {
+        viewModelScope.launch { repo.fetchPendingNotifications() }
+    }
+
+    fun markNotificationRead(id: Long) {
+        viewModelScope.launch { repo.markNotificationRead(id) }
+    }
+
     // 用户头像 URL（从登录响应或本地存储获取）
     private val _userAvatarUrl = MutableStateFlow<String?>(null)
     val userAvatarUrl: StateFlow<String?> = _userAvatarUrl.asStateFlow()
