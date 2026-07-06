@@ -312,8 +312,10 @@ def test_qc_employee_run_end_to_end(tmp_path: Path) -> None:
     assert Path(item["output_path"]).is_file()
     report = json.loads(Path(item["output_path"]).read_text(encoding="utf-8"))
     assert set(report["sections"]) == {
-        "conformance", "protection", "expected", "formulas", "traceability", "structure",
+        "conformance", "protection", "expected", "formulas", "traceability", "structure", "semantic",
     }
+    # 无 call_llm 的测试环境：semantic 节如实 skipped
+    assert report["sections"]["semantic"]["status"] == "skipped"
     assert result["meta"]["verdict"] == "WARN"
 
 

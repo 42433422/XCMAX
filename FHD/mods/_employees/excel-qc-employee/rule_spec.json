@@ -21,6 +21,7 @@
     "Independence: never import mapper/writer code; recompute invariants from plan + rules + output workbook directly.",
     "Sections: conformance (cell/formula/clear/retain vs plan), protection (template diff), expected (plan-recompute vs mapper claim vs file-recompute), formulas (#REF!/dangling sheet refs), traceability (rules sha256 vs plan.meta.rules_ref), structure (rules.blocks keys vs file).",
     "Missing inputs make a section skipped with reason — never fake pass.",
+    "When host provides ctx.call_llm (and payload.use_llm is not false), add semantic section: LLM business-sanity review (value plausibility, dropped-record suspicion, warning triage) over deterministic results, plus human_summary in Chinese; LLM can add findings but never overturn deterministic sections; payload.llm_strict=false downgrades LLM fail to warn.",
     "Verdict: any fail -> FAIL with blame routing (writer_or_plan/mapper/pipeline/rules_stale); warn-only -> WARN; else PASS.",
     "Never claim success unless qc_report.json is actually written; employee ok means QC executed, not QC passed.",
     "Return {ok, summary, items, warnings, error, meta}."

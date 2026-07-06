@@ -503,7 +503,28 @@ _BLAME = {
     "formulas": "template_or_plan",
     "traceability": "pipeline",
     "structure": "rules_stale",
+    "semantic": "semantic_llm",
 }
+
+
+def merge_semantic_section(report: Dict[str, Any], semantic: Dict[str, Any]) -> Dict[str, Any]:
+    """把 LLM 语义审查节并入报告并重算 verdict/blame（确定性节结论不受影响）。"""
+    report["sections"]["semantic"] = semantic
+    statuses = {name: s.get("status") for name, s in report["sections"].items()}
+    if any(s == "fail" for s in statuses.values()):
+        report["verdict"] = "FAIL"
+    elif any(s == "warn" for s in statuses.values()):
+        report["verdict"] = "WARN"
+    else:
+        report["verdict"] = "PASS"
+    report["blame"] = sorted(
+        {_BLAME[name] for name, s in statuses.items() if s == "fail" and name in _BLAME}
+    )
+    if semantic.get("human_summary"):
+        report["human_summary"] = semantic["human_summary"]
+    summary_bits = [f"{name}:{status}" for name, status in statuses.items()]
+    report["summary"] = f"QC {report['verdict']}（" + "，".join(summary_bits) + "）"
+    return report
 
 
 def run_qc(

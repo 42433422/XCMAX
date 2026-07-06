@@ -34,6 +34,7 @@ RULE_SPEC = {
         'Use direct_python only; handlers must be ["direct_python"].',
         "infer: consume reader workbook.json (template side); detect row blocks via merged-range periodicity, key column, calendar anchor sequence, formula zones; fit per-column formula templates by numeric arithmetic progression across blocks.",
         "infer output rules.json is a proposal: evidence.confidences + open_questions for human confirmation; never fabricate structure.",
+        "When host provides ctx.call_llm (and payload.use_llm is not false), refine the heuristic draft with LLM proposals (bands / key_col / clear_zone / open questions); every proposal must pass deterministic validation before adoption; adopted/rejected recorded in evidence.llm.",
         "compile: rules.json + records (payload.records / records_path / bundled {rules, records}) -> plan.json following excel-template-write plan_version=1 contract.",
         "compile validates day/band/entry bounds, drops out-of-roster keys with reasons, emits expected block and meta.rules_ref sha256 for QC.",
         "Never claim success unless rules.json / plan.json is actually written.",

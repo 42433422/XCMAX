@@ -1,6 +1,8 @@
 """规则映射员入口：action 分发（infer 推断规则 / compile 编译计划）。
 
-- ``infer``：输入读取员的 workbook.json（模板一侧）→ 写出 outputs/rules.json 提案。
+- ``infer``：输入读取员的 workbook.json（模板一侧）→ 写出 outputs/rules.json 提案；
+  宿主提供 ``ctx.call_llm`` 时（且 ``payload.use_llm`` 未显式关闭），用 LLM 精修
+  启发式草案（bands/键列/clear_zone 等 open_questions），提议经机器验证后采纳。
 - ``compile``：输入 rules.json（或组合 ``{"rules": .., "records": ..}``）→
   写出 outputs/plan.json（模板写入员契约），records 取自输入文件或 payload.records。
 
@@ -15,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .compile_plan import compile_plan
 from .infer import infer_rules
+from .llm_refine import llm_refine_rules
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -90,7 +93,22 @@ def _resolve_rules_and_records(
     return rules, records
 
 
-def convert_file(
+def _pick_sheet(data: Dict[str, Any], sheet_name: Optional[str]) -> Dict[str, Any]:
+    sheets = data.get("sheets") or []
+    if sheet_name:
+        for s in sheets:
+            if s.get("name") == sheet_name:
+                return s
+    return max(sheets, key=lambda s: int(s.get("cell_count") or 0))
+
+
+def _llm_enabled(payload: Dict[str, Any], ctx: Dict[str, Any]) -> bool:
+    if payload.get("use_llm") is False:
+        return False
+    return callable(ctx.get("call_llm"))
+
+
+async def convert_file(
     src_path: Optional[Path],
     output_path: Path,
     *,
@@ -114,11 +132,16 @@ def convert_file(
     if action == "infer":
         if data is None:
             raise ValueError("infer 需要上传读取员的 workbook.json")
+        sheet_name = str(payload.get("sheet") or "").strip() or None
         rules = infer_rules(
             data,
-            sheet_name=str(payload.get("sheet") or "").strip() or None,
+            sheet_name=sheet_name,
             source_name=str(data.get("source") or (src_path.name if src_path else "")),
         )
+        if _llm_enabled(payload, ctx):
+            rules = await llm_refine_rules(
+                rules, _pick_sheet(data, sheet_name), ctx["call_llm"]
+            )
         out = output_dir / "rules.json"
         out.write_text(
             json.dumps(rules, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
@@ -136,6 +159,7 @@ def convert_file(
             "formula_templates": len(rules["formula_templates"]),
             "confidences": evidence["confidences"],
             "open_questions": evidence["open_questions"],
+            "llm": evidence.get("llm") or {"used": False},
             "output_schema": list(rule_spec.get("output_schema") or []),
         }
 

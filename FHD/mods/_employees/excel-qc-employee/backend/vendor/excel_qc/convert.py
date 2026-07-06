@@ -1,5 +1,9 @@
 """质检员入口：回填结果 xlsx + plan.json（+ 可选模板/rules/write_report）→ qc_report.json。
 
+确定性六节先行（地基）；宿主提供 ``ctx.call_llm`` 时（且 ``payload.use_llm``
+未显式关闭）追加 ``semantic`` 节——LLM 业务合理性审查 + ``human_summary`` 人话摘要。
+``payload.llm_strict=false`` 可把 LLM 的 fail 降级为 warn。
+
 员工执行成功（ok=true）不等于质检通过：verdict（PASS/WARN/FAIL）与问责路由
 （blame）在报告与返回值里，由调用方决定闭环走向（重跑写入员 / 回炉映射员 /
 规则重新 infer / 转人工）。
@@ -11,7 +15,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .checks import run_qc
+from .checks import merge_semantic_section, run_qc
+from .llm_review import llm_semantic_review
 
 
 def _load_json_file(path: Path, label: str) -> Dict[str, Any]:
@@ -49,7 +54,7 @@ def _optional_json(
     return _load_json_file(p, label)
 
 
-def convert_file(
+async def convert_file(
     src_path: Optional[Path],
     output_path: Path,
     *,
@@ -87,6 +92,26 @@ def convert_file(
         write_report=write_report,
     )
 
+    call_llm = ctx.get("call_llm")
+    if payload.get("use_llm") is False or not callable(call_llm):
+        semantic = {
+            "status": "skipped",
+            "issues": [],
+            "stats": {},
+            "human_summary": "",
+            "skipped_reason": "LLM 关闭或宿主未提供 call_llm，语义审查未执行",
+        }
+    else:
+        semantic = await llm_semantic_review(
+            plan,
+            report["sections"],
+            call_llm,
+            rules=rules,
+            business_context=str(payload.get("business_context") or ""),
+            strict=payload.get("llm_strict", True) is not False,
+        )
+    report = merge_semantic_section(report, semantic)
+
     output_dir = output_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
     out = output_dir / "qc_report.json"
@@ -99,6 +124,7 @@ def convert_file(
         "verdict": report["verdict"],
         "blame": report["blame"],
         "summary": report["summary"],
+        "human_summary": report.get("human_summary") or "",
         "sections": {name: sec["status"] for name, sec in report["sections"].items()},
         "output_schema": list(rule_spec.get("output_schema") or []),
     }

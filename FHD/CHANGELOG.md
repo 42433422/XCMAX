@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · LLM 协作（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：规则映射员接 LLM 精修（`llm_refine.py`）：LLM 基于表头/块文本样本回答 open_questions（bands 多带布局/键列兜底/clear_zone 边界），**每条提议经确定性验证**（越块/公式区重叠/覆盖率）才采纳，采纳与拒绝全留痕 `evidence.llm`；无 `ctx.call_llm` 或 `use_llm=false` 时与纯启发式一致
+- **feat(employee)**：质检员新增 `semantic` 第七节（`llm_review.py`）：LLM 业务合理性审查（数值常理/丢弃记录可疑度/警告分级）+ `human_summary` 中文摘要；LLM finding 计入 verdict（blame=`semantic_llm`）但不可推翻确定性六节，`llm_strict=false` 降级为 warn
+- **test(mods)**：`test_excel_employee_llm_paths.py` 8 用例（mock call_llm）：合法提议采纳/越界拒绝/乱码与宕机留痕/无 LLM 回归基线/semantic 并入 verdict/降级/skipped；真实太阳鸟模板 LLM 协作全链冒烟（LLM 提议三带布局→机器验证采纳→QC 语义审查抓出 30h 超常值）
+
 ### 表格员工闭环 · 质检员（2026-07-06 · v10 线内迭代）
 
 - **feat(employee)**：新增 `excel-qc-employee`（Excel 质检员）：对回填结果六节独立对账——计划符合性（cell/formula/clear/retain 逐格比对）、保护区完整性（原模板 diff）、expected 三方重算（映射员自述 ↔ 计划重算 ↔ 输出文件重算）、公式健康（#REF!/悬空 sheet 引用）、rules_ref 哈希追溯、块结构漂移；verdict PASS/WARN/FAIL + blame 问责路由（writer_or_plan/mapper/pipeline/rules_stale）；不 import 映射员/写入员代码，缺输入的节如实 skipped

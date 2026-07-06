@@ -24,6 +24,8 @@
 
 输出 `outputs/rules.json` 是**提案**：`evidence.confidences` + `evidence.open_questions` 列出待人确认项（如 bands 多带布局、clear_zone 边界）。骨架不一致/非等差的公式列不拟合、保持保护。
 
+**LLM 精修**（宿主提供 `ctx.call_llm` 且 `payload.use_llm` 未关时）：LLM 基于表头/块文本样本回答 open_questions——提议 bands 多带布局、兜底键列、修 clear_zone 边界。**每条提议必须通过确定性验证**（越界/公式区重叠/覆盖率检查）才采纳；采纳与拒绝全部留痕于 `evidence.llm`，去人工化的同时保持规则可审查。
+
 ### 2. `compile`：rules.json + records → plan.json
 
 输入：固化后的 `rules.json`（上传文件、`payload.rules`、或组合 `{"rules":…, "records":…}`）；records 走 `payload.records` / `payload.records_path`。

@@ -16,6 +16,8 @@
 | `traceability` | 重算 rules.json sha256 ↔ `plan.meta.rules_ref`（产物可追溯规则版本） | `pipeline` |
 | `structure` | `rules.blocks` 键 ↔ 输出键列实际值（模板重排/规则过期检测） | `rules_stale` |
 
+**第七节 `semantic`（LLM 业务合理性审查）**：宿主提供 `ctx.call_llm` 且 `payload.use_llm` 未关时执行——审查确定性代码看不见的东西：数值是否符合业务常理（异常大/小、负数、超 24h 工时类）、丢弃记录是否可疑（错字/漏人）、无记录块提醒、警告轻重分级；并产出 `human_summary` 给业务人员看的中文摘要。LLM finding 计入 verdict（fail → FAIL，blame=`semantic_llm`）但**不可推翻确定性六节**；`payload.llm_strict=false` 把 LLM 的 fail 降级为 warn（防幻觉阻塞）；`payload.business_context` 可注入业务背景。
+
 缺输入的节标记 `skipped` 并写明原因——**绝不假装通过**。verdict：任一 fail → FAIL；仅 warn → WARN；否则 PASS。员工返回 `ok=true` 表示质检执行成功，质检结论看 `verdict`。
 
 ## payload 示例
