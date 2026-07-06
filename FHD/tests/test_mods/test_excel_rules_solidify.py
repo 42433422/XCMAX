@@ -341,6 +341,61 @@ def test_solidify_convert_action_end_to_end(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+SOLIDIFIED_EXAMPLE = (
+    FHD_ROOT
+    / "mods/_employees/excel-rules-map-employee/examples/sunbird-solidified/transform.py"
+)
+
+
+@pytest.mark.skipif(
+    not (SUNBIRD_TEMPLATE.is_file() and SUNBIRD_SOURCE.is_file() and SUNBIRD_VENDOR.is_dir()),
+    reason="真实太阳鸟文件/vendor 不在本机",
+)
+def test_solidified_example_passes_golden_gate(tmp_path: Path) -> None:
+    """LLM 亲笔固化脚本（examples/sunbird-solidified）常驻回归：金样对账必须全绿。
+
+    金样 = 太阳鸟单体输出；脚本零 taiyangniao 依赖，纯从源 workbook.json 计算。
+    该测试同时守护固化脚本与金样反读器/records 契约的兼容性。
+    """
+    import sys
+
+    infer_mod, _, golden_mod, _, _ = _load_pkg()
+    reader = _load_module("reader_solidified_example", READER_CONVERT)
+
+    if str(SUNBIRD_VENDOR) not in sys.path:
+        sys.path.insert(0, str(SUNBIRD_VENDOR))
+    from taiyangniao_attendance.convert import convert_attendance_file
+
+    golden_xlsx = tmp_path / "golden.xlsx"
+    assert convert_attendance_file(
+        str(SUNBIRD_SOURCE), str(golden_xlsx), template_path=str(SUNBIRD_TEMPLATE)
+    )["success"]
+
+    rules = infer_mod.infer_rules(
+        _read_json(reader, SUNBIRD_TEMPLATE, tmp_path / "tpl_wb.json"), source_name="sunbird"
+    )
+    rules["bands"] = {
+        "morning": {"row_offset": 0, "max_entries": 2},
+        "afternoon": {"row_offset": 2, "max_entries": 2},
+        "night": {"row_offset": 4, "max_entries": 2},
+    }
+    rules["template_map"]["clear_zone"]["col_end"] = 67
+    expected = golden_mod.extract_records_from_workbook(
+        _read_json(reader, golden_xlsx, tmp_path / "golden_wb.json"), rules
+    )
+
+    code = SOLIDIFIED_EXAMPLE.read_text(encoding="utf-8")
+    assert "taiyangniao" not in code.replace("taiyangniao 依赖", "")
+    namespace: dict = {}
+    exec(compile(code, str(SOLIDIFIED_EXAMPLE), "exec"), namespace)  # noqa: S102
+    source_wb = _read_json(reader, SUNBIRD_SOURCE, tmp_path / "src_wb.json")
+    records = namespace["produce_records"](source_wb, rules)
+
+    diff = golden_mod.diff_records(records, expected)
+    assert diff["ok"], diff["stats"]
+    assert diff["stats"]["matched"] == len(expected) > 3000
+
+
 @pytest.mark.skipif(
     not (SUNBIRD_TEMPLATE.is_file() and SUNBIRD_SOURCE.is_file() and SUNBIRD_VENDOR.is_dir()),
     reason="真实太阳鸟文件/vendor 不在本机",

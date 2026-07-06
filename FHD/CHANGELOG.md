@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · LLM 亲考与固化产物（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：收录 `examples/sunbird-solidified/transform.py`——LLM 在固化循环中亲笔编写的太阳鸟考勤转换脚本（288 行零 taiyangniao 依赖），三轮迭代通过金样门禁（68.7%→97.8%→100%，3842/3842 槽），端到端与太阳鸟单体输出数据区 30240 格逐格 0 差异；每人参数（MORNING9/OT_1830）由金样归纳，等价模板 B 列 DSL 快照
+- **test(mods)**：`test_solidified_example_passes_golden_gate` 常驻回归——固化脚本对真实钉钉表金样对账必须全绿，同时守护金样反读器与 records 契约兼容性
+
 ### 表格员工闭环 · 固化循环（2026-07-06 · v10 线内迭代）
 
 - **feat(employee)**：规则映射员新增 `solidify` 动作（`solidify.py` + `golden.py`）：LLM 把业务转换规则写成 `produce_records(source_workbook, rules)` Python 脚本（窄接口，管道其余保持白盒）；循环「生成→静态安全检查→沙箱执行→records 契约校验→金样对账→diff 喂回重写」，全绿才固化 `transform.py` + `solidify_report.json`（迭代证据+sha256+rules_ref）；金样判据 = 金样 xlsx 按 rules 确定性反读 records 逐槽 diff；固化后每月运行零 LLM
