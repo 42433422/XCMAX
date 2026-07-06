@@ -45,7 +45,11 @@ from app.application.auth_app_service import get_auth_app_service
 | `ShipmentApplicationService` | `application/shipment_app_service.py` | 发货单创建、查询、管理 |
 | `ProductAppService` | `application/product_app_service.py` | 产品管理、导入 |
 | `CustomerAppService` | `application/customer_app_service.py` | 客户管理 |
-| `AIChatAppService` | `application/ai_chat_app_service.py` | AI 对话 |
+| `AIChatApplicationService` | `application/ai_chat_app_service.py` | AI 对话主编排（组合下列 4 个子服务，见 P0 拆分） |
+| `AIChatWorkflowService` | `application/ai_chat_workflow_service.py` | Workflow：规则导入捷径 + 动态工作流规划/执行 |
+| `AIChatApprovalService` | `application/ai_chat_approval_service.py` | Approval：聊天确认流程 + 审批卡片载荷 |
+| `AIChatExcelContextService` | `application/ai_chat_excel_context_service.py` | ExcelContext：Excel 向量检索、列角色推断、导入记录抽取 |
+| `AIChatResponseBuilderService` | `application/ai_chat_response_builder_service.py` | ResponseBuilder：统一响应格式构建 + 即时工具执行 |
 | `WeChatContactAppService` | `application/wechat_contact_app_service.py` | 微信联系人管理 |
 | `TemplateAppService` | `application/template_app_service.py` | 模板管理 |
 | `FileAnalysisAppService` | `application/file_analysis_app_service.py` | 文件分析 |

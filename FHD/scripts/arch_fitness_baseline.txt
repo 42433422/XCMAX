@@ -9,7 +9,9 @@
 [giant-file] app/application/agent_orchestrator/tool_spec.py
 [giant-file] app/application/agent_orchestrator/tool_spec_data/input_schemas.py
 [giant-file] app/application/agent_orchestrator/tool_spec_data/output_schemas.py
-[giant-file] app/application/ai_chat_app_service.py
+[giant-file] app/application/ai_chat_excel_context_service.py
+[giant-file] app/application/ai_chat_response_builder_service.py
+[giant-file] app/application/ai_chat_workflow_service.py
 [giant-file] app/application/aibiz_web_terminal_service.py
 [giant-file] app/application/aiopen/service.py
 [giant-file] app/application/approval_workspace_app_service.py
