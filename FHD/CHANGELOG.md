@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 流程可视化员工节点可操作化（2026-07-06 · v10 线内迭代 · P1 路径五）
+
+- **feat(frontend)**：`DutyRosterWorkflowLoopView` 员工卡从装饰卡升级为可操作节点——安装状态复用编制 health（已安装·可对话 / 本机未安装 / Catalog 未登记）；触发方式与关键环节复用 `workflowEmployeeDocs`（不再手写静态文案）；已安装「联系员工」（跳 IM 预选，对话持久化）+「查看编制」，未安装「安装员工包」+「仅查看编制」
+- **feat(frontend)**：IM 支持 `?employee=<id>` 预选员工会话，衔接流程可视化「联系员工」跳转
+
 ### 管理端员工对话持久化 · 与手机端同源（2026-07-06 · v10 线内迭代 · P1 路径三）
 
 - **feat(im)**：新增 `GET/POST /api/admin/employees/{id}/messages`——管理端 AI 员工对话（用户消息 + 员工回复）持久化到 boss↔员工 IM 直连会话，管理端刷新不丢、手机端读同一 transcript；员工执行失败降级为诚实提示且用户消息仍落库
