@@ -6,7 +6,18 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 隔离加固 · 多租户/用户边界（2026-07-06 · v10 线内迭代）
+
+- **fix(im)**：`get_or_create_direct` 增加租户边界校验，堵住绕过联系人列表跨租户建直连会话（企业专属客服 / `emp:*` 合成账号豁免；桌面单租户不受影响）；Web 与手机路由补 `PermissionError→403`
+- **fix(mod-store)**：`/api/mod-store/install` 改为 `Depends(get_logged_in_user)`，堵住云多租户下未鉴权安装可执行包（TO_9 S1）
+- **fix(tenant)**：实现 `XCAGI_TENANT_STRICT` 强制严格保险丝（覆盖 `XCAGI_TENANT_ALLOW_LEGACY_NULL_VISIBLE`）；`account_system_ssot.md` 安全策略校正为「默认严格 / None→fail-closed」，与代码一致
+- **test(relay)**：补中继任务跨用户读取负向测试（`get_task` 按 `mobile_user_id` 限定）
+
 ### 客户体验打磨 · 诚实状态与产品文案（2026-07-06 · v10 线内迭代）
+
+- **feat(frontend)**：Codex 轮询超时显式提示 + 「重试拉取」按钮，替代静默停止
+- **feat(frontend)**：AdminEntitlements/ProductOnboarding/ModStore/Products 四高频页面错误文案统一走 `userFacingError`，不再泄漏原始 HTTP/网络文案
+- **feat(android)**：员工列表全链路消费 `installed/runnable/source`，未安装编制员工显示灰色「未安装」徽标 / AI 员工列表「未安装」chip（本地 SSOT 兜底标 planned）
 
 - **feat(mobile-api)**：员工列表落地统一身份契约（`installed/runnable/source/status` + `employee_id/display_name/contact_route/mobile_contact_route`）；未安装员工标 `planned`，不再假装在岗
 - **feat(relay)**：`_public_desktop` 增加 `online`（poll 心跳判定）；`/relay/tasks` 建任务响应带 `desktop_online`，离线时明示「任务已入队，电脑执行端当前离线」
