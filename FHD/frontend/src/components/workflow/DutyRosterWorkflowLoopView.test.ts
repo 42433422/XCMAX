@@ -80,6 +80,8 @@ function mountView(props: Record<string, unknown> = {}) {
         name: 'workflow-visualization',
         component: { template: '<div />' },
       },
+      { path: '/im', name: 'im', component: { template: '<div />' } },
+      { path: '/mod-store', name: 'mod-store', component: { template: '<div />' } },
     ],
   })
   return router.push('/').then(() =>
@@ -302,7 +304,7 @@ describe('DutyRosterWorkflowLoopView', () => {
     const wrapper = await mountView({ surface: 'workflow-visualization', compact: false })
     const status = wrapper.find('.drlv-employee-status')
     expect(status.classes()).toContain('drlv-employee-status--ok')
-    expect(status.text()).toBe('已对齐')
+    expect(status.text()).toBe('已安装 · 可对话')
   })
 
   it('marks employee as warn when missing locally', async () => {
@@ -311,7 +313,7 @@ describe('DutyRosterWorkflowLoopView', () => {
     const employees = wrapper.findAll('.drlv-employee')
     const warnEmployee = employees.find((e) => e.find('.drlv-employee-status--warn').exists())
     expect(warnEmployee).toBeTruthy()
-    expect(warnEmployee!.find('.drlv-employee-status').text()).toBe('本机缺包')
+    expect(warnEmployee!.find('.drlv-employee-status').text()).toBe('本机未安装')
   })
 
   it('marks employee as warn when missing from catalog', async () => {
@@ -320,7 +322,30 @@ describe('DutyRosterWorkflowLoopView', () => {
     const employees = wrapper.findAll('.drlv-employee')
     const warnEmployee = employees.find((e) => e.find('.drlv-employee-status--warn').exists())
     expect(warnEmployee).toBeTruthy()
-    expect(warnEmployee!.find('.drlv-employee-status').text()).toBe('Catalog 缺岗')
+    expect(warnEmployee!.find('.drlv-employee-status').text()).toBe('Catalog 未登记')
+  })
+
+  it('已安装员工卡片展示「联系员工」CTA', async () => {
+    const wrapper = await mountView({ surface: 'workflow-visualization', compact: false })
+    const employee = wrapper.find('.drlv-employee')
+    const actions = employee.find('.drlv-employee-actions')
+    expect(actions.exists()).toBe(true)
+    expect(actions.text()).toContain('联系员工')
+    expect(actions.text()).not.toContain('安装员工包')
+  })
+
+  it('未安装员工卡片展示「安装员工包」与「仅查看编制」CTA', async () => {
+    statusRef.value.missingLocalIds = ['e1']
+    const wrapper = await mountView({ surface: 'workflow-visualization', compact: false })
+    const employees = wrapper.findAll('.drlv-employee')
+    const notInstalled = employees.find(
+      (e) => e.find('.drlv-employee-status--warn').exists(),
+    )
+    expect(notInstalled).toBeTruthy()
+    const actions = notInstalled!.find('.drlv-employee-actions')
+    expect(actions.text()).toContain('安装员工包')
+    expect(actions.text()).toContain('仅查看编制')
+    expect(actions.text()).not.toContain('联系员工')
   })
 
   it('calls ensureLoaded on mount', async () => {

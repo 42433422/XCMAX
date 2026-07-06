@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import {
   DEPARTMENT_COLORS,
@@ -8,6 +8,14 @@ import {
 } from '@/domain/yuangonDutyRoster'
 import { useDutyRoster } from '@/composables/useDutyRoster'
 import { useDutyRosterLoopStatus } from '@/composables/useDutyRosterLoopStatus'
+import { getWorkflowEmployeeDocs } from '@/utils/workflowEmployeeDocs'
+
+type EmployeeDoc = {
+  /** 触发方式（来自 branches[].trigger） */
+  trigger: string
+  /** 负责环节 / 关键步骤（来自 flows[].steps 前若干条） */
+  steps: string[]
+}
 
 type EmployeeFlowPlacement = {
   deptId: string
@@ -31,10 +39,40 @@ const { status, loading, ready, healthLabel, detailLine, refresh } = useDutyRost
   autoRefreshMs: 30000,
 })
 
+// 流程说明 SSOT：触发方式 / 关键步骤（复用 workflowEmployeeDocs，不再手写静态文案）
+const employeeDocs = ref<Record<string, EmployeeDoc>>({})
+
 onMounted(() => {
   // 触发 SSOT 派生数据加载（失败时 composable 自动回退到构建时硬编码常量）
   ensureLoaded()
+  void loadEmployeeDocs()
 })
+
+async function loadEmployeeDocs(): Promise<void> {
+  try {
+    const docs = await getWorkflowEmployeeDocs()
+    const triggers = new Map<string, string>()
+    for (const b of docs.branches || []) {
+      const id = String(b.id || '').trim()
+      if (id) triggers.set(id, String(b.trigger || '').trim())
+    }
+    const map: Record<string, EmployeeDoc> = {}
+    for (const f of docs.flows || []) {
+      const id = String(f.id || '').trim()
+      if (!id) continue
+      map[id] = {
+        trigger: triggers.get(id) || '',
+        steps: (f.steps || [])
+          .map((s) => String(s.label || '').trim())
+          .filter(Boolean)
+          .slice(0, 4),
+      }
+    }
+    employeeDocs.value = map
+  } catch {
+    /* 文档加载失败不影响图谱主体；卡片降级为职责说明 */
+  }
+}
 
 function routeTarget(name: string, path: string): RouteLocationRaw {
   if (!router.hasRoute(name)) {
@@ -135,12 +173,15 @@ const employeeCards = computed(() => {
     const primary = flows[0]
     const missingLocal = status.value.missingLocalIds.includes(employeeId)
     const missingCatalog = status.value.missingCatalogIds.includes(employeeId)
+    // 统一安装/可运行语义（与后端契约 installed 一致）：本机装了包才算「已安装/可对话」。
+    const installed = !missingLocal
     const statusLabel = missingLocal
-      ? '本机缺包'
+      ? '本机未安装'
       : missingCatalog
-        ? 'Catalog 缺岗'
-        : '已对齐'
+        ? 'Catalog 未登记'
+        : '已安装 · 可对话'
 
+    const doc = employeeDocs.value[employeeId]
     return {
       id: employeeId,
       index: index + 1,
@@ -150,11 +191,33 @@ const employeeCards = computed(() => {
       primarySubzoneLabel: primary?.subzoneLabel || '未分配流程节点',
       color: primary?.color || '#2563eb',
       flows,
+      installed,
+      missingCatalog,
       statusLabel,
       statusKind: missingLocal || missingCatalog ? 'warn' : 'ok',
+      trigger: doc?.trigger || '',
+      steps: doc?.steps || [],
     }
   })
 })
+
+/** 联系员工：跳转 IM 并用 query 预选该员工（对话已持久化，见 P1 路径三）。 */
+function contactEmployee(employeeId: string): void {
+  const target: RouteLocationRaw = router.hasRoute('im')
+    ? { name: 'im', query: { employee: employeeId } }
+    : { path: '/im', query: { employee: employeeId } }
+  void router.push(target).catch(() => {})
+}
+
+/** 未安装员工：去扩展市场安装本地员工包。 */
+function installEmployeePack(): void {
+  void router.push(routeTarget('mod-store', '/mod-store')).catch(() => {})
+}
+
+/** 仅查看编制：回到编制图谱（部门视图）。 */
+function viewInRoster(): void {
+  void router.push(routeTarget('duty-roster-graph', '/duty-roster-graph')).catch(() => {})
+}
 
 const healthCards = computed(() => [
   { label: '编制员工', value: status.value.plannedCount, sub: '编制主索引' },
@@ -253,7 +316,8 @@ const riskLine = computed(() => {
             52 个编制员工如何进入流程
           </h4>
           <p class="drlv-employees-sub">
-            每张卡对应一个本机员工包 manifest 的岗位说明，并标出它参与的六部门流程节点。
+            每张卡展示员工的部门、流程节点、触发方式与关键环节，并标出本机安装状态——
+            已安装可直接「联系员工」，未安装可一键去安装或仅查看编制。
           </p>
         </div>
         <strong class="drlv-employees-count">{{ employeeCards.length }} 员工</strong>
@@ -283,6 +347,16 @@ const riskLine = computed(() => {
             <span>{{ employee.primaryDeptLabel }}</span>
             <strong>{{ employee.primarySubzoneLabel }}</strong>
           </div>
+          <dl v-if="employee.trigger || employee.steps.length" class="drlv-employee-meta">
+            <div v-if="employee.trigger" class="drlv-employee-meta-row">
+              <dt>触发</dt>
+              <dd>{{ employee.trigger }}</dd>
+            </div>
+            <div v-if="employee.steps.length" class="drlv-employee-meta-row">
+              <dt>环节</dt>
+              <dd>{{ employee.steps.join(' → ') }}</dd>
+            </div>
+          </dl>
           <div class="drlv-employee-flows" aria-label="参与流程节点">
             <span
               v-for="flow in employee.flows"
@@ -291,6 +365,40 @@ const riskLine = computed(() => {
             >
               {{ flow.subzoneLabel }}
             </span>
+          </div>
+          <div class="drlv-employee-actions">
+            <template v-if="employee.installed">
+              <button
+                type="button"
+                class="drlv-employee-act drlv-employee-act--primary"
+                @click="contactEmployee(employee.id)"
+              >
+                联系员工
+              </button>
+              <button
+                type="button"
+                class="drlv-employee-act"
+                @click="viewInRoster"
+              >
+                查看编制
+              </button>
+            </template>
+            <template v-else>
+              <button
+                type="button"
+                class="drlv-employee-act drlv-employee-act--primary"
+                @click="installEmployeePack"
+              >
+                安装员工包
+              </button>
+              <button
+                type="button"
+                class="drlv-employee-act"
+                @click="viewInRoster"
+              >
+                仅查看编制
+              </button>
+            </template>
           </div>
         </article>
       </div>
@@ -634,6 +742,66 @@ const riskLine = computed(() => {
   font-weight: 700;
   line-height: 1;
   padding: 5px 7px;
+}
+
+.drlv-employee-meta {
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.drlv-employee-meta-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.drlv-employee-meta-row dt {
+  flex-shrink: 0;
+  color: var(--dept-color, #2563eb);
+  font-weight: 700;
+}
+
+.drlv-employee-meta-row dd {
+  margin: 0;
+  color: #475569;
+}
+
+.drlv-employee-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.drlv-employee-act {
+  flex: 1;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #fff;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.drlv-employee-act:hover {
+  background: #f1f5f9;
+}
+
+.drlv-employee-act--primary {
+  border-color: var(--dept-color, #2563eb);
+  background: var(--dept-color, #2563eb);
+  color: #fff;
+}
+
+.drlv-employee-act--primary:hover {
+  filter: brightness(1.05);
+  background: var(--dept-color, #2563eb);
 }
 
 @media (max-width: 900px) {
