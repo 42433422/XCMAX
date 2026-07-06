@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 管理端员工对话持久化 · 与手机端同源（2026-07-06 · v10 线内迭代 · P1 路径三）
+
+- **feat(im)**：新增 `GET/POST /api/admin/employees/{id}/messages`——管理端 AI 员工对话（用户消息 + 员工回复）持久化到 boss↔员工 IM 直连会话，管理端刷新不丢、手机端读同一 transcript；员工执行失败降级为诚实提示且用户消息仍落库
+- **feat(frontend)**：`ImMessengerView` 员工对话改用持久化 IM 端点（选中加载历史 / 发送落库），移除仅前端内存的 execute 回复解析
+- **refactor(im)**：直连会话租户豁免统一为 `_is_synthetic_system_peer`（企业客服 + `emp:*` + `ai-employee:*`）
+
 ### 隔离加固 · 多租户/用户边界（2026-07-06 · v10 线内迭代）
 
 - **fix(im)**：`get_or_create_direct` 增加租户边界校验，堵住绕过联系人列表跨租户建直连会话（企业专属客服 / `emp:*` 合成账号豁免；桌面单租户不受影响）；Web 与手机路由补 `PermissionError→403`
