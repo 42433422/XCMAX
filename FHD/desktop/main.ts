@@ -696,6 +696,23 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?
   }
 }
 
+/**
+ * 允许交给系统浏览器打开的外部链接 scheme 白名单。
+ *
+ * 渲染进程一旦被 XSS 注入，`window.open('file://...')` / 自定义 scheme 可能触发
+ * 本地文件浏览或任意协议处理器（electronegativity OPEN_EXTERNAL 风险）。
+ * 只放行 http/https/mailto，其余一律拒绝。
+ */
+export function isSafeExternalUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' || parsed.protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -806,11 +823,16 @@ async function createWindow(): Promise<void> {
     }
   })
   // window.open / target=_blank 由系统浏览器打开，不在 Electron 内开新窗口。
+  // 仅放行 http/https/mailto，阻断 file:/自定义协议等危险 scheme（XSS 逃逸面）。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
       return { action: 'allow' }
     }
-    void shell.openExternal(url)
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url)
+    } else {
+      console.warn(`[xcagi-desktop] blocked window.open to unsafe url: ${url}`)
+    }
     return { action: 'deny' }
   })
 

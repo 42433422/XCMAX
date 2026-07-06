@@ -423,6 +423,50 @@ describe('main — isTrustedDesktopOrigin', () => {
   })
 })
 
+describe('main — isSafeExternalUrl (openExternal scheme 白名单)', () => {
+  it('allows https links', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('https://xiu-ci.com/market')).toBe(true)
+  })
+
+  it('allows http links', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('http://192.168.1.10:17500/docs')).toBe(true)
+  })
+
+  it('allows mailto links', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('mailto:support@xiu-ci.com')).toBe(true)
+  })
+
+  it('blocks file protocol', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('file:///etc/passwd')).toBe(false)
+  })
+
+  it('blocks smb/unc style protocol', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('smb://attacker/share')).toBe(false)
+  })
+
+  it('blocks javascript pseudo-protocol', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('javascript:alert(1)')).toBe(false)
+  })
+
+  it('blocks custom app protocols', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl('ms-msdt:/id PCWDiagnostic')).toBe(false)
+  })
+
+  it('returns false for undefined and malformed input', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl(undefined)).toBe(false)
+    expect(isSafeExternalUrl('not a url')).toBe(false)
+    expect(isSafeExternalUrl('')).toBe(false)
+  })
+})
+
 describe('main — readPackagedAppVersion', () => {
   it('returns "dev" in unpackaged mode', async () => {
     electronMocks.app.isPackaged = false
