@@ -2343,7 +2343,13 @@ function applyDepartmentLayout(rawNodes: Node[], rawEdges: Edge[]) {
 // ─────────────────────────────────────────────────────────────────────────────
 function buildAreaGraph(emps: EmpRow[]) {
   const rosterEmps = emps.filter(isDutyGraphMember)
-  const deployedIds = new Set(rosterEmps.map((e) => e.id))
+  // 诚实在岗判定：编制成员 ≠ 在岗；必须本机已安装 employee_pack（或虚拟管家）才算。
+  // 与 buildDepartmentGraph 的 missingLocalPackIds 判定对齐，未安装员工不进「在岗」图。
+  const deployedIds = new Set(
+    rosterEmps
+      .filter((e) => isVirtualEmployee(e.id) || isDeployedDutyRosterRow(e))
+      .map((e) => e.id),
+  )
   const rawNodes: Node[] = []
   const rawEdges: Edge[] = []
 
