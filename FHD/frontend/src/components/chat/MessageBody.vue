@@ -3,10 +3,9 @@
 </template>
 
 <script setup lang="ts">
-import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { renderMarkdown } from '@/utils/lightMarkdown'
-import { sanitizeMermaidSource } from '@/utils/mermaidSanitize'
+import { bindCodeCopyButtons, flushMermaid } from '@/composables/useMarkdownPostRender'
 
 const props = defineProps<{
   content: string
@@ -25,142 +24,10 @@ const rendered = computed(() => {
   return html
 })
 
-let mermaidApi: {
-  initialize: (config?: Record<string, unknown>) => void
-  run: (options?: Record<string, unknown>) => Promise<void>
-} | null = null
-let mermaidInit = false
-
-async function getMermaid() {
-  if (!mermaidApi) {
-    const mod = await import('mermaid')
-    mermaidApi = mod.default
-  }
-  if (!mermaidInit) {
-    mermaidApi.initialize({
-      startOnLoad: false,
-      securityLevel: 'strict',
-      theme: 'dark',
-      fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-    })
-    mermaidInit = true
-  }
-  return mermaidApi
-}
-
-/** 简单哈希：用于跳过 source 未变化的 mermaid 块 */
-function hashStr(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
-  }
-  return h
-}
-
-async function flushMermaid() {
-  const host = hostRef.value
-  if (!host) return
-  const els = Array.from(host.querySelectorAll('.md-mermaid')) as HTMLElement[]
-  if (!els.length) return
-  let mer
-  try {
-    mer = await getMermaid()
-  } catch {
-    for (const el of els) el.textContent = '[流程图加载失败]'
-    return
-  }
-  for (const el of els) {
-    const src = el.dataset.source || ''
-    if (!src) {
-      el.dataset.rendered = '1'
-      continue
-    }
-    const srcHash = String(hashStr(src))
-    if (el.dataset.rendered === '1' && el.dataset.srcHash === srcHash) continue
-
-    // 优先用原始 source；失败再用 sanitize 后的版本重试一次。
-    // 这样既不破坏已经合法的图，又能挽救常见 LLM 失误（括号/引号/冒号未引）。
-    const variants: string[] = [src]
-    const sanitized = sanitizeMermaidSource(src)
-    if (sanitized && sanitized !== src) variants.push(sanitized)
-
-    let rendered = false
-    let lastErr: unknown = null
-    for (const variant of variants) {
-      const slot = document.createElement('div')
-      slot.className = 'mermaid'
-      slot.textContent = variant
-      el.innerHTML = ''
-      el.appendChild(slot)
-      try {
-        await mer.run({ nodes: [slot] })
-        rendered = true
-        break
-      } catch (e) {
-        lastErr = e
-      }
-    }
-
-    if (!rendered) {
-      const errMsg = (lastErr as Error)?.message || String(lastErr || '')
-      const escapeText = (raw: string) =>
-        raw.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' } as Record<string, string>)[c] || c)
-      el.innerHTML =
-        `<div class="md-mermaid-fail">` +
-        `<div class="md-mermaid-fail__head">` +
-        `<span class="md-mermaid-fail__msg">流程图解析失败：${escapeText(errMsg)}</span>` +
-        `<button type="button" class="md-mermaid-fail__copy" data-copy-source>复制源码</button>` +
-        `</div>` +
-        `<pre class="md-code"><code class="md-code__body">${escapeText(src)}</code></pre>` +
-        `</div>`
-      const copyBtn = el.querySelector('[data-copy-source]') as HTMLButtonElement | null
-      if (copyBtn) {
-        copyBtn.addEventListener('click', async () => {
-          const orig = copyBtn.textContent
-          try {
-            await navigator.clipboard.writeText(src)
-            copyBtn.textContent = '已复制'
-          } catch {
-            copyBtn.textContent = '复制失败'
-          }
-          window.setTimeout(() => {
-            copyBtn.textContent = orig || '复制源码'
-          }, 1400)
-        })
-      }
-    }
-    el.dataset.rendered = '1'
-    el.dataset.srcHash = srcHash
-  }
-}
-
-function bindCopyButtons() {
-  const host = hostRef.value
-  if (!host) return
-  const btns = Array.from(host.querySelectorAll('.md-code__copy')) as HTMLButtonElement[]
-  for (const btn of btns) {
-    if (btn.dataset.bound === '1') continue
-    btn.dataset.bound = '1'
-    btn.addEventListener('click', async () => {
-      const code = btn.parentElement?.parentElement?.querySelector('.md-code__body')?.textContent || ''
-      try {
-        await navigator.clipboard.writeText(code)
-        const orig = btn.textContent
-        btn.textContent = '已复制'
-        window.setTimeout(() => {
-          btn.textContent = orig || '复制'
-        }, 1400)
-      } catch {
-        btn.textContent = '复制失败'
-      }
-    })
-  }
-}
-
 async function flushAll() {
   await nextTick()
-  bindCopyButtons()
-  await flushMermaid()
+  bindCodeCopyButtons(hostRef.value)
+  await flushMermaid(hostRef.value)
 }
 
 onMounted(() => {
