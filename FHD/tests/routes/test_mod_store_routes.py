@@ -5,6 +5,7 @@ Covers helper functions, route endpoints, catalog operations, and error paths.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,6 +20,10 @@ from app.fastapi_routes.mod_store_routes import router
 def app_with_router() -> FastAPI:
     app = FastAPI()
     app.include_router(router)
+    # /install 现要求登录（get_logged_in_user）；这些测试聚焦路由逻辑，注入已登录用户。
+    app.dependency_overrides[ms.get_logged_in_user] = lambda: SimpleNamespace(
+        id=1, username="tester", is_active=True
+    )
     return app
 
 

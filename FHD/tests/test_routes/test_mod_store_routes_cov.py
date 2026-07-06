@@ -13,6 +13,7 @@ registered in sys.modules (not real package trees), we patch them via
 import asyncio
 import sys
 import types
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -245,6 +246,10 @@ def _set_stub(module_name: str, attr: str, value: Any) -> Any:
 def _make_client() -> TestClient:
     app = FastAPI()
     app.include_router(_mod.router)
+    # /install 现要求登录（get_logged_in_user）；注入已登录用户以覆盖路由逻辑。
+    app.dependency_overrides[_mod.get_logged_in_user] = lambda: SimpleNamespace(
+        id=1, username="tester", is_active=True
+    )
     return TestClient(app, raise_server_exceptions=False)
 
 
