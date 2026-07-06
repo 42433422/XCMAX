@@ -13,8 +13,6 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.infrastructure.auth.dependencies import get_logged_in_user
-
 from app.application.mod_store_catalog_app import (
     catalog_base_url,
     catalog_download_to,
@@ -24,6 +22,7 @@ from app.application.mod_store_catalog_app import (
     normalize_package_zip_path,
     sync_modstore_library_to_local,
 )
+from app.infrastructure.auth.dependencies import get_logged_in_user
 from app.shell.mods_catalog import list_mod_items
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
