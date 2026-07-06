@@ -225,9 +225,29 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             )
         ).scalar_one_or_none()
 
+    def _assert_direct_peer_allowed(self, user_id: int, peer_user_id: int) -> None:
+        """直连会话租户边界：对端必须存在、启用，且与发起人同租户。
+
+        与 ``list_contacts`` 的租户过滤对齐——不同企业的用户互相不可见，自然不可建联，
+        堵住绕过联系人列表直接指定 ``peer_user_id`` 的跨租户建会话路径。
+        豁免系统合成对端：企业专属客服与 AI 员工合成账号（``emp:*``）为全局账号
+        （tenant_id 为空），所有租户都可与其建联。
+        """
+        peer = self._db.get(User, int(peer_user_id))
+        if peer is None or not bool(getattr(peer, "is_active", False)):
+            raise ValueError("联系人不存在或已停用")
+        username = str(getattr(peer, "username", "") or "")
+        if self._is_enterprise_dedicated_cs_user(peer) or username.startswith("emp:"):
+            return
+        me = self._db.get(User, int(user_id))
+        my_tenant = getattr(me, "tenant_id", None) if me else None
+        if my_tenant is not None and getattr(peer, "tenant_id", None) != my_tenant:
+            raise PermissionError("对方不在你的企业通讯录中，无法建立会话")
+
     def get_or_create_direct(self, user_id: int, peer_user_id: int) -> dict[str, Any]:
         if user_id == peer_user_id:
             raise ValueError("不能与自己创建会话")
+        self._assert_direct_peer_allowed(user_id, peer_user_id)
         conv_id = self._find_direct_conversation(user_id, peer_user_id)
         if conv_id:
             conv = self._db.get(ImConversation, conv_id)

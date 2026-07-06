@@ -330,6 +330,9 @@ def im_create_direct(
         return {"success": True, "conversation": conv}
     except ValueError as exc:
         return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except PermissionError as exc:
+        # 跨租户建联拒绝（须在 RECOVERABLE_ERRORS 之前：PermissionError ⊂ OSError）。
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_create_direct")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)

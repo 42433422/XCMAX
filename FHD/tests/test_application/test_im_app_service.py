@@ -188,7 +188,10 @@ class TestGetOrCreateDirect:
         db = MagicMock()
         svc = ImApplicationService(db)
         conv = _make_conversation(conv_id=10, title="chat")
-        with patch.object(svc, "_find_direct_conversation", return_value=10):
+        with (
+            patch.object(svc, "_assert_direct_peer_allowed", return_value=None),
+            patch.object(svc, "_find_direct_conversation", return_value=10),
+        ):
             db.get.return_value = conv
             result = svc.get_or_create_direct(1, 2)
         assert result["id"] == 10
@@ -198,7 +201,10 @@ class TestGetOrCreateDirect:
         db = MagicMock()
         svc = ImApplicationService(db)
         conv = _make_conversation(conv_id=20, title="用户1 ↔ 用户2")
-        with patch.object(svc, "_find_direct_conversation", return_value=None):
+        with (
+            patch.object(svc, "_assert_direct_peer_allowed", return_value=None),
+            patch.object(svc, "_find_direct_conversation", return_value=None),
+        ):
             db.get.return_value = conv
 
             # After flush, conv.id should be set
@@ -209,6 +215,97 @@ class TestGetOrCreateDirect:
             db.refresh.side_effect = lambda x: None
             result = svc.get_or_create_direct(1, 2)
         assert result["created"] is True
+
+
+# ---------------------------------------------------------------------------
+# 直连会话租户边界（真实 SQLite，不用 mock；防跨租户建联越权）
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def tenant_im_db(tmp_path):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.db.models.im import ImConversation, ImConversationMember, ImMessage
+    from app.db.models.user import User as UserModel
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'im_tenant.db'}")
+    UserModel.__table__.create(engine, checkfirst=True)
+    ImConversation.__table__.create(engine, checkfirst=True)
+    ImConversationMember.__table__.create(engine, checkfirst=True)
+    ImMessage.__table__.create(engine, checkfirst=True)
+    session = sessionmaker(bind=engine)()
+    rows = [
+        # (id, username, tenant_id, is_active)
+        (1, "alice-t1", 1, True),
+        (2, "bob-t1", 1, True),
+        (3, "carol-t2", 2, True),
+        (4, "legacy-null-tenant", None, True),
+        (5, "inactive-t1", 1, False),
+        (6, "emp:daily-orchestrator", None, True),
+        (7, "enterprise-cs", None, True),
+    ]
+    for uid, uname, tenant, active in rows:
+        session.add(
+            UserModel(
+                id=uid,
+                username=uname,
+                password="!",
+                display_name=uname,
+                tenant_id=tenant,
+                is_active=active,
+            )
+        )
+    session.commit()
+    yield session
+    session.close()
+
+
+class TestDirectPeerTenantBoundary:
+    """PRODUCT SaaS 隔离：绕过联系人列表直接指定 peer_user_id 不得跨租户建联。"""
+
+    def test_cross_tenant_direct_is_rejected(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        with pytest.raises(PermissionError, match="企业通讯录"):
+            svc.get_or_create_direct(1, 3)
+
+    def test_same_tenant_direct_is_allowed(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        result = svc.get_or_create_direct(1, 2)
+        assert result["created"] is True
+
+    def test_tenant_user_cannot_reach_null_tenant_human(self, tenant_im_db):
+        # 与 list_contacts 对齐：企业用户联系人列表只含同租户，NULL 存量人类不可达。
+        svc = ImApplicationService(tenant_im_db)
+        with pytest.raises(PermissionError, match="企业通讯录"):
+            svc.get_or_create_direct(1, 4)
+
+    def test_null_tenant_initiator_keeps_desktop_mode_working(self, tenant_im_db):
+        # 桌面单租户模式（tenant_id 全 NULL）不受影响。
+        svc = ImApplicationService(tenant_im_db)
+        result = svc.get_or_create_direct(4, 1)
+        assert result["created"] is True
+
+    def test_employee_synthetic_peer_is_exempt(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        result = svc.get_or_create_direct(1, 6)
+        assert result["created"] is True
+
+    def test_enterprise_dedicated_cs_is_exempt(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        result = svc.get_or_create_direct(1, 7)
+        assert result["created"] is True
+
+    def test_nonexistent_peer_rejected(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        with pytest.raises(ValueError, match="不存在或已停用"):
+            svc.get_or_create_direct(1, 999)
+
+    def test_inactive_peer_rejected(self, tenant_im_db):
+        svc = ImApplicationService(tenant_im_db)
+        with pytest.raises(ValueError, match="不存在或已停用"):
+            svc.get_or_create_direct(1, 5)
 
 
 # ---------------------------------------------------------------------------
