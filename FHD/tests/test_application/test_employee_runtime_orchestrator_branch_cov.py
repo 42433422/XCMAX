@@ -354,6 +354,49 @@ class TestEmployeeDispatcher:
         assert captured["input_data"]["keep_me"] == "yes"
         assert captured["input_data"]["skip_collaboration"] is True
 
+    def test_dispatcher_marks_collaboration_context_payload(self) -> None:
+        captured: dict[str, Any] = {}
+
+        class _SpyAgent:
+            def __init__(self, tool_id: str) -> None:
+                self.tool_id = tool_id
+
+            def run(self, task: str, input_data: dict, **kw: Any) -> dict:
+                captured["task"] = task
+                captured["input_data"] = input_data
+                captured["kw"] = kw
+                return {"success": True}
+
+        with patch(
+            "app.application.employee_runtime.agent.EmployeeAgent",
+            _SpyAgent,
+        ):
+            _employee_dispatcher(
+                tool_id="dep-1",
+                action="run",
+                params={
+                    "_runtime_context": {
+                        "task": "root task",
+                        "employee_id": "root-1",
+                        "node_outputs": {"dep-0": {"ok": True}},
+                        "user_id": 7,
+                        "workspace_root": "/ws",
+                        "session_id": "s1",
+                    }
+                },
+            )
+
+        assert captured["task"] == "root task"
+        assert captured["input_data"]["invoke_mode"] == "collaboration_context"
+        assert captured["input_data"]["source"] == "employee_collaboration"
+        assert captured["input_data"]["client_surface"] == "employee_runtime"
+        assert captured["input_data"]["root_employee_id"] == "root-1"
+        assert captured["input_data"]["upstream_outputs"] == {"dep-0": {"ok": True}}
+        assert captured["input_data"]["skip_collaboration"] is True
+        assert captured["kw"]["user_id"] == 7
+        assert captured["kw"]["workspace_root"] == "/ws"
+        assert captured["kw"]["session_id"] == "s1"
+
     def test_user_id_resolution_from_params(self) -> None:
         captured: dict[str, Any] = {}
 

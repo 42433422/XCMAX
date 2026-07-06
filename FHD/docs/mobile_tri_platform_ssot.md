@@ -61,7 +61,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 ### 准入门槛
 
 - Flutter：`cd FHD/mobile-flutter-poc && flutter pub get && flutter test`
-- OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output contracts/openapi.json && python scripts/check_openapi_consistency.py`
+- OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output contracts/openapi.json && python scripts/tools/check_openapi_consistency.py`
 - FastAPI mobile：`cd FHD && python -m pytest tests/test_routes/test_mobile_api_extensions_cov.py`
 - SSOT：`cd FHD && python scripts/dev/ssot_cli.py check mobile-tri-platform`
 

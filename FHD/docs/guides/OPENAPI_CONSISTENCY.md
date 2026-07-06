@@ -9,7 +9,7 @@
 
 | 位置 | 用途 |
 | --- | --- |
-| `scripts/check_openapi_consistency.py` | 本地/流水线手动运行的完整校验 CLI，支持导出 JSON + Markdown 报告 |
+| `scripts/tools/check_openapi_consistency.py` | 本地/流水线手动运行的完整校验 CLI，支持导出 JSON + Markdown 报告 |
 | `tests/test_openapi_consistency.py` | pytest 守门员，error 级发现直接让 CI 失败 |
 | `docs/reports/OPENAPI_CONSISTENCY.md` | 最近一次校验的 Markdown 报告（可提交） |
 | `scripts/output/openapi_consistency.json` | 最近一次校验的完整 JSON 明细 |
@@ -26,25 +26,25 @@
 
 ```bash
 # 最小形式（输出到终端，退出码 = 有无 error）
-python scripts/check_openapi_consistency.py
+python scripts/tools/check_openapi_consistency.py
 
 # 同时生成 JSON + Markdown 报告
-python scripts/check_openapi_consistency.py \
+python scripts/tools/check_openapi_consistency.py \
   --md-out docs/reports/OPENAPI_CONSISTENCY.md \
   --json-out scripts/output/openapi_consistency.json
 
 # 追加忽略模式（可重复）
-python scripts/check_openapi_consistency.py \
+python scripts/tools/check_openapi_consistency.py \
   --ignore-regex "^/api/internal/.*"
 
 # 严格模式：error 失败；warning 必须已登记在基线中，新增 warning 失败
-python scripts/check_openapi_consistency.py --strict
+python scripts/tools/check_openapi_consistency.py --strict
 
 # 当前 warning 收敛后刷新基线（只应在确认 warning 减少或同等可解释后提交）
-python scripts/check_openapi_consistency.py --update-warning-baseline
+python scripts/tools/check_openapi_consistency.py --update-warning-baseline
 
 # 只要摘要，不打印每条 finding
-python scripts/check_openapi_consistency.py --quiet
+python scripts/tools/check_openapi_consistency.py --quiet
 ```
 
 控制台输出形如：
@@ -97,7 +97,7 @@ python scripts/check_openapi_consistency.py --quiet
 ```yaml
 - name: OpenAPI consistency (full report)
   run: |
-    python scripts/check_openapi_consistency.py \
+    python scripts/tools/check_openapi_consistency.py \
       --md-out docs/reports/OPENAPI_CONSISTENCY.md \
       --json-out scripts/output/openapi_consistency.json
 
@@ -174,7 +174,7 @@ async def customers_all():
 
 ## 相关文件
 
-- 校验脚本：`scripts/check_openapi_consistency.py`
+- 校验脚本：`scripts/tools/check_openapi_consistency.py`
 - 测试：`tests/test_openapi_consistency.py`
 - 路由注册入口：`app/fastapi_routes/__init__.py::register_all_routes`
 - OpenAPI 生成相关修复：`app/neuro_bus/route_event_publisher.py::publish_route_event`

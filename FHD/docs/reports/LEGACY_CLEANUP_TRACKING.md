@@ -5,7 +5,7 @@
 **决策依据**：
 - 静态引用：`rg "from app\.legacy\." app scripts tests MODstore` 等
 - 运行时遥测：`scripts/dev/legacy_usage_report.py --since 168` 输出的近 7 天调用记录
-- 路由契约：`scripts/check_openapi_consistency.py` 的快照 diff
+- 路由契约：`scripts/tools/check_openapi_consistency.py` 的快照 diff
 
 **删除准入规则**：静态引用 = 0 **且** 近 7 天遥测 count = 0 才能真正 `rm`。
 

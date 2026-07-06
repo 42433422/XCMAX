@@ -288,7 +288,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 | **Ruff** | `fhd-ci-cd.yml` / `fhd-test.yml` — 唯一 formatter + linter（`ruff check` + `ruff format --check`） |
 | **black / isort** | **禁用** — 与 Ruff 冲突；CI、本地 pre-commit、FHD dev 依赖均不得重新启用 |
 
-`guard-temp-scripts` 使用 `FHD/scripts/ci/guard_temp_scripts.py`：对 `_find_zero.py` / `_analyze_coverage.py` 做全量 tracked 扫描，对新增 `_fail*.txt`、`*.v1_backup`、根级/直挂 `scripts/` 的 `fix_` / `check_` / `final_` 临时脚本做增量拦截。本地 pre-commit 同步执行同一脚本。
+`guard-temp-scripts` 使用 `FHD/scripts/ci/guard_temp_scripts.py`：对 `_find_zero.py` / `_analyze_coverage.py` 做全量 tracked 扫描，对新增 `_fail*.txt`、`*.v1_backup`、根级/直挂 `scripts/` 的 `fix_` / `check_` / `final_` / `recover_` / `debug_` / `test_` 临时脚本做增量拦截（合法后端单元测试位于 `FHD/tests/`，不受影响）。本地 pre-commit 同步执行同一脚本。
 
 ## 安全扫描门禁策略（FHD）
 
@@ -321,7 +321,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 `fhd-ci-cd.yml` → job `backend-test` 上传 `coverage.xml` 至 Codecov。**可选**：需在 GitHub **Settings → Secrets → Actions** 配置 `CODECOV_TOKEN`；无 token 时步骤 `continue-on-error`（不阻断 CI）。本地 `coverage.xml` / `htmlcov/` 仍为 SSOT。
 
-**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `80`，对应 `source=[app]` 全量行覆盖 floor）。分支与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`，再由 `coverage_ratchet.py --check` 同时检查行/分支。旧 `35/58/窄包70/77.4%` 等窄 include 或误报口径已退役，禁止再引用为当前值。
+**覆盖率门槛 SSOT**：唯一真值 = `FHD/pyproject.toml` → `[tool.coverage.report] fail_under`（当前 `90`，对应 `source=[app]` 全量行覆盖 floor，2026-07-05 bump 自 89）。分支 floor（85）与前端 floor 见 `FHD/metrics/coverage_ratchet_baseline.json`；对外现状口径见 `FHD/metrics/coverage-dual-summary.json`。`backend-test` **不再**用 CLI `--cov-fail-under` 硬编码阈值；标准命令传 `--cov-fail-under=0`，再由 `coverage_ratchet.py --check` 同时检查行/分支（行 ≥ 90 / 分支 ≥ 85）。旧 `35/58/窄包70/77.4%` 等窄 include 或误报口径已退役，禁止再引用为当前值。
 
 `FHD/scripts/ci/check_coverage_ssot.py` 在 smoke/full CI 中校验上述三个文件互相一致，并禁止 `pyproject.toml` 复制动态 pytest passed/failed 快照；动态实测只允许出现在 `coverage-dual-summary.json`。
 
@@ -354,3 +354,60 @@ cd XCMAX
 ```
 
 历史子仓 remote（`ai-excel-helper`、`XCMAX-roadmap`、`xcagi-modstore`）已退役；旧 `.git` 备份见 `~/XCMAX-archives/nested-git-backup-20260608/`。
+
+## K8s 部署（Phase A 已补齐）
+
+XCMAX 后端支持 K8s 部署，清单 SSOT 在 `FHD/k8s/`：
+
+- `deployment.yaml`：xcagi Deployment（replicas=2，image 占位 `__DEPLOY_BACKEND_IMAGE__`）
+- `service.yaml`：ClusterIP，port 5100 → targetPort 5000（gunicorn containerPort）
+- `configmap.yaml`：非敏感环境变量（含 Neuro Bus 生产配置全套开关）
+- `hpa.yaml`：CPU 80% 触发，min=2 / max=6
+- `pdb.yaml`：minAvailable=1
+- `ingress.yaml`：`xiu-ci.com/fhd-api` 路由
+- `networkpolicy.yaml`：ingress 仅允许同 namespace + ingress-nginx
+- `secret.yaml`：DEPRECATED，实际通过 `kubectl create secret` 或 SealedSecrets 注入
+
+Helm Chart 在 `FHD/helm/`（apiVersion: v2），渲染结果与 `k8s/*.yaml` 等价。
+
+> 本节为命令式 break-glass / 速查参考；声明式 GitOps（ArgoCD App-of-Apps + Rollouts）见前文「K8s 部署（Phase 3）」「GitOps（Phase 2）」「渐进式交付（Phase 3 · Argo Rollouts）」。
+
+### 部署策略
+
+| 策略 | 适用场景 | 触发 |
+|------|---------|------|
+| **rolling**（默认） | 常规发布，零停机 | workflow_dispatch → strategy=rolling |
+| **blue-green** | 大版本升级，需快速回滚 | workflow_dispatch → strategy=blue-green |
+| **canary** | 高风险变更，灰度验证 | workflow_dispatch → strategy=canary |
+
+### 触发方式
+
+```bash
+# 手动触发（GitHub UI 或 gh CLI）
+gh workflow run fhd-deploy.yml \
+  -f strategy=rolling \
+  -f environment=staging
+
+# 通过 release orchestrator（自动）
+# fhd-release-orchestrator.yml → dispatch-k8s-deploy → fhd-deploy.yml
+```
+
+### 前提条件
+
+- Secret `KUBE_CONFIG` 或 `KUBE_CONFIG_B64` 已配置（否则硬失败）
+- 镜像已推送至 GHCR：`ghcr.io/42433422/xcmax/xcagi-fhd-api:sha-<git_sha>`
+- 目标 namespace 已创建（xcagi-staging / xcagi-production）
+
+### 健康检查
+
+部署完成后自动执行：
+```bash
+curl -sf https://xiu-ci.com/fhd-api/api/health  # production
+curl -sf https://staging.xiu-ci.com/fhd-api/api/health  # staging
+```
+
+### 回滚
+
+```bash
+kubectl -n xcagi-production rollout undo deployment/xcagi
+```

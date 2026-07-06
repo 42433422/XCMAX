@@ -640,16 +640,60 @@
             <span class="settings-item__icon settings-row__icon--violet" aria-hidden="true">
               <i class="fa fa-cloud"></i>
             </span>
-            <label class="settings-item__label" for="settings-ai-mode">{{ $t('settings.aiMode') }}</label>
+            <label class="settings-item__label" for="settings-ai-mode">AI 部署模式</label>
             <select
               id="settings-ai-mode"
-              v-model="aiMode"
+              v-model="deploymentMode"
               class="settings-item__control settings-item__control--select"
+              @change="onDeploymentModeChange"
             >
-              <option value="online">{{ $t('settings.aiModeOnline') }}</option>
-              <option value="offline">{{ $t('settings.aiModeOffline') }}</option>
+              <option v-for="mode in deploymentModes" :key="mode.id" :value="mode.id">
+                {{ mode.label }}（{{ mode.badge }}）
+              </option>
             </select>
           </div>
+
+          <div class="settings-item settings-item--readonly">
+            <span class="settings-item__icon settings-row__icon--cyan" aria-hidden="true">
+              <i class="fa fa-random"></i>
+            </span>
+            <span class="settings-item__label">网络与性能</span>
+            <span class="settings-item__value">{{ deploymentModeBadge }}</span>
+          </div>
+
+          <div v-if="performanceModeSelected" class="settings-item settings-item--stacked">
+            <span class="settings-item__icon settings-row__icon--slate" aria-hidden="true">
+              <i class="fa fa-database"></i>
+            </span>
+            <label class="settings-item__label" for="settings-postgres-url">PostgreSQL 连接</label>
+            <input
+              id="settings-postgres-url"
+              v-model="postgresUrlDraft"
+              class="settings-item__control settings-item__control--text settings-item__control--wide"
+              type="password"
+              autocomplete="off"
+              placeholder="postgresql+psycopg://user:password@host:5432/xcagi"
+            >
+            <p class="settings-item__hint">
+              性能模式会写入 PG profile，并生成 SQLite 到 PostgreSQL 的同步计划，重启后生效。
+            </p>
+          </div>
+
+          <transition name="settings-fade">
+            <div
+              v-if="deploymentSaving || deploymentStatusMessage"
+              class="deployment-transition"
+              :class="{ 'deployment-transition--done': !deploymentSaving }"
+            >
+              <span v-if="deploymentSaving" class="deployment-transition__spinner" aria-hidden="true"></span>
+              <i v-else class="fa fa-check-circle deployment-transition__done" aria-hidden="true"></i>
+              <span>{{ deploymentSaving ? deploymentTransitionText : deploymentStatusMessage }}</span>
+            </div>
+          </transition>
+
+          <p v-if="deploymentSyncCommand" class="deployment-sync-command" :title="deploymentSyncCommand">
+            {{ deploymentSyncCommand }}
+          </p>
         </div>
 
         <details
@@ -772,8 +816,8 @@
         </details>
 
         <div class="settings-card__footer">
-          <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading">
-            {{ loading ? $t('settings.saving') : $t('settings.saveSettings') }}
+          <button class="settings-primary-btn" type="button" @click="saveSettings" :disabled="loading || deploymentSaving">
+            {{ deploymentSaving ? '正在切换部署模式…' : loading ? $t('settings.saving') : $t('settings.saveSettings') }}
           </button>
         </div>
           </div>
@@ -882,6 +926,12 @@ import { DEFAULT_INDUSTRY_ID } from '@/constants/industryDefaults';
 import { getIndustryPreset } from '@/constants/industryPresets';
 import { isProtectedClientModId } from '@/constants/protectedMods';
 import {
+  DEFAULT_DEPLOYMENT_MODE,
+  DEPLOYMENT_MODES,
+  type DeploymentMode,
+  type DeploymentModeId,
+} from '@/constants/deploymentModes.generated';
+import {
   ACCOUNT_CUSTOM_MOD_IDS,
   expectedHostBridgeModIds,
   isHostBridgeModId,
@@ -944,6 +994,31 @@ type ApiMessageResult = {
   success?: boolean
   message?: string
   error?: string
+}
+
+type DesktopDeploymentResponse = {
+  data?: DesktopDeploymentResponse
+  success?: boolean
+  desktopMode?: boolean
+  modes?: DeploymentMode[]
+  currentMode?: string
+  database?: {
+    storageMode?: string
+    sqlitePath?: string
+    databaseUrlRedacted?: string
+    postgresUrlRedacted?: string
+  }
+  syncPlan?: {
+    syncCommand?: string
+    restartRequired?: boolean
+  } | null
+  restartRequired?: boolean
+}
+
+type DesktopDeploymentUpdateResponse = DesktopDeploymentResponse & {
+  data?: DesktopDeploymentUpdateResponse
+  mode?: string
+  modeDetail?: DeploymentMode
 }
 
 function errorMessage(error: unknown, fallback = '未知错误'): string {
@@ -1671,7 +1746,7 @@ const modSettingsFoldMeta = computed(() => {
 });
 
 const basicSettingsSummary = computed(() => {
-  const mode = aiMode.value === 'offline' ? t('settings.offline') : t('settings.aiModeOnline');
+  const mode = selectedDeploymentMode.value?.label || (aiMode.value === 'offline' ? t('settings.offline') : t('settings.aiModeOnline'));
   return `${normalizedAssistantName.value} · ${mode}`;
 });
 
@@ -1747,6 +1822,14 @@ async function onUninstallMod(modId: string) {
 const loading = ref(false);
 const loadingVersions = ref(false);
 const aiMode = ref('online');
+const deploymentModes = ref<DeploymentMode[]>([...DEPLOYMENT_MODES]);
+const deploymentMode = ref<DeploymentModeId>(DEFAULT_DEPLOYMENT_MODE);
+const deploymentSaving = ref(false);
+const deploymentStatusMessage = ref('');
+const deploymentSyncCommand = ref('');
+const deploymentRestartRequired = ref(false);
+const postgresUrlDraft = ref('');
+const postgresConfigured = ref(false);
 const assistantName = ref('修茈');
 const versions = ref<DistillationVersion[]>([]);
 const sampleCount = ref(0);
@@ -1759,7 +1842,77 @@ const currentDbPath = ref('');
 const databaseStorageLabel = ref('');
 const desktopDatabaseVisible = ref(false);
 
+function isDeploymentModeId(value: unknown): value is DeploymentModeId {
+  return DEPLOYMENT_MODES.some((mode) => mode.id === value);
+}
+
+function normalizeDeploymentModeId(value: unknown): DeploymentModeId {
+  return isDeploymentModeId(value) ? value : DEFAULT_DEPLOYMENT_MODE;
+}
+
+const selectedDeploymentMode = computed(() => (
+  deploymentModes.value.find((mode) => mode.id === deploymentMode.value) ||
+  DEPLOYMENT_MODES.find((mode) => mode.id === DEFAULT_DEPLOYMENT_MODE) ||
+  DEPLOYMENT_MODES[0]
+));
+
+const deploymentModeBadge = computed(() => {
+  const mode = selectedDeploymentMode.value;
+  return mode ? `${mode.badge} · ${mode.summary}` : '';
+});
+
+const performanceModeSelected = computed(() => deploymentMode.value === 'performance');
+
+const deploymentTransitionText = computed(() => (
+  performanceModeSelected.value
+    ? '正在写入性能模式配置，生成 SQLite 到 PostgreSQL 同步计划…'
+    : '正在写入部署模式配置…'
+));
+
+function storageLabel(mode: string): string {
+  return mode === 'local_sqlite'
+    ? '本地数据库（SQLite）'
+    : mode === 'remote_postgresql'
+      ? '远程 PostgreSQL'
+      : '本地数据库';
+}
+
+function onDeploymentModeChange() {
+  const selected = selectedDeploymentMode.value;
+  if (selected?.aiMode === 'online' || selected?.aiMode === 'offline') {
+    aiMode.value = selected.aiMode;
+  }
+  deploymentStatusMessage.value = performanceModeSelected.value
+    ? '性能模式需要 PostgreSQL，并会在保存后生成 SQLite 到 PG 的同步计划。'
+    : '';
+}
+
 async function loadDesktopDatabaseStatus() {
+  let triedDeploymentEndpoint = false;
+  try {
+    triedDeploymentEndpoint = true;
+    const deploymentRes = await api.get<DesktopDeploymentResponse>('/api/desktop/deployment');
+    const deployment = (deploymentRes?.data ?? deploymentRes) as DesktopDeploymentResponse;
+    if (deployment?.success && deployment.desktopMode !== false) {
+      desktopDatabaseVisible.value = true;
+      if (Array.isArray(deployment.modes) && deployment.modes.length) {
+        deploymentModes.value = deployment.modes;
+      }
+      deploymentMode.value = normalizeDeploymentModeId(deployment.currentMode);
+      onDeploymentModeChange();
+      const db = deployment.database || {};
+      const mode = String(db.storageMode || '');
+      databaseStorageLabel.value = storageLabel(mode);
+      currentDbPath.value = String(db.sqlitePath || db.databaseUrlRedacted || '');
+      postgresConfigured.value = Boolean(String(db.postgresUrlRedacted || '').trim());
+      deploymentSyncCommand.value = String(deployment.syncPlan?.syncCommand || '');
+      deploymentRestartRequired.value = Boolean(deployment.restartRequired);
+      return;
+    }
+  } catch {
+    // 老后端或 Web 模式下继续走 /api/desktop/status 兼容路径。
+  }
+
   try {
     const res = await api.get<{ data?: Record<string, unknown>; desktopMode?: boolean; storageMode?: string }>('/api/desktop/status');
     const data = (res?.data ?? res) as Record<string, unknown>;
@@ -1771,16 +1924,14 @@ async function loadDesktopDatabaseStatus() {
     }
     desktopDatabaseVisible.value = true;
     const mode = String(data.storageMode || '');
-    databaseStorageLabel.value =
-      mode === 'local_sqlite'
-        ? '本地数据库（SQLite）'
-        : mode === 'remote_postgresql'
-          ? '远程 PostgreSQL'
-          : '本地数据库';
+    databaseStorageLabel.value = storageLabel(mode);
     if (data.database) {
       currentDbPath.value = String(data.database);
     }
   } catch {
+    if (!triedDeploymentEndpoint) {
+      deploymentStatusMessage.value = '';
+    }
     desktopDatabaseVisible.value = false;
     databaseStorageLabel.value = '';
     currentDbPath.value = '';
@@ -2025,6 +2176,11 @@ async function loadPreferences() {
 async function saveSettings() {
   loading.value = true;
   try {
+    if (desktopDatabaseVisible.value && performanceModeSelected.value && !postgresUrlDraft.value.trim() && !postgresConfigured.value) {
+      await appAlert('切换性能模式前请填写 PostgreSQL 连接地址。');
+      return;
+    }
+    const deploymentResult = await saveDeploymentSettings();
     const saveResults = await Promise.all([
       api.post<ApiMessageResult>('/api/preferences', {
         user_id: 'default',
@@ -2046,12 +2202,42 @@ async function saveSettings() {
         name: normalizedAssistantName.value
       }
     }));
-    await appAlert('设置已保存');
+    const restartHint = deploymentResult?.restartRequired ? '，部署模式需重启后完全生效' : '';
+    await appAlert(`设置已保存${restartHint}`);
   } catch (e: unknown) {
     console.error('保存设置失败:', e);
     await appAlert(`保存失败: ${errorMessage(e)}`);
   } finally {
     loading.value = false;
+  }
+}
+
+async function saveDeploymentSettings(): Promise<DesktopDeploymentUpdateResponse | null> {
+  if (!desktopDatabaseVisible.value) return null;
+  deploymentSaving.value = true;
+  deploymentStatusMessage.value = '';
+  deploymentSyncCommand.value = '';
+  try {
+    const payload: { mode: DeploymentModeId; postgresUrl?: string } = {
+      mode: deploymentMode.value,
+    };
+    const pgUrl = postgresUrlDraft.value.trim();
+    if (pgUrl) payload.postgresUrl = pgUrl;
+    const result = await api.put<DesktopDeploymentUpdateResponse>('/api/desktop/deployment', payload);
+    const data = (result?.data ?? result) as DesktopDeploymentUpdateResponse;
+    if (!data?.success) throw new Error('部署模式保存失败');
+    const db = data.database || {};
+    databaseStorageLabel.value = storageLabel(String(db.storageMode || ''));
+    currentDbPath.value = String(db.sqlitePath || db.databaseUrlRedacted || currentDbPath.value || '');
+    postgresConfigured.value = postgresConfigured.value || Boolean(pgUrl || String(db.postgresUrlRedacted || '').trim());
+    deploymentRestartRequired.value = Boolean(data.restartRequired);
+    deploymentSyncCommand.value = String(data.syncPlan?.syncCommand || '');
+    deploymentStatusMessage.value = performanceModeSelected.value
+      ? '性能模式配置已写入；SQLite→PG 同步计划已生成，重启后完全生效。'
+      : '部署模式配置已写入。';
+    return data;
+  } finally {
+    deploymentSaving.value = false;
   }
 }
 
@@ -2809,6 +2995,27 @@ select.settings-item__control,
   min-width: 0;
 }
 
+.settings-item--stacked {
+  grid-template-columns: var(--settings-icon-size) 1fr minmax(220px, 52%);
+  align-items: start;
+}
+
+.settings-item--stacked .settings-item__icon {
+  margin-top: 2px;
+}
+
+.settings-item__control--wide {
+  max-width: none;
+}
+
+.settings-item__hint {
+  grid-column: 2 / 4;
+  margin: -2px 0 2px;
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .settings-item__save-btn {
   flex-shrink: 0;
   border: 1px solid #93c5fd;
@@ -2874,6 +3081,69 @@ select.settings-item__control,
 .settings-item__value--mono {
   font-family: ui-monospace, Consolas, monospace;
   font-size: 11px;
+}
+
+.deployment-transition {
+  margin: 10px var(--settings-row-pad-x) 0;
+  padding: 10px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e3a8a;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.deployment-transition--done {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.deployment-transition__spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(37, 99, 235, 0.25);
+  border-top-color: #2563eb;
+  animation: settings-spin 0.8s linear infinite;
+  flex: 0 0 auto;
+}
+
+.deployment-transition__done {
+  color: #16a34a;
+}
+
+.deployment-sync-command {
+  margin: 8px var(--settings-row-pad-x) 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #111827;
+  color: #d1d5db;
+  font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-fade-enter-active,
+.settings-fade-leave-active {
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.settings-fade-enter-from,
+.settings-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+
+@keyframes settings-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .settings-primary-btn {
@@ -3789,6 +4059,14 @@ select.settings-item__control,
     justify-self: stretch;
     max-width: none;
     text-align: left;
+  }
+
+  .settings-item--stacked {
+    grid-template-columns: var(--settings-icon-size) 1fr;
+  }
+
+  .settings-item__hint {
+    grid-column: 2;
   }
 
   .intent-showcase-grid {

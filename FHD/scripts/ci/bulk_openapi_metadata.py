@@ -19,7 +19,7 @@ def main() -> int:
         sys.path.insert(0, str(root))
 
     checker = __import__(
-        "scripts.ci.check_openapi_consistency",
+        "scripts.tools.check_openapi_consistency",
         fromlist=["collect_openapi_operations", "check_operation_quality"],
     )
     from app.fastapi_app import get_fastapi_app

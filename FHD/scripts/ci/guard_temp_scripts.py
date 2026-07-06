@@ -11,7 +11,7 @@ from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
 FORBIDDEN_BASENAMES = {"_find_zero.py", "_analyze_coverage.py"}
-TEMP_PREFIXES = ("fix_", "check_", "final_", "recover_")
+TEMP_PREFIXES = ("fix_", "check_", "final_", "recover_", "debug_", "test_")
 OPS_THROWAWAY_PATTERNS = (
     re.compile(r"^collect_\d+days?\.sh$"),
     re.compile(r"^collect_.*_k8s\.sh$"),

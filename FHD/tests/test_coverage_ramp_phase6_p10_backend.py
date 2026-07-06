@@ -1299,6 +1299,140 @@ def test_run_interactive_chat_returns_reasoning_without_action_handlers() -> Non
     mock_mm.remember.assert_called_once()
 
 
+def test_run_collaboration_context_returns_reasoning_without_action_handlers() -> None:
+    agent = EmployeeAgent("dep-1")
+    pack = {
+        "pack_id": "dep-1",
+        "version": "1.0.0",
+        "manifest": {"name": "上游架构员工"},
+        "pack_dir": "/tmp/dep-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    reasoning = {"reasoning": "上游建议：先保持接口兼容，再分阶段迁移。", "input": {}}
+    with (
+        patch(
+            "app.application.employee_runtime.agent.load_employee_pack_from_disk",
+            return_value=pack,
+        ),
+        patch(
+            "app.application.employee_runtime.agent.parse_employee_config_v2",
+            return_value={},
+        ),
+        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._handler_list",
+            return_value=["direct_python"],
+        ),
+        patch(
+            "app.application.employee_runtime.agent.gate_action_or_block",
+            return_value=gate,
+        ),
+        patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
+        patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+        patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
+        patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
+        patch(
+            "app.application.employee_runtime.agent._ex._memory_light",
+            return_value={"session": {}},
+        ),
+        patch(
+            "app.application.employee_runtime.agent._ex._cognition_fhd",
+            return_value=reasoning,
+        ),
+        patch("app.application.employee_runtime.agent._ex._actions_fhd") as mock_actions,
+        patch("app.application.employee_runtime.metrics.record_employee_run") as mock_record,
+    ):
+        mock_scope_cls.return_value = MagicMock()
+        mock_mm = MagicMock()
+        mock_mm_cls.return_value = mock_mm
+        mock_mm.recall.return_value = MemoryContext()
+
+        out = agent.run(
+            "评审主员工任务",
+            input_data={
+                "source": "employee_collaboration",
+                "invoke_mode": "collaboration_context",
+            },
+        )
+
+    assert out["success"] is True
+    assert out["result"]["summary"] == "collaboration context"
+    assert out["result"]["outputs"][0]["handler"] == "collaboration_context"
+    assert out["result"]["outputs"][0]["output"] == "上游建议：先保持接口兼容，再分阶段迁移。"
+    mock_upstream.assert_not_called()
+    mock_actions.assert_not_called()
+    mock_record.assert_called_once()
+
+
+def test_run_collaboration_context_cognition_error_degrades_to_context() -> None:
+    agent = EmployeeAgent("dep-1")
+    pack = {
+        "pack_id": "dep-1",
+        "version": "1.0.0",
+        "manifest": {"name": "上游架构员工"},
+        "pack_dir": "/tmp/dep-1",
+    }
+    gate = {"ok": True, "risk_level": "low", "reason": "low"}
+    reasoning = {"reasoning": "", "error": "llm timeout", "input": {}}
+    with (
+        patch(
+            "app.application.employee_runtime.agent.load_employee_pack_from_disk",
+            return_value=pack,
+        ),
+        patch(
+            "app.application.employee_runtime.agent.parse_employee_config_v2",
+            return_value={},
+        ),
+        patch("app.application.employee_runtime.agent._ex._normalize_actions_cfg", return_value={}),
+        patch(
+            "app.application.employee_runtime.agent._ex._handler_list",
+            return_value=["direct_python"],
+        ),
+        patch(
+            "app.application.employee_runtime.agent.gate_action_or_block",
+            return_value=gate,
+        ),
+        patch("app.application.employee_runtime.agent.MemoryScope.from_config") as mock_scope_cls,
+        patch("app.application.employee_runtime.agent.EmployeeMemoryManager") as mock_mm_cls,
+        patch("app.application.employee_runtime.agent.build_employee_context"),
+        patch.object(EmployeeAgent, "_run_upstream_collaboration") as mock_upstream,
+        patch.object(EmployeeAgent, "_perceive", return_value={"normalized_input": {}}),
+        patch(
+            "app.application.employee_runtime.agent._ex._memory_light",
+            return_value={"session": {}},
+        ),
+        patch(
+            "app.application.employee_runtime.agent._ex._cognition_fhd",
+            return_value=reasoning,
+        ),
+        patch("app.application.employee_runtime.agent._ex._actions_fhd") as mock_actions,
+        patch("app.application.employee_runtime.metrics.record_employee_run") as mock_record,
+    ):
+        mock_scope_cls.return_value = MagicMock()
+        mock_mm = MagicMock()
+        mock_mm_cls.return_value = mock_mm
+        mock_mm.recall.return_value = MemoryContext()
+
+        out = agent.run(
+            "评审主员工任务",
+            input_data={
+                "source": "employee_collaboration",
+                "invoke_mode": "collaboration_context",
+            },
+        )
+
+    assert out["success"] is True
+    assert out["degraded"] is True
+    assert out["result"]["summary"] == "collaboration context"
+    assert out["result"]["cognition_error"] == "llm timeout"
+    assert out["result"]["outputs"][0]["handler"] == "collaboration_context"
+    assert "上游架构员工 协作上下文暂不可用" in out["result"]["outputs"][0]["output"]
+    mock_upstream.assert_not_called()
+    mock_actions.assert_not_called()
+    mock_record.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # EmployeeAgent — run (full success path with agent handler)
 # ---------------------------------------------------------------------------

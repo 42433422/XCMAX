@@ -60,6 +60,39 @@ export type ForcePushUserEntitlementsPayload = {
   installed_mods?: Record<string, unknown>[];
 };
 
+export type CurrentEntitlementsSyncStatus = {
+  has_snapshot: boolean;
+  updated_at_ms: number;
+  account?: {
+    market_user_id?: number | string | null;
+    username?: string;
+    account_kind?: string;
+    market_is_enterprise?: boolean;
+    market_is_admin?: boolean;
+  } | null;
+  snapshot?: {
+    market_user_id?: string;
+    username?: string;
+    email?: string;
+    is_admin?: boolean;
+    is_enterprise?: boolean;
+    profile?: {
+      tier?: string;
+      industry_id?: string;
+      account_tier?: string;
+      budget_range?: string;
+      entitled_industries?: string[];
+    };
+    mod_ids?: string[];
+    wallet?: Record<string, unknown> | null;
+    meta?: {
+      updated_at_ms?: number;
+      target?: string;
+      push_mode?: string;
+    };
+  } | null;
+};
+
 export const xcmaxAdminApi = {
   listUsers() {
     return api.get('/api/xcmax/admin/market/users');
@@ -111,6 +144,17 @@ export const xcmaxAdminApi = {
   },
   forcePushUserEntitlements(userId: number, payload: ForcePushUserEntitlementsPayload) {
     return api.post(`/api/xcmax/admin/market/users/${userId}/entitlements/push`, payload);
+  },
+  pullSync() {
+    return api.post<{ data?: { pull?: Record<string, unknown>; apply?: Record<string, unknown> } }>(
+      '/api/xcmax/sync/pull',
+      {},
+    );
+  },
+  getCurrentEntitlementsSyncStatus() {
+    return api.get<{ data?: CurrentEntitlementsSyncStatus; message?: string }>(
+      '/api/xcmax/sync/entitlements/current',
+    );
   },
   startImpersonate(marketUserId: number, username: string) {
     return api.post('/api/xcmax/admin/impersonate', {

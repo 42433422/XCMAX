@@ -15,20 +15,17 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-try:
-    from app.services.distillation_trainer import (
-        CHECKPOINT_DIR,
-        DISTILL_DIR,
-        ID_TO_LABEL,
-        INTENT_LABELS,
-        LABEL_TO_ID,
-        LOG_DIR,
-        DistillationDataset,
-        DistillationTrainer,
-        main,
-    )
-except ImportError:
-    pytest.skip("distillation_trainer dependencies unavailable", allow_module_level=True)
+from app.services.distillation_trainer import (
+    CHECKPOINT_DIR,
+    DISTILL_DIR,
+    ID_TO_LABEL,
+    INTENT_LABELS,
+    LABEL_TO_ID,
+    LOG_DIR,
+    DistillationDataset,
+    DistillationTrainer,
+    main,
+)
 
 torch_available = True
 try:

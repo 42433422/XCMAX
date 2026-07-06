@@ -1,0 +1,87 @@
+# 元守卫: 检测 PR 是否修改了 CODEOWNERS 标注的守卫路径。
+# 若修改且 PR 未带 "guard-approved" label,则硬失败。
+# 用途: 防止 AI 在修业务 bug 时顺手把 CI 守卫/覆盖率底线/棘轮基线改弱。
+#
+# 与 .github/CODEOWNERS 配合使用——CODEOWNERS 标注路径(文档/提示作用),
+# 本 workflow 真正执行强制阻断(单人仓库里 owner 不能自批准 PR,
+# 所以用 label 机制替代人工 review)。
+#
+# 启用步骤(需 owner 在 GitHub UI 操作):
+#   1. Settings → Branches → main → Required status checks
+#      添加 "Guard Guards (meta-guard)"
+#   2. 若需跳过本守卫: PR 页面添加 "guard-approved" label
+#      (仅 owner 有权限加 label)
+name: Guard Guards
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'FHD/.github/workflows/**'
+      - 'FHD/scripts/ci/**'
+      - 'FHD/scripts/arch_fitness.py'
+      - 'FHD/scripts/dev/coverage_ratchet.py'
+      - 'FHD/scripts/dev/count_type_debt.py'
+      - 'FHD/scripts/dev/count_raw_sql.py'
+      - 'FHD/scripts/dev/verify_version_anchors.py'
+      - 'FHD/pyproject.toml'
+      - 'FHD/metrics/coverage_ratchet_baseline.json'
+      - 'FHD/frontend/vitest.config.js'
+      - 'FHD/tests/release/**'
+      - 'FHD/tests/release_gate/**'
+      - '.trae/rules/**'
+      - '.github/CODEOWNERS'
+      - '.github/workflows/guard-guards.yml'
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  guard-guards:
+    name: Guard Guards (meta-guard)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check guard-approved label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          set -euo pipefail
+          echo "🛡️  检测到本 PR 修改了守卫/红线路径,需人工批准。"
+          echo ""
+          echo "守卫路径包括:"
+          echo "  - CI workflows (.github/workflows/, FHD/.github/workflows/)"
+          echo "  - CI 守卫脚本 (FHD/scripts/ci/, FHD/scripts/dev/coverage_ratchet.py 等)"
+          echo "  - 覆盖率/类型/SQL 棘轮基线 (pyproject.toml, coverage_ratchet_baseline.json, vitest.config.js)"
+          echo "  - Release Gate 测试 (FHD/tests/release/, FHD/tests/release_gate/)"
+          echo "  - Trae 工程规则 (.trae/rules/)"
+          echo "  - CODEOWNERS / 本 workflow 自身"
+          echo ""
+          echo "PR 作者: $PR_AUTHOR"
+
+          # 检查 PR 是否带 guard-approved label
+          LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '.[].name' 2>/dev/null || echo "")
+
+          if echo "$LABELS" | grep -qx "guard-approved"; then
+            echo ""
+            echo "✅ PR 带 'guard-approved' label,人工批准已确认,守卫通过。"
+            exit 0
+          fi
+
+          echo ""
+          echo "❌ PR 未带 'guard-approved' label,守卫阻断。"
+          echo ""
+          echo "若本次守卫改动是经过人工确认的,请:"
+          echo "  1. 在 PR 页面右侧 Labels 处添加 'guard-approved'"
+          echo "  2. 重新运行本检查(re-run failed jobs)"
+          echo ""
+          echo "若这是 AI 自动化流程误改了守卫路径,请回滚对以下路径的修改:"
+          echo "  - .github/workflows/, FHD/.github/workflows/"
+          echo "  - FHD/scripts/ci/, FHD/scripts/dev/coverage_ratchet.py 等"
+          echo "  - FHD/pyproject.toml, FHD/metrics/coverage_ratchet_baseline.json"
+          echo "  - FHD/tests/release/, FHD/tests/release_gate/"
+          echo "  - .trae/rules/, .github/CODEOWNERS, .github/workflows/guard-guards.yml"
+          exit 1

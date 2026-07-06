@@ -91,6 +91,18 @@ describe('xcmaxAdminApi', () => {
     )
   })
 
+  it('pullSync calls POST /api/xcmax/sync/pull', async () => {
+    await xcmaxAdminApi.pullSync()
+    const api = (await import('./core')).default
+    expect(api.post).toHaveBeenCalledWith('/api/xcmax/sync/pull', {})
+  })
+
+  it('getCurrentEntitlementsSyncStatus calls current entitlement status endpoint', async () => {
+    await xcmaxAdminApi.getCurrentEntitlementsSyncStatus()
+    const api = (await import('./core')).default
+    expect(api.get).toHaveBeenCalledWith('/api/xcmax/sync/entitlements/current')
+  })
+
   it('startImpersonate calls POST with market_user_id and username', async () => {
     await xcmaxAdminApi.startImpersonate(10, 'testuser')
     const api = (await import('./core')).default

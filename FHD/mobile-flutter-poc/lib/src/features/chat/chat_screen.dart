@@ -8,6 +8,7 @@ import '../../data/mobile_repository_scope.dart';
 import '../../models/conversation.dart';
 import '../../policy/android_error_policy.dart';
 import '../../policy/avatar_policy.dart';
+import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
@@ -532,8 +533,14 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _startVoiceInput() {
+  Future<void> _startVoiceInput() async {
     setState(() => _showToolPanel = false);
+    final granted = await const AndroidRecordAudioPermission().ensureGranted();
+    if (!mounted) return;
+    if (!granted) {
+      _showMessage('需要麦克风权限才能使用语音输入');
+      return;
+    }
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,

@@ -119,6 +119,71 @@ async def test_execute_compat_chat_attaches_agent_run_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_compat_chat_uses_ai_chat_mainline_when_enabled() -> None:
+    body = XcagiCompatChatBody(message="查询产品库", user_id="u42", source="desktop")
+
+    with (
+        patch("app.application.planner_compat_service.set_llm_mode"),
+        patch(
+            "app.application.planner_compat_service._merge_runtime_context_with_message_paths",
+            return_value=({"use_ai_chat_mainline": True}, []),
+        ),
+        patch("app.application.planner_compat_service.assert_p2_elevated_claim_or_raise"),
+        patch("app.application.planner_compat_service.resolve_ai_tier", return_value="p1"),
+        patch(
+            "app.application.planner_compat_service.runtime_context_with_tier",
+            return_value={"use_ai_chat_mainline": True, "ai_tier": "p1"},
+        ),
+        patch(
+            "app.application.kitten_planner_context.enrich_kitten_analyzer_runtime",
+            new_callable=AsyncMock,
+            return_value={"use_ai_chat_mainline": True, "ai_tier": "p1"},
+        ),
+        patch("app.application.kitten_planner_context.kitten_reply_attachments", return_value={}),
+        patch(
+            "app.application.planner_compat_service._ensure_chat_db_read_authorized",
+            return_value=(True, None),
+        ),
+        patch(
+            "app.application.planner_compat_service._message_requires_db_read_token",
+            return_value=False,
+        ),
+        patch(
+            "app.application.planner_compat_service.planner_workflow_interrupt_reply",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._ensure_vector_index_if_needed",
+            return_value=None,
+        ),
+        patch(
+            "app.application.planner_compat_service._xcagi_chat_timeout_seconds",
+            return_value=30.0,
+        ),
+        patch(
+            "app.application.planner_compat_service._attach_compat_chat_trace",
+            side_effect=lambda payload, *_args, **_kwargs: payload,
+        ),
+        patch(
+            "app.application.planner_compat_service._execute_ai_chat_mainline",
+            new_callable=AsyncMock,
+            return_value={
+                "success": True,
+                "response": "mainline",
+                "data": {"text": "mainline"},
+            },
+        ) as mock_mainline,
+        patch("app.application.planner_compat_service.run_agent_chat") as mock_legacy,
+    ):
+        result = await execute_compat_chat(_make_request(), body)
+
+    assert result["success"] is True
+    assert result["response"] == "mainline"
+    mock_mainline.assert_awaited_once()
+    mock_legacy.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_execute_compat_chat_observes_reply_tool_records_across_thread() -> None:
     repo = InMemoryAgentRunRepository()
     body = XcagiCompatChatBody(message="查产品 5003", user_id="u42", source="desktop")
