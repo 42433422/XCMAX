@@ -7,6 +7,7 @@ import hmac
 import json
 import logging
 import os
+import secrets
 import time
 from typing import Any, cast
 from urllib.parse import urlencode
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 _STATE_TTL_SECONDS = 600
 _discovery_cache: dict[str, Any] = {}
+
+# SECRET_KEY 缺失/过短时的进程级随机回退（不可预测），替代旧的硬编码
+# ``xcagi-dev-oidc-state-key``——固定值会让任何人都能伪造 OIDC state 的 HMAC 签名。
+# 生产应显式配置 SECRET_KEY；随机回退仅影响进程重启后未完成的 OIDC 登录流程（state TTL 600s）。
+_FALLBACK_STATE_SECRET = secrets.token_urlsafe(48)
+_warned_weak_secret = False
 
 
 def oidc_enabled() -> bool:
@@ -30,9 +37,16 @@ def oidc_enabled() -> bool:
 
 def _secret_key() -> str:
     key = (os.environ.get("SECRET_KEY") or os.environ.get("XCAGI_SECRET_KEY") or "").strip()
-    if len(key) < 16:
-        key = "xcagi-dev-oidc-state-key"
-    return key
+    if len(key) >= 16:
+        return key
+    global _warned_weak_secret
+    if not _warned_weak_secret:
+        logger.warning(
+            "SECRET_KEY 未配置或过短（<16 字符），OIDC state 签名使用进程级随机密钥"
+            "（重启后未完成的 OIDC 登录需重新发起）"
+        )
+        _warned_weak_secret = True
+    return _FALLBACK_STATE_SECRET
 
 
 def sign_oidc_state(*, return_to: str = "") -> str:
