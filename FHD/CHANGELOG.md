@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · 规则映射员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-rules-map-employee`（Excel 规则映射员）双动作：`infer` 从读取员模板 workbook.json 通用推断块结构（竖向合并周期投票）/键列（覆盖率×唯一率）/日历锚（1..N 等差序列）/公式区/公式模板（跨块数字等差拟合），产出可固化 rules.json 提案（confidences + open_questions）；`compile` 把固化规则 + 槽位记录编译为写入员 plan.json（day/band/entry 越界校验、公式按块实例化、expected 对账基准、rules_ref sha256 追溯）
+- **test(mods)**：`test_excel_rules_map_employee.py` 合成模板全字段推断 + 真实太阳鸟模板金样对照（151 块/31 天日历/16 公式列，实例化公式与模板原文逐字一致）+ 读→推→编→写→重读 e2e；真实模板四段全链冒烟通过
+
 ### 表格员工闭环 · 读取员/模板写入员（2026-07-06 · v10 线内迭代）
 
 - **feat(employee)**：新增 `excel-template-write-employee`（Excel 模板写入员）：模板 xlsx + `plan.json` 写入计划 → 回填结果，phases（clear_ranges/cell_writes/formula_writes/retain_sheets）顺序执行，模板样式/合并/既有公式保真，`protected_ranges` 拒写并记 violation，输出 `outputs/filled.xlsx` + `write_report.json`（透传 `expected` 供质检员对账）
