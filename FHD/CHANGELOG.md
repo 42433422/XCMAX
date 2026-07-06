@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 表格员工闭环 · 质检员（2026-07-06 · v10 线内迭代）
+
+- **feat(employee)**：新增 `excel-qc-employee`（Excel 质检员）：对回填结果六节独立对账——计划符合性（cell/formula/clear/retain 逐格比对）、保护区完整性（原模板 diff）、expected 三方重算（映射员自述 ↔ 计划重算 ↔ 输出文件重算）、公式健康（#REF!/悬空 sheet 引用）、rules_ref 哈希追溯、块结构漂移；verdict PASS/WARN/FAIL + blame 问责路由（writer_or_plan/mapper/pipeline/rules_stale）；不 import 映射员/写入员代码，缺输入的节如实 skipped
+- **test(mods)**：`test_excel_qc_employee.py` 12 用例：诚实链路 PASS、六类篡改逐一检出（写入篡改/残值/伪造 expected/保护区破坏/#REF!/规则漂移）+ 真实太阳鸟模板五段全链质检（1290 格核对、3458 公式扫描、80 块零漂移）
+
 ### 表格员工闭环 · 规则映射员（2026-07-06 · v10 线内迭代）
 
 - **feat(employee)**：新增 `excel-rules-map-employee`（Excel 规则映射员）双动作：`infer` 从读取员模板 workbook.json 通用推断块结构（竖向合并周期投票）/键列（覆盖率×唯一率）/日历锚（1..N 等差序列）/公式区/公式模板（跨块数字等差拟合），产出可固化 rules.json 提案（confidences + open_questions）；`compile` 把固化规则 + 槽位记录编译为写入员 plan.json（day/band/entry 越界校验、公式按块实例化、expected 对账基准、rules_ref sha256 追溯）
