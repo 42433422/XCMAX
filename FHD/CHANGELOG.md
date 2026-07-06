@@ -6,6 +6,16 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 生产加固 P0（2026-07-06 · v10 线内迭代）
+
+> 方案与路线图见 [`specs/production-hardening-2026-07.md`](../specs/production-hardening-2026-07.md)
+
+- **fix(android/security)**：WebView 凭证注入判定重写——旧 `url.contains("xiu-ci.com")`/`contains("10.")` 子串匹配可被 `https://evil.com/?xiu-ci.com`、`http://evil.com/10.html` 绕过导致 token 泄漏；新 `UrlHostPolicy` 严格 host 解析（HTTPS+精确域 / RFC1918 字面 IPv4），`ModWebViewScreen`/`DesktopToolWebView` 加载前白名单强校验
+- **fix(auth/security)**：OIDC state 签名移除硬编码回退密钥 `xcagi-dev-oidc-state-key`（可伪造 state），改进程级随机回退 + 告警（与 mobile_jwt 同模式）
+- **feat(perf)**：`ConditionalGZipMiddleware` 选择性响应压缩——仅压缩单块完整 json/text 响应（openapi.json 等大响应受益），SSE/流式零缓冲透传，规避 Starlette GZipMiddleware 的 SSE 卡顿问题
+- **fix(desktop/security)**：`shell.openExternal` 增加 scheme 白名单（http/https/mailto），阻断 `file:`/`smb:`/自定义协议逃逸
+- **chore(ios)**：`project.yml` MARKETING_VERSION `1.0.0` → `10.0.0` 对齐 v10 全线锚点（CI 已注入同值，修本地 xcodegen 不一致）
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
