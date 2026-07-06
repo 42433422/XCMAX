@@ -451,6 +451,50 @@ def test_is_desktop_online_branches():
     assert relay._is_desktop_online("paired", now.replace(tzinfo=None).isoformat()) is True
 
 
+def test_get_task_is_scoped_to_owning_user(monkeypatch, tmp_path):
+    """跨用户不得读到他人中继任务：user B 查 user A 的 task → None（隔离负向测试）。"""
+    relay = _load_mobile_relay_service_module()
+    engine = create_engine(f"sqlite:///{tmp_path / 'relay-scope.db'}")
+    session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def test_db():
+        db = session_factory()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+    monkeypatch.setattr(relay, "get_db", test_db)
+    service = relay.MobileRelayService()
+    reg = service.register_desktop(
+        label="pc", device_id="mac-1", relay_base_url="https://r.test/api"
+    )
+    service.confirm_mobile(
+        user_id=7, username="owner", relay_id=reg["relay_id"], code=reg["pairing_code"]
+    )
+    task = service.create_task(
+        user_id=7, relay_id=reg["relay_id"], kind="codex.invoke", payload={"message": "x"}
+    )
+    assert task is not None
+
+    # 归属用户可读
+    assert service.get_task(user_id=7, task_id=task["task_id"]) is not None
+    # 其他用户读不到（JOIN mobile_user_id 限定）
+    assert service.get_task(user_id=8, task_id=task["task_id"]) is None
+    # 其他用户也不能对该 relay 建任务（非其绑定）
+    assert (
+        service.create_task(
+            user_id=8, relay_id=reg["relay_id"], kind="codex.invoke", payload={}
+        )
+        is None
+    )
+
+
 def test_desktop_online_reflects_poll_heartbeat(monkeypatch, tmp_path):
     """绑定后未 poll 视为离线；poll 心跳后在线；心跳过期回到离线（不得假装在线）。"""
     relay = _load_mobile_relay_service_module()
