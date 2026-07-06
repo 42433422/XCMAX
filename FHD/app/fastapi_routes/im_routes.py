@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -444,6 +445,156 @@ async def im_mark_read(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("im_mark_read")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+def _employee_reply_text(result: Any) -> str:
+    """从 execute_employee_task_local 结果里提取一段人类可读回复。"""
+    if not isinstance(result, dict):
+        return str(result or "").strip()
+    for key in ("response", "reply", "summary", "message", "text"):
+        value = result.get(key)
+        if value:
+            return str(value).strip()
+    data = result.get("data")
+    if isinstance(data, dict):
+        for key in ("response", "reply", "summary", "message", "text"):
+            value = data.get(key)
+            if value:
+                return str(value).strip()
+    outputs = result.get("outputs")
+    if isinstance(outputs, list):
+        for out in outputs:
+            if isinstance(out, dict):
+                for key in ("summary", "message", "text", "error"):
+                    value = out.get(key)
+                    if value:
+                        return str(value).strip()
+    return ""
+
+
+async def _run_duty_employee_reply(employee_id: str, message: str, uid: int, sid: str) -> str:
+    """跑本机员工 agent loop 取一段回复文本；失败降级为诚实提示（不抛，保证会话可持久化）。"""
+    import asyncio
+
+    from app.application.employee_runtime.executor import execute_employee_task_local
+
+    payload = {
+        "trigger": "admin_im_chat",
+        "invoke_mode": "interactive_chat",
+        "source": "admin_console",
+        "client_surface": "admin_console",
+        "employee_id": employee_id,
+    }
+    try:
+        result = await asyncio.to_thread(
+            execute_employee_task_local,
+            employee_id,
+            message,
+            payload,
+            user_id=uid,
+            workspace_root=None,
+            session_id=sid or f"admin_im_{uid}",
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin duty employee execute failed: %s", exc)
+        return "员工暂时无法响应，请确认本机员工包已安装且电脑执行端在线后重试。"
+    text = _employee_reply_text(result)
+    if text:
+        return text
+    if isinstance(result, dict) and result.get("success") is False:
+        return "员工未能完成本次任务，请确认员工包已安装或稍后重试。"
+    return "（员工未返回内容）"
+
+
+@router.get("/api/admin/employees/{employee_id}/messages")
+def admin_employee_messages(
+    request: Request,
+    employee_id: str,
+    user: CurrentUser = Depends(require_identified_user),
+    limit: int = Query(default=50, ge=1, le=100),
+):
+    """管理端 AI 员工 1:1 IM 历史（持久化 · 与手机端同一会话，刷新不丢）。"""
+    uid = _uid_for_request(request, user)
+    if uid <= 0:
+        return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+    _ensure_schema()
+    db = HostSessionLocal()
+    try:
+        svc = ImApplicationService(db)
+        emp_uid = svc.ensure_employee_user(pid)
+        conv = svc.get_or_create_direct(uid, emp_uid)
+        conv_id = int(conv["id"])
+        messages = svc.list_messages(conv_id, uid, limit=limit)
+        return {
+            "success": True,
+            "conversation_id": conv_id,
+            "employee_user_id": emp_uid,
+            "messages": messages,
+        }
+    except PermissionError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_employee_messages")
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/employees/{employee_id}/messages")
+async def admin_employee_send(
+    request: Request,
+    employee_id: str,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端向 AI 员工发消息：用户消息与员工回复都持久化到同一 IM 会话。
+
+    与手机端 ``/api/mobile/v1/employees/{id}/chat/stream`` 共用同一员工执行入口
+    （execute_employee_task_local），但把 transcript 落到 boss↔员工 的 IM 直连会话，
+    从而管理端刷新不丢、手机端读同一会话（PRODUCT_POLISH_CHECKLIST P1 路径三）。
+    """
+    from app.fastapi_routes.domains.misc.helpers import _session_id_from_request
+
+    uid = _uid_for_request(request, user)
+    if uid <= 0:
+        return JSONResponse({"success": False, "message": "请先登录"}, status_code=401)
+    pid = str(employee_id or "").strip()
+    if not pid:
+        return JSONResponse({"success": False, "message": "employee_id 必填"}, status_code=400)
+    text = str(body.get("message") or body.get("body") or "").strip()
+    if not text:
+        return JSONResponse({"success": False, "message": "消息不能为空"}, status_code=400)
+    display_name = str(body.get("display_name") or "").strip()
+    _ensure_schema()
+    sid = _session_id_from_request(request)
+    db = HostSessionLocal()
+    try:
+        svc = ImApplicationService(db)
+        emp_uid = svc.ensure_employee_user(pid, display_name=display_name)
+        conv = svc.get_or_create_direct(uid, emp_uid)
+        conv_id = int(conv["id"])
+        # 1) 持久化用户消息（真实事件先落库，即使随后员工执行失败也不丢）
+        svc.send_message(conv_id, uid, text)
+        # 2) 跑员工取回复
+        reply = await _run_duty_employee_reply(pid, text, uid, sid)
+        # 3) 持久化员工回复到同一会话
+        svc.send_message(conv_id, emp_uid, reply)
+        messages = svc.list_messages(conv_id, uid, limit=50)
+        return {"success": True, "conversation_id": conv_id, "messages": messages}
+    except PermissionError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=403)
+    except ValueError as exc:
+        return JSONResponse({"success": False, "message": str(exc)}, status_code=400)
+    except RECOVERABLE_ERRORS as exc:
+        logger.exception("admin_employee_send")
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()

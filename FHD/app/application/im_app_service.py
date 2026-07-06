@@ -8,7 +8,11 @@ from typing import Any
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session
 
-from app.application.im_employee_mixin import ImEmployeeMixin
+from app.application.im_employee_mixin import (
+    AI_EMPLOYEE_ROLE,
+    AI_EMPLOYEE_USERNAME_PREFIX,
+    ImEmployeeMixin,
+)
 from app.application.im_employee_peer import EmployeePeerMixin
 from app.db.models.im import ImConversation, ImConversationMember, ImMessage
 from app.db.models.user import User
@@ -225,19 +229,34 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
             )
         ).scalar_one_or_none()
 
+    @staticmethod
+    def _is_synthetic_system_peer(peer: User) -> bool:
+        """系统合成对端（全局账号，tenant_id 为空，所有租户可建联）。
+
+        含：企业专属客服、AI 员工合成账号——两套前缀均视为系统账号：
+        - ``emp:*``（EmployeePeerMixin）
+        - ``ai-employee:*`` + role ``ai_employee``（ImEmployeeMixin.ensure_employee_user）
+        """
+        username = str(getattr(peer, "username", "") or "")
+        role = str(getattr(peer, "role", "") or "")
+        return (
+            ImApplicationService._is_enterprise_dedicated_cs_user(peer)
+            or username.startswith("emp:")
+            or username.startswith(AI_EMPLOYEE_USERNAME_PREFIX)
+            or role == AI_EMPLOYEE_ROLE
+        )
+
     def _assert_direct_peer_allowed(self, user_id: int, peer_user_id: int) -> None:
         """直连会话租户边界：对端必须存在、启用，且与发起人同租户。
 
         与 ``list_contacts`` 的租户过滤对齐——不同企业的用户互相不可见，自然不可建联，
         堵住绕过联系人列表直接指定 ``peer_user_id`` 的跨租户建会话路径。
-        豁免系统合成对端：企业专属客服与 AI 员工合成账号（``emp:*``）为全局账号
-        （tenant_id 为空），所有租户都可与其建联。
+        系统合成对端（企业专属客服 / AI 员工）为全局账号，所有租户都可与其建联。
         """
         peer = self._db.get(User, int(peer_user_id))
         if peer is None or not bool(getattr(peer, "is_active", False)):
             raise ValueError("联系人不存在或已停用")
-        username = str(getattr(peer, "username", "") or "")
-        if self._is_enterprise_dedicated_cs_user(peer) or username.startswith("emp:"):
+        if self._is_synthetic_system_peer(peer):
             return
         me = self._db.get(User, int(user_id))
         my_tenant = getattr(me, "tenant_id", None) if me else None
