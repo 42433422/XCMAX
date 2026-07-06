@@ -22,6 +22,7 @@ import os
 import sys
 import types
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -223,9 +224,15 @@ def _set_stub(module_name: str, attr: str, value: Any) -> Any:
     return old
 
 
-def _make_client() -> TestClient:
+def _make_client(*, authed: bool = True) -> TestClient:
     app = FastAPI()
     app.include_router(_mod.router)
+    if authed:
+        # /install 现要求登录（get_logged_in_user）；多数分支测试不关心鉴权，
+        # 默认注入一个已登录用户，保持既有断言不变。
+        app.dependency_overrides[_mod.get_logged_in_user] = lambda: SimpleNamespace(
+            id=1, username="tester", is_active=True
+        )
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -1174,6 +1181,29 @@ class TestInstallRouteActivateFlag:
         assert resp.status_code == 200
         args, kwargs = mock_install.call_args
         assert args[0] == "alias-mod" or kwargs.get("pkg_id") == "alias-mod"
+
+    def test_install_requires_login(self):
+        """未登录不得安装任意市场包（云多租户隔离 P0）。
+
+        install 挂了 get_logged_in_user 依赖：模拟其抛 401（未登录），
+        断言 install 逻辑完全不执行。
+        """
+        app = FastAPI()
+        app.include_router(_mod.router)
+
+        def _deny():
+            raise HTTPException(status_code=401, detail="请先登录")
+
+        app.dependency_overrides[_mod.get_logged_in_user] = _deny
+        with patch.object(
+            _mod,
+            "_install_from_catalog",
+            AsyncMock(return_value=_mod.ModStoreInstallResult(success=True, message="ok")),
+        ) as mock_install:
+            with TestClient(app, raise_server_exceptions=False) as client:
+                resp = client.post("/install", json={"pkg_id": "m1", "version": "1.0"})
+        assert resp.status_code == 401
+        mock_install.assert_not_called()
 
 
 # ===========================================================================

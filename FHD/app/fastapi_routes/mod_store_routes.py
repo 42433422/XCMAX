@@ -10,8 +10,10 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.infrastructure.auth.dependencies import get_logged_in_user
 
 from app.application.mod_store_catalog_app import (
     catalog_base_url,
@@ -584,7 +586,11 @@ async def mod_store_upload() -> ModStoreNotImplementedResponse:
 
 
 @router.post("/install", response_model=ModStoreInstallResult)
-async def mod_store_install(request: Request) -> ModStoreInstallResult:
+async def mod_store_install(
+    request: Request, _user=Depends(get_logged_in_user)
+) -> ModStoreInstallResult:
+    # 安装任意市场包会向本机落地可执行代码，属敏感写操作，必须登录后执行
+    # （与 upload/模型下载一致；堵住云多租户下未鉴权装包，TO_9 S1）。
     payload = await _request_payload(request)
     pkg_id = _safe_text(payload.get("pkg_id") or payload.get("mod_id"))
     version = _safe_text(payload.get("version"))
