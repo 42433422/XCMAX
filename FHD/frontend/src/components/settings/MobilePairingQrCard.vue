@@ -79,6 +79,7 @@ import {
   resolvePairingPortHint,
   type PairingPayload,
 } from '@/api/mobilePairing';
+import { userFacingErrorMessage } from '@/utils/userFacingError';
 
 const loading = ref(false);
 const qrDataUrl = ref('');
@@ -174,7 +175,7 @@ async function refreshQr() {
     await renderPayload(payload);
   } catch (error: unknown) {
     qrDataUrl.value = '';
-    errorMessage.value = error instanceof Error ? error.message : '生成配对二维码失败';
+    errorMessage.value = userFacingErrorMessage(error, '生成配对二维码失败，请稍后重试');
   } finally {
     loading.value = false;
   }

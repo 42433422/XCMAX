@@ -372,6 +372,7 @@ import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';
 import { useXcmaxSync } from '@/composables/useXcmaxSync';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+import { userFacingErrorMessage } from '@/utils/userFacingError';
 import {
   YUANGON_AREAS,
   YUANGON_PKG_DESCRIPTIONS,
@@ -438,6 +439,10 @@ type DutyEmployeeEntry = {
   api_base_path: string;
   phone_channel: string;
   is_duty_employee_entry: true;
+  /** 统一员工身份契约：来自服务端；undefined = 未知（如离线兜底），不据此禁用操作 */
+  installed?: boolean;
+  runnable?: boolean;
+  source?: string;
 };
 
 type SystemEmployeeEntry = CodexSuperEmployeeEntry | ClaudeSuperEmployeeEntry | CursorSuperEmployeeEntry | DutyEmployeeEntry;
@@ -469,6 +474,9 @@ type AdminEmployeeApiItem = {
   status?: string;
   api_base_path?: string;
   phone_channel?: string;
+  installed?: boolean;
+  runnable?: boolean;
+  source?: string;
 };
 
 type AdminEmployeesPayload = {
@@ -811,7 +819,8 @@ function dutyContactLabel(channel: string): string {
 
 function systemEntryStatusLabel(entry: SystemEmployeeEntry): string {
   if (isSuperEmployeeEntry(entry)) return '多设备调度';
-  return entry.status === 'on_duty' ? '在岗员工' : '编制员工';
+  if (entry.status === 'on_duty') return '在岗员工';
+  return entry.installed === false ? '编制员工 · 未安装' : '编制员工';
 }
 
 function systemEntryIdentity(entry: SystemEmployeeEntry): string {
@@ -831,6 +840,7 @@ function systemEntryRuntimeStatus(entry: SystemEmployeeEntry): string {
   if (isSuperEmployeeEntry(entry)) {
     return codexBusy.value ? '提交中' : codexStreamActive.value ? '回复中' : '可派工';
   }
+  if (entry.runnable === false) return '未安装';
   return dutyEmployeeBusy.value && activeSystemEntry.value?.id === entry.id ? '执行中' : '可对话';
 }
 
@@ -867,10 +877,15 @@ function normalizeDutyEmployee(raw: AdminEmployeeApiItem): DutyEmployeeEntry | n
     api_base_path: String(raw.api_base_path || `/api/admin/employees/${id}`).trim(),
     phone_channel: String(raw.phone_channel || 'admin-duty').trim(),
     is_duty_employee_entry: true,
+    installed: typeof raw.installed === 'boolean' ? raw.installed : undefined,
+    runnable: typeof raw.runnable === 'boolean' ? raw.runnable : undefined,
+    source: typeof raw.source === 'string' ? raw.source : undefined,
   };
 }
 
 function fallbackDutyEmployees(): DutyEmployeeEntry[] {
+  // 离线兜底：只声明「编制员工」（planned），不得假装全员在岗；
+  // installed/runnable 留空表示未知，等 API 恢复后以服务端契约为准。
   const rows: AdminEmployeeApiItem[] = [];
   for (const area of Object.values(YUANGON_AREAS)) {
     for (const id of area.ids) {
@@ -879,7 +894,7 @@ function fallbackDutyEmployees(): DutyEmployeeEntry[] {
         name: YUANGON_PKG_ROLE_LABELS[id] || id,
         description: YUANGON_PKG_DESCRIPTIONS[id] || '',
         yuangon_area: area.label,
-        status: 'on_duty',
+        status: 'planned',
         api_base_path: `/api/admin/employees/${id}`,
         phone_channel: 'admin-duty',
       });
@@ -1432,7 +1447,7 @@ async function startChatWith(contact: ImContact): Promise<void> {
     await loadConversations();
     await selectConversation(conv.id);
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '发起会话失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '发起会话失败，请稍后重试'), 'error');
   } finally {
     busy.value = false;
   }
@@ -1453,7 +1468,7 @@ async function loadCodexConversation(options: { syncStream?: boolean } = {}): Pr
     await nextTick();
     scrollCodexToBottom();
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载 Codex 对话失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '加载 Codex 对话失败，请稍后重试'), 'error');
   } finally {
     focusCodexInput();
   }
@@ -1538,7 +1553,7 @@ async function onCodexSend(): Promise<void> {
     focusCodexInput();
   } catch (error) {
     stopCodexTypewriter(true);
-    showAppToast(error instanceof Error ? error.message : 'Codex 调用失败', 'error');
+    showAppToast(userFacingErrorMessage(error, 'Codex 调用失败，请稍后重试'), 'error');
   } finally {
     codexBusy.value = false;
     focusCodexInput();
@@ -1549,6 +1564,11 @@ async function onDutyEmployeeSend(): Promise<void> {
   const entry = activeSystemEntry.value;
   if (!entry || !isDutyEmployeeEntry(entry)) return;
   if (dutyEmployeeBusy.value) return;
+  // 未安装员工不可派工：明确告知下一步，而不是调用后返回难懂的执行错误。
+  if (entry.runnable === false) {
+    showAppToast(`「${entry.display_name}」尚未安装到本机，请先在扩展市场安装该员工包后再对话`, 'error');
+    return;
+  }
   const text = dutyEmployeeDraft.value.trim();
   if (!text) return;
   const localId = `duty-${entry.id}-${Date.now()}`;
@@ -1589,7 +1609,7 @@ async function onDutyEmployeeSend(): Promise<void> {
     appendDutyEmployeeMessage(entry.id, {
       id: `${localId}-error`,
       role: 'assistant',
-      body: error instanceof Error ? `调用失败：${error.message}` : '调用失败：未知错误',
+      body: userFacingErrorMessage(error, '员工暂时无法响应，请确认电脑执行端在线后重试'),
       created_at: new Date().toISOString(),
       status: '失败',
     });
@@ -1619,7 +1639,7 @@ async function loadContacts(): Promise<void> {
     contacts.value = await fetchImContacts();
     imApiReachable.value = true;
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载联系人失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '加载联系人失败，请稍后重试'), 'error');
   } finally {
     contactsLoading.value = false;
   }
@@ -1649,7 +1669,7 @@ async function loadConversations(): Promise<void> {
       await window.xcagiDesktop.setBadge(total);
     }
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载会话失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '加载会话失败，请稍后重试'), 'error');
   } finally {
     busy.value = false;
   }
@@ -1681,7 +1701,7 @@ async function selectConversation(id: number): Promise<void> {
     }
     await loadConversations();
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载消息失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '加载消息失败，请稍后重试'), 'error');
   } finally {
     busy.value = false;
   }
@@ -1699,7 +1719,7 @@ async function loadOlderMessages(): Promise<void> {
       messages.value = [...older, ...messages.value];
     }
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '加载历史失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '加载历史失败，请稍后重试'), 'error');
   } finally {
     busy.value = false;
   }
@@ -1779,7 +1799,7 @@ async function onSend(): Promise<void> {
     scrollToBottom();
     await loadConversations();
   } catch (error) {
-    showAppToast(error instanceof Error ? error.message : '发送失败', 'error');
+    showAppToast(userFacingErrorMessage(error, '发送失败，请稍后重试'), 'error');
   } finally {
     busy.value = false;
   }

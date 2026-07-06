@@ -21,6 +21,7 @@ import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
 import { clearHostPackSkippedSession } from '@/utils/hostPackOnboardingGate';
+import { isQrExpiredError, userFacingErrorMessage } from '@/utils/userFacingError';
 import OtpCells from '@/components/OtpCells.vue';
 
 const route = useRoute();
@@ -222,7 +223,7 @@ async function sendPhoneCode() {
     const res = await authApi.sendPhoneCode(phone.value.trim());
     altLoginHint.value = String((res as { message?: string }).message || t('login.errCodeSent'));
   } catch (error: unknown) {
-    errorMessage.value = error instanceof ApiError ? error.message : t('login.errSendCodeFailed');
+    errorMessage.value = userFacingErrorMessage(error, t('login.errSendCodeFailed'));
   } finally {
     sendingCode.value = false;
   }
@@ -247,7 +248,7 @@ async function startQrLogin() {
     qrDataUrl.value = await QRCode.toDataURL(payload, { width: 220, margin: 1 });
     qrPollTimer.value = window.setInterval(() => void pollQrStatus(), 2000);
   } catch (error: unknown) {
-    errorMessage.value = error instanceof ApiError ? error.message : t('login.errQrGenerateFailed');
+    errorMessage.value = userFacingErrorMessage(error, t('login.errQrGenerateFailed'));
   }
 }
 
@@ -268,8 +269,13 @@ async function pollQrStatus() {
       stopQrPoll();
       errorMessage.value = t('login.errQrExpiredRetry');
     }
-  } catch {
-    /* ignore transient poll errors */
+  } catch (error: unknown) {
+    // 二维码失效类 HTTP 错误必须转成「二维码已过期」，不能静默或抛原始 401
+    //（PRODUCT_POLISH_CHECKLIST P0 路径一）；其余瞬时网络错误继续下一轮轮询。
+    if (isQrExpiredError(error)) {
+      stopQrPoll();
+      errorMessage.value = t('login.errQrExpiredRetry');
+    }
   }
 }
 
@@ -365,20 +371,20 @@ async function submitLogin() {
   } catch (error: unknown) {
     if (error instanceof ApiError) {
       const d = error.data && typeof error.data === 'object' ? (error.data as Record<string, unknown>) : {};
+      const serverMessage =
+        (typeof d.message === 'string' && d.message) ||
+        (typeof (d.error as { message?: string } | undefined)?.message === 'string' &&
+          (d.error as { message: string }).message) ||
+        '';
       errorMessage.value = formatLoginFailurePayload({
         ...d,
-        message:
-          (typeof d.message === 'string' && d.message) ||
-          (typeof (d.error as { message?: string } | undefined)?.message === 'string' &&
-            (d.error as { message: string }).message) ||
-          error.message,
+        // 服务端产品文案优先；缺失时按状态码映射，绝不展示「请求失败：401」类原始文案。
+        message: serverMessage || userFacingErrorMessage(error, t('login.errLoginFailedRetry')),
         error_id: d.error_id,
         error: d.error,
       });
     } else {
-      const err = error as { response?: { data?: { message?: string; error?: { message?: string } } } };
-      const data = err.response?.data;
-      errorMessage.value = data?.error?.message || data?.message || t('login.errLoginFailedRetry');
+      errorMessage.value = userFacingErrorMessage(error, t('login.errLoginFailedRetry'));
     }
   } finally {
     loading.value = false;

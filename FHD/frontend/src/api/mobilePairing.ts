@@ -1,4 +1,5 @@
 import { apiFetch } from '@/utils/apiBase';
+import { looksLikeProductCopy, statusFallbackCopy } from '@/utils/userFacingError';
 
 export interface PairingPayload {
   host: string;
@@ -20,7 +21,13 @@ export interface HostDiscoverHint {
 async function readJson<T>(response: Response): Promise<T> {
   const data = (await response.json()) as { success?: boolean; data?: T; message?: string };
   if (!response.ok || data.success === false) {
-    throw new Error(data.message || response.statusText || '请求失败');
+    // 服务端产品文案（如「配对码无效或已过期」）优先；否则按状态码映射，
+    // 绝不把 `Unauthorized` 之类 statusText 直接抛给设置页展示。
+    const serverMessage = String(data.message || '').trim();
+    const message = looksLikeProductCopy(serverMessage)
+      ? serverMessage
+      : statusFallbackCopy(response.status, '配对服务暂时不可用，请稍后重试');
+    throw new Error(message);
   }
   return (data.data ?? data) as T;
 }

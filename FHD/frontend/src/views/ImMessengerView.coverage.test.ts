@@ -440,7 +440,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     await input.setValue('hello')
     await wrapper.find('form').trigger('submit.prevent')
     await flushPromises()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('发送失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('发送失败，请稍后重试', 'error')
   })
 
   // ===== 5. 联系人选择器 =====
@@ -588,7 +588,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await wrapper.find('.im-contact-item').trigger('click')
     await flushPromises()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('发起会话失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('发起会话失败，请稍后重试', 'error')
   })
 
   // ===== 6. API 错误处理 =====
@@ -602,7 +602,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
   it('loadContacts 失败且 error 非 Error 实例时显示默认提示', async () => {
     imMocks.fetchImContacts.mockRejectedValue('unknown')
     await mountView()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载联系人失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载联系人失败，请稍后重试', 'error')
   })
 
   it('loadConversations 失败时显示错误 toast', async () => {
@@ -617,7 +617,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     imMocks.fetchImContacts.mockResolvedValue([])
     imMocks.fetchImConversations.mockRejectedValue('unknown')
     await mountView()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载会话失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载会话失败，请稍后重试', 'error')
   })
 
   it('selectConversation 失败时显示错误 toast', async () => {
@@ -635,7 +635,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     const wrapper = await mountView()
     await wrapper.find('.im-conv-item').trigger('click')
     await flushPromises()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载消息失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载消息失败，请稍后重试', 'error')
   })
 
   it('loadOlderMessages 失败时显示错误 toast', async () => {
@@ -669,7 +669,7 @@ describe('ImMessengerView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await wrapper.find('.im-load-more').trigger('click')
     await flushPromises()
-    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载历史失败', 'error')
+    expect(toastMocks.showAppToast).toHaveBeenCalledWith('加载历史失败，请稍后重试', 'error')
   })
 
   // ===== 7. xcagiDesktop 集成 =====
