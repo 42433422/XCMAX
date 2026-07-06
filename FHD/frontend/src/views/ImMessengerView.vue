@@ -196,6 +196,13 @@
                 <time>{{ formatTime(m.created_at) }}</time>
               </div>
             </div>
+            <div v-if="codexPollTimedOut" class="im-system-call-timeout" role="status">
+              <i class="fa fa-clock-o" aria-hidden="true"></i>
+              <span>等待执行结果超时，任务可能仍在电脑执行端运行。请确认电脑执行端在线后重试拉取。</span>
+              <button type="button" class="im-system-call-retry" @click="retryCodexPolling">
+                重试拉取
+              </button>
+            </div>
           </div>
           <div v-else ref="dutyEmployeeScrollEl" class="im-system-call-log">
             <div v-if="!activeDutyEmployeeMessages.length" class="im-system-call-empty">
@@ -547,6 +554,9 @@ const codexStreamMessageId = ref('');
 const codexStreamRequestId = ref('');
 const codexStreamCreatedAt = ref('');
 const codexStreamActive = ref(false);
+// Codex 轮询超时（CODEX_POLL_MAX_ROUNDS 轮仍未终态）：展示可读提示 + 重试入口，
+// 不再静默停止让用户对着光标干等（PRODUCT_POLISH_CHECKLIST P2 路径六）。
+const codexPollTimedOut = ref(false);
 const messages = ref<ImMessage[]>([]);
 const draft = ref('');
 const dutyEmployees = ref<DutyEmployeeEntry[]>([]);
@@ -1369,9 +1379,18 @@ function syncCodexStreamFromMessages(
   return isCodexDispatchStillOpen(dispatcher);
 }
 
+function onCodexPollExhausted(): void {
+  // 轮询到上限仍未终态：收起打字机光标，标记超时以在对话区展示提示 + 重试按钮。
+  codexPollTimer = null;
+  stopCodexTypewriter();
+  codexStreamActive.value = false;
+  codexPollTimedOut.value = true;
+}
+
 function startCodexPolling(requestId = ''): void {
   stopCodexPolling();
   codexPollRound = 0;
+  codexPollTimedOut.value = false;
   const poll = async () => {
     if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
     codexPollRound += 1;
@@ -1381,6 +1400,8 @@ function startCodexPolling(requestId = ''): void {
       const shouldContinue = syncCodexStreamFromMessages(next, requestId);
       if (shouldContinue && codexPollRound < CODEX_POLL_MAX_ROUNDS) {
         codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
+      } else if (shouldContinue) {
+        onCodexPollExhausted();
       } else {
         codexPollTimer = null;
       }
@@ -1390,11 +1411,18 @@ function startCodexPolling(requestId = ''): void {
       if (codexPollRound < CODEX_POLL_MAX_ROUNDS) {
         codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
       } else {
-        codexPollTimer = null;
+        onCodexPollExhausted();
       }
     }
   };
   codexPollTimer = setTimeout(poll, CODEX_POLL_INTERVAL_MS);
+}
+
+function retryCodexPolling(): void {
+  const requestId = codexStreamRequestId.value;
+  codexPollTimedOut.value = false;
+  codexStreamActive.value = true;
+  startCodexPolling(requestId);
 }
 
 async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
@@ -1402,6 +1430,7 @@ async function activatePinnedEntry(entry: PinnedImEntry): Promise<void> {
     closeOverlappingAssistantFloat();
     stopCodexPolling();
     stopCodexTypewriter(true);
+    codexPollTimedOut.value = false;
     activeSystemEntry.value = entry;
     activeConversationId.value = null;
     messages.value = [];
@@ -1508,6 +1537,7 @@ async function onCodexSend(): Promise<void> {
   if (!text) return;
   closeOverlappingAssistantFloat();
   codexBusy.value = true;
+  codexPollTimedOut.value = false;
   stopCodexPolling();
   const localRequestId = `local-${Date.now()}`;
   const now = new Date().toISOString();
@@ -2348,6 +2378,40 @@ onUnmounted(() => {
 .im-system-call-empty p {
   margin: 0;
   font-size: 13px;
+}
+.im-system-call-timeout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 4px 4px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--xc-color-warning-bg, #fff7e6);
+  border: 1px solid var(--xc-color-warning-border, #ffd591);
+  color: var(--xc-color-warning-text, #ad6800);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.im-system-call-timeout .fa {
+  opacity: 0.75;
+}
+.im-system-call-timeout span {
+  flex: 1;
+  min-width: 160px;
+}
+.im-system-call-retry {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--xc-color-warning-border, #ffd591);
+  background: #fff;
+  color: var(--xc-color-warning-text, #ad6800);
+  font-size: 12px;
+  cursor: pointer;
+}
+.im-system-call-retry:hover {
+  background: var(--xc-color-warning-bg, #fff7e6);
 }
 .im-system-call-row {
   display: flex;
