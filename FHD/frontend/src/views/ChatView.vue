@@ -20,6 +20,7 @@
         @shipment-download-click="handleShipmentDownloadClick"
         @approval-confirm="confirmWorkflowFromCard"
         @approval-cancel="cancelWorkflowFromCard"
+        @retry-message="retryLastUserMessage"
       />
       <div v-if="isTaskPaneResizable" class="chat-pane-handle-slot">
         <PaneResizeHandle
@@ -109,7 +110,9 @@
           id="messageInput"
           rows="2"
           :placeholder="inputPlaceholder"
+          aria-label="输入你的问题"
           v-model="messageInput"
+          :disabled="isLoading"
           @keydown="handleKeyDown"
         ></textarea>
         <button
@@ -129,7 +132,24 @@
           <i class="fa" :class="voiceButtonIcon" aria-hidden="true"></i>
           <span class="voice-input-btn-label">{{ voiceButtonText }}</span>
         </button>
-        <button class="btn btn-primary send-message-btn" id="sendMessageBtn" @click="sendMessage">
+        <button
+          v-if="isStreamingReply"
+          type="button"
+          class="btn send-message-btn chat-stop-btn"
+          aria-label="停止生成"
+          @click="stopStreamingReply"
+        >
+          <i class="fa fa-stop" aria-hidden="true"></i>
+          停止
+        </button>
+        <button
+          v-else
+          class="btn btn-primary send-message-btn"
+          id="sendMessageBtn"
+          aria-label="发送消息"
+          :disabled="isLoading"
+          @click="sendMessage"
+        >
           发送
         </button>
       </div>
@@ -246,6 +266,8 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  stopStreamingReply,
+  retryLastUserMessage,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
   confirmTask,

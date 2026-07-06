@@ -7,7 +7,12 @@
         :class="['message', msg.role]"
         :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
       >
+        <ChatTypingIndicator
+          v-if="msg.role === 'ai' && isStreamingShell(msg)"
+          :label="msg.toolProgressLabel || '正在生成回复…'"
+        />
         <div
+          v-else
           class="message-html"
           v-html="
             msg.role === 'ai' ? sanitizeChatBubbleMarkdown(msg.content) : sanitizeChatBubbleHtml(msg.content)
@@ -74,6 +79,16 @@
         <div :class="msg.role === 'ai' ? 'message-footer' : 'message-footer message-footer--user'">
           <div class="time">{{ msg.time }}</div>
           <button
+            v-if="msg.role === 'ai' && isFailedMessage(msg) && !isLoading"
+            class="message-retry-btn"
+            title="重试"
+            aria-label="重新生成回复"
+            @click.stop="$emit('retry-message')"
+          >
+            <i class="fa fa-redo" aria-hidden="true"></i>
+            重试
+          </button>
+          <button
             v-if="msg.role === 'ai' && canSpeakMessage(msg)"
             class="message-tts-btn"
             :class="{ 'is-playing': playingMsgIdx === idx }"
@@ -90,10 +105,10 @@
         </div>
       </div>
       <div v-if="isLoading && !isStreamingReply" class="message ai">
-        <div class="chat-loading-row">
+        <div class="chat-loading-row" role="status" aria-live="polite">
           <i class="fa fa-spinner fa-spin chat-loading-spinner" aria-hidden="true"></i>
           <span class="status-dot online"></span>
-          <span>{{ loadingProgressText }}</span>
+          <span>{{ loadingProgressText || '正在思考…' }}</span>
         </div>
       </div>
     </div>
@@ -106,8 +121,31 @@ import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import ChatTypingIndicator from '@/components/chat/ChatTypingIndicator.vue'
 
 useI18n()
+
+/** 流式占位（首 token 前）：内容为空的 AI 气泡展示「正在生成」动效，而不是空白气泡 */
+function isStreamingShell(msg: ChatMessage): boolean {
+  if (!msg.streamingShell) return false
+  const text = String(msg.content || '')
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim()
+  return text.length === 0
+}
+
+/** 失败消息：AI 回复以「处理失败：」开头 → 展示「重试」入口，可自助恢复 */
+function isFailedMessage(msg: ChatMessage): boolean {
+  if (msg.role !== 'ai') return false
+  const text = String(msg.content || '')
+    .replace(/<br\s*\/?>/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim()
+  return text.startsWith('处理失败：')
+}
 
 const props = defineProps<{
   messages: ChatMessage[]
@@ -130,6 +168,7 @@ defineEmits<{
   'shipment-download-click': []
   'approval-confirm': []
   'approval-cancel': []
+  'retry-message': []
 }>()
 
 const messagesHostRef = ref<HTMLElement | null>(null)
@@ -159,5 +198,22 @@ watch(messagesHostRef, (el) => {
 .chat-loading-spinner {
   color: var(--xc-color-primary, #0d47a1);
   font-size: 14px;
+}
+
+.message-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--xc-color-border, #e2e8f0);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--xc-color-primary, #0d47a1);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.message-retry-btn:hover {
+  background: #f1f5f9;
 }
 </style>

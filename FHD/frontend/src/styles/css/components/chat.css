@@ -682,6 +682,21 @@
   min-width: 84px;
 }
 
+.chat-stop-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--app-danger, #dc2626);
+  color: #fff;
+  border: none;
+  font-weight: 600;
+}
+
+.chat-stop-btn:hover {
+  filter: brightness(1.05);
+}
+
 .sheet-link-bar {
   margin-top: var(--app-space-sm);
   display: flex;

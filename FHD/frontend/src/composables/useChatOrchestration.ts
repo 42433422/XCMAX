@@ -35,6 +35,7 @@ import { useAgentRunEventSync } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
 import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { userFacingErrorMessage } from '@/utils/userFacingError'
 
 type XcagiChatWindow = Window & {
   __VUE_CHAT_FILL__?: (value: string) => boolean
@@ -127,6 +128,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   const isLoading = ref(false)
   const isStreamingReply = ref(false)
   const isExecuting = ref(false)
+  // 「停止生成」：持有当前流式请求的 AbortController；用户主动停止时置 userStopped，
+  // 与超时/网络中断区分开来（诚实状态）。
+  let activeStreamController: AbortController | null = null
+  let streamUserStopped = false
   const latestAssistantPush = ref<{ title: string; description: string } | null>(null)
   const proRuntimeTask = ref<{ title: string; statusText: string; statusClass: string; description: string } | null>(null)
   const chatMessagesRef = ref<HTMLElement | null>(null)
@@ -1167,6 +1172,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       const baseS = resolveChatTimeoutMs(primaryForStream)
       const timeoutMsS = Math.min(120000, baseS)
       const controller = new AbortController()
+      activeStreamController = controller
+      streamUserStopped = false
       const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
       const msgIndex = pushStreamingAiShell()
       let streamPlain = ''
@@ -1282,15 +1289,26 @@ export function useChatOrchestration(options: UseChatViewOptions) {
           maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
         }
       } catch (err: unknown) {
-        const errText =
-          err instanceof Error && err.name === 'AbortError'
-            ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
-            : errorMessage(err, '流式对话失败')
-        applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-        await saveMessage('ai', `处理失败：${errText}`)
+        const isAbort = err instanceof Error && err.name === 'AbortError'
+        if (isAbort && streamUserStopped) {
+          // 用户主动停止：保留已生成的部分内容，追加「已停止生成」标记，不当作失败。
+          const stoppedText = streamPlain.trim()
+            ? `${streamPlain}\n\n（已停止生成）`
+            : '（已停止生成）'
+          applyPlainTextToMessageIndex(msgIndex, stoppedText)
+          await saveMessage('ai', stoppedText)
+        } else {
+          const errText = isAbort
+            ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断，请重试`
+            : userFacingErrorMessage(err, '生成回复失败，请稍后重试')
+          applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
+          await saveMessage('ai', `处理失败：${errText}`)
+        }
       } finally {
         isStreamingReply.value = false
         window.clearTimeout(killTimer)
+        if (activeStreamController === controller) activeStreamController = null
+        streamUserStopped = false
         isLoading.value = false
         stopLoadingProgress()
       }
@@ -1490,6 +1508,35 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       void executeRemoteChatRound(msgs)
     })
   }
+  /** 停止当前流式生成：abort 请求，保留已生成部分并标「已停止生成」（见流式 catch）。 */
+  function stopStreamingReply() {
+    if (!activeStreamController) return
+    streamUserStopped = true
+    try {
+      activeStreamController.abort()
+    } catch {
+      /* abort 抛错可忽略 */
+    }
+  }
+
+  /** 重试：重发最近一条用户消息（不新增用户气泡），用于失败/停止后的自助恢复。 */
+  async function retryLastUserMessage() {
+    if (isLoading.value) return
+    let content = ''
+    for (let i = messages.value.length - 1; i >= 0; i--) {
+      if (messages.value[i].role === 'user') {
+        content = String(messages.value[i].content || '')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<[^>]*>/g, '')
+          .replace(/&nbsp;/gi, ' ')
+          .trim()
+        break
+      }
+    }
+    if (!content) return
+    await executeRemoteChatRound([content])
+  }
+
   function handleShipmentDownloadClick() {
     addAndSaveMessage('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', 'ai')
   }
@@ -1589,6 +1636,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     scrollToBottom,
     syncProModeState: dbGate.syncProModeState,
     sendMessage,
+    stopStreamingReply,
+    retryLastUserMessage,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,
