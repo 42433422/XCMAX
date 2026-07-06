@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Config, get_config
 from app.infrastructure.mods.mod_auth import ModContextMiddleware
 from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
+from app.middleware.conditional_gzip import ConditionalGZipMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.industry_context import IndustryContextMiddleware
@@ -78,6 +79,9 @@ def create_fastapi_app(
 
     app.state.config = config_object
 
+    # 最先注册 = 洋葱最内层：先压缩路由产出的完整响应，外层中间件只改 header。
+    # SSE / 流式响应由 ConditionalGZipMiddleware 自动跳过，不会引入缓冲。
+    app.add_middleware(ConditionalGZipMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
     app.add_middleware(XSSSanitizerMiddleware)
