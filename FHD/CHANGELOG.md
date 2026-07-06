@@ -6,6 +6,17 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 客户体验打磨 · 诚实状态与产品文案（2026-07-06 · v10 线内迭代）
+
+- **feat(mobile-api)**：员工列表落地统一身份契约（`installed/runnable/source/status` + `employee_id/display_name/contact_route/mobile_contact_route`）；未安装员工标 `planned`，不再假装在岗
+- **feat(relay)**：`_public_desktop` 增加 `online`（poll 心跳判定）；`/relay/tasks` 建任务响应带 `desktop_online`，离线时明示「任务已入队，电脑执行端当前离线」
+- **feat(super-employee)**：`_dispatch_reply` 按派工真实状态回复（接受=思考中 / 排队 / 无在线设备 / 派发失败），废除一律「思考中...」占位
+- **feat(frontend)**：新增 `utils/userFacingError` 统一错误文案层；登录/扫码配对/IM 页不再展示原始 HTTP 文案；二维码轮询 401/404/410 转「二维码已过期」；未安装员工显示「编制员工 · 未安装」并拦截派工
+- **fix(admin-console)**：员工域图 `buildAreaGraph` 在岗判定与部门图对齐（须本机已安装 employee_pack），不再全员标在岗
+- **feat(android)**：登录/列表错误统一产品文案映射；中继派工优先在线桌面；离线与轮询超时如实提示，消除假成功文案
+- **docs(customer)**：新增 `docs/customer/DEMO_RUNBOOK.md` 演示走查清单与对外口径卡（iOS/鸿蒙一律「验证中」口径）
+- **chore(repo)**：删除误入库的 `.venv` 符号链接（指向作者本机路径，阻断他机 uv 环境创建）
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
