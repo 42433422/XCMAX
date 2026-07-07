@@ -90,3 +90,27 @@ export function resolvePairingPortHint(fallback = 5000): number {
   if (envPort > 0) return envPort;
   return fallback;
 }
+
+/** 后端 loopback 监听时，Vite 代理端口才是手机局域网可达地址。 */
+export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayload {
+  if (typeof window === 'undefined') return payload;
+  const pagePort = Number(window.location.port || 0);
+  if (pagePort !== 5001 && pagePort !== 5011) return payload;
+  const host = payload.host && payload.host !== '127.0.0.1'
+    ? payload.host
+    : resolvePairingHost();
+  if (!host || host === '127.0.0.1') return payload;
+  const apiBaseUrl = `http://${host}:${pagePort}/`;
+  const qrJson = {
+    ...(payload.qr_json || {}),
+    host,
+    port: pagePort,
+    api_base_url: apiBaseUrl,
+  };
+  return {
+    ...payload,
+    host,
+    port: pagePort,
+    qr_json: qrJson,
+  };
+}
