@@ -201,9 +201,14 @@ vi.mock('@/stores/accountProfile', () => ({
   useAccountProfileStore: () => mockAccountProfileStore,
 }))
 
-vi.mock('@/constants/productFlow', () => ({
-  readHostPackAcknowledged: mockReadHostPackAcknowledged,
-}))
+vi.mock('@/constants/productFlow', async () => {
+  const actual = await vi.importActual<typeof import('@/constants/productFlow')>('@/constants/productFlow')
+  return {
+    ...actual,
+    readHostPackAcknowledged: mockReadHostPackAcknowledged,
+    resolveProductFlowEntryStep: actual.resolveProductFlowEntryStep,
+  }
+})
 
 // Stub all view components
 vi.mock('../views/LoginView.vue', () => ({ default: { template: '<div>Login</div>' } }))
