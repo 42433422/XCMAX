@@ -30,6 +30,10 @@
 
 - **fix(mobile-flutter)**：小米真机 `mobile_scanner` CameraX 启动 NPE；改用 `camera` + ML Kit 帧流扫码，对齐原生 Kotlin 方案
 
+### 扫码识别无反应修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：相机帧转 ML Kit 输入改用 **NV21**（Android 插件仅支持 NV21/YV12，此前误用 iOS 的 yuv420 导致每帧静默失败）；修正旋转角与扫码成功后停流
+
 ### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
 
 - **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口
