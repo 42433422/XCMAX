@@ -39,7 +39,6 @@ from app.application.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.relay_workspace import resolve_verified_relay_workspace_root
 from app.application.workspaces import WorkspaceError, get_workspace_registry
-from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
