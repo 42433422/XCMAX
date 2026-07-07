@@ -219,7 +219,17 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
 
   void _handleSessionChanged(MobileSessionData session) {
     if (!mounted) return;
-    setState(() => _session = session);
+    final nextRoute = resolveAndroidStartupRoute(
+      session: session,
+      appConfig: _appConfig,
+    );
+    setState(() {
+      _session = session;
+      if (_route != nextRoute) {
+        _route = nextRoute;
+        _autoLoginStarted = false;
+      }
+    });
     unawaited(_reconcileAndroidBackgroundWork(session));
     unawaited(_runBiometricGateIfNeeded(session));
     _tryHandlePendingDeepLink();

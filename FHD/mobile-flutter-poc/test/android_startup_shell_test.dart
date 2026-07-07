@@ -524,7 +524,7 @@ class _FakeStartupApi extends MobileApiClient {
   Stream<MobileSessionData> get sessionChanges => _changes.stream;
 
   @override
-  Future<MobileSessionData> loadSession() async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
 
   @override
   Future<MobileAppConfigData> appConfig({

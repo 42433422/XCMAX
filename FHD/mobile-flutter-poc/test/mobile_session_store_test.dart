@@ -713,24 +713,25 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
-  test('MobileRepository ignores stale paired relay desktop', () async {
+  test('MobileRepository skips stale paired relay desktop', () async {
     final store = MemoryMobileSessionStore();
     final api = _StalePairedRelayApi(store);
     final repository = MobileRepository(client: api);
 
-    final reply = await repository.streamMessage(
-      conversation: const ConversationItem(
-        id: 'pinned:trae',
-        type: ConversationType.pinnedTrae,
-        title: '超级员工-Trae',
-        subtitle: '',
-        timestampText: '',
+    await expectLater(
+      repository.streamMessage(
+        conversation: const ConversationItem(
+          id: 'pinned:trae',
+          type: ConversationType.pinnedTrae,
+          title: '超级员工-Trae',
+          subtitle: '',
+          timestampText: '',
+        ),
+        body: '不要再卡旧队列',
       ),
-      body: '不要再卡旧队列',
+      throwsA(isA<MobileRepositoryException>()),
     );
-
-    expect(reply, 'Trae 直连回复');
-    expect(api.postedTools, ['Trae']);
+    expect(api.postedTools, isEmpty);
     expect(api.createdRelayTasks, 0);
   });
 
@@ -758,6 +759,35 @@ void main() {
     final context = api.lastPayload?['context'] as Map<String, Object?>?;
     expect(context?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
     expect(context?['conversation_id'], 'pinned:trae');
+  });
+
+  test('MobileRepository skips LAN when server mode is cloud', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'cloud',
+        fhdHost: '192.168.31.8:17500',
+        localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:cursor',
+        type: ConversationType.pinnedCursor,
+        title: '超级员工-Cursor',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '云端模式应走中继',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.postedTools, isEmpty);
+    expect(api.lastKind, 'cursor.invoke');
   });
 
   test('MobileRepository prefers LAN direct super employee over fresh relay',
@@ -1507,7 +1537,7 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
   }
 }
 
-class _StalePairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+class _StalePairedRelayApi extends _FreshPairedRelayApi {
   _StalePairedRelayApi(super.store);
 
   @override
@@ -1769,7 +1799,7 @@ class _EmployeeSourceApi extends _EnterpriseModsApi {
   var mobileModsCalls = 0;
 
   @override
-  Future<MobileSessionData> loadSession() async {
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
     return MobileSessionData(accountKind: accountKind);
   }
 
