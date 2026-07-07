@@ -77,7 +77,7 @@ import {
   issueMobilePairing,
   loadDesktopPairingPayload,
   resolvePairingHost,
-  resolvePairingPortHint,
+  resolveReachablePairingPort,
   type PairingPayload,
 } from '@/api/mobilePairing';
 
@@ -164,7 +164,9 @@ async function refreshQr() {
     }
 
     const hint = await fetchHostDiscoverHint();
-    const port = Number(hint.api_port || resolvePairingPortHint());
+    // 当页面通过 vite proxy (5011) 访问时，后端 hint.api_port (17500) 绑定 127.0.0.1 不可达，
+    // 必须用页面端口（vite proxy 0.0.0.0 监听，手机可达）。
+    const port = resolveReachablePairingPort(Number(hint.api_port || 0));
     const host = resolvePairingHost();
     const payload = await issueMobilePairing(host, port);
     await renderPayload(payload);
