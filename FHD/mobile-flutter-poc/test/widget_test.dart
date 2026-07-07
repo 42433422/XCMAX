@@ -5661,6 +5661,53 @@ void main() {
     expect(find.text('发送失败'), findsNothing);
   });
 
+  testWidgets('chat send keeps working after fixed-length remote history', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeFixedHistoryStreamingRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: demoConversations[1],
+          repository: repository,
+          initialMessages: const [],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('远端历史'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), '继续');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await repository.firstToken.future;
+    await tester.pump();
+
+    expect(find.text('继续'), findsOneWidget);
+    expect(find.text('停止'), findsOneWidget);
+
+    repository.finish.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('开始处理完成'), findsOneWidget);
+    expect(find.text('发送失败'), findsNothing);
+
+    // A second send must not be blocked by a stuck sending flag.
+    await tester.enterText(find.byType(TextField), '再来一条');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    expect(repository.calls, hasLength(2));
+    expect(repository.calls.last['body'], '再来一条');
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('chat detail long press supports Android reply and delete', (
     WidgetTester tester,
   ) async {
@@ -6218,6 +6265,26 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
     if (!firstToken.isCompleted) firstToken.complete();
     await finish.future;
     return '开始处理完成';
+  }
+}
+
+class _FakeFixedHistoryStreamingRepository
+    extends _FakeStreamingChatRepository {
+  @override
+  Future<List<ChatMessage>> loadInitialMessages(
+    ConversationItem conversation,
+  ) async {
+    // Mirrors MobileRepository.loadInitialMessages, which can return a
+    // fixed-length list for super-employee remote history.
+    return [
+      ChatMessage(
+        id: 'remote-1',
+        conversationId: conversation.id,
+        role: ChatRole.assistant,
+        body: '远端历史',
+        timeText: '刚刚',
+      ),
+    ].toList(growable: false);
   }
 }
 

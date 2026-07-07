@@ -41,6 +41,13 @@ android {
 
     buildTypes {
         release {
+            // Keep WorkManager/Room classes used by the Kotlin background
+            // workers; R8 otherwise strips WorkDatabase and the release app
+            // crashes on launch inside androidx.startup.InitializationProvider.
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
