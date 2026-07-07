@@ -113,6 +113,8 @@ def test_platform_shell_employee_ssot_endpoint():
     assert resp["success"] is True
     assert len(resp["data"]["admin"]["departments"]) == 6
     assert len(resp["data"]["enterprise"]["layers"]) == 4
+    assert isinstance(resp["data"].get("contacts"), list)
+    assert resp["data"]["contacts"]
 
 
 def test_mobile_employee_ssot_payload_matches_kotlin_dto():
@@ -121,11 +123,50 @@ def test_mobile_employee_ssot_payload_matches_kotlin_dto():
     from app.fastapi_routes.mobile_api_extensions import _employee_ssot_payload
 
     payload = _employee_ssot_payload()
-    assert {"schema_version", "admin", "enterprise"} <= set(payload)
+    assert {"schema_version", "admin", "enterprise", "contacts"} <= set(payload)
     assert len(payload["admin"]["departments"]) == 6
     assert len(payload["enterprise"]["layers"]) == 4
     dept0 = payload["admin"]["departments"][0]
     assert {"id", "label", "employees", "planned_count", "on_duty_count"} <= set(dept0)
+    assert isinstance(payload["contacts"], list)
+    assert payload["contacts"], "contacts 不能为空"
+    sample = payload["contacts"][0]
+    assert {
+        "employee_id",
+        "display_name",
+        "source",
+        "installed",
+        "runnable",
+        "contact_route",
+        "mobile_contact_route",
+    } <= set(sample)
+
+
+def test_employee_contacts_installed_planned_and_super():
+    from app.mod_sdk.duty_roster import all_planned_duty_employee_ids
+    from app.mod_sdk.employee_ssot import derive_employee_contacts
+
+    planned = all_planned_duty_employee_ids()
+    sample_installed = set(list(planned)[:2])
+    contacts = derive_employee_contacts(installed_ids=sample_installed)
+    by_id = {row["employee_id"]: row for row in contacts}
+
+    assert by_id["codex-super-employee"]["pinned"] is True
+    assert by_id["codex-super-employee"]["source"] == "codex"
+    assert by_id["codex-super-employee"]["runnable"] is True
+
+    installed_row = next(row for row in contacts if row["employee_id"] in sample_installed)
+    assert installed_row["source"] == "installed"
+    assert installed_row["installed"] is True
+    assert installed_row["runnable"] is True
+
+    planned_only = next(
+        row for row in contacts if row["employee_id"] in planned - sample_installed
+    )
+    assert planned_only["source"] == "planned"
+    assert planned_only["installed"] is False
+    assert planned_only["runnable"] is False
+    assert planned_only["display_name"] != planned_only["employee_id"] or planned_only["employee_id"]
 
 
 def test_digest_dispatch_derives_from_roster_ssot():

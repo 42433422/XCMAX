@@ -10,6 +10,7 @@ import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
 import 'deployment_modes_ssot.dart';
 import 'duty_roster_ssot.dart';
+import 'employee_ssot_contacts.dart';
 
 const _badgeInstalledColor = 0xFF3370FF;
 const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
@@ -21,6 +22,8 @@ class MobileRepository {
   static const customerServiceRequestType = 'mobile_ai_customer_service';
 
   final MobileApiClient _client;
+
+  Map<String, Object?>? _cachedEmployeeSsotPayload;
 
   MobileApiClient get client => _client;
 
@@ -119,15 +122,27 @@ class MobileRepository {
 
   Future<List<ModInfo>> loadModInfos({bool adminMode = false}) async {
     if (adminMode) {
+      final ssotPayload = await _loadEmployeeSsotPayload();
       final response = await _client.adminHome();
       if (!response.success) {
+        if (ssotPayload != null &&
+            platformEmployeeContactsFromSsotPayload(ssotPayload).isNotEmpty) {
+          final mods = [adminDutyModFromSsotContacts(ssotPayload)];
+          await _cacheModInfos(mods);
+          return mods;
+        }
         throw MobileRepositoryException(
           response.message.ifEmpty('移动数据加载失败'),
         );
       }
 
       final home = response.data ?? AdminMobileHomeData.empty();
-      final mods = [_normalizeAdminDutyMod(home.toAdminModInfo())];
+      final mods = [
+        _normalizeAdminDutyMod(
+          home.toAdminModInfo(),
+          ssotPayload: ssotPayload,
+        ),
+      ];
       await _cacheModInfos(mods);
       return mods;
     }
@@ -149,6 +164,22 @@ class MobileRepository {
     }
   }
 
+  Future<Map<String, Object?>?> _loadEmployeeSsotPayload({bool refresh = false}) async {
+    if (_cachedEmployeeSsotPayload != null && !refresh) {
+      return _cachedEmployeeSsotPayload;
+    }
+    try {
+      final response = await _client.employeeSsot();
+      if (response.success && response.data != null) {
+        _cachedEmployeeSsotPayload = response.data;
+        return response.data;
+      }
+    } catch (_) {
+      /* fallback to admin home / cached mods */
+    }
+    return _cachedEmployeeSsotPayload;
+  }
+
   Future<List<ModInfo>> _loadCachedModInfos({required bool adminMode}) async {
     final session = await _client.loadSession();
     final mods = session.cachedModInfos
@@ -156,7 +187,14 @@ class MobileRepository {
         .where((mod) => mod.id.trim().isNotEmpty || mod.name.trim().isNotEmpty)
         .toList(growable: false);
     if (adminMode) {
-      return mods.map(_normalizeAdminDutyMod).toList(growable: false);
+      return mods
+          .map(
+            (mod) => _normalizeAdminDutyMod(
+              mod,
+              ssotPayload: _cachedEmployeeSsotPayload,
+            ),
+          )
+          .toList(growable: false);
     }
     return mods;
   }
@@ -1457,6 +1495,9 @@ class MobileRepository {
     bool adminMode = true,
     bool enterpriseMode = true,
   }) {
+    final ssotItems = adminMode
+        ? adminDutyConversationItemsFromSsotPayload(_cachedEmployeeSsotPayload)
+        : const <ConversationItem>[];
     return _sortConversationItems([
       ..._fixedConversationItems(
         showCodex: enterpriseMode || adminMode,
@@ -1466,7 +1507,7 @@ class MobileRepository {
         showCustomerService: enterpriseMode && !adminMode,
         states: _emptyConversationStates,
       ),
-      if (adminMode) ...adminDutyRosterConversationItems(),
+      if (adminMode) ...ssotItems,
     ]);
   }
 
@@ -2736,14 +2777,61 @@ String _friendlyTimestampFromMillis(int timestampMs) {
   return '${local.month}/${local.day}';
 }
 
-ModInfo _normalizeAdminDutyMod(ModInfo mod) {
+ModInfo _normalizeAdminDutyMod(
+  ModInfo mod, {
+  Map<String, Object?>? ssotPayload,
+}) {
   if (mod.id != adminDutyModId && mod.id != 'admin-duty') return mod;
 
+  final ssotContacts = platformEmployeeContactsFromSsotPayload(ssotPayload);
   final remoteById = <String, WorkflowEmployeeInfo>{};
   for (final employee in mod.workflowEmployees) {
     final id = employee.id.trim();
     if (id.isEmpty || remoteById.containsKey(id)) continue;
     remoteById[id] = employee;
+  }
+
+  if (ssotContacts.isNotEmpty) {
+    final employees = ssotContacts.map((contact) {
+      final remote = remoteById[contact.employeeId];
+      final base = workflowEmployeeFromSsotContact(contact);
+      if (remote == null) return base;
+      return WorkflowEmployeeInfo(
+        id: base.id,
+        label: base.label.ifEmpty(remote.label),
+        panelTitle: base.panelTitle.ifEmpty(remote.panelTitle),
+        panelSummary: base.panelSummary.ifEmpty(remote.panelSummary),
+        apiBasePath: base.apiBasePath.ifEmpty(remote.apiBasePath),
+        phoneChannel: base.phoneChannel.ifEmpty(remote.phoneChannel),
+        workflowPlaceholder: base.workflowPlaceholder,
+        profileSource: base.profileSource.ifEmpty(remote.profileSource),
+        marketConnected: remote.marketConnected,
+        marketPkgId: remote.marketPkgId,
+        marketName: remote.marketName,
+        marketDescription: remote.marketDescription,
+        marketVersion: remote.marketVersion,
+        marketAuthor: remote.marketAuthor,
+        marketIndustry: remote.marketIndustry,
+        marketMaterialCategory: remote.marketMaterialCategory,
+        marketLicenseScope: remote.marketLicenseScope,
+        marketSecurityLevel: remote.marketSecurityLevel,
+        marketAvatar: remote.marketAvatar,
+      );
+    }).toList(growable: false);
+
+    return ModInfo(
+      id: adminDutyModId,
+      name: mod.name,
+      version: mod.version,
+      description:
+          '${employees.length} 位管理端编制 AI 员工与 ${mod.frontendMenu.length} 个管理功能入口',
+      author: mod.author,
+      primary: mod.primary,
+      industry: mod.industry,
+      avatarUrl: mod.avatarUrl,
+      frontendMenu: mod.frontendMenu,
+      workflowEmployees: employees,
+    );
   }
 
   final employees = adminDutyRosterEmployees.map((fallback) {
