@@ -73,19 +73,23 @@ def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
     relay can therefore keep using the signed mobile JWT even if a deployed
     server has an older or mismatched local ``users`` table.
     """
-    if not payload or payload.get("typ") != "access":
+    if not payload:
+        return None
+    typ = payload.get("typ")
+    if typ not in (None, "access"):
         return None
     uid = int(payload.get("user_id") or 0)
-    if uid <= 0:
-        return None
     account_kind = str(payload.get("account_kind") or "").strip().lower()
     session_id = str(payload.get("session_id") or "").strip()
-    if account_kind not in {"admin", "admin_portal"} and not session_id.startswith("mobile-relay-"):
+    is_relay = session_id.startswith("mobile-relay-")
+    if uid <= 0 and not is_relay:
+        return None
+    if account_kind not in {"admin", "admin_portal"} and not is_relay:
         return None
     username = str(payload.get("username") or "").strip() or "mobile"
     role = "admin" if account_kind in {"admin", "admin_portal"} else "enterprise"
     return SimpleNamespace(
-        id=uid,
+        id=uid if uid > 0 else 0,
         username=username,
         display_name=username,
         email="",
@@ -120,6 +124,10 @@ async def get_mobile_user(
         jwt_payload = verify_mobile_jwt(authorization_value[7:].strip())
     uid = user_id_from_mobile_bearer(authorization_value)
     if uid is None and authorization_value.startswith("Bearer "):
+        fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
+        if fallback_user is not None:
+            _bind_mobile_user_tenant_to_request(request, fallback_user)
+            return fallback_user
         return None
     if uid is not None:
         try:
