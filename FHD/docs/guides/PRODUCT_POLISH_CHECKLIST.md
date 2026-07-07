@@ -48,11 +48,10 @@
 - 后端：`app/fastapi_routes/mobile_api.py`
 - 后端：`app/fastapi_routes/mobile_api_extensions.py`
 - 后端：`app/services/mobile_relay_service.py`
-- 后端：`app/services/mobile_relay_desktop_client.py`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/datastore/SessionStore.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/AuthInterceptor.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/repository/XcagiRepository.kt`
-- Android：`mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/AppViewModel.kt`
+- **Flutter（主线）**：`mobile-flutter-poc/lib/src/api/mobile_api.dart`（`preferCloudIfLanUnreachable`、会话 base URL）
+- **Flutter（主线）**：`mobile-flutter-poc/lib/src/data/mobile_repository.dart`
+- **Flutter（主线）**：`mobile-flutter-poc/lib/src/policy/android_error_policy.dart`
+- ~~Android 原生~~：`mobile-android/…` **归档中**，仅参照，禁止新功能
 
 ### 必测证据
 

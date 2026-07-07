@@ -1,6 +1,9 @@
 # XCAGI Android 原生客户端
 
-> **交付状态**：**签约级**（可构建 · 双 SKU · CI `android-build.yml`）；Kotlin Compose 双 SKU 签约级移动交付。与仓根 README / [`CLAIMED_VS_ACTUAL.md`](../CLAIMED_VS_ACTUAL.md) 对齐。
+> **归档状态（2026-07-07）**：本目录 **Frozen → Archive**。移动交付 SSOT 已迁移至 **`FHD/mobile-flutter-poc/`**（Flutter，见 [`MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md)）。  
+> 此处仅保留：兼容 APK 构建、紧急安全修复、Flutter 迁移 diff 参照。**禁止**新增 Tab、业务流程或独立 UX。
+
+> **历史交付状态**：签约级 Kotlin Compose 双 SKU（2026-06 口径）。以下内容为归档参考。
 
 ## 概述
 

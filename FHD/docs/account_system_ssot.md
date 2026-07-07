@@ -3,6 +3,11 @@
 > 本文档描述 XCMAX/FHD 的产品端矩阵、账号体系四个维度、行业/Persona 派生规则、各自的
 > **真相源字段**、**运行时派生规则**、**字段写入权限**与**校验规则**。实现遵循「单一真相源（SSOT）+
 > 自动派生」：每个维度只有一个持久化写入点，所有运行时身份/档位均由真相源派生，不再由前端登录入口决定。
+>
+> **定价 SSOT（运行时）**：本文 §2.2.1（企业宿主）与 §2.4（市场会员）为**商业化定价**的文档 SSOT；
+> 机器配置分别为 [`config/saas_plans.json`](../config/saas_plans.json) 与 MODstore
+> [`init_default_plan_templates`](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py)。
+> 销售/法务勿引用 [`guides/LICENSING.md`](guides/LICENSING.md) 已退役 FAQ 价或 [`XCAGI/BUSINESS_MODEL.md`](../XCAGI/BUSINESS_MODEL.md) 历史参考价。
 
 ## 零、产品端与分发矩阵
 
@@ -10,7 +15,7 @@
 |--------|-----------|----------|----------|------|
 | 网站 | 官网 / AI 市场 / 软件下载页 | Web | personal / enterprise / admin | 唯一公开注册与购买入口；个人账号仅能在网站使用 |
 | 桌面端软件 | 软件下载 / 企业交付包 | Windows / macOS | enterprise / admin | 必须绑定企业或管理员会话；不接受 personal 账号进入本地工作台 |
-| 手机 App | 应用商店 / 企业分发 | Android / iOS / HarmonyOS | enterprise / admin | 作为企业移动工作台与消息/审批入口；账号能力跟随企业授权 |
+| 手机 App | 应用商店 / 企业分发 | **Flutter**（`mobile-flutter-poc`，覆盖 Android/iOS） | enterprise / admin | 企业移动工作台；账号能力跟随企业授权 |
 
 产品端只决定可进入的运行环境，不决定账号身份。账号身份仍以 `User.tier` 与市场身份提升规则为准。
 
@@ -20,7 +25,7 @@
 |--------|----------|------------|-------|
 | 官网/网站 | 注册、登录、购买 VIP/月计划、查看个人消费 | 企业注册、购买体验/永久账户、下载软件、管理授权 | 平台后台、市场运营、企业审核、软件下载发布 |
 | 桌面端 Windows/macOS | 不允许进入 | 本地业务工作台、行业 Mod、文件/打印/本地数据能力 | 运维诊断、代管排障、企业配置审计 |
-| 手机端 Android/iOS/HarmonyOS | 不允许进入 | 消息、审批、移动看板、扫码登录/绑定桌面端 | 移动运维告警、企业会话排障 |
+| 手机端（Flutter） | 不允许 personal | 消息、审批、移动看板、扫码绑定桌面端 | 移动运维告警、会话排障 |
 
 约束：个人账号只服务网站个人消费场景；企业账号是业务系统主体；管理员账号是平台运营主体。桌面端和手机端只能接受企业或管理员会话，不能因为前端入口传了 `account_kind` 就放行 personal。
 
@@ -78,6 +83,14 @@
 
 企业 SaaS 定价的机器配置为 [config/saas_plans.json](../config/saas_plans.json)。`account_tier` 只表达企业授权档位，不根据 AI 额度消耗动态升降。
 
+| 套餐 ID | 价格（CNY） | account_tier |
+|---------|-------------|--------------|
+| `saas-trial-30` | 99（含 100 元额度，30 天） | normal |
+| `saas-permanent-starter` | 49,999 | normal |
+| `saas-permanent-growth` | 99,999 | pro |
+| `saas-permanent-max` | 499,999 | max |
+| `saas-permanent-ultra` | 999,999 | ultra |
+
 ### 2.3 行业授权初始化
 `User.entitled_industries ← init_entitled_industries_for_user(tier, industry_id)`
 - personal → `["通用"]`
@@ -91,6 +104,7 @@
 - 登录响应不含会员等级，登录 finalize 时用市场 token 单独拉取。
 - 套餐列表由后端 `GET /api/market/membership-plans` 代理市场 `GET /api/payment/plans`，前端 `ModelPaymentView` 读取（失败回退本地 FALLBACK）。
 - VIP 是月计划权益层（vip / vip_plus / svip / svip2..svip8），与企业永久授权档位并列存在；AI 额度消耗不反向决定 VIP 或 `account_tier`。
+- 会员套餐机器配置：MODstore `PlanTemplate`（种子 [`init_default_plan_templates`](../../成都修茈科技有限公司/MODstore_deploy/modstore_server/db/base.py)）；当前档：**VIP ¥9.9** → **SVIP8 ¥4,999**。
 - 实现：[app/fastapi_routes/market_account.py](../app/fastapi_routes/market_account.py) `fetch_market_membership_tier` / `market_membership_plans`。
 
 ### 2.5 行业 → Persona

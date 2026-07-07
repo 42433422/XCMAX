@@ -747,9 +747,13 @@ router.beforeEach(async (to, _from, next) => {
     !to.meta?.publicAccess &&
     !isAdminConsoleSpa()
   ) {
-    // 首次引导始终从「认识宿主」开始；宿主包未齐时在步骤 2 由用户点「下一步」进入
-    next({ name: 'product-onboarding', query: { step: 'welcome', redirect: to.fullPath } });
-    return;
+    const sku = await fetchProductSku().catch(() => 'generic');
+    if (!isEnterpriseEdition(sku)) {
+      const { resolveProductFlowEntryStep } = await import('@/constants/productFlow');
+      const step = resolveProductFlowEntryStep(to.query?.step);
+      next({ name: 'product-onboarding', query: { step, redirect: to.fullPath } });
+      return;
+    }
   }
 
   if (

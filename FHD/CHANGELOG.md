@@ -6,6 +6,20 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：`mobile-relay-*` 会话 validate 不再误 401；`preferCloudIfLanUnreachable` + session 路由 LAN/云；`/employee-ssot` client
+- **docs**：移动统一 **Flutter 主线**；`mobile-android` / `mobile-ios` 归档；`MOBILE_FLUTTER.md` + SSOT 登记
+- **feat(web)**：`productErrorMessage` 统一引导/Mod/IM 错误文案；引导续接 `xcagi_product_flow_last_step`；企业版不再重复 shell welcome 拦截
+- **feat(web)**：IM 员工通讯录优先消费 `GET /api/platform-shell/employee-ssot`
+- **docs**：`PRODUCT_USER_FLOW.md` 对齐 industry → host-pack 实现顺序
+
+### 定价 SSOT 文档同步（2026-07-07 · v10 线内迭代）
+
+- **docs**：`LICENSING.md` 清除过期年费/Offline 固定价 FAQ，定价指向 `saas_plans.json` + MODstore `PlanTemplate`
+- **docs**：`account_system_ssot.md` / `SSOT_INDEX.md` 登记 `pricing-enterprise` / `pricing-membership` SSOT
+- **docs**：`COMMERCIAL_LICENSE.md` §2.1 / §4.3、`BUSINESS_MODEL.md` 对齐运行时价格，退役旧参考价表
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod
