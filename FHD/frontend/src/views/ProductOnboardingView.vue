@@ -342,6 +342,8 @@ import {
 } from '@/utils/hostPackOnboardingGate'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import { appAlert } from '@/utils/appDialog'
+import { productErrorMessage } from '@/utils/productErrorMessage'
 
 const route = useRoute()
 const router = useRouter()
