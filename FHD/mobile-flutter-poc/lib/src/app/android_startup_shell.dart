@@ -37,6 +37,7 @@ import '../features/tools/ocr_screen.dart';
 import '../features/webview/desktop_tool_webview_screen.dart';
 import '../models/conversation.dart';
 import '../platform/android_background_work_scheduler.dart';
+import '../policy/android_error_policy.dart';
 import '../platform/android_deep_link_bridge.dart';
 import '../platform/biometric_gate.dart';
 import '../policy/android_runtime_policy.dart';
@@ -345,13 +346,22 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
   }
 
   void _tryHandlePendingDeepLink() {
-    if (_handlingDeepLink ||
-        _pendingDeepLinkRoute == null ||
-        !_session.hasAuth ||
-        _route != AndroidStartupRoute.home) {
+    if (_handlingDeepLink || _pendingDeepLinkRoute == null || !mounted) {
       return;
     }
     final route = _pendingDeepLinkRoute!;
+    final pairingPayload = pairingPayloadFromDeepLinkRoute(route);
+    if (pairingPayload != null &&
+        !_session.setupComplete &&
+        _route != AndroidStartupRoute.legal) {
+      _handlingDeepLink = true;
+      _pendingDeepLinkRoute = null;
+      unawaited(_completePairingDeepLink(pairingPayload));
+      return;
+    }
+    if (!_session.hasAuth || _route != AndroidStartupRoute.home) {
+      return;
+    }
     _pendingDeepLinkRoute = null;
     _handlingDeepLink = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -364,6 +374,26 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
       _handlingDeepLink = false;
       _tryHandlePendingDeepLink();
     });
+  }
+
+  Future<void> _completePairingDeepLink(String payload) async {
+    try {
+      await widget.repository.exchangePairingCode(payload);
+      if (!mounted) return;
+      _showAndroidSnack('设备绑定成功');
+      await _refreshRouteFromSession();
+    } catch (error) {
+      if (!mounted) return;
+      _showAndroidSnack(
+        androidProductErrorMessage(
+          error is MobileRepositoryException ? error.message : '$error',
+          '设备配对失败，请刷新二维码或输入设备码',
+        ),
+      );
+    } finally {
+      _handlingDeepLink = false;
+      _tryHandlePendingDeepLink();
+    }
   }
 
   bool _openAndroidDeepLink(String route) {

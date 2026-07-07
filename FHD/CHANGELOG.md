@@ -6,6 +6,14 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### OTA update 站 DNS/HTTPS 与推送（2026-07-07 · v10 线内迭代）
+
+- **根因**：`update.xcagi.com` CNAME → `overdue.aliyun.com`（`170.33.12.185` 欠费停放），非 CVM `119.27.178.147`；子域 nginx 仅 HTTP、无 443 证书
+- **fix(desktop)**：内置 OTA URL 改 `https://xiu-ci.com/releases/stable/{personal|enterprise}/`（同机 HTTPS alias 已可用）
+- **fix(admin)**：`check_deploy_updates` manifest 默认走 `http://119.27.178.147/.../fhd-manifest.json`，避免域名超时误判 unreachable
+- **ops**：新增 `ops/fix-update-xcagi-https.sh`（DNS 切到本机后 acme.sh 签发 + nginx 443）
+- **deploy**：已 pack+push `git_sha=7f2ad0fffad6`，服务器 `fhd-auto-update` 应用成功
+
 ### Flutter 全功能补齐（2026-07-07 · v10 线内迭代）
 
 - **feat(mobile-flutter)**：员工任务中心（Phase-D 提问列表 + 老板回答）对齐 Android `EmployeeQuestionsScreen`；员工档案新增「问他/她的待回答问题」入口
@@ -37,6 +45,7 @@
 ### 6 位设备码云中继绑定（2026-07-07 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：输入 6 位设备码时优先调用 `relay/mobile/confirm-code`（对齐管理端「服务器中继设备码」），失败再回落局域网 `pairing/lookup`；LAN 探测单次超时缩短至 ~900ms，避免 spinner 卡数分钟
+- **fix(mobile-flutter)**：`xcagi://pairing?code=` 深链携带 query，未登录态可直接触发配对（便于 adb/桌面 QR 拉起绑定）
 
 ### 6 位设备码局域网绑定（2026-07-07 · v10 线内迭代）
 
