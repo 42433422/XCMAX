@@ -21,6 +21,11 @@
 - **feat(mobile-flutter)**：登录/配对成功后自动 `registerDevice`（有 `fcm_token` 时），对齐 Android `PushRegistrar`
 - **test(mobile-flutter)**：员工提问与 IM WS 解析单测；**257** 测试全绿
 
+### 启动深链配对红屏修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：配对深链不再在 `_route == null`（加载中）或协议页触发，避免与路由切换冲突导致 `_dependents.isEmpty` 红屏
+- **fix(mobile-flutter)**：`MobileRepositoryScope` 上移到 `MaterialApp` 外层，配对 Toast 延后到下一帧展示
+
 ### 配对码仅局域网 · 云中继账号鉴权（2026-07-07 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：6 位配对码不再走 `relay/mobile/confirm-code`；统一 `pairing/lookup` → `pairing/exchange` 局域网绑定，与 Android 一致
