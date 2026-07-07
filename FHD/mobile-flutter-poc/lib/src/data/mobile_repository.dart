@@ -82,8 +82,8 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: null,
-        badgeColor: null,
+        badgeText: adminMode ? null : '已安装',
+        badgeColor: adminMode ? null : _badgeInstalledColor,
         states: conversationStates,
       ),
     ]);
@@ -895,8 +895,7 @@ class MobileRepository {
     } else {
       cache[id] = rows;
     }
-    await _client.sessionStore
-        .save(session.copyWith(cachedChatMessages: cache));
+    await _client.saveSession(session.copyWith(cachedChatMessages: cache));
   }
 
   Future<int> _loadCurrentUserId() async {
@@ -1524,8 +1523,7 @@ class MobileRepository {
     } else {
       tasks[id] = cleanTaskId;
     }
-    await _client.sessionStore
-        .save(session.copyWith(inflightRelayTasks: tasks));
+    await _client.saveSession(session.copyWith(inflightRelayTasks: tasks));
   }
 
   Future<bool> _clearInflightIfRelayChanged(
@@ -1589,7 +1587,7 @@ class MobileRepository {
       preview: _conversationPreviewForRole(role, text),
       timestampMs: timestampMs,
     ).toJson();
-    await _client.sessionStore.save(
+    await _client.saveSession(
       session.copyWith(
         cachedChatMessages: cache,
         conversationListStates: states,
