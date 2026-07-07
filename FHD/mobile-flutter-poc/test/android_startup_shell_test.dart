@@ -110,6 +110,14 @@ void main() {
     );
     expect(
       resolveAndroidDeepLinkRoute(
+        uri: Uri.parse('xcagi://pairing?code=123456&host=192.168.10.2&port=17500'),
+      ),
+      'pairing?code=123456&host=192.168.10.2&port=17500',
+    );
+    expect(pairingPayloadFromDeepLinkRoute('pairing?code=123456'), '123456');
+    expect(pairingPayloadFromDeepLinkRoute('654321'), '654321');
+    expect(
+      resolveAndroidDeepLinkRoute(
         uri: Uri.parse('https://xiu-ci.com/app/approval/12'),
       ),
       '/app/approval/12',

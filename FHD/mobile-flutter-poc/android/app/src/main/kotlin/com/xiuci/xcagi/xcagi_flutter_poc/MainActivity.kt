@@ -244,9 +244,22 @@ class MainActivity : FlutterFragmentActivity() {
         if (route.isNotBlank()) return route
         val data: Uri = intent?.data ?: return null
         return when {
-            data.scheme == "xcagi" -> data.host.orEmpty().let { host ->
-                data.path?.let { path -> "$host$path" } ?: host
-            }.ifBlank { null }
+            data.scheme == "xcagi" -> {
+                val host = data.host.orEmpty()
+                val path = data.path.orEmpty()
+                val base =
+                    when {
+                        path.isNotBlank() -> "$host$path"
+                        host.isNotBlank() -> host
+                        else -> ""
+                    }
+                val query = data.encodedQuery?.trim().orEmpty()
+                when {
+                    base.isBlank() -> null
+                    query.isNullOrBlank() -> base
+                    else -> "$base?$query"
+                }
+            }
             data.host?.contains("xiu-ci.com") == true -> data.path ?: "chat"
             else -> null
         }
