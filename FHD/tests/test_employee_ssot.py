@@ -160,13 +160,13 @@ def test_employee_contacts_installed_planned_and_super():
     assert installed_row["installed"] is True
     assert installed_row["runnable"] is True
 
-    planned_only = next(
-        row for row in contacts if row["employee_id"] in planned - sample_installed
-    )
+    planned_only = next(row for row in contacts if row["employee_id"] in planned - sample_installed)
     assert planned_only["source"] == "planned"
     assert planned_only["installed"] is False
     assert planned_only["runnable"] is False
-    assert planned_only["display_name"] != planned_only["employee_id"] or planned_only["employee_id"]
+    assert (
+        planned_only["display_name"] != planned_only["employee_id"] or planned_only["employee_id"]
+    )
 
 
 def test_digest_dispatch_derives_from_roster_ssot():

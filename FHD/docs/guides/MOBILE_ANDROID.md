@@ -1,8 +1,7 @@
 # XCAGI Android 原生客户端
 
-> **归档状态（2026-07-07）**：本目录 **Frozen → Archive**。移动交付已统一到 **`FHD/mobile-flutter-poc/`**（Flutter）。  
-> 此处仅保留：兼容 APK 构建、紧急安全修复、Flutter 迁移 diff 参照。**禁止**新增 Tab、业务流程或独立 UX。  
-> 新文档入口：[`docs/guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md)
+> **归档状态（2026-07-07）**：本目录 **Frozen → Archive**。移动交付 SSOT 已迁移至 **`FHD/mobile-flutter-poc/`**（Flutter，见 [`MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md)）。  
+> 此处仅保留：兼容 APK 构建、紧急安全修复、Flutter 迁移 diff 参照。**禁止**新增 Tab、业务流程或独立 UX。
 
 > **历史交付状态**：签约级 Kotlin Compose 双 SKU（2026-06 口径）。以下内容为归档参考。
 
