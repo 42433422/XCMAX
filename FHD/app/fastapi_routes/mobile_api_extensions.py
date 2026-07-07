@@ -94,6 +94,7 @@ from app.fastapi_routes.mobile_extensions.pairing_helpers import (
     _guess_lan_ipv4,
     _host_is_private_or_loopback,
     _pairing_issue_port,
+    _pairing_reachable_port,
 )
 from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _mobile_user_identity,
@@ -1024,9 +1025,10 @@ async def mobile_notifications_pending(
 async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
     """桌面或运维签发配对 QR 载荷（开发/内网）。"""
     host = _pairing_issue_host(body.host or (request.url.hostname or ""))
-    port = _pairing_issue_port(request, int(body.port))
+    api_port = _pairing_issue_port(request, int(body.port))
+    port = _pairing_reachable_port(request, api_port)
     payload = issue_pairing_nonce(host, port)
-    data = _enrich_pairing_payload(payload)
+    data = _enrich_pairing_payload(payload, request)
     relay = _register_desktop_relay_for_pairing(host, port)
     if relay:
         data["relay"] = relay

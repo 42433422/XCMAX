@@ -71,6 +71,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import QRCode from 'qrcode';
 import {
+  applyDevProxyReachablePort,
   buildPairingQrText,
   fetchHostDiscoverHint,
   issueMobilePairing,
@@ -126,12 +127,13 @@ function scheduleAutoRefresh() {
 }
 
 async function renderPayload(payload: PairingPayload) {
-  pairingHost.value = payload.host;
-  pairingPort.value = payload.port;
-  pairingNonce.value = payload.nonce;
-  pairingShortCode.value = pairingDisplayCode(payload);
-  expiresAt.value = Number(payload.exp || 0);
-  qrDataUrl.value = await QRCode.toDataURL(buildPairingQrText(payload), {
+  const reachable = applyDevProxyReachablePort(payload);
+  pairingHost.value = reachable.host;
+  pairingPort.value = reachable.port;
+  pairingNonce.value = reachable.nonce;
+  pairingShortCode.value = pairingDisplayCode(reachable);
+  expiresAt.value = Number(reachable.exp || 0);
+  qrDataUrl.value = await QRCode.toDataURL(buildPairingQrText(reachable), {
     width: 220,
     margin: 1,
     errorCorrectionLevel: 'M',

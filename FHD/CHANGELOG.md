@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
+
+- **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口
+
 ### Flutter 手机端聊天发送修复（2026-07-07 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：根治聊天页「点击发送无反应」——`loadInitialMessages` 返回 fixed-length 列表后 `_messages.addAll/clear` 在 `setState` 内抛 `Cannot add to a fixed-length list`，`_sending` 卡 true 拦截后续发送；改为拷贝赋值 + 不可变式追加，并补 widget 回归测试
