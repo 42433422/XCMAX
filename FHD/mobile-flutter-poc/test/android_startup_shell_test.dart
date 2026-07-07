@@ -468,6 +468,45 @@ void main() {
     expect(find.text('Android 深链审批'), findsOneWidget);
   });
 
+  testWidgets('pairing deep link waits for legal gate before exchange', (
+    tester,
+  ) async {
+    final api = _FakeStartupApi(
+      session: const MobileSessionData(),
+      config: _appConfig('legal-2'),
+    );
+    final repository = _StartupRepository(
+      api,
+      pairingError: const MobileRepositoryException('未找到电脑'),
+    );
+
+    await tester.pumpWidget(
+      AndroidStartupApp(
+        repository: repository,
+        deepLinkBridge: _FakeDeepLinkBridge(
+          initialRouteValue: 'pairing?code=123456',
+        ),
+        enableBiometricGate: false,
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.pairingAttempts, isEmpty);
+    expect(find.text('请先同意协议'), findsOneWidget);
+
+    await tester.tap(find.textContaining('我已阅读并同意'));
+    await tester.pump();
+    await tester.tap(find.text('进入 XCAGI'));
+    await tester.pump();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(repository.pairingAttempts, ['123456']);
+    expect(find.text('未找到电脑'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('startup reconciles Android WorkManager switches from session', (
     tester,
   ) async {
@@ -560,12 +599,15 @@ class _StartupRepository extends MobileRepository {
     this.api, {
     this.loginGate,
     this.loginError,
+    this.pairingError,
   }) : super(client: api);
 
   final _FakeStartupApi api;
   final Completer<void>? loginGate;
   final Object? loginError;
+  final Object? pairingError;
   final List<Map<String, Object?>> logins = [];
+  final List<String> pairingAttempts = [];
 
   @override
   Future<void> login({
@@ -591,6 +633,22 @@ class _StartupRepository extends MobileRepository {
       username: username.trim(),
       accountKind: adminMode ? 'admin' : 'enterprise',
       setupComplete: false,
+    );
+  }
+
+  @override
+  Future<void> exchangePairingCode(String raw) async {
+    pairingAttempts.add(raw.trim());
+    final error = pairingError;
+    if (error != null) {
+      if (error is MobileRepositoryException) throw error;
+      throw MobileRepositoryException('$error');
+    }
+    api.session = api.session.copyWith(
+      accessToken: 'access',
+      setupComplete: true,
+      fhdHost: '192.168.10.2:5011',
+      accountKind: 'admin',
     );
   }
 

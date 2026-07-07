@@ -150,19 +150,18 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'XCAGI',
-      navigatorKey: _navigatorKey,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: androidThemeModeFromSession(_session.themeMode),
-      builder: (context, child) => MobileRepositoryScope(
-        repository: widget.repository,
-        child: child ?? const SizedBox.shrink(),
+    return MobileRepositoryScope(
+      repository: widget.repository,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'XCAGI',
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: androidThemeModeFromSession(_session.themeMode),
+        home: _buildHome(),
       ),
-      home: _buildHome(),
     );
   }
 
@@ -220,7 +219,7 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
   }
 
   void _handleSessionChanged(MobileSessionData session) {
-    if (!mounted) return;
+    if (!mounted || _handlingDeepLink) return;
     final nextRoute = resolveAndroidStartupRoute(
       session: session,
       appConfig: _appConfig,
@@ -345,6 +344,13 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     _tryHandlePendingDeepLink();
   }
 
+  bool _canHandleStartupPairingDeepLink() {
+    return switch (_route) {
+      AndroidStartupRoute.auth || AndroidStartupRoute.onboarding => true,
+      _ => false,
+    };
+  }
+
   void _tryHandlePendingDeepLink() {
     if (_handlingDeepLink || _pendingDeepLinkRoute == null || !mounted) {
       return;
@@ -353,10 +359,17 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     final pairingPayload = pairingPayloadFromDeepLinkRoute(route);
     if (pairingPayload != null &&
         !_session.setupComplete &&
-        _route != AndroidStartupRoute.legal) {
+        _canHandleStartupPairingDeepLink()) {
       _handlingDeepLink = true;
       _pendingDeepLinkRoute = null;
-      unawaited(_completePairingDeepLink(pairingPayload));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          _handlingDeepLink = false;
+          _pendingDeepLinkRoute = route;
+          return;
+        }
+        unawaited(_completePairingDeepLink(pairingPayload));
+      });
       return;
     }
     if (!_session.hasAuth || _route != AndroidStartupRoute.home) {
@@ -380,11 +393,12 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     try {
       await widget.repository.exchangePairingCode(payload);
       if (!mounted) return;
-      _showAndroidSnack('设备绑定成功');
       await _refreshRouteFromSession();
+      if (!mounted) return;
+      _showAndroidSnackAfterFrame('设备绑定成功');
     } catch (error) {
       if (!mounted) return;
-      _showAndroidSnack(
+      _showAndroidSnackAfterFrame(
         androidProductErrorMessage(
           error is MobileRepositoryException ? error.message : '$error',
           '设备配对失败，请刷新二维码或输入设备码',
@@ -394,6 +408,13 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
       _handlingDeepLink = false;
       _tryHandlePendingDeepLink();
     }
+  }
+
+  void _showAndroidSnackAfterFrame(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showAndroidSnack(message);
+    });
   }
 
   bool _openAndroidDeepLink(String route) {
