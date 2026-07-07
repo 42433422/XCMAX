@@ -1,23 +1,26 @@
 # 移动统一 SSOT（Flutter / OpenAPI / FastAPI 主线）
 
 > 本文件是 XCAGI 移动端统一前端、前后端契约、后端业务归属、设计 token 与端侧性能监控的唯一真相源。新方向是：Flutter 统一移动前端，OpenAPI 统一前后端契约，FastAPI 统一后端业务。
-> 最后更新：2026-06-30
+> 最后更新：2026-07-07
 
 ## 0. 结论
 
-- **Flutter 统一前端**：新移动页面、路由、状态、组件、缓存和移动端业务流程优先落到 `FHD/mobile-flutter-poc`，并从 POC 收敛为移动端主实现。`FHD/mobile-android`、`FHD/mobile-ios`、`FHD/mobile-harmony` 在迁移期只作为行为参照、发布兜底或平台能力参考。
+- **Flutter 统一前端（唯一交付主线）**：新移动页面、路由、状态、组件、缓存和移动端业务流程 **只** 落到 `FHD/mobile-flutter-poc`。该目录为 v10 移动协同 App 的主实现，覆盖 Android 与 iOS 单代码库交付。
+- **原生 Android / iOS 归档中**：`FHD/mobile-android`、`FHD/mobile-ios` 进入 **Frozen → Archive** 窗口：仅保留兼容构建、紧急安全修复与 Flutter 迁移参照；**禁止**新增 Tab、业务流程或独立产品叙事。新 PR 触达上述目录须有 Flutter 对等或明确归档例外说明。
 - **OpenAPI 统一前后端契约**：`FHD/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
 - **FastAPI 统一后端业务**：账号、权限、员工系统、聊天、SSE/WebSocket、支付、审批、同步、移动 relay、行业选择和数据写入都归 FastAPI 服务端实现；Flutter 只承载交互、展示、本地缓存和必要的端侧适配。
 - **KMM 暂停作为主线**：Flutter 已解决 Android/iOS 前端重复问题，不再规划 `mobile-shared` KMM 作为默认方向。只有出现必须给 Flutter、原生 Android/iOS 或第三方 SDK 共同复用的重型端侧纯逻辑时，才可另立评审引入 KMM。
-- **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是移动 token 的机器可读口径；Flutter、Android 旧端、iOS 旧端、鸿蒙旧端都从这里对齐颜色、间距、圆角和字号。
-- **性能监控统一指标名**：Flutter 新主线复用本文第 5 节指标名；旧 Android/iOS/鸿蒙在迁移期继续用各自平台实现采集。
+- **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是移动 token 的机器可读口径；Flutter 为唯一消费主线；归档原生端仅在迁移期同步。
+- **性能监控统一指标名**：Flutter 新主线复用本文第 6 节指标名；归档 Android/iOS 在归档窗口内可继续采集但不再扩指标面。
 
 ## 1. 权威入口
 
 | 范围 | 主线 / SSOT | 派生或对标 |
 |---|---|---|
-| 移动前端主实现 | `FHD/mobile-flutter-poc` | 迁移完成后替代 Android/iOS/Harmony 分散 UI |
-| 迁移期行为参照 | `FHD/mobile-android` | Flutter 迁移时按 Android 已验证路径对齐，不做新视觉分叉 |
+| 移动前端主实现 | `FHD/mobile-flutter-poc` | **唯一交付主线**；Android + iOS 单仓 |
+| 归档参照（Android） | `FHD/mobile-android` | Frozen/Archive；仅兼容构建与迁移 diff，禁止新功能 |
+| 归档参照（iOS） | `FHD/mobile-ios` | Frozen/Archive；同上 |
+| 入口文档 | [`guides/MOBILE_FLUTTER.md`](guides/MOBILE_FLUTTER.md) | 日常开发与发版说明 |
 | 前后端契约 | `FHD/contracts/openapi.json` | Flutter `lib/src/api/*`、旧 Android Retrofit、旧 iOS `Networking/*`、旧鸿蒙 `api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |
 | 设计 token | `FHD/config/mobile_design_tokens.json` | Flutter `lib/src/theme/*`、旧 Android `ui/theme/*`、旧 iOS `DesignSystem/Theme.swift`、旧鸿蒙 `design/DesignTokens.ets` |

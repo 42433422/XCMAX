@@ -23,6 +23,7 @@ class XcagiMobileEndpoints {
   static const hostDiscoverHint = '$base/host/discover-hint';
   static const me = '$base/me';
   static const adminHome = '$base/admin/home';
+  static const employeeSsot = '$base/employee-ssot';
   static const home = '$base/home';
   static const gitBranches = '$base/git/branches';
   static const aiGroups = '$base/ai-groups';
@@ -606,6 +607,47 @@ class MobileApiClient {
     return session;
   }
 
+  /// Enterprise: when LAN host is unreachable (e.g. user on 5G), switch to cloud FHD API.
+  Future<bool> preferCloudIfLanUnreachable() async {
+    if (MobileAndroidBuild.productSku != 'enterprise') return false;
+    final session = await loadSession();
+    if (session.serverMode.trim().toLowerCase() != 'lan') return false;
+    final host = session.fhdHost.trim();
+    if (host.isEmpty) {
+      final next = session.copyWith(serverMode: 'cloud');
+      await _saveSession(next);
+      return true;
+    }
+    final lanBase = AndroidServerRouter(
+      fhdHost: host,
+      mode: AndroidServerMode.lan,
+      isEnterprise: true,
+    ).fhdBaseUrl();
+    try {
+      await getJson(
+        XcagiMobileEndpoints.rootHealth,
+        baseUrl: lanBase,
+      ).timeout(const Duration(seconds: 2));
+      return false;
+    } catch (_) {
+      final next = session.copyWith(serverMode: 'cloud');
+      await _saveSession(next);
+      return true;
+    }
+  }
+
+  String _fhdBaseUrlForSession(MobileSessionData session) {
+    final mode = session.serverMode.trim().toLowerCase() == 'lan'
+        ? AndroidServerMode.lan
+        : AndroidServerMode.cloud;
+    final host = session.fhdHost.trim();
+    return AndroidServerRouter(
+      fhdHost: host.isEmpty ? '127.0.0.1' : host,
+      mode: mode,
+      isEnterprise: MobileAndroidBuild.productSku == 'enterprise',
+    ).fhdBaseUrl();
+  }
+
   Future<void> _saveSession(
     MobileSessionData session, {
     MobileSessionData? notifyAs,
@@ -972,6 +1014,7 @@ class MobileApiClient {
   }
 
   Future<MobileEnvelope<AdminMobileHomeData>> adminHome() async {
+    await preferCloudIfLanUnreachable();
     final json = await getJson(XcagiMobileEndpoints.adminHome);
     return MobileEnvelope.fromJson(
       json,
@@ -1243,7 +1286,14 @@ class MobileApiClient {
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> validateSession() async {
+    await preferCloudIfLanUnreachable();
     final json = await getJson(XcagiMobileEndpoints.authSessionValidate);
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> employeeSsot() async {
+    await preferCloudIfLanUnreachable();
+    final json = await getJson(XcagiMobileEndpoints.employeeSsot);
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -2143,8 +2193,9 @@ class MobileApiClient {
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
+    String? baseUrl,
   }) async {
-    final request = await _open('GET', path, query: query);
+    final request = await _open('GET', path, query: query, baseUrl: baseUrl);
     return _readJsonResponse(request);
   }
 
@@ -2220,7 +2271,9 @@ class MobileApiClient {
     String? baseUrl,
     String? authToken,
   }) async {
-    final uri = _buildUri(path, query, baseUrl: baseUrl);
+    final session = await loadSession();
+    final resolvedBase = baseUrl ?? _fhdBaseUrlForSession(session);
+    final uri = _buildUri(path, query, baseUrl: resolvedBase);
     final request =
         await _httpClient.openUrl(method, uri).timeout(_config.timeout);
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
@@ -2228,7 +2281,6 @@ class MobileApiClient {
     request.headers.set('X-XCAGI-Client', 'android');
     request.headers.set('X-XCAGI-SKU', MobileAndroidBuild.productSku);
 
-    final session = await loadSession();
     final explicitAuthorization = authToken?.trim() ?? '';
     if (explicitAuthorization.isNotEmpty) {
       request.headers.set(
