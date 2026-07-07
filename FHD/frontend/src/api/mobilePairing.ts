@@ -78,13 +78,16 @@ export function buildPairingQrText(payload: PairingPayload): string {
 export function resolvePairingPortHint(fallback = 5000): number {
   if (typeof window !== 'undefined') {
     const pagePort = Number(window.location.port || 0);
-    if (pagePort === 5100 || pagePort === 5000) return pagePort;
+    // 5011 = adminConsole vite proxy (0.0.0.0，外部可达)
+    // 5100/5000 = 直连后端
+    if (pagePort === 5100 || pagePort === 5000 || pagePort === 5011) return pagePort;
   }
   const envPort = Number(import.meta.env.VITE_FHD_PORT || import.meta.env.VITE_API_PORT || 0);
   if (envPort > 0) return envPort;
   return fallback;
 }
 
+<<<<<<< Updated upstream
 /** 后端 loopback 监听时，Vite 代理端口才是手机局域网可达地址。 */
 export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayload {
   if (typeof window === 'undefined') return payload;
@@ -99,4 +102,22 @@ export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayl
     host,
     port: pagePort,
   };
+=======
+/**
+ * 判断当前页面是否通过 vite proxy 访问（端口从外部可达）。
+ * 当页面端口与后端 hint 端口不同时，说明存在反向代理，页面端口才是手机可达的端口。
+ */
+export function resolveReachablePairingPort(hintApiPort: number, fallback = 5000): number {
+  if (typeof window !== 'undefined') {
+    const pagePort = Number(window.location.port || 0);
+    // 页面端口可达（浏览器能访问即说明从局域网可达），优先于后端 hint 端口
+    // 后端 hint 端口可能绑定 127.0.0.1（桌面模式），手机不可达
+    if (pagePort > 0 && pagePort !== hintApiPort && pagePort !== 80 && pagePort !== 443) {
+      return pagePort;
+    }
+  }
+  const hint = Number(hintApiPort || 0);
+  if (hint > 0) return hint;
+  return resolvePairingPortHint(fallback);
+>>>>>>> Stashed changes
 }

@@ -734,9 +734,14 @@ class MobileApiClient {
       next = next.copyWith(biometricEnabled: biometricEnabled);
     }
     if (serverMode != null) {
+<<<<<<< Updated upstream
       final normalized = serverMode.trim().toLowerCase();
       next = next.copyWith(
         serverMode: normalized == 'lan' ? 'lan' : 'cloud',
+=======
+      next = next.copyWith(
+        serverMode: serverMode.trim().isEmpty ? 'cloud' : serverMode.trim(),
+>>>>>>> Stashed changes
       );
     }
     await _saveSession(next);
