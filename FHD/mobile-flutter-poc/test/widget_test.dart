@@ -5554,7 +5554,7 @@ void main() {
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.byIcon(Icons.mic), findsOneWidget);
     expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.text('发送'), findsOneWidget);
+    expect(find.text('发送'), findsNothing);
     expect(find.textContaining('api/mobile'), findsNothing);
     final typography = AppTheme.light().textTheme;
     final composer = tester.widget<Container>(

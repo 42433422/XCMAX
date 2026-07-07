@@ -1363,18 +1363,23 @@ class _Composer extends StatelessWidget {
                     icon: Icons.add,
                     iconSize: 26,
                     selected: showTools,
-                    onPressed: onToggleTools,
+                    onPressed: () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      onToggleTools();
+                    },
                     tooltip: '更多工具',
                   ),
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: controller,
                     builder: (context, value, _) {
                       final hasText = value.text.trim().isNotEmpty;
+                      if (!busy && !hasText) {
+                        return const SizedBox.shrink();
+                      }
                       return Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: _SendPill(
                           canStop: busy,
-                          enabled: busy || hasText,
                           onSend: onSend,
                           onStop: onStop,
                         ),
@@ -1717,15 +1722,15 @@ class _ChatToolCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    return SizedBox(
-      key: ValueKey('chat_tool_card_${action.title}'),
-      height: 92,
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: action.onTap,
-          borderRadius: BorderRadius.circular(8),
+    return Semantics(
+      button: true,
+      label: action.title,
+      child: GestureDetector(
+        key: ValueKey('chat_tool_card_${action.title}'),
+        behavior: HitTestBehavior.opaque,
+        onTap: action.onTap,
+        child: SizedBox(
+          height: 92,
           child: Padding(
             padding: const EdgeInsets.only(top: 1),
             child: Column(
@@ -1774,13 +1779,11 @@ class _ChatToolCard extends StatelessWidget {
 class _SendPill extends StatelessWidget {
   const _SendPill({
     required this.canStop,
-    required this.enabled,
     required this.onSend,
     required this.onStop,
   });
 
   final bool canStop;
-  final bool enabled;
   final VoidCallback onSend;
   final VoidCallback onStop;
 
@@ -1791,11 +1794,8 @@ class _SendPill extends StatelessWidget {
     final label = canStop ? '停止' : '发送';
     final background = canStop
         ? Theme.of(context).colorScheme.errorContainer
-        : (enabled
-            ? colors.brand
-            : colors.brand.withValues(alpha: 0.35));
+        : colors.brand;
     void handleTap() {
-      if (!enabled) return;
       if (canStop) {
         onStop();
       } else {
@@ -1803,26 +1803,33 @@ class _SendPill extends StatelessWidget {
       }
     }
 
-    return TextButton(
-      key: const ValueKey('chat_send_pill'),
-      onPressed: enabled ? handleTap : null,
-      style: TextButton.styleFrom(
-        minimumSize: const Size(52, 38),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        padding: const EdgeInsets.symmetric(horizontal: 17),
-        backgroundColor: background,
-        foregroundColor:
-            canStop ? colors.danger : Colors.white.withValues(alpha: enabled ? 1 : 0.72),
-        disabledBackgroundColor: background,
-        disabledForegroundColor:
-            Colors.white.withValues(alpha: enabled ? 1 : 0.72),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-      child: Text(
-        label,
-        style: textTheme.labelLarge?.copyWith(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
+    return Semantics(
+      button: true,
+      enabled: true,
+      label: label,
+      child: Material(
+        key: const ValueKey('chat_send_pill'),
+        color: background,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: handleTap,
+          borderRadius: BorderRadius.circular(8),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 52, minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 5),
+              child: Center(
+                child: Text(
+                  label,
+                  style: textTheme.labelLarge?.copyWith(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: canStop ? colors.danger : Colors.white,
+                  ),
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
