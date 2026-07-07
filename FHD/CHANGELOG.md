@@ -26,6 +26,10 @@
 
 - **fix(mobile-flutter)**：授权后等 `MobileScanner` 挂载再 `start()`，避免 `controllerNotAttached` 被静默吞掉；从设置返回时自动重试；相机故障与权限页分离展示
 
+### 扫码相机插件替换（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：小米真机 `mobile_scanner` CameraX 启动 NPE；改用 `camera` + ML Kit 帧流扫码，对齐原生 Kotlin 方案
+
 ### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
 
 - **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口
