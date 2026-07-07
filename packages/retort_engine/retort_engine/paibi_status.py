@@ -1,9 +1,28 @@
+"""Canonical PaiBi task-status parsing for the 反问 Retort scoring loop.
+
+This is the single source of truth for turning a Para/PaiBi task body into a
+Retort review status: normalized subtasks, extracted score JSON, calibrated
+scores, and actionable blockers/unblock tasks. `paibi_llm` and
+`paibi_result_parser` re-use these functions so the live scoring path and the
+tested helpers can never drift apart.
+"""
+
 from __future__ import annotations
 
 import json
 from typing import Any
 
 from retort_engine.llm_schema import RETORT_SCORE_DIMENSIONS
+
+__all__ = [
+    "summarize_task",
+    "parallel_summary",
+    "analyze_task_blockers",
+    "unblock_tasks_from_blockers",
+    "status_has_stale_dispatch",
+    "extract_last_json_object",
+    "normalize_llm_scores",
+]
 
 
 def summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +203,18 @@ def unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[str
     return tasks
 
 
+def status_has_stale_dispatch(status: dict[str, Any]) -> bool:
+    """True when a summarized status carries a stale-dispatch blocker.
+
+    Used by the deep-review waiter to abort early instead of spinning until the
+    full timeout when a Para tool slot accepted the task but never made progress.
+    """
+    blockers = status.get("blockers")
+    if not isinstance(blockers, list):
+        blockers = analyze_task_blockers(status)
+    return any(isinstance(item, dict) and item.get("kind") == "stale_dispatch" for item in blockers)
+
+
 def _is_stale_dispatch(status: dict[str, Any], subtasks: list[Any], logs: str) -> bool:
     if str(status.get("status") or "") not in {"running", "pending"}:
         return False
@@ -218,7 +249,7 @@ def _progress_value(value: Any) -> float:
         return 0.0
 
 
-def _extract_last_json_object(text: str) -> dict[str, Any] | None:
+def extract_last_json_object(text: str) -> dict[str, Any] | None:
     decoder = json.JSONDecoder()
     best: dict[str, Any] | None = None
     scored: list[dict[str, Any]] = []
@@ -234,6 +265,10 @@ def _extract_last_json_object(text: str) -> dict[str, Any] | None:
                 scored.append(value)
             best = value
     return scored[-1] if scored else best
+
+
+# Backward-compatible private alias kept for existing callers/tests.
+_extract_last_json_object = extract_last_json_object
 
 
 def normalize_llm_scores(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
