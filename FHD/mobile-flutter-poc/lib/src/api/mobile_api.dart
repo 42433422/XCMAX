@@ -1666,11 +1666,16 @@ class MobileApiClient {
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayConfirmCode(
-    String code,
-  ) async {
-    final json = await postJson(XcagiMobileEndpoints.relayMobileConfirmCode, {
-      'code': code.trim(),
-    });
+    String code, {
+    String baseUrl = '',
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.relayMobileConfirmCode,
+      {
+        'code': code.trim(),
+      },
+      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
+    );
     final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
     if (envelope.success) {
       final relayId = _relayIdFromBindingData(envelope.data);
