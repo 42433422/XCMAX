@@ -110,33 +110,41 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: _messages.isEmpty
                   ? const SizedBox.expand()
-                  : ListView.builder(
-                      reverse: true,
-                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
-                      itemBuilder: (context, index) {
-                        final originalIndex = _messages.length - index - 1;
-                        final message = _messages[originalIndex];
-                        return MessageBubble(
-                          message: message,
-                          conversation: widget.conversation,
-                          showAvatar: _showAvatarAt(originalIndex),
-                          userAvatarUrl: _userAvatarSource,
-                          aiAvatarUrl: employeeProfile?.avatarUrl,
-                          aiContentDescription: _resolvedTitle,
-                          hasEmployeeProfile: employeeProfile != null,
-                          onReply: () => setState(() => _replyTo = message),
-                          onDelete: () => _deleteMessageAt(originalIndex),
-                          onResend: message.status == ChatDeliveryStatus.failed
-                              ? _resendLastChat
-                              : null,
-                        );
-                      },
-                      itemCount: _messages.length,
+                  : ClipRect(
+                      child: ListView.builder(
+                        reverse: true,
+                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                        itemBuilder: (context, index) {
+                          final originalIndex = _messages.length - index - 1;
+                          final message = _messages[originalIndex];
+                          return MessageBubble(
+                            message: message,
+                            conversation: widget.conversation,
+                            showAvatar: _showAvatarAt(originalIndex),
+                            userAvatarUrl: _userAvatarSource,
+                            aiAvatarUrl: employeeProfile?.avatarUrl,
+                            aiContentDescription: _resolvedTitle,
+                            hasEmployeeProfile: employeeProfile != null,
+                            onReply: () => setState(() => _replyTo = message),
+                            onDelete: () => _deleteMessageAt(originalIndex),
+                            onResend: message.status == ChatDeliveryStatus.failed
+                                ? _resendLastChat
+                                : null,
+                          );
+                        },
+                        itemCount: _messages.length,
+                      ),
                     ),
             ),
             _Composer(
               controller: _controller,
-              onSend: _send,
+              onSend: () {
+                if (_sending) return;
+                final text = _controller.text.trim();
+                if (text.isEmpty) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                _send(text);
+              },
               onStop: _stopChat,
               busy: _sending,
               topContent: _composerTopContent(
@@ -166,7 +174,9 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       if (!mounted) return;
       if (remoteMessages.isNotEmpty) {
-        setState(() => _messages = remoteMessages);
+        // Copy into a growable list: repository may return a fixed-length
+        // list, and later sends append to _messages.
+        setState(() => _messages = [...remoteMessages]);
       }
     } catch (_) {
       // Keep the Android-like empty state when auth/network is unavailable.
@@ -195,7 +205,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _showToolPanel = false;
       _activeAssistantId = assistantId;
       _stopRequested = false;
-      _messages.add(
+      _messages = [
+        ..._messages,
         ChatMessage(
           id: assistantId,
           conversationId: widget.conversation.id,
@@ -205,7 +216,7 @@ class _ChatScreenState extends State<ChatScreen> {
           hasEmployeeProfile: true,
           status: ChatDeliveryStatus.sending,
         ),
-      );
+      ];
     });
 
     try {
@@ -332,7 +343,8 @@ class _ChatScreenState extends State<ChatScreen> {
         status: ChatDeliveryStatus.sending,
       );
       recentMessages = [..._messages, userMessage];
-      _messages.addAll([
+      _messages = [
+        ..._messages,
         userMessage,
         ChatMessage(
           id: assistantMessage.id,
@@ -345,7 +357,7 @@ class _ChatScreenState extends State<ChatScreen> {
           hasEmployeeProfile: assistantMessage.hasEmployeeProfile,
           status: assistantMessage.status,
         ),
-      ]);
+      ];
     });
     _controller.clear();
 
@@ -422,7 +434,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _clearChat() {
     setState(() {
-      _messages.clear();
+      _messages = [];
       _showToolPanel = false;
       _replyTo = null;
     });
@@ -623,7 +635,8 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _runningGitOp = true;
       _showToolPanel = false;
-      _messages.add(
+      _messages = [
+        ..._messages,
         ChatMessage(
           id: messageId,
           conversationId: widget.conversation.id,
@@ -632,7 +645,7 @@ class _ChatScreenState extends State<ChatScreen> {
           timeText: '刚刚',
           hasEmployeeProfile: _employeeProfile != null,
         ),
-      );
+      ];
     });
     try {
       final result = await repository.runGitOperation(branch: branch, op: op);
@@ -1338,7 +1351,16 @@ class _Composer extends StatelessWidget {
                         onSubmitted: busy
                             ? null
                             : (value) {
-                                if (value.trim().isNotEmpty) onSend();
+                                if (value.trim().isEmpty) return;
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                onSend();
+                              },
+                        onEditingComplete: busy
+                            ? null
+                            : () {
+                                if (controller.text.trim().isEmpty) return;
+                                FocusManager.instance.primaryFocus?.unfocus();
+                                onSend();
                               },
                         style: textTheme.bodyMedium?.copyWith(
                           color: colors.textPrimary,
@@ -1803,31 +1825,27 @@ class _SendPill extends StatelessWidget {
       }
     }
 
-    return Semantics(
-      button: true,
-      enabled: true,
-      label: label,
-      child: Material(
-        key: const ValueKey('chat_send_pill'),
-        color: background,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          onTap: handleTap,
-          borderRadius: BorderRadius.circular(8),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 52, minHeight: 48),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 5),
-              child: Center(
-                child: Text(
-                  label,
-                  style: textTheme.labelLarge?.copyWith(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: canStop ? colors.danger : Colors.white,
-                  ),
-                ),
-              ),
+    return Material(
+      key: const ValueKey('chat_send_pill'),
+      color: background,
+      borderRadius: BorderRadius.circular(8),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        height: 48,
+        child: IconButton(
+          onPressed: handleTap,
+          tooltip: label,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          constraints: const BoxConstraints(minWidth: 52),
+          style: IconButton.styleFrom(
+            foregroundColor: canStop ? colors.danger : Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          ),
+          icon: Text(
+            label,
+            style: textTheme.labelLarge?.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
