@@ -45,7 +45,11 @@ import org.json.JSONObject
 
 private const val DeltaFormatCopyDataV1 = "xcagi-copy-data-v1"
 private const val SessionFileName = "xcagi_session.json"
-private const val LegacySessionDataStorePath = "datastore/xcagi_session_enterprise.preferences_pb"
+
+// 与原生 mobile-android SessionStore 对齐：DataStore 文件按 SKU 隔离
+// （xcagi_session_personal / xcagi_session_enterprise），迁移路径随构建 flavor 变化。
+private val LegacySessionDataStorePath =
+    "datastore/xcagi_session_${BuildConfig.PRODUCT_SKU}.preferences_pb"
 private const val LegacySessionMigrationMarkerName = "xcagi_session_legacy_migrated"
 private const val RecordAudioPermissionRequestCode = 4242
 

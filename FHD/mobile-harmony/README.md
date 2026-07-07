@@ -1,5 +1,7 @@
 # 移动鸿蒙模块（企业版发布链路）
 
+> **冻结（2026-07 · 发布兜底线）**：移动端唯一主实现已切换为 [`mobile-flutter-poc/`](../mobile-flutter-poc/README.md)（Flutter 统一 Android + iOS，SSOT 见 [`docs/mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md)）。本目录冻结为**发布兜底**：只接安全/合规/紧急修复，不再新增产品流程。
+
 本目录是 XCAGI 企业版 HarmonyOS 手机端 ArkTS 工程与发布模块。
 
 ## 目录约定

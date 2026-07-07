@@ -457,6 +457,74 @@ class AdminMobileFeature {
   }
 }
 
+/// 员工任务中心：Phase-D 员工主动提问（对齐原生 ApiModels.EmployeePendingQuestion）。
+class EmployeePendingQuestion {
+  const EmployeePendingQuestion({
+    required this.id,
+    required this.employeeId,
+    required this.task,
+    required this.question,
+    required this.status,
+    required this.answer,
+    required this.askedAt,
+    required this.answeredAt,
+    required this.expiresAt,
+  });
+
+  final int id;
+  final String employeeId;
+  final String task;
+  final String question;
+
+  /// pending | answered | expired
+  final String status;
+  final String answer;
+  final String askedAt;
+  final String answeredAt;
+  final String expiresAt;
+
+  bool get isPending => status == 'pending';
+
+  factory EmployeePendingQuestion.fromJson(Map<String, Object?> json) {
+    return EmployeePendingQuestion(
+      id: _readInt(json, const ['id'], 0),
+      employeeId: _readString(json, const ['employee_id']),
+      task: _readString(json, const ['task']),
+      question: _readString(json, const ['question']),
+      status: _readString(json, const ['status']).ifEmpty('pending'),
+      answer: _readString(json, const ['answer']),
+      askedAt: _readString(json, const ['asked_at']),
+      answeredAt: _readString(json, const ['answered_at']),
+      expiresAt: _readString(json, const ['expires_at']),
+    );
+  }
+}
+
+/// `/admin/employee-pending-questions` 响应 data
+/// （对齐原生 ApiModels.EmployeePendingQuestionsData）。
+class EmployeePendingQuestionsData {
+  const EmployeePendingQuestionsData({
+    required this.items,
+    required this.count,
+    required this.marketConnected,
+  });
+
+  final List<EmployeePendingQuestion> items;
+  final int count;
+  final bool marketConnected;
+
+  factory EmployeePendingQuestionsData.fromJson(Map<String, Object?> json) {
+    final items = _readList(json['items'])
+        .map(EmployeePendingQuestion.fromJson)
+        .toList(growable: false);
+    return EmployeePendingQuestionsData(
+      items: items,
+      count: _readInt(json, const ['count'], items.length),
+      marketConnected: _readBool(json, const ['market_connected']),
+    );
+  }
+}
+
 class WalletBalanceData {
   const WalletBalanceData({
     required this.balance,

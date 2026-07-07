@@ -1,5 +1,7 @@
 # XCAGI iOS App(`mobile-ios`)
 
+> **冻结（2026-07 · 发布兜底线）**：移动端唯一主实现已切换为 [`mobile-flutter-poc/`](../mobile-flutter-poc/README.md)（Flutter 统一 Android + iOS，SSOT 见 [`docs/mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md)）。本目录冻结为**发布兜底**：只接安全/合规/紧急修复，不再新增产品流程。
+
 原生 **SwiftUI + MVVM** 客户端,对标 `mobile-android`(Kotlin/Compose)与 `mobile-harmony`(ArkTS)。
 共享同一套移动 API 契约 `api/mobile/v1/*`(见 `app/fastapi_routes/mobile_api_extensions.py`)。
 

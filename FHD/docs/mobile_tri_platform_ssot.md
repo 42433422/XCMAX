@@ -1,34 +1,54 @@
 # 移动统一 SSOT（Flutter / OpenAPI / FastAPI 主线）
 
-> 本文件是 XCAGI 移动端统一前端、前后端契约、后端业务归属、设计 token 与端侧性能监控的唯一真相源。新方向是：Flutter 统一移动前端，OpenAPI 统一前后端契约，FastAPI 统一后端业务。
-> 最后更新：2026-06-30
+> 本文件是 XCAGI 移动端统一前端、前后端契约、后端业务归属、设计 token 与端侧性能监控的唯一真相源。方向已落地：Flutter 统一移动前端（一套代码替代原生 iOS + Android），OpenAPI 统一前后端契约，FastAPI 统一后端业务。
+> 最后更新：2026-07-07
 
 ## 0. 结论
 
-- **Flutter 统一前端**：新移动页面、路由、状态、组件、缓存和移动端业务流程优先落到 `FHD/mobile-flutter-poc`，并从 POC 收敛为移动端主实现。`FHD/mobile-android`、`FHD/mobile-ios`、`FHD/mobile-harmony` 在迁移期只作为行为参照、发布兜底或平台能力参考。
+- **Flutter 统一前端**：`FHD/mobile-flutter-poc` 是移动端**唯一主实现**，一套 Dart 代码同时交付 Android 与 iOS（双 SKU personal/enterprise 与原生构建矩阵一致）。新移动页面、路由、状态、组件、缓存和移动端业务流程**只**落到 Flutter 主线。`FHD/mobile-android`、`FHD/mobile-ios`、`FHD/mobile-harmony` 已冻结为发布兜底与行为参照：只接安全修复与紧急修复，不再新增产品流程。
 - **OpenAPI 统一前后端契约**：`FHD/contracts/openapi.json` 是移动端与 FastAPI 后端之间的机器可读契约。Flutter 的 DTO/API client 应从 OpenAPI 或经裁剪的 mobile contract 派生，不允许手写一套与 OpenAPI 漂移的字段口径。
 - **FastAPI 统一后端业务**：账号、权限、员工系统、聊天、SSE/WebSocket、支付、审批、同步、移动 relay、行业选择和数据写入都归 FastAPI 服务端实现；Flutter 只承载交互、展示、本地缓存和必要的端侧适配。
 - **KMM 暂停作为主线**：Flutter 已解决 Android/iOS 前端重复问题，不再规划 `mobile-shared` KMM 作为默认方向。只有出现必须给 Flutter、原生 Android/iOS 或第三方 SDK 共同复用的重型端侧纯逻辑时，才可另立评审引入 KMM。
 - **设计 token 统一**：`FHD/config/mobile_design_tokens.json` 是移动 token 的机器可读口径；Flutter、Android 旧端、iOS 旧端、鸿蒙旧端都从这里对齐颜色、间距、圆角和字号。
-- **性能监控统一指标名**：Flutter 新主线复用本文第 5 节指标名；旧 Android/iOS/鸿蒙在迁移期继续用各自平台实现采集。
+- **性能监控统一指标名**：Flutter 主线复用本文第 5 节指标名；冻结的 Android/iOS/鸿蒙在兜底期继续用各自平台实现采集。
 
 ## 1. 权威入口
 
 | 范围 | 主线 / SSOT | 派生或对标 |
 |---|---|---|
-| 移动前端主实现 | `FHD/mobile-flutter-poc` | 迁移完成后替代 Android/iOS/Harmony 分散 UI |
-| 迁移期行为参照 | `FHD/mobile-android` | Flutter 迁移时按 Android 已验证路径对齐，不做新视觉分叉 |
-| 前后端契约 | `FHD/contracts/openapi.json` | Flutter `lib/src/api/*`、旧 Android Retrofit、旧 iOS `Networking/*`、旧鸿蒙 `api/*` |
+| 移动前端主实现 | `FHD/mobile-flutter-poc`（Flutter 统一 Android + iOS） | 替代 Android/iOS/Harmony 分散 UI；原生端冻结为兜底 |
+| 行为对齐参照（冻结） | `FHD/mobile-android` | Flutter 行为回归对照基线；`mobile-flutter-poc/test/*parity*` 直读其源码防漂移 |
+| 前后端契约 | `FHD/contracts/openapi.json` | Flutter `lib/src/api/*`、冻结 Android Retrofit、冻结 iOS `Networking/*`、冻结鸿蒙 `api/*` |
 | 后端业务实现 | `FHD/app/fastapi_routes/mobile_api.py`、`FHD/app/fastapi_routes/mobile_api_extensions.py` 与 `/api/mobile/v1/*` | OpenAPI 导出、移动端 API client |
-| 设计 token | `FHD/config/mobile_design_tokens.json` | Flutter `lib/src/theme/*`、旧 Android `ui/theme/*`、旧 iOS `DesignSystem/Theme.swift`、旧鸿蒙 `design/DesignTokens.ets` |
-| 端侧性能指标 | 本文第 5 节指标名 | Flutter 埋点、旧 Android `XcagiAnalytics`、旧 iOS `MobilePerformanceMonitor`、旧鸿蒙 `PerformanceMonitor` |
+| 设计 token | `FHD/config/mobile_design_tokens.json` | Flutter `lib/src/theme/*`、冻结 Android `ui/theme/*`、冻结 iOS `DesignSystem/Theme.swift`、冻结鸿蒙 `design/DesignTokens.ets` |
+| 端侧性能指标 | 本文第 5 节指标名 | Flutter 埋点、冻结 Android `XcagiAnalytics`、冻结 iOS `MobilePerformanceMonitor`、冻结鸿蒙 `PerformanceMonitor` |
+
+### 1.1 双 SKU 构建矩阵（Flutter 主线）
+
+与原生 `mobile-android` productFlavors 完全一致，全锚点 v10 锁定 `10.0.0`：
+
+| SKU | applicationId / bundle id | 应用名 | 构建命令 |
+|---|---|---|---|
+| personal | `com.xiuci.xcagi.mobile.personal` | XCAGI 个人版 | `flutter build apk --flavor personal --dart-define=XCAGI_PRODUCT_SKU=personal` |
+| enterprise | `com.xiuci.xcagi.mobile.enterprise` | XCAGI 企业版 | `flutter build apk --flavor enterprise --dart-define=XCAGI_PRODUCT_SKU=enterprise` |
+
+- Dart 侧构建 SKU 由 `--dart-define=XCAGI_PRODUCT_SKU` 注入（缺省 enterprise），运行时可被 `GET /api/app/config` 的 `sku` 远程覆盖（与原生 `ProductSkuConfig` 同策略）。
+- iOS 侧 bundle id 主线为 `com.xiuci.xcagi.mobile.enterprise`（企业版），personal 沿用原生 iOS 的冻结兼容口径。
+- 平台身份统一：同一套 Flutter 代码在 Android 上报 `X-XCAGI-Client: android`、在 iOS 上报 `X-XCAGI-Client: ios`，与原生两端的既有后端契约一致。
+
+### 1.2 原生端冻结规则
+
+- `mobile-android` / `mobile-ios` / `mobile-harmony` **只接**：安全修复、商店合规修复、阻断线上发布的紧急修复。
+- 任何新功能、新页面、新端点接入**必须**先落 `mobile-flutter-poc`；原生端不再单独实现新产品流程。
+- Android 仍是 Flutter 行为对齐的参照基线：`mobile-flutter-poc/test/mobile_api_parity_test.dart` 等 parity 测试直读 `mobile-android` 源码，Android 侧接口契约变更时 Flutter 必须同步（同次提交或紧随任务）。
+- 原生端退役（目录归档）需满足：Flutter 双端商店包稳定发布 ≥ 1 个发版周期，且崩溃率/核心链路指标不劣于原生基线。
 
 ## 2. Flutter 前端边界
 
 Flutter 主线负责：
 
 - 页面、导航、Shell、主题、组件、表单、列表、聊天气泡、头像渲染。
-- 登录、配对、会话、通讯录、AI 群、客服、审批、钱包、设置等移动端交互流程。
+- 登录、配对、会话、通讯录、AI 群、客服、审批、员工任务中心、钱包、设置等移动端交互流程。
 - Dart API client、DTO、repository、轻量本地缓存、端侧错误展示。
 - 端侧平台适配入口：扫码、OCR、推送、生物识别、WebView token 注入、深链。
 
@@ -36,7 +56,7 @@ Flutter 不负责：
 
 - 权限判定、会员等级、员工系统执行、支付状态、审批流推进、聊天持久化、任务调度、数据最终写入。
 - 自定义一套绕过 OpenAPI 的后端字段、错误码或路由命名。
-- 以 Flutter POC 名义重做产品信息架构或视觉风格；迁移期必须先复刻 Android 已验证行为，再逐步统一体验。
+- 以统一移动端名义重做产品信息架构或视觉风格；行为以 Android 已验证路径为对齐基线，体验统一须走 token/组件层演进。
 
 ## 3. OpenAPI 契约边界
 
@@ -60,7 +80,7 @@ Flutter 只能缓存和展示服务端状态。出现端侧与服务端冲突时
 
 ### 准入门槛
 
-- Flutter：`cd FHD/mobile-flutter-poc && flutter pub get && flutter test`
+- Flutter：`cd FHD/mobile-flutter-poc && flutter pub get && flutter test`（含直读 `mobile-android` 源码的 parity 门禁：端点表、Retrofit HTTP 面、拓扑、双 SKU flavor、鉴权头策略）
 - OpenAPI：`cd FHD && python scripts/dev/export_openapi.py --output contracts/openapi.json && python scripts/tools/check_openapi_consistency.py`
 - FastAPI mobile：`cd FHD && python -m pytest tests/test_routes/test_mobile_api_extensions_cov.py`
 - SSOT：`cd FHD && python scripts/dev/ssot_cli.py check mobile-tri-platform`
@@ -117,8 +137,9 @@ KMM 不再是移动统一默认路线。满足以下全部条件时，才允许�
 
 出现以下任一情况即视为移动统一 SSOT 漂移：
 
-- 新移动能力绕过 Flutter 主线，只在旧 Android/iOS/Harmony 端新增产品流程。
+- 新移动能力绕过 Flutter 主线，只在冻结的 Android/iOS/Harmony 端新增产品流程。
 - Flutter API model 与 `FHD/contracts/openapi.json` 字段、路径、错误包络不一致。
+- Flutter 端点/构建矩阵与 `mobile-android` 参照基线漂移（`flutter test` parity 门禁红）。
 - 可信业务逻辑落在 Flutter 端，导致服务端无法审计、复算或持久化。
 - Flutter 或旧端新增颜色、间距、字号，但 `mobile_design_tokens.json` 没有登记。
 - 性能事件命名绕过第 6 节指标表。

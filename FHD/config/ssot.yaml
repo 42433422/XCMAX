@@ -203,7 +203,8 @@ domains:
   - name: mobile-tri-platform
     owner: mobile-platform
     enabled: true
-    # 移动统一 SSOT：Flutter 前端、OpenAPI 契约、FastAPI 后端业务、设计 token、端侧性能监控。
+    # 移动统一 SSOT：Flutter 统一移动端（替代原生 Android/iOS 主实现，双 SKU）、
+    # OpenAPI 契约、FastAPI 后端业务、设计 token、端侧性能监控；原生端冻结为发布兜底。
     ssot: FHD/docs/mobile_tri_platform_ssot.md
     derived:
       - FHD/config/mobile_design_tokens.json
@@ -216,6 +217,10 @@ domains:
       - FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart
       - FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart
       - FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart
+      - FHD/mobile-flutter-poc/android/app/build.gradle.kts
+      - FHD/mobile-android/README.md
+      - FHD/mobile-ios/README.md
+      - FHD/mobile-harmony/README.md
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt
       - FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt

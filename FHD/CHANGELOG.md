@@ -6,6 +6,14 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 移动统一：Flutter 替代 iOS/Android 主实现（2026-07-07 · v10 线内迭代）
+
+- **feat(mobile-flutter)**：双 SKU 构建对齐原生 Android（productFlavors personal/enterprise + `XCAGI_PRODUCT_SKU` dart-define，applicationId/应用名与原生一致，legacy DataStore 迁移按 `BuildConfig.PRODUCT_SKU` 分 SKU）
+- **feat(mobile-flutter)**：补齐员工任务中心（Phase-D `admin/employee-pending-questions` 列表 + 回答），员工档案页与深链入口接通
+- **fix(mobile-flutter)**：IM 端点对齐 Android `api/mobile/v1/im/*`（list/read/direct/messages）；`sendPhoneCode` 改走 MODstore `api/auth/send-phone-code`；补 `api/market/catalog`、`api/mods/installed`、`api/auth/me` 市场面
+- **feat(mobile-flutter)**：平台身份统一——同一套代码 Android 上报 `X-XCAGI-Client: android`、iOS 上报 `ios`；parity 门禁扩展（Android FhdApi 105 端点对、双 SKU flavor、管理端客服收件箱与员工提问端点）
+- **docs(mobile-ssot)**：`mobile_tri_platform_ssot.md` 升级——Flutter（`mobile-flutter-poc`）为移动端唯一主实现，`mobile-android`/`mobile-ios`/`mobile-harmony` 冻结为发布兜底；ssot.yaml、SSOT_INDEX、START_HERE、product-lines-3-plus-2 同步
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod

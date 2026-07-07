@@ -29,7 +29,7 @@
 | coverage-metrics（覆盖率唯一数字） | [../metrics/coverage-dual-summary.json](../metrics/coverage-dual-summary.json) | 覆盖率唯一数字 SSOT（committed_head / 棘轮 floor / 目标 / 退役口径） |
 | account（产品端与账号体系） | [account_system_ssot.md](account_system_ssot.md) | 产品端矩阵、账号体系四维真相源（身份/行业/会员/账号等级）、行业/Persona 派生、字段写入权限矩阵、多租户隔离与账户安全 |
 | project-state（项目真实状态） | [PROJECT_STATE.md](PROJECT_STATE.md) | 项目健康度/完成度诚实仪表盘，唯一禁止撒谎的状态文档 |
-| mobile-tri-platform（移动统一） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | Flutter 统一移动前端、OpenAPI 统一前后端契约、FastAPI 统一后端业务、移动 token 与端侧性能监控 |
+| mobile-tri-platform（移动统一） | [mobile_tri_platform_ssot.md](mobile_tri_platform_ssot.md) | Flutter 统一移动前端（`mobile-flutter-poc` 为唯一主实现，替代原生 Android/iOS；原生端冻结兜底）、OpenAPI 统一前后端契约、FastAPI 统一后端业务、移动 token 与端侧性能监控 |
 | local-data（本地数据安全） | [security/LOCAL_DATA_POLICY.md](security/LOCAL_DATA_POLICY.md) | 桌面/Web 本地数据分类、purge CLI、诊断包与上传鉴权策略 |
 | neuro-bus-events（事件契约） | [../config/neuro_bus_events.yaml](../config/neuro_bus_events.yaml) | NeuroBus 三流事件契约统一 SSOT（NeuroBus 域事件 + AgentRun 事件 + 应用桥接），点号命名规范化，派生 Python 常量 + TS 类型 + OpenAPI schema |
 | deployment-modes（AI 部署模式） | [../config/deployment_modes.yaml](../config/deployment_modes.yaml) | 三档部署模式唯一真相源：绝对安全、安全、性能；统一内网/外网、手机局域网直连与移动端超级员工 LAN 优先策略 |

@@ -1351,6 +1351,64 @@ class MobileRepository {
     );
   }
 
+  /// IM 会话列表：失败返回空表不打断消息列表（对齐原生 XcagiRepository.imConversations）。
+  Future<List<Map<String, Object?>>> loadImConversations() async {
+    try {
+      final body = await _client.imListConversations();
+      final data = _nestedDataMap(body);
+      return _firstObjectList([
+        data['conversations'],
+        data['items'],
+        data['data'],
+      ]);
+    } catch (_) {
+      return const <Map<String, Object?>>[];
+    }
+  }
+
+  /// 进入 IM 会话即标记已读（对齐原生 repo.imMarkRead：失败静默）。
+  Future<void> markImRead(int conversationId) async {
+    if (conversationId <= 0) return;
+    try {
+      await _client.imMarkRead(conversationId);
+    } catch (_) {
+      // 与原生一致：标记已读失败不打断会话流程。
+    }
+  }
+
+  /// 员工任务中心：Phase-D 主动提问列表（employeeId 为空拉全部员工）。
+  Future<List<EmployeePendingQuestion>> loadEmployeePendingQuestions({
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final response = await _client.listEmployeePendingQuestions(
+      includeHistory: includeHistory,
+      employeeId: employeeId,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('拉不到员工提问'));
+    }
+    return response.data?.items ?? const <EmployeePendingQuestion>[];
+  }
+
+  /// 员工任务中心：老板回答一条员工提问。
+  Future<void> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final text = answer.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('回答不能为空');
+    }
+    final response = await _client.answerEmployeePendingQuestion(
+      questionId: questionId,
+      answer: text,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('回答发送失败'));
+    }
+  }
+
   Future<List<BusinessListItem>> loadCustomers() async {
     final response = await _client.customers();
     if (!response.success) {

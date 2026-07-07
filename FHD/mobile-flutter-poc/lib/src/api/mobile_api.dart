@@ -69,7 +69,8 @@ class XcagiMobileEndpoints {
   static const mods = '$base/mods';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
-  static const imDirect = 'api/im/conversations/direct';
+  static const imConversations = '$base/im/conversations';
+  static const imDirect = '$base/im/conversations/direct';
   static const financeSummary = 'api/finance/summary';
   static const aiChat = 'api/ai/chat';
   static const aiChatStream = 'api/ai/chat/stream';
@@ -123,9 +124,22 @@ class XcagiMobileEndpoints {
       'api/service-bridge/requests/{id}/respond';
   static const inventoryItems = 'api/inventory/items';
   static const legacyModsList = 'api/mods/';
-  static const imMessagesTemplate = 'api/im/conversations/{id}/messages';
+  static const imMessagesTemplate = '$base/im/conversations/{id}/messages';
+  static const imMarkReadTemplate = '$base/im/conversations/{id}/read';
   static const employeeChatStreamTemplate =
       '$base/employees/{employeeId}/chat/stream';
+  // 员工任务中心：Phase-D 主动提问 + 老板回答
+  static const adminEmployeePendingQuestions =
+      '$base/admin/employee-pending-questions';
+  static const adminEmployeePendingQuestionAnswerTemplate =
+      '$base/admin/employee-pending-questions/{questionId}/answer';
+  // MODstore 直连面（base = modstoreBaseUrl，对齐原生 ModstoreApi.kt）
+  static const marketAuthSendPhoneCode = 'api/auth/send-phone-code';
+  static const marketAuthLogin = 'api/auth/login';
+  static const marketAuthLoginWithPhoneCode = 'api/auth/login-with-phone-code';
+  static const marketAuthMe = 'api/auth/me';
+  static const marketCatalog = 'api/market/catalog';
+  static const modsInstalled = 'api/mods/installed';
 
   static String superEmployeeMessages(String tool) {
     switch (tool.trim().toLowerCase()) {
@@ -310,6 +324,17 @@ class XcagiMobileEndpoints {
 
   static String imMessages(int conversationId) {
     return imMessagesTemplate.replaceFirst('{id}', '$conversationId');
+  }
+
+  static String imMarkRead(int conversationId) {
+    return imMarkReadTemplate.replaceFirst('{id}', '$conversationId');
+  }
+
+  static String adminEmployeePendingQuestionAnswer(int questionId) {
+    return adminEmployeePendingQuestionAnswerTemplate.replaceFirst(
+      '{questionId}',
+      '$questionId',
+    );
   }
 }
 
@@ -533,7 +558,13 @@ class AndroidAuthHeaderPolicy {
 }
 
 class MobileAndroidBuild {
-  static const productSku = 'enterprise';
+  /// 构建期 SKU：与原生 mobile-android productFlavors(personal/enterprise) 对齐。
+  /// 通过 `--dart-define=XCAGI_PRODUCT_SKU=personal` 配合 `--flavor personal` 注入；
+  /// 缺省 enterprise（企业版主线）。
+  static const productSku = String.fromEnvironment(
+    'XCAGI_PRODUCT_SKU',
+    defaultValue: 'enterprise',
+  );
   static const fhdDefaultPort = 17500;
   static const modstoreBaseUrl = 'https://xiu-ci.com';
   static const enterpriseFhdBaseUrl = 'https://xiu-ci.com/fhd-api';
@@ -541,6 +572,17 @@ class MobileAndroidBuild {
   static const versionName = '10.0.0';
   static const displayVersion = 'v$versionName';
   static const profileVersionText = '版本 10.0.0 (10)';
+}
+
+/// 统一移动端的平台身份：Flutter 同一套代码替代原生 Android 与 iOS 后，
+/// `X-XCAGI-Client` / `platform` 字段按运行平台上报（Android→android，iOS→ios），
+/// 与原生 Android(`X-XCAGI-Client: android`) 和原生 iOS(`AppConfig.platform = ios`) 保持一致。
+class MobilePlatformIdentity {
+  const MobilePlatformIdentity._();
+
+  static String get clientHeader => Platform.isIOS ? 'ios' : 'android';
+
+  static String get appConfigPlatform => clientHeader;
 }
 
 class MobileUpdateCheckResult {
@@ -1334,13 +1376,34 @@ class MobileApiClient {
     return getJson(XcagiMobileEndpoints.lanStatus);
   }
 
+  /// 发送手机验证码：与原生 ModstoreApi 对齐，直连 MODstore `api/auth/send-phone-code`。
+  /// FHD 侧仍保留 `api/market/send-phone-code` 代理（marketSendPhoneCode）作为兼容入口。
   Future<MobileEnvelope<Map<String, Object?>>> sendPhoneCode(
     String phone,
   ) async {
-    final json = await postJson(XcagiMobileEndpoints.marketSendPhoneCode, {
-      'phone': phone.trim(),
-    });
+    final json = await postModstoreJson(
+      XcagiMobileEndpoints.marketAuthSendPhoneCode,
+      {'phone': phone.trim()},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  /// 市场目录（base = MODstore），对齐原生 ModstoreApi.marketCatalog。
+  Future<Map<String, Object?>> marketCatalog({int limit = 20}) {
+    return getModstoreJson(
+      XcagiMobileEndpoints.marketCatalog,
+      query: {'limit': '$limit'},
+    );
+  }
+
+  /// 已安装 Mod 列表（base = MODstore），对齐原生 ModstoreApi.installedMods。
+  Future<Map<String, Object?>> installedMods() {
+    return getModstoreJson(XcagiMobileEndpoints.modsInstalled);
+  }
+
+  /// 市场账号信息（base = MODstore），对齐原生 ModstoreApi.authMe。
+  Future<Map<String, Object?>> marketAuthMe() {
+    return getModstoreJson(XcagiMobileEndpoints.marketAuthMe);
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> loginWithPhoneCode({
@@ -1381,7 +1444,7 @@ class MobileApiClient {
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
       query: {
-        'platform': 'android',
+        'platform': MobilePlatformIdentity.appConfigPlatform,
         'sku': sku,
         'current_version_code': currentVersionCode.toString(),
       },
@@ -1398,7 +1461,7 @@ class MobileApiClient {
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
       query: {
-        'platform': 'android',
+        'platform': MobilePlatformIdentity.appConfigPlatform,
         'sku': sku,
         'current_version_code': currentVersionCode.toString(),
       },
@@ -1437,7 +1500,7 @@ class MobileApiClient {
       'contact': contact.trim(),
       'app_version': MobileAndroidBuild.versionName,
       'sku': MobileAndroidBuild.productSku,
-      'platform': 'android',
+      'platform': MobilePlatformIdentity.appConfigPlatform,
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
@@ -1899,6 +1962,50 @@ class MobileApiClient {
     });
   }
 
+  /// IM 会话列表（含员工主动发来的 1:1 会话），对齐原生 FhdApi.imListConversations。
+  Future<Map<String, Object?>> imListConversations() {
+    return getJson(XcagiMobileEndpoints.imConversations);
+  }
+
+  /// 标记 IM 会话已读，对齐原生 FhdApi.imMarkRead。
+  Future<Map<String, Object?>> imMarkRead(int conversationId) {
+    return postJson(XcagiMobileEndpoints.imMarkRead(conversationId), const {});
+  }
+
+  /// 员工任务中心：Phase-D 主动提问列表，对齐原生 FhdApi.listEmployeePendingQuestions。
+  Future<MobileEnvelope<EmployeePendingQuestionsData>>
+      listEmployeePendingQuestions({
+    int limit = 50,
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestions,
+      query: {
+        'limit': '$limit',
+        'include_history': '$includeHistory',
+        if (employeeId != null && employeeId.trim().isNotEmpty)
+          'employee_id': employeeId.trim(),
+      },
+    );
+    return MobileEnvelope.fromJson(
+      json,
+      (value) => EmployeePendingQuestionsData.fromJson(_asObjectMap(value)),
+    );
+  }
+
+  /// 员工任务中心：老板回答提问，对齐原生 FhdApi.answerEmployeePendingQuestion。
+  Future<MobileEnvelope<Map<String, Object?>>> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestionAnswer(questionId),
+      {'answer': answer.trim()},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> addCircleComment(
     int postId,
     String body,
@@ -2225,7 +2332,7 @@ class MobileApiClient {
         await _httpClient.openUrl(method, uri).timeout(_config.timeout);
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
     request.headers.set(HttpHeaders.contentTypeHeader, 'application/json');
-    request.headers.set('X-XCAGI-Client', 'android');
+    request.headers.set('X-XCAGI-Client', MobilePlatformIdentity.clientHeader);
     request.headers.set('X-XCAGI-SKU', MobileAndroidBuild.productSku);
 
     final session = await loadSession();

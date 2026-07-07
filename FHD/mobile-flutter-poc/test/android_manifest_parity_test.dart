@@ -29,8 +29,7 @@ void main() {
 
     expect(strings, contains('<string name="app_name">XCAGI</string>'));
     expect(gradle, contains('namespace = "com.xiuci.xcagi.mobile"'));
-    expect(gradle,
-        contains('applicationId = "com.xiuci.xcagi.mobile.enterprise"'));
+    expect(gradle, contains('applicationId = "com.xiuci.xcagi.mobile"'));
     expect(gradle, contains('targetSdk = 35'));
     expect(gradle, contains('versionCode = injectedVersionCode'));
     expect(gradle, contains('versionName = injectedVersionName'));
@@ -53,8 +52,12 @@ void main() {
     expect(mainActivity, contains('AndroidKeyStore'));
     expect(mainActivity, contains('enc:v1:'));
     expect(mainActivity, contains('PreferenceDataStoreFactory.create'));
-    expect(mainActivity,
-        contains('datastore/xcagi_session_enterprise.preferences_pb'));
+    expect(
+      mainActivity,
+      contains(
+        r'datastore/xcagi_session_${BuildConfig.PRODUCT_SKU}.preferences_pb',
+      ),
+    );
     expect(mainActivity, contains('xcagi_session.json'));
     expect(mainActivity, contains('xcagi_session_legacy_migrated'));
     expect(mainActivity, contains('fhd_access_token'));
@@ -101,6 +104,43 @@ void main() {
     expect(updateFilePaths, contains('path="updates/"'));
     expect(filePaths, contains('<external-files-path'));
     expect(filePaths, contains('path="updates/"'));
+  });
+
+  test('Flutter Android flavors mirror native dual-SKU productFlavors', () {
+    final flutterGradle =
+        File('android/app/build.gradle.kts').readAsStringSync();
+    final nativeGradle =
+        File('../mobile-android/app/build.gradle.kts').readAsStringSync();
+
+    // 与原生 mobile-android 双 SKU 完全一致：flavor 名、applicationId 后缀、
+    // 应用名 resValue、PRODUCT_SKU 常量。
+    for (final snippet in [
+      'flavorDimensions += "sku"',
+      'create("personal")',
+      'create("enterprise")',
+      'applicationIdSuffix = ".personal"',
+      'applicationIdSuffix = ".enterprise"',
+      'resValue("string", "app_name", "XCAGI 个人版")',
+      'resValue("string", "app_name", "XCAGI 企业版")',
+      'buildConfigField("String", "PRODUCT_SKU", "\\"personal\\"")',
+      'buildConfigField("String", "PRODUCT_SKU", "\\"enterprise\\"")',
+    ]) {
+      expect(
+        flutterGradle,
+        contains(snippet),
+        reason: 'Flutter gradle 缺少双 SKU 片段: $snippet',
+      );
+      expect(
+        nativeGradle,
+        contains(snippet),
+        reason: 'Android gradle 双 SKU 片段漂移: $snippet',
+      );
+    }
+
+    // Dart 侧构建 SKU 必须走 dart-define（默认 enterprise），与 flavor 搭配注入。
+    final mobileApi = File('lib/src/api/mobile_api.dart').readAsStringSync();
+    expect(mobileApi, contains("'XCAGI_PRODUCT_SKU'"));
+    expect(mobileApi, contains("defaultValue: 'enterprise'"));
   });
 
   test('Flutter launcher icons mirror native Android launcher icons', () {

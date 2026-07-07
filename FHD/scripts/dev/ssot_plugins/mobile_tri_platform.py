@@ -25,6 +25,11 @@ FLUTTER_API = ROOT / "mobile-flutter-poc/lib/src/api/mobile_api.dart"
 FLUTTER_MODELS = ROOT / "mobile-flutter-poc/lib/src/api/mobile_models.dart"
 FLUTTER_REPOSITORY = ROOT / "mobile-flutter-poc/lib/src/data/mobile_repository.dart"
 FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
+FLUTTER_ANDROID_GRADLE = ROOT / "mobile-flutter-poc/android/app/build.gradle.kts"
+
+ANDROID_README = ROOT / "mobile-android/README.md"
+IOS_README = ROOT / "mobile-ios/README.md"
+HARMONY_README = ROOT / "mobile-harmony/README.md"
 
 ANDROID_THEME = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt"
 ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt"
@@ -133,6 +138,10 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
         "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
         "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
+        "FHD/mobile-flutter-poc/android/app/build.gradle.kts",
+        "FHD/mobile-android/README.md",
+        "FHD/mobile-ios/README.md",
+        "FHD/mobile-harmony/README.md",
         "FHD/mobile-ios/project.yml",
         "FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift",
         "FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets",
@@ -156,16 +165,40 @@ def _check_doc(errors: list[str]) -> None:
 
 def _check_unified_stack(errors: list[str]) -> None:
     flutter_readme = _read_text(FLUTTER_README, errors)
-    if flutter_readme and "Flutter proof of concept" not in flutter_readme:
-        errors.append("Flutter README 未声明 Flutter POC 主线")
+    if flutter_readme and "unified mobile implementation" not in flutter_readme:
+        errors.append("Flutter README 未声明统一移动端主实现（unified mobile implementation）")
+    if flutter_readme and "--flavor personal" not in flutter_readme:
+        errors.append("Flutter README 缺少双 SKU 构建矩阵（--flavor personal）")
     flutter_unification = _read_text(FLUTTER_UNIFICATION, errors)
     if flutter_unification and "Flutter POC exists to converge" not in flutter_unification:
         errors.append("Flutter ANDROID_FIRST_UNIFICATION.md 未声明收敛移动产品线")
+    if flutter_unification and "unified mobile" not in flutter_unification:
+        errors.append("Flutter ANDROID_FIRST_UNIFICATION.md 未声明 Flutter 为统一移动实现")
     flutter_api = _read_text(FLUTTER_API, errors)
     if flutter_api:
         for snippet in ("XcagiMobileEndpoints", "api/mobile/v1", "X-XCAGI-Client"):
             if snippet not in flutter_api:
                 errors.append(f"Flutter mobile_api.dart 缺少契约片段: {snippet}")
+    flutter_gradle = _read_text(FLUTTER_ANDROID_GRADLE, errors)
+    if flutter_gradle:
+        for snippet in (
+            'create("personal")',
+            'create("enterprise")',
+            'applicationIdSuffix = ".personal"',
+            'applicationIdSuffix = ".enterprise"',
+        ):
+            if snippet not in flutter_gradle:
+                errors.append(f"Flutter android gradle 缺少双 SKU flavor 片段: {snippet}")
+
+    # 原生端冻结口径：主实现指向 Flutter，原生只留兜底。
+    for path, label in (
+        (ANDROID_README, "mobile-android"),
+        (IOS_README, "mobile-ios"),
+        (HARMONY_README, "mobile-harmony"),
+    ):
+        readme = _read_text(path, errors)
+        if readme and ("mobile-flutter-poc" not in readme or "冻结" not in readme):
+            errors.append(f"{label}/README.md 未声明冻结并指向 mobile-flutter-poc 主实现")
     flutter_models = _read_text(FLUTTER_MODELS, errors)
     if flutter_models and "class MobileEnvelope" not in flutter_models:
         errors.append("Flutter mobile_models.dart 缺少 MobileEnvelope")

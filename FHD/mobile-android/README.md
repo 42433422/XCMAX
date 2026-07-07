@@ -1,5 +1,7 @@
 # XCAGI Android
 
+> **冻结（2026-07 · 发布兜底线）**：移动端唯一主实现已切换为 [`mobile-flutter-poc/`](../mobile-flutter-poc/README.md)（Flutter 统一 Android + iOS，SSOT 见 [`docs/mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md)）。本目录冻结为**发布兜底 + 行为参照基线**：只接安全/合规/紧急修复，不再新增产品流程；Flutter parity 测试直读本目录源码防漂移。
+>
 > **交付状态（2026-06）**：**签约级** — Kotlin + Jetpack Compose 双 SKU；密码/OTP/扫码登录 · SSE 对话 · 4 Tab · 工作台 WebView。对外口径以 [`docs/CLAIMED_VS_ACTUAL.md`](../docs/CLAIMED_VS_ACTUAL.md) 与 [`VERSION.md`](../VERSION.md) 为准。
 
 成都修茈科技有限公司 XCAGI 原生 Android 客户端（个人版 / 企业版双 SKU）。

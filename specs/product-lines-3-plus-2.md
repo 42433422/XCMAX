@@ -1,8 +1,8 @@
 # XCMAX 产品线策略（3+2）
 
 > 状态：当前执行口径
-> 更新日期：2026-06-17
-> 适用范围：`XCMAX/` 根仓、`FHD/`、`成都修茈科技有限公司/`、`FHD/mobile-android/`
+> 更新日期：2026-07-07
+> 适用范围：`XCMAX/` 根仓、`FHD/`、`成都修茈科技有限公司/`、`FHD/mobile-flutter-poc/`（移动主实现）、`FHD/mobile-android/`（冻结兜底）
 
 ## 1. 决策摘要
 
@@ -12,7 +12,7 @@ XCMAX 当前按 **三条主线 + 个人版冻结** 推进：
 |--------|----------|------|--------|
 | AI 员工商店 | 员工 / Mod 的展示、售卖、授权、下载、更新中心 | `成都修茈科技有限公司/`、`成都修茈科技有限公司/MODstore_deploy/` | P1 |
 | 企业桌面 ERP + AI | 主交付产品；承载客户业务数据、ERP 流程、AI 员工、行业 Mod | `FHD/` | P0 |
-| 移动 AI 协同 App | 辅助桌面端的企业协同助手；对话、通知、审批、扫码、移动查看 | `FHD/mobile-android/` | P2 |
+| 移动 AI 协同 App | 辅助桌面端的企业协同助手；对话、通知、审批、扫码、移动查看 | `FHD/mobile-flutter-poc/`（Flutter 统一 Android+iOS 主实现）；`FHD/mobile-android/`、`FHD/mobile-ios/`、`FHD/mobile-harmony/` 冻结兜底 | P2 |
 | 个人版 | 暂停新增投入，仅保留兼容、归档和未来恢复入口 | `FHD/docs/_archive/FHD-个人/`、历史 stub | Frozen |
 
 个人版不进入当前版本目标、销售口径、路线图承诺和验收清单。任何新增个人版功能都必须先重新评审本文件。
@@ -108,7 +108,8 @@ XCMAX 当前按 **三条主线 + 个人版冻结** 推进：
 | 目录 | 归属线 | 说明 |
 |------|--------|------|
 | `FHD/` | 企业桌面 ERP + AI | 主产品；后端、前端、桌面打包、企业交付文档 |
-| `FHD/mobile-android/` | 移动 AI 协同 App | Android 原生客户端 |
+| `FHD/mobile-flutter-poc/` | 移动 AI 协同 App | Flutter 统一移动端主实现（Android + iOS 双 SKU） |
+| `FHD/mobile-android/` | 移动 AI 协同 App | Android 原生客户端（冻结兜底 + Flutter 行为参照基线） |
 | `成都修茈科技有限公司/` | AI 员工商店 | MODstore、官网、支付和员工市场 |
 | `specs/` | 跨线规划 | 产品线、任务、周报、技术债治理 |
 | `FHD/docs/_archive/FHD-个人/` | 个人版冻结 | 只读归档与兼容说明 |
