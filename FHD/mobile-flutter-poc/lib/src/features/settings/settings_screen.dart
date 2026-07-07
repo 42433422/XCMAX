@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_api.dart';
+import '../../api/mobile_session_store.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
@@ -27,6 +28,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final MobileApiClient _api;
   var _biometric = false;
   var _themeMode = 'system';
+  var _lanModeEnabled = false;
+  var _lanModeSubtitle = '关闭时超级员工经云中继执行';
   var _submittingFeedback = false;
   var _checkingUpdate = false;
   final _feedbackController = TextEditingController();
@@ -76,8 +79,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         iconColor: colors.brand,
                         iconBg: colors.brandContainer,
                         trailing: _WeSwitch(
+                          key: const ValueKey('settings_biometric_switch'),
                           checked: _biometric,
                           onChanged: _setBiometricEnabled,
+                        ),
+                        showArrow: false,
+                        showDivider: false,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  const WeSectionCaption('连接'),
+                  WeCellGroup(
+                    children: [
+                      WeCell(
+                        title: '局域网模式',
+                        subtitle: _lanModeSubtitle,
+                        icon: Icons.lan,
+                        iconColor: colors.brand,
+                        iconBg: colors.brandContainer,
+                        trailing: _WeSwitch(
+                          key: const ValueKey('settings_lan_mode_switch'),
+                          checked: _lanModeEnabled,
+                          onChanged: _setLanModeEnabled,
                         ),
                         showArrow: false,
                         showDivider: false,
@@ -199,9 +223,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() {
         _biometric = session.biometricEnabled;
         _themeMode = _normalizeThemeMode(session.themeMode);
+        _lanModeEnabled = _isLanModeEnabled(session);
+        _lanModeSubtitle = _lanModeDescription(session);
       });
     } catch (_) {
       // Keep Android defaults when local settings storage is unavailable.
+    }
+  }
+
+  void _setLanModeEnabled(bool value) {
+    setState(() {
+      _lanModeEnabled = value;
+      _lanModeSubtitle = value
+          ? '优先局域网直连超级员工（需电脑 FHD 在线）'
+          : '关闭时超级员工经云中继执行';
+    });
+    unawaited(_persistLanMode(value));
+  }
+
+  Future<void> _persistLanMode(bool enabled) async {
+    await _api.saveLocalSettings(serverMode: enabled ? 'lan' : 'cloud');
+    try {
+      final session = await _api.loadSession();
+      if (!mounted) return;
+      setState(() {
+        _lanModeSubtitle = _lanModeDescription(session);
+      });
+    } catch (_) {
+      // Subtitle already reflects the toggle intent.
     }
   }
 
@@ -264,6 +313,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
 class _WeSwitch extends StatelessWidget {
   const _WeSwitch({
+    super.key,
     required this.checked,
     required this.onChanged,
   });
@@ -277,7 +327,6 @@ class _WeSwitch extends StatelessWidget {
     return GestureDetector(
       onTap: () => onChanged(!checked),
       child: AnimatedContainer(
-        key: const ValueKey('settings_we_switch'),
         duration: const Duration(milliseconds: 180),
         curve: Curves.easeOut,
         width: 46,
@@ -377,4 +426,23 @@ String _normalizeThemeMode(String mode) {
   final normalized = mode.trim().toLowerCase();
   if (normalized == 'light' || normalized == 'dark') return normalized;
   return 'system';
+}
+
+bool _isLanModeEnabled(MobileSessionData session) {
+  return session.serverMode.trim().toLowerCase() == 'lan';
+}
+
+String _lanModeDescription(MobileSessionData session) {
+  if (!_isLanModeEnabled(session)) {
+    return '关闭时超级员工经云中继执行';
+  }
+  final host = session.fhdHost.trim();
+  final localBase = session.localBaseUrl.trim();
+  if (host.isNotEmpty) {
+    return '优先直连 $host（失败时自动回云中继）';
+  }
+  if (localBase.isNotEmpty) {
+    return '优先直连已绑定电脑（失败时自动回云中继）';
+  }
+  return '已开启；请先绑定电脑或填写局域网地址';
 }

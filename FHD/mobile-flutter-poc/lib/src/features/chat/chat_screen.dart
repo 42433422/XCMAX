@@ -1334,6 +1334,12 @@ class _Composer extends StatelessWidget {
                       child: TextField(
                         controller: controller,
                         maxLines: 1,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: busy
+                            ? null
+                            : (value) {
+                                if (value.trim().isNotEmpty) onSend();
+                              },
                         style: textTheme.bodyMedium?.copyWith(
                           color: colors.textPrimary,
                           fontSize: 15,
@@ -1363,12 +1369,12 @@ class _Composer extends StatelessWidget {
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: controller,
                     builder: (context, value, _) {
-                      final canSend = value.text.trim().isNotEmpty && !busy;
-                      if (!canSend && !busy) return const SizedBox.shrink();
+                      final hasText = value.text.trim().isNotEmpty;
                       return Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: _SendPill(
                           canStop: busy,
+                          enabled: busy || hasText,
                           onSend: onSend,
                           onStop: onStop,
                         ),
@@ -1768,11 +1774,13 @@ class _ChatToolCard extends StatelessWidget {
 class _SendPill extends StatelessWidget {
   const _SendPill({
     required this.canStop,
+    required this.enabled,
     required this.onSend,
     required this.onStop,
   });
 
   final bool canStop;
+  final bool enabled;
   final VoidCallback onSend;
   final VoidCallback onStop;
 
@@ -1780,28 +1788,41 @@ class _SendPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    return Material(
-      color:
-          canStop ? Theme.of(context).colorScheme.errorContainer : colors.brand,
-      borderRadius: BorderRadius.circular(8),
-      child: InkWell(
-        onTap: canStop ? onStop : onSend,
-        borderRadius: BorderRadius.circular(8),
-        child: SizedBox(
-          height: 38,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 17),
-            child: Center(
-              child: Text(
-                canStop ? '停止' : '发送',
-                style: textTheme.labelLarge?.copyWith(
-                  color: canStop ? colors.danger : Colors.white,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
+    final label = canStop ? '停止' : '发送';
+    final background = canStop
+        ? Theme.of(context).colorScheme.errorContainer
+        : (enabled
+            ? colors.brand
+            : colors.brand.withValues(alpha: 0.35));
+    void handleTap() {
+      if (!enabled) return;
+      if (canStop) {
+        onStop();
+      } else {
+        onSend();
+      }
+    }
+
+    return TextButton(
+      key: const ValueKey('chat_send_pill'),
+      onPressed: enabled ? handleTap : null,
+      style: TextButton.styleFrom(
+        minimumSize: const Size(52, 38),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        padding: const EdgeInsets.symmetric(horizontal: 17),
+        backgroundColor: background,
+        foregroundColor:
+            canStop ? colors.danger : Colors.white.withValues(alpha: enabled ? 1 : 0.72),
+        disabledBackgroundColor: background,
+        disabledForegroundColor:
+            Colors.white.withValues(alpha: enabled ? 1 : 0.72),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(
+        label,
+        style: textTheme.labelLarge?.copyWith(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
         ),
       ),
     );

@@ -2446,9 +2446,11 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('安全'), findsOneWidget);
+    expect(find.text('连接'), findsOneWidget);
+    expect(find.text('局域网模式'), findsOneWidget);
     expect(find.text('生物识别解锁'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('settings_we_switch'))),
+      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
       const Size(46, 28),
     );
     expect(find.text('外观'), findsOneWidget);
@@ -2498,7 +2500,10 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_设置')),
     );
     final switchWidget = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('settings_we_switch')),
+      find.descendant(
+        of: find.byKey(const ValueKey('settings_biometric_switch')),
+        matching: find.byType(AnimatedContainer),
+      ),
     );
     final switchDecoration = switchWidget.decoration! as BoxDecoration;
     final themeIcon = tester.widget<Icon>(
@@ -2552,7 +2557,7 @@ void main() {
 
     await tester.tap(find.text('浅色'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings_we_switch')));
+    await tester.tap(find.byKey(const ValueKey('settings_biometric_switch')));
     await tester.pumpAndSettle();
 
     expect(api.session.themeMode, 'light');
@@ -2561,6 +2566,33 @@ void main() {
       {'themeMode': 'light'},
       {'biometricEnabled': false},
     ]);
+  });
+
+  testWidgets('settings persists lan mode for super employee fast path', (
+    WidgetTester tester,
+  ) async {
+    final api = _FakeSettingsApi(
+      session: const MobileSessionData(
+        serverMode: 'cloud',
+        fhdHost: '192.168.31.8:17500',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.light(), home: SettingsScreen(api: api)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('关闭时超级员工经云中继执行'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('settings_lan_mode_switch')));
+    await tester.pumpAndSettle();
+
+    expect(api.session.serverMode, 'lan');
+    expect(api.settingSaves, [
+      {'serverMode': 'lan'},
+    ]);
+    expect(find.textContaining('优先直连 192.168.31.8:17500'), findsOneWidget);
   });
 
   testWidgets('settings feedback submits through Android app feedback API', (
@@ -5522,7 +5554,7 @@ void main() {
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.byIcon(Icons.mic), findsOneWidget);
     expect(find.byIcon(Icons.add), findsOneWidget);
-    expect(find.text('发送'), findsNothing);
+    expect(find.text('发送'), findsOneWidget);
     expect(find.textContaining('api/mobile'), findsNothing);
     final typography = AppTheme.light().textTheme;
     final composer = tester.widget<Container>(
@@ -6671,22 +6703,27 @@ class _FakeSettingsApi extends MobileApiClient {
   );
 
   @override
-  Future<MobileSessionData> loadSession() async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
 
   @override
   Future<void> saveLocalSettings({
     String? themeMode,
     bool? biometricEnabled,
+    String? serverMode,
   }) async {
     settingSaves.add({
       if (themeMode != null) 'themeMode': themeMode,
       if (biometricEnabled != null) 'biometricEnabled': biometricEnabled,
+      if (serverMode != null) 'serverMode': serverMode,
     });
     if (themeMode != null) {
       session = session.copyWith(themeMode: themeMode);
     }
     if (biometricEnabled != null) {
       session = session.copyWith(biometricEnabled: biometricEnabled);
+    }
+    if (serverMode != null) {
+      session = session.copyWith(serverMode: serverMode);
     }
   }
 
@@ -6748,7 +6785,7 @@ class _FakeProfileApi extends MobileApiClient {
   var meLoads = 0;
 
   @override
-  Future<MobileSessionData> loadSession() async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
 
   @override
   Future<void> clearActiveAuth() async {

@@ -587,6 +587,7 @@ class MobileApiClient {
   final StreamController<MobileSessionData> _sessionChanges =
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
+  Future<bool>? _refreshInFlight;
 
   String get configuredRelayId => _config.relayId.trim();
   String get localAvatarSource => _config.localAvatarSource.trim();
@@ -596,7 +597,13 @@ class MobileApiClient {
     yield* _sessionChanges.stream;
   }
 
-  Future<MobileSessionData> loadSession() async {
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
+    if (!forceReload &&
+        (_lastSession.hasAuth ||
+            _lastSession.hasIdentity ||
+            _lastSession.cachedModInfos.isNotEmpty)) {
+      return _lastSession.mergePreferNonBlank(_configSession());
+    }
     final stored = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
         );
@@ -689,6 +696,7 @@ class MobileApiClient {
   Future<void> saveLocalSettings({
     String? themeMode,
     bool? biometricEnabled,
+    String? serverMode,
   }) async {
     final current = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
@@ -702,6 +710,12 @@ class MobileApiClient {
     }
     if (biometricEnabled != null) {
       next = next.copyWith(biometricEnabled: biometricEnabled);
+    }
+    if (serverMode != null) {
+      final normalized = serverMode.trim().toLowerCase();
+      next = next.copyWith(
+        serverMode: normalized == 'lan' ? 'lan' : 'cloud',
+      );
     }
     await _saveSession(next);
   }
@@ -791,8 +805,17 @@ class MobileApiClient {
         autoLogin: false,
         cachedChatMessages: const <String, List<Map<String, Object?>>>{},
         conversationListStates: const <String, Map<String, Object?>>{},
+        cachedModInfos: const [],
       ),
     );
+  }
+
+  Future<void> cacheModInfos(List<Map<String, Object?>> mods) async {
+    if (mods.isEmpty) return;
+    final current = await _sessionStore.load().catchError(
+          (_) => MobileSessionData.empty,
+        );
+    await _saveSession(current.copyWith(cachedModInfos: mods));
   }
 
   Future<void> persistLoginSession(
@@ -825,7 +848,10 @@ class MobileApiClient {
     );
     await _saveSession(
       next.copyWith(
-        setupComplete: false,
+        setupComplete:
+            fallbackAccountKind.trim().toLowerCase() == 'admin' ||
+            fallbackAccountKind.trim().toLowerCase() == 'admin_portal' ||
+            next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
       ),
     );
@@ -2140,12 +2166,111 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  /// Mirrors Android [XcagiRepository.refreshFhdAccessToken]: keep saved login
+  /// when access JWT expires but refresh_token is still valid.
+  Future<bool> _refreshFhdAccessToken() async {
+    if (_refreshInFlight != null) {
+      return _refreshInFlight!;
+    }
+    final future = _refreshFhdAccessTokenImpl();
+    _refreshInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _refreshFhdAccessTokenImpl() async {
+    final session = await loadSession();
+    final refresh = session.refreshToken.trim();
+    if (refresh.isEmpty) return false;
+    try {
+      final json = await _sendJsonRequest(
+        method: 'POST',
+        path: XcagiMobileEndpoints.authRefresh,
+        body: {'refresh_token': refresh},
+        allowAuthRefresh: false,
+      );
+      final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+      if (!envelope.success) return false;
+      final data = envelope.data;
+      if (data == null || data.isEmpty) return false;
+      final access = _readString(data, const ['access_token']);
+      if (access.isEmpty) return false;
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      await _saveSession(
+        current.copyWith(
+          accessToken: access,
+          refreshToken: _firstNonBlank([
+            _readString(data, const ['refresh_token']),
+            current.refreshToken,
+          ]),
+          sessionId: _firstNonBlank([
+            _readString(data, const ['session_id']),
+            current.sessionId,
+          ]),
+        ),
+      );
+      return true;
+    } on MobileApiException catch (error) {
+      if (error.statusCode == 401) {
+        await clearActiveAuth();
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<Map<String, Object?>> _sendJsonRequest({
+    required String method,
+    required String path,
+    Map<String, String> query = const {},
+    Map<String, Object?>? body,
+    String? baseUrl,
+    String? authToken,
+    bool allowAuthRefresh = true,
+  }) async {
+    Future<Map<String, Object?>> perform() async {
+      final request = await _open(
+        method,
+        path,
+        query: query,
+        baseUrl: baseUrl,
+        authToken: authToken,
+      );
+      if (body != null) {
+        final bytes = utf8.encode(jsonEncode(body));
+        request.contentLength = bytes.length;
+        request.add(bytes);
+      }
+      return _readJsonResponse(request);
+    }
+
+    try {
+      return await perform();
+    } on MobileApiException catch (error) {
+      if (!allowAuthRefresh ||
+          error.statusCode != 401 ||
+          AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
+        rethrow;
+      }
+      final refreshed = await _refreshFhdAccessToken();
+      if (!refreshed) rethrow;
+      return perform();
+    }
+  }
+
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('GET', path, query: query);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(method: 'GET', path: path, query: query);
   }
 
   Future<Map<String, Object?>> postJson(
@@ -2154,11 +2279,13 @@ class MobileApiClient {
     Map<String, String> query = const {},
     String? baseUrl,
   }) async {
-    final request = await _open('POST', path, query: query, baseUrl: baseUrl);
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(
+      method: 'POST',
+      path: path,
+      query: query,
+      body: body,
+      baseUrl: baseUrl,
+    );
   }
 
   Future<Map<String, Object?>> postModstoreJson(
@@ -2166,31 +2293,29 @@ class MobileApiClient {
     Map<String, Object?> body, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open(
-      'POST',
-      path,
+    return _sendJsonRequest(
+      method: 'POST',
+      path: path,
       query: query,
+      body: body,
       baseUrl: _config.modstoreBaseUrl,
       authToken: _config.marketAccessToken,
+      allowAuthRefresh: false,
     );
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
   }
 
   Future<Map<String, Object?>> getModstoreJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open(
-      'GET',
-      path,
+    return _sendJsonRequest(
+      method: 'GET',
+      path: path,
       query: query,
       baseUrl: _config.modstoreBaseUrl,
       authToken: _config.marketAccessToken,
+      allowAuthRefresh: false,
     );
-    return _readJsonResponse(request);
   }
 
   Future<Map<String, Object?>> putJson(
@@ -2198,19 +2323,19 @@ class MobileApiClient {
     Map<String, Object?> body, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('PUT', path, query: query);
-    final bytes = utf8.encode(jsonEncode(body));
-    request.contentLength = bytes.length;
-    request.add(bytes);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(
+      method: 'PUT',
+      path: path,
+      query: query,
+      body: body,
+    );
   }
 
   Future<Map<String, Object?>> deleteJson(
     String path, {
     Map<String, String> query = const {},
   }) async {
-    final request = await _open('DELETE', path, query: query);
-    return _readJsonResponse(request);
+    return _sendJsonRequest(method: 'DELETE', path: path, query: query);
   }
 
   Future<HttpClientRequest> _open(

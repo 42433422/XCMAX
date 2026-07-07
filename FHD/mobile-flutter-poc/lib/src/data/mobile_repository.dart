@@ -82,8 +82,8 @@ class MobileRepository {
       ...fixed,
       ..._employeeConversationItems(
         mods,
-        badgeText: adminMode ? null : '已安装',
-        badgeColor: adminMode ? null : _badgeInstalledColor,
+        badgeText: null,
+        badgeColor: null,
         states: conversationStates,
       ),
     ]);
@@ -164,11 +164,8 @@ class MobileRepository {
   Future<void> _cacheModInfos(List<ModInfo> mods) async {
     if (mods.isEmpty) return;
     try {
-      final session = await _client.loadSession();
-      await _client.sessionStore.save(
-        session.copyWith(
-          cachedModInfos: mods.map(_modInfoToJson).toList(growable: false),
-        ),
+      await _client.cacheModInfos(
+        mods.map(_modInfoToCacheJson).toList(growable: false),
       );
     } catch (_) {
       // Match Android: cache write failure must not block the live UI.
@@ -693,20 +690,10 @@ class MobileRepository {
     }
 
     if (tool != null) {
-      final localBaseUrl = await _superEmployeeLanBaseUrl();
-      if (localBaseUrl.isNotEmpty) {
-        try {
-          final reply = await _postSuperEmployeeMessage(
-            tool,
-            text,
-            baseUrl: localBaseUrl,
-          );
-          return _assistantMessage(conversation.id, reply);
-        } catch (_) {
-          // LAN is a speed path. If it is unavailable, keep the cloud path alive.
-        }
-      }
-      final reply = await _postSuperEmployeeMessage(tool, text);
+      final reply = await streamMessage(
+        conversation: conversation,
+        body: text,
+      );
       return _assistantMessage(conversation.id, reply);
     }
 
@@ -1004,11 +991,12 @@ class MobileRepository {
       return '';
     }
     final session = await _client.loadSession();
+    if (session.serverMode.trim().toLowerCase() != 'lan') {
+      return '';
+    }
     final localBase = session.localBaseUrl.trim();
     if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
-    final mode = session.serverMode.trim().toLowerCase();
     final host = session.fhdHost.trim();
-    if (mode != 'lan' && host.isEmpty) return '';
     if (host.isEmpty) return '';
     return AndroidServerRouter(
       fhdHost: host,
@@ -1470,19 +1458,50 @@ class MobileRepository {
   }
 
   Future<String> _relayIdForSuperEmployeeDispatch() async {
+    final session = await _client.loadSession();
+    final storedRelayId = session.relayDesktopId.trim();
     try {
       final response = await _client.relayDesktops();
-      if (!response.success) return '';
+      if (!response.success) return storedRelayId;
       final rows = _relayDesktopRows(response.data)
           .where(_relayDesktopIsDispatchable)
           .toList(growable: false);
+      // API 正常但账号下尚无 paired 桌面：不要误用 build 注入/历史 relay_id 去排队。
       if (rows.isEmpty) return '';
-      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+
+      // 账号下可能累积大量历史 paired 桌面；只派给近期在线（last_seen≤5min）的执行端，
+      // 避免任务进死队列后误回落云端 CLI。
+      if (storedRelayId.isNotEmpty) {
+        for (final row in rows) {
+          if (_stringField(row, 'relay_id') == storedRelayId &&
+              _relayDesktopIsFresh(row)) {
+            return storedRelayId;
+          }
+        }
+      }
+
+      final freshRows =
+          rows.where(_relayDesktopIsFresh).toList(growable: false);
+      if (freshRows.isEmpty) {
+        throw const MobileRepositoryException(
+          '当前没有在线的电脑执行端。请在本机 Mac 打开 XCAGI 并保持桌面云中继运行后再试。',
+        );
+      }
+
+      freshRows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
             _relayDesktopSortKey(b),
           ));
-      return _stringField(rows.last, 'relay_id');
+      final latest = freshRows.last;
+      final latestRelayId = _stringField(latest, 'relay_id');
+      if (latestRelayId.isEmpty) return '';
+      if (latestRelayId != storedRelayId) {
+        await _client.persistRelayBindingMeta(latestRelayId, latest);
+      }
+      return latestRelayId;
+    } on MobileRepositoryException {
+      rethrow;
     } catch (_) {
-      return '';
+      return storedRelayId;
     }
   }
 
@@ -1776,7 +1795,8 @@ List<ModInfo> _parseModInfos(Map<String, Object?> body) {
   return rows.map(ModInfo.fromJson).toList(growable: false);
 }
 
-Map<String, Object?> _modInfoToJson(ModInfo mod) {
+/// Session cache only needs list-row fields; avoid bloating xcagi_session.json.
+Map<String, Object?> _modInfoToCacheJson(ModInfo mod) {
   return {
     'id': mod.id,
     'name': mod.name,
@@ -1790,54 +1810,28 @@ Map<String, Object?> _modInfoToJson(ModInfo mod) {
             'id': mod.industry!.id,
             'name': mod.industry!.name,
           },
-    'avatar_url': mod.avatarUrl,
-    'frontend_menu': mod.frontendMenu.map(_modMenuItemToJson).toList(
-          growable: false,
-        ),
-    'workflow_employees':
-        mod.workflowEmployees.map(_workflowEmployeeToJson).toList(
-              growable: false,
-            ),
-  }..removeWhere((_, value) => value == null);
-}
-
-Map<String, Object?> _modMenuItemToJson(ModMenuItem item) {
-  return {
-    'id': item.id,
-    'label': item.label,
-    'icon': item.icon,
-    'path': item.path,
-  };
-}
-
-Map<String, Object?> _workflowEmployeeToJson(WorkflowEmployeeInfo employee) {
-  return {
-    'id': employee.id,
-    'label': employee.label,
-    'panel_title': employee.panelTitle,
-    'panel_summary': employee.panelSummary,
-    'api_base_path': employee.apiBasePath,
-    'phone_channel': employee.phoneChannel,
-    'workflow_placeholder': employee.workflowPlaceholder,
-    'profile_source': employee.profileSource,
-    'market_connected': employee.marketConnected,
-    'market_pkg_id': employee.marketPkgId,
-    'market_name': employee.marketName,
-    'market_description': employee.marketDescription,
-    'market_version': employee.marketVersion,
-    'market_author': employee.marketAuthor,
-    'market_industry': employee.marketIndustry,
-    'market_material_category': employee.marketMaterialCategory,
-    'market_license_scope': employee.marketLicenseScope,
-    'market_security_level': employee.marketSecurityLevel,
-    'market_avatar': employee.marketAvatar,
+    'workflow_employees': mod.workflowEmployees
+        .map(
+          (employee) => {
+            'id': employee.id,
+            'label': employee.label,
+            'panel_title': employee.panelTitle,
+            'panel_summary': employee.panelSummary,
+            'api_base_path': employee.apiBasePath,
+            'phone_channel': employee.phoneChannel,
+            'profile_source': employee.profileSource,
+          },
+        )
+        .toList(growable: false),
   }..removeWhere((_, value) => value == null);
 }
 
 bool _relayDesktopIsDispatchable(Map<String, Object?> row) {
   final relayId = _stringField(row, 'relay_id');
   final status = _stringField(row, 'status').toLowerCase();
-  return relayId.isNotEmpty && status == 'paired' && _relayDesktopIsFresh(row);
+  // 与 Kotlin 一致：账号下 status=paired 即可派工；last_seen 只影响排序，不阻断中继。
+  // 否则桌面轮询稍停就会误走云端 /admin/*-super-employee（服务器 CLI），而非 cursor.invoke 本机执行。
+  return relayId.isNotEmpty && status == 'paired';
 }
 
 bool _relayDesktopIsFresh(Map<String, Object?> row) {

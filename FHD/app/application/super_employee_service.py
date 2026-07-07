@@ -39,6 +39,7 @@ from app.application.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.relay_workspace import resolve_verified_relay_workspace_root
 from app.application.workspaces import WorkspaceError, get_workspace_registry
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
@@ -424,12 +425,7 @@ class SuperEmployeeService:
             status="sent",
         )
         if self._should_reply_with_cli(text, ctx):
-            direct_body = self._cli_reply_body(text, ctx) or self._direct_reply_body(text)
-            if not direct_body:
-                direct_body = (
-                    f"{self._p.display_tool} CLI 暂时没有返回内容，"
-                    f"请确认本机 {self._p.display_tool} 已登录后重试。"
-                )
+            direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
             assistant_msg = self._message_row(
                 user_id=int(user_id),
                 role="assistant",
@@ -447,7 +443,7 @@ class SuperEmployeeService:
                 "queued": False,
                 "para_tier": 1,
                 "device_scope": "local_device",
-                "dispatcher": f"{self._p.tool_name}_cli",
+                "dispatcher": direct_dispatcher,
             }
             return {
                 "employee": {
@@ -473,8 +469,10 @@ class SuperEmployeeService:
         # 把原本的"已排队/调度器不可用"红字升级为可用回答。
         # 派工成功路径(accepted is True)完全不走这里；云端无 CLI 时 _cli_reply_body 返回空，自动跳过。
         if dispatch.get("accepted") is not True:
-            fallback_body = self._cli_reply_body(text, ctx)
-            if fallback_body:
+            fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            if fallback_body and not fallback_body.startswith(
+                f"{self._p.display_tool} CLI 暂时没有返回内容"
+            ):
                 assistant_msg = self._message_row(
                     user_id=int(user_id),
                     role="assistant",
@@ -496,7 +494,7 @@ class SuperEmployeeService:
                         "status": "completed",
                         "para_tier": 1,
                         "device_scope": "local_device",
-                        "fallback": f"{self._p.tool_name}_cli",
+                        "fallback": fallback_dispatcher,
                     },
                     "message": self._public_message(user_msg),
                     "assistant_message": self._public_message(assistant_msg),
@@ -2076,6 +2074,24 @@ class SuperEmployeeService:
             lines.append(line)
         return "\n".join(lines).strip()
 
+    def _compose_direct_chat_reply(
+        self,
+        text: str,
+        context: dict[str, Any],
+    ) -> tuple[str, str]:
+        """普通对话直答：FAQ → CLI → 明确不可用提示。"""
+        canned = self._direct_reply_body(text)
+        if canned:
+            return canned, f"{self._p.tool_name}_direct"
+        cli_body = self._cli_reply_body(text, context)
+        if cli_body:
+            return cli_body, f"{self._p.tool_name}_cli"
+        return (
+            f"{self._p.display_tool} CLI 暂时没有返回内容，"
+            f"请确认本机 {self._p.display_tool} 已登录后重试。",
+            f"{self._p.tool_name}_cli",
+        )
+
     def _direct_reply_body(self, text: str) -> str:
         normalized = re.sub(r"[\s，。！？!?、,.]+", "", text.strip().lower())
         if not normalized:
@@ -2158,16 +2174,11 @@ class SuperEmployeeService:
             request_id = str(item.get("dispatch_request_id") or "")
             if not request_id or request_id in request_ids_with_reply:
                 continue
-            body = self._direct_reply_body(str(item.get("body") or ""))
-            if not body and cli_backfills < 1:
-                text = str(item.get("body") or "")
-                if self._should_reply_with_cli(text, {}):
-                    body = (
-                        self._cli_reply_body(text, {})
-                        or f"{self._p.display_tool} CLI 暂时没有返回内容，"
-                        f"请确认本机 {self._p.display_tool} 已登录后重试。"
-                    )
-                    cli_backfills += 1
+            text = str(item.get("body") or "")
+            body = self._direct_reply_body(text)
+            if not body and cli_backfills < 1 and self._should_reply_with_cli(text, {}):
+                body, _ = self._compose_direct_chat_reply(text, {})
+                cli_backfills += 1
             if not body:
                 continue
             rows.append(
