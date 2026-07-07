@@ -69,7 +69,7 @@ jobs:
             "backend/_internal/mods"
           )) {
             if (-not (Test-Path "$dir/$p")) {
-              Write-Error "::error::Missing critical resource for $sku: $p (expected at $dir/$p)"
+              Write-Error "::error::Missing critical resource for ${sku}: $p (expected at $dir/$p)"
               exit 1
             }
             Write-Host "OK $sku resource: $p"
