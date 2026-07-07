@@ -18,6 +18,7 @@ import '../features/circle/ai_circle_screen.dart';
 import '../features/connect/connect_screen.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/contacts/employee_profile_screen.dart';
+import '../features/contacts/employee_questions_screen.dart';
 import '../features/contacts/fixed_partner_profile_screen.dart';
 import '../features/cs/admin_cs_console_screen.dart';
 import '../features/cs/cs_chat_screen.dart';
@@ -542,7 +543,10 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
       case AndroidDeepLinkTarget.employeeQuestions:
         _pushAndroidDeepLinkPage(
           navigator,
-          _EmployeeQuestionsDeepLinkScreen(employeeId: destination.employeeId),
+          EmployeeQuestionsScreen(
+            repository: widget.repository,
+            employeeId: destination.employeeId,
+          ),
         );
         return true;
       case AndroidDeepLinkTarget.settings:
@@ -823,80 +827,6 @@ class _DeepLinkedAiEmployeeProfileScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _EmployeeQuestionsDeepLinkScreen extends StatelessWidget {
-  const _EmployeeQuestionsDeepLinkScreen({required this.employeeId});
-
-  final String? employeeId;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    final cleanEmployeeId = employeeId?.trim() ?? '';
-    final title = cleanEmployeeId.isEmpty ? '员工任务中心' : '$cleanEmployeeId 的提问';
-    return Scaffold(
-      backgroundColor: colors.page,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            WeTopBar(
-              title: title,
-              showBack: true,
-              onBack: () => Navigator.of(context).maybePop(),
-              actions: [
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.question_answer_outlined),
-                  color: colors.textPrimary,
-                  tooltip: '刷新',
-                ),
-              ],
-            ),
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.question_answer_outlined,
-                        size: 48,
-                        color: colors.textTertiary,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '暂无员工主动提问',
-                        style: TextStyle(
-                          color: colors.textTertiary,
-                          fontSize: 16,
-                          height: 1.38,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '员工遇到需要老板决策的事会主动在这里问你',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.textTertiary,
-                          fontSize: 12,
-                          height: 1.33,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

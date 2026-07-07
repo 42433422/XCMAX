@@ -10,19 +10,26 @@ import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
 import 'deployment_modes_ssot.dart';
 import 'duty_roster_ssot.dart';
+import 'employee_pending_question.dart';
+import '../im/im_websocket_client.dart';
 
 const _badgeInstalledColor = 0xFF3370FF;
 const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
 
 class MobileRepository {
-  MobileRepository({MobileApiClient? client})
-      : _client = client ?? MobileApiClient();
+  MobileRepository({MobileApiClient? client, ImWebSocketClient? imWebSocket})
+      : _client = client ?? MobileApiClient(),
+        _imWebSocket = imWebSocket ?? ImWebSocketClient();
 
   static const customerServiceRequestType = 'mobile_ai_customer_service';
 
   final MobileApiClient _client;
+  final ImWebSocketClient _imWebSocket;
+  StreamSubscription<Map<String, Object?>>? _imWebSocketSubscription;
 
   MobileApiClient get client => _client;
+  bool get imWebSocketConnected => _imWebSocket.connected;
+  Stream<Map<String, Object?>> get imWebSocketEvents => _imWebSocket.events;
 
   Future<MobileMeData> loadMe() async {
     final response = await _client.me();
@@ -1286,6 +1293,70 @@ class MobileRepository {
 
   Future<void> rejectApproval(int id, String reason) async {
     await _client.rejectApproval(id: id, approverId: 0, reason: reason);
+  }
+
+  Future<List<EmployeePendingQuestion>> loadEmployeePendingQuestions({
+    int limit = 100,
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final response = await _client.employeePendingQuestions(
+      limit: limit,
+      includeHistory: includeHistory,
+      employeeId: employeeId,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(
+        response.message.ifEmpty('加载员工提问失败'),
+      );
+    }
+    final data = response.data ?? const <String, Object?>{};
+    final rows = _firstObjectList([data['items']]);
+    return rows.map(EmployeePendingQuestion.fromJson).toList(growable: false);
+  }
+
+  Future<void> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final text = answer.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('回答不能为空');
+    }
+    final response = await _client.answerEmployeePendingQuestion(
+      questionId: questionId,
+      answer: text,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('回答失败'));
+    }
+  }
+
+  Future<void> connectImWebSocket() async {
+    final session = await _client.loadSession();
+    final sessionId = session.sessionId.trim();
+    if (sessionId.isEmpty) return;
+    final url = await _imWebSocketUrl(sessionId);
+    _imWebSocketSubscription ??= _imWebSocket.events.listen((_) {});
+    _imWebSocket.connect(sessionId: sessionId, url: url);
+  }
+
+  void disconnectImWebSocket() {
+    _imWebSocket.disconnect();
+  }
+
+  Future<String> _imWebSocketUrl(String sessionId) async {
+    final session = await _client.loadSession();
+    final host = session.fhdHost.trim();
+    final mode = session.serverMode.trim().toLowerCase() == 'lan'
+        ? AndroidServerMode.lan
+        : AndroidServerMode.cloud;
+    return AndroidServerRouter(
+      fhdHost: host.isNotEmpty ? host : '127.0.0.1',
+      mode: mode,
+      enterpriseFhdBaseUrlRaw: MobileAndroidBuild.enterpriseFhdBaseUrl,
+      modstoreBaseUrlRaw: MobileAndroidBuild.modstoreBaseUrl,
+    ).fhdImWebSocketUrl(sessionId);
   }
 
   Future<int> openImDirect(int peerUserId) async {

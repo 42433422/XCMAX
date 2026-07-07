@@ -6,9 +6,17 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Flutter 全功能补齐（2026-07-07 · v10 线内迭代）
+
+- **feat(mobile-flutter)**：员工任务中心（Phase-D 提问列表 + 老板回答）对齐 Android `EmployeeQuestionsScreen`；员工档案新增「问他/她的待回答问题」入口
+- **feat(mobile-flutter)**：IM WebSocket 实时客户端（`/ws/im` 心跳 + 断线重连），`ImMessengerScreen` 接入实时消息
+- **feat(mobile-flutter)**：登录/配对成功后自动 `registerDevice`（有 `fcm_token` 时），对齐 Android `PushRegistrar`
+- **test(mobile-flutter)**：员工提问与 IM WS 解析单测；**257** 测试全绿
+
 ### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
 
 - **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口
+- **fix(frontend)**：`MobilePairingQrCard` 在 dev 代理页即时把 QR 中的 `api_base_url` 改写到 `:5011`/`:5001`，刷新二维码后手机可立即扫码绑定（无需等后端重启）
 
 ### Flutter 手机端聊天发送修复（2026-07-07 · v10 线内迭代）
 

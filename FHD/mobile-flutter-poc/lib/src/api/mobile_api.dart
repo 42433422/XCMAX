@@ -880,6 +880,27 @@ class MobileApiClient {
         serverMode: _preferredServerModeAfterLogin(next),
       ),
     );
+    await registerDeviceTokenIfNeeded();
+  }
+
+  Future<void> registerDeviceTokenIfNeeded({
+    String pushProvider = 'fcm',
+    String? pushToken,
+  }) async {
+    final session = await loadSession();
+    final token = (pushToken ?? session.fcmToken).trim();
+    if (token.isEmpty) return;
+    try {
+      await registerDevice({
+        'fcm_token': token,
+        'push_provider': pushProvider,
+        'push_token': token,
+        'product_sku': MobileAndroidBuild.productSku,
+        'device_label': 'Flutter-Android',
+      });
+    } catch (_) {
+      // Android also swallows register failures.
+    }
   }
 
   Future<void> persistRelayBindingMeta(
@@ -1011,6 +1032,9 @@ class MobileApiClient {
       next = next.copyWith(setupComplete: true);
     }
     await _saveSession(next);
+    if (next.hasAuth) {
+      await registerDeviceTokenIfNeeded();
+    }
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> mobileHealth() async {

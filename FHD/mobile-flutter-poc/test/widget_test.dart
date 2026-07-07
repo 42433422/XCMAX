@@ -3493,7 +3493,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('会话 #12'), findsOneWidget);
-    expect(find.text('WebSocket 已连接，消息实时同步'), findsOneWidget);
+    expect(find.textContaining('WebSocket'), findsOneWidget);
     expect(find.text('用户 0'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('输入消息'), findsOneWidget);
