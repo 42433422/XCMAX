@@ -113,8 +113,7 @@ def _super_employee_contacts() -> list[dict[str, Any]]:
             continue
         display = str(meta.get("display_name") or emp_id).strip()
         summary = str(
-            meta.get("summary")
-            or f"{meta.get('display_tool') or ''} 超级员工 · 多设备派工".strip()
+            meta.get("summary") or f"{meta.get('display_tool') or ''} 超级员工 · 多设备派工".strip()
         ).strip()
         source = "codex" if emp_id == "codex-super-employee" else "builtin"
         out.append(
@@ -183,7 +182,8 @@ def derive_employee_contacts(
                     department=department,
                     source="installed" if is_installed else "planned",
                     installed=is_installed,
-                    description=desc or ("已安装，可联系" if is_installed else "编制内但未安装 employee_pack"),
+                    description=desc
+                    or ("已安装，可联系" if is_installed else "编制内但未安装 employee_pack"),
                 )
             )
 
@@ -195,7 +195,9 @@ def derive_employee_contacts(
             if not eid or eid in seen:
                 continue
             seen.add(eid)
-            display = str(meta.get("label") or manifest_meta.get(eid, {}).get("name") or eid).strip()
+            display = str(
+                meta.get("label") or manifest_meta.get(eid, {}).get("name") or eid
+            ).strip()
             desc = str(manifest_meta.get(eid, {}).get("description") or "").strip()
             is_installed = eid in installed
             contacts.append(
