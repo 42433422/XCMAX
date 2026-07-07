@@ -147,7 +147,7 @@ describe('SoftwareDownloadView', () => {
     await flushPromises()
 
     expect(nativeDownload).toHaveBeenCalledWith({
-      url: 'https://dl.xiu-ci.com/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe',
+      url: 'https://xiu-ci.com/xcagi-v10.0.0/enterprise/XCAGI-Enterprise-Setup-10.0.0-x64.exe',
       filename: 'XCAGI-Enterprise-Setup-10.0.0-x64.exe',
     })
     expect(anchorClick).not.toHaveBeenCalled()

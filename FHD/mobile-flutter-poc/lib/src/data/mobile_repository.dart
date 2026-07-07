@@ -9,7 +9,6 @@ import '../policy/android_runtime_policy.dart';
 import '../policy/avatar_policy.dart';
 import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
-import 'deployment_modes_ssot.dart';
 import 'duty_roster_ssot.dart';
 import 'employee_pending_question.dart';
 import '../im/im_websocket_client.dart';
@@ -496,7 +495,7 @@ class MobileRepository {
     final parsed = parsePairingPayload(text);
     if (parsed != null && parsed.version >= 3 && parsed.relayId.isNotEmpty) {
       throw const MobileRepositoryException(
-        '云中继绑定已改为账号鉴权，请刷新电脑端内网二维码后绑定',
+        '云中继绑定请先登录账号，登录后将自动完成绑定',
       );
     }
 
@@ -520,7 +519,7 @@ class MobileRepository {
       baseUrl: baseUrl,
     );
     if (!response.success) {
-      throw MobileRepositoryException(response.message.ifEmpty('设备配对失败'));
+      throw MobileRepositoryException('设备配对失败[${response.message}]');
     }
     final hostWithPort = _hostPortFromApiBaseUrl(
       _readStringMap(response.data, const ['api_base_url', 'base_url']),
@@ -530,6 +529,7 @@ class MobileRepository {
       hostWithPort: hostWithPort,
       clearRelayDesktop: true,
       setupComplete: true,
+      preserveActiveAuth: true,
     );
     final relayId = _relayIdFromBindingData(response.data);
     if (relayId.isNotEmpty) {
@@ -586,7 +586,8 @@ class MobileRepository {
     final cleanCode = code.trim();
     if (!RegExp(r'^\d{6}$').hasMatch(cleanCode)) return '';
     final session = await _client.loadSession();
-    for (final baseUrl in await _lanPairingCandidateBaseUrls(session.fhdHost)) {
+    final candidates = await _lanPairingCandidateBaseUrls(session.fhdHost);
+    for (final baseUrl in candidates) {
       try {
         final lookup = await _client
             .pairingLookup(
@@ -596,16 +597,16 @@ class MobileRepository {
             .timeout(_lanPairingProbeTimeout);
         if (lookup.success) return baseUrl;
       } on TimeoutException {
-        continue;
+        // 继续尝试下一个候选
       } catch (_) {
-        // 局域网探测：超时/拒绝连接视为候选不可达，继续下一个。
+        // 继续尝试下一个候选
       }
     }
     return '';
   }
 
   Future<List<String>> _lanPairingCandidateBaseUrls(String configuredHost) async {
-    const lanPorts = [5011, 17500, 5001, 5000];
+    const lanPorts = [5011, 5100, 17500, 5001, 5000];
     final hostPorts = <String>[];
     final configured = _normalizePairingHost(configuredHost);
     if (configured.isNotEmpty) {
@@ -619,8 +620,8 @@ class MobileRepository {
     }
 
     try {
-      for (final iface
-          in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
+      final ifaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      for (final iface in ifaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address;
           if (ip.startsWith('127.') || ip.startsWith('169.254.')) continue;
@@ -634,7 +635,9 @@ class MobileRepository {
           }
         }
       }
-    } catch (_) {}
+    } catch (_) {
+      // 网络接口枚举失败时忽略，仅依赖已配置 host
+    }
 
     final seen = <String>{};
     final bases = <String>[];
@@ -895,8 +898,12 @@ class MobileRepository {
             body: reply,
           );
           return reply;
-        } catch (_) {
+        } catch (e) {
           _throwIfCancelled(isCancelled);
+          final sink = onToken;
+          if (sink != null) {
+            sink('〔局域网直连失败，正在切换到云端中继〕\n');
+          }
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
@@ -1129,9 +1136,6 @@ class MobileRepository {
   }
 
   Future<String> _superEmployeeLanBaseUrl() async {
-    if (!DeploymentModesSsot.mobileConnectionPrefersLan('lan_direct')) {
-      return '';
-    }
     final session = await _client.loadSession();
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
@@ -2429,15 +2433,17 @@ String _pairingLanBaseUrl(String host, int port) {
 }
 
 String _pairingLanBaseUrlFromHostPort(String hostWithPort) {
-  final compact = _compactPairingHostPort(
-    _normalizePairingHost(hostWithPort),
-    0,
-  );
-  if (compact.isEmpty) return '';
-  if (compact.contains(':')) {
-    return 'http://$compact/';
+  final normalized = _normalizePairingHost(hostWithPort);
+  if (normalized.isEmpty) return '';
+  final parts = normalized.split(':');
+  final host = parts.first.trim();
+  if (host.isEmpty) return '';
+  int port = 0;
+  if (parts.length > 1) {
+    port = (int.tryParse(parts.last.trim()) ?? 0).takeIfValidPort();
   }
-  return _pairingLanBaseUrl(compact, MobileAndroidBuild.fhdDefaultPort);
+  final cleanPort = port > 0 ? port : MobileAndroidBuild.fhdDefaultPort;
+  return 'http://$host:$cleanPort/';
 }
 
 String _hostPortFromApiBaseUrl(String raw) {
@@ -2452,10 +2458,6 @@ String _readStringMap(Map<String, Object?>? data, List<String> keys) {
     if (value.isNotEmpty) return value;
   }
   return '';
-}
-
-String _pairingBaseUrl(String host, int port) {
-  return _pairingLanBaseUrl(host, port);
 }
 
 String _compactPairingHostPort(String host, int port) {

@@ -57,7 +57,10 @@ def _backend_listens_loopback_only() -> bool:
 
 
 def _request_host_port(request: Request) -> int:
-    host_header = (request.headers.get("host") or "").strip()
+    # Vite 代理 changeOrigin 会改写 Host；优先读 X-Forwarded-Host 拿到手机真实访问端口。
+    host_header = (request.headers.get("x-forwarded-host") or "").strip()
+    if not host_header:
+        host_header = (request.headers.get("host") or "").strip()
     if ":" in host_header:
         raw_port = host_header.rsplit(":", 1)[-1]
         port = int(raw_port) if raw_port.isdigit() else 0
@@ -91,11 +94,13 @@ def _pairing_reachable_port(request: Request | None, api_port: int) -> int:
     clean_port = int(api_port or 0)
     if clean_port <= 0:
         clean_port = 5000
-    if not _backend_listens_loopback_only() or request is None:
+    if request is None:
         return clean_port
     proxy_port = _request_host_port(request)
     if proxy_port in _FRONTEND_DEV_PORTS:
         return proxy_port
+    if not _backend_listens_loopback_only():
+        return clean_port
     return clean_port
 
 

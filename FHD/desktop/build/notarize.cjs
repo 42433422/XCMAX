@@ -67,7 +67,12 @@ exports.default = async function afterSign(context) {
     return
   }
 
+  if (process.env.CI) {
+    throw new Error(
+      '[notarize] CI build requires Apple notarization secrets; set APP_STORE_CONNECT_API_KEY_ID + APP_STORE_CONNECT_API_ISSUER_ID + APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64, or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID',
+    )
+  }
   console.log(
-    '[notarize] skipped: set App Store Connect API key or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID',
+    '[notarize] skipped (local build): set APP_STORE_CONNECT_API_KEY_* or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID to enable',
   )
 }

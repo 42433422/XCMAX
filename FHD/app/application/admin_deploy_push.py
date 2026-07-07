@@ -32,10 +32,15 @@ StepStatus = Literal["pending", "running", "done", "error", "skipped"]
 PUSH_HOST = os.environ.get("FHD_PUSH_HOST", "119.27.178.147")
 PUSH_USER = os.environ.get("FHD_PUSH_USER", "root")
 CHANNEL_DEFAULT = os.environ.get("FHD_RELEASE_CHANNEL", "stable")
-MANIFEST_URL = (
-    os.environ.get("XCMAX_UPDATE_MANIFEST_URL", "").strip()
-    or "https://update.xcagi.com/releases/" + CHANNEL_DEFAULT + "/server/fhd-manifest.json"
-)
+def _default_manifest_url(channel: str = CHANNEL_DEFAULT) -> str:
+    custom = os.environ.get("XCMAX_UPDATE_MANIFEST_URL", "").strip()
+    if custom:
+        return custom.replace("/stable/", f"/{channel}/") if channel != "stable" else custom
+    # OTA SSOT：腾讯云 CVM 主域 HTTPS（不依赖阿里云 update.xcagi.com）
+    return f"https://xiu-ci.com/releases/{channel}/server/fhd-manifest.json"
+
+
+MANIFEST_URL = _default_manifest_url(CHANNEL_DEFAULT)
 ENTERPRISE_HEALTH_HOST = os.environ.get("XCMAX_REMOTE_HOST", PUSH_HOST)
 ENTERPRISE_HEALTH_PORT = int(os.environ.get("XCMAX_REMOTE_PORT", "5100"))
 
@@ -138,9 +143,7 @@ def check_deploy_updates(channel: str = CHANNEL_DEFAULT) -> dict[str, Any]:
     local_sha = _local_git_sha(root)
     local_version = _local_version(root)
     local_manifest = _read_local_manifest(root)
-    manifest_url = (
-        MANIFEST_URL.replace("/stable/", f"/{channel}/") if channel != "stable" else MANIFEST_URL
-    )
+    manifest_url = _default_manifest_url(channel)
     hub = _fetch_json_url(manifest_url)
     enterprise = _probe_enterprise_runtime()
 

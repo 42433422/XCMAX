@@ -40,8 +40,6 @@ class XcagiMobileEndpoints {
   static const pairingExchange = '$base/pairing/exchange';
   static const pairingLookup = '$base/pairing/lookup';
   static const pairingIssue = '$base/pairing/issue';
-  static const relayMobileConfirm = '$base/relay/mobile/confirm';
-  static const relayMobileConfirmCode = '$base/relay/mobile/confirm-code';
   static const relayMobileBindAccount = '$base/relay/mobile/bind-account';
   static const relayMobileDesktops = '$base/relay/mobile/desktops';
   static const relayTasks = '$base/relay/tasks';
@@ -543,8 +541,6 @@ class AndroidAuthHeaderPolicy {
       '/${XcagiMobileEndpoints.authQrConfirm}',
       '/${XcagiMobileEndpoints.pairingIssue}',
       '/${XcagiMobileEndpoints.pairingExchange}',
-      '/${XcagiMobileEndpoints.relayMobileConfirm}',
-      '/${XcagiMobileEndpoints.relayMobileConfirmCode}',
     };
     return publicPaths.any(path.endsWith);
   }
@@ -954,6 +950,7 @@ class MobileApiClient {
     String hostWithPort = '',
     bool clearRelayDesktop = false,
     bool setupComplete = false,
+    bool preserveActiveAuth = false,
   }) async {
     final payload = data ?? const <String, Object?>{};
     final resolvedHost = hostWithPort.trim().ifEmpty(
@@ -965,8 +962,8 @@ class MobileApiClient {
 
     var next = current;
     final access = _readString(payload, const ['access_token']);
-    if (access.isNotEmpty) {
-      final user = _asObjectMap(payload['user']);
+    final user = _asObjectMap(payload['user']);
+    if (!preserveActiveAuth && access.isNotEmpty) {
       next = next.copyWith(
         accessToken: access,
         refreshToken: _firstNonBlank([
@@ -988,6 +985,10 @@ class MobileApiClient {
           'enterprise',
         ]),
         userId: _readInt(user, const ['id'], current.userId),
+      );
+    }
+    if (access.isNotEmpty || preserveActiveAuth) {
+      next = next.copyWith(
         relayBaseUrl: _firstNonBlank([
           _readString(payload, const ['relay_base_url']),
           current.relayBaseUrl,
@@ -1650,41 +1651,6 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-  Future<MobileEnvelope<Map<String, Object?>>> relayConfirm({
-    required String relayId,
-    required String code,
-  }) async {
-    final json = await postJson(XcagiMobileEndpoints.relayMobileConfirm, {
-      'relay_id': relayId.trim(),
-      'code': code.trim(),
-    });
-    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
-    if (envelope.success) {
-      await persistRelayBindingMeta(relayId.trim(), envelope.data);
-    }
-    return envelope;
-  }
-
-  Future<MobileEnvelope<Map<String, Object?>>> relayConfirmCode(
-    String code, {
-    String baseUrl = '',
-  }) async {
-    final json = await postJson(
-      XcagiMobileEndpoints.relayMobileConfirmCode,
-      {
-        'code': code.trim(),
-      },
-      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
-    );
-    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
-    if (envelope.success) {
-      final relayId = _relayIdFromBindingData(envelope.data);
-      if (relayId.isNotEmpty) {
-        await persistRelayBindingMeta(relayId, envelope.data);
-      }
-    }
-    return envelope;
-  }
 
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
     String relayId,

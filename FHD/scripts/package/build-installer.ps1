@@ -24,8 +24,8 @@ $skuAppIds = @{
   enterprise = 'com.xcagi.desktop.enterprise'
 }
 $skuUpdateUrls = @{
-  personal   = 'https://update.xcagi.com/releases/stable/personal/'
-  enterprise = 'https://update.xcagi.com/releases/stable/enterprise/'
+  personal   = 'https://xiu-ci.com/releases/stable/personal/'
+  enterprise = 'https://xiu-ci.com/releases/stable/enterprise/'
 }
 
 function Assert-TextFileContains {

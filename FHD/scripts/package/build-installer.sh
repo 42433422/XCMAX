@@ -38,8 +38,8 @@ sku_app_id() {
 
 sku_update_url() {
   case "$1" in
-    personal) echo https://update.xcagi.com/releases/stable/personal/ ;;
-    enterprise) echo https://update.xcagi.com/releases/stable/enterprise/ ;;
+    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
+    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
     *) echo "Unknown SKU: $1" >&2; exit 1 ;;
   esac
 }

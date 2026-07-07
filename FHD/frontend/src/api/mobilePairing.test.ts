@@ -33,9 +33,14 @@ describe('mobilePairing', () => {
     } as Window & typeof globalThis);
     const reachable = applyDevProxyReachablePort(payload);
     expect(reachable.port).toBe(5011);
-    expect(JSON.parse(buildPairingQrText(reachable)).api_base_url).toBe(
-      'http://192.168.10.2:5011/',
-    );
+    expect(reachable.host).toBe('192.168.10.2');
+    expect(JSON.parse(buildPairingQrText(reachable))).toEqual({
+      v: 2,
+      t: '123456',
+      host: '192.168.10.2',
+      port: 5011,
+      nonce: 'nonce-abc',
+    });
     vi.unstubAllGlobals();
   });
 });

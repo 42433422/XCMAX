@@ -464,6 +464,61 @@ void main() {
     expect(saved.androidServerModeLabel, '云端中继 · 电脑工具');
   });
 
+  test(
+      'MobileApiClient persistPairingSession preserves cloud auth when pairing '
+      'against LAN desktop', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'cloud-access',
+        refreshToken: 'cloud-refresh',
+        sessionId: 'cloud-session',
+        username: 'cloud-user',
+        accountKind: 'enterprise',
+        userId: 42,
+      ),
+    );
+    final client = MobileApiClient(sessionStore: store);
+
+    await client.persistPairingSession(
+      const {
+        'api_base_url': 'http://192.168.10.2:5011/fhd-api',
+        'access_token': 'desktop-access',
+        'refresh_token': 'desktop-refresh',
+        'session_token': 'desktop-session',
+        'account_kind': 'enterprise',
+        'relay_base_url': 'https://xiu-ci.com/fhd-api',
+        'local_base_url': 'http://192.168.10.2:5011/fhd-api',
+        'account_id': 'account-1',
+        'tenant_id': 'tenant-1',
+        'paired_at': '2026-07-07T00:00:00Z',
+        'user': {'id': 9, 'username': 'desktop-admin'},
+      },
+      hostWithPort: '192.168.10.2:5011',
+      clearRelayDesktop: true,
+      setupComplete: true,
+      preserveActiveAuth: true,
+    );
+
+    final saved = await store.load();
+    // 云端登录态必须保留，否则后续云端请求会 401 触发退出登录
+    expect(saved.accessToken, 'cloud-access');
+    expect(saved.refreshToken, 'cloud-refresh');
+    expect(saved.sessionId, 'cloud-session');
+    expect(saved.username, 'cloud-user');
+    expect(saved.userId, 42);
+    // 桌面端绑定关系仍然建立
+    expect(saved.relaySessionToken, 'desktop-session');
+    expect(saved.relayAccountId, 'account-1');
+    expect(saved.relayTenantId, 'tenant-1');
+    expect(saved.relayPairedAt, '2026-07-07T00:00:00Z');
+    expect(saved.relayBaseUrl, 'https://xiu-ci.com/fhd-api');
+    expect(saved.localBaseUrl, 'http://192.168.10.2:5011/fhd-api');
+    expect(saved.fhdHost, '192.168.10.2:5011');
+    expect(saved.serverMode, 'lan');
+    expect(saved.setupComplete, isTrue);
+    expect(saved.relayDesktopId, '');
+  });
+
   test('MobileRepository cachedMe restores Android username and local avatar',
       () async {
     final store = MemoryMobileSessionStore(
