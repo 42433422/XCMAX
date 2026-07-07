@@ -37,40 +37,14 @@ def _mobile_uid(user: Any) -> int:
     return 0
 
 
-def _modstore_internal_base() -> str:
-    return (
-        (
-            os.environ.get("XCAGI_MODSTORE_INTERNAL_URL")
-            or os.environ.get("MODSTORE_INTERNAL_BASE_URL")
-            or os.environ.get("MODSTORE_PUBLIC_API_BASE")
-            or "http://127.0.0.1:9999"
-        )
-        .strip()
-        .rstrip("/")
-    )
-
-
 def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> None:
-    """入站回流：老板在员工聊天页回复 → 回流成该员工最新 pending 问题的答案，解阻塞员工（best-effort）。"""
-    key = _internal_api_key()
-    text = (answer or "").strip()
-    if not key or int(boss_user_id or 0) <= 0 or not str(employee_id or "").strip() or not text:
-        return
-    try:
-        import httpx
+    """入站回流：老板在员工聊天页回复 → 回流给 MODstore（答问题或转新任务），best-effort。
 
-        with httpx.Client(timeout=5) as client:
-            client.post(
-                f"{_modstore_internal_base()}/api/admin/employee-autonomy/internal/answer-latest",
-                headers={"X-Internal-Api-Key": key},
-                json={
-                    "user_id": int(boss_user_id),
-                    "employee_id": str(employee_id),
-                    "answer": text,
-                },
-            )
-    except Exception:  # noqa: BLE001 - 回流失败不影响 IM 主流程
-        logger.debug("relay_employee_answer failed", exc_info=True)
+    实现移至 ``app.infrastructure.im.employee_reply_relay``，与桌面/Web 端 ``im_routes`` 共用。
+    """
+    from app.infrastructure.im.employee_reply_relay import relay_boss_reply_to_employee
+
+    relay_boss_reply_to_employee(boss_user_id, employee_id, answer)
 
 
 def _internal_api_key() -> str:

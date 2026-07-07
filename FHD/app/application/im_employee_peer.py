@@ -84,12 +84,29 @@ class EmployeePeerMixin:
         """若该 1:1 会话的对端是某 AI 员工合成 User，返回其 employee_id；否则 None。
 
         入站回流用：老板在某会话回复后，据此判断是否是「回复某员工」，是则把回复回流为该员工的答案。
+
+        员工合成 User 有两套并存的命名（历史原因）：
+        - ``emp:<employee_id>``（本 mixin ``post_employee_message`` 路径）
+        - ``ai-employee:<employee_id>``（``/api/internal/employee-im/send`` 生产桥接路径，
+          带 ``AiEmployeeProfile`` 档案）
+        两者都必须识别，否则生产桥建的会话里老板的回复会被静默丢掉（已读不回）。
+        兜底再按 ``AiEmployeeProfile.user_id`` 反查一次，容忍历史改名。
         """
         peer_id = self._direct_peer_id(conversation_id, int(boss_user_id))
         if not peer_id:
             return None
         peer = self._db.get(User, int(peer_id))
         uname = str(getattr(peer, "username", "") or "")
-        if uname.startswith("emp:"):
-            return uname[len("emp:") :].strip() or None
+        for prefix in ("emp:", "ai-employee:"):
+            if uname.startswith(prefix):
+                return uname[len(prefix) :].strip() or None
+        from app.db.models.ai_employee import AiEmployeeProfile
+
+        prof_eid = self._db.execute(
+            select(AiEmployeeProfile.employee_id)
+            .where(AiEmployeeProfile.user_id == int(peer_id))
+            .limit(1)
+        ).first()
+        if prof_eid and str(prof_eid[0] or "").strip():
+            return str(prof_eid[0]).strip()
         return None
