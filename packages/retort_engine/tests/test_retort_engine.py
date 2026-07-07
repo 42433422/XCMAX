@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from retort_engine.core import RetortSelfEvolutionRunner, RetortService, _attach_llm_scoring, _blocking_git_status, _extract_json_from_stdout, _llm_absorption_evidence, _maybe_request_llm_review, absorb, assess_project, record_closed_loop_proof
-from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review
+from retort_engine.paibi_llm import PaibiLLMClient, build_retort_paibi_prompt, fetch_paibi_llm_review_status, fetch_paibi_parallel_review_status, request_paibi_llm_review, request_paibi_parallel_review, wait_for_paibi_llm_review
 from retort_engine.proof import rollback_rehearsal
 from retort_engine.real_absorption import apply_real_absorption
 from retort_engine.ui_server import RetortUIServer
@@ -809,6 +809,66 @@ def test_service_llm_review_status_parses_paibi_logs(monkeypatch) -> None:
     assert result["json_result"]["score_suggestion"] == 81
     assert result["scores"][0]["dimension"] == "calibrated_overall"
     assert result["subtasks"][0]["status"] == "completed"
+
+
+def test_single_review_status_surfaces_blockers_and_unblock_tasks(monkeypatch) -> None:
+    def fake_fetch_task(self: PaibiLLMClient, task_id: str) -> dict[str, object]:
+        return {
+            "task": {
+                "id": task_id,
+                "status": "running",
+                "subTasks": [
+                    {
+                        "id": "sub-bad",
+                        "title": "blocked",
+                        "status": "failed",
+                        "blocked": True,
+                        "last_error": "工作设备 Worker 缺少自动改码执行器：Codex CLI",
+                        "logs": [],
+                    }
+                ],
+            }
+        }
+
+    monkeypatch.setattr(PaibiLLMClient, "fetch_task", fake_fetch_task)
+
+    result = fetch_paibi_llm_review_status("task-1")
+
+    assert result["scores"] == []
+    assert any(item["kind"] == "executor_missing" for item in result["blockers"])
+    assert result["unblock_tasks"]
+    assert result["unblock_tasks"][0]["blocker_kind"] == "executor_missing"
+
+
+def test_wait_for_review_exits_early_on_stale_dispatch(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def fake_fetch_task(self: PaibiLLMClient, task_id: str) -> dict[str, object]:
+        calls.append(task_id)
+        return {
+            "task": {
+                "id": task_id,
+                "status": "running",
+                "subTasks": [
+                    {
+                        "id": "sub-stale",
+                        "title": "Retort scoring",
+                        "status": "running",
+                        "progress": 0,
+                        "logs": [{"content": "依赖已满足，等待派发。 未提供远程仓库，将使用工作设备本地目录"}],
+                    }
+                ],
+            }
+        }
+
+    monkeypatch.setattr(PaibiLLMClient, "fetch_task", fake_fetch_task)
+
+    status = wait_for_paibi_llm_review("task-stale", timeout_sec=30, interval_sec=0, stale_grace_sec=0)
+
+    assert status["wait_stopped_reason"] == "stale_dispatch"
+    assert status["status"] == "running"
+    assert status["scores"] == []
+    assert len(calls) == 1
 
 
 def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path: Path) -> None:
