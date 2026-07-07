@@ -34,6 +34,10 @@
 
 - **fix(mobile-flutter)**：相机帧转 ML Kit 输入改用 **NV21**（Android 插件仅支持 NV21/YV12，此前误用 iOS 的 yuv420 导致每帧静默失败）；修正旋转角与扫码成功后停流
 
+### 6 位设备码云中继绑定（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：输入 6 位设备码时优先调用 `relay/mobile/confirm-code`（对齐管理端「服务器中继设备码」），失败再回落局域网 `pairing/lookup`；LAN 探测单次超时缩短至 ~900ms，避免 spinner 卡数分钟
+
 ### 6 位设备码局域网绑定（2026-07-07 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：恢复「只输入设备码」— 同一 WiFi 下自动探测局域网电脑（`pairing/lookup` + 5011/17500 等端口），无需扫完整二维码
