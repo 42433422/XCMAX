@@ -280,6 +280,7 @@ import {
 } from '@/constants/enterpriseWorkflowEstablishment';
 import { autoOnboardInstalledMarketItem } from '@/utils/workflowEmployeeOnboard';
 import { resolveEnterpriseModStack } from '@/utils/enterpriseModStackApi';
+import { productErrorMessage } from '@/utils/productErrorMessage';
 
 export default {
   name: 'ModStore',
@@ -783,12 +784,10 @@ export default {
               '市场同步失败，当前为缓存/本地目录。可点「刷新目录」重试。';
             return true;
           }
-          loadError.value =
-            error instanceof Error
-              ? error.message
-              : fallbackError instanceof Error
-                ? fallbackError.message
-                : '加载市场目录失败，请检查网络后刷新。';
+          loadError.value = productErrorMessage(
+            error ?? fallbackError,
+            '加载市场目录失败，请检查网络后刷新。',
+          );
           allMods.value = [];
           return false;
         }

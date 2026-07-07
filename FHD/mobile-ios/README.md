@@ -1,7 +1,10 @@
-# XCAGI iOS App(`mobile-ios`)
+# XCAGI iOS App (`mobile-ios`)
 
-原生 **SwiftUI + MVVM** 客户端,对标 `mobile-android`(Kotlin/Compose)与 `mobile-harmony`(ArkTS)。
-共享同一套移动 API 契约 `api/mobile/v1/*`(见 `app/fastapi_routes/mobile_api_extensions.py`)。
+> **归档状态（2026-07-07）**：本目录 **Frozen → Archive**。移动交付统一到 **`../mobile-flutter-poc/`**（Flutter 单仓覆盖 iOS + Android）。  
+> 仅保留：Xcode 兼容构建、签名脚本参照、Flutter 迁移 diff。**禁止**新增产品流程。  
+> 新文档：[`docs/guides/MOBILE_FLUTTER.md`](../docs/guides/MOBILE_FLUTTER.md)
+
+原生 **SwiftUI + MVVM** 客户端（历史对标 `mobile-android`）。共享移动 API `api/mobile/v1/*`。
 
 > 范围:**全量对标安卓**。核心流程(登录/配对、SSE 流式对话、会话、通讯录、审批、客服、AI 交流圈、AI 群聊、企业模块、设置)
 > + 设备相关能力(二维码扫描、OCR、APNs 推送、IM 实时收发、MOD WebView)均已用真实原生框架实现,逐项状态见 `PARITY_MATRIX.md`。

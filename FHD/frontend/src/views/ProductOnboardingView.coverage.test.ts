@@ -886,7 +886,7 @@ describe('ProductOnboardingView.vue 覆盖率补齐测试', () => {
     await flushPromises()
     await flushPromises()
     await flushPromises()
-    expect(mockContainer.appAlert).toHaveBeenCalledWith('装包失败')
+    expect(mockContainer.appAlert).toHaveBeenCalledWith('string error')
   })
 
   it('runBootstrap：industryMissing 时调用 installIndustrySeed', async () => {

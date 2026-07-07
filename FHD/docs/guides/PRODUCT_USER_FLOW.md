@@ -80,14 +80,18 @@ flowchart LR
 
 ---
 
-## 四、阶段 2：宿主就绪（引导步骤 1～2）
+## 四、阶段 2：行业定型（引导步骤 2，可跳过）
 
-### 4.1 界面：`/onboarding`
+> **实现顺序**（`PRODUCT_FLOW_STEPS`）：`welcome` → **`industry`** → **`host-pack`** → `seed-demo` → `first-ai-task`。  
+> 企业版若行业 baseline 未齐，路由门禁会优先拦到 `industry` 或 `host-pack`（见 `hostPackOnboardingGate.ts`）。
+
+### 4.1 界面：`/onboarding?step=industry`
 
 | 步骤 ID | 标题 | 用户动作 | 接口 |
 |---------|------|----------|------|
 | `welcome` | 认识宿主 | 阅读说明 → 下一步 | — |
-| `host-pack` | 宿主能力包 | **一键装齐通用包** / 重新检测 | `GET deliverable-status`、`POST bootstrap-edition-pack` |
+| `industry` | 行业定型 | 选择开放行业 / 跳过 | `GET /api/platform-shell/onboarding-industries` |
+| `host-pack` | 补基础线 | **一键装齐通用包** / 重新检测 | `GET deliverable-status`、`POST bootstrap-edition-pack` |
 
 ### 4.2 宿主包内容（generic）
 
@@ -111,7 +115,7 @@ GET /api/platform-shell/deliverable-status
 
 ---
 
-## 五、阶段 3：行业定型（引导步骤 3，可跳过）
+## 五、阶段 3：宿主就绪 / 补基础线（引导步骤 3）
 
 ### 5.1 业务含义
 

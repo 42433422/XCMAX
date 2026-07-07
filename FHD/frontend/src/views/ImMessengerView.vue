@@ -370,6 +370,12 @@ import api from '@/api';
 import { authApi } from '@/api/auth';
 import { useImSounds } from '@/composables/useImSounds';
 import { showAppToast } from '@/composables/useAppToast';
+import { productErrorMessage } from '@/utils/productErrorMessage';
+import { fetchEmployeeSsot } from '@/utils/platformShellApi';
+import {
+  dutyEmployeesFromEmployeeSsot,
+  type EmployeeSsotPayload,
+} from '@/utils/employeeSsotContacts';
 import { useXcmaxSync } from '@/composables/useXcmaxSync';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
 import {
@@ -1468,6 +1474,17 @@ async function loadDutyEmployees(): Promise<void> {
     dutyEmployees.value = uniqueDutyEmployees(fallbackDutyEmployees());
   }
   try {
+    const ssot = (await fetchEmployeeSsot()) as EmployeeSsotPayload;
+    const fromSsot = dutyEmployeesFromEmployeeSsot(ssot);
+    if (fromSsot.length) {
+      dutyEmployees.value = uniqueDutyEmployees(fromSsot as DutyEmployeeEntry[]);
+      imApiReachable.value = true;
+      return;
+    }
+  } catch {
+    /* fallback to mobile admin employees */
+  }
+  try {
     const response = await api.get<MobileApiResponse<AdminEmployeesPayload>>('/api/mobile/v1/admin/employees');
     imApiReachable.value = true;
     const payload = response.data || {};
@@ -1480,7 +1497,7 @@ async function loadDutyEmployees(): Promise<void> {
     }
   } catch (error) {
     showAppToast(
-      error instanceof Error ? `员工通讯录使用本地编制兜底：${error.message}` : '员工通讯录使用本地编制兜底',
+      productErrorMessage(error, '员工通讯录暂时不可用，已使用本地编制兜底'),
       'warning',
     );
   }
