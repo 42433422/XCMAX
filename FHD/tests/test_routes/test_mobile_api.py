@@ -575,7 +575,11 @@ class TestMobileRelaySessionValidate:
         )
         monkeypatch.setattr(
             "app.fastapi_routes.mobile_api.verify_mobile_jwt",
-            lambda token: {"session_id": "mobile-relay-deadbeef", "account_kind": "enterprise"},
+            lambda token: {
+                "typ": "access",
+                "session_id": "mobile-relay-deadbeef",
+                "account_kind": "enterprise",
+            },
         )
         monkeypatch.setattr(
             "app.application.session_account_meta.load_session_account_meta",
