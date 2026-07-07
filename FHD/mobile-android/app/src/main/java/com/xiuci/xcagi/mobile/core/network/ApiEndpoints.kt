@@ -75,6 +75,7 @@ object ApiEndpoints {
 
     // 配对
     const val PAIRING_EXCHANGE = "$BASE/pairing/exchange"
+    const val PAIRING_LOOKUP = "$BASE/pairing/lookup"
     const val PAIRING_ISSUE = "$BASE/pairing/issue"
 
     // 中继

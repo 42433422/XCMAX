@@ -507,7 +507,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '请输入电脑端显示的 6 位设备码',
+                    '同一 WiFi 下输入电脑端 6 位设备码即可绑定',
                     style: TextStyle(
                       color: sheetColors.textSecondary,
                       fontSize: 13,

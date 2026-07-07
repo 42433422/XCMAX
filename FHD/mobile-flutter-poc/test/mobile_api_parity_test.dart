@@ -179,6 +179,7 @@ Map<String, String> _flutterMobileEndpointTemplates() => {
       'DEVICES_REGISTER': XcagiMobileEndpoints.devicesRegister,
       'NOTIFICATIONS_PENDING': XcagiMobileEndpoints.notificationsPending,
       'PAIRING_EXCHANGE': XcagiMobileEndpoints.pairingExchange,
+      'PAIRING_LOOKUP': XcagiMobileEndpoints.pairingLookup,
       'PAIRING_ISSUE': XcagiMobileEndpoints.pairingIssue,
       'RELAY_MOBILE_CONFIRM': XcagiMobileEndpoints.relayMobileConfirm,
       'RELAY_MOBILE_CONFIRM_CODE': XcagiMobileEndpoints.relayMobileConfirmCode,
