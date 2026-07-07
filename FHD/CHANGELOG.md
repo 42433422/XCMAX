@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Flutter 手机端聊天发送修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：根治聊天页「点击发送无反应」——`loadInitialMessages` 返回 fixed-length 列表后 `_messages.addAll/clear` 在 `setState` 内抛 `Cannot add to a fixed-length list`，`_sending` 卡 true 拦截后续发送；改为拷贝赋值 + 不可变式追加，并补 widget 回归测试
+- **fix(mobile-flutter)**：release R8 裁剪 `WorkDatabase` 导致新装包启动即崩；新增 `proguard-rules.pro`（对齐 mobile-android keep 规则）
+- **fix(mobile-flutter)**：`clearActiveAuth` 的 `cachedModInfos: const []` 类型转换崩溃；恢复企业端会话「已安装」徽章（对齐 Android AppViewModel）
+- **chore(mobile-flutter)**：IM 端点切换到 `api/mobile/v1/im/*` 并补 `im/conversations`、`read`、管理端客服收件箱、员工 Phase-D 提问端点，与 Android `ApiEndpoints.kt`/`FhdApi.kt` SSOT 重新对齐（parity 测试恢复全绿）
+
 ### 平台七柱 Wave 2（2026-07-05 · v10 线内迭代）
 
 - **feat(scaffold)**：`scripts/dev/scaffold-industry-mod.sh` 从中性行业包模板生成 `*-industry` Mod

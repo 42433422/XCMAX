@@ -80,6 +80,14 @@ Map<String, Object> _androidBuildConfigDefaults() {
       values[name] = rawValue.replaceAll(r'\"', '');
     }
   }
+  // Multi-line style: buildConfigField("String", "NAME",
+  //   quotedBuildConfig(androidStringConfig("localKey", "ENV_KEY", "default")))
+  for (final declaration in RegExp(
+    r'buildConfigField\(\s*"String",\s*"([^"]+)",\s*quotedBuildConfig\(\s*androidStringConfig\(\s*"[^"]+",\s*"[^"]+",\s*"((?:\\.|[^"])*)",?\s*\),?\s*\),?\s*\)',
+    multiLine: true,
+  ).allMatches(source)) {
+    values[declaration.group(1)!] = declaration.group(2)!.replaceAll(r'\"', '');
+  }
   return values;
 }
 
@@ -180,6 +188,14 @@ Map<String, String> _flutterMobileEndpointTemplates() => {
       'RELAY_TASKS_DETAIL': XcagiMobileEndpoints.relayTasksDetail,
       'CS_INFO': XcagiMobileEndpoints.csInfo,
       'CS_MESSAGES': XcagiMobileEndpoints.csMessages,
+      'ADMIN_CS_INBOX': XcagiMobileEndpoints.adminCsInbox,
+      'ADMIN_CS_INBOX_MESSAGES':
+          XcagiMobileEndpoints.adminCsInboxMessagesTemplate,
+      'ADMIN_CS_INBOX_REPLY': XcagiMobileEndpoints.adminCsInboxReplyTemplate,
+      'ADMIN_EMPLOYEE_PENDING_QUESTIONS':
+          XcagiMobileEndpoints.adminEmployeePendingQuestions,
+      'ADMIN_EMPLOYEE_PENDING_QUESTION_ANSWER':
+          XcagiMobileEndpoints.adminEmployeePendingQuestionAnswerTemplate,
       'ADMIN_CODEX_SUPER_EMPLOYEE_MESSAGES':
           XcagiMobileEndpoints.codexSuperEmployeeMessages,
       'ADMIN_CLAUDE_SUPER_EMPLOYEE_MESSAGES':
@@ -276,12 +292,19 @@ Set<String> _flutterFhdApiEndpointPairs() => {
       'POST ${XcagiMobileEndpoints.marketAccountSync}',
       'GET ${XcagiMobileEndpoints.marketSessionHandoff}',
       'GET ${XcagiMobileEndpoints.financeSummary}',
+      'GET ${XcagiMobileEndpoints.imConversations}',
+      'POST ${XcagiMobileEndpoints.imReadTemplate}',
       'POST ${XcagiMobileEndpoints.imDirect}',
       'GET ${XcagiMobileEndpoints.imMessagesTemplate}',
       'POST ${XcagiMobileEndpoints.imMessagesTemplate}',
       'GET ${XcagiMobileEndpoints.csInfo}',
       'POST ${XcagiMobileEndpoints.csMessages}',
       'GET ${XcagiMobileEndpoints.csMessages}',
+      'GET ${XcagiMobileEndpoints.adminCsInbox}',
+      'GET ${XcagiMobileEndpoints.adminCsInboxMessagesTemplate}',
+      'POST ${XcagiMobileEndpoints.adminCsInboxReplyTemplate}',
+      'GET ${XcagiMobileEndpoints.adminEmployeePendingQuestions}',
+      'POST ${XcagiMobileEndpoints.adminEmployeePendingQuestionAnswerTemplate}',
       'GET ${XcagiMobileEndpoints.codexSuperEmployeeMessages}',
       'POST ${XcagiMobileEndpoints.codexSuperEmployeeMessages}',
       'GET ${XcagiMobileEndpoints.claudeSuperEmployeeMessages}',
@@ -337,7 +360,7 @@ void main() {
     final androidEndpointPairs = _androidFhdApiEndpointPairs();
     final flutterEndpointPairs = _flutterFhdApiEndpointPairs();
 
-    expect(androidEndpointPairs.length, 98);
+    expect(androidEndpointPairs.length, 105);
     expect(flutterEndpointPairs.length, androidEndpointPairs.length);
     expect(
       flutterEndpointPairs,

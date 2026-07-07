@@ -69,7 +69,9 @@ class XcagiMobileEndpoints {
   static const mods = '$base/mods';
   static const paymentPlans = '$base/payment/plans';
   static const paymentCheckout = '$base/payment/checkout';
-  static const imDirect = 'api/im/conversations/direct';
+  static const imConversations = '$base/im/conversations';
+  static const imDirect = '$base/im/conversations/direct';
+  static const imReadTemplate = '$base/im/conversations/{id}/read';
   static const financeSummary = 'api/finance/summary';
   static const aiChat = 'api/ai/chat';
   static const aiChatStream = 'api/ai/chat/stream';
@@ -123,7 +125,11 @@ class XcagiMobileEndpoints {
       'api/service-bridge/requests/{id}/respond';
   static const inventoryItems = 'api/inventory/items';
   static const legacyModsList = 'api/mods/';
-  static const imMessagesTemplate = 'api/im/conversations/{id}/messages';
+  static const imMessagesTemplate = '$base/im/conversations/{id}/messages';
+  static const adminEmployeePendingQuestions =
+      '$base/admin/employee-pending-questions';
+  static const adminEmployeePendingQuestionAnswerTemplate =
+      '$base/admin/employee-pending-questions/{questionId}/answer';
   static const employeeChatStreamTemplate =
       '$base/employees/{employeeId}/chat/stream';
 
@@ -310,6 +316,17 @@ class XcagiMobileEndpoints {
 
   static String imMessages(int conversationId) {
     return imMessagesTemplate.replaceFirst('{id}', '$conversationId');
+  }
+
+  static String imRead(int conversationId) {
+    return imReadTemplate.replaceFirst('{id}', '$conversationId');
+  }
+
+  static String adminEmployeePendingQuestionAnswer(int questionId) {
+    return adminEmployeePendingQuestionAnswerTemplate.replaceFirst(
+      '{questionId}',
+      '$questionId',
+    );
   }
 }
 
@@ -621,6 +638,14 @@ class MobileApiClient {
     _rememberSession(notifyAs ?? await _decodeSavedCredential(session));
   }
 
+  /// Persist a session mutation while keeping the in-memory snapshot fresh.
+  ///
+  /// Callers must use this instead of `sessionStore.save(...)`: writing to the
+  /// store directly leaves `loadSession()` serving a stale cached session, so
+  /// consecutive mutations (e.g. caching the user message then the assistant
+  /// reply) silently overwrite each other.
+  Future<void> saveSession(MobileSessionData session) => _saveSession(session);
+
   Future<MobileSessionData> _decodeSavedCredential(
     MobileSessionData session,
   ) async {
@@ -805,7 +830,7 @@ class MobileApiClient {
         autoLogin: false,
         cachedChatMessages: const <String, List<Map<String, Object?>>>{},
         conversationListStates: const <String, Map<String, Object?>>{},
-        cachedModInfos: const [],
+        cachedModInfos: const <Map<String, Object?>>[],
       ),
     );
   }
@@ -1252,6 +1277,34 @@ class MobileApiClient {
     final json = await postJson(XcagiMobileEndpoints.adminCsInboxReply(id), {
       'body': body.trim(),
     });
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> employeePendingQuestions({
+    int limit = 50,
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestions,
+      query: {
+        'limit': '$limit',
+        'include_history': '$includeHistory',
+        if (employeeId != null && employeeId.trim().isNotEmpty)
+          'employee_id': employeeId.trim(),
+      },
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.adminEmployeePendingQuestionAnswer(questionId),
+      {'answer': answer.trim()},
+    );
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
@@ -1898,6 +1951,14 @@ class MobileApiClient {
   ) async {
     final json = await postJson(XcagiMobileEndpoints.circleLike(postId), {});
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<Map<String, Object?>> imListConversations() {
+    return getJson(XcagiMobileEndpoints.imConversations);
+  }
+
+  Future<Map<String, Object?>> imMarkRead(int conversationId) {
+    return postJson(XcagiMobileEndpoints.imRead(conversationId), {});
   }
 
   Future<Map<String, Object?>> imCreateDirect(int peerUserId) {

@@ -901,6 +901,41 @@ void main() {
     expect(assistant.subtitle, '普通回复');
   });
 
+  test('MobileRepository chat cache survives logged-in session snapshot',
+      () async {
+    // Regression: with an authed session loadSession() serves the in-memory
+    // snapshot; caching user + assistant rows back-to-back must not overwrite
+    // each other through a stale snapshot.
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'token-abc',
+        username: 'admin',
+        accountKind: 'admin',
+        userId: 1,
+      ),
+    );
+    final client = _PlainChatCacheApi(store);
+    await client.loadSession();
+    final repository = MobileRepository(client: client);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:assistant',
+        type: ConversationType.pinnedAssistant,
+        title: '小C助理',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '你好',
+    );
+
+    expect(reply, '普通回复');
+    final cached = (await store.load()).cachedChatMessages['pinned:assistant'];
+    expect(cached, hasLength(2));
+    expect(cached?[0]['role'], 'user');
+    expect(cached?[1]['role'], 'assistant');
+  });
+
   test('MobileRepository routes employee chat to mobile employee SSE',
       () async {
     final store = MemoryMobileSessionStore(
