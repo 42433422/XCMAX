@@ -4,7 +4,7 @@ export interface PairingPayload {
   host: string;
   port: number;
   nonce: string;
-  shortCode: string; // 6 位设备码，v3 优先为服务器中继码
+  shortCode: string; // 6 位局域网配对码（pairing/issue），非云中继码
   exp: number;
   relay_id?: string;
   relay_base_url?: string;

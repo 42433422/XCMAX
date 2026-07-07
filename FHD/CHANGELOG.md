@@ -8,7 +8,7 @@
 
 ### OTA update 站 DNS/HTTPS 与推送（2026-07-07 · v10 线内迭代）
 
-- **根因**：`update.xcagi.com` CNAME → `overdue.aliyun.com`（`170.33.12.185` 欠费停放），非 CVM `119.27.178.147`；子域 nginx 仅 HTTP、无 443 证书
+- **决策**：放弃阿里云 `update.xcagi.com`（欠费停放），OTA/ manifest SSOT 统一 `https://xiu-ci.com/releases/stable/...`（腾讯云 DNSPod + 同机 nginx）
 - **fix(desktop)**：内置 OTA URL 改 `https://xiu-ci.com/releases/stable/{personal|enterprise}/`（同机 HTTPS alias 已可用）
 - **fix(admin)**：`check_deploy_updates` manifest 默认走 `http://119.27.178.147/.../fhd-manifest.json`，避免域名超时误判 unreachable
 - **ops**：新增 `ops/fix-update-xcagi-https.sh`（DNS 切到本机后 acme.sh 签发 + nginx 443）
@@ -20,6 +20,11 @@
 - **feat(mobile-flutter)**：IM WebSocket 实时客户端（`/ws/im` 心跳 + 断线重连），`ImMessengerScreen` 接入实时消息
 - **feat(mobile-flutter)**：登录/配对成功后自动 `registerDevice`（有 `fcm_token` 时），对齐 Android `PushRegistrar`
 - **test(mobile-flutter)**：员工提问与 IM WS 解析单测；**257** 测试全绿
+
+### 配对码仅局域网 · 云中继账号鉴权（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：6 位配对码不再走 `relay/mobile/confirm-code`；统一 `pairing/lookup` → `pairing/exchange` 局域网绑定，与 Android 一致
+- **fix(frontend)**：`MobilePairingQrCard` 展示 LAN `shortCode`（非 relay `pairing_code`）；文案明确配对码仅同 WiFi，跨网走登录后云中继账号鉴权
 
 ### 扫码配对 400 修复（2026-07-07 · v10 线内迭代）
 

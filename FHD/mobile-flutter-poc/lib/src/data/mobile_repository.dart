@@ -506,19 +506,6 @@ class MobileRepository {
       throw const MobileRepositoryException('无法识别配对码，请刷新电脑端二维码');
     }
 
-    if (RegExp(r'^\d{6}$').hasMatch(code)) {
-      if (await _attemptRelayPairingConfirmCode(code)) {
-        return;
-      }
-      final session = await _client.loadSession();
-      for (final candidate
-          in await _lanPairingCandidateBaseUrls(session.fhdHost)) {
-        if (await _attemptRelayPairingConfirmCode(code, baseUrl: candidate)) {
-          return;
-        }
-      }
-    }
-
     final baseUrl = await _resolvePairingExchangeBaseUrl(parsed, text);
     if (baseUrl.isEmpty) {
       throw const MobileRepositoryException(
@@ -594,58 +581,6 @@ class MobileRepository {
   }
 
   static const _lanPairingProbeTimeout = Duration(milliseconds: 900);
-
-  Future<bool> _attemptRelayPairingConfirmCode(
-    String code, {
-    String baseUrl = '',
-  }) async {
-    final cleanCode = code.trim();
-    if (!RegExp(r'^\d{6}$').hasMatch(cleanCode)) return false;
-    try {
-      await _primeRelayPairingSession();
-      final response = await _client
-          .relayConfirmCode(cleanCode, baseUrl: baseUrl)
-          .timeout(
-            baseUrl.isEmpty
-                ? const Duration(seconds: 8)
-                : _lanPairingProbeTimeout,
-          );
-      if (!response.success) return false;
-      final relayId = _relayIdFromBindingData(response.data);
-      if (relayId.isEmpty) {
-        throw const MobileRepositoryException('设备码绑定响应缺少 relay_id');
-      }
-      await _client.persistPairingSession(
-        response.data,
-        setupComplete: true,
-      );
-      final session = await _client.loadSession();
-      await _client.saveSession(
-        session.copyWith(
-          fhdHost: '',
-          serverMode: 'cloud',
-          setupComplete: true,
-        ),
-      );
-      return true;
-    } on MobileRepositoryException {
-      rethrow;
-    } on TimeoutException {
-      return false;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<void> _primeRelayPairingSession() async {
-    final session = await _client.loadSession();
-    await _client.saveSession(
-      session.copyWith(
-        fhdHost: '',
-        serverMode: 'cloud',
-      ),
-    );
-  }
 
   Future<String> _discoverLanBaseUrlForShortCode(String code) async {
     final cleanCode = code.trim();

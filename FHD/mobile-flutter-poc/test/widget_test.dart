@@ -2323,7 +2323,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
 
     expect(
-      find.text('输入电脑端 6 位设备码即可绑定（优先服务器中继，无需同一 WiFi）'),
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
       findsOneWidget,
     );
     expect(find.text('连接'), findsOneWidget);
@@ -2366,7 +2366,7 @@ void main() {
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
     final sheetSubtitle = tester.widget<Text>(
-      find.text('输入电脑端 6 位设备码即可绑定（优先服务器中继，无需同一 WiFi）'),
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
     );
 
     expect(sheetTitle.style?.color, colors.textPrimary);
