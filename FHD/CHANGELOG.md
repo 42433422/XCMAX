@@ -13,6 +13,11 @@
 - **feat(mobile-flutter)**：登录/配对成功后自动 `registerDevice`（有 `fcm_token` 时），对齐 Android `PushRegistrar`
 - **test(mobile-flutter)**：员工提问与 IM WS 解析单测；**257** 测试全绿
 
+### 扫码配对 400 修复（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：配对 exchange 不再误打云端 `/fhd-api`；解析失败时禁止把整段 JSON 当 nonce 提交；局域网 baseUrl 改为 `http://host:port/` 并在 exchange 前写入 session `fhdHost`
+- **fix(mobile-flutter)**：400/配对码无效时展示「请在电脑端刷新二维码后重试」友好文案
+
 ### 局域网扫码配对修复（2026-07-07 · v10 线内迭代）
 
 - **fix(backend)**：配对 QR 在后端仅监听 `127.0.0.1` 时不再写入手机不可达的 API 端口（如 `:17500`）；经 Vite 管理端/企业端（`:5011`/`:5001`）签发时改写入局域网可达的代理端口，并忽略 Vite Host 误作 API 端口

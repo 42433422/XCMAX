@@ -488,23 +488,31 @@ class MobileRepository {
   }
 
   Future<void> exchangePairingCode(String raw) async {
-    final parsed = parsePairingPayload(raw);
+    final text = raw.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('无法识别配对码');
+    }
+    final parsed = parsePairingPayload(text);
     if (parsed != null && parsed.version >= 3 && parsed.relayId.isNotEmpty) {
       throw const MobileRepositoryException(
         '云中继绑定已改为账号鉴权，请刷新电脑端内网二维码后绑定',
       );
     }
-    final baseUrl = parsed == null
-        ? ''
-        : parsed.apiBaseUrl.isNotEmpty
-            ? parsed.apiBaseUrl
-            : _pairingBaseUrl(parsed.host, parsed.port);
-    final code = parsed?.code.trim() ?? '';
-    final nonce = parsed == null
-        ? raw.trim()
-        : parsed.version >= 2 && code.isEmpty
-            ? parsed.nonce.ifEmpty(parsed.token)
-            : parsed.nonce;
+
+    final code = _pairingExchangeCode(parsed, text);
+    final nonce = _pairingExchangeNonce(parsed, text, code);
+    if (code.isEmpty && nonce.isEmpty) {
+      throw const MobileRepositoryException('无法识别配对码，请刷新电脑端二维码');
+    }
+
+    final baseUrl = await _resolvePairingExchangeBaseUrl(parsed, text);
+    if (baseUrl.isEmpty) {
+      throw const MobileRepositoryException(
+        '缺少电脑地址，请扫描完整二维码或在连接页配置电脑地址',
+      );
+    }
+
+    await _primePairingLanSession(baseUrl);
     final response = await _client.exchangePairing(
       nonce: nonce,
       code: code,
@@ -513,9 +521,12 @@ class MobileRepository {
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('设备配对失败'));
     }
+    final hostWithPort = _hostPortFromApiBaseUrl(
+      _readStringMap(response.data, const ['api_base_url', 'base_url']),
+    ).ifEmpty(parsed?.hostWithPort ?? '');
     await _client.persistPairingSession(
       response.data,
-      hostWithPort: parsed?.hostWithPort ?? '',
+      hostWithPort: hostWithPort,
       clearRelayDesktop: true,
       setupComplete: true,
     );
@@ -527,6 +538,64 @@ class MobileRepository {
         // Android leaves relay binding cleared when account relay bind fails.
       }
     }
+  }
+
+  Future<void> _primePairingLanSession(String baseUrl) async {
+    final hostWithPort = _hostPortFromApiBaseUrl(baseUrl);
+    if (hostWithPort.isEmpty) return;
+    final session = await _client.loadSession();
+    await _client.saveSession(
+      session.copyWith(
+        fhdHost: hostWithPort,
+        serverMode: 'lan',
+      ),
+    );
+  }
+
+  Future<String> _resolvePairingExchangeBaseUrl(
+    PairingPayload? parsed,
+    String raw,
+  ) async {
+    if (parsed != null) {
+      final fromPayload = parsed.apiBaseUrl.isNotEmpty
+          ? _ensureTrailingSlash(parsed.apiBaseUrl)
+          : _pairingLanBaseUrl(parsed.host, parsed.port);
+      if (fromPayload.isNotEmpty) return fromPayload;
+    }
+
+    final session = await _client.loadSession();
+    final fromSession = _pairingLanBaseUrlFromHostPort(session.fhdHost);
+    if (fromSession.isNotEmpty) return fromSession;
+
+    if (RegExp(r'^\d{6}$').hasMatch(raw)) {
+      throw const MobileRepositoryException(
+        '仅输入设备码无法定位电脑，请扫描完整二维码',
+      );
+    }
+    if (raw.startsWith('{')) {
+      throw const MobileRepositoryException(
+        '二维码内容无法识别，请在电脑端刷新二维码后重试',
+      );
+    }
+    return '';
+  }
+
+  String _pairingExchangeCode(PairingPayload? parsed, String raw) {
+    if (parsed != null) return parsed.code.trim();
+    if (RegExp(r'^\d{6}$').hasMatch(raw)) return raw;
+    return '';
+  }
+
+  String _pairingExchangeNonce(PairingPayload? parsed, String raw, String code) {
+    if (parsed != null) {
+      if (parsed.version >= 2 && code.isEmpty) {
+        return parsed.nonce.ifEmpty(parsed.token);
+      }
+      return parsed.nonce;
+    }
+    if (code.isNotEmpty) return '';
+    if (raw.length >= 8) return raw;
+    return '';
   }
 
   Future<void> confirmAuthQr({
@@ -2286,10 +2355,40 @@ String _firstNonBlank(List<String> values) {
   return '';
 }
 
-String _pairingBaseUrl(String host, int port) {
+String _pairingLanBaseUrl(String host, int port) {
   final hostWithPort = _compactPairingHostPort(host, port);
   if (hostWithPort.isEmpty) return '';
-  return 'http://$hostWithPort/fhd-api';
+  return 'http://$hostWithPort/';
+}
+
+String _pairingLanBaseUrlFromHostPort(String hostWithPort) {
+  final compact = _compactPairingHostPort(
+    _normalizePairingHost(hostWithPort),
+    0,
+  );
+  if (compact.isEmpty) return '';
+  if (compact.contains(':')) {
+    return 'http://$compact/';
+  }
+  return _pairingLanBaseUrl(compact, MobileAndroidBuild.fhdDefaultPort);
+}
+
+String _hostPortFromApiBaseUrl(String raw) {
+  final (host, port) = _pairingHostPortFromApiBase(raw);
+  return _compactPairingHostPort(host, port);
+}
+
+String _readStringMap(Map<String, Object?>? data, List<String> keys) {
+  if (data == null || data.isEmpty) return '';
+  for (final key in keys) {
+    final value = data[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+String _pairingBaseUrl(String host, int port) {
+  return _pairingLanBaseUrl(host, port);
 }
 
 String _compactPairingHostPort(String host, int port) {
