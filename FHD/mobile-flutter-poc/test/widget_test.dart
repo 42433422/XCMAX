@@ -4647,7 +4647,7 @@ void main() {
           isPinned: true,
         ),
       ),
-      isNull,
+      FixedPartnerKind.trae,
     );
   });
 

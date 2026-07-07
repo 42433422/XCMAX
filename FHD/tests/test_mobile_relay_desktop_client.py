@@ -99,7 +99,6 @@ def test_register_desktop_relay_reuses_cached_pairing_on_timeout(monkeypatch, tm
     assert payload is not None
     assert payload["relay_id"] == "relay-cached"
     assert payload["pairing_code"] == "123456"
-    assert payload["qr_json"]["v"] == 3
     assert "desktop_token" not in payload
 
 

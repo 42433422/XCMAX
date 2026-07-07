@@ -280,14 +280,6 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
         **({"expires_at": expires_at} if expires_at else {}),
         **({"exp": exp} if exp > 0 else {}),
         "relay_base_url": base_url,
-        "qr_json": {
-            "v": 3,
-            "kind": "xcagi_relay_pairing",
-            "relay_id": relay_id,
-            "code": pairing_code,
-            "t": pairing_code,
-            "relay_base_url": base_url,
-        },
     }
 
 

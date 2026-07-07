@@ -8,7 +8,6 @@ export interface PairingPayload {
   exp: number;
   relay_id?: string;
   relay_base_url?: string;
-  qr_json?: Record<string, unknown>;
   relay?: Record<string, unknown>;
 }
 
@@ -45,8 +44,7 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
   const raw = await desktop.getPairingQrPayload();
   if (!raw) return null;
   const parsed = JSON.parse(String(raw)) as Partial<PairingPayload>;
-  const qrJson = typeof parsed.qr_json === 'object' && parsed.qr_json ? parsed.qr_json as Record<string, unknown> : undefined;
-  if (!parsed.nonce && !qrJson) return null;
+  if (!parsed.nonce) return null;
   return {
     host: String(parsed.host || '127.0.0.1'),
     port: Number(parsed.port || 5000),
@@ -55,7 +53,6 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
     exp: Number(parsed.exp || Math.floor(Date.now() / 1000) + 300),
     relay_id: typeof parsed.relay_id === 'string' ? parsed.relay_id : undefined,
     relay_base_url: typeof parsed.relay_base_url === 'string' ? parsed.relay_base_url : undefined,
-    qr_json: qrJson,
     relay: typeof parsed.relay === 'object' && parsed.relay ? parsed.relay as Record<string, unknown> : undefined,
   };
 }
@@ -69,9 +66,6 @@ export function resolvePairingHost(): string {
 
 /** QR 内嵌短码，同时保留 host/port 作为首次绑定的局域网直连兜底。 */
 export function buildPairingQrText(payload: PairingPayload): string {
-  if (payload.qr_json && Object.keys(payload.qr_json).length > 0) {
-    return JSON.stringify(payload.qr_json);
-  }
   return JSON.stringify({
     v: 2,
     t: payload.shortCode || payload.nonce,
@@ -100,17 +94,9 @@ export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayl
     ? payload.host
     : resolvePairingHost();
   if (!host || host === '127.0.0.1') return payload;
-  const apiBaseUrl = `http://${host}:${pagePort}/`;
-  const qrJson = {
-    ...(payload.qr_json || {}),
-    host,
-    port: pagePort,
-    api_base_url: apiBaseUrl,
-  };
   return {
     ...payload,
     host,
     port: pagePort,
-    qr_json: qrJson,
   };
 }

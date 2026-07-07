@@ -37,7 +37,7 @@ MANIFEST_PATH = os.environ.get(
 ARTIFACT_DIR = os.environ.get("FHD_ARTIFACT_DIR", str(Path(MANIFEST_PATH).parent))
 MANIFEST_URL = (
     os.environ.get("XCMAX_UPDATE_MANIFEST_URL", "").strip()
-    or "https://update.xcagi.com/releases/stable/server/fhd-manifest.json"
+    or "https://xiu-ci.com/releases/stable/server/fhd-manifest.json"
 )
 HUB_VUE_DIST = os.path.join(ARTIFACT_DIR, "vue-dist")
 LOCAL_VUE_DIST = os.path.join(DEPLOY_ROOT, "templates", "vue-dist")

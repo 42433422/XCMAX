@@ -78,8 +78,6 @@ from app.fastapi_routes.mobile_extensions.models import (
     RelayDesktopPollBody,
     RelayDesktopRegisterBody,
     RelayMobileBindAccountBody,
-    RelayMobileConfirmBody,
-    RelayMobileConfirmCodeBody,
     RelayTaskCreateBody,
     SyncAckBody,
     SyncPullBody,
@@ -1203,72 +1201,6 @@ async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
         return format_mobile_response(data=data)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_desktop_register")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/relay/mobile/confirm")
-async def mobile_relay_confirm(body: RelayMobileConfirmBody, user=Depends(get_mobile_user)):
-    try:
-        user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
-        uid = int(user_public.get("id") or 0)
-        username = str(user_public.get("username") or user_public.get("display_name") or "")
-        desktop = MobileRelayService().confirm_mobile(
-            user_id=uid,
-            username=username,
-            relay_id=body.relay_id,
-            code=body.code,
-        )
-        if not desktop:
-            return JSONResponse(
-                format_mobile_response(None, "中继配对码无效或已过期", success=False, code=400),
-                status_code=400,
-            )
-        return format_mobile_response(
-            data={
-                "desktop": desktop,
-                "relay_id": desktop.get("relay_id"),
-                **_relay_mobile_auth_payload(user_public, desktop),
-            }
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_confirm")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/relay/mobile/confirm-code")
-async def mobile_relay_confirm_code(
-    body: RelayMobileConfirmCodeBody,
-    user=Depends(get_mobile_user),
-):
-    try:
-        user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
-        uid = int(user_public.get("id") or 0)
-        username = str(user_public.get("username") or user_public.get("display_name") or "")
-        desktop = MobileRelayService().confirm_mobile_by_code(
-            user_id=uid,
-            username=username,
-            code=body.code,
-        )
-        if not desktop:
-            return JSONResponse(
-                format_mobile_response(None, "设备码无效或已过期", success=False, code=400),
-                status_code=400,
-            )
-        return format_mobile_response(
-            data={
-                "desktop": desktop,
-                "relay_id": desktop.get("relay_id"),
-                **_relay_mobile_auth_payload(user_public, desktop),
-            }
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_confirm_code")
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,

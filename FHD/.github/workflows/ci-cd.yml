@@ -506,6 +506,10 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${FHD_PUSH_HOST:-}" ] || [ -z "${FHD_PUSH_SSH_KEY_RAW:-}" ]; then
+            if [ "${FHD_CVM_PUSH_STRICT:-false}" = "true" ]; then
+              echo "::error::CVM push required (strict mode: tag release or workflow_dispatch) but FHD_PUSH_HOST/FHD_PUSH_SSH_KEY secrets missing. Configure secrets or the production server will serve stale artifacts."
+              exit 1
+            fi
             echo "::notice::Skipping CVM push — configure FHD_PUSH_HOST and FHD_PUSH_SSH_KEY in repo secrets."
             exit 0
           fi

@@ -779,6 +779,8 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
         return FixedPartnerKind.cursor;
       case 'claude':
         return FixedPartnerKind.claude;
+      case 'trae':
+        return FixedPartnerKind.trae;
       case 'assistant':
       default:
         return FixedPartnerKind.assistant;

@@ -75,8 +75,9 @@ export const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
 }
 
 export const SKU_UPDATE_URL: Record<ProductSku, string> = {
-  personal: 'https://update.xcagi.com/releases/stable/personal/',
-  enterprise: 'https://update.xcagi.com/releases/stable/enterprise/'
+  // OTA SSOT：腾讯云 xiu-ci.com（与 CVM 119.27.178.147 同机 nginx alias，HTTPS 已签发）
+  personal: 'https://xiu-ci.com/releases/stable/personal/',
+  enterprise: 'https://xiu-ci.com/releases/stable/enterprise/'
 }
 
 /**

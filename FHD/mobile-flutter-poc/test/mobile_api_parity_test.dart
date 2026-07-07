@@ -181,8 +181,6 @@ Map<String, String> _flutterMobileEndpointTemplates() => {
       'PAIRING_EXCHANGE': XcagiMobileEndpoints.pairingExchange,
       'PAIRING_LOOKUP': XcagiMobileEndpoints.pairingLookup,
       'PAIRING_ISSUE': XcagiMobileEndpoints.pairingIssue,
-      'RELAY_MOBILE_CONFIRM': XcagiMobileEndpoints.relayMobileConfirm,
-      'RELAY_MOBILE_CONFIRM_CODE': XcagiMobileEndpoints.relayMobileConfirmCode,
       'RELAY_MOBILE_BIND_ACCOUNT': XcagiMobileEndpoints.relayMobileBindAccount,
       'RELAY_MOBILE_DESKTOPS': XcagiMobileEndpoints.relayMobileDesktops,
       'RELAY_TASKS': XcagiMobileEndpoints.relayTasks,
@@ -284,8 +282,6 @@ Set<String> _flutterFhdApiEndpointPairs() => {
       'POST ${XcagiMobileEndpoints.devicesRegister}',
       'GET ${XcagiMobileEndpoints.notificationsPending}',
       'POST ${XcagiMobileEndpoints.pairingExchange}',
-      'POST ${XcagiMobileEndpoints.relayMobileConfirm}',
-      'POST ${XcagiMobileEndpoints.relayMobileConfirmCode}',
       'POST ${XcagiMobileEndpoints.relayMobileBindAccount}',
       'GET ${XcagiMobileEndpoints.relayMobileDesktops}',
       'POST ${XcagiMobileEndpoints.relayTasks}',
@@ -361,7 +357,7 @@ void main() {
     final androidEndpointPairs = _androidFhdApiEndpointPairs();
     final flutterEndpointPairs = _flutterFhdApiEndpointPairs();
 
-    expect(androidEndpointPairs.length, 105);
+    expect(androidEndpointPairs.length, 103);
     expect(flutterEndpointPairs.length, androidEndpointPairs.length);
     expect(
       flutterEndpointPairs,
