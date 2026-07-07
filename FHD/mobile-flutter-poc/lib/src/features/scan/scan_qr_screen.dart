@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart'
     as mlkit;
@@ -6,6 +8,7 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
+import '../../platform/android_camera_permission.dart';
 import '../../policy/android_error_policy.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
@@ -29,11 +32,16 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   late final MobileScannerController _scannerController;
   late final ImagePicker _imagePicker;
   late final mlkit.BarcodeScanner _albumScanner;
+  final AndroidCameraPermission _cameraPermission =
+      const AndroidCameraPermission();
   var _flashOn = false;
   var _scanned = false;
   var _pairing = false;
   var _pickingAlbum = false;
   var _showSuccess = false;
+  var _hasCameraPermission = false;
+  var _checkingCameraPermission = true;
+  var _requestingCameraPermission = false;
 
   @override
   void initState() {
@@ -50,6 +58,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     _albumScanner = mlkit.BarcodeScanner(
       formats: [mlkit.BarcodeFormat.qrCode],
     );
+    unawaited(_refreshCameraPermission(requestIfMissing: false));
   }
 
   @override
@@ -63,6 +72,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final cameraEnabled = widget.enableCamera;
+    final scannerReady = cameraEnabled && _hasCameraPermission;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -91,7 +101,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                         ),
                       ),
                       const Spacer(),
-                      if (cameraEnabled && !_scanned)
+                      if (scannerReady && !_scanned)
                         IconButton(
                           onPressed: _toggleTorch,
                           icon: Icon(
@@ -113,7 +123,11 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled) ...[
+                      if (_checkingCameraPermission && cameraEnabled)
+                        Center(
+                          child: CircularProgressIndicator(color: colors.brand),
+                        )
+                      else if (scannerReady) ...[
                         MobileScanner(
                           controller: _scannerController,
                           fit: BoxFit.cover,
@@ -122,14 +136,22 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                             return _ScannerUnavailable(
                               onRequestPermission: _requestCameraPermission,
                               onOpenManual: _showManualInput,
+                              requesting: _requestingCameraPermission,
                             );
                           },
                         ),
                         const Positioned.fill(child: _ScannerOverlay()),
-                      ] else
+                      ] else if (cameraEnabled)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
                           onOpenManual: _showManualInput,
+                          requesting: _requestingCameraPermission,
+                        )
+                      else
+                        _ScannerUnavailable(
+                          onRequestPermission: _requestCameraPermission,
+                          onOpenManual: _showManualInput,
+                          requesting: _requestingCameraPermission,
                         ),
                       if (cameraEnabled && _pairing)
                         Positioned.fill(
@@ -153,7 +175,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                             ),
                           ),
                         ),
-                      if (cameraEnabled && !_scanned)
+                      if (scannerReady && !_scanned)
                         Positioned(
                           bottom: 42,
                           left: 32,
@@ -217,11 +239,47 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
     }
   }
 
+  Future<void> _refreshCameraPermission({
+    required bool requestIfMissing,
+  }) async {
+    if (!widget.enableCamera) {
+      if (!mounted) return;
+      setState(() {
+        _hasCameraPermission = false;
+        _checkingCameraPermission = false;
+        _requestingCameraPermission = false;
+      });
+      return;
+    }
+
+    if (requestIfMissing) {
+      if (mounted) setState(() => _requestingCameraPermission = true);
+    } else if (mounted) {
+      setState(() => _checkingCameraPermission = true);
+    }
+
+    var granted = await _cameraPermission.isGranted();
+    if (!granted && requestIfMissing) {
+      granted = await _cameraPermission.ensureGranted();
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _hasCameraPermission = granted;
+      _checkingCameraPermission = false;
+      _requestingCameraPermission = false;
+    });
+
+    if (granted) {
+      try {
+        await _scannerController.start();
+      } catch (_) {}
+    }
+  }
+
   Future<void> _requestCameraPermission() async {
-    if (!widget.enableCamera) return;
-    try {
-      await _scannerController.start();
-    } catch (_) {}
+    if (!widget.enableCamera || _requestingCameraPermission) return;
+    await _refreshCameraPermission(requestIfMissing: true);
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -720,10 +778,12 @@ class _ScannerUnavailable extends StatelessWidget {
   const _ScannerUnavailable({
     required this.onRequestPermission,
     required this.onOpenManual,
+    this.requesting = false,
   });
 
   final VoidCallback onRequestPermission;
   final VoidCallback onOpenManual;
+  final bool requesting;
 
   @override
   Widget build(BuildContext context) {
@@ -747,11 +807,20 @@ class _ScannerUnavailable extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           TextButton(
-            onPressed: onRequestPermission,
-            child: Text(
-              '授予相机权限',
-              style: TextStyle(color: colors.brand),
-            ),
+            onPressed: requesting ? null : onRequestPermission,
+            child: requesting
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: colors.brand,
+                    ),
+                  )
+                : Text(
+                    '授予相机权限',
+                    style: TextStyle(color: colors.brand),
+                  ),
           ),
           const SizedBox(height: 12),
           TextButton(
