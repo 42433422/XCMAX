@@ -27,9 +27,9 @@ class ScanQrScreen extends StatefulWidget {
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
-class _ScanQrScreenState extends State<ScanQrScreen> {
+class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver {
   late final MobileRepository _repository;
-  late final MobileScannerController _scannerController;
+  MobileScannerController? _scannerController;
   late final ImagePicker _imagePicker;
   late final mlkit.BarcodeScanner _albumScanner;
   final AndroidCameraPermission _cameraPermission =
@@ -39,31 +39,52 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   var _pairing = false;
   var _pickingAlbum = false;
   var _showSuccess = false;
-  var _hasCameraPermission = false;
+  var _permissionGranted = false;
   var _checkingCameraPermission = true;
   var _requestingCameraPermission = false;
+  var _bootstrappingScanner = false;
+  var _scannerSession = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _repository = MobileRepositoryScope.resolve(
       context,
       explicit: widget.repository,
     );
-    _scannerController = MobileScannerController(
-      formats: const [BarcodeFormat.qrCode],
-      facing: CameraFacing.back,
-    );
+    _scannerController = _createScannerController();
     _imagePicker = ImagePicker();
     _albumScanner = mlkit.BarcodeScanner(
       formats: [mlkit.BarcodeFormat.qrCode],
     );
-    unawaited(_refreshCameraPermission(requestIfMissing: false));
+    if (widget.enableCamera) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_bootstrapScanner(requestPermission: false));
+      });
+    } else {
+      _checkingCameraPermission = false;
+    }
+  }
+
+  MobileScannerController _createScannerController() {
+    return MobileScannerController(
+      formats: const [BarcodeFormat.qrCode],
+      facing: CameraFacing.back,
+      autoStart: false,
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !widget.enableCamera) return;
+    unawaited(_bootstrapScanner(requestPermission: false));
   }
 
   @override
   void dispose() {
-    _scannerController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _scannerController?.dispose();
     _albumScanner.close();
     super.dispose();
   }
@@ -72,7 +93,10 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final cameraEnabled = widget.enableCamera;
-    final scannerReady = cameraEnabled && _hasCameraPermission;
+    final controller = _scannerController;
+    final scannerRunning =
+        controller?.value.isRunning == true && controller?.value.error == null;
+    final scannerReady = cameraEnabled && _permissionGranted && scannerRunning;
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -123,31 +147,50 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (_checkingCameraPermission && cameraEnabled)
-                        Center(
-                          child: CircularProgressIndicator(color: colors.brand),
-                        )
-                      else if (scannerReady) ...[
+                      if (cameraEnabled && controller != null)
                         MobileScanner(
-                          controller: _scannerController,
+                          key: ValueKey<int>(_scannerSession),
+                          controller: controller,
                           fit: BoxFit.cover,
                           onDetect: _onDetect,
+                          placeholderBuilder: (context) {
+                            if (_checkingCameraPermission ||
+                                _requestingCameraPermission) {
+                              return Center(
+                                child: CircularProgressIndicator(
+                                  color: colors.brand,
+                                ),
+                              );
+                            }
+                            return const ColoredBox(color: Colors.black);
+                          },
                           errorBuilder: (context, error) {
-                            return _ScannerUnavailable(
-                              onRequestPermission: _requestCameraPermission,
+                            if (error.errorCode ==
+                                MobileScannerErrorCode.permissionDenied) {
+                              return _ScannerUnavailable(
+                                onRequestPermission: _requestCameraPermission,
+                                onOpenManual: _showManualInput,
+                                requesting: _requestingCameraPermission,
+                              );
+                            }
+                            return _ScannerFailure(
+                              message: error.errorCode.message,
+                              onRetry: _restartScanner,
                               onOpenManual: _showManualInput,
-                              requesting: _requestingCameraPermission,
                             );
                           },
-                        ),
-                        const Positioned.fill(child: _ScannerOverlay()),
-                      ] else if (cameraEnabled)
+                        )
+                      else
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
                           onOpenManual: _showManualInput,
                           requesting: _requestingCameraPermission,
-                        )
-                      else
+                        ),
+                      if (scannerReady)
+                        const Positioned.fill(child: _ScannerOverlay()),
+                      if (cameraEnabled &&
+                          !_permissionGranted &&
+                          !_checkingCameraPermission)
                         _ScannerUnavailable(
                           onRequestPermission: _requestCameraPermission,
                           onOpenManual: _showManualInput,
@@ -231,55 +274,74 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
   }
 
   Future<void> _toggleTorch() async {
+    final controller = _scannerController;
+    if (controller == null) return;
     setState(() => _flashOn = !_flashOn);
     try {
-      await _scannerController.toggleTorch();
+      await controller.toggleTorch();
     } catch (_) {
       if (mounted) setState(() => _flashOn = !_flashOn);
     }
   }
 
-  Future<void> _refreshCameraPermission({
-    required bool requestIfMissing,
-  }) async {
-    if (!widget.enableCamera) {
-      if (!mounted) return;
+  Future<void> _bootstrapScanner({required bool requestPermission}) async {
+    if (!widget.enableCamera || _bootstrappingScanner) return;
+    _bootstrappingScanner = true;
+    if (mounted) {
       setState(() {
-        _hasCameraPermission = false;
-        _checkingCameraPermission = false;
-        _requestingCameraPermission = false;
+        _requestingCameraPermission = requestPermission;
+        if (!requestPermission) {
+          _checkingCameraPermission = true;
+        }
       });
-      return;
-    }
-
-    if (requestIfMissing) {
-      if (mounted) setState(() => _requestingCameraPermission = true);
-    } else if (mounted) {
-      setState(() => _checkingCameraPermission = true);
     }
 
     var granted = await _cameraPermission.isGranted();
-    if (!granted && requestIfMissing) {
+    if (!granted && requestPermission) {
       granted = await _cameraPermission.ensureGranted();
     }
 
     if (!mounted) return;
     setState(() {
-      _hasCameraPermission = granted;
+      _permissionGranted = granted;
       _checkingCameraPermission = false;
       _requestingCameraPermission = false;
+      _bootstrappingScanner = false;
     });
 
-    if (granted) {
-      try {
-        await _scannerController.start();
-      } catch (_) {}
+    if (!granted) return;
+
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    final controller = _scannerController;
+    if (controller == null) return;
+    if (controller.value.isRunning && controller.value.error == null) return;
+    try {
+      await controller.start();
+      if (mounted) setState(() {});
+    } catch (_) {
+      await _restartScanner();
     }
+  }
+
+  Future<void> _restartScanner() async {
+    if (!widget.enableCamera) return;
+    await _scannerController?.stop();
+    await _scannerController?.dispose();
+    _scannerController = _createScannerController();
+    if (!mounted) return;
+    setState(() => _scannerSession++);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted) return;
+    try {
+      await _scannerController?.start();
+      if (mounted) setState(() {});
+    } catch (_) {}
   }
 
   Future<void> _requestCameraPermission() async {
     if (!widget.enableCamera || _requestingCameraPermission) return;
-    await _refreshCameraPermission(requestIfMissing: true);
+    await _bootstrapScanner(requestPermission: true);
   }
 
   void _onDetect(BarcodeCapture capture) {
@@ -535,7 +597,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       passwordController.dispose();
       if (mounted && !_pairing) {
         setState(() => _scanned = false);
-        _scannerController.start().ignore();
+        unawaited(_scannerController?.start());
       }
     });
   }
@@ -548,7 +610,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
       _scanned = true;
     });
     try {
-      await _scannerController.stop();
+      await _scannerController?.stop();
     } catch (_) {}
     try {
       await _repository.exchangePairingCode(text);
@@ -575,7 +637,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> {
         ),
       );
       if (widget.enableCamera) {
-        _scannerController.start().ignore();
+        unawaited(_scannerController?.start());
       }
     }
   }
@@ -769,6 +831,58 @@ class _PairingDigitBox extends StatelessWidget {
           fontWeight: FontWeight.w700,
           letterSpacing: 0,
         ),
+      ),
+    );
+  }
+}
+
+class _ScannerFailure extends StatelessWidget {
+  const _ScannerFailure({
+    required this.message,
+    required this.onRetry,
+    required this.onOpenManual,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenManual;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return Container(
+      color: Colors.black,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            message.isEmpty ? '相机启动失败' : message,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 15,
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 20),
+          TextButton(
+            onPressed: onRetry,
+            child: Text('重试', style: TextStyle(color: colors.brand)),
+          ),
+          const SizedBox(height: 12),
+          TextButton(
+            onPressed: onOpenManual,
+            child: Text(
+              '输入设备码',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
