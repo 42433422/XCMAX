@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import '../api/mobile_api.dart';
 import '../api/mobile_models.dart';
@@ -508,7 +509,7 @@ class MobileRepository {
     final baseUrl = await _resolvePairingExchangeBaseUrl(parsed, text);
     if (baseUrl.isEmpty) {
       throw const MobileRepositoryException(
-        '缺少电脑地址，请扫描完整二维码或在连接页配置电脑地址',
+        '未找到电脑，请确认手机与电脑在同一 WiFi，并在管理端刷新设备码后重试',
       );
     }
 
@@ -567,10 +568,9 @@ class MobileRepository {
     final fromSession = _pairingLanBaseUrlFromHostPort(session.fhdHost);
     if (fromSession.isNotEmpty) return fromSession;
 
-    if (RegExp(r'^\d{6}$').hasMatch(raw)) {
-      throw const MobileRepositoryException(
-        '仅输入设备码无法定位电脑，请扫描完整二维码',
-      );
+    final shortCode = _pairingExchangeCode(parsed, raw);
+    if (RegExp(r'^\d{6}$').hasMatch(shortCode)) {
+      return _discoverLanBaseUrlForShortCode(shortCode);
     }
     if (raw.startsWith('{')) {
       throw const MobileRepositoryException(
@@ -578,6 +578,67 @@ class MobileRepository {
       );
     }
     return '';
+  }
+
+  Future<String> _discoverLanBaseUrlForShortCode(String code) async {
+    final cleanCode = code.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(cleanCode)) return '';
+    final session = await _client.loadSession();
+    for (final baseUrl in await _lanPairingCandidateBaseUrls(session.fhdHost)) {
+      try {
+        final lookup = await _client.pairingLookup(
+          code: cleanCode,
+          baseUrl: baseUrl,
+        );
+        if (lookup.success) return baseUrl;
+      } catch (_) {
+        // 局域网探测：超时/拒绝连接视为候选不可达，继续下一个。
+      }
+    }
+    return '';
+  }
+
+  Future<List<String>> _lanPairingCandidateBaseUrls(String configuredHost) async {
+    const lanPorts = [5011, 5001, 17500, 5000];
+    final hostPorts = <String>[];
+    final configured = _normalizePairingHost(configuredHost);
+    if (configured.isNotEmpty) {
+      if (configured.contains(':')) {
+        hostPorts.add(configured);
+      } else {
+        for (final port in lanPorts) {
+          hostPorts.add('$configured:$port');
+        }
+      }
+    }
+
+    try {
+      for (final iface
+          in await NetworkInterface.list(type: InternetAddressType.IPv4)) {
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('127.') || ip.startsWith('169.254.')) continue;
+          final parts = ip.split('.');
+          if (parts.length != 4) continue;
+          final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+          for (final hostOctet in ['2', '1', '10', '100']) {
+            for (final port in lanPorts) {
+              hostPorts.add('$prefix.$hostOctet:$port');
+            }
+          }
+        }
+      }
+    } catch (_) {}
+
+    final seen = <String>{};
+    final bases = <String>[];
+    for (final hostPort in hostPorts) {
+      final base = _pairingLanBaseUrlFromHostPort(hostPort);
+      if (base.isNotEmpty && seen.add(base)) {
+        bases.add(base);
+      }
+    }
+    return bases;
   }
 
   String _pairingExchangeCode(PairingPayload? parsed, String raw) {

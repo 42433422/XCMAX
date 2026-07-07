@@ -38,6 +38,7 @@ class XcagiMobileEndpoints {
   static const notificationsPending = '$base/notifications/pending';
   static const authQrConfirm = '$base/auth/qr/confirm';
   static const pairingExchange = '$base/pairing/exchange';
+  static const pairingLookup = '$base/pairing/lookup';
   static const pairingIssue = '$base/pairing/issue';
   static const relayMobileConfirm = '$base/relay/mobile/confirm';
   static const relayMobileConfirmCode = '$base/relay/mobile/confirm-code';
@@ -1577,6 +1578,18 @@ class MobileApiClient {
         'nonce': nonce.trim(),
         'code': code.trim(),
       },
+      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> pairingLookup({
+    required String code,
+    String baseUrl = '',
+  }) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.pairingLookup,
+      {'code': code.trim()},
       baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
