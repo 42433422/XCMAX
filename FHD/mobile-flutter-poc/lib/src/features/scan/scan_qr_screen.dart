@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart'
     as mlkit;
 import 'package:image_picker/image_picker.dart';
@@ -31,7 +32,6 @@ class ScanQrScreen extends StatefulWidget {
 class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver {
   late final MobileRepository _repository;
   CameraController? _cameraController;
-  CameraDescription? _cameraDescription;
   late final ImagePicker _imagePicker;
   late final mlkit.BarcodeScanner _barcodeScanner;
   final AndroidCameraPermission _cameraPermission =
@@ -339,12 +339,11 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
       );
       final controller = CameraController(
         description,
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
       _cameraController = controller;
-      _cameraDescription = description;
       await controller.initialize();
       if (!mounted) return;
       await controller.startImageStream(_processCameraFrame);
@@ -385,17 +384,19 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
 
   Future<void> _processCameraFrame(CameraImage image) async {
     if (_scanned || _pairing || _processingFrame) return;
-    final description = _cameraDescription;
-    if (description == null) return;
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
     _processingFrame = true;
     try {
-      final inputImage = inputImageFromCameraFrame(image, description);
+      final inputImage = inputImageFromCameraFrame(image, controller);
       if (inputImage == null) return;
       final barcodes = await _barcodeScanner.processImage(inputImage);
       final raw = barcodes
           .map((barcode) => barcode.rawValue?.trim() ?? '')
           .firstWhere((value) => value.isNotEmpty, orElse: () => '');
-      if (raw.isEmpty || !mounted) return;
+      if (raw.isEmpty || !mounted || _scanned || _pairing) return;
+      await _stopCameraStream();
+      if (!mounted) return;
       _handleScanResult(raw);
     } catch (_) {
     } finally {
@@ -404,6 +405,8 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
   }
 
   void _handleScanResult(String raw) {
+    if (_scanned || _pairing) return;
+    HapticFeedback.mediumImpact();
     final authPayload = parseAuthQrPayload(raw);
     if (authPayload != null) {
       setState(() => _scanned = true);
