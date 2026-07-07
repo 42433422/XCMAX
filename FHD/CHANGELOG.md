@@ -8,7 +8,8 @@
 
 ### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
 
-- **fix(mobile)**：`mobile-relay-*` 会话 validate 不再误 401；Android 配对先存 token 再 bind-account；冷启动 validate 前 LAN→云回落
+- **fix(mobile-flutter)**：`mobile-relay-*` 会话 validate 不再误 401；`preferCloudIfLanUnreachable` + session 路由 LAN/云；`/employee-ssot` client
+- **docs**：移动统一 **Flutter 主线**；`mobile-android` / `mobile-ios` 归档；`MOBILE_FLUTTER.md` + SSOT 登记
 - **feat(web)**：`productErrorMessage` 统一引导/Mod/IM 错误文案；引导续接 `xcagi_product_flow_last_step`；企业版不再重复 shell welcome 拦截
 - **feat(web)**：IM 员工通讯录优先消费 `GET /api/platform-shell/employee-ssot`
 - **docs**：`PRODUCT_USER_FLOW.md` 对齐 industry → host-pack 实现顺序

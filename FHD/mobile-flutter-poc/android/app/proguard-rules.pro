@@ -1,0 +1,5 @@
+-keep class androidx.work.** { *; }
+-keep class * extends androidx.work.Worker
+-keep class * extends androidx.work.CoroutineWorker
+-keep class * extends androidx.work.ListenableWorker
+-dontwarn androidx.work.**

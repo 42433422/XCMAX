@@ -1004,16 +1004,17 @@ class MobileRepository {
       return '';
     }
     final session = await _client.loadSession();
-    final localBase = session.localBaseUrl.trim();
-    if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
     final mode = session.serverMode.trim().toLowerCase();
     final host = session.fhdHost.trim();
-    if (mode != 'lan' && host.isEmpty) return '';
-    if (host.isEmpty) return '';
-    return AndroidServerRouter(
-      fhdHost: host,
-      mode: AndroidServerMode.lan,
-    ).fhdBaseUrl();
+    if (mode == 'lan' && host.isNotEmpty) {
+      return AndroidServerRouter(
+        fhdHost: host,
+        mode: AndroidServerMode.lan,
+      ).fhdBaseUrl();
+    }
+    final localBase = session.localBaseUrl.trim();
+    if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
+    return '';
   }
 
   Future<String> _streamRelaySuperEmployeeTask({
