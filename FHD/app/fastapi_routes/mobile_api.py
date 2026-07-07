@@ -479,6 +479,21 @@ async def mobile_auth_session_validate(request: Request, user=Depends(get_mobile
     from app.application.session_account_meta import load_session_account_meta
 
     auth_app_service = get_auth_app_service()
+    if session_id.startswith("mobile-relay-"):
+        meta = load_session_account_meta(session_id) or {}
+        relay_data: dict[str, Any] = {
+            "valid": True,
+            "session_id": session_id,
+            "user": _user_public_dict(user),
+            "session": {"session_id": session_id, "relay": True},
+            "account_kind": meta.get("account_kind")
+            or (payload or {}).get("account_kind")
+            or "enterprise",
+            "company_brand": meta.get("company_brand"),
+            "entitled_mod_ids": [],
+        }
+        return format_mobile_response(data=relay_data, message="会话有效")
+
     session_info = auth_app_service.session_manager.get_session_info(session_id)
     if not session_info:
         return JSONResponse(
