@@ -34,8 +34,18 @@
 
 - **fix(desktop)**：后端默认绑定 `0.0.0.0:17500`，手机同 WiFi 可连局域网 IP；Electron UI 仍只加载 `127.0.0.1`
 - **fix(desktop)**：`proxy-bypass-list` 对 `xiu-ci.com` 直连，避免系统代理 `127.0.0.1:7890` 未开时 OTA 报 `ERR_PROXY_CONNECTION_FAILED`
+- **fix(desktop)**：死系统代理不可达时启动前追加 `--no-proxy-server`，`defaultSession` PAC/直连与 updater 专用 `netSession`
+- **fix(desktop)**：OTA `setFeedURL` 不再默认 `channel: stable`（避免拉 `stable.yml` 404）
 - **fix(desktop)**：v10 同版本迭代 OTA — `latest.yml` 写入 `buildSha`，`build-info.json` 比对后仍可拉取新包
 - **fix(mobile-relay)**：桌面云中继 `httpx` 使用 `trust_env=False`，修复代理环境下 `Invalid port` 注册失败
+
+### 桌面冷启性能（P1-3 · 2026-07-08 · v10 线内迭代）
+
+- **perf(desktop)**：Splash 先出窗，不再在 `show()` 前阻塞 `waitForBackendHealth`；就绪探测改 `/api/ping`（300ms 轮询）
+- **perf(desktop)**：`electron-backend.log` 超 8MB 自动轮转；打包默认 `LOG_LEVEL=WARNING`
+- **perf(backend)**：`XCAGI_DESKTOP_FAST_START=1` 时 lifespan 仅 DB+Mod，NeuroBus/员工调度/云中继/性能优化延后后台加载
+- **perf(api)**：`GET /api/health?lite=true` 跳过 NeuroBus 载荷
+- **perf(frontend)**：桌面壳 `mods` 列表重试退避缩短（150–600ms）
 
 ### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
 

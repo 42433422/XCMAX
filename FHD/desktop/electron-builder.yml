@@ -11,6 +11,7 @@ files:
   - package.json
   - resources/icon.ico
   - resources/icon.png
+  - resources/splash.html
 extraResources:
   - from: ../dist/xcagi-backend
     to: backend
