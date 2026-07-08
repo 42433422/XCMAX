@@ -86,11 +86,16 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
 
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (updateUrl) {
-    autoUpdater.setFeedURL({
+    // generic 提供方默认拉取 latest.yml；勿设 channel，否则会请求 stable.yml 导致 404。
+    const feed: { provider: 'generic'; url: string; channel?: string } = {
       provider: 'generic',
       url: updateUrl,
-      channel: process.env.XCAGI_UPDATE_CHANNEL || 'stable'
-    })
+    }
+    const channel = String(process.env.XCAGI_UPDATE_CHANNEL || '').trim()
+    if (channel) {
+      feed.channel = channel
+    }
+    autoUpdater.setFeedURL(feed)
   }
 
   const send = (type: string, data?: unknown) => {

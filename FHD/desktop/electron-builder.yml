@@ -26,7 +26,7 @@ extraResources:
     to: build-info.json
 publish:
   provider: generic
-  url: https://update.xcagi.com/releases/stable/
+  url: https://xiu-ci.com/releases/stable/
 win:
   target:
     - target: nsis
