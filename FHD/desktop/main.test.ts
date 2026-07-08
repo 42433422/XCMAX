@@ -66,7 +66,10 @@ const electronMocks = vi.hoisted(() => {
       setPermissionRequestHandler: vi.fn(),
       setPermissionCheckHandler: vi.fn(),
       setProxy: vi.fn(() => Promise.resolve())
-    }
+    },
+    fromPartition: vi.fn(() => ({
+      setProxy: vi.fn(() => Promise.resolve())
+    }))
   }
   const screen = { getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) }
   const nativeImage = { createFromPath: vi.fn(() => ({})), createEmpty: vi.fn(() => ({})) }
@@ -229,6 +232,14 @@ describe('main — SKU constants', () => {
     expect(SKU_UPDATE_URL.personal).toMatch(/\/personal\/$/)
     expect(SKU_UPDATE_URL.enterprise).toMatch(/\/enterprise\/$/)
     expect(SKU_UPDATE_URL.personal).not.toBe(SKU_UPDATE_URL.enterprise)
+  })
+})
+
+describe('main — desktop splash & ping readiness', () => {
+  it('resolveDesktopSplashUrl returns file or data url', async () => {
+    const { resolveDesktopSplashUrl } = await import('./main.js')
+    const url = resolveDesktopSplashUrl()
+    expect(url.startsWith('file://') || url.startsWith('data:text/html')).toBe(true)
   })
 })
 

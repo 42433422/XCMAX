@@ -36,6 +36,13 @@ logger = logging.getLogger(__name__)
 _APP_ROOT = Path(__file__).resolve().parents[1]
 
 
+def _desktop_fast_start_enabled() -> bool:
+    import os
+
+    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理"""
@@ -56,38 +63,49 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_db_done")
 
-    try:
-        from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
+    fast_start = _desktop_fast_start_enabled()
 
-        await ensure_deliverable_runtime(app)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("Deliverable runtime setup skipped: %s", exc)
+    if fast_start:
+        from app.fastapi_app.deferred_startup import schedule_deferred_heavy_startup
 
-    try:
-        from app.utils.performance_initializer import init_performance_optimization
+        await schedule_deferred_heavy_startup(app)
+    else:
+        try:
+            from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
 
-        init_performance_optimization(app)
-        mark_startup("performance_optimizer_ready")
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("Performance optimizer init skipped: %s", exc)
+            await ensure_deliverable_runtime(app)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Deliverable runtime setup skipped: %s", exc)
 
-    await _init_neuro_ddd_async(app)
-    await _init_employee_runtime_async(app)
-    await _init_mobile_relay_desktop_async(app)
+        try:
+            from app.utils.performance_initializer import init_performance_optimization
+
+            init_performance_optimization(app)
+            mark_startup("performance_optimizer_ready")
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("Performance optimizer init skipped: %s", exc)
+
+        await _init_neuro_ddd_async(app)
+        await _init_employee_runtime_async(app)
+        await _init_mobile_relay_desktop_async(app)
+
+        try:
+            from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+
+            start_backup_scheduler()
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
 
     mark_startup("lifespan_ready")
-    logger.info("✅ FastAPI 应用启动完成")
-
-    try:
-        from app.desktop_runtime.backup_scheduler import start_backup_scheduler
-
-        start_backup_scheduler()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+    logger.info("✅ FastAPI 应用启动完成%s", "（重服务后台加载）" if fast_start else "")
 
     yield
 
     logger.info("🛑 FastAPI 应用关闭中...")
+    if fast_start:
+        from app.fastapi_app.deferred_startup import cancel_deferred_heavy_startup
+
+        await cancel_deferred_heavy_startup(app)
     try:
         from app.desktop_runtime.backup_scheduler import stop_backup_scheduler
 

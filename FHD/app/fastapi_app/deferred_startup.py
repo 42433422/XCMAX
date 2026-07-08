@@ -1,0 +1,79 @@
+"""FastAPI lifespan 延后加载：桌面冷启先监听 HTTP，重服务后台补齐。"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+
+from fastapi import FastAPI
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
+
+
+def _desktop_fast_start_enabled() -> bool:
+    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
+    return raw not in {"0", "false", "off", "no"}
+
+
+async def _deferred_heavy_startup(app: FastAPI) -> None:
+    """NeuroBus / 员工调度 / 云中继 / 性能优化等重初始化，不阻塞 uvicorn 首包。"""
+    from app.fastapi_app.startup_timing import mark_startup
+
+    try:
+        from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
+
+        await ensure_deliverable_runtime(app)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("Deliverable runtime setup skipped: %s", exc)
+
+    try:
+        from app.utils.performance_initializer import init_performance_optimization
+
+        init_performance_optimization(app)
+        mark_startup("performance_optimizer_ready")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("Performance optimizer init skipped: %s", exc)
+
+    from app.fastapi_app.lifespan import (
+        _init_employee_runtime_async,
+        _init_mobile_relay_desktop_async,
+        _init_neuro_ddd_async,
+    )
+
+    await _init_neuro_ddd_async(app)
+    await _init_employee_runtime_async(app)
+    await _init_mobile_relay_desktop_async(app)
+    mark_startup("deferred_heavy_ready")
+
+    try:
+        from app.desktop_runtime.backup_scheduler import start_backup_scheduler
+
+        start_backup_scheduler()
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("⚠️ 桌面端定时备份调度器启动失败: %s", exc)
+
+
+async def schedule_deferred_heavy_startup(app: FastAPI) -> None:
+    if not _desktop_fast_start_enabled():
+        return
+    existing = getattr(app.state, "deferred_startup_task", None)
+    if existing and not existing.done():
+        return
+    app.state.deferred_startup_task = asyncio.create_task(
+        _deferred_heavy_startup(app),
+        name="xcagi-deferred-heavy-startup",
+    )
+
+
+async def cancel_deferred_heavy_startup(app: FastAPI) -> None:
+    task = getattr(app.state, "deferred_startup_task", None)
+    if not task or task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass

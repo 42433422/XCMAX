@@ -677,21 +677,28 @@ export const useModsStore = defineStore('mods', () => {
   async function fetchModsWithRetry(
     fetchOpts?: FetchModsOptions,
   ): Promise<{ ok: boolean; modsDisabled?: boolean }> {
+    const desktopFast =
+      typeof window !== 'undefined' && Boolean((window as Window & { xcagiDesktop?: unknown }).xcagiDesktop);
+    const retryDelay = (transport: boolean) =>
+      desktopFast ? (transport ? 600 : 150) : transport ? 1200 : 400;
+    const emptyRetryDelay = desktopFast ? 250 : 500;
+    const emptyRetryDelay2 = desktopFast ? 400 : 800;
+
     let r = await fetchModsOnce(fetchOpts);
     if (r.modsDisabled) return r;
     if (!r.ok) {
-      await delay(r.transportError ? 1200 : 400);
+      await delay(retryDelay(Boolean(r.transportError)));
       r = await fetchModsOnce(fetchOpts);
     }
     if (r.modsDisabled) return r;
     if (r.ok && mods.value.length === 0) {
       const mismatch = await shouldRetryModsListWhenEmpty();
       if (mismatch) {
-        await delay(500);
+        await delay(emptyRetryDelay);
         r = await fetchModsOnce(fetchOpts);
         if (r.modsDisabled) return r;
         if (r.ok && mods.value.length === 0) {
-          await delay(800);
+          await delay(emptyRetryDelay2);
           r = await fetchModsOnce(fetchOpts);
         }
       }

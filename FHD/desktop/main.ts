@@ -404,6 +404,25 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
   }
 }
 
+function rotateBackendLogIfNeeded(logPath: string): void {
+  const maxBytes = 8 * 1024 * 1024
+  try {
+    if (!fs.existsSync(logPath)) {
+      return
+    }
+    if (fs.statSync(logPath).size < maxBytes) {
+      return
+    }
+    const rotated = `${logPath}.1`
+    if (fs.existsSync(rotated)) {
+      fs.unlinkSync(rotated)
+    }
+    fs.renameSync(logPath, rotated)
+  } catch {
+    /* ignore rotation failures */
+  }
+}
+
 function ensureBackendLogStream(): fs.WriteStream | null {
   if (backendLogStream) {
     return backendLogStream
@@ -411,7 +430,9 @@ function ensureBackendLogStream(): fs.WriteStream | null {
   try {
     const logDir = path.join(app.getPath('userData'), 'logs')
     fs.mkdirSync(logDir, { recursive: true })
-    backendLogStream = fs.createWriteStream(path.join(logDir, 'electron-backend.log'), {
+    const logPath = path.join(logDir, 'electron-backend.log')
+    rotateBackendLogIfNeeded(logPath)
+    backendLogStream = fs.createWriteStream(logPath, {
       flags: 'a'
     })
     backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
@@ -451,13 +472,16 @@ function packagedBackendHealthTimeoutMs(): number {
   return process.platform === 'win32' ? 180_000 : 120_000
 }
 
-/** 须确认 uvicorn /api/health，避免 TCP 可达但不是 XCAGI 后端时误判就绪。 */
-async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
+/** 轻量就绪探测：/api/ping 无 NeuroBus 载荷，轮询更快。 */
+export async function waitForBackendPing(
+  port: number,
+  timeoutMs = packagedBackendHealthTimeoutMs()
+): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(3_000)
+      const response = await fetch(`http://127.0.0.1:${port}/api/ping`, {
+        signal: AbortSignal.timeout(2_000)
       })
       const server = (response.headers.get('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
@@ -470,7 +494,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     } catch {
       /* backend still booting */
     }
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise(resolve => setTimeout(resolve, 300))
   }
   const airplayHint =
     port === 5000
@@ -480,8 +504,28 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
     : ''
   throw new Error(
-    `后端 /api/health 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}${firstBootHint}`
+    `后端 /api/ping 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}${firstBootHint}`
   )
+}
+
+/** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
+export const waitForBackendHealth = waitForBackendPing
+
+export function resolveDesktopSplashUrl(): string {
+  const candidates = [
+    path.join(__dirname, 'splash.html'),
+    path.join(__dirname, '..', 'resources', 'splash.html')
+  ]
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'splash.html'))
+  }
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      return `file://${filePath.replace(/\\/g, '/')}`
+    }
+  }
+  const fallback = `<!doctype html><html><body style="margin:0;background:#f4f7fb;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui"><div>XCAGI 启动中…</div></body></html>`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}`
 }
 
 type DesktopStartupMarks = {
@@ -648,6 +692,8 @@ async function startBackend(): Promise<void> {
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
+      LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
+      XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
     },
@@ -947,36 +993,35 @@ async function createWindow(): Promise<void> {
     })
   }
 
-  await waitForBackendHealth(DEFAULT_PORT)
-
-  if (shouldClearFrontendCache()) {
-    try {
-      await mainWindow.webContents.session.clearCache()
-      markFrontendCacheCleared()
-    } catch {
-      /* ignore */
-    }
-  }
-
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow) tagDesktopWebContents(mainWindow)
-  })
-
-  // 防止渲染进程导航到本机后端以外的来源（electronegativity LimitNavigation HIGH）。
-  // 桌面端只加载 127.0.0.1:DEFAULT_PORT，任何外部跳转一律拦截。
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT) && !url.startsWith('file://') && !url.startsWith('data:')) {
       event.preventDefault()
       console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
     }
   })
-  // window.open / target=_blank 由系统浏览器打开，不在 Electron 内开新窗口。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
       return { action: 'allow' }
     }
     void shell.openExternal(url)
     return { action: 'deny' }
+  })
+
+  await mainWindow.loadURL(resolveDesktopSplashUrl())
+  mainWindow.show()
+  mainWindow.focus()
+
+  const cacheClearTask = shouldClearFrontendCache()
+    ? mainWindow.webContents.session
+        .clearCache()
+        .then(() => markFrontendCacheCleared())
+        .catch(() => undefined)
+    : Promise.resolve()
+
+  await Promise.all([waitForBackendPing(DEFAULT_PORT), cacheClearTask])
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) tagDesktopWebContents(mainWindow)
   })
 
   await mainWindow.loadURL(desktopInitialUrl(), {
@@ -986,7 +1031,6 @@ async function createWindow(): Promise<void> {
   if (process.platform === 'darwin') {
     ensureMacWindowInWorkArea(mainWindow)
   }
-  mainWindow.show()
   mainWindow.focus()
 
   void waitForBackendStatus(DEFAULT_PORT).then(status => {
