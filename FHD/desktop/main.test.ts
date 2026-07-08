@@ -149,6 +149,27 @@ describe('main — resolveDefaultDesktopPort', () => {
   })
 })
 
+describe('main — resolveDesktopBackendBindHost', () => {
+  const saved = process.env.XCAGI_DESKTOP_API_HOST
+
+  afterEach(() => {
+    if (saved === undefined) delete process.env.XCAGI_DESKTOP_API_HOST
+    else process.env.XCAGI_DESKTOP_API_HOST = saved
+  })
+
+  it('defaults to 0.0.0.0 for LAN pairing', async () => {
+    delete process.env.XCAGI_DESKTOP_API_HOST
+    const { resolveDesktopBackendBindHost } = await import('./main.js')
+    expect(resolveDesktopBackendBindHost()).toBe('0.0.0.0')
+  })
+
+  it('respects XCAGI_DESKTOP_API_HOST override', async () => {
+    process.env.XCAGI_DESKTOP_API_HOST = '127.0.0.1'
+    const { resolveDesktopBackendBindHost } = await import('./main.js')
+    expect(resolveDesktopBackendBindHost()).toBe('127.0.0.1')
+  })
+})
+
 describe('main — isPortAvailable', () => {
   it('returns true for a free port', async () => {
     const { isPortAvailable } = await import('./main.js')
@@ -158,11 +179,11 @@ describe('main — isPortAvailable', () => {
   })
 
   it('returns false when port is already bound', async () => {
-    const { isPortAvailable } = await import('./main.js')
+    const { isPortAvailable, DESKTOP_BACKEND_BIND_HOST } = await import('./main.js')
     const net = await import('node:net')
     const server = net.createServer()
     await new Promise<void>(resolve => {
-      server.listen(0, '127.0.0.1', () => resolve())
+      server.listen(0, DESKTOP_BACKEND_BIND_HOST, () => resolve())
     })
     const port = (server.address() as { port: number }).port
     try {

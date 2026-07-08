@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面 LAN 配对 + OTA 代理绕过 + 云中继直连（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：后端默认绑定 `0.0.0.0:17500`，手机同 WiFi 可连局域网 IP；Electron UI 仍只加载 `127.0.0.1`
+- **fix(desktop)**：`proxy-bypass-list` 对 `xiu-ci.com` 直连，避免系统代理 `127.0.0.1:7890` 未开时 OTA 报 `ERR_PROXY_CONNECTION_FAILED`
+- **fix(desktop)**：v10 同版本迭代 OTA — `latest.yml` 写入 `buildSha`，`build-info.json` 比对后仍可拉取新包
+- **fix(mobile-relay)**：桌面云中继 `httpx` 使用 `trust_env=False`，修复代理环境下 `Invalid port` 注册失败
+
 ### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：`mobile-relay-*` 会话 validate 不再误 401；`preferCloudIfLanUnreachable` + session 路由 LAN/云；`/employee-ssot` client
