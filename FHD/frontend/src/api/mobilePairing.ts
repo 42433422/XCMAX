@@ -36,7 +36,7 @@ export async function issueMobilePairing(host: string, port: number): Promise<Pa
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ host, port }),
   });
-  return readJson<PairingPayload>(response);
+  return normalizePairingPayload(await readJson<PairingPayload>(response));
 }
 
 export async function loadDesktopPairingPayload(): Promise<PairingPayload | null> {
@@ -47,7 +47,7 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
   const parsed = JSON.parse(String(raw)) as Partial<PairingPayload>;
   const qrJson = typeof parsed.qr_json === 'object' && parsed.qr_json ? parsed.qr_json as Record<string, unknown> : undefined;
   if (!parsed.nonce && !qrJson) return null;
-  return {
+  return normalizePairingPayload({
     host: String(parsed.host || '127.0.0.1'),
     port: Number(parsed.port || 5000),
     nonce: String(parsed.nonce || ''),
@@ -57,7 +57,7 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
     relay_base_url: typeof parsed.relay_base_url === 'string' ? parsed.relay_base_url : undefined,
     qr_json: qrJson,
     relay: typeof parsed.relay === 'object' && parsed.relay ? parsed.relay as Record<string, unknown> : undefined,
-  };
+  });
 }
 
 export function resolvePairingHost(): string {
@@ -89,4 +89,57 @@ export function resolvePairingPortHint(fallback = 5000): number {
   const envPort = Number(import.meta.env.VITE_FHD_PORT || import.meta.env.VITE_API_PORT || 0);
   if (envPort > 0) return envPort;
   return fallback;
+}
+
+/** 统一 QR 与手输设备码的 SSOT（优先 qr_json 内 code/t）。 */
+export function normalizePairingPayload(payload: PairingPayload): PairingPayload {
+  const qrJson = { ...(payload.qr_json || {}) };
+  const relay = payload.relay || {};
+  const displayCode = String(
+    relay.pairing_code || qrJson.code || qrJson.t || qrJson.shortCode || payload.shortCode || '',
+  ).trim();
+  if (!displayCode) return payload;
+  const nextQrJson = {
+    ...qrJson,
+    code: displayCode,
+    t: displayCode,
+    shortCode: displayCode,
+  };
+  return {
+    ...payload,
+    shortCode: displayCode,
+    qr_json: nextQrJson,
+  };
+}
+
+/** 后端 loopback 监听时，Vite 代理端口才是手机局域网可达地址。 */
+export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayload {
+  if (typeof window === 'undefined') return payload;
+  const pagePort = Number(window.location.port || 0);
+  if (pagePort !== 5001 && pagePort !== 5011) return payload;
+  const host = payload.host && payload.host !== '127.0.0.1'
+    ? payload.host
+    : resolvePairingHost();
+  if (!host || host === '127.0.0.1') return payload;
+  const apiBaseUrl = `http://${host}:${pagePort}/`;
+  const qrJson = {
+    ...(payload.qr_json || {}),
+    host,
+    port: pagePort,
+    api_base_url: apiBaseUrl,
+  };
+  return {
+    ...payload,
+    host,
+    port: pagePort,
+    qr_json: qrJson,
+  };
+}
+
+/** 根据后端返回的端口，返回手机局域网可达的端口（Vite 代理端口）。 */
+export function resolveReachablePairingPort(apiPort: number | undefined): number {
+  if (typeof window === 'undefined') return apiPort || 5000;
+  const pagePort = Number(window.location.port || 0);
+  if (pagePort === 5011 || pagePort === 5001) return pagePort;
+  return apiPort || 5000;
 }

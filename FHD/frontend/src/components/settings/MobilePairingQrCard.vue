@@ -75,6 +75,7 @@ import {
   fetchHostDiscoverHint,
   issueMobilePairing,
   loadDesktopPairingPayload,
+  normalizePairingPayload,
   resolvePairingHost,
   resolvePairingPortHint,
   type PairingPayload,
@@ -97,13 +98,7 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 const countdown = computed(() => Math.max(0, expiresAt.value - nowSec.value));
 
 function pairingDisplayCode(payload: PairingPayload): string {
-  const qrJson = payload.qr_json || {};
-  const qrKind = String(qrJson.kind || '');
-  if (qrKind === 'xcagi_relay_pairing') {
-    return String(qrJson.code || qrJson.t || payload.shortCode || '').trim();
-  }
-  const relay = payload.relay || {};
-  return String(relay.pairing_code || payload.shortCode || '').trim();
+  return String(payload.shortCode || '').trim();
 }
 
 function clearTimers() {
@@ -125,7 +120,8 @@ function scheduleAutoRefresh() {
   }, ms);
 }
 
-async function renderPayload(payload: PairingPayload) {
+async function renderPayload(raw: PairingPayload) {
+  const payload = normalizePairingPayload(raw);
   pairingHost.value = payload.host;
   pairingPort.value = payload.port;
   pairingNonce.value = payload.nonce;
@@ -170,7 +166,7 @@ async function refreshQr() {
     const hint = await fetchHostDiscoverHint();
     const port = Number(hint.api_port || resolvePairingPortHint());
     const host = resolvePairingHost();
-    const payload = await issueMobilePairing(host, port);
+    const payload = normalizePairingPayload(await issueMobilePairing(host, port));
     await renderPayload(payload);
   } catch (error: unknown) {
     qrDataUrl.value = '';
