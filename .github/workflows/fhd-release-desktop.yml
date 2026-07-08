@@ -382,6 +382,7 @@ jobs:
             ${{ runner.temp }}/download-release.json
       - name: Push manifest to CVM (both download paths)
         working-directory: .
+        continue-on-error: true
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
