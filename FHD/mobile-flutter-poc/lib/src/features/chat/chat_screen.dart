@@ -15,6 +15,9 @@ import '../../widgets/app_avatar.dart';
 import '../../widgets/we_ui.dart';
 import '../contacts/employee_profile_screen.dart';
 import '../contacts/fixed_partner_profile_screen.dart';
+import '../devtools/branch_detail_screen.dart';
+import '../devtools/diff_viewer_screen.dart';
+import '../devtools/timeline_screen.dart';
 import '../tools/ocr_screen.dart';
 import '../voice/voice_input_sheet.dart';
 
@@ -51,6 +54,8 @@ class _ChatScreenState extends State<ChatScreen> {
   MobileRepository? _repository;
   late final _EmployeeConversationRef? _employeeRef;
   AiEmployeeProfile? _employeeProfile;
+  RelayTaskProgress? _activeRelayProgress;
+  bool _cancellingRelay = false;
 
   @override
   void initState() {
@@ -110,41 +115,47 @@ class _ChatScreenState extends State<ChatScreen> {
             Expanded(
               child: _messages.isEmpty
                   ? const SizedBox.expand()
-                  : ClipRect(
-                      child: ListView.builder(
-                        reverse: true,
-                        padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
-                        itemBuilder: (context, index) {
-                          final originalIndex = _messages.length - index - 1;
-                          final message = _messages[originalIndex];
-                          return MessageBubble(
-                            message: message,
-                            conversation: widget.conversation,
-                            showAvatar: _showAvatarAt(originalIndex),
-                            userAvatarUrl: _userAvatarSource,
-                            aiAvatarUrl: employeeProfile?.avatarUrl,
-                            aiContentDescription: _resolvedTitle,
-                            hasEmployeeProfile: employeeProfile != null,
-                            onReply: () => setState(() => _replyTo = message),
-                            onDelete: () => _deleteMessageAt(originalIndex),
-                            onResend: message.status == ChatDeliveryStatus.failed
-                                ? _resendLastChat
-                                : null,
-                          );
-                        },
-                        itemCount: _messages.length,
-                      ),
+                  : ListView.builder(
+                      reverse: true,
+                      padding: const EdgeInsets.fromLTRB(14, 4, 14, 20),
+                      itemBuilder: (context, index) {
+                        final originalIndex = _messages.length - index - 1;
+                        final message = _messages[originalIndex];
+                        final isActiveRelay = _sending &&
+                            _activeAssistantId == message.id &&
+                            _activeRelayProgress != null;
+                        final toolCalls = _toolCallsFor(message);
+                        return MessageBubble(
+                          message: message,
+                          conversation: widget.conversation,
+                          showAvatar: _showAvatarAt(originalIndex),
+                          userAvatarUrl: _userAvatarSource,
+                          aiAvatarUrl: employeeProfile?.avatarUrl,
+                          aiContentDescription: _resolvedTitle,
+                          hasEmployeeProfile: employeeProfile != null,
+                          relayProgress:
+                              isActiveRelay ? _activeRelayProgress : null,
+                          cancellingRelay: _cancellingRelay,
+                          onCancelRelay: _cancellingRelay
+                              ? null
+                              : () => _stopChat(),
+                          onReply: () => setState(() => _replyTo = message),
+                          onDelete: () => _deleteMessageAt(originalIndex),
+                          onResend: message.status == ChatDeliveryStatus.failed
+                              ? _resendLastChat
+                              : null,
+                          toolCalls: toolCalls,
+                          onShowTimeline: toolCalls.isEmpty
+                              ? null
+                              : () => _openTimelineForMessage(message),
+                        );
+                      },
+                      itemCount: _messages.length,
                     ),
             ),
             _Composer(
               controller: _controller,
-              onSend: () {
-                if (_sending) return;
-                final text = _controller.text.trim();
-                if (text.isEmpty) return;
-                FocusManager.instance.primaryFocus?.unfocus();
-                _send(text);
-              },
+              onSend: _send,
               onStop: _stopChat,
               busy: _sending,
               topContent: _composerTopContent(
@@ -174,9 +185,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       if (!mounted) return;
       if (remoteMessages.isNotEmpty) {
-        // Copy into a growable list: repository may return a fixed-length
-        // list, and later sends append to _messages.
-        setState(() => _messages = [...remoteMessages]);
+        setState(() => _messages = remoteMessages);
       }
     } catch (_) {
       // Keep the Android-like empty state when auth/network is unavailable.
@@ -205,8 +214,7 @@ class _ChatScreenState extends State<ChatScreen> {
       _showToolPanel = false;
       _activeAssistantId = assistantId;
       _stopRequested = false;
-      _messages = [
-        ..._messages,
+      _messages.add(
         ChatMessage(
           id: assistantId,
           conversationId: widget.conversation.id,
@@ -216,7 +224,7 @@ class _ChatScreenState extends State<ChatScreen> {
           hasEmployeeProfile: true,
           status: ChatDeliveryStatus.sending,
         ),
-      ];
+      );
     });
 
     try {
@@ -226,6 +234,11 @@ class _ChatScreenState extends State<ChatScreen> {
           if (!mounted) return;
           if (_stopRequested || _activeAssistantId != assistantId) return;
           setState(() => _appendMessageBody(assistantId, token));
+        },
+        onStatus: (progress) {
+          if (!mounted) return;
+          if (_stopRequested || _activeAssistantId != assistantId) return;
+          setState(() => _activeRelayProgress = progress);
         },
         isCancelled: () => _stopRequested || _activeAssistantId != assistantId,
       );
@@ -240,6 +253,7 @@ class _ChatScreenState extends State<ChatScreen> {
             body: reply,
             status: ChatDeliveryStatus.sent,
           );
+          _activeRelayProgress = null;
         });
       }
     } catch (error) {
@@ -251,12 +265,15 @@ class _ChatScreenState extends State<ChatScreen> {
           body: '（$error）',
           status: ChatDeliveryStatus.failed,
         );
+        _activeRelayProgress = null;
       });
     } finally {
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
           _activeAssistantId = null;
+          _activeRelayProgress = null;
+          _cancellingRelay = false;
         });
       }
     }
@@ -343,8 +360,7 @@ class _ChatScreenState extends State<ChatScreen> {
         status: ChatDeliveryStatus.sending,
       );
       recentMessages = [..._messages, userMessage];
-      _messages = [
-        ..._messages,
+      _messages.addAll([
         userMessage,
         ChatMessage(
           id: assistantMessage.id,
@@ -357,7 +373,7 @@ class _ChatScreenState extends State<ChatScreen> {
           hasEmployeeProfile: assistantMessage.hasEmployeeProfile,
           status: assistantMessage.status,
         ),
-      ];
+      ]);
     });
     _controller.clear();
 
@@ -398,6 +414,11 @@ class _ChatScreenState extends State<ChatScreen> {
           if (_stopRequested || _activeAssistantId != assistantId) return;
           setState(() => _appendMessageBody(assistantId, token));
         },
+        onStatus: (progress) {
+          if (!mounted) return;
+          if (_stopRequested || _activeAssistantId != assistantId) return;
+          setState(() => _activeRelayProgress = progress);
+        },
         isCancelled: () => _stopRequested || _activeAssistantId != assistantId,
       );
       if (!mounted) return;
@@ -408,6 +429,7 @@ class _ChatScreenState extends State<ChatScreen> {
           body: reply,
           status: ChatDeliveryStatus.sent,
         );
+        _activeRelayProgress = null;
       });
     } catch (error) {
       if (!mounted) return;
@@ -421,12 +443,15 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           status: ChatDeliveryStatus.failed,
         );
+        _activeRelayProgress = null;
       });
     } finally {
       if (mounted && _activeAssistantId == assistantId) {
         setState(() {
           _sending = false;
           _activeAssistantId = null;
+          _activeRelayProgress = null;
+          _cancellingRelay = false;
         });
       }
     }
@@ -434,7 +459,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _clearChat() {
     setState(() {
-      _messages = [];
+      _messages.clear();
       _showToolPanel = false;
       _replyTo = null;
     });
@@ -444,6 +469,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void _stopChat() {
     final assistantId = _activeAssistantId;
     if (assistantId == null) return;
+    final progress = _activeRelayProgress;
     setState(() {
       _stopRequested = true;
       _replaceMessage(
@@ -464,7 +490,24 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       _sending = false;
       _activeAssistantId = null;
+      _activeRelayProgress = null;
     });
+    if (progress != null && progress.taskId.isNotEmpty) {
+      _cancelRelayTask(progress.taskId);
+    }
+  }
+
+  Future<void> _cancelRelayTask(String taskId) async {
+    final repository = _repository;
+    if (repository == null || taskId.isEmpty) return;
+    setState(() => _cancellingRelay = true);
+    try {
+      await repository.cancelRelayTask(taskId);
+    } catch (_) {
+      // 静默失败：本地已经停止展示，远端任务稍后自然完成或超时
+    } finally {
+      if (mounted) setState(() => _cancellingRelay = false);
+    }
   }
 
   Future<void> _resendLastChat() async {
@@ -635,8 +678,7 @@ class _ChatScreenState extends State<ChatScreen> {
     setState(() {
       _runningGitOp = true;
       _showToolPanel = false;
-      _messages = [
-        ..._messages,
+      _messages.add(
         ChatMessage(
           id: messageId,
           conversationId: widget.conversation.id,
@@ -645,7 +687,7 @@ class _ChatScreenState extends State<ChatScreen> {
           timeText: '刚刚',
           hasEmployeeProfile: _employeeProfile != null,
         ),
-      ];
+      );
     });
     try {
       final result = await repository.runGitOperation(branch: branch, op: op);
@@ -721,20 +763,31 @@ class _ChatScreenState extends State<ChatScreen> {
         _ChatToolAction(
           icon: Icons.difference,
           title: '查看 diff',
-          subtitle: '检查分支改动',
-          onTap: () => _runGitOperation(branch, 'git.diff'),
+          subtitle: '逐行检查分支改动',
+          onTap: () => _openDiffViewer(branch),
         ),
         _ChatToolAction(
-          icon: Icons.call_merge,
-          title: '合并分支',
-          subtitle: '合并当前任务',
-          onTap: () => _runGitOperation(branch, 'git.merge'),
+          icon: Icons.account_tree,
+          title: '分支与审批',
+          subtitle: '查看提交并合并/丢弃',
+          onTap: () => _openBranchDetail(branch),
         ),
         _ChatToolAction(
-          icon: Icons.delete_outline,
-          title: '丢弃分支',
-          subtitle: '放弃本次改动',
-          onTap: () => _runGitOperation(branch, 'git.discard'),
+          icon: Icons.timeline,
+          title: '执行回顾',
+          subtitle: '查看工具调用时间线',
+          onTap: () => _openTimeline(),
+        ),
+        ..._sharedToolActions(),
+      ];
+    }
+    if (isSuperEmployee) {
+      return [
+        _ChatToolAction(
+          icon: Icons.timeline,
+          title: '执行回顾',
+          subtitle: '查看工具调用时间线',
+          onTap: () => _openTimeline(),
         ),
         ..._sharedToolActions(),
       ];
@@ -765,6 +818,97 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       ..._sharedToolActions(),
     ];
+  }
+
+  void _openDiffViewer(String branch) {
+    final repository = _repository;
+    if (repository == null) return;
+    setState(() => _showToolPanel = false);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DiffViewerScreen(
+          branch: branch,
+          repository: repository,
+        ),
+      ),
+    );
+  }
+
+  void _openBranchDetail(String branch) {
+    final repository = _repository;
+    if (repository == null) return;
+    setState(() => _showToolPanel = false);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BranchDetailScreen(
+          branch: branch,
+          repository: repository,
+        ),
+      ),
+    );
+  }
+
+  void _openTimeline() {
+    final repository = _repository;
+    if (repository == null) return;
+    setState(() => _showToolPanel = false);
+    final toolLabel = _resolvedTitle;
+    final calls = _collectRecentToolCalls();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TimelineScreen(
+          repository: repository,
+          taskId: '',
+          toolLabel: toolLabel,
+          initialCalls: calls,
+        ),
+      ),
+    );
+  }
+
+  List<Map<String, Object?>> _collectRecentToolCalls() {
+    final repository = _repository;
+    if (repository == null) return const <Map<String, Object?>>[];
+    for (final message in _messages.reversed) {
+      if (message.role != ChatRole.assistant) continue;
+      if (!message.body.contains('闭环结果')) continue;
+      final calls = repository.parseToolCallsFromBody(
+        message.body,
+        toolLabel: _resolvedTitle,
+      );
+      if (calls.isNotEmpty) return calls;
+    }
+    return const <Map<String, Object?>>[];
+  }
+
+  /// 计算某条 assistant 消息的 dev-loop 工具调用记录，供气泡内嵌 mini timeline 使用。
+  List<Map<String, Object?>> _toolCallsFor(ChatMessage message) {
+    final repository = _repository;
+    if (repository == null) return const <Map<String, Object?>>[];
+    if (message.role != ChatRole.assistant) return const <Map<String, Object?>>[];
+    if (!message.body.contains('闭环结果')) return const <Map<String, Object?>>[];
+    return repository.parseToolCallsFromBody(
+      message.body,
+      toolLabel: _resolvedTitle,
+    );
+  }
+
+  void _openTimelineForMessage(ChatMessage message) {
+    final repository = _repository;
+    if (repository == null) return;
+    final calls = _toolCallsFor(message);
+    if (calls.isEmpty) return;
+    setState(() => _showToolPanel = false);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TimelineScreen(
+          repository: repository,
+          taskId: '',
+          toolLabel: _resolvedTitle,
+          initialCalls: calls,
+        ),
+      ),
+    );
   }
 
   List<_ChatToolAction> _sharedToolActions() {
@@ -954,6 +1098,11 @@ class MessageBubble extends StatelessWidget {
     required this.onReply,
     required this.onDelete,
     this.onResend,
+    this.relayProgress,
+    this.cancellingRelay = false,
+    this.onCancelRelay,
+    this.toolCalls = const <Map<String, Object?>>[],
+    this.onShowTimeline,
   });
 
   final ChatMessage message;
@@ -966,6 +1115,11 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onReply;
   final VoidCallback onDelete;
   final VoidCallback? onResend;
+  final RelayTaskProgress? relayProgress;
+  final bool cancellingRelay;
+  final VoidCallback? onCancelRelay;
+  final List<Map<String, Object?>> toolCalls;
+  final VoidCallback? onShowTimeline;
 
   @override
   Widget build(BuildContext context) {
@@ -1094,6 +1248,14 @@ class MessageBubble extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                             ],
+                            if (relayProgress != null) ...[
+                              _RelayProgressCard(
+                                progress: relayProgress!,
+                                cancelling: cancellingRelay,
+                                onCancel: onCancelRelay,
+                              ),
+                              const SizedBox(height: 8),
+                            ],
                             Text(
                               visibleBody,
                               style: TextStyle(
@@ -1103,6 +1265,13 @@ class MessageBubble extends StatelessWidget {
                                 letterSpacing: 0,
                               ),
                             ),
+                            if (toolCalls.isNotEmpty && onShowTimeline != null) ...[
+                              const SizedBox(height: 10),
+                              _MiniTimeline(
+                                calls: toolCalls,
+                                onTap: onShowTimeline!,
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -1174,6 +1343,174 @@ class MessageBubble extends StatelessWidget {
   }
 }
 
+/// Assistant 气泡底部嵌入的 dev-loop mini timeline：4 图标水平排列 + 连接线，
+/// 点击跳转 TimelineScreen 查看完整调用详情。
+class _MiniTimeline extends StatelessWidget {
+  const _MiniTimeline({required this.calls, required this.onTap});
+
+  final List<Map<String, Object?>> calls;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: colors.surfaceHigh.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: colors.divider.withValues(alpha: 0.6),
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(
+              '闭环',
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(child: _buildNodes(colors)),
+            const SizedBox(width: 6),
+            Icon(
+              Icons.chevron_right,
+              size: 14,
+              color: colors.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNodes(XcagiThemeColors colors) {
+    final children = <Widget>[];
+    for (var i = 0; i < calls.length; i++) {
+      children.add(_MiniTimelineNode(call: calls[i], colors: colors));
+      if (i < calls.length - 1) {
+        children.add(
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: _MiniTimelineConnector(
+                colors: colors,
+                success: _callSuccess(calls[i]),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: children,
+    );
+  }
+
+  bool _callSuccess(Map<String, Object?> call) {
+    final v = call['success'];
+    if (v is bool) return v;
+    return false;
+  }
+}
+
+class _MiniTimelineNode extends StatelessWidget {
+  const _MiniTimelineNode({required this.call, required this.colors});
+
+  final Map<String, Object?> call;
+  final XcagiThemeColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = _iconFor(call['icon'] ?? '');
+    final success = call['success'] == true;
+    final pending = call['success'] == null;
+    final color = success
+        ? colors.success
+        : pending
+            ? colors.textTertiary
+            : colors.danger;
+    final label = _shortLabel(call['label'] as String? ?? '');
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 22,
+          height: 22,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.12),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, size: 13, color: color),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontSize: 9,
+            height: 1.0,
+            fontWeight: FontWeight.w500,
+            letterSpacing: 0,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _shortLabel(String raw) {
+    if (raw.isEmpty) return raw;
+    if (raw.length <= 4) return raw;
+    if (raw.startsWith('创建分支')) return '分支';
+    if (raw.startsWith('验证')) return '验证';
+    if (raw.startsWith('推送')) return '推送';
+    return raw.substring(0, 4);
+  }
+
+  IconData _iconFor(Object? icon) {
+    switch (icon) {
+      case 'branch':
+        return Icons.call_split;
+      case 'check':
+        return Icons.check_circle_outline;
+      case 'upload':
+        return Icons.cloud_upload_outlined;
+      case 'terminal':
+      default:
+        return Icons.terminal;
+    }
+  }
+}
+
+class _MiniTimelineConnector extends StatelessWidget {
+  const _MiniTimelineConnector({required this.colors, required this.success});
+
+  final XcagiThemeColors colors;
+  final bool success;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 1,
+      color: success
+          ? colors.success.withValues(alpha: 0.5)
+          : colors.divider.withValues(alpha: 0.7),
+    );
+  }
+}
+
 class _MessageActionMenu extends StatelessWidget {
   const _MessageActionMenu({
     required this.text,
@@ -1225,6 +1562,245 @@ class _MessageActionMenu extends StatelessWidget {
         }
       },
       child: child,
+    );
+  }
+}
+
+/// 长任务（relay dev-loop）内嵌进度卡：步骤列表 + 进度条 + 中断按钮。
+class _RelayProgressCard extends StatelessWidget {
+  const _RelayProgressCard({
+    required this.progress,
+    required this.cancelling,
+    required this.onCancel,
+  });
+
+  final RelayTaskProgress progress;
+  final bool cancelling;
+  final VoidCallback? onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final steps = _stepsForStatus(progress.status);
+    final activeIndex = _activeIndexForStatus(progress.status);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 236),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: colors.page,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: colors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: cancelling
+                    ? CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(colors.danger),
+                      )
+                    : (progress.status == 'completed'
+                        ? Icon(Icons.check_circle,
+                            size: 14, color: colors.success)
+                        : SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation(colors.brand),
+                            ),
+                          )),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  _titleForStatus(progress.status),
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (onCancel != null &&
+                  progress.status != 'completed' &&
+                  progress.status != 'failed' &&
+                  progress.status != 'cancelled')
+                GestureDetector(
+                  onTap: onCancel,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: colors.danger.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      cancelling ? '取消中' : '中断',
+                      style: TextStyle(
+                        color: colors.danger,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < steps.length; i++) ...[
+            _StepRow(
+              label: steps[i],
+              state: _stepState(i, activeIndex, progress.status),
+              isLast: i == steps.length - 1,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _titleForStatus(String status) {
+    switch (status) {
+      case 'queued':
+        return '${progress.toolLabel} 任务排队中';
+      case 'running':
+      case 'assigned':
+        return '${progress.toolLabel} 正在执行';
+      case 'resuming':
+        return '${progress.toolLabel} 恢复中';
+      case 'completed':
+        return '${progress.toolLabel} 已完成';
+      case 'failed':
+        return '${progress.toolLabel} 执行失败';
+      case 'blocked':
+        return '${progress.toolLabel} 已阻塞';
+      case 'cancelled':
+        return '${progress.toolLabel} 已取消';
+      default:
+        return progress.toolLabel;
+    }
+  }
+
+  List<String> _stepsForStatus(String status) {
+    return const ['创建任务', '排队等待', '电脑执行', '回写结果'];
+  }
+
+  int _activeIndexForStatus(String status) {
+    switch (status) {
+      case 'queued':
+        return 1;
+      case 'running':
+      case 'assigned':
+        return 2;
+      case 'completed':
+        return 4;
+      case 'failed':
+      case 'blocked':
+      case 'cancelled':
+        return -1;
+      default:
+        return 0;
+    }
+  }
+
+  _StepState _stepState(int index, int activeIndex, String status) {
+    if (status == 'failed' || status == 'blocked' || status == 'cancelled') {
+      if (index == activeIndex - 1 || index == activeIndex) {
+        return _StepState.failed;
+      }
+    }
+    if (index < activeIndex) return _StepState.done;
+    if (index == activeIndex) return _StepState.active;
+    return _StepState.pending;
+  }
+}
+
+enum _StepState { pending, active, done, failed }
+
+class _StepRow extends StatelessWidget {
+  const _StepRow({
+    required this.label,
+    required this.state,
+    required this.isLast,
+  });
+
+  final String label;
+  final _StepState state;
+  final bool isLast;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final iconColor = switch (state) {
+      _StepState.done => colors.success,
+      _StepState.active => colors.brand,
+      _StepState.failed => colors.danger,
+      _StepState.pending => colors.textTertiary,
+    };
+    final labelColor = switch (state) {
+      _StepState.done => colors.textSecondary,
+      _StepState.active => colors.textPrimary,
+      _StepState.failed => colors.danger,
+      _StepState.pending => colors.textTertiary,
+    };
+    return Row(
+      children: [
+        SizedBox(
+          width: 16,
+          child: Column(
+            children: [
+              if (state == _StepState.active)
+                SizedBox(
+                  width: 10,
+                  height: 10,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 1.5,
+                    valueColor: AlwaysStoppedAnimation(iconColor),
+                  ),
+                )
+              else
+                Icon(
+                  state == _StepState.done
+                      ? Icons.check_circle
+                      : state == _StepState.failed
+                          ? Icons.cancel
+                          : Icons.radio_button_unchecked,
+                  size: 12,
+                  color: iconColor,
+                ),
+              if (!isLast)
+                Container(
+                  width: 1,
+                  height: 8,
+                  color: colors.divider,
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            color: labelColor,
+            fontSize: 11,
+            fontWeight: state == _StepState.active
+                ? FontWeight.w600
+                : FontWeight.w400,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1347,21 +1923,6 @@ class _Composer extends StatelessWidget {
                       child: TextField(
                         controller: controller,
                         maxLines: 1,
-                        textInputAction: TextInputAction.send,
-                        onSubmitted: busy
-                            ? null
-                            : (value) {
-                                if (value.trim().isEmpty) return;
-                                FocusManager.instance.primaryFocus?.unfocus();
-                                onSend();
-                              },
-                        onEditingComplete: busy
-                            ? null
-                            : () {
-                                if (controller.text.trim().isEmpty) return;
-                                FocusManager.instance.primaryFocus?.unfocus();
-                                onSend();
-                              },
                         style: textTheme.bodyMedium?.copyWith(
                           color: colors.textPrimary,
                           fontSize: 15,
@@ -1385,19 +1946,14 @@ class _Composer extends StatelessWidget {
                     icon: Icons.add,
                     iconSize: 26,
                     selected: showTools,
-                    onPressed: () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      onToggleTools();
-                    },
+                    onPressed: onToggleTools,
                     tooltip: '更多工具',
                   ),
                   ValueListenableBuilder<TextEditingValue>(
                     valueListenable: controller,
                     builder: (context, value, _) {
-                      final hasText = value.text.trim().isNotEmpty;
-                      if (!busy && !hasText) {
-                        return const SizedBox.shrink();
-                      }
+                      final canSend = value.text.trim().isNotEmpty && !busy;
+                      if (!canSend && !busy) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(left: 6),
                         child: _SendPill(
@@ -1744,15 +2300,15 @@ class _ChatToolCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    return Semantics(
-      button: true,
-      label: action.title,
-      child: GestureDetector(
-        key: ValueKey('chat_tool_card_${action.title}'),
-        behavior: HitTestBehavior.opaque,
-        onTap: action.onTap,
-        child: SizedBox(
-          height: 92,
+    return SizedBox(
+      key: ValueKey('chat_tool_card_${action.title}'),
+      height: 92,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          onTap: action.onTap,
+          borderRadius: BorderRadius.circular(8),
           child: Padding(
             padding: const EdgeInsets.only(top: 1),
             child: Column(
@@ -1813,39 +2369,26 @@ class _SendPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     final textTheme = Theme.of(context).textTheme;
-    final label = canStop ? '停止' : '发送';
-    final background = canStop
-        ? Theme.of(context).colorScheme.errorContainer
-        : colors.brand;
-    void handleTap() {
-      if (canStop) {
-        onStop();
-      } else {
-        onSend();
-      }
-    }
-
     return Material(
-      key: const ValueKey('chat_send_pill'),
-      color: background,
+      color:
+          canStop ? Theme.of(context).colorScheme.errorContainer : colors.brand,
       borderRadius: BorderRadius.circular(8),
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        height: 48,
-        child: IconButton(
-          onPressed: handleTap,
-          tooltip: label,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          constraints: const BoxConstraints(minWidth: 52),
-          style: IconButton.styleFrom(
-            foregroundColor: canStop ? colors.danger : Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          icon: Text(
-            label,
-            style: textTheme.labelLarge?.copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
+      child: InkWell(
+        onTap: canStop ? onStop : onSend,
+        borderRadius: BorderRadius.circular(8),
+        child: SizedBox(
+          height: 38,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 17),
+            child: Center(
+              child: Text(
+                canStop ? '停止' : '发送',
+                style: textTheme.labelLarge?.copyWith(
+                  color: canStop ? colors.danger : Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ),
           ),
         ),

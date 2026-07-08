@@ -22,9 +22,9 @@
       </div>
 
       <div class="mobile-pairing__meta">
-        <!-- 大号配对码：仅局域网 pairing/issue 的 shortCode，非云中继码。 -->
+        <!-- 大号设备码展示，优先使用服务器中继码。 -->
         <div v-if="pairingShortCode" class="mobile-pairing__code-block">
-          <span class="mobile-pairing__code-label">局域网配对码</span>
+          <span class="mobile-pairing__code-label">设备码</span>
           <span class="mobile-pairing__code-value">{{ pairingShortCode }}</span>
           <button
             type="button"
@@ -60,9 +60,9 @@
     </div>
 
     <ul class="mobile-pairing__tips">
-      <li>6 位配对码与下方二维码仅用于同一局域网的设备绑定。</li>
-      <li>跨网远程同步请先在 App 登录账号，由云中继按账号鉴权绑定（不使用本配对码）。</li>
-      <li>登录确认请使用 App 扫描登录页的「App 扫码登录」二维码（非本配对码）。</li>
+      <li>优先通过服务器中继绑定，手机和电脑不在同一局域网也可以连接。</li>
+      <li>扫描二维码或输入上方 6 位设备码即可连接。</li>
+      <li>登录确认请使用 App 扫描登录页的「App 扫码登录」二维码（非本设备码）。</li>
     </ul>
   </div>
 </template>
@@ -98,7 +98,13 @@ let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 const countdown = computed(() => Math.max(0, expiresAt.value - nowSec.value));
 
 function pairingDisplayCode(payload: PairingPayload): string {
-  return String(payload.shortCode || '').trim();
+  const qrJson = payload.qr_json || {};
+  const qrKind = String(qrJson.kind || '');
+  if (qrKind === 'xcagi_relay_pairing') {
+    return String(qrJson.code || qrJson.t || payload.shortCode || '').trim();
+  }
+  const relay = payload.relay || {};
+  return String(relay.pairing_code || payload.shortCode || '').trim();
 }
 
 function clearTimers() {
@@ -121,13 +127,12 @@ function scheduleAutoRefresh() {
 }
 
 async function renderPayload(payload: PairingPayload) {
-  const reachable = applyDevProxyReachablePort(payload);
-  pairingHost.value = reachable.host;
-  pairingPort.value = reachable.port;
-  pairingNonce.value = reachable.nonce;
-  pairingShortCode.value = pairingDisplayCode(reachable);
-  expiresAt.value = Number(reachable.exp || 0);
-  qrDataUrl.value = await QRCode.toDataURL(buildPairingQrText(reachable), {
+  pairingHost.value = payload.host;
+  pairingPort.value = payload.port;
+  pairingNonce.value = payload.nonce;
+  pairingShortCode.value = pairingDisplayCode(payload);
+  expiresAt.value = Number(payload.exp || 0);
+  qrDataUrl.value = await QRCode.toDataURL(buildPairingQrText(payload), {
     width: 220,
     margin: 1,
     errorCorrectionLevel: 'M',
@@ -164,11 +169,11 @@ async function refreshQr() {
     }
 
     const hint = await fetchHostDiscoverHint();
-    // 当页面通过 vite proxy (5011) 访问时，后端 hint.api_port (17500) 绑定 127.0.0.1 不可达，
-    // 必须用页面端口（vite proxy 0.0.0.0 监听，手机可达）。
     const port = resolveReachablePairingPort(Number(hint.api_port || 0));
     const host = resolvePairingHost();
-    const payload = await issueMobilePairing(host, port);
+    const payload = applyDevProxyReachablePort(
+      await issueMobilePairing(host, port),
+    );
     await renderPayload(payload);
   } catch (error: unknown) {
     qrDataUrl.value = '';

@@ -4,10 +4,11 @@ export interface PairingPayload {
   host: string;
   port: number;
   nonce: string;
-  shortCode: string; // 6 位局域网配对码（pairing/issue），非云中继码
+  shortCode: string; // 6 位设备码，v3 优先为服务器中继码
   exp: number;
   relay_id?: string;
   relay_base_url?: string;
+  qr_json?: Record<string, unknown>;
   relay?: Record<string, unknown>;
 }
 
@@ -44,7 +45,8 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
   const raw = await desktop.getPairingQrPayload();
   if (!raw) return null;
   const parsed = JSON.parse(String(raw)) as Partial<PairingPayload>;
-  if (!parsed.nonce) return null;
+  const qrJson = typeof parsed.qr_json === 'object' && parsed.qr_json ? parsed.qr_json as Record<string, unknown> : undefined;
+  if (!parsed.nonce && !qrJson) return null;
   return {
     host: String(parsed.host || '127.0.0.1'),
     port: Number(parsed.port || 5000),
@@ -53,6 +55,7 @@ export async function loadDesktopPairingPayload(): Promise<PairingPayload | null
     exp: Number(parsed.exp || Math.floor(Date.now() / 1000) + 300),
     relay_id: typeof parsed.relay_id === 'string' ? parsed.relay_id : undefined,
     relay_base_url: typeof parsed.relay_base_url === 'string' ? parsed.relay_base_url : undefined,
+    qr_json: qrJson,
     relay: typeof parsed.relay === 'object' && parsed.relay ? parsed.relay as Record<string, unknown> : undefined,
   };
 }
@@ -66,6 +69,9 @@ export function resolvePairingHost(): string {
 
 /** QR 内嵌短码，同时保留 host/port 作为首次绑定的局域网直连兜底。 */
 export function buildPairingQrText(payload: PairingPayload): string {
+  if (payload.qr_json && Object.keys(payload.qr_json).length > 0) {
+    return JSON.stringify(payload.qr_json);
+  }
   return JSON.stringify({
     v: 2,
     t: payload.shortCode || payload.nonce,
@@ -78,8 +84,6 @@ export function buildPairingQrText(payload: PairingPayload): string {
 export function resolvePairingPortHint(fallback = 5000): number {
   if (typeof window !== 'undefined') {
     const pagePort = Number(window.location.port || 0);
-    // 5011 = adminConsole vite proxy (0.0.0.0，外部可达)
-    // 5100/5000 = 直连后端
     if (pagePort === 5100 || pagePort === 5000 || pagePort === 5011) return pagePort;
   }
   const envPort = Number(import.meta.env.VITE_FHD_PORT || import.meta.env.VITE_API_PORT || 0);
@@ -87,7 +91,6 @@ export function resolvePairingPortHint(fallback = 5000): number {
   return fallback;
 }
 
-<<<<<<< Updated upstream
 /** 后端 loopback 监听时，Vite 代理端口才是手机局域网可达地址。 */
 export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayload {
   if (typeof window === 'undefined') return payload;
@@ -102,7 +105,8 @@ export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayl
     host,
     port: pagePort,
   };
-=======
+}
+
 /**
  * 判断当前页面是否通过 vite proxy 访问（端口从外部可达）。
  * 当页面端口与后端 hint 端口不同时，说明存在反向代理，页面端口才是手机可达的端口。
@@ -110,8 +114,6 @@ export function applyDevProxyReachablePort(payload: PairingPayload): PairingPayl
 export function resolveReachablePairingPort(hintApiPort: number, fallback = 5000): number {
   if (typeof window !== 'undefined') {
     const pagePort = Number(window.location.port || 0);
-    // 页面端口可达（浏览器能访问即说明从局域网可达），优先于后端 hint 端口
-    // 后端 hint 端口可能绑定 127.0.0.1（桌面模式），手机不可达
     if (pagePort > 0 && pagePort !== hintApiPort && pagePort !== 80 && pagePort !== 443) {
       return pagePort;
     }
@@ -119,5 +121,4 @@ export function resolveReachablePairingPort(hintApiPort: number, fallback = 5000
   const hint = Number(hintApiPort || 0);
   if (hint > 0) return hint;
   return resolvePairingPortHint(fallback);
->>>>>>> Stashed changes
 }

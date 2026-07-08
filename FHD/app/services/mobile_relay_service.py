@@ -183,7 +183,139 @@ class MobileRelayService:
             "expires_at": expires_at,
             "exp": _epoch_from_iso(expires_at),
             "relay_base_url": normalized_base,
+            "qr_json": {
+                "v": 3,
+                "kind": "xcagi_relay_pairing",
+                "relay_id": relay_id,
+                "code": pairing_code,
+                "t": pairing_code,
+                "relay_base_url": normalized_base,
+            },
         }
+
+    def confirm_mobile(
+        self,
+        *,
+        user_id: int,
+        username: str,
+        relay_id: str,
+        code: str,
+    ) -> dict[str, Any] | None:
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT * FROM mobile_relay_desktops
+                        WHERE relay_id = :relay_id AND pairing_code = :code
+                        """
+                    ),
+                    {"relay_id": relay_id.strip(), "code": code.strip()},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            data = _row_dict(row)
+            if data.get("status") == "revoked":
+                return None
+            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
+                return None
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET status = 'paired',
+                        mobile_user_id = :user_id,
+                        mobile_username = :username,
+                        updated_at = :updated_at
+                    WHERE relay_id = :relay_id
+                    """
+                ),
+                {
+                    "relay_id": relay_id.strip(),
+                    "user_id": int(user_id),
+                    "username": username.strip()[:200],
+                    "updated_at": now,
+                },
+            )
+            data.update(
+                {
+                    "status": "paired",
+                    "mobile_user_id": int(user_id),
+                    "mobile_username": username.strip()[:200],
+                    "updated_at": now,
+                }
+            )
+            return self._public_desktop(data)
+
+    def confirm_mobile_by_code(
+        self,
+        *,
+        user_id: int,
+        username: str,
+        code: str,
+    ) -> dict[str, Any] | None:
+        clean_code = code.strip()
+        if not clean_code:
+            return None
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT * FROM mobile_relay_desktops
+                        WHERE pairing_code = :code
+                          AND status IN ('pending', 'paired')
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                        """
+                    ),
+                    {"code": clean_code},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            data = _row_dict(row)
+            if data.get("status") == "pending" and str(data.get("expires_at") or "") < now:
+                return None
+            relay_id = str(data.get("relay_id") or "").strip()
+            if not relay_id:
+                return None
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_desktops
+                    SET status = 'paired',
+                        mobile_user_id = :user_id,
+                        mobile_username = :username,
+                        updated_at = :updated_at
+                    WHERE relay_id = :relay_id
+                    """
+                ),
+                {
+                    "relay_id": relay_id,
+                    "user_id": int(user_id),
+                    "username": username.strip()[:200],
+                    "updated_at": now,
+                },
+            )
+            data.update(
+                {
+                    "status": "paired",
+                    "mobile_user_id": int(user_id),
+                    "mobile_username": username.strip()[:200],
+                    "updated_at": now,
+                }
+            )
+            return self._public_desktop(data)
 
     def bind_mobile_by_account(
         self,
@@ -333,6 +465,46 @@ class MobileRelayService:
                 .first()
             )
             return _row_dict(row) if row else None
+
+    def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
+        """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT t.* FROM mobile_relay_tasks t
+                        JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+                        WHERE t.task_id = :task_id
+                          AND d.mobile_user_id = :user_id
+                          AND d.status = 'paired'
+                        """
+                    ),
+                    {"task_id": task_id.strip(), "user_id": int(user_id)},
+                )
+                .mappings()
+                .first()
+            )
+            if not row:
+                return None
+            cur_status = str(row.get("status") or "").strip()
+            if cur_status not in {"queued", "running"}:
+                return _row_dict(row)
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_relay_tasks
+                    SET status = 'cancelled',
+                        completed_at = :now,
+                        updated_at = :now
+                    WHERE task_id = :task_id AND status IN ('queued', 'running')
+                    """
+                ),
+                {"task_id": task_id.strip(), "now": now},
+            )
+            return _row_dict(row)
 
     def poll_desktop(
         self,

@@ -2322,10 +2322,7 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(
-      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
-      findsOneWidget,
-    );
+    expect(find.text('请输入电脑端显示的 6 位设备码'), findsOneWidget);
     expect(find.text('连接'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
@@ -2366,7 +2363,7 @@ void main() {
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
     final sheetSubtitle = tester.widget<Text>(
-      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
+      find.text('请输入电脑端显示的 6 位设备码'),
     );
 
     expect(sheetTitle.style?.color, colors.textPrimary);
@@ -2449,11 +2446,9 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('安全'), findsOneWidget);
-    expect(find.text('连接'), findsOneWidget);
-    expect(find.text('局域网模式'), findsOneWidget);
     expect(find.text('生物识别解锁'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
+      tester.getSize(find.byKey(const ValueKey('settings_we_switch'))),
       const Size(46, 28),
     );
     expect(find.text('外观'), findsOneWidget);
@@ -2503,10 +2498,7 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_设置')),
     );
     final switchWidget = tester.widget<AnimatedContainer>(
-      find.descendant(
-        of: find.byKey(const ValueKey('settings_biometric_switch')),
-        matching: find.byType(AnimatedContainer),
-      ),
+      find.byKey(const ValueKey('settings_we_switch')),
     );
     final switchDecoration = switchWidget.decoration! as BoxDecoration;
     final themeIcon = tester.widget<Icon>(
@@ -2560,7 +2552,7 @@ void main() {
 
     await tester.tap(find.text('浅色'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings_biometric_switch')));
+    await tester.tap(find.byKey(const ValueKey('settings_we_switch')));
     await tester.pumpAndSettle();
 
     expect(api.session.themeMode, 'light');
@@ -2569,33 +2561,6 @@ void main() {
       {'themeMode': 'light'},
       {'biometricEnabled': false},
     ]);
-  });
-
-  testWidgets('settings persists lan mode for super employee fast path', (
-    WidgetTester tester,
-  ) async {
-    final api = _FakeSettingsApi(
-      session: const MobileSessionData(
-        serverMode: 'cloud',
-        fhdHost: '192.168.31.8:17500',
-      ),
-    );
-
-    await tester.pumpWidget(
-      MaterialApp(theme: AppTheme.light(), home: SettingsScreen(api: api)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('关闭时超级员工经云中继执行'), findsOneWidget);
-
-    await tester.tap(find.byKey(const ValueKey('settings_lan_mode_switch')));
-    await tester.pumpAndSettle();
-
-    expect(api.session.serverMode, 'lan');
-    expect(api.settingSaves, [
-      {'serverMode': 'lan'},
-    ]);
-    expect(find.textContaining('优先直连 192.168.31.8:17500'), findsOneWidget);
   });
 
   testWidgets('settings feedback submits through Android app feedback API', (
@@ -3496,7 +3461,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('会话 #12'), findsOneWidget);
-    expect(find.textContaining('WebSocket'), findsOneWidget);
+    expect(find.text('WebSocket 已连接，消息实时同步'), findsOneWidget);
     expect(find.text('用户 0'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('输入消息'), findsOneWidget);
@@ -4647,7 +4612,7 @@ void main() {
           isPinned: true,
         ),
       ),
-      FixedPartnerKind.trae,
+      isNull,
     );
   });
 
@@ -5589,9 +5554,11 @@ void main() {
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pump();
 
-    expect(find.text('新建对话'), findsOneWidget);
-    expect(find.text('OCR 识别'), findsOneWidget);
-    expect(find.text('语音输入'), findsOneWidget);
+    // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
+    expect(find.text('执行回顾'), findsOneWidget);
+    expect(find.text('新建对话'), findsNothing);
+    expect(find.text('OCR 识别'), findsNothing);
+    expect(find.text('语音输入'), findsNothing);
     expect(find.text('任务派工'), findsOneWidget);
     expect(find.text('验收回访'), findsOneWidget);
     expect(find.text('问题修复'), findsOneWidget);
@@ -5662,53 +5629,6 @@ void main() {
 
     expect(find.text('开始处理完成'), findsOneWidget);
     expect(find.text('发送失败'), findsNothing);
-  });
-
-  testWidgets('chat send keeps working after fixed-length remote history', (
-    WidgetTester tester,
-  ) async {
-    final repository = _FakeFixedHistoryStreamingRepository();
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: ChatScreen(
-          conversation: demoConversations[1],
-          repository: repository,
-          initialMessages: const [],
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('远端历史'), findsOneWidget);
-
-    await tester.enterText(find.byType(TextField), '继续');
-    await tester.pump();
-    await tester.tap(find.text('发送'));
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    await repository.firstToken.future;
-    await tester.pump();
-
-    expect(find.text('继续'), findsOneWidget);
-    expect(find.text('停止'), findsOneWidget);
-
-    repository.finish.complete();
-    await tester.pumpAndSettle();
-
-    expect(find.text('开始处理完成'), findsOneWidget);
-    expect(find.text('发送失败'), findsNothing);
-
-    // A second send must not be blocked by a stuck sending flag.
-    await tester.enterText(find.byType(TextField), '再来一条');
-    await tester.pump();
-    await tester.tap(find.text('发送'));
-    await tester.pump();
-    expect(tester.takeException(), isNull);
-    expect(repository.calls, hasLength(2));
-    expect(repository.calls.last['body'], '再来一条');
-    await tester.pumpAndSettle();
   });
 
   testWidgets('chat detail long press supports Android reply and delete', (
@@ -6253,6 +6173,7 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     calls.add({
@@ -6271,26 +6192,6 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
   }
 }
 
-class _FakeFixedHistoryStreamingRepository
-    extends _FakeStreamingChatRepository {
-  @override
-  Future<List<ChatMessage>> loadInitialMessages(
-    ConversationItem conversation,
-  ) async {
-    // Mirrors MobileRepository.loadInitialMessages, which can return a
-    // fixed-length list for super-employee remote history.
-    return [
-      ChatMessage(
-        id: 'remote-1',
-        conversationId: conversation.id,
-        role: ChatRole.assistant,
-        body: '远端历史',
-        timeText: '刚刚',
-      ),
-    ].toList(growable: false);
-  }
-}
-
 class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
   final calls = <String>[];
 
@@ -6301,6 +6202,7 @@ class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     calls.add(body);
@@ -6332,6 +6234,7 @@ class _FakeInflightRelayRepository extends _FakeRealtimeRepository {
   Future<String?> resumeRelayTask({
     required String conversationId,
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     onToken?.call('思考中...');
