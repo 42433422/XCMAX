@@ -11,6 +11,7 @@
 - **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
 - **fix(desktop)**：Windows 系统代理场景改用 PAC——更新站 `DIRECT`，其余 `PROXY; DIRECT` 回退
 - **fix(desktop)**：OTA 专用 `netSession` 直连（`persist:xcagi-updater`），electron-updater 与元数据拉取均绕过死代理
+- **fix(desktop)**：检查更新期间临时将 `defaultSession` 切直连，规避死系统代理
 
 ### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
 
