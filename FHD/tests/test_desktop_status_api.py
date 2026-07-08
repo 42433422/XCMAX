@@ -11,6 +11,7 @@ def test_desktop_status_api_local_sqlite(tmp_path, monkeypatch):
     from app.security.lan_settings_store import LanSettingsOverride
 
     monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+    monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "0")
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.delenv("XCAGI_DESKTOP_KEEP_DATABASE_URL", raising=False)

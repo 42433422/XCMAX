@@ -18,6 +18,17 @@ def _desktop_fast_start_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+async def _deferred_route_registration(app: FastAPI) -> None:
+    if not getattr(app.state, "deferred_routes_pending", False):
+        return
+    from app.fastapi_app.startup_timing import mark_startup
+    from app.fastapi_routes import register_deferred_routes
+
+    await asyncio.to_thread(register_deferred_routes, app)
+    app.state.deferred_routes_pending = False
+    mark_startup("routes_ready")
+
+
 async def _deferred_mod_bootstrap(app: FastAPI) -> None:
     if not getattr(app.state, "mods_deferred_bootstrap", False):
         return
@@ -34,7 +45,10 @@ async def _deferred_heavy_startup(app: FastAPI) -> None:
     """Mod 分阶段挂载 + NeuroBus / 员工调度 / 云中继等，不阻塞 uvicorn 首包。"""
     from app.fastapi_app.startup_timing import mark_startup
 
-    await _deferred_mod_bootstrap(app)
+    await asyncio.gather(
+        _deferred_route_registration(app),
+        _deferred_mod_bootstrap(app),
+    )
     try:
         from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
 

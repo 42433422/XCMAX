@@ -24,7 +24,7 @@
         min-width: 320px;
       }
       h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: 0.02em; }
-      p { margin-top: 0.75rem; font-size: 0.95rem; color: #5a6d8c; }
+      p { margin-top: 0.75rem; font-size: 0.95rem; color: #5a6d8c; min-height: 1.4em; }
       .spinner {
         width: 36px;
         height: 36px;
@@ -40,8 +40,14 @@
   <body>
     <div class="card">
       <h1>XCAGI</h1>
-      <p>正在启动本地服务…</p>
+      <p id="status">正在准备界面…</p>
       <div class="spinner" aria-hidden="true"></div>
     </div>
+    <script>
+      window.xcagiSetSplashStatus = function (text) {
+        var el = document.getElementById('status');
+        if (el && text) el.textContent = text;
+      };
+    </script>
   </body>
 </html>
