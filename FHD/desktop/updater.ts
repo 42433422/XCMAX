@@ -195,15 +195,30 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   })
 
   setTimeout(() => {
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 60_000)
 
   setInterval(() => {
     if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
       return
     }
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 6 * 60 * 60 * 1000)
+}
+
+export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
+  const defaultSession = session.defaultSession
+  const previous = await defaultSession.resolveProxy('https://xiu-ci.com')
+  await defaultSession.setProxy({ mode: 'direct' })
+  try {
+    return await checkForUpdates()
+  } finally {
+    if (/^PROXY/i.test(previous) || /^SOCKS/i.test(previous)) {
+      await defaultSession.setProxy({ mode: 'system' })
+    } else {
+      await defaultSession.setProxy({ mode: 'direct' })
+    }
+  }
 }
 
 export async function checkForUpdates(): Promise<unknown> {

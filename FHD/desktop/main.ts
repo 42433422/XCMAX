@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
-import { checkForUpdates, configureUpdater, installUpdate } from './updater'
+import { checkForUpdates, configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 
 const APP_NAME = 'XCAGI'
@@ -933,7 +933,7 @@ function createMenu(): void {
       label: '导出诊断包…',
       click: () => void exportSupportBundleInteractive()
     },
-    { label: '检查更新', click: () => void checkForUpdates() },
+    { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
     { type: 'separator' },
     { role: 'quit', label: '退出' }
   ]
@@ -1000,7 +1000,7 @@ function createTray(): void {
       { label: '显示 XCAGI', click: () => mainWindow?.show() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
       { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
-      { label: '检查更新', click: () => void checkForUpdates() },
+      { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }
     ])
@@ -1071,7 +1071,7 @@ function bootstrap(): void {
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
-      ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
+      ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
