@@ -11,7 +11,7 @@ import {
   session,
   shell
 } from 'electron'
-import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
+import { ChildProcessWithoutNullStreams, execFile, execFileSync, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import net from 'node:net'
@@ -26,7 +26,66 @@ const APP_NAME = 'XCAGI'
 export const OTA_PROXY_BYPASS_RULES =
   'xiu-ci.com,*.xiu-ci.com,update.xcagi.com,*.update.xcagi.com,localhost,127.0.0.1,<local>'
 
+export function readWindowsInternetProxy(): string | null {
+  if (process.platform !== 'win32') {
+    return null
+  }
+  try {
+    const enable = execFileSync(
+      'reg',
+      [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyEnable',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    )
+    if (!/0x1/.test(enable)) {
+      return null
+    }
+    const server = execFileSync(
+      'reg',
+      [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyServer',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    )
+    const match = server.match(/ProxyServer\s+REG_SZ\s+(\S+)/)
+    return match?.[1]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+export function buildOtaPacScript(proxyServer: string): string {
+  const proxy = proxyServer.replace(/'/g, '')
+  return `
+function FindProxyForURL(url, host) {
+  if (host === 'xiu-ci.com' || dnsDomainIs(host, '.xiu-ci.com') ||
+      host === 'update.xcagi.com' || dnsDomainIs(host, '.update.xcagi.com') ||
+      host === 'localhost' || host === '127.0.0.1') {
+    return 'DIRECT';
+  }
+  return 'PROXY ${proxy}; DIRECT';
+}
+`.trim()
+}
+
 export async function applyOtaProxyBypass(): Promise<void> {
+  const proxyServer =
+    readWindowsInternetProxy() ||
+    String(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim() ||
+    null
+  if (proxyServer) {
+    await session.defaultSession.setProxy({
+      pacScript: buildOtaPacScript(proxyServer),
+    })
+    return
+  }
   await session.defaultSession.setProxy({
     mode: 'system',
     proxyBypassRules: OTA_PROXY_BYPASS_RULES,

@@ -9,6 +9,7 @@
 ### OTA session 代理绕过（2026-07-08 · v10 线内迭代）
 
 - **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
+- **fix(desktop)**：Windows 系统代理场景改用 PAC——更新站 `DIRECT`，其余 `PROXY; DIRECT` 回退
 
 ### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
 

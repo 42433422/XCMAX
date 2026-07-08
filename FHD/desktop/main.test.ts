@@ -232,6 +232,15 @@ describe('main — SKU constants', () => {
   })
 })
 
+describe('main — OTA proxy PAC', () => {
+  it('routes update hosts DIRECT and others via proxy with DIRECT fallback', async () => {
+    const { buildOtaPacScript } = await import('./main.js')
+    const pac = buildOtaPacScript('127.0.0.1:7890')
+    expect(pac).toContain("host === 'xiu-ci.com'")
+    expect(pac).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
+  })
+})
+
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
   it('is a valid PEM-formatted Ed25519 public key', async () => {
     const { ED25519_PUBLIC_KEY_PEM } = await import('./main.js')
