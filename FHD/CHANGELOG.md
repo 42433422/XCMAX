@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### OTA 推送验活（2026-07-08 · v10 线内迭代）
+
+- **chore(release)**：enterprise Windows 同版本 `buildSha` OTA 推送验活（Win32 真机拉取）
+
 ### 桌面侧栏版本 + 配对码 SSOT（2026-07-08 · v10 线内迭代）
 
 - **fix(web)**：侧栏「系统正常」右侧显示 `v10.0.0`（非管理端从 `/api/health` 读取）
