@@ -1312,6 +1312,23 @@ async def mobile_relay_task_status(task_id: str, user=Depends(get_mobile_user)):
     return format_mobile_response(data={"task": task})
 
 
+@extension_router.post("/relay/tasks/{task_id}/cancel")
+async def mobile_relay_task_cancel(task_id: str, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    task = MobileRelayService().cancel_task(user_id=uid, task_id=task_id)
+    if not task:
+        return JSONResponse(
+            format_mobile_response(None, "任务不存在", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(data={"task": task})
+
+
 @extension_router.post("/relay/desktop/poll")
 async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
     try:
@@ -1843,6 +1860,129 @@ async def mobile_admin_trae_super_employee_invoke(
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,
         )
+
+
+# ── 超级员工 LAN SSE 流式直答 ──
+
+
+def _super_employee_service_for_tool(tool: str):
+    """根据工具名返回对应的 SuperEmployeeService 实例。"""
+    tool_lower = (tool or "").strip().lower()
+    if tool_lower == "codex":
+        return CodexSuperEmployeeService()
+    if tool_lower == "claude":
+        return ClaudeSuperEmployeeService()
+    if tool_lower == "cursor":
+        return CursorSuperEmployeeService()
+    if tool_lower == "trae":
+        return TraeSuperEmployeeService()
+    return None
+
+
+async def _stream_super_employee_invoke(
+    request: Request,
+    tool: str,
+    body: dict[str, Any],
+    user,
+):
+    """超级员工 SSE 流式直答的共享实现。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    service = _super_employee_service_for_tool(tool)
+    if service is None:
+        return JSONResponse(
+            format_mobile_response(
+                None, f"未知超级员工工具：{tool}", success=False, code=400
+            ),
+            status_code=400,
+        )
+    text = str((body or {}).get("message") or (body or {}).get("body") or "").strip()
+    if not text:
+        return JSONResponse(
+            format_mobile_response(None, "message 必填", success=False, code=400),
+            status_code=400,
+        )
+    context = dict((body or {}).get("context") or {})
+    context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
+    context.setdefault("target_devices", ["all"])
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(
+            (body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax"
+        )
+        context = factory_context(workspace_id=_wsid, base=context)
+
+    async def sse_gen():
+        try:
+            async for event in service.invoke_stream(
+                user_id=uid,
+                message=text,
+                context=context,
+            ):
+                yield _sse_line(event)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("mobile_super_employee_stream failed: %s", exc)
+            yield _sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
+
+    return StreamingResponse(
+        sse_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@extension_router.post("/admin/codex-super-employee/messages/stream")
+async def mobile_admin_codex_super_employee_stream(
+    request: Request,
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """移动端 Codex 超级员工 LAN SSE 流式直答。"""
+    return await _stream_super_employee_invoke(request, "codex", body, user)
+
+
+@extension_router.post("/admin/claude-super-employee/messages/stream")
+async def mobile_admin_claude_super_employee_stream(
+    request: Request,
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """移动端 Claude 超级员工 LAN SSE 流式直答。"""
+    return await _stream_super_employee_invoke(request, "claude", body, user)
+
+
+@extension_router.post("/admin/cursor-super-employee/messages/stream")
+async def mobile_admin_cursor_super_employee_stream(
+    request: Request,
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """移动端 Cursor 超级员工 LAN SSE 流式直答。"""
+    return await _stream_super_employee_invoke(request, "cursor", body, user)
+
+
+@extension_router.post("/admin/trae-super-employee/messages/stream")
+async def mobile_admin_trae_super_employee_stream(
+    request: Request,
+    body: dict[str, Any],
+    user=Depends(get_mobile_user),
+):
+    """移动端 Trae 超级员工 LAN SSE 流式直答。"""
+    return await _stream_super_employee_invoke(request, "trae", body, user)
 
 
 # ── AI 群聊（微信式多 AI 群组）──

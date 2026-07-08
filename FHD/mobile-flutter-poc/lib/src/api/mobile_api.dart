@@ -92,6 +92,14 @@ class XcagiMobileEndpoints {
       '$base/admin/cursor-super-employee/messages';
   static const traeSuperEmployeeMessages =
       '$base/admin/trae-super-employee/messages';
+  static const codexSuperEmployeeStream =
+      '$base/admin/codex-super-employee/messages/stream';
+  static const claudeSuperEmployeeStream =
+      '$base/admin/claude-super-employee/messages/stream';
+  static const cursorSuperEmployeeStream =
+      '$base/admin/cursor-super-employee/messages/stream';
+  static const traeSuperEmployeeStream =
+      '$base/admin/trae-super-employee/messages/stream';
   static const circleLikeTemplate = '$base/circle/posts/{postId}/like';
   static const circleCommentsTemplate = '$base/circle/posts/{postId}/comments';
   static const relayTasksDetail = '$base/relay/tasks/{taskId}';
@@ -146,6 +154,20 @@ class XcagiMobileEndpoints {
     }
   }
 
+  static String superEmployeeStream(String tool) {
+    switch (tool.trim().toLowerCase()) {
+      case 'claude':
+        return claudeSuperEmployeeStream;
+      case 'cursor':
+        return cursorSuperEmployeeStream;
+      case 'trae':
+        return traeSuperEmployeeStream;
+      case 'codex':
+      default:
+        return codexSuperEmployeeStream;
+    }
+  }
+
   static String circleLike(int postId) {
     return circleLikeTemplate.replaceFirst('{postId}', '$postId');
   }
@@ -159,6 +181,10 @@ class XcagiMobileEndpoints {
       '{taskId}',
       Uri.encodeComponent(taskId),
     );
+  }
+
+  static String relayTaskCancel(String taskId) {
+    return '${relayTasksDetail.replaceFirst('{taskId}', Uri.encodeComponent(taskId))}/cancel';
   }
 
   static String approvalDetail(int id) {
@@ -342,6 +368,8 @@ class XcagiMobileTopology {
   static const fhdApiListenPort = 5000;
   static const fhdApiUpstreamPort = 5100;
   static const modstoreListenPort = 8765;
+  // 后端 loopback 监听 17500 时，手机不可达；vite proxy 监听 0.0.0.0:5011 才可达。
+  static const lanReachableProxyPort = 5011;
   static const mustRunProcesses = ['web', 'modstore-scheduler'];
 }
 
@@ -410,6 +438,18 @@ class AndroidServerRouter {
       return enterpriseFhdBaseUrl();
     }
     return lanFhdBaseUrl();
+  }
+
+  /// 手机端 LAN 直连专用：当后端 loopback 监听 17500 时，手机不可达，
+  /// 需改用 vite proxy 端口 5011（监听 0.0.0.0）。
+  String lanReachableBaseUrl() {
+    final raw = lanFhdBaseUrl();
+    final loopbackPort = ':$fhdDefaultPort/';
+    if (raw.endsWith(loopbackPort)) {
+      final prefix = raw.substring(0, raw.length - loopbackPort.length);
+      return '$prefix:${XcagiMobileTopology.lanReachableProxyPort}/';
+    }
+    return raw;
   }
 
   String lanFhdBaseUrl() {
@@ -734,14 +774,9 @@ class MobileApiClient {
       next = next.copyWith(biometricEnabled: biometricEnabled);
     }
     if (serverMode != null) {
-<<<<<<< Updated upstream
       final normalized = serverMode.trim().toLowerCase();
       next = next.copyWith(
         serverMode: normalized == 'lan' ? 'lan' : 'cloud',
-=======
-      next = next.copyWith(
-        serverMode: serverMode.trim().isEmpty ? 'cloud' : serverMode.trim(),
->>>>>>> Stashed changes
       );
     }
     await _saveSession(next);
@@ -1695,6 +1730,16 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<Map<String, Object?>>> relayCancelTask(
+    String taskId,
+  ) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.relayTaskCancel(taskId),
+      <String, Object?>{},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> onboardingIndustries() async {
     final json = await getJson(XcagiMobileEndpoints.onboardingIndustries);
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -2238,6 +2283,87 @@ class MobileApiClient {
       baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  /// LAN SSE 流式调用超级员工。逐 token 返回，与 streamChat 同样的 SSE 协议。
+  /// 失败时抛 [MobileApiException]，由调用方决定是否回退到直答/relay。
+  Future<String> streamSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+    void Function(String token)? onToken,
+    void Function(String status)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    final path = XcagiMobileEndpoints.superEmployeeStream(tool);
+    final effectiveBaseUrl = baseUrl.trim().isEmpty ? null : baseUrl.trim();
+    final request = await _open(
+      'POST',
+      path,
+      baseUrl: effectiveBaseUrl,
+    );
+    request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+    final bytes = utf8.encode(jsonEncode({
+      'body': body,
+      'message': body,
+      'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+    }));
+    request.contentLength = bytes.length;
+    request.add(bytes);
+
+    final response = await request.close().timeout(_config.timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      final text = await utf8.decodeStream(response).timeout(_config.timeout);
+      final errBody = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+      throw MobileApiException(
+        statusCode: response.statusCode,
+        message: errBody['message']?.toString() ??
+            errBody['error']?.toString() ??
+            'HTTP ${response.statusCode}',
+        body: errBody,
+      );
+    }
+
+    final buffer = StringBuffer();
+    await for (final line
+        in response.transform(utf8.decoder).transform(const LineSplitter())) {
+      if (isCancelled != null && isCancelled()) {
+        return buffer.toString();
+      }
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('data:')) continue;
+      final payload = trimmed.substring('data:'.length).trim();
+      if (payload.isEmpty || payload == '[DONE]') continue;
+
+      final json = _asObjectMap(jsonDecode(payload));
+      final eventType = json['type']?.toString() ?? '';
+      switch (eventType) {
+        case 'token':
+          final token = json['text']?.toString() ?? '';
+          if (token.isNotEmpty) {
+            buffer.write(token);
+            onToken?.call(token);
+          }
+          break;
+        case 'status':
+          final status = json['text']?.toString() ?? '';
+          if (status.isNotEmpty) {
+            onStatus?.call(status);
+          }
+          break;
+        case 'done':
+          final result = json['result'];
+          final finalText = _chatResultText(result).ifEmpty(buffer.toString());
+          return finalText.ifEmpty('（无回复）');
+        case 'error':
+          throw MobileApiException(
+            statusCode: response.statusCode,
+            message: json['message']?.toString() ?? 'stream error',
+            body: json,
+          );
+      }
+    }
+    return buffer.toString().ifEmpty('（无回复）');
   }
 
   /// Mirrors Android [XcagiRepository.refreshFhdAccessToken]: keep saved login

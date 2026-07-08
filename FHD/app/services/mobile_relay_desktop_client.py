@@ -280,6 +280,14 @@ def _public_payload_from_config(config: dict[str, Any]) -> dict[str, Any] | None
         **({"expires_at": expires_at} if expires_at else {}),
         **({"exp": exp} if exp > 0 else {}),
         "relay_base_url": base_url,
+        "qr_json": {
+            "v": 3,
+            "kind": "xcagi_relay_pairing",
+            "relay_id": relay_id,
+            "code": pairing_code,
+            "t": pairing_code,
+            "relay_base_url": base_url,
+        },
     }
 
 
@@ -553,6 +561,59 @@ def _poll_once() -> None:
         ).start()
 
 
+def _extract_tool_calls(assistant: dict[str, Any], tool_label: str) -> list[dict[str, Any]]:
+    """从 assistant_message body 里提取 dev-loop 关键步骤，供手机端时间线展示。
+
+    dev-loop 结束文本含 "闭环结果" 段落（分支/验证/推送），据此解析。
+    非开发任务（闲聊直答）返回空列表。
+    """
+    body = str(assistant.get("body") or assistant.get("content") or "").strip()
+    if not body or "闭环结果" not in body:
+        return []
+    import re
+
+    calls: list[dict[str, Any]] = []
+    # 分支
+    m = re.search(r"分支[：:]\s*(\S+)", body)
+    if m:
+        calls.append({
+            "action": "create_branch",
+            "icon": "branch",
+            "label": f"创建分支 {m.group(1)}",
+            "detail": m.group(1),
+        })
+    # 验证
+    m = re.search(r"验证[：:]\s*(通过|未通过)[（(]([^)）]*)", body)
+    if m:
+        ok = m.group(1) == "通过"
+        calls.append({
+            "action": "verify",
+            "icon": "check",
+            "label": f"验证{'通过' if ok else '未通过'}",
+            "detail": m.group(2)[:200],
+            "success": ok,
+        })
+    # 推送
+    m = re.search(r"推送[：:]\s*(.+?)(?:\n|$)", body)
+    if m:
+        push_text = m.group(1).strip()[:200]
+        calls.append({
+            "action": "push",
+            "icon": "upload",
+            "label": "推送分支",
+            "detail": push_text,
+            "success": "成功" in push_text or "已推送" in push_text,
+        })
+    # CLI 执行（总是在最前面）
+    calls.insert(0, {
+        "action": "cli_run",
+        "icon": "terminal",
+        "label": f"{tool_label} CLI 执行",
+        "detail": "调用无头 agent 修改代码",
+    })
+    return calls
+
+
 def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     kind = str(task.get("kind") or "codex.invoke").strip()
     payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
@@ -644,6 +705,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
                 else {}
             )
             ok, relay_status, error = _classify_terminal_result(assistant, message=message)
+            tool_calls = _extract_tool_calls(assistant, tool_label)
+            if tool_calls:
+                result["tool_calls"] = tool_calls
             if ok:
                 return {"ok": True, "codex": result, "_relay_status": "completed"}
             return {
