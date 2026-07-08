@@ -119,9 +119,15 @@ def create_fastapi_app(
         ),
     )
 
-    from app.fastapi_routes import register_all_routes
+    if _desktop_fast_start_enabled():
+        from app.fastapi_routes import register_bootstrap_routes
 
-    register_all_routes(app)
+        register_bootstrap_routes(app)
+        app.state.deferred_routes_pending = True
+    else:
+        from app.fastapi_routes import register_all_routes
+
+        register_all_routes(app)
 
     from app.middleware.error_handler import register_exception_handlers
 

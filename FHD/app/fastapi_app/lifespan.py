@@ -357,6 +357,9 @@ async def _init_mobile_relay_desktop_async(app: FastAPI):
 
 async def _init_mods_async(app: FastAPI):
     """初始化 Mod 扩展（create_fastapi_app 已分阶段挂载；此处仅补偿失败重试）。"""
+    if getattr(app.state, "mods_deferred_bootstrap", False):
+        logger.info("Mod bootstrap deferred; skipping lifespan mod init")
+        return
     if getattr(app.state, "mods_full_load_done", False):
         logger.info("Mod extensions fully loaded; skipping lifespan mod init")
         return

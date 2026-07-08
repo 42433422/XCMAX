@@ -494,7 +494,7 @@ export async function waitForBackendPing(
     } catch {
       /* backend still booting */
     }
-    await new Promise(resolve => setTimeout(resolve, 300))
+    await new Promise(resolve => setTimeout(resolve, 150))
   }
   const airplayHint =
     port === 5000
@@ -510,6 +510,41 @@ export async function waitForBackendPing(
 
 /** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
 export const waitForBackendHealth = waitForBackendPing
+
+/** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
+export async function waitForBackendApplicationReady(
+  port: number,
+  timeoutMs = packagedBackendHealthTimeoutMs()
+): Promise<void> {
+  await waitForBackendPing(port, timeoutMs)
+  const started = Date.now()
+  const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
+  while (remaining() > 0) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
+        signal: AbortSignal.timeout(2_000)
+      })
+      if (response.ok) {
+        const body = (await response.json()) as { appRoutesReady?: boolean; readyForUi?: boolean }
+        if (body.appRoutesReady !== false && body.readyForUi !== false) {
+          return
+        }
+      }
+    } catch {
+      /* routes still registering */
+    }
+    await new Promise(resolve => setTimeout(resolve, 150))
+  }
+  console.warn('[xcagi-desktop] appRoutesReady 未在时限内为 true，仍加载主应用')
+}
+
+function updateSplashStatus(text: string): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const safe = text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  void mainWindow.webContents
+    .executeJavaScript(`window.xcagiSetSplashStatus && window.xcagiSetSplashStatus('${safe}')`)
+    .catch(() => undefined)
+}
 
 export function resolveDesktopSplashUrl(): string {
   const candidates = [
@@ -1008,7 +1043,9 @@ async function createWindow(): Promise<void> {
   })
 
   void mainWindow.loadURL(resolveDesktopSplashUrl())
+  mainWindow.show()
   mainWindow.focus()
+  updateSplashStatus('正在启动本地服务…')
 
   if (shouldClearFrontendCache()) {
     void mainWindow.webContents.session
@@ -1033,12 +1070,29 @@ async function createWindow(): Promise<void> {
     }
   }
 
-  void waitForBackendPing(DEFAULT_PORT)
-    .then(() => loadMainApplication())
+  const splashStarted = Date.now()
+  const splashTicker = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      clearInterval(splashTicker)
+      return
+    }
+    const sec = Math.floor((Date.now() - splashStarted) / 1000)
+    if (sec > 0 && sec % 2 === 0) {
+      updateSplashStatus(`正在启动本地服务…（${sec}s）`)
+    }
+  }, 1000)
+
+  void waitForBackendApplicationReady(DEFAULT_PORT)
+    .then(() => {
+      updateSplashStatus('正在加载应用…')
+      return loadMainApplication()
+    })
     .catch(error => {
-      console.error('[xcagi-desktop] backend ping wait failed', error)
+      console.error('[xcagi-desktop] backend readiness wait failed', error)
+      updateSplashStatus('启动失败，请查看日志')
       void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
     })
+    .finally(() => clearInterval(splashTicker))
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
@@ -1249,6 +1303,9 @@ function bootstrap(): void {
       }
 
       try {
+        // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
+        await createWindow()
+        updateSplashStatus('正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
@@ -1260,31 +1317,21 @@ function bootstrap(): void {
           app.quit()
           return
         }
-        try {
-          await createWindow()
-          // 启动成功：提交回滚（删除 marker，保留备份）
-          if (pendingRollback) {
-            commitRollback()
-            writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error)
-          writeBackendLog(`[rollback] createWindow 失败: ${msg}\n`)
-          if (pendingRollback) {
-            await triggerRollbackSafe(`createWindow 失败: ${msg}`)
-            void dialog.showErrorBox(APP_NAME, '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。')
-          } else {
-            void dialog.showErrorBox(APP_NAME, msg)
-          }
-          app.quit()
+        if (pendingRollback) {
+          commitRollback()
+          writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
         }
       } catch (error) {
-        // startBackend 或 waitForBackendHealth 抛错（health 超时）
         const msg = error instanceof Error ? error.message : String(error)
-        writeBackendLog(`[rollback] startBackend 抛错: ${msg}\n`)
+        writeBackendLog(`[rollback] 桌面启动失败: ${msg}\n`)
         if (pendingRollback) {
-          await triggerRollbackSafe(`后端启动失败: ${msg}`)
-          void dialog.showErrorBox(APP_NAME, '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。')
+          await triggerRollbackSafe(`桌面启动失败: ${msg}`)
+          void dialog.showErrorBox(
+            APP_NAME,
+            msg.includes('createWindow') || msg.includes('窗口')
+              ? '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。'
+              : '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。'
+          )
         } else {
           void dialog.showErrorBox(APP_NAME, msg)
         }

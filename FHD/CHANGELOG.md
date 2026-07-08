@@ -6,6 +6,14 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面冷启体感（2026-07-08 · v10 线内迭代 · 第三轮）
+
+- **perf(desktop)**：先出 Splash 窗再 spawn 后端；Splash 状态文案 + 秒数反馈
+- **perf(desktop)**：主应用等待 `appRoutesReady`（ping + deferred 路由挂载完成）
+- **perf(backend)**：fast-start 仅注册 bootstrap 路由（health/infrastructure），业务路由并行 deferred
+- **perf(backend)**：lifespan 跳过 `mods_deferred_bootstrap` 重复同步 Mod 引导
+- **perf(package)**：PyInstaller 默认关闭 UPX（`XCAGI_PYINSTALLER_UPX=1` 可显式开启）
+
 ### OTA session 代理绕过（2026-07-08 · v10 线内迭代）
 
 - **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
