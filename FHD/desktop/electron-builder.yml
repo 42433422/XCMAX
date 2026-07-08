@@ -22,6 +22,8 @@ extraResources:
   # 兜底会优雅降级到后端内嵌副本。切勿恢复成单独 frontend extraResource。
   - from: resources/product-sku.json
     to: product-sku.json
+  - from: resources/build-info.json
+    to: build-info.json
 publish:
   provider: generic
   url: https://xiu-ci.com/releases/stable/
