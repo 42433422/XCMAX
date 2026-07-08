@@ -576,41 +576,50 @@ def _extract_tool_calls(assistant: dict[str, Any], tool_label: str) -> list[dict
     # 分支
     m = re.search(r"分支[：:]\s*(\S+)", body)
     if m:
-        calls.append({
-            "action": "create_branch",
-            "icon": "branch",
-            "label": f"创建分支 {m.group(1)}",
-            "detail": m.group(1),
-        })
+        calls.append(
+            {
+                "action": "create_branch",
+                "icon": "branch",
+                "label": f"创建分支 {m.group(1)}",
+                "detail": m.group(1),
+            }
+        )
     # 验证
     m = re.search(r"验证[：:]\s*(通过|未通过)[（(]([^)）]*)", body)
     if m:
         ok = m.group(1) == "通过"
-        calls.append({
-            "action": "verify",
-            "icon": "check",
-            "label": f"验证{'通过' if ok else '未通过'}",
-            "detail": m.group(2)[:200],
-            "success": ok,
-        })
+        calls.append(
+            {
+                "action": "verify",
+                "icon": "check",
+                "label": f"验证{'通过' if ok else '未通过'}",
+                "detail": m.group(2)[:200],
+                "success": ok,
+            }
+        )
     # 推送
     m = re.search(r"推送[：:]\s*(.+?)(?:\n|$)", body)
     if m:
         push_text = m.group(1).strip()[:200]
-        calls.append({
-            "action": "push",
-            "icon": "upload",
-            "label": "推送分支",
-            "detail": push_text,
-            "success": "成功" in push_text or "已推送" in push_text,
-        })
+        calls.append(
+            {
+                "action": "push",
+                "icon": "upload",
+                "label": "推送分支",
+                "detail": push_text,
+                "success": "成功" in push_text or "已推送" in push_text,
+            }
+        )
     # CLI 执行（总是在最前面）
-    calls.insert(0, {
-        "action": "cli_run",
-        "icon": "terminal",
-        "label": f"{tool_label} CLI 执行",
-        "detail": "调用无头 agent 修改代码",
-    })
+    calls.insert(
+        0,
+        {
+            "action": "cli_run",
+            "icon": "terminal",
+            "label": f"{tool_label} CLI 执行",
+            "detail": "调用无头 agent 修改代码",
+        },
+    )
     return calls
 
 
