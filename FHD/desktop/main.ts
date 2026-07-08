@@ -973,7 +973,7 @@ async function createWindow(): Promise<void> {
     winOpts.frame = true
     winOpts.titleBarStyle = 'default'
   }
-  winOpts.show = false
+  winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
   if (process.platform !== 'darwin') {
@@ -1007,31 +1007,42 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' }
   })
 
-  await mainWindow.loadURL(resolveDesktopSplashUrl())
-  mainWindow.show()
+  void mainWindow.loadURL(resolveDesktopSplashUrl())
   mainWindow.focus()
 
-  const cacheClearTask = shouldClearFrontendCache()
-    ? mainWindow.webContents.session
-        .clearCache()
-        .then(() => markFrontendCacheCleared())
-        .catch(() => undefined)
-    : Promise.resolve()
+  if (shouldClearFrontendCache()) {
+    void mainWindow.webContents.session
+      .clearCache()
+      .then(() => markFrontendCacheCleared())
+      .catch(() => undefined)
+  }
 
-  await Promise.all([waitForBackendPing(DEFAULT_PORT), cacheClearTask])
+  const loadMainApplication = async (): Promise<void> => {
+    if (!mainWindow) return
+    try {
+      await mainWindow.loadURL(desktopInitialUrl(), {
+        extraHeaders: 'Cache-Control: no-cache\r\n'
+      })
+      tagDesktopWebContents(mainWindow)
+      if (process.platform === 'darwin') {
+        ensureMacWindowInWorkArea(mainWindow)
+      }
+      mainWindow.focus()
+    } catch (error) {
+      console.error('[xcagi-desktop] load main application failed', error)
+    }
+  }
+
+  void waitForBackendPing(DEFAULT_PORT)
+    .then(() => loadMainApplication())
+    .catch(error => {
+      console.error('[xcagi-desktop] backend ping wait failed', error)
+      void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
+    })
 
   mainWindow.webContents.on('did-finish-load', () => {
     if (mainWindow) tagDesktopWebContents(mainWindow)
   })
-
-  await mainWindow.loadURL(desktopInitialUrl(), {
-    extraHeaders: 'Cache-Control: no-cache\r\n'
-  })
-  tagDesktopWebContents(mainWindow)
-  if (process.platform === 'darwin') {
-    ensureMacWindowInWorkArea(mainWindow)
-  }
-  mainWindow.focus()
 
   void waitForBackendStatus(DEFAULT_PORT).then(status => {
     console.info(
