@@ -27,10 +27,10 @@ const APP_NAME = 'XCAGI'
 // 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
-// 系统代理（如 127.0.0.1:7890）未运行时，仍须直连 xiu-ci.com 拉取 OTA 元数据与安装包。
+// 系统代理（如 127.0.0.1:7890）未运行时，仍须直连更新站拉取 OTA 元数据与安装包。
 app.commandLine.appendSwitch(
   'proxy-bypass-list',
-  'xiu-ci.com;*.xiu-ci.com;localhost;127.0.0.1;<local>'
+  'xiu-ci.com;*.xiu-ci.com;update.xcagi.com;*.update.xcagi.com;localhost;127.0.0.1;<local>'
 )
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
@@ -90,9 +90,10 @@ export const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
   enterprise: 'full'
 }
 
+// update.xcagi.com 在部分网络解析到不可达 IP；发布产物实际由 xiu-ci.com 同源 /releases/ 提供。
 export const SKU_UPDATE_URL: Record<ProductSku, string> = {
-  personal: 'https://update.xcagi.com/releases/stable/personal/',
-  enterprise: 'https://update.xcagi.com/releases/stable/enterprise/'
+  personal: 'https://xiu-ci.com/releases/stable/personal/',
+  enterprise: 'https://xiu-ci.com/releases/stable/enterprise/'
 }
 
 /**

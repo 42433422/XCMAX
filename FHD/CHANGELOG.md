@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`SKU_UPDATE_URL` 改走可达的 `xiu-ci.com/releases/stable/{sku}/`（`update.xcagi.com` 在 Win32 解析到不可达 IP）
+- **fix(desktop)**：electron-updater 不再默认 `channel: stable`（避免请求 `stable.yml` 404，应拉 `latest.yml`）
+- **fix(desktop)**：`proxy-bypass-list` 同时覆盖 `update.xcagi.com` 与 `xiu-ci.com`
+
 ### OTA 推送验活（2026-07-08 · v10 线内迭代）
 
 - **chore(release)**：enterprise Windows 同版本 `buildSha` OTA 推送验活（Win32 真机拉取）
