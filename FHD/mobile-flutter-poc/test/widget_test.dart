@@ -5839,6 +5839,49 @@ void main() {
     ]);
     expect(find.text('✅ 已合并 $branchA'), findsOneWidget);
   });
+
+  testWidgets('chat assistant bubble embeds dev-loop mini timeline', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeRealtimeRepository();
+    const branch = 'super-employee/codex/fix-bug';
+    final body = '闭环结果：\n'
+        '分支：$branch\n'
+        '验证：通过（ruff lint 0 errors）\n'
+        '推送：已推送到远端';
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: demoConversations[1],
+          repository: repository,
+          initialMessages: [
+            ChatMessage(
+              id: 'a1',
+              conversationId: 'pinned:codex',
+              role: ChatRole.assistant,
+              body: body,
+              timeText: '刚刚',
+              hasEmployeeProfile: true,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('闭环'), findsOneWidget);
+    expect(find.byIcon(Icons.terminal), findsOneWidget);
+    expect(find.byIcon(Icons.call_split), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
+    expect(find.byIcon(Icons.cloud_upload_outlined), findsOneWidget);
+
+    await tester.tap(find.text('闭环'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('执行时间线'), findsOneWidget);
+  });
 }
 
 Future<void> _tapHeaderPlusMenuItem(

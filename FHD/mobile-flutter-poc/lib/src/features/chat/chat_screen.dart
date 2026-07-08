@@ -1396,15 +1396,16 @@ class _MiniTimeline extends StatelessWidget {
   Widget _buildNodes(XcagiThemeColors colors) {
     final children = <Widget>[];
     for (var i = 0; i < calls.length; i++) {
-      children.add(_MiniTimelineNode(call: calls[i], colors: colors));
+      final call = calls[i];
+      children.add(_MiniTimelineNode(call: call, colors: colors));
       if (i < calls.length - 1) {
         children.add(
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
+              padding: const EdgeInsets.only(top: 10.5, left: 2, right: 2),
               child: _MiniTimelineConnector(
                 colors: colors,
-                success: _callSuccess(calls[i]),
+                success: _callSuccess(call),
               ),
             ),
           ),
@@ -1412,15 +1413,16 @@ class _MiniTimeline extends StatelessWidget {
       }
     }
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: children,
     );
   }
 
+  /// 已完成的步骤（success 为 null）按成功处理；只有显式 success=false 才视为失败。
   bool _callSuccess(Map<String, Object?> call) {
     final v = call['success'];
     if (v is bool) return v;
-    return false;
+    return true;
   }
 }
 
@@ -1433,13 +1435,8 @@ class _MiniTimelineNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final icon = _iconFor(call['icon'] ?? '');
-    final success = call['success'] == true;
-    final pending = call['success'] == null;
-    final color = success
-        ? colors.success
-        : pending
-            ? colors.textTertiary
-            : colors.danger;
+    final success = call['success'] != false;
+    final color = success ? colors.success : colors.danger;
     final label = _shortLabel(call['label'] as String? ?? '');
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1454,16 +1451,20 @@ class _MiniTimelineNode extends StatelessWidget {
           child: Icon(icon, size: 13, color: color),
         ),
         const SizedBox(height: 3),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 9,
-            height: 1.0,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0,
+        SizedBox(
+          width: 22,
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 9,
+              height: 1.0,
+              fontWeight: FontWeight.w500,
+              letterSpacing: 0,
+            ),
           ),
         ),
       ],
@@ -1472,11 +1473,13 @@ class _MiniTimelineNode extends StatelessWidget {
 
   String _shortLabel(String raw) {
     if (raw.isEmpty) return raw;
-    if (raw.length <= 4) return raw;
     if (raw.startsWith('创建分支')) return '分支';
     if (raw.startsWith('验证')) return '验证';
     if (raw.startsWith('推送')) return '推送';
-    return raw.substring(0, 4);
+    if (raw.contains('CLI')) return 'CLI';
+    if (raw.contains('执行')) return '执行';
+    if (raw.length <= 2) return raw;
+    return raw.substring(0, 2);
   }
 
   IconData _iconFor(Object? icon) {
