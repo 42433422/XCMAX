@@ -1,10 +1,13 @@
 import { BrowserWindow, app, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import type { UpdateInfo } from 'electron-updater'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 let updateDownloaded = false
+let remoteBuildSha = ''
+let rebuildHookInstalled = false
 
 function updaterLogPath(): string {
   return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
@@ -26,6 +29,54 @@ function appendUpdaterEvent(type: string, data?: unknown): void {
 
 export function isUpdateDownloaded(): boolean {
   return updateDownloaded
+}
+
+export function readLocalBuildSha(): string {
+  if (!app.isPackaged) {
+    return String(process.env.XCAGI_BUILD_SHA || '').trim()
+  }
+  const candidates = [
+    path.join(process.resourcesPath, 'build-info.json'),
+    path.join(process.resourcesPath, 'backend', 'build-info.json')
+  ]
+  for (const filePath of candidates) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { gitSha?: string; buildSha?: string }
+      const sha = String(raw.gitSha || raw.buildSha || '').trim()
+      if (sha) return sha
+    } catch {
+      /* try next */
+    }
+  }
+  return ''
+}
+
+export function parseYamlField(content: string, field: string): string {
+  const prefix = `${field}:`
+  const line = content.split(/\r?\n/).find(entry => entry.startsWith(prefix))
+  return line ? line.slice(prefix.length).trim() : ''
+}
+
+function installSameVersionRebuildHook(): void {
+  if (rebuildHookInstalled) {
+    return
+  }
+  rebuildHookInstalled = true
+  const updater = autoUpdater as typeof autoUpdater & {
+    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
+  }
+  const original = updater.isUpdateAvailable?.bind(updater)
+  updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+    if (original?.(updateInfo)) {
+      return true
+    }
+    const remoteSha = String(
+      (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
+    ).trim()
+    const localSha = readLocalBuildSha()
+    return Boolean(remoteSha && localSha && remoteSha !== localSha)
+  }
 }
 
 export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
@@ -109,25 +160,21 @@ export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
   }
-  await verifyLatestMetadataSignature()
+  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
+  const updateUrl = process.env.XCAGI_UPDATE_URL
+  if (publicKeyPem && updateUrl) {
+    const metadataText = await fetchLatestMetadataText()
+    remoteBuildSha = parseYamlField(metadataText, 'buildSha')
+    installSameVersionRebuildHook()
+  }
   return autoUpdater.checkForUpdates()
 }
 
-export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
-  if (!updateDownloaded) {
-    throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
-  }
-  if (beforeInstall) {
-    await beforeInstall('manual')
-  }
-  autoUpdater.quitAndInstall(false, true)
-}
-
-export async function verifyLatestMetadataSignature(): Promise<void> {
+export async function fetchLatestMetadataText(): Promise<string> {
   const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (!publicKeyPem || !updateUrl) {
-    return
+    return ''
   }
 
   const file = process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
@@ -139,6 +186,21 @@ export async function verifyLatestMetadataSignature(): Promise<void> {
 
   const content = await response.text()
   await verifyMetadataSignatureText(content, publicKeyPem)
+  return content
+}
+
+export async function verifyLatestMetadataSignature(): Promise<void> {
+  await fetchLatestMetadataText()
+}
+
+export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
+  if (!updateDownloaded) {
+    throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
+  }
+  if (beforeInstall) {
+    await beforeInstall('manual')
+  }
+  autoUpdater.quitAndInstall(false, true)
 }
 
 /** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */

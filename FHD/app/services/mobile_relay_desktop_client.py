@@ -39,6 +39,13 @@ _STOP_EVENT = threading.Event()
 # 历史上 get_app_data_dir() 源码直跑会回落到仓库根，桌面便以与手机已配对 relay 不同
 # 的身份去轮询，任务永远卡在「排队中」。
 _CONFIG_FILE = Path(get_desktop_state_dir()) / "mobile_relay_desktop.json"
+
+
+def _relay_http_client(timeout: float) -> httpx.Client:
+    """云中继须直连公网 API；桌面系统代理未运行时 trust_env 会导致 Invalid port 等异常。"""
+    return httpx.Client(timeout=timeout, trust_env=False)
+
+
 _LEGACY_CONFIG_FILE = Path(get_app_data_dir()) / "mobile_relay_desktop.json"
 _LEGACY_MIGRATION_DONE = False
 
@@ -364,7 +371,7 @@ def register_desktop_relay(
     }
     timeout = float(os.environ.get("XCAGI_RELAY_REGISTER_TIMEOUT_SEC") or "5")
     try:
-        with httpx.Client(timeout=timeout) as client:
+        with _relay_http_client(timeout) as client:
             resp = client.post(
                 _api_url("/api/mobile/v1/relay/desktop/register", base_url), json=body
             )
@@ -489,7 +496,7 @@ def _complete_relay_task(
             result.setdefault("error_code", relay_status)
             result.setdefault("error_message", str(result.get("error") or "").strip())
         timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
-        with httpx.Client(timeout=timeout) as client:
+        with _relay_http_client(timeout) as client:
             client.post(
                 _api_url(f"/api/mobile/v1/relay/desktop/tasks/{task_id}/complete", base_url),
                 json={
@@ -519,7 +526,7 @@ def _poll_once() -> None:
     if free <= 0:
         return
     timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
-    with httpx.Client(timeout=timeout) as client:
+    with _relay_http_client(timeout) as client:
         resp = client.post(
             _api_url("/api/mobile/v1/relay/desktop/poll", base_url),
             json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": free},

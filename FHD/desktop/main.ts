@@ -27,6 +27,11 @@ const APP_NAME = 'XCAGI'
 // 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+// 系统代理（如 127.0.0.1:7890）未运行时，仍须直连 xiu-ci.com 拉取 OTA 元数据与安装包。
+app.commandLine.appendSwitch(
+  'proxy-bypass-list',
+  'xiu-ci.com;*.xiu-ci.com;localhost;127.0.0.1;<local>'
+)
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 export function resolveDefaultDesktopPort(): number {
@@ -42,15 +47,26 @@ export function resolveDefaultDesktopPort(): number {
 
 export const DEFAULT_PORT = resolveDefaultDesktopPort()
 
-/** 检测 127.0.0.1:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
-export function isPortAvailable(port: number): Promise<boolean> {
+/** 桌面后端绑定地址：0.0.0.0 供手机同 WiFi 扫码；Electron UI 仍只加载 127.0.0.1。 */
+export function resolveDesktopBackendBindHost(): string {
+  const env = process.env.XCAGI_DESKTOP_API_HOST?.trim()
+  if (env) {
+    return env
+  }
+  return '0.0.0.0'
+}
+
+export const DESKTOP_BACKEND_BIND_HOST = resolveDesktopBackendBindHost()
+
+/** 检测 bindHost:port 是否可绑定（未被占用）。桌面模式不做端口避让，启动前必须预检。 */
+export function isPortAvailable(port: number, bindHost = DESKTOP_BACKEND_BIND_HOST): Promise<boolean> {
   return new Promise(resolve => {
     const tester = net.createServer()
     tester.once('error', () => resolve(false))
     tester.once('listening', () => {
       tester.close(() => resolve(true))
     })
-    tester.listen(port, '127.0.0.1')
+    tester.listen(port, bindHost)
   })
 }
 
@@ -212,7 +228,7 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
         '--desktop',
         '--headless',
         '--host',
-        '127.0.0.1',
+        DESKTOP_BACKEND_BIND_HOST,
         '--port',
         String(DEFAULT_PORT),
         '--data-dir',
@@ -230,7 +246,7 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
       '--desktop',
       '--headless',
       '--host',
-      '127.0.0.1',
+      DESKTOP_BACKEND_BIND_HOST,
       '--port',
       String(DEFAULT_PORT),
       '--data-dir',
@@ -481,6 +497,7 @@ async function startBackend(): Promise<void> {
       ...process.env,
       XCAGI_DESKTOP_MODE: '1',
       XCAGI_DATA_DIR: app.getPath('userData'),
+      XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
       ...backendEditionEnv(),
