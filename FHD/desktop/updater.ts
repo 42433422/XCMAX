@@ -63,10 +63,11 @@ function installSameVersionRebuildHook(): void {
     return
   }
   rebuildHookInstalled = true
-  const updater = autoUpdater as typeof autoUpdater & {
+  // electron-updater 将 isUpdateAvailable 标为 private；经 unknown 注入同版本 buildSha 比对。
+  const updater = autoUpdater as unknown as {
     isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
   }
-  const original = updater.isUpdateAvailable?.bind(updater)
+  const original = updater.isUpdateAvailable?.bind(autoUpdater)
   updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
     if (original?.(updateInfo)) {
       return true
