@@ -17,7 +17,7 @@ import fs from 'node:fs'
 import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
-import { checkForUpdates, configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
+import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 
 const APP_NAME = 'XCAGI'
@@ -75,12 +75,49 @@ function FindProxyForURL(url, host) {
 `.trim()
 }
 
+export function parseProxyEndpoint(proxyServer: string): { host: string; port: number } | null {
+  const raw = proxyServer.trim().replace(/^https?:\/\//i, '')
+  const parts = raw.split(':')
+  if (parts.length !== 2) {
+    return null
+  }
+  const port = Number(parts[1])
+  if (!parts[0] || !Number.isFinite(port) || port <= 0) {
+    return null
+  }
+  return { host: parts[0], port: Math.floor(port) }
+}
+
+export function isProxyEndpointReachable(proxyServer: string, timeoutMs = 1500): Promise<boolean> {
+  const endpoint = parseProxyEndpoint(proxyServer)
+  if (!endpoint) {
+    return Promise.resolve(false)
+  }
+  return new Promise(resolve => {
+    const socket = net.connect({ host: endpoint.host, port: endpoint.port })
+    const done = (ok: boolean) => {
+      socket.removeAllListeners()
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
 export async function applyOtaProxyBypass(): Promise<void> {
   const proxyServer =
     readWindowsInternetProxy() ||
     String(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim() ||
     null
   if (proxyServer) {
+    const reachable = await isProxyEndpointReachable(proxyServer)
+    if (!reachable) {
+      await session.defaultSession.setProxy({ mode: 'direct' })
+      return
+    }
     await session.defaultSession.setProxy({
       pacScript: buildOtaPacScript(proxyServer),
     })
