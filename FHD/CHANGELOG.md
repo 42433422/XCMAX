@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### OTA session 代理绕过（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
+
 ### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
 
 - **fix(desktop)**：`SKU_UPDATE_URL` 改走可达的 `xiu-ci.com/releases/stable/{sku}/`（`update.xcagi.com` 在 Win32 解析到不可达 IP）

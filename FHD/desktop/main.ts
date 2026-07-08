@@ -22,6 +22,17 @@ import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRoll
 
 const APP_NAME = 'XCAGI'
 
+/** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
+export const OTA_PROXY_BYPASS_RULES =
+  'xiu-ci.com,*.xiu-ci.com,update.xcagi.com,*.update.xcagi.com,localhost,127.0.0.1,<local>'
+
+export async function applyOtaProxyBypass(): Promise<void> {
+  await session.defaultSession.setProxy({
+    mode: 'system',
+    proxyBypassRules: OTA_PROXY_BYPASS_RULES,
+  })
+}
+
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 // 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
 // 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
@@ -30,7 +41,7 @@ app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 // 系统代理（如 127.0.0.1:7890）未运行时，仍须直连更新站拉取 OTA 元数据与安装包。
 app.commandLine.appendSwitch(
   'proxy-bypass-list',
-  'xiu-ci.com;*.xiu-ci.com;update.xcagi.com;*.update.xcagi.com;localhost;127.0.0.1;<local>'
+  OTA_PROXY_BYPASS_RULES.replace(/,/g, ';')
 )
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
@@ -955,6 +966,7 @@ function bootstrap(): void {
     })
 
     app.whenReady().then(async () => {
+      await applyOtaProxyBypass()
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
