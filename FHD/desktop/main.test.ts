@@ -64,7 +64,8 @@ const electronMocks = vi.hoisted(() => {
   const session = {
     defaultSession: {
       setPermissionRequestHandler: vi.fn(),
-      setPermissionCheckHandler: vi.fn()
+      setPermissionCheckHandler: vi.fn(),
+      setProxy: vi.fn(() => Promise.resolve())
     }
   }
   const screen = { getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) }
