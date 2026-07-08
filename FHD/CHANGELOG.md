@@ -42,8 +42,10 @@
 ### 桌面冷启性能（P1-3 · 2026-07-08 · v10 线内迭代）
 
 - **perf(desktop)**：Splash 先出窗，不再在 `show()` 前阻塞 `waitForBackendHealth`；就绪探测改 `/api/ping`（300ms 轮询）
+- **perf(desktop)**：主窗口立即 `show`，主应用加载与 ping 等待解耦，清缓存改为后台
 - **perf(desktop)**：`electron-backend.log` 超 8MB 自动轮转；打包默认 `LOG_LEVEL=WARNING`
 - **perf(backend)**：`XCAGI_DESKTOP_FAST_START=1` 时 lifespan 仅 DB+Mod，NeuroBus/员工调度/云中继/性能优化延后后台加载
+- **perf(backend)**：fast-start 下 Mod `bootstrap` 从 factory 同步路径延后到 deferred，消除 ~3.4s `mod_staged` 阻塞
 - **perf(api)**：`GET /api/health?lite=true` 跳过 NeuroBus 载荷
 - **perf(frontend)**：桌面壳 `mods` 列表重试退避缩短（150–600ms）
 
