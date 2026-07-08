@@ -525,8 +525,12 @@ export async function waitForBackendApplicationReady(
         signal: AbortSignal.timeout(2_000)
       })
       if (response.ok) {
-        const body = (await response.json()) as { appRoutesReady?: boolean; readyForUi?: boolean }
-        if (body.appRoutesReady !== false && body.readyForUi !== false) {
+        const body = (await response.json()) as {
+          appRoutesReady?: boolean
+          readyForUi?: boolean
+        }
+        const routesReady = body.appRoutesReady ?? body.readyForUi
+        if (routesReady !== false) {
           return
         }
       }
