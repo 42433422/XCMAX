@@ -107,6 +107,36 @@ export function isProxyEndpointReachable(proxyServer: string, timeoutMs = 1500):
   })
 }
 
+export function isProxyEndpointReachableSync(proxyServer: string, timeoutMs = 1200): boolean {
+  const endpoint = parseProxyEndpoint(proxyServer)
+  if (!endpoint) {
+    return false
+  }
+  if (process.platform === 'win32') {
+    try {
+      const result = execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `(Test-NetConnection ${endpoint.host} -Port ${endpoint.port} -WarningAction SilentlyContinue).TcpTestSucceeded`,
+        ],
+        { encoding: 'utf8', timeout: timeoutMs + 800, windowsHide: true },
+      ).trim()
+      return result === 'True'
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+let systemProxyBypassMode: 'direct' | 'pac' | 'system' = 'system'
+
+export function resolveSystemProxyBypassMode(): 'direct' | 'pac' | 'system' {
+  return systemProxyBypassMode
+}
+
 export async function applyOtaProxyBypass(): Promise<void> {
   const proxyServer =
     readWindowsInternetProxy() ||
@@ -115,14 +145,17 @@ export async function applyOtaProxyBypass(): Promise<void> {
   if (proxyServer) {
     const reachable = await isProxyEndpointReachable(proxyServer)
     if (!reachable) {
+      systemProxyBypassMode = 'direct'
       await session.defaultSession.setProxy({ mode: 'direct' })
       return
     }
+    systemProxyBypassMode = 'pac'
     await session.defaultSession.setProxy({
       pacScript: buildOtaPacScript(proxyServer),
     })
     return
   }
+  systemProxyBypassMode = 'system'
   await session.defaultSession.setProxy({
     mode: 'system',
     proxyBypassRules: OTA_PROXY_BYPASS_RULES,
@@ -139,6 +172,13 @@ app.commandLine.appendSwitch(
   'proxy-bypass-list',
   OTA_PROXY_BYPASS_RULES.replace(/,/g, ';')
 )
+if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+  const configuredProxy = readWindowsInternetProxy()
+  if (configuredProxy && !isProxyEndpointReachableSync(configuredProxy)) {
+    systemProxyBypassMode = 'direct'
+    app.commandLine.appendSwitch('no-proxy-server')
+  }
+}
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 export function resolveDefaultDesktopPort(): number {

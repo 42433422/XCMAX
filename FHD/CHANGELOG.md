@@ -13,6 +13,7 @@
 - **fix(desktop)**：OTA 专用 `netSession` 直连（`persist:xcagi-updater`），electron-updater 与元数据拉取均绕过死代理
 - **fix(desktop)**：检查更新期间临时将 `defaultSession` 切直连，规避死系统代理
 - **fix(desktop)**：启动时探测系统代理端口；不可达则 `defaultSession` 全程直连（桌面 UI 仅加载 127.0.0.1）
+- **fix(desktop)**：死代理在进程启动前追加 `--no-proxy-server`，避免 Chromium 仍走 WinINet 代理
 
 ### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
 
