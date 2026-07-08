@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面侧栏版本 + 配对码 SSOT（2026-07-08 · v10 线内迭代）
+
+- **fix(web)**：侧栏「系统正常」右侧显示 `v10.0.0`（非管理端从 `/api/health` 读取）
+- **fix(web)**：移动端配对 QR 与 6 位设备码统一 `normalizePairingPayload` SSOT
+
 ### 桌面 LAN 配对 + OTA 代理绕过 + 云中继直连（2026-07-08 · v10 线内迭代）
 
 - **fix(desktop)**：后端默认绑定 `0.0.0.0:17500`，手机同 WiFi 可连局域网 IP；Electron UI 仍只加载 `127.0.0.1`
