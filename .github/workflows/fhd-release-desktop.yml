@@ -90,6 +90,7 @@ jobs:
     needs: [windows]
     if: success()
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -249,6 +250,7 @@ jobs:
     needs: [macos]
     if: success()
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -323,8 +325,8 @@ jobs:
           done
 
   generate-manifest:
-    needs: [deploy-windows, deploy-macos]
-    if: always() && (needs.deploy-windows.result == 'success' || needs.deploy-macos.result == 'success')
+    needs: [windows, macos]
+    if: always() && needs.windows.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -443,7 +445,7 @@ jobs:
   github-release:
     needs: [windows, macos, verify-download]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: always() && startsWith(github.ref, 'refs/tags/') && needs.windows.result == 'success' && needs.verify-download.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
