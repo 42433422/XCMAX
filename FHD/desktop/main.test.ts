@@ -239,6 +239,12 @@ describe('main — OTA proxy PAC', () => {
     expect(pac).toContain("host === 'xiu-ci.com'")
     expect(pac).toContain("return 'PROXY 127.0.0.1:7890; DIRECT'")
   })
+
+  it('parses proxy endpoint host and port', async () => {
+    const { parseProxyEndpoint } = await import('./main.js')
+    expect(parseProxyEndpoint('127.0.0.1:7890')).toEqual({ host: '127.0.0.1', port: 7890 })
+    expect(parseProxyEndpoint('bad')).toBeNull()
+  })
 })
 
 describe('main — ED25519_PUBLIC_KEY_PEM', () => {
