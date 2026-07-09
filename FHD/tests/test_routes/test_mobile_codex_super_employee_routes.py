@@ -104,11 +104,13 @@ async def test_mobile_admin_codex_invoke_passes_mobile_context(ext_mod):
     assert response["data"]["dispatch"]["status"] == "accepted"
     assert seen["user_id"] == 8
     assert seen["message"] == "手机派工"
-    assert seen["context"] == {
-        "source": "mobile_im",
-        "client_surface": "mobile",
-        "target_devices": ["all"],
-    }
+    ctx = seen["context"]
+    assert isinstance(ctx, dict)
+    assert ctx["source"] == "mobile_im"
+    assert ctx["client_surface"] == "mobile"
+    assert ctx["target_devices"] == ["all"]
+    # 手机进度问答需可读仓库：空 context 时自动注入 workspace_root
+    assert str(ctx.get("workspace_root") or "").strip()
 
 
 @pytest.mark.asyncio
