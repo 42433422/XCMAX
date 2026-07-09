@@ -5554,11 +5554,11 @@ void main() {
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pump();
 
-    // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
+    // Codex 超级员工无活跃 git 分支时：保留基础卡片 + 执行回顾 + 共享操作（对齐 Android）。
+    expect(find.text('新建对话'), findsOneWidget);
+    expect(find.text('OCR 识别'), findsOneWidget);
+    expect(find.text('语音输入'), findsOneWidget);
     expect(find.text('执行回顾'), findsOneWidget);
-    expect(find.text('新建对话'), findsNothing);
-    expect(find.text('OCR 识别'), findsNothing);
-    expect(find.text('语音输入'), findsNothing);
     expect(find.text('任务派工'), findsOneWidget);
     expect(find.text('验收回访'), findsOneWidget);
     expect(find.text('问题修复'), findsOneWidget);

@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 对话页工具卡片补齐（2026-07-09 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：超级员工会话无活跃分支时，十字键面板恢复「新建对话 / OCR / 语音」，并保留「执行回顾」与派工类卡片（对齐 Android）
+
 ### 桌面 deferred 路由被 SPA 兜底遮蔽（2026-07-09 · v10 线内迭代）
 
 - **fix(backend)**：`register_deferred_routes` 结束后调用 `ensure_spa_fallback_last`，避免桌面 fast-start 下 GET `/api/memory/v2` 等被 `/{fallback:path}` 吃成「资源不存在」

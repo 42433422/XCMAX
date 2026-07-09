@@ -753,6 +753,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<_ChatToolAction> _toolActions() {
     final isSuperEmployee = widget.conversation.type.superTool != null;
     final activeGitBranches = _activeGitBranches();
+    final baseActions = _baseToolActions();
     if (isSuperEmployee && activeGitBranches.isNotEmpty) {
       final branch =
           _currentGitBranch(activeGitBranches) ?? activeGitBranches.last;
@@ -779,7 +780,9 @@ class _ChatScreenState extends State<ChatScreen> {
       ];
     }
     if (isSuperEmployee) {
+      // 与 Android 对齐：无活跃分支时保留新建对话/OCR/语音，并额外提供执行回顾。
       return [
+        ...baseActions,
         _ChatToolAction(
           icon: Icons.timeline,
           title: '执行回顾',
@@ -789,6 +792,13 @@ class _ChatScreenState extends State<ChatScreen> {
         ..._sharedToolActions(),
       ];
     }
+    return [
+      ...baseActions,
+      ..._sharedToolActions(),
+    ];
+  }
+
+  List<_ChatToolAction> _baseToolActions() {
     return [
       _ChatToolAction(
         icon: Icons.refresh,
@@ -813,7 +823,6 @@ class _ChatScreenState extends State<ChatScreen> {
         subtitle: '手机语音转文字',
         onTap: _startVoiceInput,
       ),
-      ..._sharedToolActions(),
     ];
   }
 
