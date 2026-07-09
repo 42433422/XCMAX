@@ -3,7 +3,7 @@
 > **分支**：`fix/desktop-perf-complete`  
 > **执行**：DevFleet Win32 `5fdd29c4-…` + Mac 本机 shell + 浏览器 UI 探针  
 > **版本锚点**：10.0.0（v10 锁，未 bump）  
-> **关联 commit**：`88bc22f34`（deliverable-status）、`a379e579c`（OTA Alembic frozen）、`727e306e2`（fast-start bootstrap platform_shell）
+> **关联 commit**：`88bc22f34`（deliverable-status）、`a379e579c`（OTA Alembic frozen）、`727e306e2`（fast-start bootstrap）、`4424c9e7c`/`d52156ca8`（hiddenimports + ASCII 源码）、本轮 `xcagi_backend.spec`/`migrate.py`（alembic.ini 扁平化）
 
 ---
 
@@ -12,7 +12,7 @@
 | 端 | 设备 | OS / 架构 | 安装位置 | 证据 |
 |----|------|-----------|----------|------|
 | Mac | Mac 主设备 | macOS 26.3 / arm64 | `/Applications/XCAGI.app` | `CFBundleShortVersionString=10.0.0`；`product-sku.json` → enterprise |
-| Windows | DevFleet Win32 `5fdd29c4-…` | Windows NT 10.0.26200 / x64 | `%LOCALAPPDATA%\Programs\XCAGI` | **2026-07-09 续接**：PyInstaller 构建完成、robocopy 热替换；**A5/A9 未 PASS** |
+| Windows | DevFleet Win32 `5fdd29c4-…` | Windows NT 10.0.26200 / x64 | `%LOCALAPPDATA%\Programs\XCAGI` | **2026-07-09 终验**：A5 `deliverable=true`；A9 `migrate_exit=0` |
 
 **制品**：`FHD/release/xcagi-v10.0.0/enterprise/XCAGI-10.0.0-mac-arm64.dmg`（283MB）。
 
@@ -28,14 +28,14 @@
 | A2 | 首启 `/api/health` 200 | **PASS** | **PASS**¹ | Mac：`status=healthy version=10.0.0` |
 | A3 | SKU enterprise | **PASS** | **PASS**¹ | `product-sku.json` |
 | A4 | Mod 加载 | **PASS** | **PASS**¹ | Mac 17 mods；`modsRoutesLoaded=true` |
-| A5 | `deliverable-status` | **PASS** | **BLOCKED**⁸ | Mac：`mac_deliverable_smoke.sh` + `test_bootstrap_deliverable.py`；Win DevFleet 占用无法远程验收 |
-| A6 | 引导 / host-pack | **PASS** | **BLOCKED**² | Mac：`recommended_step=daily_use` |
-| A7 | 样板业务 API | **PASS**³ | **BLOCKED**² | Mac：`GET /api/purchase/orders` → 200（ERP Mod 路由）；`/api/erp/orders` 非契约路径 |
+| A5 | `deliverable-status` | **PASS** | **PASS**⁹ | Win：`deliverable=True mods=True blockers=0 step=daily_use sku=enterprise`（cmd `87dbc872`） |
+| A6 | 引导 / host-pack | **PASS** | **PASS**⁹ | Win A5 载荷 `recommended_step=daily_use` |
+| A7 | 样板业务 API | **PASS**³ | **PARTIAL** | Mac：`/api/purchase/orders` 200；Win 本轮未复测 ERP 列表（不阻塞 A5） |
 | A8 | 日志 / 备份 | **PASS** | **PASS**¹ | Mac：`userData/logs`、`backups/`、`electron-backend.log` |
-| A9 | OTA / migrate-only | **PASS**⁴ | **BLOCKED**⁸ | Mac exit=0；Win 远程 `migrate-only` 探针挂起 + Agent「已有任务运行中」 |
-| A10 | 回滚 | **PASS**⁵ | **BLOCKED**² | `desktop/rollback.test.ts` 9/9 vitest |
-| A11 | 自动化 smoke | **PASS** | **NOT RUN** | Mac PASSED；Win 脚本 UTF-8 无 BOM 在 PS5 下解析失败，已用内联 ASCII 远程步骤 |
-| A12 | UI 首屏 | **PASS** | **NOT RUN** | 浏览器：`http://127.0.0.1:17500/` 标题「XCAGI · 登录」 |
+| A9 | OTA / migrate-only | **PASS**⁴ | **PASS**⁹ | Win：`migrate_exit=0`（扁平化 `_internal/alembic.ini` 后；cmd `87dbc872`） |
+| A10 | 回滚 | **PASS**⁵ | **PARTIAL** | 单元测试 9/9；真机 OTA 回滚未跑 |
+| A11 | 自动化 smoke | **PASS** | **PARTIAL** | Mac PASSED；Win 用内联远程步骤等价验收 |
+| A12 | UI 首屏 | **PASS** | **NOT RUN** | Mac 浏览器登录页；Win UI 走查未录屏 |
 
 ¹ 前序 agent（678ae525）DevFleet 远程命令输出；本轮 Windows **全部远程命令返回「设备已有任务或命令运行中」**，shell session 卡在 `opening`。  
 ² 需用户在 Win32 **重启 DevFleet Agent** 或结束占用任务后，执行 `FHD/scripts/dev/win_v10a_hotfix_deploy.ps1`。  
@@ -46,6 +46,11 @@
 ⁸ **2026-07-09 续接 v10-A（Agent 子任务）**：`727e306e2` 已合入 `fix/desktop-perf-complete`。Mac 复测：`mac_deliverable_smoke.sh` PASSED；`pytest` `test_bootstrap_deliverable.py` + `test_deliverable_status.py` **9/9 PASS**。DevFleet Win32 **online** 但远程验收 **BLOCKED**：`remote_commands` `1374821c` 在 `migrate-only` 探针上 **running** 无 stdout；后续命令均 `设备已有任务或命令运行中`；多个 `shell-sessions` 长期 `opening`。末次成功轮询（`ffefa5b2`）显示后台 **python 9312**（PyInstaller 构建中）、`health_down`、`dist` 下 `xcagi-backend.exe` 已存在（约 125MB）。**须在 Win 本机**执行热修脚本完成 A5/A9。
 
 ⁷ **2026-07-09 续接 v10-A（本 commit）**：404 根因 = 桌面 fast-start 仅 bootstrap health/infrastructure，`platform-shell` 在 deferred；未挂载时 SPA fallback 对 `api/*` 返回 404。修复：`platform_shell` 提前至 bootstrap + PS5 ASCII 热修脚本。DevFleet 已同步 Win 三文件并后台启动 `win_v10a_hotfix_deploy.ps1`（python 构建中，验收待完成）。
+
+⁹ **2026-07-09 终验（用户重启 Win 后）**：
+- Win 源码中文 docstring 损坏 → `SyntaxError` → PyInstaller `invalid module` → frozen 缺 `platform_shell_routes`/`deliverable_status`。已 ASCII 化源码并重建。
+- PyInstaller `add_data("alembic.ini")` 把文件打成目录 `_internal/alembic.ini/alembic.ini`；扁平化后 `migrate-only` exit 0。
+- 终验输出：`A5=deliverable=True mods=True blockers=0 step=daily_use sku=enterprise`；`migrate_exit=0`；`health=healthy`（version 字段仍显示 1.0.0，不阻塞 deliverable）。
 
 ### 404 根因（Win health 200 / deliverable 404）
 
@@ -107,36 +112,28 @@ TestClient 不跑 lifespan deferred 任务；`XCAGI_DESKTOP_FAST_START=0` 于测
 | Win 远程验收（本回合） | **BLOCKED** — 设备忙；acceptance probe 挂起；短命令失败 |
 | Mac 本机 | smoke + pytest **PASS** |
 
-## 用户需配合（仅剩 Windows）
+## 用户需配合（剩余非阻塞）
 
-1. （可选）Mac：`git push origin fix/desktop-perf-complete` 便于 Win `git pull` 对齐 `727e306e2`。
-2. Win 结束占用任务后 **本机 PowerShell 一条命令**：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File 'C:\Users\97088\Documents\New project 3\XCMAX\FHD\scripts\dev\win_v10a_hotfix_deploy.ps1'
-```
-
-（若 dist 下 `xcagi-backend.exe` 已是新构建且仅需部署验收：加 `-DeployOnly`。）
-
-3. 成功标准：`health=healthy`、`deliverable=true`、`migrate exit=0`。
-4. DevFleet 仍报「已有任务」：任务管理器结束残留 `python`/`pyinstaller`/`powershell`，重启 DevFleet Agent。
+1. （可选）正式安装包发版时用已修 `xcagi_backend.spec` 重打 Win backend，避免再手工扁平化 `alembic.ini`。
+2. （可选）Win UI 走查录屏 + 真机 OTA 回滚补测（A10/A12）。
+3. Win10 第二台覆盖仍缺（仅 1 台 DevFleet Win11 系）。
 
 ## 签字表（自动化验收 + 用户授权代签）
 
 | 角色 | 姓名 | 日期 | 说明 |
 |------|------|------|------|
-| 测试负责人 | 自动化验收 Agent | 2026-07-09 | Mac PASS（smoke+9 pytest）；Win BLOCKED（DevFleet 占用） |
-| 开发负责人 | 自动化验收 Agent | 2026-07-08 | 88bc22f34 + a379e579c 已合入分支 |
-| 产品负责人 | 用户授权代签 | 2026-07-08 | 待 Win 热修复测后正式签 |
-| 运维负责人 | 用户授权代签 | 2026-07-08 | OTA 根因已修；Win 真机 OTA 待补 |
+| 测试负责人 | 自动化验收 Agent | 2026-07-09 | Mac PASS；Win A5/A9 PASS（cmd `87dbc872`） |
+| 开发负责人 | 自动化验收 Agent | 2026-07-09 | hiddenimports + ASCII 源码 + alembic.ini 扁平化 |
+| 产品负责人 | 用户授权代签 | 2026-07-09 | 用户重启 Win 后授权续跑终验 |
+| 运维负责人 | 用户授权代签 | 2026-07-09 | migrate-only exit 0；真机 OTA 回滚可选补测 |
 
-**PL1 勾选**：**否**（2026-07-09 续接）— Mac PASS；Win A5/A9 因 DevFleet 占用未获 `deliverable=true` / `migrate exit=0` 证据，**不得**勾选 `specs/tasks.md` PL1。
+**PL1 勾选**：**是**（2026-07-09 终验）— 双端 A5 `deliverable=true` + A9 `migrate_exit=0` 已有证据；A7/A10/A12 Win 为 PARTIAL/NOT RUN，记入证据但不阻塞 v10-A 技术签字。
 
 ---
 
 ## 结论
 
-- **Mac arm64**：v10-A 技术验收 **PASS**（`mac_deliverable_smoke.sh` + bootstrap 单测）。  
-- **Windows x64**：`727e306e2` 已同步；dist 后端 exe 曾就绪，但 **DevFleet 远程验收 BLOCKED**（Agent 任务占用）。  
-- **下一步**：Win **本机**执行 `win_v10a_hotfix_deploy.ps1`（或 `-DeployOnly` 若 dist 已新）→ 确认 `deliverable=true` + `migrate exit=0` → 再勾选 PL1。
+- **Mac arm64**：v10-A 技术验收 **PASS**。  
+- **Windows x64**：v10-A 关键项 **PASS**（A5/A9）；根因链：源码编码损坏 → frozen 缺模块 → `alembic.ini` 被打成目录 → 已修并热修验证。  
+- **下一步（非阻塞）**：正式包用修后 spec 重打；可选 UI 录屏 / 真机回滚 / Win10 第二台。
 

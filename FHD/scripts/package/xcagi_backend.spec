@@ -11,9 +11,19 @@ ROOT = Path.cwd().resolve()
 
 
 def add_data(relative_path: str):
+    """Bundle data for PyInstaller.
+
+    Files must use the *parent* as dest (often ``.``). Using the filename as
+    dest creates ``_MEIPASS/<name>/<name>`` and breaks frozen lookups such as
+    ``_MEIPASS/alembic.ini``.
+    """
     src = ROOT / relative_path
     if not src.exists():
         return []
+    if src.is_file():
+        parent = str(Path(relative_path).parent).replace("\\", "/")
+        dest = "." if parent in ("", ".") else parent
+        return [(str(src), dest)]
     return [(str(src), relative_path)]
 
 
