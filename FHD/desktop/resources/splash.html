@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>XCAGI</title>
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        background: linear-gradient(160deg, #f4f7fb 0%, #e8eef8 100%);
+        color: #1a2b4a;
+        height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .card {
+        text-align: center;
+        padding: 2.5rem 3rem;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.88);
+        box-shadow: 0 12px 40px rgba(26, 43, 74, 0.08);
+        min-width: 320px;
+      }
+      h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: 0.02em; }
+      p { margin-top: 0.75rem; font-size: 0.95rem; color: #5a6d8c; min-height: 1.4em; }
+      .spinner {
+        width: 36px;
+        height: 36px;
+        margin: 1.25rem auto 0;
+        border: 3px solid #d5e0f2;
+        border-top-color: #3b6fd9;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>XCAGI</h1>
+      <p id="status">正在准备界面…</p>
+      <div class="spinner" aria-hidden="true"></div>
+    </div>
+    <script>
+      window.xcagiSetSplashStatus = function (text) {
+        var el = document.getElementById('status');
+        if (el && text) el.textContent = text;
+      };
+    </script>
+  </body>
+</html>

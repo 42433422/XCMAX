@@ -1,4 +1,5 @@
-import { BrowserWindow, app, dialog } from 'electron'
+import { BrowserWindow, app, dialog, net, session } from 'electron'
+import type { Session } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
 import crypto from 'node:crypto'
@@ -8,6 +9,46 @@ import path from 'node:path'
 let updateDownloaded = false
 let remoteBuildSha = ''
 let rebuildHookInstalled = false
+let updaterNetSession: Session | null = null
+let updaterNetSessionReady: Promise<Session> | null = null
+
+export async function ensureUpdaterNetSession(): Promise<Session> {
+  if (updaterNetSession) {
+    return updaterNetSession
+  }
+  if (!updaterNetSessionReady) {
+    updaterNetSessionReady = (async () => {
+      const updaterSession = session.fromPartition('persist:xcagi-updater', { cache: false })
+      await updaterSession.setProxy({ mode: 'direct' })
+      updaterNetSession = updaterSession
+      const updater = autoUpdater as unknown as { netSession?: Session }
+      updater.netSession = updaterSession
+      return updaterSession
+    })()
+  }
+  return updaterNetSessionReady
+}
+
+export function fetchTextViaSession(targetSession: Session, url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = net.request({ method: 'GET', url, session: targetSession })
+    const chunks: Buffer[] = []
+    request.on('response', response => {
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      response.on('end', () => {
+        const status = response.statusCode || 0
+        if (status < 200 || status >= 300) {
+          reject(new Error(`更新元数据下载失败: ${status} ${response.statusMessage || ''}`.trim()))
+          return
+        }
+        resolve(Buffer.concat(chunks).toString('utf8'))
+      })
+      response.on('error', reject)
+    })
+    request.on('error', reject)
+    request.end()
+  })
+}
 
 function updaterLogPath(): string {
   return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
@@ -63,10 +104,11 @@ function installSameVersionRebuildHook(): void {
     return
   }
   rebuildHookInstalled = true
-  const updater = autoUpdater as typeof autoUpdater & {
+  // electron-updater 将 isUpdateAvailable 标为 private；经 unknown 注入同版本 buildSha 比对。
+  const updater = autoUpdater as unknown as {
     isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
   }
-  const original = updater.isUpdateAvailable?.bind(updater)
+  const original = updater.isUpdateAvailable?.bind(autoUpdater)
   updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
     if (original?.(updateInfo)) {
       return true
@@ -82,14 +124,22 @@ function installSameVersionRebuildHook(): void {
 export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+    void ensureUpdaterNetSession()
+  }
 
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (updateUrl) {
-    autoUpdater.setFeedURL({
+    // generic 提供方默认拉取 latest.yml；勿设 channel，否则会请求 stable.yml 导致 404。
+    const feed: { provider: 'generic'; url: string; channel?: string } = {
       provider: 'generic',
       url: updateUrl,
-      channel: process.env.XCAGI_UPDATE_CHANNEL || 'stable'
-    })
+    }
+    const channel = String(process.env.XCAGI_UPDATE_CHANNEL || '').trim()
+    if (channel) {
+      feed.channel = channel
+    }
+    autoUpdater.setFeedURL(feed)
   }
 
   const send = (type: string, data?: unknown) => {
@@ -145,20 +195,38 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   })
 
   setTimeout(() => {
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 60_000)
 
   setInterval(() => {
     if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
       return
     }
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 6 * 60 * 60 * 1000)
+}
+
+export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
+  const defaultSession = session.defaultSession
+  const previous = await defaultSession.resolveProxy('https://xiu-ci.com')
+  await defaultSession.setProxy({ mode: 'direct' })
+  try {
+    return await checkForUpdates()
+  } finally {
+    if (/^PROXY/i.test(previous) || /^SOCKS/i.test(previous)) {
+      await defaultSession.setProxy({ mode: 'system' })
+    } else {
+      await defaultSession.setProxy({ mode: 'direct' })
+    }
+  }
 }
 
 export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
+  }
+  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+    await ensureUpdaterNetSession()
   }
   const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
   const updateUrl = process.env.XCAGI_UPDATE_URL
@@ -179,12 +247,17 @@ export async function fetchLatestMetadataText(): Promise<string> {
 
   const file = process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
   const url = `${updateUrl.replace(/\/+$/, '')}/${file}`
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`更新元数据下载失败: ${response.status} ${response.statusText}`)
+  let content: string
+  if (process.env.XCAGI_DESKTOP_TEST === '1') {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`更新元数据下载失败: ${response.status} ${response.statusText}`)
+    }
+    content = await response.text()
+  } else {
+    const updaterSession = await ensureUpdaterNetSession()
+    content = await fetchTextViaSession(updaterSession, url)
   }
-
-  const content = await response.text()
   await verifyMetadataSignatureText(content, publicKeyPem)
   return content
 }

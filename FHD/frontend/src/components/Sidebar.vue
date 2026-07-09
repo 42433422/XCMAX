@@ -101,13 +101,22 @@
             {{ entitlementSyncStatusText }}
           </span>
         </div>
-        <div
-          v-if="primaryModChip && !isAdminConsoleSpa()"
-          class="sidebar-mods-badges"
-          :title="primaryModChip.fullName"
-          aria-label="已加载扩展模块"
-        >
-          <span class="sidebar-mod-chip">{{ primaryModChip.shortLabel }}</span>
+        <div v-if="sidebarFooterMetaVisible" class="sidebar-footer-meta">
+          <div
+            v-if="primaryModChip && !isAdminConsoleSpa()"
+            class="sidebar-mods-badges"
+            :title="primaryModChip.fullName"
+            aria-label="已加载扩展模块"
+          >
+            <span class="sidebar-mod-chip">{{ primaryModChip.shortLabel }}</span>
+          </div>
+          <span
+            v-if="sidebarAppVersionText"
+            class="sidebar-version-chip"
+            :title="sidebarAppVersionTitle"
+          >
+            {{ sidebarAppVersionText }}
+          </span>
         </div>
       </div>
       <button
@@ -164,6 +173,7 @@ import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
 import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
+import packageJson from '../../package.json'
 
 const { imUnreadTotal } = useImUnreadBadge()
 
@@ -223,6 +233,7 @@ const entitlementSyncStatus = ref(null)
 const entitlementSyncStatusError = ref('')
 const entitlementSyncLoading = ref(false)
 const entitlementSyncNoticeUntil = ref(0)
+const healthAppVersion = ref('')
 let activeReorderPointerId = null
 let pressTimer = null
 let boundWindowPointerMove = null
@@ -335,6 +346,34 @@ const shouldShowEntitlementSyncStatus = computed(() => {
   if (!accountProfileStore.loaded) return false
   return Boolean(accountProfileStore.marketUserId || displayBrand.value)
 })
+
+const sidebarAppVersionText = computed(() => {
+  if (shouldShowAdminDeployStatus.value) return ''
+  return displayVersion(healthAppVersion.value || packageJson.version || '')
+})
+
+const sidebarAppVersionTitle = computed(() => {
+  const ver = String(healthAppVersion.value || packageJson.version || '').trim()
+  return ver ? `当前版本 ${displayVersion(ver)}` : '当前应用版本'
+})
+
+const sidebarFooterMetaVisible = computed(
+  () =>
+    Boolean(sidebarAppVersionText.value) ||
+    Boolean(primaryModChip.value && !isAdminConsoleSpa()),
+)
+
+async function refreshHealthAppVersion() {
+  if (shouldShowAdminDeployStatus.value) return
+  try {
+    const res = await fetch('/api/health', { credentials: 'same-origin' })
+    if (!res.ok) return
+    const data = await res.json()
+    healthAppVersion.value = String(data?.version || '').trim()
+  } catch {
+    /* 健康检查失败时回退 package.json 版本 */
+  }
+}
 
 function displayVersion(value) {
   const text = String(value || '').trim()
@@ -867,6 +906,7 @@ onMounted(async () => {
   }
   syncAdminDeployStatusPolling()
   syncEntitlementSyncPolling()
+  void refreshHealthAppVersion()
 })
 
 onBeforeUnmount(() => {
@@ -951,9 +991,33 @@ onBeforeUnmount(() => {
   flex-wrap: wrap;
   gap: 4px;
   justify-content: flex-end;
-  flex: 1 1 auto;
   min-width: 0;
-  max-width: 70%;
+  max-width: 100%;
+}
+
+.sidebar-footer-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.sidebar-version-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 88px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  line-height: 1.35;
+  font-weight: 700;
+  white-space: nowrap;
+  color: #475569;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
 }
 
 .sidebar-mod-chip {

@@ -15,12 +15,14 @@ def register_health_routes(app: FastAPI) -> None:
     """注册健康检查路由"""
 
     @app.get("/api/health", tags=["health"])
-    async def health_check():
+    async def health_check(lite: bool = False):
         payload: dict = {
             "status": "healthy",
             "version": app.version,
             "service": "xcagi-fastapi",
         }
+        if lite:
+            return payload
         try:
             from app.neuro_bus.integrations.fastapi_integration import get_neurobus_health
             from app.neuro_bus.integrations.intent_integration import is_neuro_stack_enabled

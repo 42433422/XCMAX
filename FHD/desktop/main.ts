@@ -11,27 +11,174 @@ import {
   session,
   shell
 } from 'electron'
-import { ChildProcessWithoutNullStreams, execFile, spawn } from 'node:child_process'
+import { ChildProcessWithoutNullStreams, execFile, execFileSync, spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
-import { checkForUpdates, configureUpdater, installUpdate } from './updater'
+import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 
 const APP_NAME = 'XCAGI'
+
+/** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
+export const OTA_PROXY_BYPASS_RULES =
+  'xiu-ci.com,*.xiu-ci.com,update.xcagi.com,*.update.xcagi.com,localhost,127.0.0.1,<local>'
+
+export function readWindowsInternetProxy(): string | null {
+  if (process.platform !== 'win32') {
+    return null
+  }
+  try {
+    const enable = execFileSync(
+      'reg',
+      [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyEnable',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    )
+    if (!/0x1/.test(enable)) {
+      return null
+    }
+    const server = execFileSync(
+      'reg',
+      [
+        'query',
+        'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+        '/v',
+        'ProxyServer',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    )
+    const match = server.match(/ProxyServer\s+REG_SZ\s+(\S+)/)
+    return match?.[1]?.trim() || null
+  } catch {
+    return null
+  }
+}
+
+export function buildOtaPacScript(proxyServer: string): string {
+  const proxy = proxyServer.replace(/'/g, '')
+  return `
+function FindProxyForURL(url, host) {
+  if (host === 'xiu-ci.com' || dnsDomainIs(host, '.xiu-ci.com') ||
+      host === 'update.xcagi.com' || dnsDomainIs(host, '.update.xcagi.com') ||
+      host === 'localhost' || host === '127.0.0.1') {
+    return 'DIRECT';
+  }
+  return 'PROXY ${proxy}; DIRECT';
+}
+`.trim()
+}
+
+export function parseProxyEndpoint(proxyServer: string): { host: string; port: number } | null {
+  const raw = proxyServer.trim().replace(/^https?:\/\//i, '')
+  const parts = raw.split(':')
+  if (parts.length !== 2) {
+    return null
+  }
+  const port = Number(parts[1])
+  if (!parts[0] || !Number.isFinite(port) || port <= 0) {
+    return null
+  }
+  return { host: parts[0], port: Math.floor(port) }
+}
+
+export function isProxyEndpointReachable(proxyServer: string, timeoutMs = 1500): Promise<boolean> {
+  const endpoint = parseProxyEndpoint(proxyServer)
+  if (!endpoint) {
+    return Promise.resolve(false)
+  }
+  return new Promise(resolve => {
+    const socket = net.connect({ host: endpoint.host, port: endpoint.port })
+    const done = (ok: boolean) => {
+      socket.removeAllListeners()
+      socket.destroy()
+      resolve(ok)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => done(true))
+    socket.once('timeout', () => done(false))
+    socket.once('error', () => done(false))
+  })
+}
+
+export function isProxyEndpointReachableSync(proxyServer: string, timeoutMs = 1200): boolean {
+  const endpoint = parseProxyEndpoint(proxyServer)
+  if (!endpoint) {
+    return false
+  }
+  if (process.platform === 'win32') {
+    try {
+      const result = execFileSync(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-Command',
+          `(Test-NetConnection ${endpoint.host} -Port ${endpoint.port} -WarningAction SilentlyContinue).TcpTestSucceeded`,
+        ],
+        { encoding: 'utf8', timeout: timeoutMs + 800, windowsHide: true },
+      ).trim()
+      return result === 'True'
+    } catch {
+      return false
+    }
+  }
+  return false
+}
+
+let systemProxyBypassMode: 'direct' | 'pac' | 'system' = 'system'
+
+export function resolveSystemProxyBypassMode(): 'direct' | 'pac' | 'system' {
+  return systemProxyBypassMode
+}
+
+export async function applyOtaProxyBypass(): Promise<void> {
+  const proxyServer =
+    readWindowsInternetProxy() ||
+    String(process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '').trim() ||
+    null
+  if (proxyServer) {
+    const reachable = await isProxyEndpointReachable(proxyServer)
+    if (!reachable) {
+      systemProxyBypassMode = 'direct'
+      await session.defaultSession.setProxy({ mode: 'direct' })
+      return
+    }
+    systemProxyBypassMode = 'pac'
+    await session.defaultSession.setProxy({
+      pacScript: buildOtaPacScript(proxyServer),
+    })
+    return
+  }
+  systemProxyBypassMode = 'system'
+  await session.defaultSession.setProxy({
+    mode: 'system',
+    proxyBypassRules: OTA_PROXY_BYPASS_RULES,
+  })
+}
 
 // 与 paths.py / 安装器太阳鸟种子目录一致（勿用 package.json 默认 xcagi-desktop）
 // 注：单测环境通过 XCAGI_DESKTOP_TEST=1 跳过 bootstrap()，但模块顶层仍有副作用，
 // 测试中通过 vi.mock('electron') 替换 app，故下列两行在测试环境下也安全。
 app.setPath('userData', path.join(app.getPath('appData'), 'XCAGI'))
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
-// 系统代理（如 127.0.0.1:7890）未运行时，仍须直连 xiu-ci.com 拉取 OTA 元数据与安装包。
+// 系统代理（如 127.0.0.1:7890）未运行时，仍须直连更新站拉取 OTA 元数据与安装包。
 app.commandLine.appendSwitch(
   'proxy-bypass-list',
-  'xiu-ci.com;*.xiu-ci.com;localhost;127.0.0.1;<local>'
+  OTA_PROXY_BYPASS_RULES.replace(/,/g, ';')
 )
+if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+  const configuredProxy = readWindowsInternetProxy()
+  if (configuredProxy && !isProxyEndpointReachableSync(configuredProxy)) {
+    systemProxyBypassMode = 'direct'
+    app.commandLine.appendSwitch('no-proxy-server')
+  }
+}
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 export function resolveDefaultDesktopPort(): number {
@@ -90,8 +237,8 @@ export const SKU_RUNTIME_EDITION: Record<ProductSku, string> = {
   enterprise: 'full'
 }
 
+// update.xcagi.com 在部分网络解析到不可达 IP；发布产物实际由 xiu-ci.com 同源 /releases/ 提供。
 export const SKU_UPDATE_URL: Record<ProductSku, string> = {
-  // OTA SSOT：腾讯云 xiu-ci.com（与 CVM 119.27.178.147 同机 nginx alias，HTTPS 已签发）
   personal: 'https://xiu-ci.com/releases/stable/personal/',
   enterprise: 'https://xiu-ci.com/releases/stable/enterprise/'
 }
@@ -257,6 +404,25 @@ function backendExecutable(): { command: string; args: string[]; cwd: string } {
   }
 }
 
+function rotateBackendLogIfNeeded(logPath: string): void {
+  const maxBytes = 8 * 1024 * 1024
+  try {
+    if (!fs.existsSync(logPath)) {
+      return
+    }
+    if (fs.statSync(logPath).size < maxBytes) {
+      return
+    }
+    const rotated = `${logPath}.1`
+    if (fs.existsSync(rotated)) {
+      fs.unlinkSync(rotated)
+    }
+    fs.renameSync(logPath, rotated)
+  } catch {
+    /* ignore rotation failures */
+  }
+}
+
 function ensureBackendLogStream(): fs.WriteStream | null {
   if (backendLogStream) {
     return backendLogStream
@@ -264,7 +430,9 @@ function ensureBackendLogStream(): fs.WriteStream | null {
   try {
     const logDir = path.join(app.getPath('userData'), 'logs')
     fs.mkdirSync(logDir, { recursive: true })
-    backendLogStream = fs.createWriteStream(path.join(logDir, 'electron-backend.log'), {
+    const logPath = path.join(logDir, 'electron-backend.log')
+    rotateBackendLogIfNeeded(logPath)
+    backendLogStream = fs.createWriteStream(logPath, {
       flags: 'a'
     })
     backendLogStream.write(`\n[${new Date().toISOString()}] XCAGI desktop backend bootstrap\n`)
@@ -304,13 +472,16 @@ function packagedBackendHealthTimeoutMs(): number {
   return process.platform === 'win32' ? 180_000 : 120_000
 }
 
-/** 须确认 uvicorn /api/health，避免 TCP 可达但不是 XCAGI 后端时误判就绪。 */
-async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHealthTimeoutMs()): Promise<void> {
+/** 轻量就绪探测：/api/ping 无 NeuroBus 载荷，轮询更快。 */
+export async function waitForBackendPing(
+  port: number,
+  timeoutMs = packagedBackendHealthTimeoutMs()
+): Promise<void> {
   const started = Date.now()
   while (Date.now() - started <= timeoutMs) {
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/health`, {
-        signal: AbortSignal.timeout(3_000)
+      const response = await fetch(`http://127.0.0.1:${port}/api/ping`, {
+        signal: AbortSignal.timeout(2_000)
       })
       const server = (response.headers.get('server') || '').toLowerCase()
       if (response.ok && server.includes('uvicorn')) {
@@ -323,7 +494,7 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     } catch {
       /* backend still booting */
     }
-    await new Promise(resolve => setTimeout(resolve, 500))
+    await new Promise(resolve => setTimeout(resolve, 150))
   }
   const airplayHint =
     port === 5000
@@ -333,8 +504,67 @@ async function waitForBackendHealth(port: number, timeoutMs = packagedBackendHea
     ? ' 若仍失败，请查看数据目录 logs/ 下后端日志，或从菜单导出诊断包。'
     : ''
   throw new Error(
-    `后端 /api/health 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}${firstBootHint}`
+    `后端 /api/ping 在 ${timeoutMs}ms 内未就绪（端口 ${port}）。${airplayHint}${firstBootHint}`
   )
+}
+
+/** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
+export const waitForBackendHealth = waitForBackendPing
+
+/** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
+export async function waitForBackendApplicationReady(
+  port: number,
+  timeoutMs = packagedBackendHealthTimeoutMs()
+): Promise<void> {
+  await waitForBackendPing(port, timeoutMs)
+  const started = Date.now()
+  const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
+  while (remaining() > 0) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
+        signal: AbortSignal.timeout(2_000)
+      })
+      if (response.ok) {
+        const body = (await response.json()) as {
+          appRoutesReady?: boolean
+          readyForUi?: boolean
+        }
+        const routesReady = body.appRoutesReady ?? body.readyForUi
+        if (routesReady !== false) {
+          return
+        }
+      }
+    } catch {
+      /* routes still registering */
+    }
+    await new Promise(resolve => setTimeout(resolve, 150))
+  }
+  console.warn('[xcagi-desktop] appRoutesReady 未在时限内为 true，仍加载主应用')
+}
+
+function updateSplashStatus(text: string): void {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const safe = text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+  void mainWindow.webContents
+    .executeJavaScript(`window.xcagiSetSplashStatus && window.xcagiSetSplashStatus('${safe}')`)
+    .catch(() => undefined)
+}
+
+export function resolveDesktopSplashUrl(): string {
+  const candidates = [
+    path.join(__dirname, 'splash.html'),
+    path.join(__dirname, '..', 'resources', 'splash.html')
+  ]
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'splash.html'))
+  }
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      return `file://${filePath.replace(/\\/g, '/')}`
+    }
+  }
+  const fallback = `<!doctype html><html><body style="margin:0;background:#f4f7fb;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui"><div>XCAGI 启动中…</div></body></html>`
+  return `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}`
 }
 
 type DesktopStartupMarks = {
@@ -501,6 +731,8 @@ async function startBackend(): Promise<void> {
       XCAGI_API_HOST: DESKTOP_BACKEND_BIND_HOST,
       XCAGI_UVICORN_RELOAD: '0',
       XCAGI_GLOBAL_RATE_LIMIT: '0',
+      LOG_LEVEL: process.env.LOG_LEVEL || (app.isPackaged ? 'WARNING' : 'INFO'),
+      XCAGI_DESKTOP_FAST_START: '1',
       ...backendEditionEnv(),
       PYTHONUTF8: '1'
     },
@@ -780,7 +1012,7 @@ async function createWindow(): Promise<void> {
     winOpts.frame = true
     winOpts.titleBarStyle = 'default'
   }
-  winOpts.show = false
+  winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
   if (process.platform !== 'darwin') {
@@ -800,30 +1032,12 @@ async function createWindow(): Promise<void> {
     })
   }
 
-  await waitForBackendHealth(DEFAULT_PORT)
-
-  if (shouldClearFrontendCache()) {
-    try {
-      await mainWindow.webContents.session.clearCache()
-      markFrontendCacheCleared()
-    } catch {
-      /* ignore */
-    }
-  }
-
-  mainWindow.webContents.on('did-finish-load', () => {
-    if (mainWindow) tagDesktopWebContents(mainWindow)
-  })
-
-  // 防止渲染进程导航到本机后端以外的来源（electronegativity LimitNavigation HIGH）。
-  // 桌面端只加载 127.0.0.1:DEFAULT_PORT，任何外部跳转一律拦截。
   mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
+    if (!isTrustedDesktopOrigin(url, DEFAULT_PORT) && !url.startsWith('file://') && !url.startsWith('data:')) {
       event.preventDefault()
       console.warn(`[xcagi-desktop] blocked will-navigate to ${url}`)
     }
   })
-  // window.open / target=_blank 由系统浏览器打开，不在 Electron 内开新窗口。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
       return { action: 'allow' }
@@ -832,15 +1046,61 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' }
   })
 
-  await mainWindow.loadURL(desktopInitialUrl(), {
-    extraHeaders: 'Cache-Control: no-cache\r\n'
-  })
-  tagDesktopWebContents(mainWindow)
-  if (process.platform === 'darwin') {
-    ensureMacWindowInWorkArea(mainWindow)
-  }
+  void mainWindow.loadURL(resolveDesktopSplashUrl())
   mainWindow.show()
   mainWindow.focus()
+  updateSplashStatus('正在启动本地服务…')
+
+  if (shouldClearFrontendCache()) {
+    void mainWindow.webContents.session
+      .clearCache()
+      .then(() => markFrontendCacheCleared())
+      .catch(() => undefined)
+  }
+
+  const loadMainApplication = async (): Promise<void> => {
+    if (!mainWindow) return
+    try {
+      await mainWindow.loadURL(desktopInitialUrl(), {
+        extraHeaders: 'Cache-Control: no-cache\r\n'
+      })
+      tagDesktopWebContents(mainWindow)
+      if (process.platform === 'darwin') {
+        ensureMacWindowInWorkArea(mainWindow)
+      }
+      mainWindow.focus()
+    } catch (error) {
+      console.error('[xcagi-desktop] load main application failed', error)
+    }
+  }
+
+  const splashStarted = Date.now()
+  const splashTicker = setInterval(() => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      clearInterval(splashTicker)
+      return
+    }
+    const sec = Math.floor((Date.now() - splashStarted) / 1000)
+    if (sec > 0 && sec % 2 === 0) {
+      updateSplashStatus(`正在启动本地服务…（${sec}s）`)
+    }
+  }, 1000)
+
+  void waitForBackendApplicationReady(DEFAULT_PORT)
+    .then(() => {
+      updateSplashStatus('正在加载应用…')
+      return loadMainApplication()
+    })
+    .catch(error => {
+      console.error('[xcagi-desktop] backend readiness wait failed', error)
+      updateSplashStatus('启动失败，请查看日志')
+      void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
+    })
+    .finally(() => clearInterval(splashTicker))
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (mainWindow) tagDesktopWebContents(mainWindow)
+  })
 
   void waitForBackendStatus(DEFAULT_PORT).then(status => {
     console.info(
@@ -863,7 +1123,7 @@ function createMenu(): void {
       label: '导出诊断包…',
       click: () => void exportSupportBundleInteractive()
     },
-    { label: '检查更新', click: () => void checkForUpdates() },
+    { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
     { type: 'separator' },
     { role: 'quit', label: '退出' }
   ]
@@ -930,7 +1190,7 @@ function createTray(): void {
       { label: '显示 XCAGI', click: () => mainWindow?.show() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
       { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
-      { label: '检查更新', click: () => void checkForUpdates() },
+      { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }
     ])
@@ -955,6 +1215,7 @@ function bootstrap(): void {
     })
 
     app.whenReady().then(async () => {
+      await applyOtaProxyBypass()
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {
         process.env.XCAGI_UPDATE_URL = SKU_UPDATE_URL[sku]
@@ -1000,7 +1261,7 @@ function bootstrap(): void {
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
-      ipcMain.handle('xcagi:check-for-updates', () => checkForUpdates())
+      ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
@@ -1046,6 +1307,9 @@ function bootstrap(): void {
       }
 
       try {
+        // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
+        await createWindow()
+        updateSplashStatus('正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
@@ -1057,31 +1321,21 @@ function bootstrap(): void {
           app.quit()
           return
         }
-        try {
-          await createWindow()
-          // 启动成功：提交回滚（删除 marker，保留备份）
-          if (pendingRollback) {
-            commitRollback()
-            writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error)
-          writeBackendLog(`[rollback] createWindow 失败: ${msg}\n`)
-          if (pendingRollback) {
-            await triggerRollbackSafe(`createWindow 失败: ${msg}`)
-            void dialog.showErrorBox(APP_NAME, '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。')
-          } else {
-            void dialog.showErrorBox(APP_NAME, msg)
-          }
-          app.quit()
+        if (pendingRollback) {
+          commitRollback()
+          writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
         }
       } catch (error) {
-        // startBackend 或 waitForBackendHealth 抛错（health 超时）
         const msg = error instanceof Error ? error.message : String(error)
-        writeBackendLog(`[rollback] startBackend 抛错: ${msg}\n`)
+        writeBackendLog(`[rollback] 桌面启动失败: ${msg}\n`)
         if (pendingRollback) {
-          await triggerRollbackSafe(`后端启动失败: ${msg}`)
-          void dialog.showErrorBox(APP_NAME, '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。')
+          await triggerRollbackSafe(`桌面启动失败: ${msg}`)
+          void dialog.showErrorBox(
+            APP_NAME,
+            msg.includes('createWindow') || msg.includes('窗口')
+              ? '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。'
+              : '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。'
+          )
         } else {
           void dialog.showErrorBox(APP_NAME, msg)
         }
