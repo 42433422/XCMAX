@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 超级员工发送被卡住中继锁死（2026-07-09 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：恢复 inflight 中继时不再占用 `_sending` / `_activeAssistantId`，避免 Codex/Cursor/Claude 点发送无反应（Trae 无卡住任务故正常）
+- **fix(mobile-flutter)**：中继轮询超时/任务失效时清理 `inflightRelayTasks`；进会话先探测一次再决定是否恢复
+- **fix(mobile-flutter)**：发送被挡时 toast 提示；6 分钟看门狗自动解锁 `_sending`
+
 ### 四工具超级员工 factory_context / Workspace 对齐（2026-07-09 · v10 线内迭代）
 
 - **fix(backend)**：Cursor 桌面/手机 POST 补齐 `factory_context(workspace_id)`，与 Codex/Claude/Trae 一致

@@ -1063,6 +1063,38 @@ class MobileRepository {
     if (await _clearInflightIfRelayChanged(conversationId, taskId)) {
       return null;
     }
+    // 进会话先探测一次：失效/不存在的任务立刻清掉，避免长时间占住 UI。
+    try {
+      final probe = await _client.relayTaskStatus(taskId);
+      if (!probe.success) {
+        await _setInflightRelayTask(conversationId, '');
+        return null;
+      }
+      final taskMap = _objectMap(probe.data?['task']);
+      final current =
+          taskMap.isNotEmpty ? taskMap : probe.data ?? const <String, Object?>{};
+      final status = _stringField(current, 'status');
+      if (status.isEmpty ||
+          const {'failed', 'blocked', 'cancelled', 'done', 'completed'}
+              .contains(status)) {
+        await _setInflightRelayTask(conversationId, '');
+        if (status == 'done' || status == 'completed') {
+          final text = _relayTaskResultText(current);
+          if (text.trim().isNotEmpty) {
+            await _cacheChatMessage(
+              conversationId,
+              role: ChatRole.assistant,
+              body: text,
+            );
+            return text;
+          }
+        }
+        return null;
+      }
+    } catch (_) {
+      await _setInflightRelayTask(conversationId, '');
+      return null;
+    }
     final kind = relayKindForConversation(conversationId);
     final toolLabel = toolLabelForRelayKind(kind ?? 'codex.invoke');
     onStatus?.call(RelayTaskProgress(
@@ -1088,6 +1120,15 @@ class MobileRepository {
       );
     }
     return reply;
+  }
+
+  /// 清除全部卡住的中继占用（调试/救急：避免会话永久无法发送）。
+  Future<void> clearAllInflightRelayTasks() async {
+    final session = await _client.loadSession();
+    if (session.inflightRelayTasks.isEmpty) return;
+    await _client.saveSession(
+      session.copyWith(inflightRelayTasks: const <String, String>{}),
+    );
   }
 
   Future<void> deleteCachedChatMessage({
@@ -1614,18 +1655,46 @@ class MobileRepository {
     bool Function()? isCancelled,
   }) async {
     var lastStatus = '';
+    var sawKnownStatus = false;
     for (var attempt = 0; attempt < 150; attempt += 1) {
       _throwIfCancelled(isCancelled);
       await Future<void>.delayed(const Duration(seconds: 2));
       _throwIfCancelled(isCancelled);
-      final status = await _client.relayTaskStatus(taskId);
-      final taskMap = _objectMap(status.data?['task']);
-      final current = taskMap.isNotEmpty
-          ? taskMap
-          : status.data ?? const <String, Object?>{};
+      Map<String, Object?> current;
+      try {
+        final status = await _client.relayTaskStatus(taskId);
+        if (!status.success) {
+          // 任务不存在/鉴权失败：清掉本地 inflight，避免会话永久锁发送。
+          await _setInflightRelayTask(conversationId, '');
+          throw MobileRepositoryException(
+            status.message.ifEmpty('中继任务已失效，请重新发送'),
+          );
+        }
+        final taskMap = _objectMap(status.data?['task']);
+        current = taskMap.isNotEmpty
+            ? taskMap
+            : status.data ?? const <String, Object?>{};
+      } on MobileRepositoryException {
+        rethrow;
+      } catch (error) {
+        if (attempt >= 5) {
+          await _setInflightRelayTask(conversationId, '');
+          throw MobileRepositoryException(
+            '中继任务状态不可用，已解除占用：$error',
+          );
+        }
+        continue;
+      }
       final currentStatus = _stringField(current, 'status');
       _throwIfCancelled(isCancelled);
+      if (currentStatus.isEmpty && attempt >= 3 && !sawKnownStatus) {
+        await _setInflightRelayTask(conversationId, '');
+        throw const MobileRepositoryException(
+          '中继任务已失效或不存在，请重新发送',
+        );
+      }
       if (currentStatus.isNotEmpty && currentStatus != lastStatus) {
+        sawKnownStatus = true;
         onStatus?.call(RelayTaskProgress(
           taskId: taskId,
           status: currentStatus,
@@ -1663,8 +1732,10 @@ class MobileRepository {
         );
       }
     }
+    // 超时也必须清 inflight，否则下次进会话会再次锁死发送。
+    await _setInflightRelayTask(conversationId, '');
     throw const MobileRepositoryException(
-      '电脑工具暂未回写结果，任务仍在后台运行，可稍后回到此会话查看。',
+      '电脑工具暂未回写结果，已解除占用；可重新发送或稍后查看历史。',
     );
   }
 

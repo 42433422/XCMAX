@@ -217,19 +217,19 @@ class _ChatScreenState extends State<ChatScreen> {
     );
     if (!mounted || !hasInflight) return;
 
+    // 恢复旧中继时不要占用 _sending：否则发送键变「停止」或点发送直接 return，
+    // 用户会感觉「除了 Trae 都发不出去」。恢复失败/超时由 repository 清 inflight。
     final assistantId =
         'assistant-resume-${DateTime.now().microsecondsSinceEpoch}';
     setState(() {
-      _sending = true;
       _showToolPanel = false;
-      _activeAssistantId = assistantId;
-      _stopRequested = false;
+      // 不抢占 _activeAssistantId / _sending：用户新发送应优先。
       _messages.add(
         ChatMessage(
           id: assistantId,
           conversationId: widget.conversation.id,
           role: ChatRole.assistant,
-          body: '',
+          body: '正在检查未完成的电脑任务…',
           timeText: '刚刚',
           hasEmployeeProfile: true,
           status: ChatDeliveryStatus.sending,
@@ -241,19 +241,20 @@ class _ChatScreenState extends State<ChatScreen> {
       final reply = await repository.resumeRelayTask(
         conversationId: widget.conversation.id,
         onToken: (token) {
-          if (!mounted) return;
-          if (_stopRequested || _activeAssistantId != assistantId) return;
+          if (!mounted || _stopRequested || _sending) return;
           setState(() => _appendMessageBody(assistantId, token));
         },
         onStatus: (progress) {
-          if (!mounted) return;
-          if (_stopRequested || _activeAssistantId != assistantId) return;
+          if (!mounted || _stopRequested || _sending) return;
           setState(() => _activeRelayProgress = progress);
         },
-        isCancelled: () => _stopRequested || _activeAssistantId != assistantId,
+        isCancelled: () => _stopRequested || _sending || !mounted,
       );
       if (!mounted) return;
-      if (_stopRequested || _activeAssistantId != assistantId) return;
+      if (_sending || _stopRequested) {
+        setState(() => _removeMessage(assistantId));
+        return;
+      }
       if (reply == null) {
         setState(() => _removeMessage(assistantId));
       } else {
@@ -268,20 +269,24 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (error) {
       if (!mounted) return;
-      if (_stopRequested || _activeAssistantId != assistantId) return;
+      if (_sending || _stopRequested) {
+        setState(() => _removeMessage(assistantId));
+        return;
+      }
       setState(() {
         _replaceMessage(
           assistantId,
-          body: '（$error）',
+          body: '（上次电脑任务已结束：$error）',
           status: ChatDeliveryStatus.failed,
         );
         _activeRelayProgress = null;
       });
     } finally {
-      if (mounted && _activeAssistantId == assistantId) {
+      if (mounted) {
         setState(() {
-          _sending = false;
-          _activeAssistantId = null;
+          if (_activeAssistantId == assistantId) {
+            _activeAssistantId = null;
+          }
           _activeRelayProgress = null;
           _cancellingRelay = false;
         });
@@ -432,7 +437,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _send([String? overrideText]) async {
     final text = (overrideText ?? _controller.text).trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty) return;
+    if (_sending) {
+      _showMessage('当前仍有任务在进行，请先点「停止」再发送');
+      return;
+    }
     final quoted = _replyTo;
     _replyTo = null;
     final now = DateTime.now().microsecondsSinceEpoch;
@@ -479,6 +488,19 @@ class _ChatScreenState extends State<ChatScreen> {
       ]);
     });
     _controller.clear();
+
+    // 看门狗：异常路径漏清 _sending 时自动解锁，避免永久无法再发。
+    Future<void>.delayed(const Duration(minutes: 6), () {
+      if (!mounted) return;
+      if (_sending && _activeAssistantId == assistantId) {
+        setState(() {
+          _sending = false;
+          _activeAssistantId = null;
+          _activeRelayProgress = null;
+        });
+        _showMessage('发送超时已解锁，可重试');
+      }
+    });
 
     await _streamAssistantReply(
       assistantId: assistantId,
