@@ -97,3 +97,38 @@ def test_deliverable_personal_sku_no_erp(monkeypatch):
     data = build_deliverable_status(list(PERSONAL_HOST_MOD_IDS))
     assert data["deliverable"] is True
     assert ERP_DOMAIN_BRIDGE_MOD_ID not in data["expected_mod_ids"]
+
+
+def test_deliverable_enterprise_missing_erp(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "enterprise")
+    # enterprise host mods without ERP bridge
+    mods = [m for m in ENTERPRISE_HOST_MOD_IDS if m != ERP_DOMAIN_BRIDGE_MOD_ID]
+    data = build_deliverable_status(mods)
+    assert data["product_sku"] == "enterprise"
+    assert data["deliverable"] is False
+    assert (
+        any(
+            b.get("code") == "ERP_DOMAIN_BRIDGE_MISSING" or "erp" in str(b).lower()
+            for b in data["blockers"]
+        )
+        or data["missing_mod_ids"]
+    )
+
+
+def test_deliverable_mods_routes_false(monkeypatch):
+    monkeypatch.setenv("XCAGI_GENERIC_EDITION", "1")
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.state.mods_routes_loaded = False
+    data = build_deliverable_status(list(GENERIC_HOST_MOD_IDS), app=app)
+    # routes flag reflected; may or may not block depending on installed list
+    assert data["mods_routes_loaded"] is False
+
+
+def test_deliverable_personal_incomplete(monkeypatch):
+    monkeypatch.setenv("XCAGI_PRODUCT_SKU", "personal")
+    data = build_deliverable_status(["xcagi-planner-bridge"])
+    assert data["product_sku"] == "personal"
+    assert data["deliverable"] is False
+    assert data["product_flow"]["recommended_step"] in ("host_pack", "industry_mod")

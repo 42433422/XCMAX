@@ -108,3 +108,56 @@ class TestPairingIssuePortEnvAndDefaults:
     def test_api_base_url_strips_scheme_and_path(self):
         assert ph._pairing_api_base_url("http://192.168.1.2/foo", 0) == "http://192.168.1.2:5000/"
         assert ph._pairing_api_base_url("192.168.1.2:9999", 17500) == "http://192.168.1.2:17500/"
+
+
+class TestGuessLanAndRuntime:
+    def test_guess_lan_ipv4_success(self):
+        class _Sock:
+            def connect(self, *_a):
+                return None
+
+            def getsockname(self):
+                return ("10.0.0.8", 0)
+
+            def close(self):
+                return None
+
+        with patch.object(ph.socket, "socket", return_value=_Sock()):
+            assert ph._guess_lan_ipv4() == "10.0.0.8"
+
+    def test_guess_lan_ipv4_oserror(self):
+        with patch.object(ph.socket, "socket", side_effect=OSError("no net")):
+            assert ph._guess_lan_ipv4() == "127.0.0.1"
+
+    def test_read_runtime_api_port_file(self, tmp_path, monkeypatch):
+        runtime = tmp_path / ".runtime"
+        runtime.mkdir()
+        (runtime / "api.port").write_text("17500\n", encoding="utf-8")
+        monkeypatch.setattr(ph, "_REPO_ROOT", tmp_path)
+        assert ph._read_runtime_api_port() == 17500
+
+    def test_read_runtime_api_port_invalid(self, tmp_path, monkeypatch):
+        runtime = tmp_path / ".runtime"
+        runtime.mkdir()
+        (runtime / "api.port").write_text("not-a-port\n", encoding="utf-8")
+        monkeypatch.setattr(ph, "_REPO_ROOT", tmp_path)
+        assert ph._read_runtime_api_port(default=9) == 9
+
+    def test_backend_listens_loopback_env(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_API_HOST", "127.0.0.1")
+        assert ph._backend_listens_loopback_only() is True
+        monkeypatch.setenv("XCAGI_API_HOST", "0.0.0.0")
+        assert ph._backend_listens_loopback_only() is False
+
+    def test_enrich_without_code(self):
+        with patch.object(ph, "_backend_listens_loopback_only", return_value=False):
+            data = ph._enrich_pairing_payload(
+                {"host": "10.1.2.3", "port": 17500, "nonce": "n"},
+                _mock_request("10.1.2.3:17500"),
+            )
+        assert data["api_base_url"] == "http://10.1.2.3:17500/"
+        assert "code" not in data or not data.get("code")
+        assert data["qr_json"]["host"] == "10.1.2.3"
+
+    def test_requested_5000_yields_to_request_port(self):
+        assert ph._pairing_issue_port(_mock_request("127.0.0.1:17500"), 5000) == 17500
