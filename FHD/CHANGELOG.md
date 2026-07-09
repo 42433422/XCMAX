@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 巨石模块结构拆分（2026-07-09 · v10 线内迭代）
+
+- **refactor(backend)**：`workflow.py` Excel 导入拆至 `workflow_import_excel.py`（原路径 re-export）
+- **refactor(backend)**：`xcmax_admin` Token 采集拆至 `xcmax_admin_token_usage.py`（测试 patch 路径不变）
+- **refactor(backend)**：`mobile_api_extensions` 员工提问/chat SSE 拆至 `mobile_extensions/employee_routes.py`
+
 ### 局域网手机自更新闭环（2026-07-09 · v10 线内迭代）
 
 - **feat(scripts)**：`lan-mobile-apk-publish.sh` 本机构建 Flutter 企业版 APK，写入 `data/lan-releases/` + manifest（versionName=10.0.0，versionCode=时间戳）
