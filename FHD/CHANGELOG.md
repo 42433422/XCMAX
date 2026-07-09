@@ -11,6 +11,9 @@
 - **fix(mobile-flutter)**：恢复 inflight 中继时不再占用 `_sending` / `_activeAssistantId`，避免 Codex/Cursor/Claude 点发送无反应（Trae 无卡住任务故正常）
 - **fix(mobile-flutter)**：中继轮询超时/任务失效时清理 `inflightRelayTasks`；进会话先探测一次再决定是否恢复
 - **fix(mobile-flutter)**：发送被挡时 toast 提示；僵死锁（`_sending` 无活跃助手）自动解锁；看门狗 90s；停止键在无 assistantId 时也能清锁；Composer 随 busy 强制重建
+- **fix(mobile-flutter)**：进会话强制重置发送锁；超级员工工具栏增加「测试发送 ping」绕过输入框验证链路
+- **fix(mobile-flutter)**：超级员工发送分阶段超时（LAN SSE 90s / 中继查找 12s / 中继回传 3min）并即时吐出连接状态，避免 Cursor 假死无反馈
+- **fix(backend)**：超级员工 FAQ 直答增加 `ping` → `pong`，便于连通性验收（不经 CLI）
 
 ### 四工具超级员工 factory_context / Workspace 对齐（2026-07-09 · v10 线内迭代）
 

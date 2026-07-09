@@ -65,6 +65,11 @@ class _ChatScreenState extends State<ChatScreen> {
     _messages = [...widget.initialMessages];
     _repository = widget.repository ?? MobileRepositoryScope.maybeRead(context);
     _employeeRef = _parseEmployeeConversationRef(widget.conversation.id);
+    // 进会话一律从可发送状态开始，避免上次僵死锁残留。
+    _sending = false;
+    _activeAssistantId = null;
+    _stopRequested = false;
+    _activeRelayProgress = null;
     _loadRemoteMessages();
     _loadUserAvatar();
     _loadEmployeeProfile();
@@ -939,6 +944,15 @@ class _ChatScreenState extends State<ChatScreen> {
       // 与 Android 对齐：无活跃分支时保留新建对话/OCR/语音，并额外提供执行回顾。
       return [
         ...baseActions,
+        _ChatToolAction(
+          icon: Icons.bolt_outlined,
+          title: '测试发送 ping',
+          subtitle: '绕过输入框直接发一条 ping',
+          onTap: () {
+            setState(() => _showToolPanel = false);
+            _send('ping');
+          },
+        ),
         _ChatToolAction(
           icon: Icons.folder_open_outlined,
           title: '选择项目',
@@ -2097,11 +2111,12 @@ class _Composer extends StatelessWidget {
                     onPressed: onToggleTools,
                     tooltip: '更多工具',
                   ),
-                  ValueListenableBuilder<TextEditingValue>(
-                    key: ValueKey('send-pill-busy-$busy'),
-                    valueListenable: controller,
-                    builder: (context, value, _) {
-                      final canSend = value.text.trim().isNotEmpty && !busy;
+                  ListenableBuilder(
+                    listenable: controller,
+                    builder: (context, _) {
+                      // parent 已用 busy key 重建；这里再听输入，保证打字时出现发送键。
+                      final canSend =
+                          controller.text.trim().isNotEmpty && !busy;
                       if (!canSend && !busy) return const SizedBox.shrink();
                       return Padding(
                         padding: const EdgeInsets.only(left: 6),

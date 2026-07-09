@@ -2516,8 +2516,14 @@ class SuperEmployeeService:
             "help",
         }
         greeting_prompts = {"你好", "在吗", "在不在", "hello", "hi"}
+        ping_prompts = {"ping", "pingpong", "ping-pong"}
         slow_prompts = {"为什么这么慢", "为啥这么慢", "为什么出不来", "怎么出不来"}
 
+        if normalized in ping_prompts:
+            return (
+                f"pong，我是 XCMAX {name}，当前已就绪。"
+                f"可直接发开发/排查任务；普通问答也会在此通道回复。"
+            )
         if normalized in identity_prompts:
             return (
                 f"我是{name}。你在软件里发普通问题时，我会直接回复；"

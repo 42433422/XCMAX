@@ -886,12 +886,15 @@ class MobileRepository {
       );
       // 用户主动新发时清掉旧 inflight，避免后台 resume 轮询继续占住会话。
       await _setInflightRelayTask(conversation.id, '');
+      onToken?.call('正在连接…');
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       final workspace = await _selectedFactoryWorkspace();
       if (localBaseUrl.isNotEmpty) {
         // 第 1 级：LAN SSE（逐 token / status，避免整段 POST 挡住流式进度）。
         try {
-          final reply = await _client.streamSuperEmployeeMessage(
+          onToken?.call('\n局域网直连中…\n');
+          final reply = await _client
+              .streamSuperEmployeeMessage(
             tool,
             text,
             baseUrl: localBaseUrl,
@@ -910,7 +913,8 @@ class MobileRepository {
               onToken?.call('\n$status\n');
             },
             isCancelled: isCancelled,
-          );
+          )
+              .timeout(const Duration(seconds: 90));
           _throwIfCancelled(isCancelled);
           await _cacheChatMessage(
             conversation.id,
@@ -922,6 +926,7 @@ class MobileRepository {
           _throwIfCancelled(isCancelled);
           // 第 2 级：旧后端无 stream 时回落 LAN POST；再失败才走云中继。
           try {
+            onToken?.call('\n改用局域网直答…\n');
             final reply = await _postSuperEmployeeMessage(
               tool,
               text,
@@ -929,7 +934,7 @@ class MobileRepository {
               workspaceId: workspace.id,
               workspaceRoot: workspace.root,
               conversationId: conversation.id,
-            );
+            ).timeout(const Duration(seconds: 60));
             _throwIfCancelled(isCancelled);
             onToken?.call(reply);
             await _cacheChatMessage(
@@ -947,7 +952,11 @@ class MobileRepository {
       final relayKind = relayKindForConversation(conversation.id);
       String relayId = '';
       try {
-        relayId = await _relayIdForSuperEmployeeDispatch();
+        onToken?.call('\n查找在线电脑…\n');
+        relayId = await _relayIdForSuperEmployeeDispatch()
+            .timeout(const Duration(seconds: 12));
+      } on TimeoutException {
+        relayId = '';
       } on MobileRepositoryException catch (e) {
         _throwIfCancelled(isCancelled);
         final guidance = e.message.trim().ifEmpty(
@@ -963,24 +972,37 @@ class MobileRepository {
       }
       if (relayKind != null && relayId.isNotEmpty) {
         // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
-        final reply = await _streamRelaySuperEmployeeTask(
-          relayId: relayId,
-          relayKind: relayKind,
-          conversationId: conversation.id,
-          message: text,
-          onToken: onToken,
-          onStatus: onStatus,
-          isCancelled: isCancelled,
-        );
-        _throwIfCancelled(isCancelled);
-        if (reply.trim().isNotEmpty) {
+        onToken?.call('\n已派到电脑，等待回传…\n');
+        try {
+          final reply = await _streamRelaySuperEmployeeTask(
+            relayId: relayId,
+            relayKind: relayKind,
+            conversationId: conversation.id,
+            message: text,
+            onToken: onToken,
+            onStatus: onStatus,
+            isCancelled: isCancelled,
+          ).timeout(const Duration(minutes: 3));
+          _throwIfCancelled(isCancelled);
+          if (reply.trim().isNotEmpty) {
+            await _cacheChatMessage(
+              conversation.id,
+              role: ChatRole.assistant,
+              body: reply,
+            );
+          }
+          return reply.ifEmpty('已收到，我会继续处理。');
+        } on TimeoutException {
+          await _setInflightRelayTask(conversation.id, '');
+          const msg = '电脑回传超时，已解除占用；请确认本机 Cursor/Codex 在线后重试。';
+          onToken?.call(msg);
           await _cacheChatMessage(
             conversation.id,
             role: ChatRole.assistant,
-            body: reply,
+            body: msg,
           );
+          return msg;
         }
-        return reply.ifEmpty('已收到，我会继续处理。');
       }
       // 无 LAN、无在线电脑中继时，禁止误打云端 POST（云端通常无本机 CLI，
       // 只会得到「请确认本机已登录」类误导文案）。引导用户绑定执行端。
