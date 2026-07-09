@@ -219,48 +219,46 @@ class TestLanSettingsOverrideFromJson:
 
 
 class TestLoadOverrides:
-    def test_returns_empty_when_file_missing(self, tmp_path):
+    def test_returns_empty_when_file_missing(self, tmp_path, monkeypatch):
         mod = _module()
         missing = tmp_path / "no_file.json"
-        with patch.object(mod, "_settings_path", return_value=missing):
-            result = mod.load_overrides()
+        monkeypatch.setenv("LAN_SETTINGS_FILE", str(missing))
+        result = mod.load_overrides()
         assert result.enabled is None
 
-    def test_returns_parsed_when_file_exists(self, tmp_path):
+    def test_returns_parsed_when_file_exists(self, tmp_path, monkeypatch):
         mod = _module()
         p = tmp_path / "lan_settings.json"
         p.write_text(json.dumps({"enabled": True}), encoding="utf-8")
-        with patch.object(mod, "_settings_path", return_value=p):
-            result = mod.load_overrides()
+        monkeypatch.setenv("LAN_SETTINGS_FILE", str(p))
+        result = mod.load_overrides()
         assert result.enabled is True
 
-    def test_empty_file_returns_empty_override(self, tmp_path):
+    def test_empty_file_returns_empty_override(self, tmp_path, monkeypatch):
         mod = _module()
         p = tmp_path / "lan_settings.json"
         p.write_text("   ", encoding="utf-8")
-        with patch.object(mod, "_settings_path", return_value=p):
-            result = mod.load_overrides()
+        monkeypatch.setenv("LAN_SETTINGS_FILE", str(p))
+        result = mod.load_overrides()
         assert result.enabled is None
 
-    def test_ioerror_returns_empty_override(self, tmp_path):
+    def test_ioerror_returns_empty_override(self, tmp_path, monkeypatch):
         mod = _module()
         p = tmp_path / "lan_settings.json"
         p.write_text("{}", encoding="utf-8")
+        monkeypatch.setenv("LAN_SETTINGS_FILE", str(p))
         # Patch Path.read_text at the class level temporarily
-        with (
-            patch.object(mod, "_settings_path", return_value=p),
-            patch("pathlib.Path.read_text", side_effect=OSError("disk error")),
-        ):
+        with patch("pathlib.Path.read_text", side_effect=OSError("disk error")):
             result = mod.load_overrides()
         # OSError is in RECOVERABLE_ERRORS, so returns empty
         assert result.enabled is None
 
-    def test_corrupt_json_returns_empty_override(self, tmp_path):
+    def test_corrupt_json_returns_empty_override(self, tmp_path, monkeypatch):
         mod = _module()
         p = tmp_path / "lan_settings.json"
         p.write_text("{bad json", encoding="utf-8")
-        with patch.object(mod, "_settings_path", return_value=p):
-            result = mod.load_overrides()
+        monkeypatch.setenv("LAN_SETTINGS_FILE", str(p))
+        result = mod.load_overrides()
         assert result.enabled is None
 
 
