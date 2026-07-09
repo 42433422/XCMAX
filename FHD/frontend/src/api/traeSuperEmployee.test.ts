@@ -63,4 +63,56 @@ describe('traeSuperEmployee API', () => {
     )
     expect(result.messages).toHaveLength(1)
   })
+
+  it('unwraps nested data.messages and throws on success false', async () => {
+    apiFetchMock.mockResolvedValue(
+      jsonResponse({ data: { messages: [{ id: 'nested' }] } }),
+    )
+    await expect(fetchTraeSuperEmployeeMessages()).resolves.toEqual([{ id: 'nested' }])
+
+    apiFetchMock.mockResolvedValue(jsonResponse({ success: false, message: '加载失败' }))
+    await expect(fetchTraeSuperEmployeeMessages()).rejects.toThrow('加载失败')
+
+    apiFetchMock.mockResolvedValue(
+      jsonResponse({ data: { success: false, message: 'nested fail' } }),
+    )
+    await expect(fetchTraeSuperEmployeeMessages()).rejects.toThrow('nested fail')
+  })
+
+  it('throws on non-JSON and maps 401 to 未登录', async () => {
+    apiFetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({ 'content-type': 'text/plain' }),
+      json: async () => ({}),
+    } as Response)
+    await expect(fetchTraeSuperEmployeeMessages()).rejects.toThrow('请求失败（HTTP 200）')
+
+    apiFetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({ 'content-type': 'text/plain' }),
+      json: async () => ({}),
+    } as Response)
+    await expect(fetchTraeSuperEmployeeMessages()).rejects.toThrow('未登录')
+  })
+
+  it('send ignores string message field and uses mobile scope', async () => {
+    apiFetchMock.mockResolvedValue(
+      jsonResponse({
+        message: 'plain',
+        assistant_message: { id: 'a2' },
+        dispatch: { request_id: 'r1' },
+      }),
+    )
+    const result = await sendTraeSuperEmployeeMessage('hi', undefined, { scope: 'mobile' })
+    expect(apiFetchMock).toHaveBeenCalledWith(
+      '/api/mobile/v1/admin/trae-super-employee/messages',
+      expect.any(Object),
+    )
+    expect(result.message).toBeUndefined()
+    expect(result.assistant_message).toEqual({ id: 'a2' })
+    expect(result.dispatch).toEqual({ request_id: 'r1' })
+    expect(result.messages).toEqual([])
+  })
 })

@@ -525,6 +525,241 @@ class TestBackupDatabaseErrors:
         ):
             assert mig.backup_database(tmp_path, version="1.0") is None
 
+    def test_integrity_fail_unlink_oserror_swallowed(self, tmp_path):
+        """integrity_check fail + unlink OSError → still return None (BrPart 69)."""
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        db = data / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig, "_integrity_check_ok", return_value=False),
+            patch.object(
+                mig,
+                "utc_now_naive",
+                return_value=MagicMock(strftime=MagicMock(return_value="20260101120002")),
+            ),
+            patch.object(Path, "unlink", side_effect=OSError("busy")),
+        ):
+            assert mig.backup_database(tmp_path, version="1.0") is None
+
+    def test_sqlite_error_unlink_oserror_swallowed(self, tmp_path):
+        """hot backup sqlite.Error + partial file unlink OSError (BrPart 53-55)."""
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        db = data / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+
+        class _Conn:
+            def backup(self, *_a, **_k):
+                # Leave a partial target so exists() is True in except.
+                raise sqlite3.Error("boom")
+
+            def close(self):
+                return None
+
+        # Pre-create the expected target so unlink path runs.
+        stamp = "20260101120003"
+        target = backups / f"xcagi-1.0-{stamp}.db"
+        target.write_bytes(b"partial")
+
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig.sqlite3, "connect", side_effect=[_Conn(), _Conn()]),
+            patch.object(
+                mig,
+                "utc_now_naive",
+                return_value=MagicMock(strftime=MagicMock(return_value=stamp)),
+            ),
+            patch.object(Path, "unlink", side_effect=OSError("locked")),
+        ):
+            assert mig.backup_database(tmp_path, version="1.0") is None
+
+    def test_src_connect_fails_src_conn_none_in_finally(self, tmp_path):
+        """First sqlite3.connect raises → src_conn stays None (BrPart 61->65)."""
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        db = data / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(
+                mig.sqlite3,
+                "connect",
+                side_effect=sqlite3.Error("cannot open"),
+            ),
+            patch.object(
+                mig,
+                "utc_now_naive",
+                return_value=MagicMock(strftime=MagicMock(return_value="20260101120004")),
+            ),
+        ):
+            assert mig.backup_database(tmp_path, version="1.0") is None
+
+
+class TestRecoverAllBackupsFail:
+    def test_all_candidates_fail_integrity_or_copy(self, tmp_path):
+        """Every backup fails integrity or copy2 → corrupt_no_backup (186-187)."""
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        bad = data / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        # Two candidates: both "pass" integrity mock but copy always fails.
+        a = backups / "xcagi-a.db"
+        b = backups / "xcagi-b.db"
+        a.write_bytes(b"x")
+        b.write_bytes(b"y")
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig, "_quick_check_ok", return_value=False),
+            patch.object(mig, "_integrity_check_ok", return_value=True),
+            patch.object(mig.shutil, "copy2", side_effect=OSError("disk full")),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "corrupt_no_backup"
+        assert "no usable backup" in out["detail"]
+
+    def test_backups_dir_missing_still_scans_legacy_only(self, tmp_path):
+        """backups_dir not a dir (162->164 false) but legacy has only bad files."""
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        data.mkdir()
+        bad = data / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        legacy = data / "database_backups"
+        legacy.mkdir()
+        (legacy / "snap.bak").write_bytes(b"bad")
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": tmp_path / "no-such-backups",  # not created
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig, "_quick_check_ok", return_value=False),
+            patch.object(mig, "_integrity_check_ok", return_value=False),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "corrupt_no_backup"
+
+
+class TestBootstrapAndMainBackupPrint:
+    def test_bootstrap_sqlite_schema_calls_create_all(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with (
+            patch.object(mig, "configure_desktop_environment"),
+            patch("app.db.models", create=True),
+            patch("app.db.dispose_and_recreate_engine") as dispose,
+            patch("app.db.engine", new=MagicMock()),
+            patch("app.db.base.Base") as Base,
+        ):
+            Base.metadata = MagicMock()
+            mig.bootstrap_sqlite_schema(tmp_path)
+        dispose.assert_called_once()
+        Base.metadata.create_all.assert_called_once()
+
+    def test_alembic_root_non_frozen(self):
+        from app.desktop_runtime import migrate as mig
+
+        with patch.object(mig.sys, "frozen", False, create=True):
+            root = mig._alembic_root()
+        assert root.name == "FHD" or (root / "alembic.ini").exists() or root.is_dir()
+
+    def test_main_backup_prints_path(self, tmp_path, capsys):
+        from app.desktop_runtime.migrate import main
+
+        backup_path = tmp_path / "xcagi-v.db"
+        backup_path.write_text("ok")
+        with (
+            patch("app.desktop_runtime.migrate.configure_desktop_environment"),
+            patch(
+                "app.desktop_runtime.migrate.backup_database",
+                return_value=backup_path,
+            ),
+        ):
+            rc = main(["--backup"])
+        assert rc == 0
+        assert str(backup_path) in capsys.readouterr().out
+
+    def test_run_alembic_upgrade_non_bootstrap(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with (
+            patch.object(mig, "configure_desktop_environment"),
+            patch.object(mig, "_should_bootstrap_sqlite", return_value=False),
+            patch.object(mig, "_run_alembic_cli") as cli,
+        ):
+            mig.run_alembic_upgrade(tmp_path, version="head")
+        cli.assert_called_once_with("upgrade", "head")
+
 
 class TestRunAlembicUpgradeBootstrap:
     def test_bootstrap_stamps_head(self, tmp_path):

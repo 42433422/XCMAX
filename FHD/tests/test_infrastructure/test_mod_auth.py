@@ -11,7 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
@@ -462,6 +462,122 @@ class TestMiddlewareCall:
             pytest.raises(RuntimeError, match="app failed"),
         ):
             await middleware(scope, MagicMock(), MagicMock())
+
+    @pytest.mark.asyncio
+    async def test_enterprise_filter_syncs_and_allows_visible_mod(self, monkeypatch):
+        """sid + enterprise filter active + visible mod → sync then continue."""
+        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
+        called = {"sync": False, "app": False}
+
+        async def app(scope, receive, send):
+            called["app"] = True
+
+        async def _sync(sid):
+            called["sync"] = True
+            assert sid == "sess-ok"
+
+        middleware = ModContextMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/mod/taiyangniao-pro/x",
+            "headers": [],
+            "cookies": {},
+        }
+        # Starlette reads cookies from Cookie header
+        scope["headers"] = [(b"cookie", b"session_id=sess-ok")]
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+                return_value=True,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                side_effect=_sync,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=True,
+            ),
+            patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"),
+        ):
+            await middleware(scope, MagicMock(), MagicMock())
+        assert called["sync"] is True
+        assert called["app"] is True
+
+    @pytest.mark.asyncio
+    async def test_enterprise_filter_blocks_invisible_mod(self, monkeypatch):
+        """sid + enterprise filter + not visible → 403 JSONResponse, app not called."""
+        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
+        called = {"app": False}
+        sent = []
+
+        async def app(scope, receive, send):
+            called["app"] = True
+
+        async def send(message):
+            sent.append(message)
+
+        async def receive():
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        middleware = ModContextMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/mod/taiyangniao-pro/x",
+            "headers": [(b"cookie", b"session_id=sess-deny")],
+        }
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+                return_value=True,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                new=AsyncMock(),
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.is_mod_visible_for_enterprise",
+                return_value=False,
+            ),
+            patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready"),
+        ):
+            await middleware(scope, receive, send)
+        assert called["app"] is False
+        start = next(m for m in sent if m.get("type") == "http.response.start")
+        assert start["status"] == 403
+
+    @pytest.mark.asyncio
+    async def test_enterprise_filter_inactive_skips_entitlement_gate(self, monkeypatch):
+        """sid present but enterprise filter off → no sync, ensure_mod still runs."""
+        monkeypatch.setattr("app.infrastructure.mods.mod_auth.MOD_SIGNATURE_SECRET", "")
+        sync = AsyncMock()
+
+        async def app(scope, receive, send):
+            pass
+
+        middleware = ModContextMiddleware(app)
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/mod/host-mod/x",
+            "headers": [(b"cookie", b"session_id=sess-skip")],
+        }
+        with (
+            patch(
+                "app.enterprise.mod_entitlements.enterprise_mod_filter_active",
+                return_value=False,
+            ),
+            patch(
+                "app.enterprise.mod_entitlements.sync_entitlements_for_session",
+                sync,
+            ),
+            patch("app.infrastructure.mods.mod_manager.ensure_mod_api_ready") as ensure,
+        ):
+            await middleware(scope, MagicMock(), MagicMock())
+        sync.assert_not_called()
+        ensure.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -197,6 +198,105 @@ async def test_save_workspace_upload_bad_and_ok(tmp_path, monkeypatch):
     out = await ps._save_workspace_upload(good, subdir="tutorial")
     assert out["filename"] == "sheet.xlsx"
     assert out["file_path"].startswith("uploads/tutorial/")
+
+
+@pytest.mark.asyncio
+async def test_save_workspace_upload_suffix_and_rel_fallback(tmp_path, monkeypatch):
+    """secure_filename drops suffix → re-append; relative_to ValueError → abs path."""
+    from starlette.datastructures import UploadFile
+
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
+    class _Mem:
+        def __init__(self, data: bytes):
+            self._data = data
+
+        async def read(self):
+            return self._data
+
+    good = UploadFile(filename="sheet.xlsx", file=_Mem(b"xlsx"))
+    good.read = _Mem(b"xlsx").read  # type: ignore[method-assign]
+    with patch(
+        "app.utils.secure_filename.secure_filename",
+        return_value="sheet",  # no .xlsx → triggers suffix re-append
+    ):
+        out = await ps._save_workspace_upload(good, subdir="tutorial")
+    assert ".xlsx" in out["file_path"]
+
+    good2 = UploadFile(filename="sheet.xlsx", file=_Mem(b"xlsx"))
+    good2.read = _Mem(b"xlsx").read  # type: ignore[method-assign]
+
+    def _rel_fail(self, *a, **k):
+        raise ValueError("not relative")
+
+    with patch.object(Path, "relative_to", _rel_fail):
+        out2 = await ps._save_workspace_upload(good2, subdir="tutorial")
+    assert out2["file_path"]  # absolute fallback
+
+
+@pytest.mark.asyncio
+async def test_workspace_read_files(monkeypatch):
+    with patch(
+        "app.application.office_parse_app_service.read_workspace_output_files",
+        return_value=[{"path": "a.xlsx", "ok": True}],
+    ):
+        out = await ps.platform_shell_workspace_read_files(
+            ps.WorkspaceReadFilesBody(workspace_root="/tmp", file_paths=["a.xlsx"])
+        )
+    assert out["success"] is True
+    assert out["data"]["files"][0]["path"] == "a.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_workspace_root_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+    out = await ps.platform_shell_workspace_root()
+    assert out["success"] is True
+    assert Path(out["data"]["workspace_root"]) == tmp_path.resolve()
+
+
+@pytest.mark.asyncio
+async def test_chat_office_upload_ok_with_session():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from io import BytesIO
+
+    app = FastAPI()
+    app.include_router(ps.router)
+    client = TestClient(app, raise_server_exceptions=False)
+    user = MagicMock(id=1, is_active=True)
+    with (
+        patch("app.infrastructure.auth.dependencies.resolve_session_user", return_value=user),
+        patch(
+            "app.fastapi_routes.platform_shell_routes._save_workspace_upload",
+            return_value={"file_path": "uploads/chat/x.xlsx"},
+        ),
+    ):
+        resp = client.post(
+            "/api/platform-shell/chat-office-file-upload",
+            files={"file": ("chat.xlsx", BytesIO(b"x"), "application/octet-stream")},
+        )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_decoupling_progress_skips_empty_mod_id():
+    mgr = MagicMock()
+    mgr.list_all_mods.return_value = [{"id": ""}, {"id": "  "}, {"id": "mod-a"}]
+    with (
+        patch(
+            "app.infrastructure.mods.mod_manager.get_mod_manager",
+            return_value=mgr,
+        ),
+        patch(
+            "app.mod_sdk.decoupling_progress.build_decoupling_progress_payload",
+            return_value={"ok": True},
+        ) as build,
+    ):
+        out = await ps.decoupling_progress()
+    assert out["success"] is True
+    build.assert_called_once_with(["mod-a"])
 
 
 @pytest.mark.asyncio
