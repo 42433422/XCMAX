@@ -411,6 +411,138 @@ class TestGitMerge:
             assert "合并异常" in result["reply"]
 
 
+class TestParseUnifiedDiff:
+    """_parse_unified_diff 结构化解析。"""
+
+    def test_empty_diff(self) -> None:
+        assert relay_gitops._parse_unified_diff("") == []
+
+    def test_add_del_context_hunks(self) -> None:
+        text = (
+            "diff --git a/foo.py b/foo.py\n"
+            "--- a/foo.py\n"
+            "+++ b/foo.py\n"
+            "@@ -1,3 +1,4 @@\n"
+            " keep\n"
+            "-old\n"
+            "+new\n"
+            "+extra\n"
+            "diff --git a/bar.py b/bar.py\n"
+            "@@ -1 +1 @@\n"
+            "-x\n"
+            "+y\n"
+        )
+        files = relay_gitops._parse_unified_diff(text)
+        assert len(files) == 2
+        assert files[0]["path"] == "foo.py"
+        assert files[0]["additions"] == 2
+        assert files[0]["deletions"] == 1
+        assert files[0]["hunks"][0]["header"].startswith("@@")
+        types = [ln["type"] for ln in files[0]["hunks"][0]["lines"]]
+        assert "context" in types and "add" in types and "del" in types
+        assert files[1]["path"] == "bar.py"
+        assert files[1]["additions"] == 1
+        assert files[1]["deletions"] == 1
+
+    def test_hunk_before_file_header_is_ignored(self) -> None:
+        text = "@@ -1 +1 @@\n+orphan\ndiff --git a/a.py b/a.py\n@@ -0,0 +1 @@\n+ok\n"
+        files = relay_gitops._parse_unified_diff(text)
+        assert len(files) == 1
+        assert files[0]["path"] == "a.py"
+        assert files[0]["additions"] == 1
+
+
+class TestGitDiffStructured:
+    def test_missing_branch(self) -> None:
+        result = relay_gitops.git_diff_structured({}, repo="/repo")
+        assert result["ok"] is False
+        assert "缺少分支名" in result["reply"]
+
+    def test_no_files(self) -> None:
+        with (
+            patch.object(relay_gitops, "_git", return_value=_completed(stdout="")),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+            patch.object(relay_gitops, "_parse_unified_diff", return_value=[]),
+        ):
+            result = relay_gitops.git_diff_structured({"branch": "feature"}, repo="/repo")
+        assert result["ok"] is True
+        assert "没有差异" in result["reply"]
+        assert result["structured"]["files"] == []
+
+    def test_with_files_and_origin_fallback(self) -> None:
+        parsed = [
+            {"path": "a.py", "additions": 2, "deletions": 1, "hunks": []},
+            {"path": "b.py", "additions": 1, "deletions": 0, "hunks": []},
+        ]
+
+        def _git_side_effect(cwd, *args, timeout=120.0):
+            cmd = " ".join(args)
+            if cmd.startswith("fetch"):
+                return _completed()
+            if cmd.startswith("merge-base origin/"):
+                return _completed(stdout="")  # force local-ref fallback
+            if cmd.startswith("merge-base feature"):
+                return _completed(stdout="abc123\n")
+            if cmd.startswith("diff"):
+                return _completed(stdout="diff --git a/a.py b/a.py\n")
+            return _completed()
+
+        with (
+            patch.object(relay_gitops, "_git", side_effect=_git_side_effect),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+            patch.object(relay_gitops, "_parse_unified_diff", return_value=parsed),
+        ):
+            result = relay_gitops.git_diff_structured({"branch": "feature"}, repo="/repo")
+        assert result["ok"] is True
+        assert "2 个文件" in result["reply"]
+        assert result["structured"]["total_additions"] == 3
+        assert result["structured"]["total_deletions"] == 1
+
+
+class TestGitLog:
+    def test_missing_branch(self) -> None:
+        result = relay_gitops.git_log({}, repo="/repo")
+        assert result["ok"] is False
+        assert "缺少分支名" in result["reply"]
+
+    def test_parses_commits(self) -> None:
+        def _git_side_effect(cwd, *args, timeout=120.0):
+            cmd = " ".join(args)
+            if cmd.startswith("fetch"):
+                return _completed()
+            if cmd.startswith("merge-base"):
+                return _completed(stdout="basehash\n")
+            if cmd.startswith("log"):
+                return _completed(
+                    stdout=(
+                        "aaaaaaaaaaaaaaaa|2026-07-01|alice|first\n"
+                        "bbbbbbbbbbbbbbbb|2026-07-02|bob|second\n"
+                        "badline\n"
+                    )
+                )
+            if cmd.startswith("show"):
+                return _completed(stdout=" a.py | 2 +\n b.py | 1 -\n 2 files changed\n")
+            return _completed()
+
+        with (
+            patch.object(relay_gitops, "_git", side_effect=_git_side_effect),
+            patch.object(relay_gitops, "_merge_base_branch", return_value="main"),
+        ):
+            result = relay_gitops.git_log({"branch": "feature", "limit": 50}, repo="/repo")
+        assert result["ok"] is True
+        assert len(result["commits"]) == 2
+        assert result["commits"][0]["hash"] == "aaaaaaaa"
+        assert result["commits"][0]["files_changed"] == 2
+        assert result["commits"][1]["author"] == "bob"
+
+
+class TestGitCancel:
+    def test_cancel_ok(self) -> None:
+        result = relay_gitops.git_cancel({"branch": "x"})
+        assert result["ok"] is True
+        assert "取消" in result["reply"]
+
+
 class TestHandleGitOp:
     """handle_git_op 分支覆盖。"""
 
@@ -419,6 +551,26 @@ class TestHandleGitOp:
             result = relay_gitops.handle_git_op("git.diff", {"branch": "x"})
             assert result == {"ok": True}
             mock_diff.assert_called_once()
+
+    def test_handle_diff_structured(self) -> None:
+        with patch.object(
+            relay_gitops, "git_diff_structured", return_value={"ok": True}
+        ) as mock_s:
+            result = relay_gitops.handle_git_op("git.diff.structured", {"branch": "x"})
+            assert result == {"ok": True}
+            mock_s.assert_called_once()
+
+    def test_handle_log(self) -> None:
+        with patch.object(relay_gitops, "git_log", return_value={"ok": True}) as mock_log:
+            result = relay_gitops.handle_git_op("git.log", {"branch": "x"})
+            assert result == {"ok": True}
+            mock_log.assert_called_once()
+
+    def test_handle_cancel(self) -> None:
+        with patch.object(relay_gitops, "git_cancel", return_value={"ok": True}) as mock_c:
+            result = relay_gitops.handle_git_op("git.cancel", {})
+            assert result == {"ok": True}
+            mock_c.assert_called_once()
 
     def test_handle_discard(self) -> None:
         with patch.object(relay_gitops, "git_discard", return_value={"ok": True}) as mock_d:
