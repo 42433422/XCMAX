@@ -672,9 +672,7 @@ class SuperEmployeeService:
             env = self._cli_subprocess_env()
             # Trae/Claude stream-json 单行常超过 asyncio 默认 64KiB，readline 会抛
             # LimitOverrunError → 整段 SSE 失败，手机误报「连接不到电脑工具」。
-            stream_limit = int(
-                os.environ.get("XCMAX_CLI_STREAM_LINE_LIMIT") or (8 * 1024 * 1024)
-            )
+            stream_limit = int(os.environ.get("XCMAX_CLI_STREAM_LINE_LIMIT") or (8 * 1024 * 1024))
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -721,9 +719,7 @@ class SuperEmployeeService:
                         self._p.display_tool,
                     )
                     try:
-                        chunk = await asyncio.wait_for(
-                            proc.stdout.read(1024 * 1024), timeout=3.0
-                        )
+                        chunk = await asyncio.wait_for(proc.stdout.read(1024 * 1024), timeout=3.0)
                     except TimeoutError:
                         return b"\n"
                     if not chunk:
@@ -1916,10 +1912,10 @@ class SuperEmployeeService:
         source = str(ctx.get("source") or "").strip().lower()
         # 手机局域网直连(mobile_im)与云中继(mobile_relay)都是操作者本机执行端：
         # 允许使用已校验的真实仓库根，否则进度/上线类问答只能落在临时 scratch。
-        is_operator_desktop = (
-            ctx.get("force_cli_direct") is True
-            or source in {"mobile_relay", "mobile_im"}
-        )
+        is_operator_desktop = ctx.get("force_cli_direct") is True or source in {
+            "mobile_relay",
+            "mobile_im",
+        }
         if not is_operator_desktop:
             return ""
         return resolve_verified_relay_workspace_root(ctx)
