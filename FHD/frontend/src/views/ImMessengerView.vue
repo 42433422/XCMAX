@@ -167,6 +167,25 @@
                   {{ superCliToolLabel(tool) }}
                 </button>
               </div>
+              <label
+                v-if="factoryWorkspaces.length"
+                class="im-cli-workspace"
+              >
+                <span class="im-cli-workspace__label">项目</span>
+                <select
+                  v-model="selectedWorkspaceId"
+                  class="im-cli-workspace__select"
+                  aria-label="派工项目 Workspace"
+                >
+                  <option
+                    v-for="ws in factoryWorkspaces"
+                    :key="ws.id"
+                    :value="ws.id"
+                  >
+                    {{ ws.label || ws.id }}
+                  </option>
+                </select>
+              </label>
             </section>
           </div>
           <div
@@ -410,6 +429,10 @@ import {
   streamSuperEmployeeMessage,
   type SuperEmployeeStreamTool,
 } from '@/api/superEmployeeStream';
+import {
+  fetchFactoryWorkspaces,
+  type FactoryWorkspace,
+} from '@/api/factoryConsole';
 
 type CurrentUserPayload = {
   user?: { id?: number };
@@ -596,6 +619,8 @@ const contacts = ref<ImContact[]>([]);
 const contactKeyword = ref('');
 const contactsLoading = ref(false);
 const isAdminCustomerServiceConsole = ref(false);
+const factoryWorkspaces = ref<FactoryWorkspace[]>([]);
+const selectedWorkspaceId = ref('xcmax');
 
 const { playIncoming, playOutgoing } = useImSounds();
 const { onImMessage, onImReadState } = useXcmaxSync();
@@ -1559,6 +1584,33 @@ async function loadDutyEmployees(): Promise<void> {
   }
 }
 
+async function loadFactoryWorkspaces(): Promise<void> {
+  if (!isAdminCustomerServiceConsole.value) {
+    factoryWorkspaces.value = [];
+    return;
+  }
+  try {
+    const items = await fetchFactoryWorkspaces();
+    factoryWorkspaces.value = items;
+    if (!items.some((ws) => ws.id === selectedWorkspaceId.value) && items.length) {
+      selectedWorkspaceId.value = items[0].id;
+    }
+  } catch {
+    // 非管理端或工厂未开时静默；缺省仍用 xcmax
+    if (!factoryWorkspaces.value.length) {
+      factoryWorkspaces.value = [
+        {
+          id: 'xcmax',
+          label: 'XCMAX 主项目',
+          isolation: 'none',
+          default_branch: 'main',
+          vcs_kind: 'git',
+        },
+      ];
+    }
+  }
+}
+
 async function onCodexSend(): Promise<void> {
   if (!isSuperEmployeeEntry(activeSystemEntry.value)) return;
   if (codexBusy.value) return;
@@ -1604,11 +1656,13 @@ async function onCodexSend(): Promise<void> {
     source: codexContextSource.value,
     client_surface: codexApiScope.value === 'mobile' ? 'mobile' : 'admin_console',
     target_devices: ['all'],
+    workspace_id: selectedWorkspaceId.value || 'xcmax',
   };
   try {
     let assembled = '';
     const finalText = await streamSuperEmployeeMessage(tool, text, context, {
       scope: codexApiScope.value,
+      workspaceId: selectedWorkspaceId.value || 'xcmax',
       onStatus: (status) => {
         if (!assembled) {
           startCodexTypewriter({
@@ -1999,7 +2053,7 @@ onMounted(async () => {
     applyReadState(conversation_id, user_id, last_message_id);
   });
   connectWs();
-  await Promise.all([loadContacts(), loadConversations(), loadDutyEmployees()]);
+  await Promise.all([loadContacts(), loadConversations(), loadDutyEmployees(), loadFactoryWorkspaces()]);
   if (isAdminCustomerServiceConsole.value && !activeConversationId.value) {
     closeOverlappingAssistantFloat();
     activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY;
@@ -2441,6 +2495,28 @@ onUnmounted(() => {
   border-color: var(--xc-color-primary, #0052d9);
   background: rgba(0, 82, 217, 0.08);
   color: var(--xc-color-primary, #0052d9);
+}
+.im-cli-workspace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+.im-cli-workspace__label {
+  color: var(--xc-color-muted, #86909c);
+  font-size: 12px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.im-cli-workspace__select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--xc-color-border, #e6e9ef);
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: var(--xc-color-text, #1f2329);
+  font-size: 13px;
+  padding: 6px 10px;
 }
 .im-system-call-log {
   flex: 1;

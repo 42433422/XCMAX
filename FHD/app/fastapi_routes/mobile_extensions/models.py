@@ -65,24 +65,28 @@ class CodexSuperEmployeeMobileMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     body: str = Field(default="", max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+    workspace_id: str = Field(default="", max_length=120)
 
 
 class ClaudeSuperEmployeeMobileMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     body: str = Field(default="", max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+    workspace_id: str = Field(default="", max_length=120)
 
 
 class CursorSuperEmployeeMobileMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     body: str = Field(default="", max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+    workspace_id: str = Field(default="", max_length=120)
 
 
 class TraeSuperEmployeeMobileMessageBody(BaseModel):
     message: str = Field(default="", max_length=4000)
     body: str = Field(default="", max_length=4000)
     context: dict[str, Any] = Field(default_factory=dict)
+    workspace_id: str = Field(default="", max_length=120)
 
 
 class AiGroupCreateBody(BaseModel):

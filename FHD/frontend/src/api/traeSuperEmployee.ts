@@ -72,10 +72,13 @@ export async function sendTraeSuperEmployeeMessage(
   assistant_message?: TraeSuperEmployeeMessage;
   messages: TraeSuperEmployeeMessage[];
 }> {
+  const ctx = { ...(context ?? {}) };
+  const workspaceId = String(ctx.workspace_id || 'xcmax').trim() || 'xcmax';
+  ctx.workspace_id = workspaceId;
   const res = await apiFetch(traeEndpoint(options.scope), {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ message, context: context ?? {} }),
+    body: JSON.stringify({ message, workspace_id: workspaceId, context: ctx }),
   });
   const data = await readJson<{
     success?: boolean;

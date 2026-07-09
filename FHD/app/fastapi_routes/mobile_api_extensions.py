@@ -1787,6 +1787,13 @@ async def mobile_admin_cursor_super_employee_invoke(
         root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
         if root:
             context["workspace_root"] = root
+    # 与 Codex/Claude/Trae 对齐：管理账号铸造工厂授权。
+    if (
+        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        == "admin"
+    ):
+        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
+        context = factory_context(workspace_id=_wsid, base=context)
     try:
         result = CursorSuperEmployeeService().invoke(
             user_id=uid,

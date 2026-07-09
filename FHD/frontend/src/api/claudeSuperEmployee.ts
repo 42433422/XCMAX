@@ -72,10 +72,13 @@ export async function sendClaudeSuperEmployeeMessage(
   assistant_message?: ClaudeSuperEmployeeMessage;
   messages: ClaudeSuperEmployeeMessage[];
 }> {
+  const ctx = { ...(context ?? {}) };
+  const workspaceId = String(ctx.workspace_id || 'xcmax').trim() || 'xcmax';
+  ctx.workspace_id = workspaceId;
   const res = await apiFetch(claudeEndpoint(options.scope), {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ message, context: context ?? {} }),
+    body: JSON.stringify({ message, workspace_id: workspaceId, context: ctx }),
   });
   const data = await readJson<{
     success?: boolean;

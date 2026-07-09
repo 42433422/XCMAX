@@ -72,6 +72,19 @@ vi.mock('@/api/traeSuperEmployee', () => ({
 vi.mock('@/api/superEmployeeStream', () => ({
   streamSuperEmployeeMessage: vi.fn().mockRejectedValue(new Error('stream unavailable')),
 }))
+vi.mock('@/api/factoryConsole', () => ({
+  fetchFactoryWorkspaces: vi.fn().mockResolvedValue([
+    {
+      id: 'xcmax',
+      label: 'XCMAX 主项目',
+      isolation: 'none',
+      default_branch: 'main',
+      vcs_kind: 'git',
+    },
+  ]),
+  fetchFactoryEmployees: vi.fn().mockResolvedValue([]),
+  dispatchFactoryTask: vi.fn(),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
@@ -212,6 +225,7 @@ describe('ImMessengerView.vue', () => {
         source: 'admin_im',
         client_surface: 'admin_console',
         target_devices: ['all'],
+        workspace_id: 'xcmax',
       },
       { scope: 'admin' },
     )
@@ -229,6 +243,7 @@ describe('ImMessengerView.vue', () => {
         source: 'admin_im',
         client_surface: 'admin_console',
         target_devices: ['all'],
+        workspace_id: 'xcmax',
       },
       { scope: 'admin' },
     )
@@ -278,6 +293,7 @@ describe('ImMessengerView.vue', () => {
         source: 'mobile_im',
         client_surface: 'mobile',
         target_devices: ['all'],
+        workspace_id: 'xcmax',
       },
       { scope: 'mobile' },
     )

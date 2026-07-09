@@ -22,16 +22,26 @@ export async function streamSuperEmployeeMessage(
   tool: SuperEmployeeStreamTool,
   message: string,
   context: Record<string, unknown> = {},
-  options: SuperEmployeeStreamHandlers & { scope?: CodexSuperEmployeeApiScope } = {},
+  options: SuperEmployeeStreamHandlers & {
+    scope?: CodexSuperEmployeeApiScope;
+    workspaceId?: string;
+  } = {},
 ): Promise<string> {
   const scope = options.scope ?? 'admin';
+  const workspaceId = String(
+    options.workspaceId || context.workspace_id || 'xcmax',
+  ).trim() || 'xcmax';
   const res = await apiFetch(streamEndpoint(tool, scope), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
     },
-    body: JSON.stringify({ message, context }),
+    body: JSON.stringify({
+      message,
+      workspace_id: workspaceId,
+      context: { ...context, workspace_id: workspaceId },
+    }),
     signal: options.signal,
     // 长任务：不走默认短超时
     timeoutMs: 0,

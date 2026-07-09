@@ -129,7 +129,11 @@ describe('claudeSuperEmployee API', () => {
         '/api/admin/claude-super-employee/messages',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ message: 'hello', context: {} }),
+          body: JSON.stringify({
+            message: 'hello',
+            workspace_id: 'xcmax',
+            context: { workspace_id: 'xcmax' },
+          }),
         }),
       )
       expect(result.dispatch).toEqual({ request_id: 'r1', status: 'queued' })
@@ -144,7 +148,11 @@ describe('claudeSuperEmployee API', () => {
       expect(apiFetchMock).toHaveBeenCalledWith(
         expect.any(String),
         expect.objectContaining({
-          body: JSON.stringify({ message: 'hi', context: ctx }),
+          body: JSON.stringify({
+            message: 'hi',
+            workspace_id: 'xcmax',
+            context: { user_id: 5, session: 'abc', workspace_id: 'xcmax' },
+          }),
         }),
       )
     })

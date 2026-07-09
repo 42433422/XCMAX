@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 四工具超级员工 factory_context / Workspace 对齐（2026-07-09 · v10 线内迭代）
+
+- **fix(backend)**：Cursor 桌面/手机 POST 补齐 `factory_context(workspace_id)`，与 Codex/Claude/Trae 一致
+- **feat(frontend)**：桌面 IM 超级员工增加项目 Workspace 下拉；SSE/POST 均携带 `workspace_id`
+- **feat(mobile)**：四工具 Mobile body 统一 `workspace_id` 字段
+
 ### 桌面 IM Trae 一等入口 + 真 SSE + 手机 Workspace（2026-07-09 · v10 线内迭代）
 
 - **feat(frontend)**：桌面 IM 超级开发组补齐编程软件 Trae（与 Codex/Cursor/Claude 并列）

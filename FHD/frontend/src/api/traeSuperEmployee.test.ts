@@ -54,7 +54,11 @@ describe('traeSuperEmployee API', () => {
       '/api/admin/trae-super-employee/messages',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ message: 'ping', context: { source: 'admin_im' } }),
+        body: JSON.stringify({
+          message: 'ping',
+          workspace_id: 'xcmax',
+          context: { source: 'admin_im', workspace_id: 'xcmax' },
+        }),
       }),
     )
     expect(result.messages).toHaveLength(1)

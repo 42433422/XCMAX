@@ -78,7 +78,11 @@ describe('codexSuperEmployee api', () => {
       '/api/mobile/v1/admin/codex-super-employee/messages',
       expect.objectContaining({
         method: 'POST',
-        body: JSON.stringify({ message: 'run', context: { source: 'mobile_im' } }),
+        body: JSON.stringify({
+          message: 'run',
+          workspace_id: 'xcmax',
+          context: { source: 'mobile_im', workspace_id: 'xcmax' },
+        }),
       }),
     );
   });

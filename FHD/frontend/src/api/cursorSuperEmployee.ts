@@ -72,10 +72,13 @@ export async function sendCursorSuperEmployeeMessage(
   assistant_message?: CursorSuperEmployeeMessage;
   messages: CursorSuperEmployeeMessage[];
 }> {
+  const ctx = { ...(context ?? {}) };
+  const workspaceId = String(ctx.workspace_id || 'xcmax').trim() || 'xcmax';
+  ctx.workspace_id = workspaceId;
   const res = await apiFetch(cursorEndpoint(options.scope), {
     method: 'POST',
     headers: jsonHeaders,
-    body: JSON.stringify({ message, context: context ?? {} }),
+    body: JSON.stringify({ message, workspace_id: workspaceId, context: ctx }),
   });
   const data = await readJson<{
     success?: boolean;

@@ -1154,6 +1154,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
         b.message = "hello"
         b.body = ""
         b.context = {}
+        b.workspace_id = ""
         return b
 
     @pytest.mark.asyncio
@@ -1195,6 +1196,10 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
             patch(
                 "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
             ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_session_meta",
+                return_value={"account_kind": "admin"},
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.CursorSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = ValueError("bad")
@@ -1214,6 +1219,10 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
             patch(
                 "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
             ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_session_meta",
+                return_value={"account_kind": "admin"},
+            ),
             patch("app.fastapi_routes.mobile_api_extensions.CursorSuperEmployeeService") as svc_cls,
         ):
             svc_cls.return_value.invoke.side_effect = err_class("fail")
@@ -1232,13 +1241,27 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
             patch(
                 "app.fastapi_routes.mobile_api_extensions._mobile_request_user_id", return_value=5
             ),
+            patch(
+                "app.fastapi_routes.mobile_api_extensions._mobile_session_meta",
+                return_value={"account_kind": "admin"},
+            ),
+            patch("app.fastapi_routes.mobile_api_extensions.factory_context") as factory_ctx,
             patch("app.fastapi_routes.mobile_api_extensions.CursorSuperEmployeeService") as svc_cls,
         ):
+            factory_ctx.side_effect = lambda workspace_id="xcmax", base=None: {
+                **(base or {}),
+                "workspace_id": workspace_id,
+                "_factory_token": "t",
+            }
             svc_cls.return_value.invoke.return_value = {"result": "ok"}
             result = await m.mobile_admin_cursor_super_employee_invoke(
                 request=MagicMock(), body=self._body(), user=_user()
             )
         assert result is not None
+        factory_ctx.assert_called_once()
+        kwargs = svc_cls.return_value.invoke.call_args.kwargs
+        assert kwargs["context"]["workspace_id"] == "xcmax"
+        assert kwargs["context"]["_factory_token"] == "t"
 
 
 # ============================================================

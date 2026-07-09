@@ -443,3 +443,28 @@ class TestImRoutes:
         assert kwargs["message"] == "修复构建"
         assert kwargs["context"]["_factory_token"] == "factory-token"
         assert kwargs["context"]["workspace_id"] == "xcmax"
+
+    def test_cursor_super_employee_invokes_with_factory_context(self, client, monkeypatch):
+        monkeypatch.setenv("XCMAX_FACTORY_CAPABILITY_TOKEN", "factory-token")
+        with (
+            patch("app.fastapi_routes.im_routes.HostSessionLocal") as mock_db_cls,
+            patch(
+                "app.fastapi_routes.im_routes._is_admin_customer_service_session", return_value=True
+            ),
+            patch("app.fastapi_routes.im_routes.CursorSuperEmployeeService") as mock_svc_cls,
+        ):
+            mock_db = MagicMock()
+            mock_db_cls.return_value = mock_db
+            mock_svc = MagicMock()
+            mock_svc.invoke.return_value = {"dispatch": {"status": "queued"}}
+            mock_svc_cls.return_value = mock_svc
+            resp = client.post(
+                "/api/admin/cursor-super-employee/messages",
+                json={"message": "修登录", "workspace_id": "xcmax"},
+            )
+        assert resp.status_code == 200
+        mock_svc.invoke.assert_called_once()
+        kwargs = mock_svc.invoke.call_args.kwargs
+        assert kwargs["message"] == "修登录"
+        assert kwargs["context"]["_factory_token"] == "factory-token"
+        assert kwargs["context"]["workspace_id"] == "xcmax"
