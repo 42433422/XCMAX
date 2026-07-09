@@ -89,20 +89,35 @@ def _pairing_issue_port(request: Request, requested: int) -> int:
     return 5000
 
 
+def _tcp_port_is_listening(port: int, host: str = "127.0.0.1") -> bool:
+    """本机某端口是否在听（用于判断 Vite 代理是否真的可用）。"""
+    clean = int(port or 0)
+    if clean <= 0:
+        return False
+    try:
+        with socket.create_connection((host, clean), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
 def _pairing_reachable_port(request: Request | None, api_port: int) -> int:
-    """后端仅监听 loopback 时，手机局域网需走 Vite 代理端口。"""
+    """后端仅监听 loopback 时，优先走可用的 Vite 代理；代理未起则保留 API 端口。
+
+    旧逻辑无条件改写到 5011，Vite 挂掉时手机拿到不可达地址，表现为「没法绑定」。
+    """
     clean_port = int(api_port or 0)
     if clean_port <= 0:
         clean_port = 5000
     if request is not None:
         proxy_port = _request_host_port(request)
-        if proxy_port in _FRONTEND_DEV_PORTS:
+        if proxy_port in _FRONTEND_DEV_PORTS and _tcp_port_is_listening(proxy_port):
             return proxy_port
     if not _backend_listens_loopback_only():
         return clean_port
-    # 桌面常绑 127.0.0.1:17500；手机不可达，默认改写到 Vite 代理 5011。
+    # 桌面常绑 127.0.0.1:17500；仅当 Vite 代理真的在听时才改写。
     for candidate in (5011, 5001):
-        if candidate in _FRONTEND_DEV_PORTS:
+        if candidate in _FRONTEND_DEV_PORTS and _tcp_port_is_listening(candidate):
             return candidate
     return clean_port
 

@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 局域网配对端口探测（2026-07-09 · v10 线内迭代）
+
+- **fix(backend)**：`_pairing_reachable_port` 仅在 Vite 代理端口真正在听时才改写到 5011/5001；代理挂掉时保留 API 端口（如 17500），避免手机拿到不可达地址「没法绑定」
+
 ### 手机扫码相机兼容（2026-07-09 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：Android 扫码改用 `camera_android`（Camera2），避免 CameraX 在小米等机型上 Preview+Capture+Analysis 三路绑定失败

@@ -34,9 +34,20 @@ class TestPairingIssuePort:
 
 class TestPairingReachablePort:
     def test_loopback_backend_uses_vite_proxy_port(self):
-        with patch.object(ph, "_backend_listens_loopback_only", return_value=True):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=True),
+            patch.object(ph, "_tcp_port_is_listening", return_value=True),
+        ):
             port = ph._pairing_reachable_port(_mock_request("127.0.0.1:5011"), 17500)
         assert port == 5011
+
+    def test_loopback_backend_keeps_api_port_when_vite_down(self):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=True),
+            patch.object(ph, "_tcp_port_is_listening", return_value=False),
+        ):
+            port = ph._pairing_reachable_port(_mock_request("127.0.0.1:5011"), 17500)
+        assert port == 17500
 
     def test_public_backend_keeps_api_port(self):
         with patch.object(ph, "_backend_listens_loopback_only", return_value=False):
@@ -44,7 +55,10 @@ class TestPairingReachablePort:
         assert port == 17500
 
     def test_public_backend_uses_vite_proxy_when_request_via_dev_port(self):
-        with patch.object(ph, "_backend_listens_loopback_only", return_value=False):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=False),
+            patch.object(ph, "_tcp_port_is_listening", return_value=True),
+        ):
             port = ph._pairing_reachable_port(_mock_request("127.0.0.1:5011"), 17500)
         assert port == 5011
 
@@ -56,7 +70,10 @@ class TestPairingReachablePort:
             "shortCode": "123456",
             "exp": 1,
         }
-        with patch.object(ph, "_backend_listens_loopback_only", return_value=True):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=True),
+            patch.object(ph, "_tcp_port_is_listening", return_value=True),
+        ):
             data = ph._enrich_pairing_payload(payload, _mock_request("127.0.0.1:5011"))
         assert data["port"] == 5011
         assert data["api_base_url"] == "http://192.168.10.2:5011/"
@@ -76,7 +93,10 @@ class TestRequestHostPortForwarded:
 
     def test_reachable_port_uses_forwarded_host(self):
         # 模拟 vite 代理：Host=后端:17500，X-Forwarded-Host=手机访问的:5011
-        with patch.object(ph, "_backend_listens_loopback_only", return_value=False):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=False),
+            patch.object(ph, "_tcp_port_is_listening", return_value=True),
+        ):
             req = _mock_request("127.0.0.1:17500", forwarded_host="192.168.10.2:5011")
             port = ph._pairing_reachable_port(req, 17500)
         assert port == 5011
