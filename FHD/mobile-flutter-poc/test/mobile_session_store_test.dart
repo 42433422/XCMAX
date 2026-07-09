@@ -790,6 +790,30 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
+  test('MobileRepository ignores stored relay when desktop list fails',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(relayDesktopId: 'stale-stored-relay'),
+    );
+    final api = _RelayDesktopsFailApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '列表失败勿进死队列',
+    );
+
+    expect(reply, contains('没有在线的电脑执行端'));
+    expect(api.createdRelayTasks, 0);
+    expect(api.statusCalls, 0);
+  });
+
   test('MobileRepository Trae relay tasks carry XCMAX workspace context',
       () async {
     final store = MemoryMobileSessionStore();
@@ -918,6 +942,47 @@ void main() {
     expect(reply, isNull);
     expect(api.statusCalls, 0);
     expect((await store.load()).inflightRelayTasks, isEmpty);
+  });
+
+  test('MobileRepository clears inflight when paired desktops are all offline',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        inflightRelayTasks: {'pinned:trae': 'stale-offline-task'},
+        relayDesktopId: 'old-paired-relay',
+      ),
+    );
+    final api = _StalePairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.resumeRelayTask(
+      conversationId: 'pinned:trae',
+    );
+
+    expect(reply, isNull);
+    expect(api.statusCalls, 0);
+    expect((await store.load()).inflightRelayTasks, isEmpty);
+  });
+
+  test('MobileRepository cancelRelayTask clears matching local inflight',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        inflightRelayTasks: {
+          'pinned:trae': 'task-cancel-me',
+          'pinned:codex': 'other-task',
+        },
+      ),
+    );
+    final api = _CancelRelayClearsInflightApi(store);
+    final repository = MobileRepository(client: api);
+
+    final cancelled = await repository.cancelRelayTask('task-cancel-me');
+
+    expect(cancelled, isTrue);
+    final tasks = (await store.load()).inflightRelayTasks;
+    expect(tasks.containsKey('pinned:trae'), isFalse);
+    expect(tasks['pinned:codex'], 'other-task');
   });
 
   test('MobileRepository caches normal chat like Android streamChat', () async {
@@ -1624,6 +1689,41 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
       message: '',
       data: {'reply': '$tool 直连回复'},
       raw: {'reply': '$tool 直连回复'},
+    );
+  }
+}
+
+class _CancelRelayClearsInflightApi extends MobileApiClient {
+  _CancelRelayClearsInflightApi(MobileSessionStore store)
+      : super(sessionStore: store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCancelTask(
+    String taskId,
+  ) async {
+    return MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'task': {'task_id': taskId, 'status': 'cancelled'},
+      },
+      raw: {
+        'task': {'task_id': taskId, 'status': 'cancelled'},
+      },
+    );
+  }
+}
+
+class _RelayDesktopsFailApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+  _RelayDesktopsFailApi(super.store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
+    return const MobileEnvelope<Map<String, Object?>>(
+      success: false,
+      message: 'relay list unavailable',
+      data: {},
+      raw: {'success': false, 'message': 'relay list unavailable'},
     );
   }
 }

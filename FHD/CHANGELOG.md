@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 安卓超级员工发送卡住修复（2026-07-09 · v10 线内迭代）
+
+- Flutter：陈旧 inflight 中继恢复在桌面离线时不再进入长轮询锁死 `_sending`
+- Flutter：停止/取消时同步清本地 `inflight_relay_tasks`，避免重进会话再次卡住
+- Flutter：composer 在 `busy` 时强制显示「停止」，避免 ValueListenableBuilder 漏重建导致点「发送」无反应
+- Flutter：中继桌面列表失败时不再回落陈旧 `relay_desktop_id` 进死队列
+
 ### 安卓超级员工调用诊断 + Flutter 正式签名（2026-07-09 · v10 线内迭代）
 
 - 超级员工空回复区分：未装 CLI / 未绑电脑 / 工具额度限流 / 鉴权失败（与 XCAGI 钱包无关）

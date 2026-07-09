@@ -492,8 +492,16 @@ class _ChatScreenState extends State<ChatScreen> {
       _activeAssistantId = null;
       _activeRelayProgress = null;
     });
-    if (progress != null && progress.taskId.isNotEmpty) {
-      _cancelRelayTask(progress.taskId);
+    // 本地 inflight 必须清掉，否则重进会话又会 resume 把发送锁死。
+    final repository = _repository;
+    final conversationId = widget.conversation.id;
+    final taskId = progress?.taskId.trim() ?? '';
+    if (repository != null) {
+      if (taskId.isNotEmpty) {
+        _cancelRelayTask(taskId);
+      } else {
+        repository.clearInflightRelay(conversationId).catchError((_) {});
+      }
     }
   }
 
@@ -506,6 +514,10 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       // 静默失败：本地已经停止展示，远端任务稍后自然完成或超时
     } finally {
+      // 无论远端是否取消成功，都清掉本地 inflight，避免再次卡住发送。
+      try {
+        await repository.clearInflightRelay(widget.conversation.id);
+      } catch (_) {}
       if (mounted) setState(() => _cancellingRelay = false);
     }
   }
@@ -1952,21 +1964,36 @@ class _Composer extends StatelessWidget {
                     onPressed: onToggleTools,
                     tooltip: '更多工具',
                   ),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: controller,
-                    builder: (context, value, _) {
-                      final canSend = value.text.trim().isNotEmpty && !busy;
-                      if (!canSend && !busy) return const SizedBox.shrink();
-                      return Padding(
-                        padding: const EdgeInsets.only(left: 6),
-                        child: _SendPill(
-                          canStop: busy,
-                          onSend: onSend,
-                          onStop: onStop,
-                        ),
-                      );
-                    },
-                  ),
+                  // busy 必须在 ValueListenableBuilder 外分支：否则仅 _sending
+                  // 变化时部分机型上按钮文案仍停在「发送」，点按被 _send 早退吞掉。
+                  if (busy)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: _SendPill(
+                        key: const ValueKey('composer-stop'),
+                        canStop: true,
+                        onSend: onSend,
+                        onStop: onStop,
+                      ),
+                    )
+                  else
+                    ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: controller,
+                      builder: (context, value, _) {
+                        if (value.text.trim().isEmpty) {
+                          return const SizedBox.shrink();
+                        }
+                        return Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: _SendPill(
+                            key: const ValueKey('composer-send'),
+                            canStop: false,
+                            onSend: onSend,
+                            onStop: onStop,
+                          ),
+                        );
+                      },
+                    ),
                 ],
               ),
             ),
@@ -2359,6 +2386,7 @@ class _ChatToolCard extends StatelessWidget {
 
 class _SendPill extends StatelessWidget {
   const _SendPill({
+    super.key,
     required this.canStop,
     required this.onSend,
     required this.onStop,

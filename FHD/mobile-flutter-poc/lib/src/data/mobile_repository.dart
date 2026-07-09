@@ -1045,6 +1045,11 @@ class MobileRepository {
     return _inflightRelayTask(conversationId).then((value) => value.isNotEmpty);
   }
 
+  /// 清除会话本地 inflight 标记（不依赖远端取消是否成功）。
+  Future<void> clearInflightRelay(String conversationId) async {
+    await _setInflightRelayTask(conversationId, '');
+  }
+
   Future<String?> resumeRelayTask({
     required String conversationId,
     void Function(String token)? onToken,
@@ -1053,6 +1058,7 @@ class MobileRepository {
   }) async {
     final taskId = await _inflightRelayTask(conversationId);
     if (taskId.isEmpty) return null;
+    // 无在线执行端 / 中继已换绑：清 inflight，勿进入最长约 5 分钟的轮询锁死发送。
     if (await _clearInflightIfRelayChanged(conversationId, taskId)) {
       return null;
     }
@@ -1297,8 +1303,17 @@ class MobileRepository {
 
   /// 取消正在执行的 relay 任务。
   Future<bool> cancelRelayTask(String taskId) async {
-    if (taskId.trim().isEmpty) return false;
-    final response = await _client.relayCancelTask(taskId.trim());
+    final cleanTaskId = taskId.trim();
+    if (cleanTaskId.isEmpty) return false;
+    // 先清本地 inflight，避免 UI 停止后重进会话再次锁死发送。
+    final session = await _client.loadSession();
+    final tasks = Map<String, String>.of(session.inflightRelayTasks);
+    final before = tasks.length;
+    tasks.removeWhere((_, value) => value.trim() == cleanTaskId);
+    if (tasks.length != before) {
+      await _client.saveSession(session.copyWith(inflightRelayTasks: tasks));
+    }
+    final response = await _client.relayCancelTask(cleanTaskId);
     if (!response.success) return false;
     final task = _objectMap(response.data?['task']);
     return _stringField(task, 'status') == 'cancelled';
@@ -1956,7 +1971,8 @@ class MobileRepository {
     final storedRelayId = session.relayDesktopId.trim();
     try {
       final response = await _client.relayDesktops();
-      if (!response.success) return storedRelayId;
+      // 列表失败时不要回落陈旧 relay_id，否则会进死队列轮询卡住发送按钮。
+      if (!response.success) return '';
       final rows = _relayDesktopRows(response.data)
           .where(_relayDesktopIsDispatchable)
           .toList(growable: false);
@@ -2026,7 +2042,17 @@ class MobileRepository {
     String conversationId,
     String taskId,
   ) async {
-    final currentRelayId = await _relayIdForSuperEmployeeDispatch();
+    String currentRelayId = '';
+    try {
+      currentRelayId = await _relayIdForSuperEmployeeDispatch();
+    } on MobileRepositoryException {
+      // 无在线执行端：清掉陈旧 inflight，避免重进会话锁死发送。
+      await _setInflightRelayTask(conversationId, '');
+      return true;
+    } catch (_) {
+      await _setInflightRelayTask(conversationId, '');
+      return true;
+    }
     if (currentRelayId.isEmpty) {
       await _setInflightRelayTask(conversationId, '');
       return true;
