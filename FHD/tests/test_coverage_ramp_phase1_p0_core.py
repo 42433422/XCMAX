@@ -462,7 +462,12 @@ def test_clear_impersonation(mock_get_db: MagicMock) -> None:
 @patch("app.application.session_account_meta.load_session_account_meta")
 def test_audit_admin_action_no_crash(mock_load: MagicMock) -> None:
     mock_load.return_value = {"impersonating_username": "admin"}
-    audit_admin_action(SimpleNamespace(), "test.action", target_user_id=1)
+    # session_id_from_request 需要 headers/cookies；空壳即可不崩
+    audit_admin_action(
+        SimpleNamespace(headers={}, cookies={}),
+        "test.action",
+        target_user_id=1,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,13 @@ Route tests that require DB are tested via direct function calls with mocked dep
 
 from __future__ import annotations
 
+
+def _enterprise_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(headers={"X-XCMAX-Client-Shell": "enterprise"}, cookies={})
+
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -83,17 +90,17 @@ class TestOpenRegistrationAllowed:
 class TestAttachSessionCookie:
     def test_empty_sid_returns_unchanged(self, auth_mod):
         resp = MagicMock()
-        result = auth_mod._attach_session_cookie(resp, "")
+        result = auth_mod._attach_session_cookie(resp, "", _enterprise_request())
         assert result is resp
 
     def test_none_sid_returns_unchanged(self, auth_mod):
         resp = MagicMock()
-        result = auth_mod._attach_session_cookie(resp, None)
+        result = auth_mod._attach_session_cookie(resp, None, _enterprise_request())
         assert result is resp
 
     def test_sets_cookie(self, auth_mod):
         resp = MagicMock()
-        auth_mod._attach_session_cookie(resp, "sid-123")
+        auth_mod._attach_session_cookie(resp, "sid-123", _enterprise_request())
         resp.set_cookie.assert_called_once()
 
 

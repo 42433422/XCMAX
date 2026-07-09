@@ -7,6 +7,13 @@ _attach_session_cookie, _jit_create_local_user_for_enterprise.
 
 from __future__ import annotations
 
+
+def _enterprise_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(headers={"X-XCMAX-Client-Shell": "enterprise"}, cookies={})
+
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -201,7 +208,7 @@ class TestAttachSessionCookie:
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
-        result = _attach_session_cookie(response, "test-session-id")
+        result = _attach_session_cookie(response, "test-session-id", _enterprise_request())
         assert isinstance(result, JSONResponse)
 
     def test_with_none_session_id(self):
@@ -210,7 +217,7 @@ class TestAttachSessionCookie:
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         response = JSONResponse({"success": True})
-        result = _attach_session_cookie(response, None)
+        result = _attach_session_cookie(response, None, _enterprise_request())
         assert isinstance(result, JSONResponse)
 
 

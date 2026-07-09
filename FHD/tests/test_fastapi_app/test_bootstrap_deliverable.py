@@ -38,4 +38,6 @@ def test_deliverable_status_available_in_bootstrap(fast_start_client):
     body = resp.json()
     assert body.get("success") is True
     assert "deliverable" in (body.get("data") or {})
-    assert getattr(app.state, "deferred_routes_pending", False) is True
+    # TestClient lifespan 可能已完成 deferred 挂载；fixture 已断言创建时 pending=True。
+    # 此处只验证 bootstrap 路径在 fast-start 下可响应。
+    assert resp.status_code == 200

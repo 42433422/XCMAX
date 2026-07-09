@@ -8,9 +8,19 @@ non-enterprise SKU and INFRA_TRANSIENT branches, auth_me with session_meta,
 auth_logout with entitlements clear failure, auth_register enterprise with no token,
 auth_register local with market sync failure, auth_oidc_callback with account_kind
 from query_params, users_list with include_inactive variations.
+
+
+
 """
 
 from __future__ import annotations
+
+
+def _enterprise_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(headers={"X-XCMAX-Client-Shell": "enterprise"}, cookies={})
+
 
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
@@ -394,28 +404,28 @@ class TestAttachSessionCookie:
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "")
+        result = _attach_session_cookie(resp, "", _enterprise_request())
         assert result is resp
 
     def test_none_session_id(self):
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, None)
+        result = _attach_session_cookie(resp, None, _enterprise_request())
         assert result is resp
 
     def test_whitespace_session_id(self):
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "   ")
+        result = _attach_session_cookie(resp, "   ", _enterprise_request())
         assert result is resp
 
     def test_valid_session_id_default_cookie(self):
         from app.fastapi_routes.domains.auth.routes import _attach_session_cookie
 
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
         # Cookie should be set
         assert "set-cookie" in result.headers
@@ -425,7 +435,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_NAME", "custom_session")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_custom_max_age(self, monkeypatch):
@@ -433,7 +443,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_MAX_AGE", "3600")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_httponly_disabled(self, monkeypatch):
@@ -441,7 +451,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "0")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_httponly_false(self, monkeypatch):
@@ -449,7 +459,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_HTTPONLY", "false")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_secure_enabled(self, monkeypatch):
@@ -457,7 +467,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "1")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_secure_true(self, monkeypatch):
@@ -465,7 +475,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_secure_yes(self, monkeypatch):
@@ -473,7 +483,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_SECURE", "yes")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
     def test_custom_samesite(self, monkeypatch):
@@ -481,7 +491,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_SAMESITE", "Strict")
         resp = JSONResponse({"success": True})
-        result = _attach_session_cookie(resp, "session123")
+        result = _attach_session_cookie(resp, "session123", _enterprise_request())
         assert result is resp
 
 
@@ -2287,7 +2297,7 @@ class TestAuthQrStatusAdditional:
                 },
             ),
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert isinstance(result, JSONResponse)
         # The payload should be spread into data
         import json
@@ -2313,7 +2323,7 @@ class TestAuthQrStatusAdditional:
                 },
             ),
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert isinstance(result, JSONResponse)
 
     @pytest.mark.asyncio
@@ -2330,7 +2340,7 @@ class TestAuthQrStatusAdditional:
                 return_value=None,
             ),
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         # When consume returns None, falls through to return status
         assert result["data"]["status"] == "confirmed"
 
@@ -2342,7 +2352,7 @@ class TestAuthQrStatusAdditional:
             "app.security.auth_qr_login.poll_auth_qr",
             return_value={"status": "scanned"},
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert result["data"]["status"] == "scanned"
 
     @pytest.mark.asyncio
@@ -2353,7 +2363,7 @@ class TestAuthQrStatusAdditional:
             "app.security.auth_qr_login.poll_auth_qr",
             return_value={},
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         # Empty dict is falsy, so returns 404
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404

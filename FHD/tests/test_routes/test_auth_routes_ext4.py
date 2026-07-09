@@ -11,6 +11,13 @@ auth_update_company_brand.
 
 from __future__ import annotations
 
+
+def _enterprise_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(headers={"X-XCMAX-Client-Shell": "enterprise"}, cookies={})
+
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1246,7 +1253,7 @@ class TestAuthQrStatus:
         from app.fastapi_routes.domains.auth.routes import auth_qr_status
 
         with patch("app.security.auth_qr_login.poll_auth_qr", return_value=None):
-            result = await auth_qr_status(qr_id="bad", poll_secret="x")
+            result = await auth_qr_status(_enterprise_request(), qr_id="bad", poll_secret="x")
         assert isinstance(result, JSONResponse)
         assert result.status_code == 404
 
@@ -1258,7 +1265,7 @@ class TestAuthQrStatus:
             "app.security.auth_qr_login.poll_auth_qr",
             return_value={"status": "pending"},
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert result["data"]["status"] == "pending"
 
     @pytest.mark.asyncio
@@ -1269,7 +1276,7 @@ class TestAuthQrStatus:
             "app.security.auth_qr_login.poll_auth_qr",
             return_value={"status": "expired"},
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert result["data"]["status"] == "expired"
 
     @pytest.mark.asyncio
@@ -1289,7 +1296,7 @@ class TestAuthQrStatus:
                 },
             ),
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert isinstance(result, JSONResponse)
         assert result.body  # has content
 
@@ -1307,7 +1314,7 @@ class TestAuthQrStatus:
                 return_value={"session_id": None},
             ),
         ):
-            result = await auth_qr_status(qr_id="q1", poll_secret="s1")
+            result = await auth_qr_status(_enterprise_request(), qr_id="q1", poll_secret="s1")
         assert result["data"]["status"] == "confirmed"
 
 

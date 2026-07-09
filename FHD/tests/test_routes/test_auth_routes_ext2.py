@@ -2,6 +2,13 @@
 
 from __future__ import annotations
 
+
+def _enterprise_request():
+    from types import SimpleNamespace
+
+    return SimpleNamespace(headers={"X-XCMAX-Client-Shell": "enterprise"}, cookies={})
+
+
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -204,14 +211,14 @@ class TestAttachSessionCookie:
         from fastapi.responses import JSONResponse
 
         resp = JSONResponse(content={"ok": True})
-        result = auth_mod._attach_session_cookie(resp, "")
+        result = auth_mod._attach_session_cookie(resp, "", _enterprise_request())
         assert result is resp
 
     def test_none_session_id(self, auth_mod):
         from fastapi.responses import JSONResponse
 
         resp = JSONResponse(content={"ok": True})
-        result = auth_mod._attach_session_cookie(resp, None)
+        result = auth_mod._attach_session_cookie(resp, None, _enterprise_request())
         assert result is resp
 
     def test_sets_cookie(self, auth_mod, monkeypatch):
@@ -219,7 +226,7 @@ class TestAttachSessionCookie:
 
         monkeypatch.setenv("SESSION_COOKIE_NAME", "test_session")
         resp = JSONResponse(content={"ok": True})
-        result = auth_mod._attach_session_cookie(resp, "sid123")
+        result = auth_mod._attach_session_cookie(resp, "sid123", _enterprise_request())
         assert result is resp
 
 
