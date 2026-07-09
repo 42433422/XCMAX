@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -14,7 +16,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from app.application.ai_group_chat_service import AiGroupChatService
 from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
@@ -37,6 +39,78 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["im-v0"])
+
+
+def _sse_line(payload: dict[str, Any]) -> bytes:
+    return ("data: " + json.dumps(payload, ensure_ascii=False) + "\n\n").encode("utf-8")
+
+
+def _super_employee_service_for_tool(tool: str):
+    tool_lower = (tool or "").strip().lower()
+    if tool_lower == "codex":
+        return CodexSuperEmployeeService()
+    if tool_lower == "claude":
+        return ClaudeSuperEmployeeService()
+    if tool_lower == "cursor":
+        return CursorSuperEmployeeService()
+    if tool_lower == "trae":
+        return TraeSuperEmployeeService()
+    return None
+
+
+async def _admin_stream_super_employee_invoke(
+    request: Request,
+    tool: str,
+    body: dict[str, Any],
+    user: CurrentUser,
+):
+    """管理端超级员工真 SSE（与手机 LAN stream 同协议）。"""
+    uid = _uid(user)
+    db = HostSessionLocal()
+    try:
+        denied = _require_admin_customer_service_session(request, db)
+        if denied is not None:
+            return denied
+    finally:
+        db.close()
+
+    service = _super_employee_service_for_tool(tool)
+    if service is None:
+        return JSONResponse(
+            {"success": False, "message": f"未知超级员工工具：{tool}"},
+            status_code=400,
+        )
+    text = str((body or {}).get("message") or (body or {}).get("body") or "").strip()
+    if not text:
+        return JSONResponse({"success": False, "message": "message 必填"}, status_code=400)
+    context = dict((body or {}).get("context") or {})
+    context.setdefault("source", "admin_im")
+    context.setdefault("client_surface", "admin_console")
+    context.setdefault("target_devices", ["all"])
+    workspace_id = str((body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax")
+    context = factory_context(workspace_id=workspace_id, base=context)
+
+    async def sse_gen():
+        try:
+            async for event in service.invoke_stream(
+                user_id=uid,
+                message=text,
+                context=context,
+            ):
+                yield _sse_line(event)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("admin_super_employee_stream failed: %s", exc)
+            yield _sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
+
+    return StreamingResponse(
+        sse_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 _schema_ready = False
 
@@ -720,6 +794,46 @@ def trae_super_employee_invoke(
         return JSONResponse({"success": False, "message": str(exc)}, status_code=500)
     finally:
         db.close()
+
+
+@router.post("/api/admin/codex-super-employee/messages/stream")
+async def codex_super_employee_stream(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Codex 超级员工真 SSE。"""
+    return await _admin_stream_super_employee_invoke(request, "codex", body, user)
+
+
+@router.post("/api/admin/claude-super-employee/messages/stream")
+async def claude_super_employee_stream(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Claude 超级员工真 SSE。"""
+    return await _admin_stream_super_employee_invoke(request, "claude", body, user)
+
+
+@router.post("/api/admin/cursor-super-employee/messages/stream")
+async def cursor_super_employee_stream(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Cursor 超级员工真 SSE。"""
+    return await _admin_stream_super_employee_invoke(request, "cursor", body, user)
+
+
+@router.post("/api/admin/trae-super-employee/messages/stream")
+async def trae_super_employee_stream(
+    request: Request,
+    body: dict = Body(default_factory=dict),
+    user: CurrentUser = Depends(require_identified_user),
+):
+    """管理端 Trae（编程软件 trae-cli）超级员工真 SSE。"""
+    return await _admin_stream_super_employee_invoke(request, "trae", body, user)
 
 
 # ── AI 群聊（管理端/桌面）──

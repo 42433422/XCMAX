@@ -1888,6 +1888,38 @@ async def mobile_admin_trae_super_employee_invoke(
         )
 
 
+@extension_router.get("/admin/factory/workspaces")
+async def mobile_admin_factory_workspaces(
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    """手机端可选工厂 Workspace（与桌面项目工厂同源注册表）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    try:
+        from app.application.workspaces import get_workspace_registry
+
+        items = [
+            {
+                "id": ws.id,
+                "label": ws.label,
+                "isolation": ws.isolation,
+                "default_branch": ws.default_branch,
+                "vcs_kind": ws.vcs_kind,
+                "root": str(ws.root),
+            }
+            for ws in get_workspace_registry().list()
+        ]
+        return format_mobile_response(data={"workspaces": items})
+    except RECOVERABLE_ERRORS:
+        logger.exception("mobile_admin_factory_workspaces")
+        return JSONResponse(
+            format_mobile_response(None, "加载项目列表失败", success=False, code=500),
+            status_code=500,
+        )
+
+
 # ── 超级员工 LAN SSE 流式直答 ──
 
 

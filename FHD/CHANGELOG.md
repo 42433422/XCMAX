@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面 IM Trae 一等入口 + 真 SSE + 手机 Workspace（2026-07-09 · v10 线内迭代）
+
+- **feat(frontend)**：桌面 IM 超级开发组补齐编程软件 Trae（与 Codex/Cursor/Claude 并列）
+- **feat(frontend/backend)**：管理端超级员工 `messages/stream` 真 SSE；IM 发送优先 SSE，失败再回落 POST+轮询
+- **feat(mobile-flutter/backend)**：手机超级员工可选工厂 Workspace（不再写死本机路径）；会话持久化 `selected_workspace_id`
+
 ### Trae 流式超长行打爆局域网（2026-07-09 · v10 线内迭代）
 
 - **fix(backend)**：CLI SSE `readline` 行缓冲提到 8MiB，并兜底吞掉 LimitOverrun，避免 Trae stream-json 超长行导致手机误报「连接不到电脑工具」

@@ -43,6 +43,7 @@ class MobileSessionData {
     this.cachedChatMessages = const {},
     this.conversationListStates = const {},
     this.cachedModInfos = const [],
+    this.selectedWorkspaceId = '',
   });
 
   final String accessToken;
@@ -84,6 +85,8 @@ class MobileSessionData {
   final Map<String, List<Map<String, Object?>>> cachedChatMessages;
   final Map<String, Map<String, Object?>> conversationListStates;
   final List<Map<String, Object?>> cachedModInfos;
+  /// 超级员工派工所选工厂 Workspace（如 xcmax）；空则后端默认 xcmax。
+  final String selectedWorkspaceId;
 
   static const empty = MobileSessionData();
   static const Object _unset = Object();
@@ -155,6 +158,7 @@ class MobileSessionData {
       cachedChatMessages: _readChatCache(json, 'cached_chat_messages'),
       conversationListStates: _readObjectMap(json, 'conversation_list_states'),
       cachedModInfos: _readObjectList(json, 'cached_mod_infos'),
+      selectedWorkspaceId: _readString(json, 'selected_workspace_id'),
     );
   }
 
@@ -197,6 +201,7 @@ class MobileSessionData {
         'cached_chat_messages': cachedChatMessages,
         'conversation_list_states': conversationListStates,
         'cached_mod_infos': cachedModInfos,
+        'selected_workspace_id': selectedWorkspaceId,
       }..removeWhere((key, value) {
           if (value == null) return true;
           if (value is String) return value.trim().isEmpty;
@@ -262,6 +267,8 @@ class MobileSessionData {
       cachedModInfos: other.cachedModInfos.isNotEmpty
           ? other.cachedModInfos
           : cachedModInfos,
+      selectedWorkspaceId:
+          _firstNonBlank(other.selectedWorkspaceId, selectedWorkspaceId),
     );
   }
 
@@ -304,6 +311,7 @@ class MobileSessionData {
     Object? cachedChatMessages = _unset,
     Object? conversationListStates = _unset,
     Object? cachedModInfos = _unset,
+    Object? selectedWorkspaceId = _unset,
   }) {
     return MobileSessionData(
       accessToken: identical(accessToken, _unset)
@@ -408,6 +416,9 @@ class MobileSessionData {
       cachedModInfos: identical(cachedModInfos, _unset)
           ? this.cachedModInfos
           : cachedModInfos as List<Map<String, Object?>>,
+      selectedWorkspaceId: identical(selectedWorkspaceId, _unset)
+          ? this.selectedWorkspaceId
+          : selectedWorkspaceId as String,
     );
   }
 }

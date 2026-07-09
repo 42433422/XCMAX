@@ -14,7 +14,7 @@ import 'employee_pending_question.dart';
 import '../im/im_websocket_client.dart';
 
 const _badgeInstalledColor = 0xFF3370FF;
-const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
+const _xcmaxDefaultWorkspaceId = 'xcmax';
 
 class MobileRepository {
   MobileRepository({MobileApiClient? client, ImWebSocketClient? imWebSocket})
@@ -885,6 +885,7 @@ class MobileRepository {
         body: text,
       );
       final localBaseUrl = await _superEmployeeLanBaseUrl();
+      final workspace = await _selectedFactoryWorkspace();
       if (localBaseUrl.isNotEmpty) {
         // 第 1 级：LAN SSE（逐 token / status，避免整段 POST 挡住流式进度）。
         try {
@@ -892,6 +893,12 @@ class MobileRepository {
             tool,
             text,
             baseUrl: localBaseUrl,
+            context: _superEmployeeRelayContext(
+              conversationId: conversation.id,
+              workspaceId: workspace.id,
+              workspaceRoot: workspace.root,
+            ),
+            workspaceId: workspace.id,
             onToken: (token) {
               if (isCancelled != null && isCancelled()) return;
               onToken?.call(token);
@@ -917,6 +924,9 @@ class MobileRepository {
               tool,
               text,
               baseUrl: localBaseUrl,
+              workspaceId: workspace.id,
+              workspaceRoot: workspace.root,
+              conversationId: conversation.id,
             );
             _throwIfCancelled(isCancelled);
             onToken?.call(reply);
@@ -1142,14 +1152,18 @@ class MobileRepository {
     if (relayId.isEmpty) {
       throw MobileRepositoryException('未绑定电脑工具，无法执行 $cleanOp');
     }
+    final workspace = await _selectedFactoryWorkspace();
 
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: cleanOp,
       payload: {
         'branch': cleanBranch,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
-        'context': _superEmployeeRelayContext(),
+        if (workspace.root.isNotEmpty) 'workspace_root': workspace.root,
+        'context': _superEmployeeRelayContext(
+          workspaceId: workspace.id,
+          workspaceRoot: workspace.root,
+        ),
       },
     );
     if (!created.success) {
@@ -1195,13 +1209,17 @@ class MobileRepository {
     if (relayId.isEmpty) {
       throw const MobileRepositoryException('未绑定电脑工具，无法查看改动');
     }
+    final workspace = await _selectedFactoryWorkspace();
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: 'git.diff.structured',
       payload: {
         'branch': branch.trim(),
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
-        'context': _superEmployeeRelayContext(),
+        if (workspace.root.isNotEmpty) 'workspace_root': workspace.root,
+        'context': _superEmployeeRelayContext(
+          workspaceId: workspace.id,
+          workspaceRoot: workspace.root,
+        ),
       },
     );
     if (!created.success) {
@@ -1248,14 +1266,18 @@ class MobileRepository {
     if (relayId.isEmpty) {
       throw const MobileRepositoryException('未绑定电脑工具，无法查看提交');
     }
+    final workspace = await _selectedFactoryWorkspace();
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: 'git.log',
       payload: {
         'branch': branch.trim(),
         'limit': limit,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
-        'context': _superEmployeeRelayContext(),
+        if (workspace.root.isNotEmpty) 'workspace_root': workspace.root,
+        'context': _superEmployeeRelayContext(
+          workspaceId: workspace.id,
+          workspaceRoot: workspace.root,
+        ),
       },
     );
     if (!created.success) {
@@ -1378,17 +1400,71 @@ class MobileRepository {
     String tool,
     String text, {
     String baseUrl = '',
+    String workspaceId = '',
+    String workspaceRoot = '',
+    String conversationId = '',
   }) async {
     final response = await _client.postSuperEmployeeMessage(
       tool,
       text,
       baseUrl: baseUrl,
+      context: _superEmployeeRelayContext(
+        conversationId: conversationId,
+        workspaceId: workspaceId,
+        workspaceRoot: workspaceRoot,
+      ),
+      workspaceId: workspaceId,
     );
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
     }
     return _assistantReplyFromMap(response.data ?? response.raw)
         .ifEmpty('已收到，我会继续处理。');
+  }
+
+  Future<List<FactoryWorkspaceOption>> listFactoryWorkspaces() async {
+    try {
+      final localBase = await _superEmployeeLanBaseUrl();
+      final rows = await _client.factoryWorkspaces(baseUrl: localBase);
+      return rows
+          .map(FactoryWorkspaceOption.fromJson)
+          .where((w) => w.id.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      return const [
+        FactoryWorkspaceOption(id: _xcmaxDefaultWorkspaceId, label: 'XCMAX 主项目'),
+      ];
+    }
+  }
+
+  Future<FactoryWorkspaceOption> _selectedFactoryWorkspace() async {
+    final session = await _client.loadSession();
+    final selectedId = session.selectedWorkspaceId.trim().isEmpty
+        ? _xcmaxDefaultWorkspaceId
+        : session.selectedWorkspaceId.trim();
+    final options = await listFactoryWorkspaces();
+    for (final option in options) {
+      if (option.id == selectedId) return option;
+    }
+    if (options.isNotEmpty) return options.first;
+    return const FactoryWorkspaceOption(
+      id: _xcmaxDefaultWorkspaceId,
+      label: 'XCMAX 主项目',
+    );
+  }
+
+  Future<String> selectedWorkspaceLabel() async {
+    final ws = await _selectedFactoryWorkspace();
+    return ws.label.isNotEmpty ? ws.label : ws.id;
+  }
+
+  Future<void> setSelectedWorkspaceId(String workspaceId) async {
+    final id = workspaceId.trim().isEmpty
+        ? _xcmaxDefaultWorkspaceId
+        : workspaceId.trim();
+    final session = await _client.loadSession();
+    if (session.selectedWorkspaceId == id) return;
+    await _client.saveSession(session.copyWith(selectedWorkspaceId: id));
   }
 
   Future<String> _superEmployeeLanBaseUrl() async {
@@ -1489,13 +1565,18 @@ class MobileRepository {
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
+    final workspace = await _selectedFactoryWorkspace();
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: relayKind,
       payload: {
         'message': message,
-        'workspace_root': _xcmaxDefaultWorkspaceRoot,
-        'context': _superEmployeeRelayContext(conversationId: conversationId),
+        if (workspace.root.isNotEmpty) 'workspace_root': workspace.root,
+        'context': _superEmployeeRelayContext(
+          conversationId: conversationId,
+          workspaceId: workspace.id,
+          workspaceRoot: workspace.root,
+        ),
       },
     );
     if (!created.success) {
@@ -2153,11 +2234,16 @@ class MobileRepository {
 
 Map<String, Object?> _superEmployeeRelayContext({
   String conversationId = '',
+  String workspaceId = '',
+  String workspaceRoot = '',
 }) {
+  final wid =
+      workspaceId.trim().isEmpty ? _xcmaxDefaultWorkspaceId : workspaceId.trim();
   return {
     'source': 'mobile_chat',
     'client_surface': 'mobile',
-    'workspace_root': _xcmaxDefaultWorkspaceRoot,
+    'workspace_id': wid,
+    if (workspaceRoot.trim().isNotEmpty) 'workspace_root': workspaceRoot.trim(),
     if (conversationId.trim().isNotEmpty)
       'conversation_id': conversationId.trim(),
   };
@@ -3865,6 +3951,26 @@ class RelayTaskProgress {
   final String taskId;
   final String status;
   final String toolLabel;
+}
+
+class FactoryWorkspaceOption {
+  const FactoryWorkspaceOption({
+    required this.id,
+    this.label = '',
+    this.root = '',
+  });
+
+  final String id;
+  final String label;
+  final String root;
+
+  factory FactoryWorkspaceOption.fromJson(Map<String, Object?> json) {
+    return FactoryWorkspaceOption(
+      id: (json['id']?.toString() ?? '').trim(),
+      label: (json['label']?.toString() ?? '').trim(),
+      root: (json['root']?.toString() ?? '').trim(),
+    );
+  }
 }
 
 class _MobileRepositoryCancelled implements Exception {

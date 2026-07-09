@@ -65,6 +65,13 @@ vi.mock('@/api/cursorSuperEmployee', () => ({
   fetchCursorSuperEmployeeMessages: vi.fn().mockResolvedValue([]),
   sendCursorSuperEmployeeMessage: vi.fn().mockResolvedValue({ messages: [] }),
 }))
+vi.mock('@/api/traeSuperEmployee', () => ({
+  fetchTraeSuperEmployeeMessages: vi.fn().mockResolvedValue([]),
+  sendTraeSuperEmployeeMessage: vi.fn().mockResolvedValue({ messages: [] }),
+}))
+vi.mock('@/api/superEmployeeStream', () => ({
+  streamSuperEmployeeMessage: vi.fn().mockRejectedValue(new Error('stream unavailable')),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({ query: {} }),
 }))
@@ -154,6 +161,7 @@ describe('ImMessengerView.vue', () => {
       fetchCodexSuperEmployeeMessages,
       sendCodexSuperEmployeeMessage,
     } = await import('@/api/codexSuperEmployee')
+    const { streamSuperEmployeeMessage } = await import('@/api/superEmployeeStream')
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
       data: {
@@ -172,18 +180,24 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.text()).not.toContain('小C助理')
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
+    expect(wrapper.text()).toContain('超级员工-Trae')
     expect(wrapper.text()).toContain('全设备协同调度')
     expect(wrapper.text()).toContain('Codex')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(wrapper.find('.im-pin').exists()).toBe(false)
-    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
-    await wrapper.find('.im-conv-item--pinned').trigger('click')
+    const codexPinned = wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((node) => node.text().includes('超级员工-Codex'))
+    expect(codexPinned).toBeTruthy()
+    await codexPinned!.trigger('click')
     await flushPromises()
+    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
 
     expect(wrapper.text()).toContain('跨设备协作开发员工')
     expect(wrapper.text()).toContain('全设备 Codex')
+    expect(wrapper.text()).toContain('超级开发组 · CLI')
     expect(createDirectConversation).not.toHaveBeenCalled()
 
     const input = wrapper.find('.im-compose--codex input')
@@ -191,6 +205,7 @@ describe('ImMessengerView.vue', () => {
     await wrapper.find('.im-compose--codex button').trigger('click')
     await flushPromises()
 
+    expect(streamSuperEmployeeMessage).toHaveBeenCalled()
     expect(sendCodexSuperEmployeeMessage).toHaveBeenCalledWith(
       '修复登录问题',
       {
@@ -240,9 +255,17 @@ describe('ImMessengerView.vue', () => {
 
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
+    expect(wrapper.text()).toContain('超级员工-Trae')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-pin').exists()).toBe(false)
     expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
+
+    const codexPinned = wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((node) => node.text().includes('超级员工-Codex'))
+    expect(codexPinned).toBeTruthy()
+    await codexPinned!.trigger('click')
+    await flushPromises()
 
     const input = wrapper.find('.im-compose--codex input')
     await input.setValue('手机上调用 Codex')
@@ -263,6 +286,7 @@ describe('ImMessengerView.vue', () => {
   it('shows super development CLI switch card and My Groups entry in admin console', async () => {
     const { authApi } = await import('@/api/auth')
     const { fetchCursorSuperEmployeeMessages } = await import('@/api/cursorSuperEmployee')
+    const { fetchTraeSuperEmployeeMessages } = await import('@/api/traeSuperEmployee')
     vi.stubEnv('VITE_XCMAX_ADMIN_CONSOLE', '1')
     vi.mocked(authApi.getCurrentUser).mockResolvedValueOnce({
       data: {
@@ -277,9 +301,19 @@ describe('ImMessengerView.vue', () => {
     })
     await flushPromises()
 
+    const codexPinned = wrapper
+      .findAll('.im-conv-item--pinned')
+      .find((node) => node.text().includes('超级员工-Codex'))
+    expect(codexPinned).toBeTruthy()
+    await codexPinned!.trigger('click')
+    await flushPromises()
+
     expect(wrapper.find('a[title="我的群聊"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('超级开发组 · CLI')
     expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
+    expect(
+      wrapper.findAll('.im-cli-model-switch__btn').some((btn) => btn.text().includes('Trae')),
+    ).toBe(true)
 
     const cursorBtn = wrapper
       .findAll('.im-cli-model-switch__btn')
@@ -290,5 +324,14 @@ describe('ImMessengerView.vue', () => {
 
     expect(fetchCursorSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
     expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Cursor')
+
+    const traeBtn = wrapper
+      .findAll('.im-cli-model-switch__btn')
+      .find((btn) => btn.text().includes('Trae'))
+    expect(traeBtn).toBeTruthy()
+    await traeBtn!.trigger('click')
+    await flushPromises()
+    expect(fetchTraeSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
+    expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Trae')
   })
 })

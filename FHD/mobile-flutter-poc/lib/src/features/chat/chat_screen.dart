@@ -56,6 +56,8 @@ class _ChatScreenState extends State<ChatScreen> {
   AiEmployeeProfile? _employeeProfile;
   RelayTaskProgress? _activeRelayProgress;
   bool _cancellingRelay = false;
+  String _workspaceLabel = '';
+  String _workspaceId = '';
 
   @override
   void initState() {
@@ -66,6 +68,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _loadRemoteMessages();
     _loadUserAvatar();
     _loadEmployeeProfile();
+    _loadSelectedWorkspace();
   }
 
   @override
@@ -87,11 +90,21 @@ class _ChatScreenState extends State<ChatScreen> {
         child: Column(
           children: [
             WeTopBar(
-              title: _resolvedTitle,
+              title: _workspaceLabel.isNotEmpty &&
+                      widget.conversation.type.superTool != null
+                  ? '$_resolvedTitle · $_workspaceLabel'
+                  : _resolvedTitle,
               height: 48,
               showBack: true,
               onBack: () => Navigator.of(context).maybePop(),
               actions: [
+                if (widget.conversation.type.superTool != null)
+                  IconButton(
+                    onPressed: _pickWorkspace,
+                    icon: const Icon(Icons.folder_open_outlined, size: 22),
+                    tooltip: '选择项目',
+                    color: colors.textPrimary,
+                  ),
                 IconButton(
                   onPressed: () => _showMessage('视频通话功能即将上线'),
                   icon: const Icon(Icons.videocam_outlined, size: 22),
@@ -311,6 +324,99 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       // Keep the Android-like chat surface usable while modInfos refresh fails.
     }
+  }
+
+  Future<void> _loadSelectedWorkspace() async {
+    if (widget.conversation.type.superTool == null) return;
+    final repository = _repository;
+    if (repository == null) return;
+    try {
+      final options = await repository.listFactoryWorkspaces();
+      final label = await repository.selectedWorkspaceLabel();
+      final session = await repository.client.loadSession();
+      if (!mounted) return;
+      final id = session.selectedWorkspaceId.trim().isEmpty
+          ? (options.isNotEmpty ? options.first.id : 'xcmax')
+          : session.selectedWorkspaceId.trim();
+      setState(() {
+        _workspaceId = id;
+        _workspaceLabel = label;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _workspaceId = 'xcmax';
+        _workspaceLabel = 'XCMAX 主项目';
+      });
+    }
+  }
+
+  Future<void> _pickWorkspace() async {
+    final repository = _repository;
+    if (repository == null) return;
+    final options = await repository.listFactoryWorkspaces();
+    if (!mounted) return;
+    if (options.isEmpty) {
+      _showMessage('暂无可用项目');
+      return;
+    }
+    final colors = AppTheme.colors(context);
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: colors.surface,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 18),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                  child: Text(
+                    '选择派工项目',
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 17,
+                      height: 1.29,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Divider(height: 0.5, thickness: 0.5, color: colors.divider),
+                for (final option in options)
+                  ListTile(
+                    title: Text(
+                      option.label.isNotEmpty ? option.label : option.id,
+                      style: TextStyle(color: colors.textPrimary),
+                    ),
+                    subtitle: option.root.isNotEmpty
+                        ? Text(
+                            option.root,
+                            style: TextStyle(color: colors.textSecondary),
+                          )
+                        : null,
+                    trailing: option.id == _workspaceId
+                        ? Icon(Icons.check, color: colors.brand)
+                        : null,
+                    onTap: () async {
+                      Navigator.of(context).pop();
+                      await repository.setSelectedWorkspaceId(option.id);
+                      if (!mounted) return;
+                      setState(() {
+                        _workspaceId = option.id;
+                        _workspaceLabel =
+                            option.label.isNotEmpty ? option.label : option.id;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   String get _resolvedTitle {
@@ -783,6 +889,17 @@ class _ChatScreenState extends State<ChatScreen> {
       // 与 Android 对齐：无活跃分支时保留新建对话/OCR/语音，并额外提供执行回顾。
       return [
         ...baseActions,
+        _ChatToolAction(
+          icon: Icons.folder_open_outlined,
+          title: '选择项目',
+          subtitle: _workspaceLabel.isNotEmpty
+              ? '当前：$_workspaceLabel'
+              : '切换派工 Workspace',
+          onTap: () {
+            setState(() => _showToolPanel = false);
+            _pickWorkspace();
+          },
+        ),
         _ChatToolAction(
           icon: Icons.timeline,
           title: '执行回顾',

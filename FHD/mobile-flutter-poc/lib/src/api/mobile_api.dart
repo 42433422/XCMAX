@@ -23,6 +23,7 @@ class XcagiMobileEndpoints {
   static const hostDiscoverHint = '$base/host/discover-hint';
   static const me = '$base/me';
   static const adminHome = '$base/admin/home';
+  static const factoryWorkspaces = '$base/admin/factory/workspaces';
   static const home = '$base/home';
   static const gitBranches = '$base/git/branches';
   static const aiGroups = '$base/ai-groups';
@@ -1118,6 +1119,23 @@ class MobileApiClient {
       json,
       (value) => AdminMobileHomeData.fromJson(_asObjectMap(value)),
     );
+  }
+
+  Future<List<Map<String, Object?>>> factoryWorkspaces({
+    String baseUrl = '',
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.factoryWorkspaces,
+      baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
+    );
+    final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+    final data = envelope.data ?? const <String, Object?>{};
+    final raw = data['workspaces'];
+    if (raw is! List) return const [];
+    return raw
+        .whereType<Map>()
+        .map((e) => Map<String, Object?>.from(e))
+        .toList(growable: false);
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> home() async {
@@ -2296,14 +2314,23 @@ class MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
+    String workspaceId = '',
   }) async {
+    final ctx = <String, Object?>{
+      'source': 'mobile',
+      'client_surface': 'mobile',
+      ...context,
+    };
+    final payload = <String, Object?>{
+      'body': body,
+      'message': body,
+      'context': ctx,
+      if (workspaceId.trim().isNotEmpty) 'workspace_id': workspaceId.trim(),
+    };
     final json = await postJson(
       XcagiMobileEndpoints.superEmployeeMessages(tool),
-      {
-        'body': body,
-        'message': body,
-        'context': const {'source': 'mobile', 'client_surface': 'mobile'},
-      },
+      payload,
       baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -2315,6 +2342,8 @@ class MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
+    String workspaceId = '',
     void Function(String token)? onToken,
     void Function(String status)? onStatus,
     bool Function()? isCancelled,
@@ -2327,11 +2356,18 @@ class MobileApiClient {
       baseUrl: effectiveBaseUrl,
     );
     request.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
-    final bytes = utf8.encode(jsonEncode({
+    final ctx = <String, Object?>{
+      'source': 'mobile',
+      'client_surface': 'mobile',
+      ...context,
+    };
+    final payload = <String, Object?>{
       'body': body,
       'message': body,
-      'context': const {'source': 'mobile', 'client_surface': 'mobile'},
-    }));
+      'context': ctx,
+      if (workspaceId.trim().isNotEmpty) 'workspace_id': workspaceId.trim(),
+    };
+    final bytes = utf8.encode(jsonEncode(payload));
     request.contentLength = bytes.length;
     request.add(bytes);
 
@@ -2584,8 +2620,14 @@ class MobileApiClient {
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
+    String? baseUrl,
   }) async {
-    return _sendJsonRequest(method: 'GET', path: path, query: query);
+    return _sendJsonRequest(
+      method: 'GET',
+      path: path,
+      query: query,
+      baseUrl: baseUrl,
+    );
   }
 
   Future<Map<String, Object?>> postJson(
