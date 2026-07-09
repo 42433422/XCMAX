@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）
+
+- **fix(desktop)**：`deliverable-status` 读取运行中 `request.app`，消除 `MOD_ROUTES_NOT_MOUNTED` 误判（Mac 真机已验）
+- **fix(desktop)**：PyInstaller 打包 OTA `migrate-only` 在 frozen 环境改走 `alembic.command` API（修复 `upgrade head` exit 2）
+- **docs(evidence)**：更新 `v10-a-desktop-acceptance-2026-07-08.md`；Win 热修构建完成，安装目录部署待 DevFleet 收尾
+
 ### 桌面冷启体感（2026-07-08 · v10 线内迭代 · 第三轮）
 
 - **perf(desktop)**：先出 Splash 窗再 spawn 后端；Splash 状态文案 + 秒数反馈
