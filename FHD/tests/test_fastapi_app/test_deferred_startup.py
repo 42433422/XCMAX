@@ -64,3 +64,37 @@ async def test_schedule_skipped_when_fast_start_disabled(monkeypatch):
     app = FastAPI()
     await mod.schedule_deferred_heavy_startup(app)
     assert not hasattr(app.state, "deferred_startup_task")
+
+
+@pytest.mark.asyncio
+async def test_cancel_noop_when_no_task():
+    mod = _load_deferred_startup()
+    app = FastAPI()
+    await mod.cancel_deferred_heavy_startup(app)
+
+
+@pytest.mark.asyncio
+async def test_deferred_route_registration_skips_when_not_pending():
+    mod = _load_deferred_startup()
+    app = FastAPI()
+    app.state.deferred_routes_pending = False
+    await mod._deferred_route_registration(app)
+    assert app.state.deferred_routes_pending is False
+
+
+@pytest.mark.asyncio
+async def test_deferred_mod_bootstrap_skips_when_already_loaded():
+    mod = _load_deferred_startup()
+    app = FastAPI()
+    app.state.mods_deferred_bootstrap = True
+    app.state.mods_routes_loaded = True
+    await mod._deferred_mod_bootstrap(app)
+    assert app.state.mods_deferred_bootstrap is False
+
+
+@pytest.mark.asyncio
+async def test_deferred_mod_bootstrap_noop_when_flag_off():
+    mod = _load_deferred_startup()
+    app = FastAPI()
+    app.state.mods_deferred_bootstrap = False
+    await mod._deferred_mod_bootstrap(app)
