@@ -23,6 +23,7 @@
 - **feat(mobile-flutter)**：超级员工工具卡「发布 APK 到局域网」派工执行 publish 脚本，摆脱 USB 装包
 - **feat(scripts)**：publish 默认识别无线 adb（`adb connect 手机IP:5555`）并 `install -r`，零二次操作闭环（Para 式局域网控机）
 - **feat(backend)**：`POST /api/mobile/v1/lan/android-update/notify`（仅 loopback）写入 outbox，兜底唤醒手机
+- **feat(mobile-flutter)**：个人资料页 Hero/头像环/钱包卡质感提升（轻阴影、细腻渐变、更通透间距）
 - **feat(mobile-flutter)**：PushPoll 识别 `lan_apk_ready` 自动拉 LAN APK 并打开系统安装器；深链 `update/check` 自动检查更新
 
 ### 超级员工发送被卡住中继锁死（2026-07-09 · v10 线内迭代）

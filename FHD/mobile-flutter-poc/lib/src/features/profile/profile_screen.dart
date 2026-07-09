@@ -83,12 +83,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onEdit: _showProfileEditor,
                         onSync: _refreshProfileState,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       _WalletBalanceCard(
                         wallet: wallet,
                         onRefresh: _refreshWallet,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       WeCellGroup(
                         children: [
                           WeCell(
@@ -685,29 +685,43 @@ class _ProfileHeroCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onEdit,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(24),
         child: Container(
           key: const ValueKey('profile_hero_card'),
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          padding: const EdgeInsets.all(16),
+          margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: cardBorder),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: cardBorder, width: 0.8),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: solidHero ? 0.28 : 0.10),
+                blurRadius: 22,
+                offset: const Offset(0, 10),
+                spreadRadius: -6,
+              ),
+              BoxShadow(
+                color: colors.textPrimary.withValues(alpha: 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: solidHero
                   ? [
                       accent,
-                      accent.withValues(alpha: 0.82),
+                      accent.withValues(alpha: 0.86),
                       Theme.of(context).colorScheme.tertiary,
                     ]
                   : [
                       colors.surface,
+                      Color.alphaBlend(accent.withAlpha(18), colors.surface),
                       glassAccent,
                       glassTail,
                     ],
-              stops: solidHero ? null : const [0, 0.7, 1],
+              stops: solidHero ? null : const [0, 0.38, 0.78, 1],
             ),
           ),
           child: Column(
@@ -849,8 +863,8 @@ class _EditableAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
     return SizedBox(
-      width: 72,
-      height: 72,
+      width: 76,
+      height: 76,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -859,31 +873,65 @@ class _EditableAvatar extends StatelessWidget {
             top: 0,
             child: Container(
               key: const ValueKey('profile_avatar_frame'),
-              width: 72,
-              height: 72,
-              padding: const EdgeInsets.all(3),
+              width: 76,
+              height: 76,
+              padding: const EdgeInsets.all(2.5),
               decoration: BoxDecoration(
-                color: solidHero
-                    ? colors.chatUserBubbleText.withValues(alpha: 0.92)
-                    : colors.surface,
                 shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: solidHero
+                      ? [
+                          colors.chatUserBubbleText.withValues(alpha: 0.95),
+                          colors.chatUserBubbleText.withValues(alpha: 0.72),
+                        ]
+                      : [
+                          accent.withValues(alpha: 0.95),
+                          accent.withValues(alpha: 0.45),
+                          colors.surface,
+                        ],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.22),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
               ),
-              child: _ProfileAvatarPreview(avatarPath: avatarPath, size: 66),
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  color: solidHero
+                      ? colors.chatUserBubbleText.withValues(alpha: 0.92)
+                      : colors.surface,
+                  shape: BoxShape.circle,
+                ),
+                child: _ProfileAvatarPreview(avatarPath: avatarPath, size: 67),
+              ),
             ),
           ),
           Positioned(
-            right: -3,
-            bottom: -3,
+            right: -2,
+            bottom: -2,
             child: Container(
               key: const ValueKey('profile_avatar_badge_shell'),
-              width: 22,
-              height: 22,
+              width: 24,
+              height: 24,
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 color: solidHero
-                    ? colors.chatUserBubbleText.withValues(alpha: 0.92)
+                    ? colors.chatUserBubbleText.withValues(alpha: 0.95)
                     : colors.surface,
                 shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: colors.textPrimary.withValues(alpha: 0.12),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Container(
                 key: const ValueKey('profile_avatar_badge_accent'),
@@ -1089,13 +1137,29 @@ class _WalletBalanceCard extends StatelessWidget {
         child: Container(
           key: const ValueKey('profile_wallet_card'),
           margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: colors.brand.withValues(alpha: 0.28),
+                blurRadius: 18,
+                offset: const Offset(0, 8),
+                spreadRadius: -4,
+              ),
+            ],
             gradient: LinearGradient(
-              colors: [colors.brand, colors.brandGradientEnd],
+              colors: [
+                colors.brand,
+                Color.alphaBlend(
+                  colors.brandGradientEnd.withValues(alpha: 0.92),
+                  colors.brand,
+                ),
+                colors.brandGradientEnd,
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
+              stops: const [0, 0.55, 1],
             ),
           ),
           child: Column(
