@@ -257,9 +257,10 @@ async def test_workspace_root_endpoint(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_chat_office_upload_ok_with_session():
+    from io import BytesIO
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from io import BytesIO
 
     app = FastAPI()
     app.include_router(ps.router)
