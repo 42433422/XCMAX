@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 桌面 deferred 路由被 SPA 兜底遮蔽（2026-07-09 · v10 线内迭代）
+
+- **fix(backend)**：`register_deferred_routes` 结束后调用 `ensure_spa_fallback_last`，避免桌面 fast-start 下 GET `/api/memory/v2` 等被 `/{fallback:path}` 吃成「资源不存在」
+
 ### 局域网配对端口探测（2026-07-09 · v10 线内迭代）
 
 - **fix(backend)**：`_pairing_reachable_port` 仅在 Vite 代理端口真正在听时才改写到 5011/5001；代理挂掉时保留 API 端口（如 17500），避免手机拿到不可达地址「没法绑定」

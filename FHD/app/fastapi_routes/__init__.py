@@ -83,6 +83,15 @@ def register_deferred_routes(app: FastAPI) -> None:
     else:
         register_legacy_compat_routes(app)
 
+    # 桌面 fast-start：SPA catch-all 先于 deferred API 注册；必须挪回末尾，
+    # 否则 GET /api/memory/v2 等会被兜底成「资源不存在」（POST 仍可能因 CSRF 命中真路由）。
+    try:
+        from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+        ensure_spa_fallback_last(app)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("Failed to reorder SPA fallback after deferred routes: %s", exc)
+
     logger.info("Deferred FastAPI routes registered successfully")
 
 
