@@ -55,6 +55,21 @@ def test_client_shell_from_referer_admin() -> None:
     assert client_shell_from_request(req) == ADMIN_SHELL
 
 
+def test_client_shell_from_admin_login_path_without_port() -> None:
+    """同端口挂载 /admin/login（桌面壳）也应识别为管理端。"""
+    req = _make_request(
+        headers=[(b"referer", b"http://127.0.0.1:17500/admin/login")],
+    )
+    assert client_shell_from_request(req) == ADMIN_SHELL
+
+
+def test_client_shell_from_origin_5011() -> None:
+    req = _make_request(
+        headers=[(b"origin", b"http://127.0.0.1:5011")],
+    )
+    assert client_shell_from_request(req) == ADMIN_SHELL
+
+
 def test_clear_session_cookie_deletes_shell_cookie() -> None:
     req = _make_request(headers=[(b"x-xcmax-client-shell", b"admin")])
     resp = clear_session_cookie(JSONResponse({}), req)

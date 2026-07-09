@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 管理端/企业端会话 Cookie 隔离（2026-07-09 · v10 线内迭代）
+
+- **fix(auth)**：登录/登出改走分壳 `attach_session_cookie` / `clear_session_cookie`，管理端写 `admin_session_id`，不再覆盖企业端 `session_id`
+- **fix(auth)**：`session_id_from_request` 按壳读对应 Cookie；Referer `/admin/login` 与 Origin `:5011` 识别为管理端
+- **fix(frontend)**：`api/core` 请求统一附带 `X-XCMAX-Client-Shell`，与后端分壳对齐
+
 ### 安卓超级员工调用诊断 + Flutter 正式签名（2026-07-09 · v10 线内迭代）
 
 - 超级员工空回复区分：未装 CLI / 未绑电脑 / 工具额度限流 / 鉴权失败（与 XCAGI 钱包无关）

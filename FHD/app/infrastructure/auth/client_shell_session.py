@@ -22,8 +22,15 @@ def client_shell_from_request(request: Request) -> str:
         return ADMIN_SHELL
     if raw in (ENTERPRISE_SHELL, "enterprise", "desktop", "web"):
         return ENTERPRISE_SHELL
+    # 无壳头时：管理端 Vite :5011、同端口 /admin/login、Origin 含 :5011
     referer = str(request.headers.get("referer") or "").lower()
-    if ":5011/admin" in referer or referer.rstrip("/").endswith(":5011/admin"):
+    origin = str(request.headers.get("origin") or "").lower()
+    if (
+        ":5011/admin" in referer
+        or referer.rstrip("/").endswith(":5011/admin")
+        or "/admin/login" in referer
+        or ":5011" in origin
+    ):
         return ADMIN_SHELL
     return ENTERPRISE_SHELL
 

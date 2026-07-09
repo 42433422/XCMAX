@@ -7,7 +7,7 @@ import os
 from typing import Any, cast
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 
 from app.http.error_codes import (
     ACCOUNT_DISABLED,
@@ -461,22 +461,15 @@ def auth_subscription_status(request: Request):
     return {"success": True, "data": status}
 
 
-def _attach_session_cookie(response: JSONResponse, session_id: str | None) -> JSONResponse:
-    sid = (session_id or "").strip()
-    if not sid:
-        return response
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    max_age = int(os.environ.get("SESSION_COOKIE_MAX_AGE", "315360000"))
-    response.set_cookie(
-        key=cookie_name,
-        value=sid,
-        max_age=max_age,
-        httponly=os.environ.get("SESSION_COOKIE_HTTPONLY", "1") not in ("0", "false", "False"),
-        secure=os.environ.get("SESSION_COOKIE_SECURE", "").lower() in ("1", "true", "yes"),
-        samesite=os.environ.get("SESSION_COOKIE_SAMESITE", "Lax"),
-        path="/",
-    )
-    return response
+def _attach_session_cookie(
+    response: Response,
+    session_id: str | None,
+    request: Request,
+) -> Response:
+    """按客户端壳写入 session_id / admin_session_id，避免管理端与企业端串登录态。"""
+    from app.infrastructure.auth.client_shell_session import attach_session_cookie
+
+    return attach_session_cookie(response, session_id, request)
 
 
 @router.post("/api/auth/forgot-account")
@@ -723,7 +716,7 @@ async def auth_register(request: Request, body: dict = Body(default_factory=dict
     )
 
     payload = {"success": True, **result}
-    return _attach_session_cookie(JSONResponse(payload), result.get("session_id"))
+    return _attach_session_cookie(JSONResponse(payload), result.get("session_id"), request)
 
 
 @router.post("/api/auth/login")
@@ -787,7 +780,9 @@ async def auth_login(request: Request, body: dict = Body(default_factory=dict)):
                 )
             except INFRA_TRANSIENT:
                 logger.exception("issue web tokens failed")
-    resp = _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    resp = _attach_session_cookie(
+        JSONResponse(result or {}), (result or {}).get("session_id"), request
+    )
     auth_login_duration_seconds.labels(auth_method="password").observe(
         time.perf_counter() - login_start
     )
@@ -842,7 +837,9 @@ async def auth_login_with_phone_code(request: Request, body: dict = Body(default
             time.perf_counter() - login_start
         )
         return err
-    resp = _attach_session_cookie(JSONResponse(result or {}), (result or {}).get("session_id"))
+    resp = _attach_session_cookie(
+        JSONResponse(result or {}), (result or {}).get("session_id"), request
+    )
     auth_login_duration_seconds.labels(auth_method="phone_code").observe(
         time.perf_counter() - login_start
     )
@@ -938,7 +935,7 @@ async def auth_oidc_callback(request: Request):
         sku=sku,
     )
     resp = RedirectResponse(url=f"{base}?oidc=ok", status_code=302)
-    return _attach_session_cookie(resp, payload.get("session_id"))
+    return _attach_session_cookie(resp, payload.get("session_id"), request)
 
 
 @router.post("/api/auth/qr/issue")
@@ -957,7 +954,11 @@ async def auth_qr_issue(request: Request, body: dict = Body(default_factory=dict
 
 
 @router.get("/api/auth/qr/status")
-async def auth_qr_status(qr_id: str = Query(""), poll_secret: str = Query("")):
+async def auth_qr_status(
+    request: Request,
+    qr_id: str = Query(""),
+    poll_secret: str = Query(""),
+):
     from app.security.auth_qr_login import consume_confirmed_qr, poll_auth_qr
 
     rec = poll_auth_qr(qr_id, poll_secret)
@@ -981,7 +982,7 @@ async def auth_qr_status(qr_id: str = Query(""), poll_secret: str = Query("")):
                     },
                 }
             )
-            return _attach_session_cookie(resp, str(confirmed.get("session_id")))
+            return _attach_session_cookie(resp, str(confirmed.get("session_id")), request)
     if status == "expired":
         return {"success": True, "data": {"status": "expired"}}
     return {"success": True, "data": {"status": status}}
@@ -1150,9 +1151,9 @@ def auth_logout(request: Request):
         clear_session_entitlements()
     except INFRA_TRANSIENT:
         pass
-    resp = JSONResponse(result)
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    resp.delete_cookie(cookie_name, path="/")
+    from app.infrastructure.auth.client_shell_session import clear_session_cookie
+
+    resp = clear_session_cookie(JSONResponse(result), request)
     return resp
 
 

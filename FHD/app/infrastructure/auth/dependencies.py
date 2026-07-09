@@ -96,7 +96,10 @@ def session_id_from_request(request: Request) -> str:
     auth = auth_raw if isinstance(auth_raw, str) else ""
     if auth.startswith("Bearer "):
         return auth[7:].strip()
-    cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
+    # 管理端 / 企业端分壳 Cookie（admin_session_id vs session_id），避免同机串登录态
+    from app.infrastructure.auth.client_shell_session import session_cookie_name_for_request
+
+    cookie_name = session_cookie_name_for_request(request)
     cookie_raw = cookies.get(cookie_name) or ""
     return cookie_raw.strip() if isinstance(cookie_raw, str) else ""
 

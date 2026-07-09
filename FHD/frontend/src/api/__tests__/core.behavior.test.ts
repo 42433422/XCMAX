@@ -75,6 +75,13 @@ describe('api.get', () => {
     expect(out).toEqual({ ok: 1 });
   });
 
+  it('attaches X-XCMAX-Client-Shell on GET', async () => {
+    fetchMock.mockResolvedValue(makeResponse({ json: {} }));
+    await api.get('/api/x');
+    const cfg = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((cfg.headers as Record<string, string>)['X-XCMAX-Client-Shell']).toBe('enterprise');
+  });
+
   it('GET does not attach CSRF header', async () => {
     document.cookie = 'csrf_token=tok123';
     fetchMock.mockResolvedValue(makeResponse({ json: {} }));
