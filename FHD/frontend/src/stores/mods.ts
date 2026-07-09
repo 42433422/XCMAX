@@ -547,7 +547,7 @@ export const useModsStore = defineStore('mods', () => {
     transportError?: boolean
   }> {
     try {
-      const response = await apiFetch('/api/mods/', { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS });
+      const response = await apiFetch('/api/mods', { timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS });
       if (!response.ok) {
         loadError.value = `HTTP ${response.status}`;
         return { ok: false };

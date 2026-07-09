@@ -26,7 +26,7 @@ async function isPrivateDbModRouteAvailable(): Promise<boolean> {
       success?: boolean;
       data?: PrivateDbModRouteRow[] | PrivateDbModRouteRow;
     }>(
-      '/api/mods/',
+      '/api/mods',
     );
     const mods = Array.isArray(resp?.data) ? resp.data : resp?.data ? [resp.data] : [];
     modRouteAvailable =

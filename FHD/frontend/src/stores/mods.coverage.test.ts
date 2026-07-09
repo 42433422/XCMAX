@@ -205,7 +205,7 @@ function routeApiFetch(routes: {
   probeWorkflow?: () => unknown;
 }) {
   mockApiFetch.mockImplementation(async (url: string) => {
-    if (url === '/api/mods/') return routes.mods ? routes.mods() : makeResponse({ success: true, data: [] });
+    if (url === '/api/mods') return routes.mods ? routes.mods() : makeResponse({ success: true, data: [] });
     if (url === '/api/system/industry')
       return routes.industry ? routes.industry() : makeResponse({ success: true, data: { id: '' } });
     if (url.includes('erp-domain') && url.includes('status'))
@@ -573,7 +573,7 @@ describe('mods store – coverage 补齐', () => {
       // 第一次返回空列表，第二次返回有数据
       let modsCallCount = 0;
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') {
+        if (url === '/api/mods') {
           modsCallCount++;
           if (modsCallCount <= 1) return makeResponse({ success: true, data: [] });
           return makeResponse({ success: true, data: sampleMods });
@@ -597,7 +597,7 @@ describe('mods store – coverage 补齐', () => {
       });
       let modsCallCount = 0;
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') {
+        if (url === '/api/mods') {
           modsCallCount++;
           if (modsCallCount <= 1) return makeResponse({ success: true, data: [] });
           return makeResponse({ success: true, data: sampleMods });
@@ -619,7 +619,7 @@ describe('mods store – coverage 补齐', () => {
       });
       let modsCallCount = 0;
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') {
+        if (url === '/api/mods') {
           modsCallCount++;
           return makeResponse({ success: true, data: [], mods_disabled: true });
         }
@@ -640,7 +640,7 @@ describe('mods store – coverage 补齐', () => {
         mods_disabled: false,
       });
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') return makeResponse({ success: true, data: [] });
+        if (url === '/api/mods') return makeResponse({ success: true, data: [] });
         return makeResponse({ success: true });
       });
 
@@ -661,7 +661,7 @@ describe('mods store – coverage 补齐', () => {
       });
       mockSummarizeModLoadingData.mockReturnValue('后端 Mod 加载不完整');
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') return makeResponse({ success: true, data: [] });
+        if (url === '/api/mods') return makeResponse({ success: true, data: [] });
         return makeResponse({ success: true });
       });
 
@@ -675,7 +675,7 @@ describe('mods store – coverage 补齐', () => {
     it('loading-status 请求失败时返回 false 不重试', async () => {
       mockFetchModLoadingStatusShared.mockRejectedValue(new Error('network'));
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') return makeResponse({ success: true, data: [] });
+        if (url === '/api/mods') return makeResponse({ success: true, data: [] });
         return makeResponse({ success: true });
       });
 
@@ -689,7 +689,7 @@ describe('mods store – coverage 补齐', () => {
     it('loading-status 返回 null 时不重试', async () => {
       mockFetchModLoadingStatusShared.mockResolvedValue(null);
       mockApiFetch.mockImplementation(async (url: string) => {
-        if (url === '/api/mods/') return makeResponse({ success: true, data: [] });
+        if (url === '/api/mods') return makeResponse({ success: true, data: [] });
         return makeResponse({ success: true });
       });
 
