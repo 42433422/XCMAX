@@ -739,9 +739,10 @@ void main() {
       body: '分析一下',
     );
 
-    expect(cursorReply, 'Cursor 真实后端回复');
-    expect(claudeReply.body, 'Claude 真实后端回复');
-    expect(api.postedTools, ['Cursor', 'Claude']);
+    // 无 LAN、无 paired 桌面时不再误打云端 POST，改为引导绑定执行端。
+    expect(cursorReply, contains('没有在线的电脑执行端'));
+    expect(claudeReply.body, contains('没有在线的电脑执行端'));
+    expect(api.postedTools, isEmpty);
     final session = await store.load();
     expect(session.cachedChatMessages['pinned:cursor'], hasLength(2));
   });
@@ -763,8 +764,8 @@ void main() {
       body: '不要卡队列',
     );
 
-    expect(reply, 'Codex 直连回复');
-    expect(api.postedTools, ['Codex']);
+    expect(reply, contains('没有在线的电脑执行端'));
+    expect(api.postedTools, isEmpty);
     expect(api.createdRelayTasks, 0);
   });
 
@@ -897,7 +898,8 @@ void main() {
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
+    // fhdHost 无 path 时走 AndroidServerRouter.lanReachableBaseUrl（Vite 代理 5011）。
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
   });
 
   test('MobileRepository clears stale inflight relay without paired desktop',

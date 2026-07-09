@@ -957,14 +957,25 @@ class MobileRepository {
         }
         return reply.ifEmpty('已收到，我会继续处理。');
       }
-      final reply = await _postSuperEmployeeMessage(tool, text);
+      // 无 LAN、无在线电脑中继时，禁止误打云端 POST（云端通常无本机 CLI，
+      // 只会得到「请确认本机已登录」类误导文案）。引导用户绑定执行端。
       _throwIfCancelled(isCancelled);
+      final toolLabel = conversation.title.trim().isEmpty
+          ? '超级员工'
+          : conversation.title.trim();
+      final guidance = localBaseUrl.isEmpty
+          ? '当前是云端模式，且没有在线的电脑执行端。'
+              '请到「我 → 扫码绑定」连接本机 XCAGI，或同一 WiFi 下开启局域网直连后再调用 $toolLabel。'
+              '（部分工具失败是账号额度不足，与 XCAGI 钱包无关；请在电脑端该工具里核对用量。）'
+          : '局域网与云端中继均不可用，无法调用 $toolLabel。'
+              '请确认电脑 FHD 在线，或重新扫码绑定后再试。';
+      onToken?.call(guidance);
       await _cacheChatMessage(
         conversation.id,
         role: ChatRole.assistant,
-        body: reply,
+        body: guidance,
       );
-      return reply;
+      return guidance;
     }
 
     final employeeRef = _employeeConversationRef(conversation.id);
