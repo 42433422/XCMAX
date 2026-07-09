@@ -12,8 +12,10 @@
 - **fix(desktop)**：桌面 fast-start 将 `platform-shell` 路由提前至 bootstrap，避免 deferred 完成前 SPA fallback 对 `/api/platform-shell/*` 返回 404（v10-A Win 404 根因）
 - **fix(desktop)**：`win_v10a_hotfix_deploy.ps1` 改为纯 ASCII + 轮询 health/deliverable（PS5 兼容）
 - **fix(desktop)**：PyInstaller `xcagi_backend.spec` 强制 hiddenimports（`platform_shell_routes` / `deliverable_status`），修复 Win frozen 包缺模块导致 deliverable-status 404
+- **fix(desktop)**：Win 源码中文 docstring 损坏导致 SyntaxError / invalid module；关键模块改为 ASCII 文案后重建通过
+- **fix(package)**：`add_data` 对单文件改用父目录 dest，避免 `alembic.ini` 被打成 `_MEIPASS/alembic.ini/alembic.ini`；`migrate.py` 兼容嵌套路径
 - **fix(desktop)**：PyInstaller 打包 OTA `migrate-only` 在 frozen 环境改走 `alembic.command` API（修复 `upgrade head` exit 2）
-- **docs(evidence)**：更新 `v10-a-desktop-acceptance-2026-07-08.md`；Win 热修构建完成，安装目录部署待 DevFleet 收尾
+- **docs(evidence)**：v10-A 终验 — Win A5 `deliverable=true` + A9 `migrate_exit=0`；`specs/tasks.md` PL1 已勾选
 
 ### 桌面冷启体感（2026-07-08 · v10 线内迭代 · 第三轮）
 

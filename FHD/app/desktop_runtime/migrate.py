@@ -197,6 +197,10 @@ def _alembic_root() -> Path:
 def _run_alembic_cli(*args: str) -> None:
     root = _alembic_root()
     ini = root / "alembic.ini"
+    # Older/broken PyInstaller trees nested the file as alembic.ini/alembic.ini.
+    if not ini.is_file() and (root / "alembic.ini" / "alembic.ini").is_file():
+        ini = root / "alembic.ini" / "alembic.ini"
+        root = ini.parent
     if not ini.is_file():
         raise FileNotFoundError(f"alembic.ini not found: {ini}")
     # PyInstaller 入口不支持 ``exe -m alembic``（参数会进 run_fastapi argparse），须走 API。
