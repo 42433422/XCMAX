@@ -278,6 +278,90 @@ class TestMigrateMain:
         assert "database" in data
 
 
+class TestRecoverIfCorrupt:
+    def _dirs(self, tmp_path):
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        return {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+
+    def test_skipped_when_no_db(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with patch.object(mig, "ensure_desktop_dirs", return_value=self._dirs(tmp_path)):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "skipped"
+
+    def test_ok_when_healthy(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        db = dirs["data"] / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        with patch.object(mig, "ensure_desktop_dirs", return_value=dirs):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "ok"
+
+    def test_restored_from_backup(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        bad = dirs["data"] / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        good = dirs["backups"] / "xcagi-good.db"
+        conn = sqlite3.connect(str(good))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        with patch.object(mig, "ensure_desktop_dirs", return_value=dirs):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "restored"
+        assert (dirs["data"] / "xcagi.db").exists()
+
+    def test_corrupt_no_backup(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        bad = dirs["data"] / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        with patch.object(mig, "ensure_desktop_dirs", return_value=dirs):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "corrupt_no_backup"
+
+    def test_disk_usage_oserror_still_ok(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        db = dirs["data"] / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig.shutil, "disk_usage", side_effect=OSError("x")),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "ok"
+
+
 # ---------------------------------------------------------------------------
 # support_bundle.py
 # ---------------------------------------------------------------------------
