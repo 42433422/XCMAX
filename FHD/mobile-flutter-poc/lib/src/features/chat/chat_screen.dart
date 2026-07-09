@@ -200,9 +200,38 @@ class _ChatScreenState extends State<ChatScreen> {
         widget.conversation,
       );
       if (!mounted) return;
-      if (remoteMessages.isNotEmpty) {
-        setState(() => _messages = remoteMessages);
-      }
+      if (remoteMessages.isEmpty) return;
+      setState(() {
+        // 发送进行中时绝不能整表覆盖：否则刚发出的气泡被抹掉，
+        // onToken 找不到 assistantId → 界面无反馈、按钮却一直「停止」。
+        if (_sending || _activeAssistantId != null) {
+          final existingIds = {for (final m in _messages) m.id};
+          for (final remote in remoteMessages) {
+            if (!existingIds.contains(remote.id)) {
+              _messages.add(remote);
+            }
+          }
+          return;
+        }
+        // 保留本地尚未落库的临时气泡（local-/assistant-），再拼远程历史。
+        final localPending = _messages
+            .where(
+              (m) =>
+                  m.id.startsWith('local-') ||
+                  m.id.startsWith('assistant-') ||
+                  m.id.startsWith('git-'),
+            )
+            .toList(growable: false);
+        if (localPending.isEmpty) {
+          _messages = remoteMessages;
+        } else {
+          final remoteIds = {for (final m in remoteMessages) m.id};
+          _messages = [
+            ...remoteMessages,
+            ...localPending.where((m) => !remoteIds.contains(m.id)),
+          ];
+        }
+      });
     } catch (_) {
       // Keep the Android-like empty state when auth/network is unavailable.
     } finally {
@@ -866,7 +895,21 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _appendMessageBody(String messageId, String token) {
     final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
+    if (index < 0) {
+      // 远程历史覆盖后气泡可能丢失：补回助手气泡，避免「停止」却无内容。
+      _messages.add(
+        ChatMessage(
+          id: messageId,
+          conversationId: widget.conversation.id,
+          role: ChatRole.assistant,
+          body: token,
+          timeText: '刚刚',
+          hasEmployeeProfile: _employeeProfile != null,
+          status: ChatDeliveryStatus.sending,
+        ),
+      );
+      return;
+    }
     final current = _messages[index];
     _messages[index] = ChatMessage(
       id: current.id,
@@ -889,7 +932,20 @@ class _ChatScreenState extends State<ChatScreen> {
     ChatDeliveryStatus? status,
   }) {
     final index = _messages.indexWhere((message) => message.id == messageId);
-    if (index < 0) return;
+    if (index < 0) {
+      _messages.add(
+        ChatMessage(
+          id: messageId,
+          conversationId: widget.conversation.id,
+          role: ChatRole.assistant,
+          body: body,
+          timeText: '刚刚',
+          hasEmployeeProfile: _employeeProfile != null,
+          status: status ?? ChatDeliveryStatus.sent,
+        ),
+      );
+      return;
+    }
     final current = _messages[index];
     _messages[index] = ChatMessage(
       id: current.id,

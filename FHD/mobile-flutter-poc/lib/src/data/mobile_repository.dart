@@ -879,6 +879,8 @@ class MobileRepository {
     }
 
     if (tool != null) {
+      // 先吐状态，再写缓存：避免 SharedPreferences 慢/卡时界面完全无反馈。
+      onToken?.call('正在连接…');
       await _cacheChatMessage(
         conversation.id,
         role: ChatRole.user,
@@ -886,7 +888,6 @@ class MobileRepository {
       );
       // 用户主动新发时清掉旧 inflight，避免后台 resume 轮询继续占住会话。
       await _setInflightRelayTask(conversation.id, '');
-      onToken?.call('正在连接…');
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       final workspace = await _selectedFactoryWorkspace();
       if (localBaseUrl.isNotEmpty) {
