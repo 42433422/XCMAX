@@ -31,7 +31,8 @@
 - **refactor(orchestrator)**：`chat_trace.py`（~1717 行）拆为 `chat_trace_common.py` + `chat_trace_llm.py` / `chat_trace_retrieval.py` / `chat_trace_memory.py` / `chat_trace_artifact.py` / `chat_trace_legacy.py`；`start_legacy_chat_run` / `create_chat_trace_run` / `attach_chat_trace_run` 等 API 经 shim 不变
 - **refactor(application)**：`ai_group_chat_service.py`（~3968 行）拆为 `ai_group_chat/` 包（constants/loaders + crud/progress/post/routing/dispatch/reports/storage mixins + service）；原路径 re-export，测试 patch 经 facade 解析
 - **refactor(application)**：`super_employee_service.py`（~2776 行）拆为 `super_employee/` 包（profiles + cli_runtime/para_dispatch/dev_loop mixins + service）；Codex/Cursor/Claude/Trae 子类与 `subprocess`/`shutil`/`Path` monkeypatch 路径不变
-- **refactor(application)**：`ai_chat_app_service.py`（~3912 行）拆为 `ai_chat/` 包（helpers + excel_import/workflow/tool_execution mixins + service）；`LLMWorkflowPlanner` 等 shim 级 patch 与 `_skip_pro_excel_deterministic_import` 保持
+- **refactor(application)**：`ai_chat_app_service.py`（~3912 行）拆为 `ai_chat/` 包
+- **refactor(application)**：`ai_chat/workflow_mixin.py` 再拆 `workflow_format_mixin.py`（格式化/agent-run 桥接），主 mixin 压到 <900 行（helpers + excel_import/workflow/tool_execution mixins + service）；`LLMWorkflowPlanner` 等 shim 级 patch 与 `_skip_pro_excel_deterministic_import` 保持
 - **refactor(mod-sdk)**：`employee_specialized_tools.py`（~2674 行）拆为 6 个 sibling 模块（runtime/quality/git_deploy/write_gate/llm_ops/registry），原模块保留为 re-export facade，测试与 monkeypatch 路径不变
 - **refactor(services)**：`tools_workflow_registered.py`（~2359 行）改为 `tools_workflow_registered/` 包（business/excel/misc/rag/excel_advanced/core），`__init__.py` 全量 re-export，`from app.services.tools_workflow_registered import X` 路径不变
 - **fix(services)**：`tools_workflow_registered` 路由 dispatch 改为 facade 懒解析（`_facade.py` + `core._resolve_router`）；`misc._registered_router_business_db` 经 facade 调用 sibling router，修复 `patch.object(mod, "_registered_router_products")` 失效

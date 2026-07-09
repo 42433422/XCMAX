@@ -22,6 +22,7 @@ from app.utils.path_utils import resolve_fhd_repo_root
 from .excel_import_mixin import AIChatExcelImportMixin
 from .helpers import _facade_attr
 from .tool_execution_mixin import AIChatToolExecutionMixin
+from .workflow_format_mixin import AIChatWorkflowFormatMixin
 from .workflow_mixin import AIChatWorkflowMixin
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 class AIChatApplicationService(
     AIChatExcelImportMixin,
     AIChatWorkflowMixin,
+    AIChatWorkflowFormatMixin,
     AIChatToolExecutionMixin,
 ):
     """
