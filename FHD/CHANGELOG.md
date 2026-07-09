@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 安卓超级员工调用诊断 + Flutter 正式签名（2026-07-09 · v10 线内迭代）
+
+- 超级员工空回复区分：未装 CLI / 未绑电脑 / 工具额度限流 / 鉴权失败（与 XCAGI 钱包无关）
+- Flutter：无 LAN、无在线中继时不再误打云端 POST，改为引导扫码绑定或局域网直连
+- Flutter Android release 接入 `mobile-android` 正式 keystore（`XCAGI_REQUIRE_RELEASE_SIGNING=1` 可强制）
+
 ### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）
 
 - **fix(desktop)**：`deliverable-status` 读取运行中 `request.app`，消除 `MOD_ROUTES_NOT_MOUNTED` 误判（Mac 真机已验）

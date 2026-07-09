@@ -496,9 +496,8 @@ class SuperEmployeeService:
         # 派工成功路径(accepted is True)完全不走这里；云端无 CLI 时 _cli_reply_body 返回空，自动跳过。
         if dispatch.get("accepted") is not True:
             fallback_body, fallback_dispatcher = self._compose_direct_chat_reply(text, ctx)
-            if fallback_body and not fallback_body.startswith(
-                f"{self._p.display_tool} CLI 暂时没有返回内容"
-            ):
+            # 未装 CLI / 空输出诊断文案不算「成功直答」，继续走派工排队提示。
+            if fallback_body and not self._is_cli_unavailable_message(fallback_body):
                 assistant_msg = self._message_row(
                     user_id=int(user_id),
                     role="assistant",
@@ -648,7 +647,7 @@ class SuperEmployeeService:
                     return
             body = final_text.strip()
             if not body:
-                body = f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。"
+                body = self._empty_cli_user_message(ran=True, stderr="")
             yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
         except Exception as exc:  # noqa: BLE001
             logger.exception("invoke_stream cli failed: %s", exc)
@@ -1815,11 +1814,16 @@ class SuperEmployeeService:
                     return body
                 if returncode != 0:
                     detail = (stderr.strip() or stdout.strip())[:500]
+                    diagnosed = self._empty_cli_user_message(ran=True, stderr=detail)
+                    if "额度" in diagnosed or "鉴权" in diagnosed or "限流" in diagnosed:
+                        return diagnosed
                     return (
                         f"{self._p.display_tool} CLI 已接入，但本次返回失败"
                         f"（code {returncode}）：{detail}"
                     )
-                return ""
+                return self._empty_cli_user_message(
+                    ran=True, stderr=(stderr.strip() or stdout.strip())[:500]
+                )
             # 非 stream(codex)：先读 last-message 文件，再退 stdout。
             if self._p.cli_reads_output_file and output_path.exists():
                 body = output_path.read_text(encoding="utf-8", errors="replace").strip()
@@ -1829,11 +1833,16 @@ class SuperEmployeeService:
             if cleaned:
                 return cleaned
             if returncode != 0:
+                detail = stderr.strip()[:500]
+                diagnosed = self._empty_cli_user_message(ran=True, stderr=detail)
+                if "额度" in diagnosed or "鉴权" in diagnosed or "限流" in diagnosed:
+                    return diagnosed
                 return (
                     f"{self._p.display_tool} CLI 已接入，但本次返回失败"
-                    f"（code {returncode}）：{stderr.strip()[:500]}"
+                    f"（code {returncode}）：{detail}"
                 )
-        return ""
+            return self._empty_cli_user_message(ran=True, stderr=stderr.strip()[:500])
+        return self._empty_cli_user_message(ran=False)
 
     def _cli_path(self) -> str:
         candidates = [
@@ -2348,6 +2357,87 @@ class SuperEmployeeService:
             lines.append(line)
         return "\n".join(lines).strip()
 
+    def _is_cli_unavailable_message(self, body: str) -> bool:
+        text = (body or "").strip()
+        if not text:
+            return True
+        tool = self._p.display_tool
+        markers = (
+            f"{tool} CLI 暂时没有返回内容",
+            f"本机未找到 {tool} CLI",
+            f"{tool} CLI 已运行但没有返回内容",
+            f"{tool} 暂时无法回复",
+            f"{tool} 当前没有可用额度",
+            f"{tool} CLI 已启动但鉴权失败",
+        )
+        return any(text.startswith(m) or m in text[:80] for m in markers)
+
+    def _empty_cli_user_message(self, *, ran: bool, stderr: str = "") -> str:
+        """区分「本机没通 / CLI 未装 / 额度或鉴权」——勿一律说「请确认已登录」。
+
+        超级员工走本机 CLI，不走平台钱包扣费；钱包不足会出现在小 C / 普通 AI 对话，
+        不应与本通道混淆。
+        """
+        tool = self._p.display_tool
+        detail = (stderr or "").strip()
+        lowered = detail.lower()
+        quota_markers = (
+            "quota",
+            "rate limit",
+            "ratelimit",
+            "usage limit",
+            "insufficient",
+            "billing",
+            "payment required",
+            "余额",
+            "额度",
+            "次数用尽",
+            "超出限额",
+        )
+        auth_markers = (
+            "login",
+            "log in",
+            "sign in",
+            "unauthorized",
+            "unauthenticated",
+            "not logged",
+            "api key",
+            "auth",
+            "token expired",
+            "未登录",
+            "鉴权",
+            "请先登录",
+        )
+        if any(m in lowered or m in detail for m in quota_markers):
+            snippet = detail[:220] if detail else "工具返回额度/限流相关错误"
+            return (
+                f"{tool} 当前没有可用额度或触发限流（与 XCAGI 钱包余额无关）。"
+                f"请在本机检查 {tool} 账号套餐/用量后重试。详情：{snippet}"
+            )
+        if ran and any(m in lowered or m in detail for m in auth_markers):
+            snippet = detail[:220] if detail else "工具返回鉴权相关错误"
+            return (
+                f"{tool} CLI 已启动但鉴权失败，请在本机重新登录 {tool} 后重试。"
+                f"详情：{snippet}"
+            )
+        if not self._cli_path():
+            return (
+                f"本机未找到 {tool} CLI，超级员工无法在此服务器进程内执行。"
+                "请用手机扫码绑定已安装并登录该工具的电脑执行端，"
+                "或同一 WiFi 下开启局域网直连后再试。"
+                "（这与钱包额度无关。）"
+            )
+        if ran:
+            hint = f" 详情：{detail[:220]}" if detail else ""
+            return (
+                f"{tool} CLI 已运行但没有返回内容，常见原因是本机未登录或会话失效。"
+                f"请在电脑端确认 {tool} 已登录后重试。{hint}"
+            )
+        return (
+            f"{tool} 暂时无法回复。请确认电脑执行端在线、已绑定，"
+            f"且本机已安装并登录 {tool}。（与钱包额度无关。）"
+        )
+
     def _compose_direct_chat_reply(
         self,
         text: str,
@@ -2357,12 +2447,14 @@ class SuperEmployeeService:
         canned = self._direct_reply_body(text)
         if canned:
             return canned, f"{self._p.tool_name}_direct"
+        cli_path = self._cli_path()
+        if not cli_path:
+            return self._empty_cli_user_message(ran=False), f"{self._p.tool_name}_cli_missing"
         cli_body = self._cli_reply_body(text, context)
         if cli_body:
             return cli_body, f"{self._p.tool_name}_cli"
         return (
-            f"{self._p.display_tool} CLI 暂时没有返回内容，"
-            f"请确认本机 {self._p.display_tool} 已登录后重试。",
+            self._empty_cli_user_message(ran=True),
             f"{self._p.tool_name}_cli",
         )
 
