@@ -8,8 +8,9 @@
 
 ### Windows 桌面冷启体感（2026-07-09 · v10 线内迭代）
 
-- **fix(desktop)**：主界面改为 `/api/ping` 就绪即加载，不再阻塞等待 `appRoutesReady`（Win deferred 注册可拖数十秒）
+- **fix(desktop)**：主界面改为 `/api/ping` 就绪即加载，不再阻塞等待 `appRoutesReady`（Win deferred 注册可拖数十秒；实机曾见 ping≈15s 后 `appRoutesReady` 超 120s 仍为 false）
 - **fix(desktop)**：去掉模块加载期同步 PowerShell `Test-NetConnection`；死代理改由 `applyOtaProxyBypass` 异步判定
+- **fix(frontend)**：Mod 列表请求统一为 `/api/mods`（无尾斜杠），避免部分打包态下 `/api/mods/` 404 导致侧栏空转重试
 - **perf(backend)**：桌面 fast-start 下 Neuro/员工调度/云中继在路由就绪后错峰启动（Win 2.5s / 其它 1s）
 - **security**：SSE/deliverable 错误不再回传异常原文；CLI 语法校验拒绝路径穿越（清 CodeQL）
 
