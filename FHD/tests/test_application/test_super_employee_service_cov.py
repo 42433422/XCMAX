@@ -1532,3 +1532,42 @@ class TestEmptyCliUserMessage:
             body, dispatcher = svc._compose_direct_chat_reply("随便问问", {})
         assert "未找到" in body
         assert dispatcher.endswith("_cli_missing")
+
+    def test_ran_with_cli_empty_stderr_hints_login(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=True, stderr="")
+        assert "已运行" in body or "没有返回" in body
+        assert "登录" in body
+
+    def test_not_ran_with_cli_present_generic_unavailable(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=False)
+        assert "暂时无法" in body or "无法回复" in body
+        assert "钱包" in body
+
+    def test_chinese_quota_marker(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=True, stderr="额度不足，请升级套餐")
+        assert "额度" in body or "限流" in body
+        assert "钱包" in body
+
+    def test_chinese_auth_marker(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=True, stderr="请先登录后再试")
+        assert "鉴权" in body or "登录" in body
+
+    def test_compose_cli_empty_body_uses_cli_dispatcher(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with (
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_cli_reply_body", return_value=""),
+            patch.object(svc, "_direct_reply_body", return_value=""),
+        ):
+            body, dispatcher = svc._compose_direct_chat_reply("解释这段日志", {})
+        assert body
+        assert dispatcher.endswith("_cli")
+
