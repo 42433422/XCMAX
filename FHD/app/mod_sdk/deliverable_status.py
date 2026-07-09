@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from fastapi import FastAPI
+
 from app.mod_sdk.edition_policy import bundled_mods_dir, resolve_edition
 from app.mod_sdk.platform_shell import (
     GENERIC_HOST_MOD_IDS,
@@ -41,7 +43,25 @@ def _installed_mod_ids() -> list[str]:
         return []
 
 
-def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict[str, Any]:
+def _mods_routes_loaded(app: FastAPI | None = None) -> bool | None:
+    """读取运行中 FastAPI 实例的 Mod 路由挂载状态；无运行实例时返回 None（不阻断验收）。"""
+    if app is not None:
+        return bool(getattr(app.state, "mods_routes_loaded", False))
+    try:
+        from app.fastapi_app.factory import _app_singleton
+
+        if _app_singleton is not None:
+            return bool(getattr(_app_singleton.state, "mods_routes_loaded", False))
+    except RECOVERABLE_ERRORS:
+        pass
+    return None
+
+
+def build_deliverable_status(
+    installed_mod_ids: list[str] | None = None,
+    *,
+    app: FastAPI | None = None,
+) -> dict[str, Any]:
     from app.mod_sdk.host_foundation import (
         host_foundation_bridges_ready,
         host_foundation_employee_present,
@@ -153,16 +173,9 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
             if not (bundle / mid).is_dir():
                 bundle_missing.append(mid)
 
-    mods_routes = True
-    try:
-        from app.fastapi_app import get_fastapi_app
+    mods_routes = _mods_routes_loaded(app)
 
-        app = get_fastapi_app()
-        mods_routes = bool(getattr(app.state, "mods_routes_loaded", False))
-    except RECOVERABLE_ERRORS:
-        mods_routes = False
-
-    if not mods_routes and expected:
+    if mods_routes is False and expected and installed_mod_ids is None:
         blockers.append(
             {
                 "code": "MOD_ROUTES_NOT_MOUNTED",
@@ -222,7 +235,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
         "missing_mod_ids": missing,
         "bundled_mods_dir": str(bundle) if bundle else None,
         "bundled_mods_missing": bundle_missing,
-        "mods_routes_loaded": mods_routes,
+        "mods_routes_loaded": bool(mods_routes) if mods_routes is not None else False,
         "platform_shell_mode": shell.get("platform_shell_mode"),
         "blockers": blockers,
         "next_actions": _next_actions(edition, blockers, deliverable),

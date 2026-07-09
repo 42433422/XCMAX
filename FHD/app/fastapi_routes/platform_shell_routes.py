@@ -51,11 +51,11 @@ async def decoupling_progress():
 
 
 @router.get("/deliverable-status")
-async def platform_shell_deliverable_status():
+async def platform_shell_deliverable_status(request: Request):
     """可交付验收：edition 包是否装齐、Mod 路由是否挂载、建议下一步操作。"""
     from app.mod_sdk.deliverable_status import build_deliverable_status
 
-    return {"success": True, "data": build_deliverable_status()}
+    return {"success": True, "data": build_deliverable_status(app=request.app)}
 
 
 @router.get("/industry-baseline")
