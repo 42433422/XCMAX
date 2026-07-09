@@ -855,7 +855,7 @@ void main() {
     expect(api.lastKind, 'cursor.invoke');
   });
 
-  test('MobileRepository prefers LAN direct super employee over fresh relay',
+  test('MobileRepository prefers LAN SSE super employee over fresh relay',
       () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
@@ -867,6 +867,7 @@ void main() {
     );
     final api = _FreshPairedRelayApi(store);
     final repository = MobileRepository(client: api);
+    final tokens = <String>[];
 
     final reply = await repository.streamMessage(
       conversation: const ConversationItem(
@@ -876,13 +877,17 @@ void main() {
         subtitle: '',
         timestampText: '',
       ),
-      body: '局域网直连执行',
+      body: '局域网流式执行',
+      onToken: tokens.add,
     );
 
     expect(reply, 'Trae 直连回复');
     expect(api.createdRelayTasks, 0);
+    expect(api.postedBaseUrls, isEmpty);
     // 17500 + /fhd-api → 手机可达 Vite 代理 5011，并去掉云端 path 前缀。
-    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
+    expect(tokens.join(), contains('正在思考'));
+    expect(tokens.join(), contains('Trae 直连回复'));
   });
 
   test('MobileRepository rewrites stored LAN 17500 base to reachable 5011',
@@ -906,11 +911,41 @@ void main() {
         subtitle: '',
         timestampText: '',
       ),
-      body: '改写端口后直连',
+      body: '改写端口后流式',
     );
 
     expect(reply, 'Trae 直连回复');
-    expect(api.postedBaseUrls, ['http://192.168.10.2:5011/']);
+    expect(api.streamedBaseUrls, ['http://192.168.10.2:5011/']);
+    expect(api.postedBaseUrls, isEmpty);
+  });
+
+  test('MobileRepository falls back to LAN POST when SSE unavailable', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        lanAccessToken: 'lan-access',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _LanSseFailPostOkApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: 'SSE 失败回落 POST',
+    );
+
+    expect(reply, 'Trae 直连回复');
+    expect(api.createdRelayTasks, 0);
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
   });
 
   test('MobileRepository skips LAN without lanAccessToken and uses relay silently',
@@ -973,6 +1008,7 @@ void main() {
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
     // fhdHost 无 path 时走 AndroidServerRouter.lanReachableBaseUrl（Vite 代理 5011）。
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
     expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
     expect(tokens.join(), isNot(contains('局域网连接失败')));
   });
@@ -1616,6 +1652,8 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
 
   final postedTools = <String>[];
   final postedBaseUrls = <String>[];
+  final streamedTools = <String>[];
+  final streamedBaseUrls = <String>[];
   var createdRelayTasks = 0;
   var statusCalls = 0;
 
@@ -1701,6 +1739,23 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
       data: {'reply': '$tool 直连回复'},
       raw: {'reply': '$tool 直连回复'},
     );
+  }
+
+  @override
+  Future<String> streamSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+    void Function(String token)? onToken,
+    void Function(String status)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    streamedTools.add(tool);
+    streamedBaseUrls.add(baseUrl);
+    onStatus?.call('$tool 正在思考…');
+    final reply = '$tool 直连回复';
+    onToken?.call(reply);
+    return reply;
   }
 }
 
@@ -1823,6 +1878,34 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
   _LanFailFreshRelayApi(super.store);
 
   @override
+  Future<String> streamSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+    void Function(String token)? onToken,
+    void Function(String status)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    streamedTools.add(tool);
+    streamedBaseUrls.add(baseUrl);
+    if (baseUrl.trim().isNotEmpty) {
+      throw const MobileApiException(
+        statusCode: 503,
+        message: 'lan stream unavailable',
+        body: <String, Object?>{},
+      );
+    }
+    return super.streamSuperEmployeeMessage(
+      tool,
+      body,
+      baseUrl: baseUrl,
+      onToken: onToken,
+      onStatus: onStatus,
+      isCancelled: isCancelled,
+    );
+  }
+
+  @override
   Future<MobileEnvelope<Map<String, Object?>>> postSuperEmployeeMessage(
     String tool,
     String body, {
@@ -1839,6 +1922,28 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
       );
     }
     return super.postSuperEmployeeMessage(tool, body, baseUrl: baseUrl);
+  }
+}
+
+class _LanSseFailPostOkApi extends _FreshPairedRelayApi {
+  _LanSseFailPostOkApi(super.store);
+
+  @override
+  Future<String> streamSuperEmployeeMessage(
+    String tool,
+    String body, {
+    String baseUrl = '',
+    void Function(String token)? onToken,
+    void Function(String status)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    streamedTools.add(tool);
+    streamedBaseUrls.add(baseUrl);
+    throw const MobileApiException(
+      statusCode: 404,
+      message: 'stream endpoint missing',
+      body: <String, Object?>{},
+    );
   }
 }
 

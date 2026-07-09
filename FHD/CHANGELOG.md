@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 局域网超级员工优先 SSE（2026-07-09 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：`streamMessage` 局域网路径改为先走 `messages/stream` SSE，失败再回落 POST，避免整段直答挡住流式进度
+
 ### 对话页工具卡片补齐（2026-07-09 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：超级员工会话无活跃分支时，十字键面板恢复「新建对话 / OCR / 语音」，并保留「执行回顾」与派工类卡片（对齐 Android）

@@ -886,40 +886,40 @@ class MobileRepository {
       );
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
-        // 第 1 级：LAN 直答（本机 OpenAPI 常无 messages/stream，POST 更稳）。
+        // 第 1 级：LAN SSE（逐 token / status，避免整段 POST 挡住流式进度）。
         try {
-          final reply = await _postSuperEmployeeMessage(
+          final reply = await _client.streamSuperEmployeeMessage(
             tool,
             text,
             baseUrl: localBaseUrl,
+            onToken: (token) {
+              if (isCancelled != null && isCancelled()) return;
+              onToken?.call(token);
+            },
+            onStatus: (status) {
+              if (isCancelled != null && isCancelled()) return;
+              onToken?.call('\n$status\n');
+            },
+            isCancelled: isCancelled,
           );
           _throwIfCancelled(isCancelled);
-          onToken?.call(reply);
           await _cacheChatMessage(
             conversation.id,
             role: ChatRole.assistant,
             body: reply,
           );
           return reply;
-        } catch (postError) {
+        } catch (_) {
           _throwIfCancelled(isCancelled);
-          // 第 2 级：LAN SSE（后端已挂 stream 时逐 token；失败再回落云中继）。
+          // 第 2 级：旧后端无 stream 时回落 LAN POST；再失败才走云中继。
           try {
-            final reply = await _client.streamSuperEmployeeMessage(
+            final reply = await _postSuperEmployeeMessage(
               tool,
               text,
               baseUrl: localBaseUrl,
-              onToken: (token) {
-                if (isCancelled != null && isCancelled()) return;
-                onToken?.call(token);
-              },
-              onStatus: (status) {
-                if (isCancelled != null && isCancelled()) return;
-                onToken?.call('\n$status\n');
-              },
-              isCancelled: isCancelled,
             );
             _throwIfCancelled(isCancelled);
+            onToken?.call(reply);
             await _cacheChatMessage(
               conversation.id,
               role: ChatRole.assistant,
