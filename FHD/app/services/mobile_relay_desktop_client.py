@@ -321,7 +321,6 @@ def _write_config(data: dict[str, Any]) -> None:
     _CONFIG_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-
 def _guess_lan_ipv4() -> str:
     """本机对外网卡 IPv4，供手机局域网直连（避免 127.0.0.1）。"""
     try:
