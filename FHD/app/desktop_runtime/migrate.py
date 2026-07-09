@@ -201,8 +201,9 @@ def _run_alembic_cli(*args: str) -> None:
         raise FileNotFoundError(f"alembic.ini not found: {ini}")
     # PyInstaller 入口不支持 ``exe -m alembic``（参数会进 run_fastapi argparse），须走 API。
     if getattr(sys, "frozen", False):
-        from alembic import command
         from alembic.config import Config
+
+        from alembic import command
 
         cfg = Config(str(ini))
         op = args[0] if args else ""
