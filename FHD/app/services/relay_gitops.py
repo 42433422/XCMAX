@@ -247,13 +247,15 @@ def git_log(payload: dict[str, Any], repo: str | None = None) -> dict[str, Any]:
         # 查该 commit 改动文件数
         fc = _git(repo, "show", "--stat", "--format=", sha, timeout=15).stdout
         files_changed = len([ln for ln in fc.splitlines() if ln.strip() and "|" in ln])
-        commits.append({
-            "hash": sha[:8],
-            "date": date,
-            "author": author,
-            "subject": subject,
-            "files_changed": files_changed,
-        })
+        commits.append(
+            {
+                "hash": sha[:8],
+                "date": date,
+                "author": author,
+                "subject": subject,
+                "files_changed": files_changed,
+            }
+        )
     return {
         "ok": True,
         "reply": f"{len(commits)} 条提交",

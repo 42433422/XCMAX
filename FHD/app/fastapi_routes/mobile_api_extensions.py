@@ -1898,9 +1898,7 @@ async def _stream_super_employee_invoke(
     service = _super_employee_service_for_tool(tool)
     if service is None:
         return JSONResponse(
-            format_mobile_response(
-                None, f"未知超级员工工具：{tool}", success=False, code=400
-            ),
+            format_mobile_response(None, f"未知超级员工工具：{tool}", success=False, code=400),
             status_code=400,
         )
     text = str((body or {}).get("message") or (body or {}).get("body") or "").strip()
@@ -1917,9 +1915,7 @@ async def _stream_super_employee_invoke(
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
     ):
-        _wsid = str(
-            (body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax"
-        )
+        _wsid = str((body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax")
         context = factory_context(workspace_id=_wsid, base=context)
 
     async def sse_gen():
