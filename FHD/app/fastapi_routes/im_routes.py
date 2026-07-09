@@ -24,7 +24,6 @@ from app.application.execution_scope import factory_context
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
 from app.application.trae_super_employee_service import TraeSuperEmployeeService
 from app.application.workspaces import get_workspace_registry
-from app.config import Config
 from app.db import HostSessionLocal, get_host_engine
 from app.infrastructure.auth.dependencies import (
     CurrentUser,

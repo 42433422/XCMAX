@@ -29,7 +29,7 @@ def _header_get(headers: Mapping[str, Any] | None, *names: str) -> str:
     for name in names:
         try:
             val = headers.get(name)
-        except Exception:
+        except (TypeError, AttributeError, KeyError):
             val = None
         if val is None and not hasattr(headers, "get"):
             return ""
@@ -37,7 +37,7 @@ def _header_get(headers: Mapping[str, Any] | None, *names: str) -> str:
             if lower_map is None:
                 try:
                     lower_map = {str(k).lower(): v for k, v in headers.items()}
-                except Exception:
+                except (TypeError, AttributeError, KeyError):
                     lower_map = {}
             val = lower_map.get(name.lower())
         if val is not None and str(val).strip():

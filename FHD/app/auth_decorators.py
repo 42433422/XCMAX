@@ -5,7 +5,6 @@ from contextvars import ContextVar, Token
 from functools import wraps
 from typing import Any
 
-from app.config import Config
 from app.db.models import User
 from app.http.json_response import json_response
 from app.services import get_auth_service, get_session_service
