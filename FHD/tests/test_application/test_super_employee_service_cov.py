@@ -23,6 +23,7 @@ from app.application.super_employee_service import (
     PARA_TERMINAL_TASK_STATUSES,
     SuperEmployeeService,
     SuperEmployeeToolProfile,
+    _chunk_text,
     _coerce_list,
     _safe_json_line,
     _utc_now,
@@ -1526,6 +1527,13 @@ class TestEmptyCliUserMessage:
             body = svc._empty_cli_user_message(ran=True, stderr="not logged in")
         assert "鉴权" in body or "登录" in body
 
+    def test_compose_without_cli_uses_missing_dispatcher(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value=""):
+            body, dispatcher = svc._compose_direct_chat_reply("随便问问", {})
+        assert "未找到" in body
+        assert dispatcher.endswith("_cli_missing")
+
     def test_ran_with_cli_empty_stderr_hints_login(self, tmp_path):
         svc = _make_svc(tmp_path)
         with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
@@ -1564,9 +1572,195 @@ class TestEmptyCliUserMessage:
         assert body
         assert dispatcher.endswith("_cli")
 
-    def test_compose_without_cli_uses_missing_dispatcher(self, tmp_path):
+
+class TestChunkText:
+    def test_empty(self):
+        assert _chunk_text("") == []
+
+    def test_short_single_chunk(self):
+        assert _chunk_text("你好。") == ["你好。"]
+
+    def test_splits_on_sentence_and_max_len(self):
+        text = "第一句。第二句！第三句？\n第四段"
+        chunks = _chunk_text(text, max_len=6)
+        assert chunks
+        assert "".join(chunks).replace(" ", "")  # non-empty
+        assert all(isinstance(c, str) and c for c in chunks)
+
+    def test_oversized_part_appended_alone(self):
+        long = "x" * 50
+        chunks = _chunk_text(long + "。短。", max_len=10)
+        assert any(len(c) >= 50 for c in chunks)
+
+
+class TestIsCliUnavailableMessage:
+    def test_empty_true(self, tmp_path):
         svc = _make_svc(tmp_path)
-        with patch.object(svc, "_cli_path", return_value=""):
-            body, dispatcher = svc._compose_direct_chat_reply("随便问问", {})
-        assert "未找到" in body
-        assert dispatcher.endswith("_cli_missing")
+        assert svc._is_cli_unavailable_message("") is True
+        assert svc._is_cli_unavailable_message("   ") is True
+
+    def test_markers(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        tool = svc._p.display_tool
+        assert svc._is_cli_unavailable_message(f"本机未找到 {tool} CLI，请绑定") is True
+        assert svc._is_cli_unavailable_message(f"{tool} 暂时无法回复，请稍后") is True
+        assert svc._is_cli_unavailable_message("正常业务回复内容") is False
+
+
+class TestParseStreamJsonLine:
+    def test_invalid_json(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        assert svc._parse_stream_json_line("not-json") == ""
+
+    def test_non_dict(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        assert svc._parse_stream_json_line("[1,2]") == ""
+
+    def test_assistant_text_block(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        line = json.dumps(
+            {"type": "assistant", "message": {"content": [{"type": "text", "text": "hi"}]}}
+        )
+        assert svc._parse_stream_json_line(line) == "hi"
+
+    def test_result_string(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        line = json.dumps({"type": "result", "result": "done"})
+        assert svc._parse_stream_json_line(line) == "done"
+
+    def test_content_block_delta(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        line = json.dumps({"type": "content_block_delta", "delta": {"text": "tok"}})
+        assert svc._parse_stream_json_line(line) == "tok"
+
+    def test_message_delta(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        line = json.dumps({"type": "message_delta", "text": "md"})
+        assert svc._parse_stream_json_line(line) == "md"
+
+    def test_unknown_type(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        assert svc._parse_stream_json_line(json.dumps({"type": "other"})) == ""
+
+
+@pytest.mark.asyncio
+class TestInvokeStream:
+    async def test_empty_message_errors(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        events = [e async for e in svc.invoke_stream(user_id=1, message="  ")]
+        assert events[0]["type"] == "error"
+
+    async def test_faq_canned_path(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_direct_reply_body", return_value="我是 Codex 超级员工。"):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="你是谁")]
+        types = [e["type"] for e in events]
+        assert "status" in types and "token" in types and "done" in types
+        assert events[-1]["result"]["dispatcher"] == "faq"
+
+    async def test_missing_cli_fallback(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value=""),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="随便问问")]
+        assert events[-1]["type"] == "done"
+        assert "cli_missing" in events[-1]["result"]["dispatcher"]
+
+    async def test_cli_stream_tokens(self, tmp_path):
+        svc = _make_svc(tmp_path)
+
+        async def _fake_stream(*_a, **_k):
+            yield {"type": "token", "text": "hello"}
+            yield {"type": "status", "text": "working"}
+            yield {"type": "done", "text": "hello world"}
+
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=False),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_cli_streaming", _fake_stream),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="解释一下")]
+        assert any(e["type"] == "token" for e in events)
+        assert events[-1]["type"] == "done"
+        assert events[-1]["result"]["dispatcher"] == "cli_stream"
+
+    async def test_cli_stream_empty_uses_fallback_message(self, tmp_path):
+        svc = _make_svc(tmp_path)
+
+        async def _fake_stream(*_a, **_k):
+            yield {"type": "done", "text": ""}
+
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=False),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_cli_streaming", _fake_stream),
+            patch.object(svc, "_empty_cli_user_message", return_value="空回复兜底"),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="解释一下")]
+        assert events[-1]["result"]["response"] == "空回复兜底"
+
+    async def test_cli_stream_error_event(self, tmp_path):
+        svc = _make_svc(tmp_path)
+
+        async def _fake_stream(*_a, **_k):
+            yield {"type": "error", "message": "boom"}
+
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=False),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_cli_streaming", _fake_stream),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="解释一下")]
+        assert events[-1]["type"] == "error"
+
+    async def test_dev_loop_path(self, tmp_path):
+        svc = _make_svc(tmp_path, cli_runner=subprocess.run)
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=True),
+            patch.object(svc, "_dev_loop_enabled", return_value=True),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_dev_task_loop", return_value="闭环结果\n分支：x"),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="修复登录")]
+        assert events[-1]["type"] == "done"
+        assert events[-1]["result"]["dispatcher"] == "dev_loop"
+
+    async def test_dev_loop_exception(self, tmp_path):
+        svc = _make_svc(tmp_path, cli_runner=subprocess.run)
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=True),
+            patch.object(svc, "_dev_loop_enabled", return_value=True),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_dev_task_loop", side_effect=RuntimeError("x")),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="修复登录")]
+        assert events[-1]["type"] == "error"
+
+    async def test_cli_exception(self, tmp_path):
+        svc = _make_svc(tmp_path)
+
+        async def _boom(*_a, **_k):
+            raise RuntimeError("cli down")
+            yield  # pragma: no cover
+
+        with (
+            patch.object(svc, "_direct_reply_body", return_value=""),
+            patch.object(svc, "_cli_path", return_value="/usr/bin/codex"),
+            patch.object(svc, "_is_task_intent", return_value=False),
+            patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+            patch.object(svc, "_run_cli_streaming", _boom),
+        ):
+            events = [e async for e in svc.invoke_stream(user_id=1, message="解释一下")]
+        assert events[-1]["type"] == "error"

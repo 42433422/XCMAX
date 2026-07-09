@@ -42,12 +42,14 @@ from app.services.mobile_relay_desktop_client import (
     _extract_merge_source,
     _extract_merge_target,
     _extract_target_branch,
+    _extract_tool_calls,
     _git_op_from_message,
     _max_concurrent,
     _poll_once,
     _public_payload_from_config,
     _read_config,
     _relay_base_url,
+    _relay_http_client,
     _terminal_codex_message,
     _terminal_error_summary,
     _text_mentions_branch_op,
@@ -1719,3 +1721,48 @@ class TestRegisterDesktopRelaySuccess:
             result = register_desktop_relay(host="127.0.0.1", port=8000)
 
         assert result is None
+
+
+class TestRelayHttpClient:
+    def test_trust_env_disabled(self) -> None:
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            client = _relay_http_client(12.5)
+            mock_cls.assert_called_once_with(timeout=12.5, trust_env=False)
+            assert client is mock_cls.return_value
+
+
+class TestExtractToolCalls:
+    def test_empty_or_non_devloop_returns_empty(self) -> None:
+        assert _extract_tool_calls({}, "Codex") == []
+        assert _extract_tool_calls({"body": "你好"}, "Codex") == []
+        assert _extract_tool_calls({"content": "闲聊"}, "Codex") == []
+
+    def test_parses_branch_verify_push(self) -> None:
+        body = (
+            "闭环结果\n"
+            "分支：feature/demo-1\n"
+            "验证：通过（pytest 12 passed）\n"
+            "推送：已推送 origin/feature/demo-1\n"
+        )
+        calls = _extract_tool_calls({"body": body}, "Codex")
+        assert calls[0]["action"] == "cli_run"
+        assert "Codex" in calls[0]["label"]
+        by_action = {c["action"]: c for c in calls}
+        assert by_action["create_branch"]["detail"] == "feature/demo-1"
+        assert by_action["verify"]["success"] is True
+        assert "pytest" in by_action["verify"]["detail"]
+        assert by_action["push"]["success"] is True
+
+    def test_verify_failed_and_push_failed(self) -> None:
+        body = "闭环结果\n分支: feat/x\n验证: 未通过（语法错误）\n推送: 失败：rejected\n"
+        calls = _extract_tool_calls({"content": body}, "Claude")
+        by_action = {c["action"]: c for c in calls}
+        assert by_action["verify"]["success"] is False
+        assert by_action["push"]["success"] is False
+        assert by_action["create_branch"]["detail"] == "feat/x"
+
+    def test_only_closed_loop_marker_still_adds_cli(self) -> None:
+        calls = _extract_tool_calls({"body": "闭环结果\n无其它字段"}, "Cursor")
+        assert len(calls) == 1
+        assert calls[0]["action"] == "cli_run"
