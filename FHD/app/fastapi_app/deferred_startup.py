@@ -70,6 +70,14 @@ async def _deferred_heavy_startup(app: FastAPI) -> None:
         _init_neuro_ddd_async,
     )
 
+    # 桌面（尤其 Windows）上 Neuro/员工调度/云中继与首屏请求抢 CPU；
+    # 路由与 Mod bootstrap 完成后稍后再启，减轻「进主界面仍卡死」体感。
+    stagger_s = 0.0
+    if os.environ.get("XCAGI_DESKTOP_MODE", "").strip() in {"1", "true", "yes"}:
+        stagger_s = 2.5 if os.name == "nt" else 1.0
+    if stagger_s > 0:
+        await asyncio.sleep(stagger_s)
+
     await _init_neuro_ddd_async(app)
     await _init_employee_runtime_async(app)
     await _init_mobile_relay_desktop_async(app)

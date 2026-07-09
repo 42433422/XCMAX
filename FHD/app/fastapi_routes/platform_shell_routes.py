@@ -55,7 +55,15 @@ async def platform_shell_deliverable_status(request: Request):
     """Deliverable acceptance: edition pack, mod routes, recommended next step."""
     from app.mod_sdk.deliverable_status import build_deliverable_status
 
-    return {"success": True, "data": build_deliverable_status(app=request.app)}
+    try:
+        return {"success": True, "data": build_deliverable_status(app=request.app)}
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("deliverable-status failed: %s", exc)
+        return {
+            "success": False,
+            "message": "deliverable status unavailable",
+            "data": {"deliverable": False, "blockers": ["STATUS_UNAVAILABLE"]},
+        }
 
 
 @router.get("/industry-baseline")

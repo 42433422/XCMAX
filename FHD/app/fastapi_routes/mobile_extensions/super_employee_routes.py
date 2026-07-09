@@ -31,6 +31,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 RECOVERABLE_ERRORS = RECOVERABLE_ERRORS
 
+
 @super_employee_router.get("/admin/codex-super-employee/messages")
 async def mobile_admin_codex_super_employee_messages(
     request: Request,
@@ -461,7 +462,8 @@ async def _stream_super_employee_invoke(
                 yield _sse_line(event)
         except Exception as exc:  # noqa: BLE001
             logger.exception("mobile_super_employee_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
+            # 不向客户端回传异常原文，避免堆栈/路径信息外泄（CodeQL）
+            yield _sse_line({"type": "error", "message": "流式调用失败，请稍后重试"})
 
     return StreamingResponse(
         sse_gen(),

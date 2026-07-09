@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Windows 桌面冷启体感（2026-07-09 · v10 线内迭代）
+
+- **fix(desktop)**：主界面改为 `/api/ping` 就绪即加载，不再阻塞等待 `appRoutesReady`（Win deferred 注册可拖数十秒）
+- **fix(desktop)**：去掉模块加载期同步 PowerShell `Test-NetConnection`；死代理改由 `applyOtaProxyBypass` 异步判定
+- **perf(backend)**：桌面 fast-start 下 Neuro/员工调度/云中继在路由就绪后错峰启动（Win 2.5s / 其它 1s）
+- **security**：SSE/deliverable 错误不再回传异常原文；CLI 语法校验拒绝路径穿越（清 CodeQL）
+
 ### 巨石模块结构拆分（2026-07-09 · v10 线内迭代）
 
 - **refactor(backend)**：`workflow.py` Excel 导入拆至 `workflow_import_excel.py`（原路径 re-export）

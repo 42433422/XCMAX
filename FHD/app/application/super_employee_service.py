@@ -2292,8 +2292,17 @@ class SuperEmployeeService:
             import py_compile
 
             errs: list[str] = []
+            cwd_root = Path(cwd).resolve()
             for f in py:
-                p = Path(cwd) / f
+                rel = Path(str(f).replace("\\", "/"))
+                # 拒绝绝对路径与 .. 穿越，避免用户可控路径拼进 cwd（CodeQL path-injection）
+                if rel.is_absolute() or ".." in rel.parts:
+                    continue
+                p = (cwd_root / rel).resolve()
+                try:
+                    p.relative_to(cwd_root)
+                except ValueError:
+                    continue
                 if not p.exists():
                     continue
                 try:

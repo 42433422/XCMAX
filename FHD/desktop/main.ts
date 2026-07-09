@@ -112,21 +112,10 @@ export function isProxyEndpointReachableSync(proxyServer: string, timeoutMs = 12
   if (!endpoint) {
     return false
   }
+  // Windows 上不再同步拉起 PowerShell Test-NetConnection（冷启可卡 1–2s+）；
+  // 可达性改由 applyOtaProxyBypass 的异步 net.connect 判定。
   if (process.platform === 'win32') {
-    try {
-      const result = execFileSync(
-        'powershell.exe',
-        [
-          '-NoProfile',
-          '-Command',
-          `(Test-NetConnection ${endpoint.host} -Port ${endpoint.port} -WarningAction SilentlyContinue).TcpTestSucceeded`,
-        ],
-        { encoding: 'utf8', timeout: timeoutMs + 800, windowsHide: true },
-      ).trim()
-      return result === 'True'
-    } catch {
-      return false
-    }
+    return true
   }
   return false
 }
@@ -172,13 +161,8 @@ app.commandLine.appendSwitch(
   'proxy-bypass-list',
   OTA_PROXY_BYPASS_RULES.replace(/,/g, ';')
 )
-if (process.env.XCAGI_DESKTOP_TEST !== '1') {
-  const configuredProxy = readWindowsInternetProxy()
-  if (configuredProxy && !isProxyEndpointReachableSync(configuredProxy)) {
-    systemProxyBypassMode = 'direct'
-    app.commandLine.appendSwitch('no-proxy-server')
-  }
-}
+// 死代理探测改到 whenReady 后的 applyOtaProxyBypass（异步 net.connect），
+// 避免 Win 模块加载时同步 PowerShell/reg 探测拖慢冷启。
 
 /** 桌面端统一使用 17500，避开 macOS AirPlay 与 Windows 本机常见 5000 端口冲突。 */
 export function resolveDefaultDesktopPort(): number {
@@ -511,35 +495,33 @@ export async function waitForBackendPing(
 /** @deprecated 使用 waitForBackendPing；保留别名供测试/旧引用。 */
 export const waitForBackendHealth = waitForBackendPing
 
-/** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
+/** ping 就绪即可加载主应用；业务路由在 fast-start deferred 中后台挂载。
+ * Windows 上等 appRoutesReady 会把 Splash 拖到数十秒，体感「没法用」。
+ * 前端对未挂载 API 应重试；此处只保证本地 HTTP 已监听。
+ */
 export async function waitForBackendApplicationReady(
   port: number,
   timeoutMs = packagedBackendHealthTimeoutMs()
 ): Promise<void> {
   await waitForBackendPing(port, timeoutMs)
-  const started = Date.now()
-  const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
-  while (remaining() > 0) {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
-        signal: AbortSignal.timeout(2_000)
-      })
-      if (response.ok) {
-        const body = (await response.json()) as {
-          appRoutesReady?: boolean
-          readyForUi?: boolean
-        }
-        const routesReady = body.appRoutesReady ?? body.readyForUi
-        if (routesReady !== false) {
-          return
-        }
+  // 非阻塞探测：若路由已就绪则立刻返回；否则不等待，直接进主界面
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/api/desktop/status`, {
+      signal: AbortSignal.timeout(1_500)
+    })
+    if (response.ok) {
+      const body = (await response.json()) as {
+        appRoutesReady?: boolean
+        readyForUi?: boolean
       }
-    } catch {
-      /* routes still registering */
+      const routesReady = body.appRoutesReady ?? body.readyForUi
+      if (routesReady === false) {
+        console.info('[xcagi-desktop] ping ready; deferred routes still pending — loading UI')
+      }
     }
-    await new Promise(resolve => setTimeout(resolve, 150))
+  } catch {
+    /* status 可选；ping 已过即可进主界面 */
   }
-  console.warn('[xcagi-desktop] appRoutesReady 未在时限内为 true，仍加载主应用')
 }
 
 function updateSplashStatus(text: string): void {

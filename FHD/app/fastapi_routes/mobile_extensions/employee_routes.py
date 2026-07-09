@@ -336,7 +336,8 @@ async def mobile_employee_chat_stream(
             yield _sse_line({"type": "done", "result": {"response": final_text}})
         except Exception as exc:
             logger.exception("mobile_employee_chat_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"员工对话失败：{exc}"})
+            # 不向客户端回传异常原文，避免堆栈/路径信息外泄（CodeQL）
+            yield _sse_line({"type": "error", "message": "员工对话失败，请稍后重试"})
 
     return StreamingResponse(
         sse_gen(),
