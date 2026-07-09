@@ -214,26 +214,17 @@ class ModstorePlatformAdapter:
             or os.environ.get("MODSTORE_PLATFORM_URL", "http://127.0.0.1:8765")
         ).rstrip("/")
 
-        request_auth = ""
-        if request is not None:
-            try:
-                request_auth = str(request.headers.get("Authorization") or "").strip()
-            except RECOVERABLE_ERRORS:
-                request_auth = ""
-
-        # 优先级：显式 kwargs > 请求头 market token > MODSTORE_AUTH_TOKEN 环境变量 > Session。
-        # 请求头 token 必须优先于环境变量：移动端携带自己的有效 market token 时，
-        # 服务器上过期/无效的 MODSTORE_AUTH_TOKEN 不能覆盖它，否则会用过期 token → 401。
-        request_token = _strip_bearer_prefix(request_auth)
+        # 优先级：显式 kwargs > MODSTORE_AUTH_TOKEN 环境变量 > Session 绑定。
+        # 不使用请求头 Authorization 作为 market token：移动端/Web 端的 Authorization
+        # 携带的是 FHD JWT（由 FHD SECRET_KEY 签发），并非 MODstore market token
+        # （由 MODSTORE_JWT_SECRET 签发）。把 FHD JWT 当作 market token 传给 MODstore
+        # 会触发 401 "凭证无效或已过期"。market token 应从 session 绑定或环境变量获取。
         env_token = os.environ.get("MODSTORE_AUTH_TOKEN", "").strip()
         auth_token = ""
         token_source = "env"
         if kwargs.get("auth_token"):
             auth_token = kwargs["auth_token"]
-            token_source = "request" if request is not None else "env"
-        elif request_token:
-            auth_token = request_token
-            token_source = "request"
+            token_source = "kwargs"
         elif env_token:
             auth_token = env_token
             token_source = "env"

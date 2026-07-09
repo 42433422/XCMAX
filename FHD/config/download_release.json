@@ -32,11 +32,11 @@
     "mac": "latest-mac.yml"
   },
   "last_push": {
-    "at": "2026-07-01T18:18:20Z",
-    "release_train": "stable",
-    "release_kind": "desktop-enterprise-update-server",
-    "git_sha": "ac61d7cf554ae950c1d2f7068ae0fc0d69f99f02",
+    "at": "2026-07-09T00:07:49.969633+00:00",
+    "release_train": "1.0.2.0",
+    "release_kind": "installer",
+    "git_sha": null,
     "cos_uploaded": false,
-    "by": "github-actions"
+    "by": "installer-employee-chain"
   }
 }
