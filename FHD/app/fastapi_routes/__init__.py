@@ -21,6 +21,7 @@ from app.fastapi_routes.mounts import (
 )
 from app.fastapi_routes.registry import RouteRegistry
 from app.legacy.routes.legacy_gap import register_legacy_gap_routers
+from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,22 @@ __all__ = [
 ]
 
 
+def _register_platform_shell_bootstrap(app: FastAPI) -> None:
+    """验收 API 须在 deferred 路由前可用，避免 SPA fallback 对 /api/* 返回 404。"""
+    try:
+        from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
+
+        app.include_router(platform_shell_router)
+        logger.info("Registered platform_shell bootstrap routes")
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("Platform shell bootstrap routes skipped: %s", exc)
+
+
 def register_bootstrap_routes(app: FastAPI) -> None:
-    """桌面 fast-start：仅 health + infrastructure，尽快让 /api/ping 可响应。"""
+    """桌面 fast-start：health + infrastructure + platform-shell，尽快让验收 API 可响应。"""
     register_health_routes(app)
     register_infrastructure_routes(app)
+    _register_platform_shell_bootstrap(app)
 
 
 def register_deferred_routes(app: FastAPI) -> None:
