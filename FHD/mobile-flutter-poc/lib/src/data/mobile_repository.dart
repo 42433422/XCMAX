@@ -879,6 +879,24 @@ class MobileRepository {
     }
 
     if (tool != null) {
+      // 连通性探测：客户端即时回 pong，不依赖 LAN/中继/CLI。
+      final normalized = text.toLowerCase().replaceAll(RegExp(r'[\s，。！？!?、,.-]+'), '');
+      if (normalized == 'ping' || normalized == 'pingpong') {
+        final pong =
+            'pong，我是${conversation.title.trim().isEmpty ? '超级员工' : conversation.title.trim()}，当前通道已就绪。';
+        onToken?.call(pong);
+        await _cacheChatMessage(
+          conversation.id,
+          role: ChatRole.user,
+          body: text,
+        );
+        await _cacheChatMessage(
+          conversation.id,
+          role: ChatRole.assistant,
+          body: pong,
+        );
+        return pong;
+      }
       // 先吐状态，再写缓存：避免 SharedPreferences 慢/卡时界面完全无反馈。
       onToken?.call('正在连接…');
       await _cacheChatMessage(

@@ -202,35 +202,22 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       if (remoteMessages.isEmpty) return;
       setState(() {
-        // 发送进行中时绝不能整表覆盖：否则刚发出的气泡被抹掉，
-        // onToken 找不到 assistantId → 界面无反馈、按钮却一直「停止」。
-        if (_sending || _activeAssistantId != null) {
-          final existingIds = {for (final m in _messages) m.id};
-          for (final remote in remoteMessages) {
-            if (!existingIds.contains(remote.id)) {
-              _messages.add(remote);
-            }
+        // 始终合并，禁止整表覆盖：发送中/本地临时气泡必须保留。
+        final byId = <String, ChatMessage>{
+          for (final m in remoteMessages) m.id: m,
+        };
+        for (final local in _messages) {
+          final keepLocal = local.id.startsWith('local-') ||
+              local.id.startsWith('assistant-') ||
+              local.id.startsWith('git-') ||
+              local.status == ChatDeliveryStatus.sending ||
+              _sending ||
+              _activeAssistantId == local.id;
+          if (keepLocal || !byId.containsKey(local.id)) {
+            byId[local.id] = local;
           }
-          return;
         }
-        // 保留本地尚未落库的临时气泡（local-/assistant-），再拼远程历史。
-        final localPending = _messages
-            .where(
-              (m) =>
-                  m.id.startsWith('local-') ||
-                  m.id.startsWith('assistant-') ||
-                  m.id.startsWith('git-'),
-            )
-            .toList(growable: false);
-        if (localPending.isEmpty) {
-          _messages = remoteMessages;
-        } else {
-          final remoteIds = {for (final m in remoteMessages) m.id};
-          _messages = [
-            ...remoteMessages,
-            ...localPending.where((m) => !remoteIds.contains(m.id)),
-          ];
-        }
+        _messages = byId.values.toList(growable: true);
       });
     } catch (_) {
       // Keep the Android-like empty state when auth/network is unavailable.
@@ -524,7 +511,7 @@ class _ChatScreenState extends State<ChatScreen> {
         id: assistantId,
         conversationId: widget.conversation.id,
         role: ChatRole.assistant,
-        body: '',
+        body: '正在连接…',
         timeText: '刚刚',
         hasEmployeeProfile: _employeeProfile != null,
         status: ChatDeliveryStatus.sending,
@@ -1006,6 +993,8 @@ class _ChatScreenState extends State<ChatScreen> {
           subtitle: '绕过输入框直接发一条 ping',
           onTap: () {
             setState(() => _showToolPanel = false);
+            // 若上次发送僵死，先解锁再测，避免只 toast「请先停止」。
+            if (_sending) _unlockSending();
             _send('ping');
           },
         ),

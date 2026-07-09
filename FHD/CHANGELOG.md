@@ -13,7 +13,8 @@
 - **fix(mobile-flutter)**：发送被挡时 toast 提示；僵死锁（`_sending` 无活跃助手）自动解锁；看门狗 90s；停止键在无 assistantId 时也能清锁；Composer 随 busy 强制重建
 - **fix(mobile-flutter)**：进会话强制重置发送锁；超级员工工具栏增加「测试发送 ping」绕过输入框验证链路
 - **fix(mobile-flutter)**：超级员工发送分阶段超时（LAN SSE 90s / 中继查找 12s / 中继回传 3min）并即时吐出连接状态，避免 Cursor 假死无反馈
-- **fix(mobile-flutter)**：远程历史加载不再整表覆盖进行中的发送气泡（根因：Cursor 点发送后气泡被抹掉、按钮却一直「停止」）
+- **fix(mobile-flutter)**：远程历史加载改为按 id 合并，发送中本地气泡永不被整表覆盖；助手气泡初始显示「正在连接…」
+- **fix(mobile-flutter)**：客户端对 `ping` 即时回 `pong`（不经 LAN/CLI）；「测试发送」会先解锁僵死锁再发
 - **fix(backend)**：超级员工 FAQ 直答增加 `ping` → `pong`，便于连通性验收（不经 CLI）
 
 ### 四工具超级员工 factory_context / Workspace 对齐（2026-07-09 · v10 线内迭代）
