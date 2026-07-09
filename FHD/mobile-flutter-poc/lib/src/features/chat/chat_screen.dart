@@ -55,7 +55,6 @@ class _ChatScreenState extends State<ChatScreen> {
   late final _EmployeeConversationRef? _employeeRef;
   AiEmployeeProfile? _employeeProfile;
   RelayTaskProgress? _activeRelayProgress;
-  bool _cancellingRelay = false;
 
   @override
   void initState() {
@@ -135,10 +134,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           hasEmployeeProfile: employeeProfile != null,
                           relayProgress:
                               isActiveRelay ? _activeRelayProgress : null,
-                          cancellingRelay: _cancellingRelay,
-                          onCancelRelay: _cancellingRelay
-                              ? null
-                              : () => _stopChat(),
                           onReply: () => setState(() => _replyTo = message),
                           onDelete: () => _deleteMessageAt(originalIndex),
                           onResend: message.status == ChatDeliveryStatus.failed
@@ -273,7 +268,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _sending = false;
           _activeAssistantId = null;
           _activeRelayProgress = null;
-          _cancellingRelay = false;
         });
       }
     }
@@ -451,7 +445,6 @@ class _ChatScreenState extends State<ChatScreen> {
           _sending = false;
           _activeAssistantId = null;
           _activeRelayProgress = null;
-          _cancellingRelay = false;
         });
       }
     }
@@ -508,7 +501,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _cancelRelayTask(String taskId) async {
     final repository = _repository;
     if (repository == null || taskId.isEmpty) return;
-    setState(() => _cancellingRelay = true);
     try {
       await repository.cancelRelayTask(taskId);
     } catch (_) {
@@ -518,7 +510,6 @@ class _ChatScreenState extends State<ChatScreen> {
       try {
         await repository.clearInflightRelay(widget.conversation.id);
       } catch (_) {}
-      if (mounted) setState(() => _cancellingRelay = false);
     }
   }
 
@@ -1111,8 +1102,6 @@ class MessageBubble extends StatelessWidget {
     required this.onDelete,
     this.onResend,
     this.relayProgress,
-    this.cancellingRelay = false,
-    this.onCancelRelay,
     this.toolCalls = const <Map<String, Object?>>[],
     this.onShowTimeline,
   });
@@ -1128,8 +1117,6 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback? onResend;
   final RelayTaskProgress? relayProgress;
-  final bool cancellingRelay;
-  final VoidCallback? onCancelRelay;
   final List<Map<String, Object?>> toolCalls;
   final VoidCallback? onShowTimeline;
 
@@ -1261,11 +1248,7 @@ class MessageBubble extends StatelessWidget {
                               const SizedBox(height: 6),
                             ],
                             if (relayProgress != null) ...[
-                              _RelayProgressCard(
-                                progress: relayProgress!,
-                                cancelling: cancellingRelay,
-                                onCancel: onCancelRelay,
-                              ),
+                              _RelayProgressCard(progress: relayProgress!),
                               const SizedBox(height: 8),
                             ],
                             Text(
@@ -1581,17 +1564,14 @@ class _MessageActionMenu extends StatelessWidget {
   }
 }
 
-/// 长任务（relay dev-loop）内嵌进度卡：步骤列表 + 进度条 + 中断按钮。
+/// 长任务（relay dev-loop）内嵌进度卡：步骤列表 + 进度条。
+/// 取消走底部 composer「停止」，气泡内不再放「中断」。
 class _RelayProgressCard extends StatelessWidget {
   const _RelayProgressCard({
     required this.progress,
-    required this.cancelling,
-    required this.onCancel,
   });
 
   final RelayTaskProgress progress;
-  final bool cancelling;
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1615,23 +1595,16 @@ class _RelayProgressCard extends StatelessWidget {
               SizedBox(
                 width: 14,
                 height: 14,
-                child: cancelling
-                    ? CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(colors.danger),
-                      )
-                    : (progress.status == 'completed'
-                        ? Icon(Icons.check_circle,
-                            size: 14, color: colors.success)
-                        : SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor:
-                                  AlwaysStoppedAnimation(colors.brand),
-                            ),
-                          )),
+                child: progress.status == 'completed'
+                    ? Icon(Icons.check_circle, size: 14, color: colors.success)
+                    : SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(colors.brand),
+                        ),
+                      ),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -1646,31 +1619,6 @@ class _RelayProgressCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (onCancel != null &&
-                  progress.status != 'completed' &&
-                  progress.status != 'failed' &&
-                  progress.status != 'cancelled')
-                GestureDetector(
-                  onTap: onCancel,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      cancelling ? '取消中' : '中断',
-                      style: TextStyle(
-                        color: colors.danger,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 8),
