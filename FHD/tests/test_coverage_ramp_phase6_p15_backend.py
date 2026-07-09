@@ -185,11 +185,12 @@ class TestMarketSessionIdFromRequest:
         req.headers = {"X-Session-ID": "hdr-session"}
         assert ma.session_id_from_request(req) == "hdr-session"
 
-    def test_cookie_takes_precedence(self) -> None:
+    def test_header_takes_precedence(self) -> None:
+        # 移动端 AuthInterceptor 显式发 X-Session-ID，优先于 Cookie
         req = MagicMock()
         req.cookies = {"session_id": "cookie-sid"}
         req.headers = {"X-Session-ID": "hdr-sid"}
-        assert ma.session_id_from_request(req) == "cookie-sid"
+        assert ma.session_id_from_request(req) == "hdr-sid"
 
     def test_empty_when_neither(self) -> None:
         req = MagicMock()

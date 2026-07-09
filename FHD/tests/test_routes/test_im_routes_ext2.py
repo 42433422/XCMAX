@@ -73,7 +73,10 @@ class TestResolveWsUserId:
             patch(
                 "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
             ),
-            patch("app.fastapi_routes.im_routes.Config", SESSION_COOKIE_NAME="session_id"),
+            patch(
+                "app.infrastructure.auth.client_shell_session.session_cookie_name_from_headers",
+                return_value="session_id",
+            ),
         ):
             result = _resolve_ws_user_id(ws)
         assert result is None
@@ -100,7 +103,10 @@ class TestResolveWsUserId:
             patch(
                 "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
             ),
-            patch("app.fastapi_routes.im_routes.Config", SESSION_COOKIE_NAME="session_id"),
+            patch(
+                "app.infrastructure.auth.client_shell_session.session_cookie_name_from_headers",
+                return_value="session_id",
+            ),
             patch(
                 "app.application.facades.session_facade.get_session_service",
                 return_value=mock_session_svc,
@@ -119,7 +125,10 @@ class TestResolveWsUserId:
             patch(
                 "app.infrastructure.auth.dependencies._allow_x_user_id_header", return_value=False
             ),
-            patch("app.fastapi_routes.im_routes.Config", SESSION_COOKIE_NAME="session_id"),
+            patch(
+                "app.infrastructure.auth.client_shell_session.session_cookie_name_from_headers",
+                return_value="session_id",
+            ),
             patch(
                 "app.application.facades.session_facade.get_session_service",
                 return_value=mock_session_svc,
