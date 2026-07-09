@@ -20,8 +20,19 @@
 - **refactor(backend)**：`xcmax_admin` Token 采集拆至 `xcmax_admin_token_usage.py`（测试 patch 路径不变）
 - **refactor(backend)**：`mobile_api_extensions` 员工提问/chat SSE 拆至 `mobile_extensions/employee_routes.py`
 - **refactor(backend)**：`workflow/planner.py` 拆至 `planner_slots.py` / `planner_tool_executors.py` / `planner_llm.py`（原路径 re-export）
+- **refactor(backend)**：`market_account.py` 拆为包 `market_account/`（session/proxy/auth + auth/account/payment 子路由；`__init__` + `_patch` 保持 `router` 与 `_xxx` patch 路径）
+- **refactor(backend)**：`xcmax_admin.py` 保留 facade；代理/市场/digest/sync/ops/deploy/local 拆为 sibling 模块（`include_router` 空前缀；`RECOVERABLE_ERRORS`/`urllib`/路由 handler re-export）
 - **refactor(backend)**：`dataset_rag_app_service.py` 拆至 `dataset_rag/` 包（types/helpers/service/singleton；原路径 re-export）
-- **refactor(backend)**：`mobile_api_extensions` 再拆 7 个子路由模块（超级员工 / AI 群聊 / 首页同步 / 认证支付 / 配对中继 / 设备通知 / 管理端）；主文件 ~4231→~1114 行；handler 与 patch 符号经 `mobile_extensions/_ext.py` 回引主模块
+- **refactor(backend)**：`mobile_api_extensions` 再拆 9 个子路由/辅助模块（超级员工 / AI 群聊 / 首页同步 / 认证支付 / 配对中继 / 设备通知 / 管理端 / 审批客户发货 / `core_helpers`）；主文件 ~4231→~448 行；handler 与 patch 符号经 `mobile_extensions/_ext.py` 回引主模块
+
+### 巨石全量拆分（续）（2026-07-09 · v10 线内迭代）
+
+- **refactor(application)**：`ai_group_chat_service.py`（~3968 行）拆为 `ai_group_chat/` 包（constants/loaders + crud/progress/post/routing/dispatch/reports/storage mixins + service）；原路径 re-export，测试 patch 经 facade 解析
+- **refactor(application)**：`super_employee_service.py`（~2776 行）拆为 `super_employee/` 包（profiles + cli_runtime/para_dispatch/dev_loop mixins + service）；Codex/Cursor/Claude/Trae 子类与 `subprocess`/`shutil`/`Path` monkeypatch 路径不变
+- **refactor(application)**：`ai_chat_app_service.py`（~3912 行）拆为 `ai_chat/` 包（helpers + excel_import/workflow/tool_execution mixins + service）；`LLMWorkflowPlanner` 等 shim 级 patch 与 `_skip_pro_excel_deterministic_import` 保持
+- **refactor(mod-sdk)**：`employee_specialized_tools.py`（~2674 行）拆为 6 个 sibling 模块（runtime/quality/git_deploy/write_gate/llm_ops/registry），原模块保留为 re-export facade，测试与 monkeypatch 路径不变
+- **refactor(services)**：`tools_workflow_registered.py`（~2359 行）改为 `tools_workflow_registered/` 包（business/excel/misc/rag/excel_advanced/core），`__init__.py` 全量 re-export，`from app.services.tools_workflow_registered import X` 路径不变
+- **fix(services)**：`tools_workflow_registered` 路由 dispatch 改为 facade 懒解析（`_facade.py` + `core._resolve_router`）；`misc._registered_router_business_db` 经 facade 调用 sibling router，修复 `patch.object(mod, "_registered_router_products")` 失效
 
 ### 局域网手机自更新闭环（2026-07-09 · v10 线内迭代）
 
