@@ -70,6 +70,29 @@ for module in [
 ]:
     hiddenimports.extend(collect_submodules(module))
 
+# v10-A: fast-start bootstrap imports these lazily; collect_submodules can miss them
+# on some Windows trees, causing deliverable-status 404 in frozen desktop builds.
+hiddenimports.extend(
+    [
+        "app.fastapi_routes.platform_shell_routes",
+        "app.mod_sdk.deliverable_status",
+        "app.mod_sdk.desktop_deliverable",
+        "app.mod_sdk.platform_shell",
+        "app.mod_sdk.decoupling_progress",
+        "app.mod_sdk.edition_policy",
+        "app.mod_sdk.edition_bootstrap",
+        "app.mod_sdk.product_skus",
+    ]
+)
+# de-dupe while preserving order
+_seen = set()
+_deduped = []
+for _name in hiddenimports:
+    if _name not in _seen:
+        _seen.add(_name)
+        _deduped.append(_name)
+hiddenimports = _deduped
+
 desktop_excludes = [
     "altair",
     "av",
