@@ -2416,10 +2416,7 @@ class SuperEmployeeService:
             )
         if ran and any(m in lowered or m in detail for m in auth_markers):
             snippet = detail[:220] if detail else "工具返回鉴权相关错误"
-            return (
-                f"{tool} CLI 已启动但鉴权失败，请在本机重新登录 {tool} 后重试。"
-                f"详情：{snippet}"
-            )
+            return f"{tool} CLI 已启动但鉴权失败，请在本机重新登录 {tool} 后重试。详情：{snippet}"
         if not self._cli_path():
             return (
                 f"本机未找到 {tool} CLI，超级员工无法在此服务器进程内执行。"
