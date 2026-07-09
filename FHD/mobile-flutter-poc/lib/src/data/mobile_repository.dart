@@ -935,7 +935,23 @@ class MobileRepository {
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
-      final relayId = await _relayIdForSuperEmployeeDispatch();
+      String relayId = '';
+      try {
+        relayId = await _relayIdForSuperEmployeeDispatch();
+      } on MobileRepositoryException catch (e) {
+        // 有 paired 桌面但均不在线：直接把可执行文案回给用户，勿再打云端 CLI。
+        _throwIfCancelled(isCancelled);
+        final guidance = e.message.trim().ifEmpty(
+          '当前没有在线的电脑执行端。请打开本机 XCAGI 并保持云中继运行后再试。',
+        );
+        onToken?.call(guidance);
+        await _cacheChatMessage(
+          conversation.id,
+          role: ChatRole.assistant,
+          body: guidance,
+        );
+        return guidance;
+      }
       if (relayKind != null && relayId.isNotEmpty) {
         // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
         final reply = await _streamRelaySuperEmployeeTask(
@@ -1979,7 +1995,8 @@ class MobileRepository {
     } on MobileRepositoryException {
       rethrow;
     } catch (_) {
-      return storedRelayId;
+      // 列表接口失败时不要回落陈旧 relay_id，否则会进死队列轮询卡住发送按钮。
+      return '';
     }
   }
 

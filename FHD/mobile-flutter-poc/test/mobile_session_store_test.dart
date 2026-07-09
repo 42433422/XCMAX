@@ -774,19 +774,18 @@ void main() {
     final api = _StalePairedRelayApi(store);
     final repository = MobileRepository(client: api);
 
-    await expectLater(
-      repository.streamMessage(
-        conversation: const ConversationItem(
-          id: 'pinned:trae',
-          type: ConversationType.pinnedTrae,
-          title: '超级员工-Trae',
-          subtitle: '',
-          timestampText: '',
-        ),
-        body: '不要再卡旧队列',
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
       ),
-      throwsA(isA<MobileRepositoryException>()),
+      body: '不要再卡旧队列',
     );
+
+    expect(reply, contains('没有在线的电脑执行端'));
     expect(api.postedTools, isEmpty);
     expect(api.createdRelayTasks, 0);
   });
