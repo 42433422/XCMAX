@@ -42,7 +42,7 @@ fi
 
 # 提取所有 (sku, platform, url, sha256, size, filename) 元组
 # manifest 结构: channels.{channel_name}.{sku}.{platform|.mac[]}.url/sha256/size/filename
-mapfile -t ENTRIES < <(
+ENTRIES_JSON=$(
   jq -r '
     .channels as $channels
     | $channels | to_entries[] as $ch
@@ -57,12 +57,13 @@ mapfile -t ENTRIES < <(
   ' "$MANIFEST"
 )
 
-if [ ${#ENTRIES[@]} -eq 0 ]; then
+if [ -z "$ENTRIES_JSON" ]; then
   echo "::error::No download entries found in manifest" >&2
   exit 2
 fi
 
-echo "=== Verifying ${#ENTRIES[@]} download entries from $MANIFEST ==="
+ENTRY_COUNT=$(echo "$ENTRIES_JSON" | wc -l | tr -d ' ')
+echo "=== Verifying $ENTRY_COUNT download entries from $MANIFEST ==="
 
 FAIL_COUNT=0
 PASS_COUNT=0
@@ -121,8 +122,8 @@ check_sku_confusion() {
   return 1
 }
 
-for entry in "${ENTRIES[@]}"; do
-  IFS=$'\t' read -r sku platform url sha256 size filename channel <<< "$entry"
+echo "$ENTRIES_JSON" | while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
+  [ -z "$sku" ] && continue
   echo ""
   echo "[$channel] $sku/$platform: $filename"
   echo "  URL: $url"

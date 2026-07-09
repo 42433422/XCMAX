@@ -6,12 +6,73 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）
+
+- **fix(desktop)**：`deliverable-status` 读取运行中 `request.app`，消除 `MOD_ROUTES_NOT_MOUNTED` 误判（Mac 真机已验）
+- **fix(desktop)**：桌面 fast-start 将 `platform-shell` 路由提前至 bootstrap，避免 deferred 完成前 SPA fallback 对 `/api/platform-shell/*` 返回 404（v10-A Win 404 根因）
+- **fix(desktop)**：`win_v10a_hotfix_deploy.ps1` 改为纯 ASCII + 轮询 health/deliverable（PS5 兼容）
+- **fix(desktop)**：PyInstaller `xcagi_backend.spec` 强制 hiddenimports（`platform_shell_routes` / `deliverable_status`），修复 Win frozen 包缺模块导致 deliverable-status 404
+- **fix(desktop)**：PyInstaller 打包 OTA `migrate-only` 在 frozen 环境改走 `alembic.command` API（修复 `upgrade head` exit 2）
+- **docs(evidence)**：更新 `v10-a-desktop-acceptance-2026-07-08.md`；Win 热修构建完成，安装目录部署待 DevFleet 收尾
+
+### 桌面冷启体感（2026-07-08 · v10 线内迭代 · 第三轮）
+
+- **perf(desktop)**：先出 Splash 窗再 spawn 后端；Splash 状态文案 + 秒数反馈
+- **perf(desktop)**：主应用等待 `appRoutesReady`（ping + deferred 路由挂载完成）
+- **perf(backend)**：fast-start 仅注册 bootstrap 路由（health/infrastructure），业务路由并行 deferred
+- **perf(backend)**：lifespan 跳过 `mods_deferred_bootstrap` 重复同步 Mod 引导
+- **perf(package)**：PyInstaller 默认关闭 UPX（`XCAGI_PYINSTALLER_UPX=1` 可显式开启）
+
+### OTA session 代理绕过（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`session.defaultSession.setProxy` 显式配置 `proxyBypassRules`，死代理（7890 未开）时 OTA 仍可直连 `xiu-ci.com`
+- **fix(desktop)**：Windows 系统代理场景改用 PAC——更新站 `DIRECT`，其余 `PROXY; DIRECT` 回退
+- **fix(desktop)**：OTA 专用 `netSession` 直连（`persist:xcagi-updater`），electron-updater 与元数据拉取均绕过死代理
+- **fix(desktop)**：检查更新期间临时将 `defaultSession` 切直连，规避死系统代理
+- **fix(desktop)**：启动时探测系统代理端口；不可达则 `defaultSession` 全程直连（桌面 UI 仅加载 127.0.0.1）
+- **fix(desktop)**：死代理在进程启动前追加 `--no-proxy-server`，避免 Chromium 仍走 WinINet 代理
+
+### OTA 更新站域名 + channel 修复（2026-07-08 · v10 线内迭代）
+
+- **fix(desktop)**：`SKU_UPDATE_URL` 改走可达的 `xiu-ci.com/releases/stable/{sku}/`（`update.xcagi.com` 在 Win32 解析到不可达 IP）
+- **fix(desktop)**：electron-updater 不再默认 `channel: stable`（避免请求 `stable.yml` 404，应拉 `latest.yml`）
+- **fix(desktop)**：`proxy-bypass-list` 同时覆盖 `update.xcagi.com` 与 `xiu-ci.com`
+
+### OTA 推送验活（2026-07-08 · v10 线内迭代）
+
+- **chore(release)**：enterprise Windows 同版本 `buildSha` OTA 推送验活（Win32 真机拉取）
+
+### 桌面侧栏版本 + 配对码 SSOT（2026-07-08 · v10 线内迭代）
+
+- **fix(web)**：侧栏「系统正常」右侧显示 `v10.0.0`（非管理端从 `/api/health` 读取）
+- **fix(web)**：移动端配对 QR 与 6 位设备码统一 `normalizePairingPayload` SSOT
+
 ### 桌面 LAN 配对 + OTA 代理绕过 + 云中继直连（2026-07-08 · v10 线内迭代）
 
 - **fix(desktop)**：后端默认绑定 `0.0.0.0:17500`，手机同 WiFi 可连局域网 IP；Electron UI 仍只加载 `127.0.0.1`
 - **fix(desktop)**：`proxy-bypass-list` 对 `xiu-ci.com` 直连，避免系统代理 `127.0.0.1:7890` 未开时 OTA 报 `ERR_PROXY_CONNECTION_FAILED`
+- **fix(desktop)**：死系统代理不可达时启动前追加 `--no-proxy-server`，`defaultSession` PAC/直连与 updater 专用 `netSession`
+- **fix(desktop)**：OTA `setFeedURL` 不再默认 `channel: stable`（避免拉 `stable.yml` 404）
 - **fix(desktop)**：v10 同版本迭代 OTA — `latest.yml` 写入 `buildSha`，`build-info.json` 比对后仍可拉取新包
 - **fix(mobile-relay)**：桌面云中继 `httpx` 使用 `trust_env=False`，修复代理环境下 `Invalid port` 注册失败
+
+### 桌面冷启性能（P1-3 · 2026-07-08 · v10 线内迭代）
+
+- **perf(desktop)**：Splash 先出窗，不再在 `show()` 前阻塞 `waitForBackendHealth`；就绪探测改 `/api/ping`（300ms 轮询）
+- **perf(desktop)**：主窗口立即 `show`，主应用加载与 ping 等待解耦，清缓存改为后台
+- **perf(desktop)**：`electron-backend.log` 超 8MB 自动轮转；打包默认 `LOG_LEVEL=WARNING`
+- **perf(backend)**：`XCAGI_DESKTOP_FAST_START=1` 时 lifespan 仅 DB+Mod，NeuroBus/员工调度/云中继/性能优化延后后台加载
+- **perf(backend)**：fast-start 下 Mod `bootstrap` 从 factory 同步路径延后到 deferred，消除 ~3.4s `mod_staged` 阻塞
+- **perf(api)**：`GET /api/health?lite=true` 跳过 NeuroBus 载荷
+- **perf(frontend)**：桌面壳 `mods` 列表重试退避缩短（150–600ms）
+
+### UX P0/P1 四线收敛（2026-07-07 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：`mobile-relay-*` 会话 validate 不再误 401；`preferCloudIfLanUnreachable` + session 路由 LAN/云；`/employee-ssot` client
+- **docs**：移动统一 **Flutter 主线**；`mobile-android` / `mobile-ios` 归档；`MOBILE_FLUTTER.md` + SSOT 登记
+- **feat(web)**：`productErrorMessage` 统一引导/Mod/IM 错误文案；引导续接 `xcagi_product_flow_last_step`；企业版不再重复 shell welcome 拦截
+- **feat(web)**：IM 员工通讯录优先消费 `GET /api/platform-shell/employee-ssot`
+- **docs**：`PRODUCT_USER_FLOW.md` 对齐 industry → host-pack 实现顺序
 
 ### 定价 SSOT 文档同步（2026-07-07 · v10 线内迭代）
 

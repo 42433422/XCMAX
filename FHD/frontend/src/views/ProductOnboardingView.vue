@@ -321,6 +321,7 @@ import {
   parseFlowStepQuery,
   readOnboardingReturnPath,
   readProductFlowCompleted,
+  saveProductFlowLastStep,
   setRuntimeOnboardingOpenIndustryIds,
 } from '@/constants/productFlow'
 import { useProductFlow } from '@/composables/useProductFlow'
@@ -330,7 +331,6 @@ import {
   fetchIndustryBaseline,
   fetchOnboardingIndustryCatalog,
 } from '@/utils/platformShellApi'
-import { appAlert } from '@/utils/appDialog'
 import {
   promptAdvancedTutorialAfterInstall,
   resolveRouteNameFromPath,
@@ -342,6 +342,8 @@ import {
 } from '@/utils/hostPackOnboardingGate'
 import { resolveCoreNavLabel } from '@/utils/coreNavLabel'
 import { patchWorkspacePrefs } from '@/utils/workspacePrefsApi'
+import { appAlert } from '@/utils/appDialog'
+import { productErrorMessage } from '@/utils/productErrorMessage'
 
 const route = useRoute()
 const router = useRouter()
@@ -578,6 +580,7 @@ watch(
 )
 
 watch(currentStep, (step) => {
+  saveProductFlowLastStep(step)
   if (step === 'host-pack') {
     void refreshStatus()
   }
@@ -698,7 +701,7 @@ async function runBootstrap() {
     }
     await appAlert(detailParts.join('\n') || '部分项目未装齐，可稍后在扩展市场继续安装。')
   } catch (err) {
-    await appAlert(err instanceof Error ? err.message : '装包失败')
+    await appAlert(productErrorMessage(err, '装包失败'))
   } finally {
     bootstrapBusy.value = false
   }
@@ -734,7 +737,7 @@ async function confirmIndustryAndNext() {
       /* 绑定已完成，目录刷新失败不阻断下一步 */
     }
   } catch (err) {
-    await appAlert(err instanceof Error ? err.message : '行业绑定失败，请稍后重试')
+    await appAlert(productErrorMessage(err, '行业绑定失败，请稍后重试'))
     return
   } finally {
     loading.value = false

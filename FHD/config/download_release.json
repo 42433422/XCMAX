@@ -32,11 +32,11 @@
     "mac": "latest-mac.yml"
   },
   "last_push": {
-    "at": "2026-07-07T05:43:42.630619+00:00",
+    "at": "2026-07-09T00:07:49.969633+00:00",
     "release_train": "1.0.2.0",
     "release_kind": "installer",
-    "git_sha": "a7e8410725658688c59bd2fa5ad70416b0c9edb5",
+    "git_sha": null,
     "cos_uploaded": false,
-    "by": "unify-to-latest"
+    "by": "installer-employee-chain"
   }
 }

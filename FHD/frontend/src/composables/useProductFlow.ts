@@ -3,7 +3,7 @@ import { readBuildEdition, type HostEdition } from '@/constants/genericModPack'
 import {
   markHostPackAcknowledged,
   markProductFlowCompleted,
-  parseFlowStepQuery,
+  resolveProductFlowEntryStep,
   readProductFlowCompleted,
   type ProductFlowStepId,
 } from '@/constants/productFlow'
@@ -38,8 +38,7 @@ export function useProductFlow() {
   }
 
   function resolveEntryStep(queryStep?: unknown): ProductFlowStepId {
-    // 尊重 URL ?step=；无显式步骤时始终从 welcome 开始，不因 deliverable 未齐而跳过
-    return parseFlowStepQuery(queryStep)
+    return resolveProductFlowEntryStep(queryStep)
   }
 
   function completeFlowAndGoChat(router: { replace: (x: { path: string }) => void }) {

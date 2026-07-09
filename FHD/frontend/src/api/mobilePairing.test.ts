@@ -1,14 +1,10 @@
-<<<<<<< Updated upstream
-import { describe, expect, it, vi } from 'vitest';
-import { buildPairingQrText, applyDevProxyReachablePort, type PairingPayload } from './mobilePairing';
-=======
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  applyDevProxyReachablePort,
   buildPairingQrText,
   resolveReachablePairingPort,
   type PairingPayload,
 } from './mobilePairing';
->>>>>>> Stashed changes
 
 describe('mobilePairing', () => {
   it('builds v2 QR text with host, port, nonce, and short code', () => {

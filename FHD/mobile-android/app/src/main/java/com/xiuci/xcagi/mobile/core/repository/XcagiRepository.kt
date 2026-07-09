@@ -914,12 +914,12 @@ class XcagiRepository @Inject constructor(
         val hostWithPort = compactHostPort(host, port)
         sessionStore.setRelayDesktopId("")
         sessionStore.clearInflightRelayTasks()
-        val relayBound = bindRelayDesktopByAccountFromMap(d)
         sessionStore.setFhdHost(hostWithPort)
         sessionStore.setServerMode("lan")
         serverRouter.fhdHost = hostWithPort
         serverRouter.mode = ServerMode.LAN
         saveRelayAuthFromMap(d)
+        val relayBound = bindRelayDesktopByAccountFromMap(d)
         if (!relayBound) {
             sessionStore.setRelayDesktopId("")
         }

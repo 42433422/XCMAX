@@ -123,3 +123,19 @@ export async function fetchEmployeePlannerStatus(
   const body = await r.json()
   return (body?.data || body) as EmployeePlannerStatus
 }
+
+export async function fetchEmployeeSsot(force = false): Promise<Record<string, unknown>> {
+  const cacheKey = '__employee_ssot_cache__'
+  const w = typeof window !== 'undefined' ? (window as unknown as Record<string, unknown>) : null
+  if (!force && w?.[cacheKey]) {
+    return w[cacheKey] as Record<string, unknown>
+  }
+  const r = await apiFetch('/api/platform-shell/employee-ssot', {
+    timeoutMs: DEFAULT_MOD_API_TIMEOUT_MS,
+  })
+  if (!r.ok) throw new Error(`employee-ssot HTTP ${r.status}`)
+  const body = await r.json()
+  const data = (body?.data || body) as Record<string, unknown>
+  if (w) w[cacheKey] = data
+  return data
+}
