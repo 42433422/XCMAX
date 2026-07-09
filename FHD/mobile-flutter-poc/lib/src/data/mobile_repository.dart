@@ -884,6 +884,8 @@ class MobileRepository {
         role: ChatRole.user,
         body: text,
       );
+      // 用户主动新发时清掉旧 inflight，避免后台 resume 轮询继续占住会话。
+      await _setInflightRelayTask(conversation.id, '');
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       final workspace = await _selectedFactoryWorkspace();
       if (localBaseUrl.isNotEmpty) {

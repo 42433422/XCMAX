@@ -10,7 +10,7 @@
 
 - **fix(mobile-flutter)**：恢复 inflight 中继时不再占用 `_sending` / `_activeAssistantId`，避免 Codex/Cursor/Claude 点发送无反应（Trae 无卡住任务故正常）
 - **fix(mobile-flutter)**：中继轮询超时/任务失效时清理 `inflightRelayTasks`；进会话先探测一次再决定是否恢复
-- **fix(mobile-flutter)**：发送被挡时 toast 提示；6 分钟看门狗自动解锁 `_sending`
+- **fix(mobile-flutter)**：发送被挡时 toast 提示；僵死锁（`_sending` 无活跃助手）自动解锁；看门狗 90s；停止键在无 assistantId 时也能清锁；Composer 随 busy 强制重建
 
 ### 四工具超级员工 factory_context / Workspace 对齐（2026-07-09 · v10 线内迭代）
 

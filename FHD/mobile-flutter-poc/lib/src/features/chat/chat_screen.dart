@@ -164,6 +164,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
             ),
             _Composer(
+              key: ValueKey('chat-composer-busy-$_sending'),
               controller: _controller,
               onSend: _send,
               onStop: _stopChat,
@@ -435,10 +436,33 @@ class _ChatScreenState extends State<ChatScreen> {
     return widget.conversation.title;
   }
 
+  void _unlockSending({String? onlyAssistantId}) {
+    if (!mounted) {
+      _sending = false;
+      if (onlyAssistantId == null || _activeAssistantId == onlyAssistantId) {
+        _activeAssistantId = null;
+      }
+      _activeRelayProgress = null;
+      return;
+    }
+    setState(() {
+      _sending = false;
+      if (onlyAssistantId == null || _activeAssistantId == onlyAssistantId) {
+        _activeAssistantId = null;
+      }
+      _activeRelayProgress = null;
+      _cancellingRelay = false;
+    });
+  }
+
   Future<void> _send([String? overrideText]) async {
     final text = (overrideText ?? _controller.text).trim();
     if (text.isEmpty) return;
-    if (_sending) {
+    // 僵死锁：_sending=true 但没有活跃助手气泡时，按钮仍可能显示「发送」，
+    // 点发送只会 toast。直接解锁后继续发，避免 Cursor 等会话永久卡死。
+    if (_sending && _activeAssistantId == null) {
+      _unlockSending();
+    } else if (_sending) {
       _showMessage('当前仍有任务在进行，请先点「停止」再发送');
       return;
     }
@@ -489,15 +513,11 @@ class _ChatScreenState extends State<ChatScreen> {
     });
     _controller.clear();
 
-    // 看门狗：异常路径漏清 _sending 时自动解锁，避免永久无法再发。
-    Future<void>.delayed(const Duration(minutes: 6), () {
+    // 看门狗：异常路径漏清 _sending 时自动解锁（90s，避免永久无法再发）。
+    Future<void>.delayed(const Duration(seconds: 90), () {
       if (!mounted) return;
       if (_sending && _activeAssistantId == assistantId) {
-        setState(() {
-          _sending = false;
-          _activeAssistantId = null;
-          _activeRelayProgress = null;
-        });
+        _unlockSending(onlyAssistantId: assistantId);
         _showMessage('发送超时已解锁，可重试');
       }
     });
@@ -522,9 +542,8 @@ class _ChatScreenState extends State<ChatScreen> {
           body: '当前离线同步不可用，请连接电脑或稍后重试。',
           status: ChatDeliveryStatus.failed,
         );
-        _sending = false;
-        _activeAssistantId = null;
       });
+      _unlockSending(onlyAssistantId: assistantId);
       return;
     }
 
@@ -571,13 +590,10 @@ class _ChatScreenState extends State<ChatScreen> {
         _activeRelayProgress = null;
       });
     } finally {
-      if (mounted && _activeAssistantId == assistantId) {
-        setState(() {
-          _sending = false;
-          _activeAssistantId = null;
-          _activeRelayProgress = null;
-          _cancellingRelay = false;
-        });
+      // 无论 _activeAssistantId 是否被中途清空，本轮发送结束都必须释放锁。
+      if (_sending &&
+          (_activeAssistantId == null || _activeAssistantId == assistantId)) {
+        _unlockSending(onlyAssistantId: assistantId);
       }
     }
   }
@@ -593,8 +609,20 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _stopChat() {
     final assistantId = _activeAssistantId;
-    if (assistantId == null) return;
     final progress = _activeRelayProgress;
+    // 即使没有 assistantId，也必须清 _sending，否则会出现「按钮是发送、点了却提示先停止」。
+    if (assistantId == null) {
+      setState(() {
+        _stopRequested = true;
+        _sending = false;
+        _activeRelayProgress = null;
+        _cancellingRelay = false;
+      });
+      if (progress != null && progress.taskId.isNotEmpty) {
+        _cancelRelayTask(progress.taskId);
+      }
+      return;
+    }
     setState(() {
       _stopRequested = true;
       _replaceMessage(
@@ -1980,6 +2008,7 @@ class _ReplyPreviewBar extends StatelessWidget {
 
 class _Composer extends StatelessWidget {
   const _Composer({
+    super.key,
     required this.controller,
     required this.onSend,
     required this.onStop,
@@ -2069,6 +2098,7 @@ class _Composer extends StatelessWidget {
                     tooltip: '更多工具',
                   ),
                   ValueListenableBuilder<TextEditingValue>(
+                    key: ValueKey('send-pill-busy-$busy'),
                     valueListenable: controller,
                     builder: (context, value, _) {
                       final canSend = value.text.trim().isNotEmpty && !busy;
