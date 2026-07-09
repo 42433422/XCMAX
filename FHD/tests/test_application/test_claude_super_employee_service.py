@@ -70,7 +70,10 @@ def test_claude_super_employee_answers_identity_without_dispatch(tmp_path: Path,
     # 身份类问题走 FAQ 直答，不再误派 CLI。
     assert result["dispatch"]["dispatcher"] == "claude_code_direct"
     assert result["assistant_message"]["kind"] == CLAUDE_DIRECT_MESSAGE_KIND
-    assert "Claude" in result["assistant_message"]["body"] or "编程" in result["assistant_message"]["body"]
+    assert (
+        "Claude" in result["assistant_message"]["body"]
+        or "编程" in result["assistant_message"]["body"]
+    )
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
     assert seen == []
 
