@@ -6,6 +6,10 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### Trae 流式超长行打爆局域网（2026-07-09 · v10 线内迭代）
+
+- **fix(backend)**：CLI SSE `readline` 行缓冲提到 8MiB，并兜底吞掉 LimitOverrun，避免 Trae stream-json 超长行导致手机误报「连接不到电脑工具」
+
 ### 手机 Trae 进度问答对齐桌面（2026-07-09 · v10 线内迭代）
 
 - **fix(backend)**：超级员工只读问答 prompt 允许读仓库/git/CHANGELOG 回答上线进度，禁止改文件

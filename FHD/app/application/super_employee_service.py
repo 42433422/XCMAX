@@ -670,6 +670,11 @@ class SuperEmployeeService:
                 self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
             )
             env = self._cli_subprocess_env()
+            # Trae/Claude stream-json 单行常超过 asyncio 默认 64KiB，readline 会抛
+            # LimitOverrunError → 整段 SSE 失败，手机误报「连接不到电脑工具」。
+            stream_limit = int(
+                os.environ.get("XCMAX_CLI_STREAM_LINE_LIMIT") or (8 * 1024 * 1024)
+            )
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -677,6 +682,7 @@ class SuperEmployeeService:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
+                    limit=max(stream_limit, 64 * 1024),
                 )
             except (OSError, FileNotFoundError) as exc:
                 yield {
@@ -701,11 +707,37 @@ class SuperEmployeeService:
                 except TimeoutError:
                     return ""
 
+            async def _readline_stdout() -> bytes:
+                """readline；超长行时降级分块，避免 LimitOverrun 打断整段流。"""
+                assert proc.stdout is not None
+                try:
+                    return await asyncio.wait_for(proc.stdout.readline(), timeout=3.0)
+                except ValueError as exc:
+                    msg = str(exc)
+                    if "limit" not in msg.lower() and "Separator is found" not in msg:
+                        raise
+                    logger.warning(
+                        "%s CLI stdout line exceeded stream limit; draining remainder",
+                        self._p.display_tool,
+                    )
+                    try:
+                        chunk = await asyncio.wait_for(
+                            proc.stdout.read(1024 * 1024), timeout=3.0
+                        )
+                    except TimeoutError:
+                        return b"\n"
+                    if not chunk:
+                        return b""
+                    nl = chunk.find(b"\n")
+                    if nl >= 0:
+                        return chunk[: nl + 1]
+                    return chunk + b"\n"
+
             while True:
                 if proc.stdout is None:
                     break
                 try:
-                    raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=3.0)
+                    raw_line = await _readline_stdout()
                 except TimeoutError:
                     # 检查 idle/hardcap 超时
                     now = time.monotonic()
