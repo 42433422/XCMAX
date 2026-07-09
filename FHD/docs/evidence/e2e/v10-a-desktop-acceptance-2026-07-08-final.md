@@ -28,7 +28,7 @@
 | A2 | 首启 `/api/health` 200 | **PASS** | **PASS**¹ | Mac：`status=healthy version=10.0.0` |
 | A3 | SKU enterprise | **PASS** | **PASS**¹ | `product-sku.json` |
 | A4 | Mod 加载 | **PASS** | **PASS**¹ | Mac 17 mods；`modsRoutesLoaded=true` |
-| A5 | `deliverable-status` | **PASS** | **FAIL**⁶ | Mac PASS；Win `GET /api/platform-shell/deliverable-status` → **404** |
+| A5 | `deliverable-status` | **PASS** | **IN PROGRESS**⁷ | Mac PASS；Win 404 根因已修+源码已同步，PyInstaller 重建中 |
 | A6 | 引导 / host-pack | **PASS** | **BLOCKED**² | Mac：`recommended_step=daily_use` |
 | A7 | 样板业务 API | **PASS**³ | **BLOCKED**² | Mac：`GET /api/purchase/orders` → 200（ERP Mod 路由）；`/api/erp/orders` 非契约路径 |
 | A8 | 日志 / 备份 | **PASS** | **PASS**¹ | Mac：`userData/logs`、`backups/`、`electron-backend.log` |
@@ -42,7 +42,25 @@
 ³ 企业样板走 Mod 门面 + `purchase/orders`，非 legacy `/api/erp/orders`。  
 ⁴ 真机 userData 上 `alembic upgrade head` 成功；根因：PyInstaller frozen 下 `-m alembic` 不可用 → `_run_alembic_cli` 走 `alembic.command`。  
 ⁵ 等价验证：`rollback.test.ts` 覆盖 prepare/commit/trigger；真机 OTA 回滚待 Win 热修后补测。  
-⁶ **2026-07-09 DevFleet 续接**：分支未 push，Win 在 `codex/windows-release-rebuild-*`；API 同步 `migrate.py` 后远程构建约 30min（控制器 1800s 超时但产物已生成）。cancel + close 后短命令可用；**deliverable / migrate 仍未 PASS**。
+⁶ **2026-07-09 DevFleet 续接**：分支未 push，Win 在 `codex/windows-release-rebuild-*`；API 同步 `migrate.py` 后远程构建约 30min（控制器 1800s 超时但产物已生成）。cancel + close 后短命令可用；**deliverable / migrate 仍未 PASS**。  
+⁷ **2026-07-09 续接 v10-A（本 commit）**：404 根因 = 桌面 fast-start 仅 bootstrap health/infrastructure，`platform-shell` 在 deferred；未挂载时 SPA fallback 对 `api/*` 返回 404。修复：`platform_shell` 提前至 bootstrap + PS5 ASCII 热修脚本。DevFleet 已同步 Win 三文件并后台启动 `win_v10a_hotfix_deploy.ps1`（python 构建中，验收待完成）。
+
+### 404 根因（Win health 200 / deliverable 404）
+
+| 对比项 | `/api/health` | `/api/platform-shell/deliverable-status` |
+|--------|---------------|-------------------------------------------|
+| 注册阶段 | bootstrap（`register_health_routes`） | 原 deferred（`register_business_routes`） |
+| fast-start 默认 | 立即可用 | deferred 完成前**无路由** |
+| 未匹配行为 | — | SPA fallback `api/` 前缀 → **404 JSON** |
+
+88bc22f34 解决的是 `deliverable=false` 误判；Win 404 是**路由尚未挂载**，非 `build_deliverable_status` 逻辑问题。
+
+### 本 commit 修复
+
+1. `register_bootstrap_routes` 挂载 `platform_shell_routes`（含 deliverable-status）
+2. `business.py` 移除重复 platform_shell mount
+3. `win_v10a_hotfix_deploy.ps1`：纯 ASCII + `Wait-HttpJson` 轮询
+4. 测试：`test_bootstrap_deliverable.py`（fast-start 下 deliverable 200）
 
 ---
 
@@ -106,7 +124,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev\win_v10a_hotfix_deploy.ps
 
 | 角色 | 姓名 | 日期 | 说明 |
 |------|------|------|------|
-| 测试负责人 | 自动化验收 Agent | 2026-07-09 | Mac PASS；Win 构建+部署 OK，A5/A9 未 PASS |
+| 测试负责人 | 自动化验收 Agent | 2026-07-09 | Mac PASS；Win 404 根因已修、重建进行中 |
 | 开发负责人 | 自动化验收 Agent | 2026-07-08 | 88bc22f34 + a379e579c 已合入分支 |
 | 产品负责人 | 用户授权代签 | 2026-07-08 | 待 Win 热修复测后正式签 |
 | 运维负责人 | 用户授权代签 | 2026-07-08 | OTA 根因已修；Win 真机 OTA 待补 |
@@ -117,7 +135,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\dev\win_v10a_hotfix_deploy.ps
 
 ## 结论
 
-- **Mac arm64**：v10-A 技术验收 **完成**。  
-- **Windows x64**：2026-07-09 续接 — 远程 **构建+robocopy 完成**，但 **deliverable-status / migrate-only 未 PASS** — **PL1 仍不可勾选**。  
-- **下一步**：push 分支 → Win 本机跑热修脚本 → 复测 → 勾选 PL1。
+- **Mac arm64**：v10-A 技术验收 **PASS**（`mac_deliverable_smoke.sh` + bootstrap 单测）。  
+- **Windows x64**：源码+热修脚本已 DevFleet 同步；**PyInstaller 重建+验收进行中** — A5/A9 待 PASS 后勾选 PL1。  
+- **下一步**：Win 构建完成后确认 `deliverable=true` + `migrate exit=0` → 勾选 PL1。
 
