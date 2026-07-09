@@ -769,7 +769,9 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
-  test('MobileRepository skips stale paired relay desktop', () async {
+  test('MobileRepository dispatches paired relay even when last_seen is stale',
+      () async {
+    // 与 Android 一致：云端已有 paired 桌面即可中继排队，不因 last_seen>5min 误报无执行端。
     final store = MemoryMobileSessionStore();
     final api = _StalePairedRelayApi(store);
     final repository = MobileRepository(client: api);
@@ -782,12 +784,13 @@ void main() {
         subtitle: '',
         timestampText: '',
       ),
-      body: '不要再卡旧队列',
+      body: '云端中继应可派工',
     );
 
-    expect(reply, contains('没有在线的电脑执行端'));
+    expect(reply, 'Trae 中继回复');
     expect(api.postedTools, isEmpty);
-    expect(api.createdRelayTasks, 0);
+    expect(api.createdRelayTasks, 1);
+    expect(api.lastRelayId, 'old-paired-relay');
   });
 
   test('MobileRepository ignores stored relay when desktop list fails',
@@ -944,7 +947,7 @@ void main() {
     expect((await store.load()).inflightRelayTasks, isEmpty);
   });
 
-  test('MobileRepository clears inflight when paired desktops are all offline',
+  test('MobileRepository resumes inflight on paired desktop even if last_seen stale',
       () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
@@ -959,8 +962,7 @@ void main() {
       conversationId: 'pinned:trae',
     );
 
-    expect(reply, isNull);
-    expect(api.statusCalls, 0);
+    expect(reply, 'Trae 中继回复');
     expect((await store.load()).inflightRelayTasks, isEmpty);
   });
 

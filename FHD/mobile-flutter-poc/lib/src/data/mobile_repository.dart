@@ -1979,29 +1979,20 @@ class MobileRepository {
       // API 正常但账号下尚无 paired 桌面：不要误用 build 注入/历史 relay_id 去排队。
       if (rows.isEmpty) return '';
 
-      // 账号下可能累积大量历史 paired 桌面；只派给近期在线（last_seen≤5min）的执行端，
-      // 避免任务进死队列后误回落云端 CLI。
+      // 与 Android Kotlin 一致：status=paired 即可走云端中继排队；
+      // last_seen 只用于排序选最近活跃桌面，不阻断派工。
       if (storedRelayId.isNotEmpty) {
         for (final row in rows) {
-          if (_stringField(row, 'relay_id') == storedRelayId &&
-              _relayDesktopIsFresh(row)) {
+          if (_stringField(row, 'relay_id') == storedRelayId) {
             return storedRelayId;
           }
         }
       }
 
-      final freshRows =
-          rows.where(_relayDesktopIsFresh).toList(growable: false);
-      if (freshRows.isEmpty) {
-        throw const MobileRepositoryException(
-          '当前没有在线的电脑执行端。请在本机 Mac 打开 XCAGI 并保持桌面云中继运行后再试。',
-        );
-      }
-
-      freshRows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
             _relayDesktopSortKey(b),
           ));
-      final latest = freshRows.last;
+      final latest = rows.last;
       final latestRelayId = _stringField(latest, 'relay_id');
       if (latestRelayId.isEmpty) return '';
       if (latestRelayId != storedRelayId) {
@@ -2350,21 +2341,7 @@ bool _relayDesktopIsDispatchable(Map<String, Object?> row) {
   final relayId = _stringField(row, 'relay_id');
   final status = _stringField(row, 'status').toLowerCase();
   // 与 Kotlin 一致：账号下 status=paired 即可派工；last_seen 只影响排序，不阻断中继。
-  // 否则桌面轮询稍停就会误走云端 /admin/*-super-employee（服务器 CLI），而非 cursor.invoke 本机执行。
   return relayId.isNotEmpty && status == 'paired';
-}
-
-bool _relayDesktopIsFresh(Map<String, Object?> row) {
-  final lastSeen = _firstNonBlank([
-    _stringField(row, 'last_seen_at'),
-    _stringField(row, 'updated_at'),
-  ]);
-  if (lastSeen.isEmpty) return false;
-  final parsed = DateTime.tryParse(lastSeen)?.toUtc();
-  if (parsed == null) return false;
-  final age = DateTime.now().toUtc().difference(parsed);
-  if (age.isNegative) return true;
-  return age <= const Duration(minutes: 5);
 }
 
 String _relayDesktopSortKey(Map<String, Object?> row) {
