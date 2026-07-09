@@ -1618,6 +1618,12 @@ async def mobile_admin_codex_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
+    if not str(context.get("workspace_root") or "").strip():
+        from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
+        root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
+        if root:
+            context["workspace_root"] = root
     # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
@@ -1693,6 +1699,12 @@ async def mobile_admin_claude_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
+    if not str(context.get("workspace_root") or "").strip():
+        from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
+        root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
+        if root:
+            context["workspace_root"] = root
     # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
@@ -1766,8 +1778,15 @@ async def mobile_admin_cursor_super_employee_invoke(
     text = (body.message or body.body or "").strip()
     context = dict(body.context or {})
     context.setdefault("source", "mobile_im")
+    context.setdefault("client_surface", "mobile")
     context.setdefault("device_scope", "all_devices")
     context.setdefault("target_devices", ["all"])
+    if not str(context.get("workspace_root") or "").strip():
+        from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
+        root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
+        if root:
+            context["workspace_root"] = root
     try:
         result = CursorSuperEmployeeService().invoke(
             user_id=uid,
@@ -1837,6 +1856,12 @@ async def mobile_admin_trae_super_employee_invoke(
     context.setdefault("client_surface", "mobile")
     context.setdefault("device_scope", "all_devices")
     context.setdefault("target_devices", ["all"])
+    if not str(context.get("workspace_root") or "").strip():
+        from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
+        root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
+        if root:
+            context["workspace_root"] = root
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
@@ -1887,7 +1912,7 @@ async def _stream_super_employee_invoke(
     user,
 ):
     """超级员工 SSE 流式直答的共享实现。"""
-    _, err = _require_mobile_admin(request, user)
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1912,6 +1937,13 @@ async def _stream_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
+    # 手机局域网直连：注入本机工程根，便于只读问答读到真实仓库（非临时 scratch）。
+    if not str(context.get("workspace_root") or "").strip():
+        from app.application.relay_workspace import resolve_verified_relay_workspace_root
+
+        root = resolve_verified_relay_workspace_root({"source": "mobile_im"})
+        if root:
+            context["workspace_root"] = root
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"

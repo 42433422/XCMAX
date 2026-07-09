@@ -1882,8 +1882,13 @@ class SuperEmployeeService:
     def _relay_real_workspace(self, context: dict[str, Any]) -> str:
         ctx = context if isinstance(context, dict) else {}
         source = str(ctx.get("source") or "").strip().lower()
-        is_relay = ctx.get("force_cli_direct") is True or source == "mobile_relay"
-        if not is_relay:
+        # 手机局域网直连(mobile_im)与云中继(mobile_relay)都是操作者本机执行端：
+        # 允许使用已校验的真实仓库根，否则进度/上线类问答只能落在临时 scratch。
+        is_operator_desktop = (
+            ctx.get("force_cli_direct") is True
+            or source in {"mobile_relay", "mobile_im"}
+        )
+        if not is_operator_desktop:
             return ""
         return resolve_verified_relay_workspace_root(ctx)
 
@@ -2062,8 +2067,11 @@ class SuperEmployeeService:
 
     def _cli_prompt(self, text: str) -> str:
         return (
-            f"你是 XCMAX 软件内的{self._p.employee_name}。请直接回答用户的问题。"
-            "这是普通对话通道：不要执行命令，不要修改文件，不要调用工具。"
+            f"你是 XCMAX 软件内的{self._p.employee_name}，当前工作区就是本机项目仓库。"
+            "请直接回答用户的问题。"
+            "这是只读问答通道：可以读取仓库文件、git 状态、CHANGELOG、VERSION、待办与测试结果来回答进度/上线差距类问题；"
+            "不要修改文件、不要提交、不要推送、不要安装依赖。"
+            "如果确实读不到真实数据，请说明缺什么，不要编造数字。"
             "如果用户询问额度、账户余额、订阅或实时账户状态，而你无法从当前会话读取真实账户数据，"
             "请明确说明不能查看，不要编造数字。"
             "\n\n用户问题："

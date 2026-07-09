@@ -1413,15 +1413,16 @@ class MobileRepository {
     final host = refreshed.fhdHost.trim();
     if (host.isEmpty) return '';
     // 后端 loopback 监听 17500 时手机不可达，需改用 vite proxy 端口 5011。
+    // 若桌面已对局域网开放 17500，保留原端口（forceProxyPort=false）。
     return AndroidServerRouter(
       fhdHost: host,
       mode: AndroidServerMode.lan,
-    ).lanReachableBaseUrl();
+    ).lanReachableBaseUrl(forceProxyPort: false);
   }
 
   /// 把会话里存的局域网基址改写成手机可达地址。
   /// - 去掉云端路径前缀 `/fhd-api`（本机 Vite/FHD 无此前缀）
-  /// - 桌面常绑 127.0.0.1:17500，手机改走 Vite 代理 5011
+  /// - 保留已声明的局域网端口（含 17500）；仅当调用方显式要求时才改写到 Vite 代理
   String _lanReachableBaseFromStored(String rawBase) {
     final clean = rawBase.trim();
     if (clean.isEmpty) return '';
@@ -1432,8 +1433,8 @@ class MobileRepository {
     final host = uri.host;
     final port =
         uri.hasPort ? uri.port : XcagiMobileTopology.desktopFhdListenPort;
-    final usePort =
-        (port == XcagiMobileTopology.desktopFhdListenPort) ? XcagiMobileTopology.lanReachableProxyPort : port;
+    // 桌面已对局域网开放 17500 时不要强改 5011（Vite 常挂掉会导致「手机答不了」）。
+    final usePort = port;
     var path = uri.path.trim();
     if (path == '/fhd-api' || path.startsWith('/fhd-api/')) {
       path = '';

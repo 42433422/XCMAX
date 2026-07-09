@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 手机 Trae 进度问答对齐桌面（2026-07-09 · v10 线内迭代）
+
+- **fix(backend)**：超级员工只读问答 prompt 允许读仓库/git/CHANGELOG 回答上线进度，禁止改文件
+- **fix(backend)**：`mobile_im` 与中继一样可解析真实 XCMAX 仓库根，避免落临时 scratch
+- **fix(backend)**：LAN SSE 鉴权改为 admin_or_enterprise，并注入 `workspace_root`
+- **fix(mobile-flutter)**：局域网基址不再把可达的 17500 强改成常挂掉的 Vite 5011
+
 ### 局域网超级员工优先 SSE（2026-07-09 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：`streamMessage` 局域网路径改为先走 `messages/stream` SSE，失败再回落 POST，避免整段直答挡住流式进度

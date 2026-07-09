@@ -884,13 +884,13 @@ void main() {
     expect(reply, 'Trae 直连回复');
     expect(api.createdRelayTasks, 0);
     expect(api.postedBaseUrls, isEmpty);
-    // 17500 + /fhd-api → 手机可达 Vite 代理 5011，并去掉云端 path 前缀。
-    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
+    // 17500 + /fhd-api → 去掉云端 path 前缀，保留局域网 17500。
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:17500/']);
     expect(tokens.join(), contains('正在思考'));
     expect(tokens.join(), contains('Trae 直连回复'));
   });
 
-  test('MobileRepository rewrites stored LAN 17500 base to reachable 5011',
+  test('MobileRepository keeps stored LAN 17500 base without forcing 5011',
       () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
@@ -915,7 +915,7 @@ void main() {
     );
 
     expect(reply, 'Trae 直连回复');
-    expect(api.streamedBaseUrls, ['http://192.168.10.2:5011/']);
+    expect(api.streamedBaseUrls, ['http://192.168.10.2:17500/']);
     expect(api.postedBaseUrls, isEmpty);
   });
 
@@ -944,8 +944,8 @@ void main() {
 
     expect(reply, 'Trae 直连回复');
     expect(api.createdRelayTasks, 0);
-    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:17500/']);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
   });
 
   test('MobileRepository skips LAN without lanAccessToken and uses relay silently',
@@ -1007,9 +1007,9 @@ void main() {
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
-    // fhdHost 无 path 时走 AndroidServerRouter.lanReachableBaseUrl（Vite 代理 5011）。
-    expect(api.streamedBaseUrls, ['http://192.168.31.8:5011/']);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+    // fhdHost 无 path 时保留局域网 17500（不再强改 Vite 5011）。
+    expect(api.streamedBaseUrls, ['http://192.168.31.8:17500/']);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
     expect(tokens.join(), isNot(contains('局域网连接失败')));
   });
 
