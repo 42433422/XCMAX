@@ -136,9 +136,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           relayProgress:
                               isActiveRelay ? _activeRelayProgress : null,
                           cancellingRelay: _cancellingRelay,
-                          onCancelRelay: _cancellingRelay
-                              ? null
-                              : () => _stopChat(),
                           onReply: () => setState(() => _replyTo = message),
                           onDelete: () => _deleteMessageAt(originalIndex),
                           onResend: message.status == ChatDeliveryStatus.failed
@@ -1100,7 +1097,6 @@ class MessageBubble extends StatelessWidget {
     this.onResend,
     this.relayProgress,
     this.cancellingRelay = false,
-    this.onCancelRelay,
     this.toolCalls = const <Map<String, Object?>>[],
     this.onShowTimeline,
   });
@@ -1117,7 +1113,6 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onResend;
   final RelayTaskProgress? relayProgress;
   final bool cancellingRelay;
-  final VoidCallback? onCancelRelay;
   final List<Map<String, Object?>> toolCalls;
   final VoidCallback? onShowTimeline;
 
@@ -1252,7 +1247,6 @@ class MessageBubble extends StatelessWidget {
                               _RelayProgressCard(
                                 progress: relayProgress!,
                                 cancelling: cancellingRelay,
-                                onCancel: onCancelRelay,
                               ),
                               const SizedBox(height: 8),
                             ],
@@ -1569,17 +1563,16 @@ class _MessageActionMenu extends StatelessWidget {
   }
 }
 
-/// 长任务（relay dev-loop）内嵌进度卡：步骤列表 + 进度条 + 中断按钮。
+/// 长任务（relay dev-loop）内嵌进度卡：步骤列表 + 进度条。
+/// 取消统一走底部「停止」，气泡内不再放「中断」。
 class _RelayProgressCard extends StatelessWidget {
   const _RelayProgressCard({
     required this.progress,
     required this.cancelling,
-    required this.onCancel,
   });
 
   final RelayTaskProgress progress;
   final bool cancelling;
-  final VoidCallback? onCancel;
 
   @override
   Widget build(BuildContext context) {
@@ -1634,31 +1627,6 @@ class _RelayProgressCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (onCancel != null &&
-                  progress.status != 'completed' &&
-                  progress.status != 'failed' &&
-                  progress.status != 'cancelled')
-                GestureDetector(
-                  onTap: onCancel,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.danger.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      cancelling ? '取消中' : '中断',
-                      style: TextStyle(
-                        color: colors.danger,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
             ],
           ),
           const SizedBox(height: 8),
