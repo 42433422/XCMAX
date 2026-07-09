@@ -96,3 +96,64 @@ def test_shell_headers_helper_matches_request() -> None:
     assert client_shell_from_headers({"X-XCMAX-Client-Shell": "admin"}) == ADMIN_SHELL
     assert client_shell_from_headers({"origin": "http://127.0.0.1:5011"}) == ADMIN_SHELL
     assert client_shell_from_headers({}) == ENTERPRISE_SHELL
+
+
+def test_shell_aliases_desktop_web() -> None:
+    assert client_shell_from_headers({"X-XCMAX-Client-Shell": "desktop"}) == ENTERPRISE_SHELL
+    assert client_shell_from_headers({"X-XCMAX-Client-Shell": "web"}) == ENTERPRISE_SHELL
+
+
+def test_header_get_tolerates_broken_mapping() -> None:
+    class BrokenHeaders:
+        def get(self, *_args, **_kwargs):
+            raise TypeError("no get")
+
+        def items(self):
+            raise AttributeError("no items")
+
+    assert client_shell_from_headers(BrokenHeaders()) == ENTERPRISE_SHELL
+    assert client_shell_from_headers(None) == ENTERPRISE_SHELL
+
+
+def test_attach_empty_sid_unchanged() -> None:
+    from fastapi.responses import JSONResponse
+
+    req = _make_request(shell="enterprise")
+    resp = JSONResponse({"ok": True})
+    assert attach_session_cookie(resp, "", req) is resp
+    assert attach_session_cookie(resp, None, req) is resp
+
+
+def test_clear_session_cookie_by_shell() -> None:
+    from fastapi.responses import JSONResponse
+
+    from app.infrastructure.auth.client_shell_session import clear_session_cookie
+
+    admin_req = _make_request(shell="admin")
+    resp = clear_session_cookie(JSONResponse({}), admin_req)
+    set_cookie = resp.headers.get("set-cookie", "")
+    assert "admin_session_id=" in set_cookie
+
+
+def test_resolve_session_id_bearer_when_allowed(monkeypatch) -> None:
+    monkeypatch.setenv("FHD_ALLOW_BEARER_AS_SESSION_ID", "1")
+    req = _make_request(
+        shell="enterprise",
+        extra_headers=[(b"authorization", b"Bearer bearer-sid")],
+    )
+    assert resolve_session_id_from_request(req) == "bearer-sid"
+
+
+def test_resolve_session_id_x_session_header() -> None:
+    req = _make_request(
+        shell="enterprise",
+        extra_headers=[(b"x-session-id", b"hdr-only")],
+    )
+    assert resolve_session_id_from_request(req) == "hdr-only"
+
+
+def test_session_cookie_name_from_headers() -> None:
+    from app.infrastructure.auth.client_shell_session import session_cookie_name_from_headers
+
+    assert session_cookie_name_from_headers({"X-XCMAX-Client-Shell": "admin"}) == "admin_session_id"
+    assert session_cookie_name_from_headers({}) == "session_id"
