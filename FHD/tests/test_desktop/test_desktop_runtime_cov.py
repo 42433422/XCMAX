@@ -149,6 +149,75 @@ class TestExportConfig:
         assert "mods" in cfg
 
 
+class TestRunAlembicCli:
+    def test_alembic_root_frozen_uses_meipass(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with (
+            patch.object(mig.sys, "frozen", True, create=True),
+            patch.object(mig.sys, "_MEIPASS", str(tmp_path), create=True),
+        ):
+            assert mig._alembic_root() == tmp_path
+
+    def test_nested_ini_and_frozen_upgrade(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        nested = tmp_path / "alembic.ini"
+        nested.mkdir()
+        (nested / "alembic.ini").write_text(
+            "[alembic]\nscript_location = alembic\n", encoding="utf-8"
+        )
+        with (
+            patch.object(mig, "_alembic_root", return_value=tmp_path),
+            patch.object(mig.sys, "frozen", True, create=True),
+            patch("alembic.config.Config") as cfg_cls,
+            patch("alembic.command.upgrade") as upgrade,
+        ):
+            mig._run_alembic_cli("upgrade", "head")
+        cfg_cls.assert_called_once()
+        upgrade.assert_called_once()
+        assert str(cfg_cls.call_args[0][0]).endswith("alembic.ini")
+
+    def test_frozen_stamp_and_unsupported_op(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        (tmp_path / "alembic.ini").write_text(
+            "[alembic]\nscript_location = alembic\n", encoding="utf-8"
+        )
+        with (
+            patch.object(mig, "_alembic_root", return_value=tmp_path),
+            patch.object(mig.sys, "frozen", True, create=True),
+            patch("alembic.config.Config"),
+            patch("alembic.command.stamp") as stamp,
+        ):
+            mig._run_alembic_cli("stamp", "head")
+            stamp.assert_called_once()
+            with pytest.raises(ValueError, match="unsupported alembic op"):
+                mig._run_alembic_cli("history")
+
+    def test_missing_ini_raises(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with patch.object(mig, "_alembic_root", return_value=tmp_path):
+            with pytest.raises(FileNotFoundError, match="alembic.ini"):
+                mig._run_alembic_cli("upgrade", "head")
+
+    def test_non_frozen_subprocess(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        (tmp_path / "alembic.ini").write_text(
+            "[alembic]\nscript_location = alembic\n", encoding="utf-8"
+        )
+        with (
+            patch.object(mig, "_alembic_root", return_value=tmp_path),
+            patch.object(mig.sys, "frozen", False, create=True),
+            patch("app.desktop_runtime.migrate.subprocess.run") as run,
+        ):
+            mig._run_alembic_cli("upgrade", "head")
+        run.assert_called_once()
+        assert run.call_args.kwargs["check"] is True
+
+
 class TestMigrateMain:
     def test_main_no_args(self, tmp_path):
         from app.desktop_runtime.migrate import main

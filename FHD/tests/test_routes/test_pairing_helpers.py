@@ -80,3 +80,31 @@ class TestRequestHostPortForwarded:
             req = _mock_request("127.0.0.1:17500", forwarded_host="192.168.10.2:5011")
             port = ph._pairing_reachable_port(req, 17500)
         assert port == 5011
+
+
+class TestPairingIssuePortEnvAndDefaults:
+    def test_env_port_when_no_request_port(self, monkeypatch):
+        monkeypatch.setenv("XCAGI_API_PORT", "17500")
+        with patch.object(ph, "_read_runtime_api_port", return_value=0):
+            assert ph._pairing_issue_port(_mock_request("localhost"), 0) == 17500
+
+    def test_default_5000_when_nothing_else(self):
+        with (
+            patch.object(ph, "_read_runtime_api_port", return_value=0),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            assert ph._pairing_issue_port(_mock_request("localhost"), 0) == 5000
+
+    def test_reachable_defaults_invalid_api_port(self):
+        with patch.object(ph, "_backend_listens_loopback_only", return_value=False):
+            assert ph._pairing_reachable_port(None, 0) == 5000
+
+    def test_host_is_private_or_loopback(self):
+        assert ph._host_is_private_or_loopback("192.168.1.1") is True
+        assert ph._host_is_private_or_loopback("127.0.0.1") is True
+        assert ph._host_is_private_or_loopback("8.8.8.8") is False
+        assert ph._host_is_private_or_loopback("localhost") is True
+
+    def test_api_base_url_strips_scheme_and_path(self):
+        assert ph._pairing_api_base_url("http://192.168.1.2/foo", 0) == "http://192.168.1.2:5000/"
+        assert ph._pairing_api_base_url("192.168.1.2:9999", 17500) == "http://192.168.1.2:17500/"
