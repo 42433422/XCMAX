@@ -1414,15 +1414,68 @@ class MobileRepository {
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
     }
-    final localBase = session.localBaseUrl.trim();
-    if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
-    final host = session.fhdHost.trim();
+    // 派工前刷新云端桌面上报的 local_base_url（桌面 IP/端口会变；旧值直连必失败）。
+    await _refreshLanBindingFromRelayDesktops();
+    final refreshed = await _client.loadSession();
+    final localBase = refreshed.localBaseUrl.trim();
+    if (localBase.isNotEmpty) {
+      return _lanReachableBaseFromStored(localBase);
+    }
+    final host = refreshed.fhdHost.trim();
     if (host.isEmpty) return '';
     // 后端 loopback 监听 17500 时手机不可达，需改用 vite proxy 端口 5011。
     return AndroidServerRouter(
       fhdHost: host,
       mode: AndroidServerMode.lan,
     ).lanReachableBaseUrl();
+  }
+
+  /// 把会话里存的局域网基址改写成手机可达地址（17500 → 5011）。
+  String _lanReachableBaseFromStored(String rawBase) {
+    final clean = rawBase.trim();
+    if (clean.isEmpty) return '';
+    final uri = Uri.tryParse(clean);
+    if (uri == null || uri.host.isEmpty) {
+      return _ensureTrailingSlash(clean);
+    }
+    final hostWithPort = uri.hasPort ? '${uri.host}:${uri.port}' : uri.host;
+    final reachable = AndroidServerRouter(
+      fhdHost: hostWithPort,
+      mode: AndroidServerMode.lan,
+    ).lanReachableBaseUrl();
+    // 保留原 path（如 /fhd-api），仅替换 host:port。
+    final path = uri.path.trim();
+    if (path.isEmpty || path == '/') return reachable;
+    final base = reachable.replaceFirst(RegExp(r'/+$'), '');
+    final suffix = path.startsWith('/') ? path : '/$path';
+    return _ensureTrailingSlash('$base$suffix');
+  }
+
+  Future<void> _refreshLanBindingFromRelayDesktops() async {
+    try {
+      final response = await _client.relayDesktops();
+      if (!response.success) return;
+      final rows = _relayDesktopRows(response.data)
+          .where(_relayDesktopIsDispatchable)
+          .toList(growable: false);
+      if (rows.isEmpty) return;
+      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+            _relayDesktopSortKey(b),
+          ));
+      final latest = rows.last;
+      final relayId = _stringField(latest, 'relay_id');
+      if (relayId.isEmpty) return;
+      await _client.persistRelayBindingMeta(relayId, latest);
+      final localBase = _stringField(latest, 'local_base_url');
+      if (localBase.isEmpty) return;
+      final hostPort = _hostPortFromApiBaseUrl(localBase);
+      if (hostPort.isEmpty) return;
+      final session = await _client.loadSession();
+      if (session.fhdHost.trim() == hostPort) return;
+      await _client.saveSession(session.copyWith(fhdHost: hostPort));
+    } catch (_) {
+      // 刷新失败仍用本地缓存地址尝试直连。
+    }
   }
 
   Future<String> _streamRelaySuperEmployeeTask({

@@ -1755,7 +1755,16 @@ class TestExtractToolCalls:
         assert by_action["push"]["success"] is True
 
     def test_verify_failed_and_push_failed(self) -> None:
+<<<<<<< Updated upstream
         body = "闭环结果\n分支: feat/x\n验证: 未通过（语法错误）\n推送: 失败：rejected\n"
+=======
+        body = (
+            "闭环结果\n"
+            "分支: feat/x\n"
+            "验证: 未通过（语法错误）\n"
+            "推送: 失败：rejected\n"
+        )
+>>>>>>> Stashed changes
         calls = _extract_tool_calls({"content": body}, "Claude")
         by_action = {c["action"]: c for c in calls}
         assert by_action["verify"]["success"] is False

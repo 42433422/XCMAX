@@ -512,6 +512,7 @@ class MobileRelayService:
         relay_id: str,
         desktop_token: str,
         max_tasks: int = 5,
+        capabilities: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now()
         with get_db() as db:
@@ -519,16 +520,38 @@ class MobileRelayService:
             desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
             if not desktop:
                 return None
-            db.execute(
-                text(
-                    """
-                    UPDATE mobile_relay_desktops
-                    SET last_seen_at = :now, updated_at = :now
-                    WHERE relay_id = :relay_id
-                    """
-                ),
-                {"now": now, "relay_id": relay_id.strip()},
-            )
+            # 桌面每次 poll 可上报当前局域网 host/port，供手机刷新 local_base_url。
+            if isinstance(capabilities, dict) and capabilities:
+                merged = dict(desktop.get("capabilities") or {})
+                merged.update({k: v for k, v in capabilities.items() if v is not None})
+                db.execute(
+                    text(
+                        """
+                        UPDATE mobile_relay_desktops
+                        SET last_seen_at = :now,
+                            updated_at = :now,
+                            capabilities_json = :capabilities_json
+                        WHERE relay_id = :relay_id
+                        """
+                    ),
+                    {
+                        "now": now,
+                        "relay_id": relay_id.strip(),
+                        "capabilities_json": _json_dumps(merged),
+                    },
+                )
+                desktop = {**desktop, "capabilities": merged, "last_seen_at": now, "updated_at": now}
+            else:
+                db.execute(
+                    text(
+                        """
+                        UPDATE mobile_relay_desktops
+                        SET last_seen_at = :now, updated_at = :now
+                        WHERE relay_id = :relay_id
+                        """
+                    ),
+                    {"now": now, "relay_id": relay_id.strip()},
+                )
             # 孤儿回收：执行端中途死会把任务永久卡在 running（poll 只发 queued，无人再认领）。
             # 每次 poll 先把本 relay claimed_at 超 TTL 的 running 重置回 queued，活 relay 自动重认领，
             # 根治『永久卡 running』。同一 relay 仍在跑的任务由执行端 _INFLIGHT 去重，不会重复执行；
