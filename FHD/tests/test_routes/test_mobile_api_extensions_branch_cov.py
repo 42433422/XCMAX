@@ -2564,7 +2564,7 @@ class TestMobileRelayTaskStatusSuccess:
 class TestMobileRelayDesktopPollSuccess:
     @pytest.mark.asyncio
     async def test_success(self, m):
-        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5)
+        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5, capabilities=None)
         data = {"tasks": []}
         with patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls:
             svc_cls.return_value.poll_desktop.return_value = data
@@ -2574,7 +2574,7 @@ class TestMobileRelayDesktopPollSuccess:
     @pytest.mark.asyncio
     async def test_recoverable_error(self, m):
         err_class = _err_class(m)
-        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5)
+        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5, capabilities=None)
         with patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls:
             svc_cls.return_value.poll_desktop.side_effect = err_class("fail")
             result = await m.mobile_relay_desktop_poll(body=body)

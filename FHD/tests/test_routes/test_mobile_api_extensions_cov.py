@@ -896,7 +896,7 @@ class TestMobileRelayDesktopPoll:
     @pytest.mark.asyncio
     async def test_data_none_returns_404(self, m):
         """branch [1074,1075]: poll returns None → 404."""
-        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5)
+        body = SimpleNamespace(relay_id="r1", desktop_token="tok", max_tasks=5, capabilities=None)
         with patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls:
             svc_cls.return_value.poll_desktop.return_value = None
             result = await m.mobile_relay_desktop_poll(body=body)
