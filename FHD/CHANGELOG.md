@@ -11,6 +11,7 @@
 - **refactor(backend)**：`workflow.py` Excel 导入拆至 `workflow_import_excel.py`（原路径 re-export）
 - **refactor(backend)**：`xcmax_admin` Token 采集拆至 `xcmax_admin_token_usage.py`（测试 patch 路径不变）
 - **refactor(backend)**：`mobile_api_extensions` 员工提问/chat SSE 拆至 `mobile_extensions/employee_routes.py`
+- **refactor(backend)**：`mobile_api_extensions` 再拆 7 个子路由模块（超级员工 / AI 群聊 / 首页同步 / 认证支付 / 配对中继 / 设备通知 / 管理端）；主文件 ~4231→~1114 行；handler 与 patch 符号经 `mobile_extensions/_ext.py` 回引主模块
 
 ### 局域网手机自更新闭环（2026-07-09 · v10 线内迭代）
 
