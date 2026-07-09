@@ -539,7 +539,12 @@ class MobileRelayService:
                         "capabilities_json": _json_dumps(merged),
                     },
                 )
-                desktop = {**desktop, "capabilities": merged, "last_seen_at": now, "updated_at": now}
+                desktop = {
+                    **desktop,
+                    "capabilities": merged,
+                    "last_seen_at": now,
+                    "updated_at": now,
+                }
             else:
                 db.execute(
                     text(
