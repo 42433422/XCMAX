@@ -861,6 +861,7 @@ void main() {
       const MobileSessionData(
         serverMode: 'lan',
         localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        lanAccessToken: 'lan-access',
         relayDesktopId: 'fresh-relay',
       ),
     );
@@ -890,6 +891,7 @@ void main() {
       const MobileSessionData(
         serverMode: 'lan',
         localBaseUrl: 'http://192.168.10.2:17500/',
+        lanAccessToken: 'lan-access',
         relayDesktopId: 'fresh-relay',
       ),
     );
@@ -911,16 +913,50 @@ void main() {
     expect(api.postedBaseUrls, ['http://192.168.10.2:5011/']);
   });
 
+  test('MobileRepository skips LAN without lanAccessToken and uses relay silently',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        localBaseUrl: 'http://192.168.31.8:17500/',
+        // 无本机 JWT：不应硬打局域网刷失败文案，直接走云中继。
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+    final tokens = <String>[];
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '无本机凭证走中继',
+      onToken: tokens.add,
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.postedBaseUrls, isEmpty);
+    expect(tokens.join(), isNot(contains('局域网连接失败')));
+  });
+
   test('MobileRepository falls back to relay when LAN direct fails', () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
         serverMode: 'lan',
         fhdHost: '192.168.31.8:17500',
+        lanAccessToken: 'lan-access',
         relayDesktopId: 'fresh-relay',
       ),
     );
     final api = _LanFailFreshRelayApi(store);
     final repository = MobileRepository(client: api);
+    final tokens = <String>[];
 
     final reply = await repository.streamMessage(
       conversation: const ConversationItem(
@@ -931,12 +967,14 @@ void main() {
         timestampText: '',
       ),
       body: '局域网失败就回中继',
+      onToken: tokens.add,
     );
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
     // fhdHost 无 path 时走 AndroidServerRouter.lanReachableBaseUrl（Vite 代理 5011）。
     expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+    expect(tokens.join(), isNot(contains('局域网连接失败')));
   });
 
   test('MobileRepository clears stale inflight relay without paired desktop',

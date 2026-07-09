@@ -439,12 +439,14 @@ String _lanModeDescription(MobileSessionData session) {
     }
     return '关闭时超级员工经云中继执行';
   }
+  if (session.lanAccessToken.trim().isEmpty) {
+    return '已开启；请扫码绑定一次本机 XCAGI（写入直连凭证后才会走局域网）';
+  }
   final host = session.fhdHost.trim();
-  final localBase = session.localBaseUrl.trim();
   if (host.isNotEmpty) {
     return '优先直连 $host（失败时自动回云中继）';
   }
-  if (localBase.isNotEmpty || session.lanAccessToken.trim().isNotEmpty) {
+  if (session.localBaseUrl.trim().isNotEmpty) {
     return '优先直连已绑定电脑（失败时自动回云中继）';
   }
   return '已开启；请先扫码绑定电脑（绑定后会缓存，无需每次重扫）';

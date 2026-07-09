@@ -927,11 +927,8 @@ class MobileRepository {
             );
             return reply;
           } catch (_) {
+            // 直连失败静默回落云中继，不在气泡里刷「局域网连接失败」。
             _throwIfCancelled(isCancelled);
-            final sink = onToken;
-            if (sink != null) {
-              sink('〔局域网连接失败，正在切换到云端中继〕\n');
-            }
           }
         }
       }
@@ -1399,9 +1396,13 @@ class MobileRepository {
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
     }
+    // 无本机配对 JWT 时不要硬打局域网：云端 token 本机验签必 401，
+    // 只会刷「局域网连接失败」再回落云中继。先走云中继，扫码一次后再直连。
+    if (session.lanAccessToken.trim().isEmpty) {
+      return '';
+    }
     // 有缓存绑定就先用；仅缺地址时才向云端拉一次桌面 local_base_url（失效才刷新）。
-    if (!session.hasLanBinding ||
-        (session.localBaseUrl.trim().isEmpty && session.fhdHost.trim().isEmpty)) {
+    if (session.localBaseUrl.trim().isEmpty && session.fhdHost.trim().isEmpty) {
       await _refreshLanBindingFromRelayDesktops();
     }
     final refreshed = await _client.loadSession();
