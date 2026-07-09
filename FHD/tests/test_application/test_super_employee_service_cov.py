@@ -186,8 +186,13 @@ class TestInvokeDirect:
             tmp_path,
             cli_runner=_stdout_runner("cli answer"),
         )
+        # 避开 FAQ 身份/问候词，确保 chat 模式落到 CLI 直答。
         with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc.invoke(user_id=1, message="你好", context={"mode": "chat"})
+            result = svc.invoke(
+                user_id=1,
+                message="帮我解释一下这段报错日志",
+                context={"mode": "chat"},
+            )
         assert result["dispatch"]["status"] == "completed"
         assert result["dispatch"]["dispatcher"] == "codex_cli"
 
@@ -1495,3 +1500,35 @@ class TestMessageRowAndPublic:
         pub = svc._public_message({})
         assert pub["role"] == "assistant"
         assert pub["body"] == ""
+
+
+class TestEmptyCliUserMessage:
+    """区分未通 / 未装 CLI / 额度 / 鉴权，避免一律「请确认已登录」。"""
+
+    def test_missing_cli_guides_bind_desktop(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value=""):
+            body = svc._empty_cli_user_message(ran=False)
+        assert "未找到" in body and "CLI" in body
+        assert "钱包" in body
+        assert "扫码绑定" in body or "局域网" in body
+
+    def test_quota_stderr_is_not_wallet(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=True, stderr="rate limit exceeded")
+        assert "额度" in body or "限流" in body
+        assert "钱包" in body
+
+    def test_auth_stderr_asks_relogin(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value="/usr/bin/codex"):
+            body = svc._empty_cli_user_message(ran=True, stderr="not logged in")
+        assert "鉴权" in body or "登录" in body
+
+    def test_compose_without_cli_uses_missing_dispatcher(self, tmp_path):
+        svc = _make_svc(tmp_path)
+        with patch.object(svc, "_cli_path", return_value=""):
+            body, dispatcher = svc._compose_direct_chat_reply("随便问问", {})
+        assert "未找到" in body
+        assert dispatcher.endswith("_cli_missing")

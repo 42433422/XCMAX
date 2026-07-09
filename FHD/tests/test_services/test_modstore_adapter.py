@@ -408,28 +408,28 @@ class TestFromSession:
         assert adapter._source == "env"
 
     def test_from_session_with_request_auth(self, monkeypatch):
+        """Authorization 是 FHD JWT，不得当作 MODstore market token。"""
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
         monkeypatch.delenv("XCAGI_MARKET_BASE_URL", raising=False)
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = "Bearer req_token"
         adapter = ModstorePlatformAdapter.from_session(request=request)
-        assert adapter.auth_token == "req_token"
+        assert adapter.auth_token == ""
 
     def test_from_session_request_token_overrides_env(self, monkeypatch):
-        """请求头 market token 必须优先于 MODSTORE_AUTH_TOKEN 环境变量。
+        """请求头 Authorization（FHD JWT）不得覆盖 MODSTORE_AUTH_TOKEN。
 
-        回归测试：移动端发送自己的 market token，但服务器设置了
-        MODSTORE_AUTH_TOKEN 环境变量（可能过期/无效），必须用请求头 token，
-        否则会用过期环境变量 token 调用 MODstore → 401。
+        market token 只来自显式 kwargs / 环境变量 / session 绑定；
+        把 FHD JWT 当 market token 会触发 MODstore 401。
         """
         monkeypatch.setenv("MODSTORE_AUTH_TOKEN", "stale_env_token")
         monkeypatch.setenv("MODSTORE_PLATFORM_URL", "http://example.com")
         request = MagicMock()
         request.headers.get.return_value = "Bearer fresh_request_token"
         adapter = ModstorePlatformAdapter.from_session(request=request)
-        assert adapter.auth_token == "fresh_request_token"
-        assert adapter._source == "request"
+        assert adapter.auth_token == "stale_env_token"
+        assert adapter._source == "env"
 
     def test_from_session_request_headers_exception(self, monkeypatch):
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
