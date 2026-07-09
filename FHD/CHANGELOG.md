@@ -27,6 +27,8 @@
 
 ### 巨石全量拆分（续）（2026-07-09 · v10 线内迭代）
 
+- **refactor(db)**：`init_db.py`（~1851 行）拆为 `init_desktop_sqlite.py` / `init_table_domains.py` / `init_seed_bootstrap.py`；原路径 re-export 全部公开与测试用私有符号（`initialize_databases`、`_iter_seed_dirs` 等）
+- **refactor(orchestrator)**：`chat_trace.py`（~1717 行）拆为 `chat_trace_common.py` + `chat_trace_llm.py` / `chat_trace_retrieval.py` / `chat_trace_memory.py` / `chat_trace_artifact.py` / `chat_trace_legacy.py`；`start_legacy_chat_run` / `create_chat_trace_run` / `attach_chat_trace_run` 等 API 经 shim 不变
 - **refactor(application)**：`ai_group_chat_service.py`（~3968 行）拆为 `ai_group_chat/` 包（constants/loaders + crud/progress/post/routing/dispatch/reports/storage mixins + service）；原路径 re-export，测试 patch 经 facade 解析
 - **refactor(application)**：`super_employee_service.py`（~2776 行）拆为 `super_employee/` 包（profiles + cli_runtime/para_dispatch/dev_loop mixins + service）；Codex/Cursor/Claude/Trae 子类与 `subprocess`/`shutil`/`Path` monkeypatch 路径不变
 - **refactor(application)**：`ai_chat_app_service.py`（~3912 行）拆为 `ai_chat/` 包（helpers + excel_import/workflow/tool_execution mixins + service）；`LLMWorkflowPlanner` 等 shim 级 patch 与 `_skip_pro_excel_deterministic_import` 保持

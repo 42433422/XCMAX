@@ -44,8 +44,9 @@ from sqlalchemy.pool import StaticPool
 import app.db.models  # noqa: F401  (registers every ORM table on Base.metadata)
 from app.db import init_db
 from app.db.base import Base
+from app.db.init_table_domains import __file__ as _INIT_TABLE_DOMAINS_FILE
 
-INIT_DB_PATH = Path(init_db.__file__)
+INIT_DB_PATH = Path(_INIT_TABLE_DOMAINS_FILE)
 
 # Column-patching ``ensure_*`` functions exercised by guard 1. Each accepts
 # ``engine=`` and ALTERs any missing columns into already-existing ORM tables.

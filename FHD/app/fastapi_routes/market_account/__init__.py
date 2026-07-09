@@ -1,0 +1,91 @@
+"""Bridge XCAGI local UI to the Xiuci market account APIs."""
+
+from __future__ import annotations
+
+import logging
+
+from fastapi import APIRouter
+from fastapi.responses import JSONResponse
+
+from app.fastapi_routes.market_account import auth_service, proxy_http, routes_account, routes_auth, routes_payment, session_store
+from app.fastapi_routes.market_account.routes_account import router as _account_router
+from app.fastapi_routes.market_account.routes_auth import router as _auth_router
+from app.fastapi_routes.market_account.routes_payment import router as _payment_router
+
+router = APIRouter(prefix="/api/market", tags=["market-account"])
+router.include_router(_auth_router)
+router.include_router(_account_router)
+router.include_router(_payment_router)
+
+logger = logging.getLogger(__name__)
+
+_MARKET_SESSION_TOKENS = session_store._MARKET_SESSION_TOKENS
+_MARKET_SESSION_REFRESH_TOKENS = session_store._MARKET_SESSION_REFRESH_TOKENS
+session_id_from_request = session_store.session_id_from_request
+bind_market_auth_to_session = session_store.bind_market_auth_to_session
+save_session_market_token = session_store.save_session_market_token
+clear_session_market_token = session_store.clear_session_market_token
+session_market_token = session_store.session_market_token
+session_market_refresh_token = session_store.session_market_refresh_token
+latest_session_market_refresh_token = session_store.latest_session_market_refresh_token
+latest_session_market_token = session_store.latest_session_market_token
+_user_id_from_session = session_store._user_id_from_session
+
+_ACCOUNT_OVERVIEW_CACHE = proxy_http._ACCOUNT_OVERVIEW_CACHE
+_market_base_url = proxy_http._market_base_url
+_auth_header = proxy_http._auth_header
+_normalize_bearer_token = proxy_http._normalize_bearer_token
+_proxy_error_http_status = proxy_http._proxy_error_http_status
+_authorization_from_request = proxy_http._authorization_from_request
+_authorization_from_request_resolved = proxy_http._authorization_from_request_resolved
+_body_snippet = proxy_http._body_snippet
+_error_message = proxy_http._error_message
+_market_http_timeout = proxy_http._market_http_timeout
+_market_http_retries = proxy_http._market_http_retries
+_account_overview_cache_ttl = proxy_http._account_overview_cache_ttl
+_overview_cache_key = proxy_http._overview_cache_key
+_transport_error_message = proxy_http._transport_error_message
+_proxy_json = proxy_http._proxy_json
+fetch_market_membership_tier = proxy_http.fetch_market_membership_tier
+
+_token_from_auth_response = auth_service._token_from_auth_response
+_refresh_token_from_auth_response = auth_service._refresh_token_from_auth_response
+_user_blob_from_market_payload = auth_service._user_blob_from_market_payload
+_truthy_identity_flag = auth_service._truthy_identity_flag
+_market_identity_from_payloads = auth_service._market_identity_from_payloads
+_market_user_id_from_auth_payload = auth_service._market_user_id_from_auth_payload
+refresh_session_market_token = auth_service.refresh_session_market_token
+resolve_valid_market_access_token = auth_service.resolve_valid_market_access_token
+_looks_like_verification_required = auth_service._looks_like_verification_required
+_register_without_verification = auth_service._register_without_verification
+send_market_reset_password_code = auth_service.send_market_reset_password_code
+reset_market_password_with_code = auth_service.reset_market_password_with_code
+register_market_user = auth_service.register_market_user
+_is_local_market_base = auth_service._is_local_market_base
+_demo_market_login_payload = auth_service._demo_market_login_payload
+_normalize_market_auth_payload = auth_service._normalize_market_auth_payload
+login_market_with_password = auth_service.login_market_with_password
+login_market_with_phone_code = auth_service.login_market_with_phone_code
+_market_internal_api_key = auth_service._market_internal_api_key
+ensure_market_enterprise_profile = auth_service.ensure_market_enterprise_profile
+_dedupe_mod_ids = auth_service._dedupe_mod_ids
+enterprise_mod_ids_for_industry = auth_service.enterprise_mod_ids_for_industry
+grant_market_enterprise_entitlements_for_session = auth_service.grant_market_enterprise_entitlements_for_session
+_oidc_identity_from_profile = auth_service._oidc_identity_from_profile
+login_market_for_oidc_profile = auth_service.login_market_for_oidc_profile
+send_market_phone_code = auth_service.send_market_phone_code
+
+_degraded_account_overview = routes_account._degraded_account_overview
+_merge_live_overview_fields = routes_account._merge_live_overview_fields
+_bootstrap_overview_needs_live_merge = routes_account._bootstrap_overview_needs_live_merge
+_market_llm_catalog_impl = routes_account._market_llm_catalog_impl
+_legacy_account_overview = routes_account._legacy_account_overview
+
+_market_auth_from_request = routes_payment._market_auth_from_request
+_checkout_sign_body_from_request = routes_payment._checkout_sign_body_from_request
+_checkout_body_has_signature = routes_payment._checkout_body_has_signature
+_resolve_market_authorization_for_checkout = routes_payment._resolve_market_authorization_for_checkout
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+from app.fastapi_routes.market_account.routes_auth import market_session_handoff

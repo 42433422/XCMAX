@@ -10,7 +10,7 @@ import json
 import os
 from typing import Any
 
-from app.utils.operational_errors import RECOVERABLE_ERRORS
+import app.fastapi_routes.xcmax_admin_patch as _p
 
 
 def _to_int(value: Any) -> int:
@@ -33,7 +33,7 @@ def _collect_local_ledger() -> dict[str, Any]:
         from app.infrastructure.billing.model_usage import list_model_usage_entries
 
         entries = list_model_usage_entries(limit=500)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except _p.RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return {"available": False, "reason": f"读取账本失败: {exc}"}
     prompt = sum(_to_int(e.get("prompt_tokens")) for e in entries)
     completion = sum(_to_int(e.get("completion_tokens")) for e in entries)
@@ -75,13 +75,13 @@ def _collect_cursor_usage() -> dict[str, Any]:
             text=True,
             timeout=30,
         )
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except _p.RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return {"available": False, "reason": f"执行失败: {exc}"}
     if proc.returncode != 0:
         return {"available": False, "reason": f"exit={proc.returncode}"}
     try:
         raw = json.loads(proc.stdout)
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except _p.RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return {"available": False, "reason": f"JSON 解析失败: {exc}"}
     aggs = raw.get("aggregations", []) if isinstance(raw, dict) else []
     total_input = sum(_to_int(a.get("inputTokens")) for a in aggs)
@@ -138,7 +138,7 @@ def _collect_codex_usage() -> dict[str, Any]:
                 for line in f:
                     try:
                         evt = json.loads(line)
-                    except RECOVERABLE_ERRORS:
+                    except _p.RECOVERABLE_ERRORS:
                         continue
                     if evt.get("type") == "session_meta":
                         payload = evt.get("payload") or {}
@@ -179,7 +179,7 @@ def _collect_codex_usage() -> dict[str, Any]:
                         slot["total"] += t
                         slot["count"] += 1
                         has_token = True
-        except RECOVERABLE_ERRORS:
+        except _p.RECOVERABLE_ERRORS:
             continue
         if has_token:
             session_count += 1
@@ -227,7 +227,7 @@ def _collect_trae_usage() -> dict[str, Any]:
         if row:
             try:
                 current_models = json.loads(row[0])
-            except RECOVERABLE_ERRORS:
+            except _p.RECOVERABLE_ERRORS:
                 current_models = None
         cur.execute("SELECT value FROM ItemTable WHERE key LIKE '%model_list_map%' LIMIT 1")
         row = cur.fetchone()
@@ -238,10 +238,10 @@ def _collect_trae_usage() -> dict[str, Any]:
                     for _mode, models in m.items():
                         if isinstance(models, list):
                             available_models_count += len(models)
-            except RECOVERABLE_ERRORS:
+            except _p.RECOVERABLE_ERRORS:
                 pass
         conn.close()
-    except RECOVERABLE_ERRORS as exc:  # noqa: BLE001
+    except _p.RECOVERABLE_ERRORS as exc:  # noqa: BLE001
         return {"available": False, "reason": f"读取 state.vscdb 失败: {exc}"}
     # Trae API 被 403 拦截，用轮次估算 token 用量
     # IDE AI 助手 Composer/Agent 模式每轮：prompt ~10000000（含多文件代码上下文+历史对话缓存）
