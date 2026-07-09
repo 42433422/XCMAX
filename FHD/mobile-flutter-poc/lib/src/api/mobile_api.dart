@@ -440,10 +440,11 @@ class AndroidServerRouter {
     return lanFhdBaseUrl();
   }
 
-  /// 手机端 LAN 直连专用：当后端 loopback 监听 17500 时，手机不可达，
-  /// 需改用 vite proxy 端口 5011（监听 0.0.0.0）。
-  String lanReachableBaseUrl() {
+  /// 手机端 LAN 直连专用：后端仅绑 loopback 时改写到 Vite 代理端口。
+  /// 若本机已对局域网开放 17500，则保留原端口（由探测层决定）。
+  String lanReachableBaseUrl({bool forceProxyPort = true}) {
     final raw = lanFhdBaseUrl();
+    if (!forceProxyPort) return raw;
     final loopbackPort = ':$fhdDefaultPort/';
     if (raw.endsWith(loopbackPort)) {
       final prefix = raw.substring(0, raw.length - loopbackPort.length);
@@ -535,9 +536,11 @@ class AndroidAuthHeaderPolicy {
     required String marketToken,
     required String modstoreBaseUrl,
     required String enterpriseFhdBaseUrl,
+    String lanToken = '',
   }) {
     final fhd = fhdToken.trim();
     final market = marketToken.trim();
+    final lan = lanToken.trim();
     if (isEnterpriseFhdRequest(
       url: url,
       enterpriseFhdBaseUrl: enterpriseFhdBaseUrl,
@@ -551,7 +554,24 @@ class AndroidAuthHeaderPolicy {
     )) {
       return market;
     }
+    // 局域网私网地址优先用配对签发的本机 JWT（云端 JWT 本机验签必失败）。
+    if (lan.isNotEmpty && _isPrivateLanUrl(url)) {
+      return lan;
+    }
     return fhd.isNotEmpty ? fhd : market;
+  }
+
+  static bool _isPrivateLanUrl(String url) {
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.host.isEmpty) return false;
+    final host = uri.host.toLowerCase();
+    if (host == 'localhost' || host == '127.0.0.1' || host == '::1') {
+      return true;
+    }
+    if (host.startsWith('10.')) return true;
+    if (host.startsWith('192.168.')) return true;
+    if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.').hasMatch(host)) return true;
+    return false;
   }
 
   static bool shouldAttachSelectedBearer({
@@ -1029,12 +1049,22 @@ class MobileApiClient {
     }
     if (access.isNotEmpty || preserveActiveAuth) {
       next = next.copyWith(
+        // 配对响应里的 JWT 是本机 FHD 签发的；云端登录 token 另存 accessToken。
+        lanAccessToken: _firstNonBlank([
+          access,
+          current.lanAccessToken,
+        ]),
+        lanRefreshToken: _firstNonBlank([
+          _readString(payload, const ['refresh_token']),
+          current.lanRefreshToken,
+        ]),
         relayBaseUrl: _firstNonBlank([
           _readString(payload, const ['relay_base_url']),
           current.relayBaseUrl,
         ]),
         localBaseUrl: _firstNonBlank([
           _readString(payload, const ['local_base_url']),
+          _readString(payload, const ['api_base_url', 'base_url']),
           current.localBaseUrl,
         ]),
         relaySessionToken: _firstNonBlank([
@@ -2653,6 +2683,7 @@ class MobileApiClient {
         _config.marketAccessToken,
         session.marketAccessToken,
       ]),
+      lanToken: session.lanAccessToken,
       modstoreBaseUrl: _config.modstoreBaseUrl,
       enterpriseFhdBaseUrl: XcagiMobileTopology.fhdApiBaseUrl,
     );

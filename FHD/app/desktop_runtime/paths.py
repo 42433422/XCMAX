@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import platform
+import secrets
 from pathlib import Path
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -63,6 +64,31 @@ def sqlite_database_url(data_dir: str | os.PathLike[str] | None = None) -> str:
     return "sqlite:///" + dirs["data"].joinpath("xcagi.db").as_posix()
 
 
+def _ensure_desktop_secret_key(root: Path) -> None:
+    """Persist a desktop-local SECRET_KEY under userData when unset."""
+    if (os.environ.get("SECRET_KEY") or "").strip():
+        return
+    secret_path = root / "config" / "secret_key"
+    try:
+        if secret_path.is_file():
+            stored = secret_path.read_text(encoding="utf-8").strip()
+            if stored:
+                os.environ["SECRET_KEY"] = stored
+                return
+        secret_path.parent.mkdir(parents=True, exist_ok=True)
+        generated = secrets.token_urlsafe(48)
+        secret_path.write_text(generated + "\n", encoding="utf-8")
+        try:
+            os.chmod(secret_path, 0o600)
+        except OSError:
+            pass
+        os.environ["SECRET_KEY"] = generated
+    except OSError as exc:
+        logging.getLogger(__name__).warning(
+            "desktop SECRET_KEY persist failed (non-fatal): %s", exc
+        )
+
+
 def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None) -> Path:
     """Set process environment defaults for the local desktop runtime.
 
@@ -113,6 +139,10 @@ def configure_desktop_environment(data_dir: str | os.PathLike[str] | None = None
     os.environ.setdefault("CACHE_REDIS_URL", "")
     os.environ.setdefault("CELERY_BROKER_URL", "memory://")
     os.environ.setdefault("CELERY_RESULT_BACKEND", "cache+memory://")
+
+    # 桌面 JWT 必须跨重启稳定：未配置 SECRET_KEY 时写入 userData 并复用，
+    # 否则配对签发的本机 token 重启后全部失效，手机局域网直连必 401。
+    _ensure_desktop_secret_key(root)
 
     # The Electron shell owns the browser window; uvicorn reload subprocesses
     # make packaged desktop shutdown unreliable.

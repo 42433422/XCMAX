@@ -886,37 +886,38 @@ class MobileRepository {
       );
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
-        // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
+        // 第 1 级：LAN 直答（本机 OpenAPI 常无 messages/stream，POST 更稳）。
         try {
-          final reply = await _client.streamSuperEmployeeMessage(
+          final reply = await _postSuperEmployeeMessage(
             tool,
             text,
             baseUrl: localBaseUrl,
-            onToken: (token) {
-              if (isCancelled != null && isCancelled()) return;
-              onToken?.call(token);
-            },
-            onStatus: (status) {
-              if (isCancelled != null && isCancelled()) return;
-              onToken?.call('\n$status\n');
-            },
-            isCancelled: isCancelled,
           );
           _throwIfCancelled(isCancelled);
+          onToken?.call(reply);
           await _cacheChatMessage(
             conversation.id,
             role: ChatRole.assistant,
             body: reply,
           );
           return reply;
-        } catch (sseError) {
+        } catch (postError) {
           _throwIfCancelled(isCancelled);
-          // 第 2 级：LAN 直答（一次性返回，SSE 不可用时的同城 fallback）
+          // 第 2 级：LAN SSE（后端已挂 stream 时逐 token；失败再回落云中继）。
           try {
-            final reply = await _postSuperEmployeeMessage(
+            final reply = await _client.streamSuperEmployeeMessage(
               tool,
               text,
               baseUrl: localBaseUrl,
+              onToken: (token) {
+                if (isCancelled != null && isCancelled()) return;
+                onToken?.call(token);
+              },
+              onStatus: (status) {
+                if (isCancelled != null && isCancelled()) return;
+                onToken?.call('\n$status\n');
+              },
+              isCancelled: isCancelled,
             );
             _throwIfCancelled(isCancelled);
             await _cacheChatMessage(
@@ -925,7 +926,7 @@ class MobileRepository {
               body: reply,
             );
             return reply;
-          } catch (e) {
+          } catch (_) {
             _throwIfCancelled(isCancelled);
             final sink = onToken;
             if (sink != null) {
@@ -935,7 +936,22 @@ class MobileRepository {
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
-      final relayId = await _relayIdForSuperEmployeeDispatch();
+      String relayId = '';
+      try {
+        relayId = await _relayIdForSuperEmployeeDispatch();
+      } on MobileRepositoryException catch (e) {
+        _throwIfCancelled(isCancelled);
+        final guidance = e.message.trim().ifEmpty(
+          '当前没有在线的电脑执行端。请打开本机 XCAGI 并保持云中继运行后再试。',
+        );
+        onToken?.call(guidance);
+        await _cacheChatMessage(
+          conversation.id,
+          role: ChatRole.assistant,
+          body: guidance,
+        );
+        return guidance;
+      }
       if (relayKind != null && relayId.isNotEmpty) {
         // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
         final reply = await _streamRelaySuperEmployeeTask(
@@ -1383,15 +1399,80 @@ class MobileRepository {
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
     }
-    final localBase = session.localBaseUrl.trim();
-    if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
-    final host = session.fhdHost.trim();
+    // 派工前刷新云端桌面上报的 local_base_url（桌面 IP/端口会变；旧值直连必失败）。
+    await _refreshLanBindingFromRelayDesktops();
+    final refreshed = await _client.loadSession();
+    final localBase = refreshed.localBaseUrl.trim();
+    if (localBase.isNotEmpty) {
+      return _lanReachableBaseFromStored(localBase);
+    }
+    final host = refreshed.fhdHost.trim();
     if (host.isEmpty) return '';
     // 后端 loopback 监听 17500 时手机不可达，需改用 vite proxy 端口 5011。
     return AndroidServerRouter(
       fhdHost: host,
       mode: AndroidServerMode.lan,
     ).lanReachableBaseUrl();
+  }
+
+  /// 把会话里存的局域网基址改写成手机可达地址。
+  /// - 去掉云端路径前缀 `/fhd-api`（本机 Vite/FHD 无此前缀）
+  /// - 桌面常绑 127.0.0.1:17500，手机改走 Vite 代理 5011
+  String _lanReachableBaseFromStored(String rawBase) {
+    final clean = rawBase.trim();
+    if (clean.isEmpty) return '';
+    final uri = Uri.tryParse(clean);
+    if (uri == null || uri.host.isEmpty) {
+      return _ensureTrailingSlash(clean);
+    }
+    final host = uri.host;
+    final port =
+        uri.hasPort ? uri.port : XcagiMobileTopology.desktopFhdListenPort;
+    final usePort =
+        (port == XcagiMobileTopology.desktopFhdListenPort) ? XcagiMobileTopology.lanReachableProxyPort : port;
+    var path = uri.path.trim();
+    if (path == '/fhd-api' || path.startsWith('/fhd-api/')) {
+      path = '';
+    }
+    final base = 'http://$host:$usePort';
+    if (path.isEmpty || path == '/') return _ensureTrailingSlash(base);
+    final suffix = path.startsWith('/') ? path : '/$path';
+    return _ensureTrailingSlash('$base$suffix');
+  }
+
+  Future<void> _refreshLanBindingFromRelayDesktops() async {
+    try {
+      final response = await _client.relayDesktops();
+      if (!response.success) return;
+      final rows = _relayDesktopRows(response.data)
+          .where(_relayDesktopIsDispatchable)
+          .toList(growable: false);
+      if (rows.isEmpty) return;
+      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+            _relayDesktopSortKey(b),
+          ));
+      final latest = rows.last;
+      final relayId = _stringField(latest, 'relay_id');
+      if (relayId.isEmpty) return;
+      await _client.persistRelayBindingMeta(relayId, latest);
+      final localBase = _stringField(latest, 'local_base_url');
+      if (localBase.isEmpty) return;
+      final hostPort = _hostPortFromApiBaseUrl(localBase);
+      if (hostPort.isEmpty) return;
+      final session = await _client.loadSession();
+      if (session.fhdHost.trim() == hostPort &&
+          session.localBaseUrl.trim() == localBase) {
+        return;
+      }
+      await _client.saveSession(
+        session.copyWith(
+          fhdHost: hostPort,
+          localBaseUrl: localBase,
+        ),
+      );
+    } catch (_) {
+      // 刷新失败仍用本地缓存地址尝试直连。
+    }
   }
 
   Future<String> _streamRelaySuperEmployeeTask({
@@ -1947,29 +2028,19 @@ class MobileRepository {
       // API 正常但账号下尚无 paired 桌面：不要误用 build 注入/历史 relay_id 去排队。
       if (rows.isEmpty) return '';
 
-      // 账号下可能累积大量历史 paired 桌面；只派给近期在线（last_seen≤5min）的执行端，
-      // 避免任务进死队列后误回落云端 CLI。
+      // 与 Android 对齐：status=paired 即可派工；last_seen 只影响排序。
       if (storedRelayId.isNotEmpty) {
         for (final row in rows) {
-          if (_stringField(row, 'relay_id') == storedRelayId &&
-              _relayDesktopIsFresh(row)) {
+          if (_stringField(row, 'relay_id') == storedRelayId) {
             return storedRelayId;
           }
         }
       }
 
-      final freshRows =
-          rows.where(_relayDesktopIsFresh).toList(growable: false);
-      if (freshRows.isEmpty) {
-        throw const MobileRepositoryException(
-          '当前没有在线的电脑执行端。请在本机 Mac 打开 XCAGI 并保持桌面云中继运行后再试。',
-        );
-      }
-
-      freshRows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
             _relayDesktopSortKey(b),
           ));
-      final latest = freshRows.last;
+      final latest = rows.last;
       final latestRelayId = _stringField(latest, 'relay_id');
       if (latestRelayId.isEmpty) return '';
       if (latestRelayId != storedRelayId) {

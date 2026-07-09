@@ -506,6 +506,9 @@ void main() {
     expect(saved.sessionId, 'cloud-session');
     expect(saved.username, 'cloud-user');
     expect(saved.userId, 42);
+    // 本机配对 JWT 另存，供局域网直连鉴权
+    expect(saved.lanAccessToken, 'desktop-access');
+    expect(saved.lanRefreshToken, 'desktop-refresh');
     // 桌面端绑定关系仍然建立
     expect(saved.relaySessionToken, 'desktop-session');
     expect(saved.relayAccountId, 'account-1');
@@ -871,7 +874,35 @@ void main() {
 
     expect(reply, 'Trae 直连回复');
     expect(api.createdRelayTasks, 0);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/fhd-api/']);
+    // 17500 + /fhd-api → 手机可达 Vite 代理 5011，并去掉云端 path 前缀。
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
+  });
+
+  test('MobileRepository rewrites stored LAN 17500 base to reachable 5011',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        localBaseUrl: 'http://192.168.10.2:17500/',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '改写端口后直连',
+    );
+
+    expect(reply, 'Trae 直连回复');
+    expect(api.postedBaseUrls, ['http://192.168.10.2:5011/']);
   });
 
   test('MobileRepository falls back to relay when LAN direct fails', () async {

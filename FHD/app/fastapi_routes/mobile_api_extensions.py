@@ -1336,6 +1336,7 @@ async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
             relay_id=body.relay_id,
             desktop_token=body.desktop_token,
             max_tasks=body.max_tasks,
+            capabilities=body.capabilities,
         )
         if not data:
             return JSONResponse(

@@ -321,6 +321,37 @@ def _write_config(data: dict[str, Any]) -> None:
     _CONFIG_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _guess_lan_ipv4() -> str:
+    """本机对外网卡 IPv4，供手机局域网直连（避免 127.0.0.1）。"""
+    try:
+        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        probe.connect(("8.8.8.8", 80))
+        ip = str(probe.getsockname()[0] or "").strip()
+        probe.close()
+        if ip and not ip.startswith("127."):
+            return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
+
+
+def _current_lan_advertise(*, fallback_host: str = "", fallback_port: int = 0) -> tuple[str, int]:
+    """返回当前应上报给云端的局域网 host/port。"""
+    host = str(fallback_host or "").strip()
+    if not host or host in {"0.0.0.0", "::", "127.0.0.1", "localhost"}:
+        host = _guess_lan_ipv4()
+    try:
+        port = int(fallback_port or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if port <= 0:
+        try:
+            port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("PORT") or "17500")
+        except (TypeError, ValueError):
+            port = 17500
+    return host, port
+
+
 def register_desktop_relay(
     *, host: str, port: int, label: str = "", force_new: bool = False
 ) -> dict[str, Any] | None:
@@ -342,6 +373,11 @@ def register_desktop_relay(
         # 已配对的身份必须复用（即便配对码过期，配对关系仍在服务端）；未配对但配对码仍有效时也复用
         # （同一配对窗口内重复出码，不该换 relay_id）。仅「未配对且配对码已过期」才落到下面注册新身份。
         if has_identity and (existing.get("paired") or valid_payload):
+            # 复用身份时仍刷新本机局域网地址，供 poll 上报给手机直连。
+            adv_host, adv_port = _current_lan_advertise(fallback_host=host, fallback_port=port)
+            existing["lan_host"] = adv_host
+            existing["lan_port"] = adv_port
+            _write_config(existing)
             start_desktop_relay_poller()
             return valid_payload or {
                 "relay_id": str(existing.get("relay_id") or ""),
@@ -350,6 +386,7 @@ def register_desktop_relay(
             }
     base_url = _relay_base_url()
     device_label = label.strip() or f"XCAGI 桌面执行端 - {socket.gethostname()}"
+    adv_host, adv_port = _current_lan_advertise(fallback_host=host, fallback_port=port)
     body = {
         "label": device_label,
         "device_id": get_stable_device_id(),
@@ -364,8 +401,8 @@ def register_desktop_relay(
             "trae": True,
             "trae_cli": True,
             "desktop": True,
-            "host": host,
-            "port": int(port),
+            "host": adv_host,
+            "port": adv_port,
             "platform": platform.platform(),
         },
     }
@@ -397,6 +434,8 @@ def register_desktop_relay(
         "exp": int(data.get("exp") or 0),
         "registered_at": int(time.time()),
         "label": device_label,
+        "lan_host": adv_host,
+        "lan_port": adv_port,
     }
     _write_config(config)
     start_desktop_relay_poller()
@@ -526,10 +565,23 @@ def _poll_once() -> None:
     if free <= 0:
         return
     timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
+    adv_host, adv_port = _current_lan_advertise(
+        fallback_host=str(config.get("lan_host") or ""),
+        fallback_port=int(config.get("lan_port") or 0),
+    )
+    if config.get("lan_host") != adv_host or int(config.get("lan_port") or 0) != adv_port:
+        config["lan_host"] = adv_host
+        config["lan_port"] = adv_port
+        _write_config(config)
     with _relay_http_client(timeout) as client:
         resp = client.post(
             _api_url("/api/mobile/v1/relay/desktop/poll", base_url),
-            json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": free},
+            json={
+                "relay_id": relay_id,
+                "desktop_token": desktop_token,
+                "max_tasks": free,
+                "capabilities": {"host": adv_host, "port": adv_port, "desktop": True},
+            },
         )
         if resp.status_code == 404:
             return

@@ -19,6 +19,8 @@ class MobileSessionData {
     this.relayDesktopId = '',
     this.relayBaseUrl = '',
     this.localBaseUrl = '',
+    this.lanAccessToken = '',
+    this.lanRefreshToken = '',
     this.relaySessionToken = '',
     this.relayAccountId = '',
     this.relayTenantId = '',
@@ -57,6 +59,9 @@ class MobileSessionData {
   final String relayDesktopId;
   final String relayBaseUrl;
   final String localBaseUrl;
+  /// 局域网配对时本机 FHD 签发的 JWT（与云端 accessToken 分离）。
+  final String lanAccessToken;
+  final String lanRefreshToken;
   final String relaySessionToken;
   final String relayAccountId;
   final String relayTenantId;
@@ -119,6 +124,8 @@ class MobileSessionData {
       relayDesktopId: _readString(json, 'relay_desktop_id'),
       relayBaseUrl: _readString(json, 'relay_base_url'),
       localBaseUrl: _readString(json, 'local_base_url'),
+      lanAccessToken: _readString(json, 'lan_access_token'),
+      lanRefreshToken: _readString(json, 'lan_refresh_token'),
       relaySessionToken: _readString(json, 'relay_session_token'),
       relayAccountId: _readString(json, 'relay_account_id'),
       relayTenantId: _readString(json, 'relay_tenant_id'),
@@ -160,6 +167,8 @@ class MobileSessionData {
         'relay_desktop_id': relayDesktopId,
         'relay_base_url': relayBaseUrl,
         'local_base_url': localBaseUrl,
+        'lan_access_token': lanAccessToken,
+        'lan_refresh_token': lanRefreshToken,
         'relay_session_token': relaySessionToken,
         'relay_account_id': relayAccountId,
         'relay_tenant_id': relayTenantId,
@@ -209,6 +218,8 @@ class MobileSessionData {
       relayDesktopId: _firstNonBlank(other.relayDesktopId, relayDesktopId),
       relayBaseUrl: _firstNonBlank(other.relayBaseUrl, relayBaseUrl),
       localBaseUrl: _firstNonBlank(other.localBaseUrl, localBaseUrl),
+      lanAccessToken: _firstNonBlank(other.lanAccessToken, lanAccessToken),
+      lanRefreshToken: _firstNonBlank(other.lanRefreshToken, lanRefreshToken),
       relaySessionToken:
           _firstNonBlank(other.relaySessionToken, relaySessionToken),
       relayAccountId: _firstNonBlank(other.relayAccountId, relayAccountId),
@@ -263,6 +274,8 @@ class MobileSessionData {
     Object? relayDesktopId = _unset,
     Object? relayBaseUrl = _unset,
     Object? localBaseUrl = _unset,
+    Object? lanAccessToken = _unset,
+    Object? lanRefreshToken = _unset,
     Object? relaySessionToken = _unset,
     Object? relayAccountId = _unset,
     Object? relayTenantId = _unset,
@@ -323,6 +336,12 @@ class MobileSessionData {
       localBaseUrl: identical(localBaseUrl, _unset)
           ? this.localBaseUrl
           : localBaseUrl as String,
+      lanAccessToken: identical(lanAccessToken, _unset)
+          ? this.lanAccessToken
+          : lanAccessToken as String,
+      lanRefreshToken: identical(lanRefreshToken, _unset)
+          ? this.lanRefreshToken
+          : lanRefreshToken as String,
       relaySessionToken: identical(relaySessionToken, _unset)
           ? this.relaySessionToken
           : relaySessionToken as String,

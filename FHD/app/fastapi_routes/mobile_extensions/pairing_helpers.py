@@ -94,13 +94,16 @@ def _pairing_reachable_port(request: Request | None, api_port: int) -> int:
     clean_port = int(api_port or 0)
     if clean_port <= 0:
         clean_port = 5000
-    if request is None:
-        return clean_port
-    proxy_port = _request_host_port(request)
-    if proxy_port in _FRONTEND_DEV_PORTS:
-        return proxy_port
+    if request is not None:
+        proxy_port = _request_host_port(request)
+        if proxy_port in _FRONTEND_DEV_PORTS:
+            return proxy_port
     if not _backend_listens_loopback_only():
         return clean_port
+    # 桌面常绑 127.0.0.1:17500；手机不可达，默认改写到 Vite 代理 5011。
+    for candidate in (5011, 5001):
+        if candidate in _FRONTEND_DEV_PORTS:
+            return candidate
     return clean_port
 
 
