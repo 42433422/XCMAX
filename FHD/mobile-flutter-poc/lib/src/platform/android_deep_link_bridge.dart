@@ -28,6 +28,7 @@ enum AndroidDeepLinkTarget {
   employeeQuestions,
   settings,
   about,
+  updateCheck,
   notifications,
   ocr,
   bridge,
@@ -147,6 +148,9 @@ class AndroidDeepLinkDestination {
 
   const AndroidDeepLinkDestination.about()
       : this._(AndroidDeepLinkTarget.about);
+
+  const AndroidDeepLinkDestination.updateCheck()
+      : this._(AndroidDeepLinkTarget.updateCheck);
 
   const AndroidDeepLinkDestination.notifications()
       : this._(AndroidDeepLinkTarget.notifications);
@@ -405,6 +409,9 @@ AndroidDeepLinkDestination resolveAndroidDeepLinkDestination(String route) {
   }
   if (first == 'about') {
     return const AndroidDeepLinkDestination.about();
+  }
+  if (first == 'update' || routePath == 'update/check') {
+    return const AndroidDeepLinkDestination.updateCheck();
   }
   if (first == 'notifications') {
     return const AndroidDeepLinkDestination.notifications();

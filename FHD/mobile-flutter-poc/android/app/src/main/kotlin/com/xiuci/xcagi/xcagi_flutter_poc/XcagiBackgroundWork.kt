@@ -23,6 +23,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.time.Instant
 import java.util.concurrent.TimeUnit
+import kotlin.concurrent.thread
 import org.json.JSONObject
 
 private const val SessionFileName = "xcagi_session.json"
@@ -68,6 +69,12 @@ object XcagiBackgroundWork {
             ExistingPeriodicWorkPolicy.UPDATE,
             pushReq,
         )
+        // One-shot poll so LAN publish notify is picked up within seconds, not 15min.
+        val immediatePush =
+            androidx.work.OneTimeWorkRequestBuilder<XcagiPushPollWorker>()
+                .setConstraints(constraints)
+                .build()
+        wm.enqueue(immediatePush)
 
         if (autoLanProbe) {
             val lanReq =
@@ -148,6 +155,15 @@ class XcagiPushPollWorker(
             if (items != null) {
                 for (index in 0 until items.length()) {
                     val row = items.optJSONObject(index) ?: continue
+                    val payload = row.optJSONObject("data") ?: JSONObject()
+                    val type = payload.optString("type").ifBlank { row.optString("type") }
+                    val route =
+                        row.optString("route").ifBlank {
+                            payload.optString("route")
+                        }
+                    if (type == "lan_apk_ready" || route == "update/check") {
+                        XcagiLanApkUpdate.trigger(applicationContext, session, payload)
+                    }
                     XcagiNotification.show(applicationContext, row)
                 }
             }
@@ -155,6 +171,100 @@ class XcagiPushPollWorker(
         } catch (_: Exception) {
             Result.retry()
         }
+    }
+}
+
+/**
+ * 收到 lan_apk_ready 后：查本机 LAN 清单 → 下载 APK → 拉起系统安装器。
+ * 主闭环仍是 CLI 无线 adb 直装；此路径为无 adb 时的兜底（仍需用户点一次系统安装确认）。
+ */
+private object XcagiLanApkUpdate {
+    fun trigger(context: Context, session: XcagiWorkerSession, payload: JSONObject) {
+        val sku = payload.optString("sku").ifBlank { ProductSku }
+        val autoInstall = payload.optString("auto_install", "1") != "0"
+        thread(name = "xcagi-lan-apk-update") {
+            runCatching {
+                val pkgInfo =
+                    context.packageManager.getPackageInfo(context.packageName, 0)
+                val currentCode =
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                        pkgInfo.longVersionCode.toInt()
+                    } else {
+                        @Suppress("DEPRECATION")
+                        pkgInfo.versionCode
+                    }
+                val response =
+                    XcagiWorkerHttp.getJson(
+                        session = session,
+                        path = "api/mobile/v1/lan/android-update",
+                        query = "sku=$sku&current_version_code=$currentCode",
+                    )
+                if (!response.optBoolean("success", response.optBoolean("ok", false))) {
+                    return@runCatching
+                }
+                val data = response.optJSONObject("data") ?: return@runCatching
+                if (!data.optBoolean("available", false)) return@runCatching
+                val downloadUrl = data.optString("apk_download_url").trim()
+                if (downloadUrl.isBlank()) return@runCatching
+                if (!autoInstall) {
+                    val intent =
+                        Intent(context, MainActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                            putExtra("deep_link_route", "update/check")
+                        }
+                    context.startActivity(intent)
+                    return@runCatching
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    !context.packageManager.canRequestPackageInstalls()
+                ) {
+                    val settingsIntent =
+                        Intent(
+                            android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                            android.net.Uri.parse("package:${context.packageName}"),
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(settingsIntent)
+                    return@runCatching
+                }
+                val apk = downloadApk(context, downloadUrl)
+                openInstaller(context, apk)
+            }
+        }
+    }
+
+    private fun downloadApk(context: Context, urlText: String): File {
+        val url = URL(urlText)
+        val dir = File(context.cacheDir, "updates").also { it.mkdirs() }
+        val out = File(dir, "lan-update.apk")
+        val connection = (url.openConnection() as HttpURLConnection).apply {
+            connectTimeout = 15_000
+            readTimeout = 120_000
+            requestMethod = "GET"
+        }
+        try {
+            if (connection.responseCode !in 200..299) {
+                throw IllegalStateException("download HTTP ${connection.responseCode}")
+            }
+            connection.inputStream.use { input ->
+                out.outputStream().use { output -> input.copyTo(output) }
+            }
+        } finally {
+            connection.disconnect()
+        }
+        return out
+    }
+
+    private fun openInstaller(context: Context, apk: File) {
+        val authority = "${context.packageName}.update.fileprovider"
+        val uri =
+            androidx.core.content.FileProvider.getUriForFile(context, authority, apk)
+        val intent =
+            Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "application/vnd.android.package-archive")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        context.startActivity(intent)
     }
 }
 
@@ -169,17 +279,21 @@ class XcagiLanProbeWorker(
 
         val ok =
             runCatching {
-                val url = URL("http://$host/fhd-api/api/mobile/v1/health")
-                val connection = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 3_000
-                    readTimeout = 3_000
-                    requestMethod = "GET"
+                // Prefer bare FHD port; fall back to /fhd-api for proxied setups.
+                fun probe(path: String): Boolean {
+                    val url = URL("http://$host$path")
+                    val connection = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 3_000
+                        readTimeout = 3_000
+                        requestMethod = "GET"
+                    }
+                    return try {
+                        connection.responseCode in 200..299
+                    } finally {
+                        connection.disconnect()
+                    }
                 }
-                try {
-                    connection.responseCode in 200..299
-                } finally {
-                    connection.disconnect()
-                }
+                probe("/api/mobile/v1/health") || probe("/fhd-api/api/mobile/v1/health")
             }.getOrDefault(false)
 
         if (!ok && session.serverMode.lowercase() == "lan") {
@@ -195,7 +309,10 @@ private data class XcagiWorkerSession(
     val context: Context,
     val json: JSONObject,
 ) {
-    val accessToken: String = json.optString("access_token")
+    val accessToken: String =
+        json.optString("lan_access_token").ifBlank {
+            json.optString("access_token")
+        }
     val sessionId: String = json.optString("session_id")
     val serverMode: String = json.optString("server_mode", "cloud")
     val fhdHost: String = json.optString("fhd_host")
@@ -205,7 +322,9 @@ private data class XcagiWorkerSession(
 
     fun baseUrl(): String {
         if (serverMode.lowercase() == "lan" && fhdHost.isNotBlank()) {
-            return "http://${fhdHost.trim()}/fhd-api"
+            // 本机 FHD 无 /fhd-api 前缀（云端才有）
+            val host = fhdHost.trim().removePrefix("http://").removePrefix("https://")
+            return "http://${host.trimEnd('/')}"
         }
         if (relayBaseUrl.isNotBlank()) return relayBaseUrl.trim()
         return CloudBaseUrl

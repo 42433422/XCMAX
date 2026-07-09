@@ -606,6 +606,15 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
           SettingsScreen(api: widget.repository.client),
         );
         return true;
+      case AndroidDeepLinkTarget.updateCheck:
+        _pushAndroidDeepLinkPage(
+          navigator,
+          SettingsScreen(
+            api: widget.repository.client,
+            autoCheckUpdate: true,
+          ),
+        );
+        return true;
       case AndroidDeepLinkTarget.about:
         _pushAndroidDeepLinkPage(
           navigator,

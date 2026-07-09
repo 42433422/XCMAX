@@ -25,7 +25,14 @@ def m():
 
 
 @pytest.fixture()
-def lan_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, m) -> TestClient:
+def dnr():
+    import app.fastapi_routes.mobile_extensions.device_notify_routes as mod
+
+    return mod
+
+
+@pytest.fixture()
+def lan_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, m, dnr) -> TestClient:
     root = tmp_path / "lan-releases"
     sku_dir = root / "enterprise"
     sku_dir.mkdir(parents=True)
@@ -45,6 +52,8 @@ def lan_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, m) -> TestClient:
         ),
         encoding="utf-8",
     )
+    # 路由闭包引用的是 device_notify_routes 模块内符号
+    monkeypatch.setattr(dnr, "_lan_releases_root", lambda: root)
     monkeypatch.setattr(m, "_lan_releases_root", lambda: root)
 
     app = FastAPI()
@@ -77,8 +86,9 @@ def test_lan_android_update_returns_download_url(lan_app: TestClient) -> None:
 
 
 def test_lan_android_update_missing_manifest(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, m
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, m, dnr
 ) -> None:
+    monkeypatch.setattr(dnr, "_lan_releases_root", lambda: tmp_path / "empty")
     monkeypatch.setattr(m, "_lan_releases_root", lambda: tmp_path / "empty")
     app = FastAPI()
     app.include_router(m.extension_router, prefix="/api/mobile/v1")
@@ -90,3 +100,39 @@ def test_lan_android_update_missing_manifest(
     client = TestClient(app)
     resp = client.get("/api/mobile/v1/lan/android-update")
     assert resp.status_code == 404
+
+
+def test_lan_android_update_notify_loopback(
+    lan_app: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple] = []
+
+    def _fake_notify(user_id, title, body, data=None):
+        calls.append((user_id, title, body, data))
+        return {"fcm": False, "outbox": True}
+
+    monkeypatch.setattr(
+        "app.application.mobile_push_app_service.notify_mobile_user",
+        _fake_notify,
+    )
+    resp = lan_app.post(
+        "/api/mobile/v1/lan/android-update/notify",
+        json={"sku": "enterprise", "version_code": 1783600000, "user_ids": [1]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["route"] == "update/check"
+    assert calls and calls[0][0] == 1
+    assert calls[0][3]["type"] == "lan_apk_ready"
+
+
+def test_lan_android_update_notify_rejects_non_loopback(
+    lan_app: TestClient, monkeypatch: pytest.MonkeyPatch, dnr
+) -> None:
+    monkeypatch.setattr(dnr, "_is_loopback_request", lambda _request: False)
+    resp = lan_app.post(
+        "/api/mobile/v1/lan/android-update/notify",
+        json={"sku": "enterprise", "user_ids": [1]},
+    )
+    assert resp.status_code == 403

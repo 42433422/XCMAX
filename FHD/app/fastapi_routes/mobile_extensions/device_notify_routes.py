@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 device_notify_router = APIRouter()
 
-from app.fastapi_routes.mobile_extensions.models import DeviceRegisterBody
+from app.fastapi_routes.mobile_extensions.models import (
+    DeviceRegisterBody,
+    LanAndroidUpdateNotifyBody,
+)
 
 # ── 设备管理 ──
 
@@ -259,3 +262,85 @@ async def mobile_lan_android_update(
         "current_version_code": current_version_code,
     }
     return format_mobile_response(data=data)
+
+
+def _is_loopback_request(request: Request) -> bool:
+    host = (request.client.host if request.client else "") or ""
+    # Starlette TestClient 使用 host=testclient
+    if host in {"127.0.0.1", "::1", "localhost", "testclient"}:
+        return True
+    try:
+        from app.security.lan_config import get_lan_config
+        from app.security.lan_ip import get_client_ip
+
+        cfg = get_lan_config()
+        ip = get_client_ip(request.scope, cfg.trusted_proxies) or host
+        return ip in {"127.0.0.1", "::1", "localhost", "testclient"}
+    except Exception:  # noqa: BLE001
+        return False
+
+
+@device_notify_router.post("/lan/android-update/notify")
+async def mobile_lan_android_update_notify(
+    request: Request,
+    body: LanAndroidUpdateNotifyBody,
+):
+    """本机 publish 脚本调用：写入 outbox，唤醒已登录手机检查/安装 LAN APK。
+
+    仅允许 loopback，避免局域网任意主机滥发更新通知。
+    """
+    if not _is_loopback_request(request):
+        return JSONResponse(
+            format_mobile_response(None, "仅本机可触发更新通知", success=False, code=403),
+            status_code=403,
+        )
+    clean_sku = (body.sku or "enterprise").strip().lower() or "enterprise"
+    if clean_sku not in {"enterprise", "personal"}:
+        return JSONResponse(
+            format_mobile_response(None, "sku 仅支持 enterprise/personal", success=False, code=400),
+            status_code=400,
+        )
+    user_ids = [int(x) for x in (body.user_ids or []) if int(x) > 0]
+    if not user_ids:
+        # 默认通知最近登录的 admin（user_id=1），可用 body.user_ids 覆盖
+        user_ids = [1]
+
+    version_code = int(body.version_code or 0)
+    if version_code <= 0:
+        root = _lan_releases_root()
+        manifest_path = (root / clean_sku / "manifest.json") if root else None
+        if manifest_path and manifest_path.is_file():
+            try:
+                version_code = int(
+                    json.loads(manifest_path.read_text(encoding="utf-8")).get("version_code") or 0
+                )
+            except (OSError, json.JSONDecodeError, TypeError, ValueError):
+                version_code = 0
+
+    from app.application.mobile_push_app_service import notify_mobile_user
+
+    notified: list[dict[str, Any]] = []
+    for uid in user_ids:
+        result = notify_mobile_user(
+            uid,
+            title="局域网有新版本",
+            body=f"企业版 APK 已发布（versionCode={version_code or '最新'}），正在准备安装…",
+            data={
+                "type": "lan_apk_ready",
+                "channel": "xcagi_system",
+                "route": "update/check",
+                "sku": clean_sku,
+                "version_code": str(version_code),
+                "auto_install": "1" if body.auto_install else "0",
+            },
+        )
+        notified.append({"user_id": uid, **result})
+
+    return format_mobile_response(
+        data={
+            "sku": clean_sku,
+            "version_code": version_code,
+            "notified": notified,
+            "route": "update/check",
+        }
+    )

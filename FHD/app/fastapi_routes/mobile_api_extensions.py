@@ -963,8 +963,10 @@ from app.fastapi_routes.mobile_extensions.device_notify_routes import (  # noqa:
     mobile_device_unregister as mobile_device_unregister,
     mobile_notifications_pending as mobile_notifications_pending,
     mobile_lan_android_update as mobile_lan_android_update,
+    mobile_lan_android_update_notify as mobile_lan_android_update_notify,
     _lan_releases_root as _lan_releases_root,
     _lan_public_base_url as _lan_public_base_url,
+    _is_loopback_request as _is_loopback_request,
 )
 extension_router.include_router(device_notify_router)
 

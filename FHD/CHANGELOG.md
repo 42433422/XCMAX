@@ -11,6 +11,8 @@
 - **refactor(backend)**：`workflow.py` Excel 导入拆至 `workflow_import_excel.py`（原路径 re-export）
 - **refactor(backend)**：`xcmax_admin` Token 采集拆至 `xcmax_admin_token_usage.py`（测试 patch 路径不变）
 - **refactor(backend)**：`mobile_api_extensions` 员工提问/chat SSE 拆至 `mobile_extensions/employee_routes.py`
+- **refactor(backend)**：`workflow/planner.py` 拆至 `planner_slots.py` / `planner_tool_executors.py` / `planner_llm.py`（原路径 re-export）
+- **refactor(backend)**：`dataset_rag_app_service.py` 拆至 `dataset_rag/` 包（types/helpers/service/singleton；原路径 re-export）
 - **refactor(backend)**：`mobile_api_extensions` 再拆 7 个子路由模块（超级员工 / AI 群聊 / 首页同步 / 认证支付 / 配对中继 / 设备通知 / 管理端）；主文件 ~4231→~1114 行；handler 与 patch 符号经 `mobile_extensions/_ext.py` 回引主模块
 
 ### 局域网手机自更新闭环（2026-07-09 · v10 线内迭代）
@@ -19,6 +21,9 @@
 - **feat(backend)**：挂载 `/download/lan`；`GET /api/mobile/v1/lan/android-update` 供已配对手机查本机 APK
 - **feat(mobile-flutter)**：LAN 模式「检查更新」优先本机清单，失败回落公网 MODstore；读取真实安装 versionCode
 - **feat(mobile-flutter)**：超级员工工具卡「发布 APK 到局域网」派工执行 publish 脚本，摆脱 USB 装包
+- **feat(scripts)**：publish 默认识别无线 adb（`adb connect 手机IP:5555`）并 `install -r`，零二次操作闭环（Para 式局域网控机）
+- **feat(backend)**：`POST /api/mobile/v1/lan/android-update/notify`（仅 loopback）写入 outbox，兜底唤醒手机
+- **feat(mobile-flutter)**：PushPoll 识别 `lan_apk_ready` 自动拉 LAN APK 并打开系统安装器；深链 `update/check` 自动检查更新
 
 ### 超级员工发送被卡住中继锁死（2026-07-09 · v10 线内迭代）
 

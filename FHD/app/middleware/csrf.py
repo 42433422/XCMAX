@@ -65,6 +65,12 @@ def _csrf_exempt_sync_api(scope: Scope) -> bool:
     return path.endswith("/api/xcmax/sync/receive")
 
 
+def _csrf_exempt_lan_apk_notify(scope: Scope) -> bool:
+    """本机 publish CLI → notify 手机：无浏览器会话；端点自身仅允许 loopback。"""
+    path = (scope.get("path") or "").rstrip("/")
+    return path.endswith("/api/mobile/v1/lan/android-update/notify")
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -112,6 +118,9 @@ class CSRFMiddleware:
                 await self.app(scope, receive, send)
                 return
             if _csrf_exempt_sync_api(scope):
+                await self.app(scope, receive, send)
+                return
+            if _csrf_exempt_lan_apk_notify(scope):
                 await self.app(scope, receive, send)
                 return
             path = (scope.get("path") or "").rstrip("/")

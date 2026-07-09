@@ -15,10 +15,12 @@ class SettingsScreen extends StatefulWidget {
     super.key,
     this.api,
     this.updateInstaller = const MethodChannelAndroidPackageUpdateInstaller(),
+    this.autoCheckUpdate = false,
   });
 
   final MobileApiClient? api;
   final AndroidPackageUpdateInstaller updateInstaller;
+  final bool autoCheckUpdate;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -41,6 +43,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         MobileRepositoryScope.maybeRead(context)?.client ??
         MobileApiClient();
     _loadCachedSettings();
+    if (widget.autoCheckUpdate) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(_checkForUpdate());
+      });
+    }
   }
 
   @override

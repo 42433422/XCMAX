@@ -16,6 +16,15 @@ class DeviceRegisterBody(BaseModel):
     platform: str = Field(default="android", max_length=32)
 
 
+class LanAndroidUpdateNotifyBody(BaseModel):
+    """本机 CLI 发布 APK 后通知已登录手机拉起更新（仅 loopback）。"""
+
+    sku: str = Field(default="enterprise", max_length=32)
+    version_code: int = Field(default=0, ge=0)
+    user_ids: list[int] = Field(default_factory=list)
+    auto_install: bool = Field(default=True)
+
+
 class PairingExchangeBody(BaseModel):
     nonce: str = Field(default="", max_length=128)
     code: str = Field(default="", max_length=16)
