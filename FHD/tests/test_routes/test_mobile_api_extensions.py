@@ -161,6 +161,11 @@ class TestPairingIssue:
         request = _mock_pairing_request("127.0.0.1:17500", "127.0.0.1")
         with (
             patch.object(ext_mod, "_guess_lan_ipv4", return_value="192.168.0.38"),
+            # 非 loopback 后端：保留 API 端口，不改写到 Vite 5011
+            patch(
+                "app.fastapi_routes.mobile_extensions.pairing_helpers._backend_listens_loopback_only",
+                return_value=False,
+            ),
             patch.object(
                 ext_mod,
                 "issue_pairing_nonce",
@@ -274,16 +279,22 @@ class TestPairingExchange:
     @pytest.mark.asyncio
     async def test_exchange_by_shortcode(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456")
-        with patch.object(
-            ext_mod,
-            "consume_by_shortcode",
-            return_value={
-                "host": "192.168.1.20",
-                "port": 5100,
-                "nonce": "n1",
-                "shortCode": "123456",
-            },
-        ) as consume:
+        with (
+            patch(
+                "app.fastapi_routes.mobile_extensions.pairing_helpers._backend_listens_loopback_only",
+                return_value=False,
+            ),
+            patch.object(
+                ext_mod,
+                "consume_by_shortcode",
+                return_value={
+                    "host": "192.168.1.20",
+                    "port": 5100,
+                    "nonce": "n1",
+                    "shortCode": "123456",
+                },
+            ) as consume,
+        ):
             result = await ext_mod.mobile_pairing_exchange(body)
         consume.assert_called_once_with("123456")
         if hasattr(result, "body"):
