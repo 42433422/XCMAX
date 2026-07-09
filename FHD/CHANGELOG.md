@@ -6,6 +6,11 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 手机扫码相机兼容（2026-07-09 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：Android 扫码改用 `camera_android`（Camera2），避免 CameraX 在小米等机型上 Preview+Capture+Analysis 三路绑定失败
+- **fix(mobile-flutter)**：扫码分辨率降为 `low`；相机失败时提示改用「输入设备码」，不再刷堆栈
+
 ### 管理端/企业端会话 Cookie 隔离（2026-07-09 · v10 线内迭代）
 
 - **fix(auth)**：登录/登出改走分壳 `attach_session_cookie` / `clear_session_cookie`，管理端写 `admin_session_id`，不再覆盖企业端 `session_id`

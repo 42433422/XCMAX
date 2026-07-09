@@ -337,9 +337,10 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
         (camera) => camera.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
       );
+      // 扫码只需预览 + 分析流；用 low 降低机型 surface 组合失败概率。
       final controller = CameraController(
         description,
-        ResolutionPreset.medium,
+        ResolutionPreset.low,
         enableAudio: false,
         imageFormatGroup: ImageFormatGroup.yuv420,
       );
@@ -356,7 +357,7 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
       if (!mounted) return;
       setState(() {
         _cameraReady = false;
-        _cameraError = error.toString();
+        _cameraError = _friendlyCameraError(error);
       });
     }
   }
@@ -708,9 +709,22 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
       if (mounted) setState(() => _cameraReady = true);
     } catch (error) {
       if (!mounted) return;
-      setState(() => _cameraError = error.toString());
+      setState(() => _cameraError = _friendlyCameraError(error));
     }
   }
+}
+
+String _friendlyCameraError(Object error) {
+  final raw = error.toString();
+  if (raw.contains('No supported surface combination') ||
+      raw.contains('bind too many use cases') ||
+      raw.contains('CameraException')) {
+    return '当前手机相机无法同时打开扫码预览，请点「输入设备码」用 6 位配对码连接，或点重试。';
+  }
+  if (raw.length > 160) {
+    return '相机启动失败，请点重试或改用「输入设备码」。';
+  }
+  return raw;
 }
 
 class _PairingSuccessOverlay extends StatefulWidget {
