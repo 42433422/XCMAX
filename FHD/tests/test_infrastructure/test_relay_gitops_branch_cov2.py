@@ -553,9 +553,7 @@ class TestHandleGitOp:
             mock_diff.assert_called_once()
 
     def test_handle_diff_structured(self) -> None:
-        with patch.object(
-            relay_gitops, "git_diff_structured", return_value={"ok": True}
-        ) as mock_s:
+        with patch.object(relay_gitops, "git_diff_structured", return_value={"ok": True}) as mock_s:
             result = relay_gitops.handle_git_op("git.diff.structured", {"branch": "x"})
             assert result == {"ok": True}
             mock_s.assert_called_once()

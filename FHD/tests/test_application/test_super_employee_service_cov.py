@@ -1570,4 +1570,3 @@ class TestEmptyCliUserMessage:
             body, dispatcher = svc._compose_direct_chat_reply("解释这段日志", {})
         assert body
         assert dispatcher.endswith("_cli")
-
