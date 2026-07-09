@@ -18,9 +18,11 @@ def fast_start_client(monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_DESKTOP_FAST_START", "1")
     configure_desktop_environment(str(tmp_path))
 
-    import app.security.lan_settings_store as lan_store
-
-    lan_store.load_overrides = lambda: LanSettingsOverride(enabled=False)
+    # 必须用 monkeypatch：直接赋值会污染后续用例的真实 load_overrides。
+    monkeypatch.setattr(
+        "app.security.lan_settings_store.load_overrides",
+        lambda: LanSettingsOverride(enabled=False),
+    )
     reset_lan_config_cache()
 
     app = create_fastapi_app()
