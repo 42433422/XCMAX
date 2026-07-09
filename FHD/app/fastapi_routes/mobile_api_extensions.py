@@ -1016,6 +1016,120 @@ async def mobile_notifications_pending(
     return format_mobile_response(data={"notifications": items})
 
 
+# ── 局域网 APK 自更新（本机 publish → 手机检查更新）──
+
+
+def _lan_releases_root() -> Path | None:
+    try:
+        from app.fastapi_app.static_mounts import resolve_lan_releases_dir
+
+        root = resolve_lan_releases_dir()
+        return Path(root) if root else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _lan_public_base_url(request: Request) -> str:
+    """拼手机可达的本机基址（优先请求 Host，避免写死 loopback）。"""
+    forwarded = (request.headers.get("x-forwarded-host") or "").strip()
+    host = forwarded.split(",")[0].strip() if forwarded else ""
+    if not host:
+        host = (request.headers.get("host") or "").strip()
+    if not host:
+        hostname = (request.url.hostname or "").strip() or "127.0.0.1"
+        port = request.url.port
+        host = f"{hostname}:{port}" if port else hostname
+    scheme = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").strip()
+    return f"{scheme}://{host}".rstrip("/")
+
+
+@extension_router.get("/lan/android-update")
+async def mobile_lan_android_update(
+    request: Request,
+    sku: str = Query("enterprise"),
+    current_version_code: int = Query(0, ge=0),
+    user=Depends(get_mobile_user),
+):
+    """已配对手机查询本机 LAN 发布的 APK（不经公网 MODstore）。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    clean_sku = (sku or "enterprise").strip().lower() or "enterprise"
+    if clean_sku not in {"enterprise", "personal"}:
+        return JSONResponse(
+            format_mobile_response(None, "sku 仅支持 enterprise/personal", success=False, code=400),
+            status_code=400,
+        )
+    root = _lan_releases_root()
+    if root is None:
+        return JSONResponse(
+            format_mobile_response(None, "本机未配置 LAN 发布目录", success=False, code=404),
+            status_code=404,
+        )
+    manifest_path = root / clean_sku / "manifest.json"
+    if not manifest_path.is_file():
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                "尚未发布局域网 APK，请先运行 lan-mobile-apk-publish.sh",
+                success=False,
+                code=404,
+            ),
+            status_code=404,
+        )
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("lan android-update manifest 读取失败: %s", exc)
+        return JSONResponse(
+            format_mobile_response(None, "局域网更新清单损坏", success=False, code=500),
+            status_code=500,
+        )
+    if not isinstance(payload, dict):
+        return JSONResponse(
+            format_mobile_response(None, "局域网更新清单格式错误", success=False, code=500),
+            status_code=500,
+        )
+    version_code = int(payload.get("version_code") or 0)
+    version_name = str(payload.get("version_name") or "10.0.0").strip() or "10.0.0"
+    apk_rel = str(payload.get("apk_path") or "").strip().lstrip("/")
+    if not apk_rel:
+        apk_name = str(payload.get("apk_name") or "").strip()
+        apk_rel = f"{clean_sku}/{apk_name}" if apk_name else ""
+    apk_file = (root / apk_rel).resolve() if apk_rel else None
+    if (
+        version_code <= 0
+        or not apk_rel
+        or apk_file is None
+        or not str(apk_file).startswith(str(root.resolve()))
+        or not apk_file.is_file()
+    ):
+        return JSONResponse(
+            format_mobile_response(None, "局域网 APK 文件缺失，请重新发布", success=False, code=404),
+            status_code=404,
+        )
+    base = _lan_public_base_url(request)
+    download_url = f"{base}/download/lan/{apk_rel}"
+    available = current_version_code < version_code
+    data = {
+        "sku": clean_sku,
+        "platform": "android",
+        "latest_android_version": version_code,
+        "latest_android_version_name": version_name,
+        "min_android_version": 0,
+        "force_update": False,
+        "apk_download_url": download_url,
+        "sha256": str(payload.get("sha256") or ""),
+        "built_at": str(payload.get("built_at") or ""),
+        "source": "lan",
+        "available": available,
+        "current_version_code": current_version_code,
+    }
+    return format_mobile_response(data=data)
+
+
 # ── 配对 ──
 
 

@@ -6,6 +6,13 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### 局域网手机自更新闭环（2026-07-09 · v10 线内迭代）
+
+- **feat(scripts)**：`lan-mobile-apk-publish.sh` 本机构建 Flutter 企业版 APK，写入 `data/lan-releases/` + manifest（versionName=10.0.0，versionCode=时间戳）
+- **feat(backend)**：挂载 `/download/lan`；`GET /api/mobile/v1/lan/android-update` 供已配对手机查本机 APK
+- **feat(mobile-flutter)**：LAN 模式「检查更新」优先本机清单，失败回落公网 MODstore；读取真实安装 versionCode
+- **feat(mobile-flutter)**：超级员工工具卡「发布 APK 到局域网」派工执行 publish 脚本，摆脱 USB 装包
+
 ### 超级员工发送被卡住中继锁死（2026-07-09 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：恢复 inflight 中继时不再占用 `_sending` / `_activeAssistantId`，避免 Codex/Cursor/Claude 点发送无反应（Trae 无卡住任务故正常）

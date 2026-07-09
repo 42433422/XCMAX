@@ -82,6 +82,7 @@ class XcagiMobileEndpoints {
   static const marketSessionHandoff = 'api/market/session-handoff';
   static const marketSendPhoneCode = 'api/market/send-phone-code';
   static const appConfig = 'api/app/config';
+  static const lanAndroidUpdate = '$base/lan/android-update';
   static const appFeedback = 'api/app/feedback';
   static const accountDelete = 'api/auth/account/delete';
   static const accountExport = 'api/auth/export';
@@ -1579,17 +1580,81 @@ class MobileApiClient {
   }
 
   Future<MobileUpdateCheckResult> checkForUpdate({
-    int currentVersionCode = MobileAndroidBuild.versionCode,
+    int? currentVersionCode,
     String sku = MobileAndroidBuild.productSku,
   }) async {
+    final resolvedCode = currentVersionCode ?? MobileAndroidBuild.versionCode;
+    final lanResult = await _checkForLanUpdate(
+      currentVersionCode: resolvedCode,
+      sku: sku,
+    );
+    if (lanResult != null) return lanResult;
+
     final json = await getModstoreJson(
       XcagiMobileEndpoints.appConfig,
       query: {
         'platform': 'android',
         'sku': sku,
-        'current_version_code': currentVersionCode.toString(),
+        'current_version_code': resolvedCode.toString(),
       },
     );
+    return _updateResultFromConfigJson(
+      json,
+      currentVersionCode: resolvedCode,
+    );
+  }
+
+  /// LAN 已配对时优先查本机发布的 APK；无清单/失败则返回 null 回落公网。
+  Future<MobileUpdateCheckResult?> _checkForLanUpdate({
+    required int currentVersionCode,
+    required String sku,
+  }) async {
+    final session = await loadSession();
+    if (session.serverMode.trim().toLowerCase() != 'lan') return null;
+    if (session.lanAccessToken.trim().isEmpty) return null;
+    final lanBase = _lanUpdateBaseUrl(session);
+    if (lanBase.isEmpty) return null;
+    try {
+      final envelopeJson = await getJson(
+        XcagiMobileEndpoints.lanAndroidUpdate,
+        query: {
+          'sku': sku,
+          'current_version_code': currentVersionCode.toString(),
+        },
+        baseUrl: lanBase,
+      );
+      final envelope = MobileEnvelope.fromJson(envelopeJson, _asObjectMap);
+      if (!envelope.success) return null;
+      final data = envelope.data ?? const <String, Object?>{};
+      if (data.isEmpty) return null;
+      final downloadUrl = _readString(data, const ['apk_download_url']);
+      if (downloadUrl.isEmpty) return null;
+      return _updateResultFromConfigJson(
+        data,
+        currentVersionCode: currentVersionCode,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _lanUpdateBaseUrl(MobileSessionData session) {
+    final local = session.localBaseUrl.trim();
+    if (local.isNotEmpty) {
+      return local.endsWith('/') ? local : '$local/';
+    }
+    final host = session.fhdHost.trim();
+    if (host.isEmpty) return '';
+    if (host.contains('://')) {
+      return host.endsWith('/') ? host : '$host/';
+    }
+    return 'http://$host/';
+  }
+
+  MobileUpdateCheckResult _updateResultFromConfigJson(
+    Map<String, Object?> json, {
+    required int currentVersionCode,
+  }) {
     AndroidProductSkuConfig.setRemoteSku(_readString(json, const ['sku']));
     final latestVersionCode = _readInt(
       json,

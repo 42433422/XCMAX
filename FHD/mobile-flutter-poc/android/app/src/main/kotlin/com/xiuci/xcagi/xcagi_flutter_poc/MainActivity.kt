@@ -136,16 +136,36 @@ class MainActivity : FlutterFragmentActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "xcagi/update_installer",
         ).setMethodCallHandler { call, result ->
-            if (call.method != "startPackageUpdate") {
-                result.notImplemented()
-                return@setMethodCallHandler
+            when (call.method) {
+                "getInstalledVersionCode" -> {
+                    try {
+                        val info = packageManager.getPackageInfo(packageName, 0)
+                        val code =
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                                info.longVersionCode.toInt()
+                            } else {
+                                @Suppress("DEPRECATION")
+                                info.versionCode
+                            }
+                        result.success(code)
+                    } catch (error: Throwable) {
+                        result.error(
+                            "VERSION_CODE_FAILED",
+                            error.message ?: "无法读取 versionCode",
+                            null,
+                        )
+                    }
+                }
+                "startPackageUpdate" -> {
+                    val downloadUrl = call.argument<String>("downloadUrl").orEmpty()
+                    val versionName = call.argument<String>("versionName").orEmpty()
+                    val currentVersionCode = call.argument<Int>("currentVersionCode") ?: 0
+                    @Suppress("UNCHECKED_CAST")
+                    val delta = call.argument<Map<String, Any?>>("delta").orEmpty()
+                    startPackageUpdate(downloadUrl, versionName, currentVersionCode, delta, result)
+                }
+                else -> result.notImplemented()
             }
-            val downloadUrl = call.argument<String>("downloadUrl").orEmpty()
-            val versionName = call.argument<String>("versionName").orEmpty()
-            val currentVersionCode = call.argument<Int>("currentVersionCode") ?: 0
-            @Suppress("UNCHECKED_CAST")
-            val delta = call.argument<Map<String, Any?>>("delta").orEmpty()
-            startPackageUpdate(downloadUrl, versionName, currentVersionCode, delta, result)
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

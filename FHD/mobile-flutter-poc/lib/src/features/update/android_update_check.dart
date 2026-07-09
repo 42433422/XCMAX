@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../api/mobile_api.dart';
 import '../../widgets/we_ui.dart';
+import 'android_installed_build_info.dart';
 import 'android_package_update_installer.dart';
 
 Future<void> runAndroidUpdateCheck(
@@ -12,7 +13,12 @@ Future<void> runAndroidUpdateCheck(
       const MethodChannelAndroidPackageUpdateInstaller(),
 }) async {
   try {
-    final result = await api.checkForUpdate();
+    final currentVersionCode = await AndroidInstalledBuildInfo.versionCode(
+      fallback: MobileAndroidBuild.versionCode,
+    );
+    final result = await api.checkForUpdate(
+      currentVersionCode: currentVersionCode,
+    );
     if (!context.mounted) return;
     if (!result.available) {
       _showSnack(context, '已是最新版本');

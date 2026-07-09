@@ -37,6 +37,7 @@ def _desktop_fast_start_enabled() -> bool:
 
 from .static_mounts import (
     mount_admin_console_static,
+    mount_lan_releases_static,
     mount_vue_dist_assets_dir,
     mount_vue_dist_public_static,
     mount_xcmax_dashboard_static,
@@ -159,6 +160,7 @@ def create_fastapi_app(
     mount_admin_console_static(app)
     mount_vue_dist_public_static(app)
     mount_vue_dist_assets_dir(app)
+    mount_lan_releases_static(app)
 
     try:
         from app.fastapi_routes.spa_fallback import register_spa_history_fallback

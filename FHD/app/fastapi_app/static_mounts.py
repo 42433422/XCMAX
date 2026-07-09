@@ -150,3 +150,30 @@ def mount_vue_dist_assets_dir(app: FastAPI) -> None:
         logger.info("Mounted Vue dist assets: /assets -> %s", assets_dir)
     except RECOVERABLE_ERRORS as e:
         logger.warning("挂载 /assets 失败: %s", e)
+
+
+def resolve_lan_releases_dir() -> str | None:
+    """本机 LAN APK 发布目录（``FHD/data/lan-releases``）。"""
+    fhd = resolve_fhd_repo_root()
+    if fhd is None:
+        return None
+    directory = os.path.join(str(fhd), "data", "lan-releases")
+    os.makedirs(directory, exist_ok=True)
+    return directory
+
+
+def mount_lan_releases_static(app: FastAPI) -> None:
+    """挂载 ``/download/lan`` → ``data/lan-releases``，供已配对手机拉 APK。"""
+    directory = resolve_lan_releases_dir()
+    if not directory:
+        logger.warning("lan-releases 目录未解析到 FHD 根，跳过 /download/lan 挂载")
+        return
+    try:
+        app.mount(
+            "/download/lan",
+            StaticFiles(directory=directory),
+            name="lan_releases",
+        )
+        logger.info("Mounted lan releases: /download/lan -> %s", directory)
+    except RECOVERABLE_ERRORS as e:
+        logger.warning("挂载 /download/lan 失败: %s", e)

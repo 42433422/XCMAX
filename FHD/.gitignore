@@ -248,6 +248,10 @@ ces/
 10.2.0
 sz-qsm-pro-1.0.0.xcmod
 data/exports/
+data/lan-releases/**
+!data/lan-releases/.gitignore
+!data/lan-releases/**/.gitkeep
+
 合同/
 _compare_convert_output.xlsx
 

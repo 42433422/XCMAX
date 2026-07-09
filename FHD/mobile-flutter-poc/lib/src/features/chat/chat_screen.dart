@@ -1163,7 +1163,25 @@ class _ChatScreenState extends State<ChatScreen> {
         subtitle: '定位根因并验证',
         onTap: _sendProblemFix,
       ),
+      if (widget.conversation.type.superTool != null)
+        _ChatToolAction(
+          icon: Icons.system_update_alt,
+          title: '发布 APK 到局域网',
+          subtitle: '本机打包，手机检查更新自装',
+          onTap: _sendLanApkPublish,
+        ),
     ];
+  }
+
+  void _sendLanApkPublish() {
+    setState(() => _showToolPanel = false);
+    if (_sending) _unlockSending();
+    _send(
+      '请在本机执行：bash FHD/scripts/dev/lan-mobile-apk-publish.sh\n'
+      '要求：versionName 保持 10.0.0，versionCode 用时间戳；'
+      '产物写入 FHD/data/lan-releases/enterprise/ 并更新 manifest.json。\n'
+      '完成后回复 versionCode、APK 路径，并提示我到手机「设置 → 检查更新」安装（无需 USB）。',
+    );
   }
 
   List<String> _activeGitBranches() {
