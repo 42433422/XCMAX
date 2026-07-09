@@ -170,7 +170,11 @@ class ModContextMiddleware:
                 mod_context = self._mod_context_from_path(str(scope.get("path") or ""))
             if mod_context.mod_id:
                 try:
-                    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
+                    from app.infrastructure.auth.client_shell_session import (
+                        session_cookie_name_for_request,
+                    )
+
+                    cookie_name = session_cookie_name_for_request(request)
                     sid = (request.cookies.get(cookie_name) or "").strip()
                     if sid:
                         from app.enterprise.mod_entitlements import (

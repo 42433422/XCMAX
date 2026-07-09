@@ -1,12 +1,17 @@
-"""企业端 (:5001) 与管理端 (:5011) 会话 Cookie 隔离。
+"""企业端 (:5001 / 桌面) 与管理端 (:5011 /admin) 会话 Cookie 隔离。
 
 同机开发时 ``127.0.0.1`` 不按端口区分 Cookie，若共用 ``session_id`` 会串登录态。
-前端随请求附带 ``X-XCMAX-Client-Shell: enterprise|admin``，后端读写对应 Cookie。
+前端随请求附带 ``X-XCMAX-Client-Shell: enterprise|admin``，后端读写对应 Cookie：
+
+- 管理端 → ``admin_session_id``
+- 企业端 / 桌面 → ``session_id``
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
+from typing import Any
 
 from fastapi import Request
 from fastapi.responses import Response
@@ -16,23 +21,57 @@ ADMIN_SHELL = "admin"
 ENTERPRISE_SHELL = "enterprise"
 
 
-def client_shell_from_request(request: Request) -> str:
-    raw = str(request.headers.get(CLIENT_SHELL_HEADER) or "").strip().lower()
+def _header_get(headers: Mapping[str, Any] | None, *names: str) -> str:
+    if not headers:
+        return ""
+    # Starlette Headers 大小写不敏感；dict 兜底按小写比对
+    lower_map: dict[str, Any] | None = None
+    for name in names:
+        try:
+            val = headers.get(name)
+        except Exception:
+            val = None
+        if val is None and not hasattr(headers, "get"):
+            return ""
+        if val is None:
+            if lower_map is None:
+                try:
+                    lower_map = {str(k).lower(): v for k, v in headers.items()}
+                except Exception:
+                    lower_map = {}
+            val = lower_map.get(name.lower())
+        if val is not None and str(val).strip():
+            return str(val).strip()
+    return ""
+
+
+def client_shell_from_headers(headers: Mapping[str, Any] | None) -> str:
+    """从 HTTP / WebSocket 头判定客户端壳（不依赖完整 Request）。"""
+    raw = _header_get(headers, CLIENT_SHELL_HEADER, "x-xcmax-client-shell").lower()
     if raw == ADMIN_SHELL:
         return ADMIN_SHELL
     if raw in (ENTERPRISE_SHELL, "enterprise", "desktop", "web"):
         return ENTERPRISE_SHELL
-    # 无壳头时：管理端 Vite :5011、同端口 /admin/login、Origin 含 :5011
-    referer = str(request.headers.get("referer") or "").lower()
-    origin = str(request.headers.get("origin") or "").lower()
+
+    referer = _header_get(headers, "referer", "Referer").lower()
+    origin = _header_get(headers, "origin", "Origin").lower()
+    xfh = _header_get(headers, "x-forwarded-host", "X-Forwarded-Host").lower()
+    # Vite changeOrigin 后 Host 常被改成后端；优先看转发前 Host / Origin / Referer
     if (
         ":5011/admin" in referer
         or referer.rstrip("/").endswith(":5011/admin")
         or "/admin/login" in referer
+        or "/admin/" in referer
         or ":5011" in origin
+        or ":5011" in xfh
+        or xfh.endswith(":5011")
     ):
         return ADMIN_SHELL
     return ENTERPRISE_SHELL
+
+
+def client_shell_from_request(request: Request) -> str:
+    return client_shell_from_headers(getattr(request, "headers", None))
 
 
 def session_cookie_name_for_shell(shell: str) -> str:
@@ -43,6 +82,10 @@ def session_cookie_name_for_shell(shell: str) -> str:
 
 def session_cookie_name_for_request(request: Request) -> str:
     return session_cookie_name_for_shell(client_shell_from_request(request))
+
+
+def session_cookie_name_from_headers(headers: Mapping[str, Any] | None) -> str:
+    return session_cookie_name_for_shell(client_shell_from_headers(headers))
 
 
 def _allow_bearer_as_session_id() -> bool:
@@ -98,8 +141,10 @@ __all__ = [
     "ENTERPRISE_SHELL",
     "attach_session_cookie",
     "clear_session_cookie",
+    "client_shell_from_headers",
     "client_shell_from_request",
     "resolve_session_id_from_request",
     "session_cookie_name_for_request",
     "session_cookie_name_for_shell",
+    "session_cookie_name_from_headers",
 ]

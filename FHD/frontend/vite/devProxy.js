@@ -1,5 +1,17 @@
 /** Dev server / preview API proxy (extracted from vite.config.js). */
 
+/** 管理端 Vite (:5011) 代理时强制注入壳头，避免裸请求/旧缓存漏带导致 Cookie 串壳。 */
+export function injectClientShellOnProxyReq(proxyReq, req, shell) {
+  const existing = String(req.headers['x-xcmax-client-shell'] || '').trim()
+  if (!existing) {
+    proxyReq.setHeader('X-XCMAX-Client-Shell', shell)
+  }
+  const origHost = req.headers['host'] || ''
+  if (origHost) {
+    proxyReq.setHeader('X-Forwarded-Host', origHost)
+  }
+}
+
 export function rewriteUpstreamRedirectToRelative(proxy, upstreamBase) {
   const prefix = String(upstreamBase || '').trim().replace(/\/$/, '')
   let upstreamOrigin = ''
@@ -309,10 +321,7 @@ export function buildDevProxy(apiBase) {
               proxyReq.setHeader('X-Real-IP', normalizedIp)
               }
               // changeOrigin 会把 Host 改成后端地址；透传原始 Host 让 pairing 等逻辑拿到手机真实访问端口
-              const origHost = req.headers['host'] || ''
-              if (origHost) {
-                proxyReq.setHeader('X-Forwarded-Host', origHost)
-              }
+              injectClientShellOnProxyReq(proxyReq, req, 'enterprise')
             })
             proxy.on('error', (err, _req, res) => {
               logViteProxyConnectFailure('/api', apiBase, err)

@@ -1,6 +1,7 @@
 import { api, buildFullApiUrl } from './core';
 import { LS_MARKET_ACCESS_TOKEN } from './marketAccount';
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie';
+import { clientShellRequestHeaders } from '@/utils/clientShell';
 import type { RequestOptions } from './core';
 import type { ApiResponse } from '@/types/api';
 import type { ChatRequest, ChatResponse, ChatSession } from '@/types/chat';
@@ -90,6 +91,7 @@ export const chatApi = {
     const body = JSON.stringify(payload);
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      ...clientShellRequestHeaders(),
       ...readMarketBearerHeader(),
       ...(hdr as Record<string, string>),
     };

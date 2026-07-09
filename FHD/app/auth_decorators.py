@@ -24,6 +24,7 @@ def get_current_session_id() -> str | None:
 
 def _extract_session_id() -> str | None:
     from app.http.request_context import get_current_http_request
+    from app.infrastructure.auth.client_shell_session import session_cookie_name_for_request
 
     req = get_current_http_request()
     if req is None:
@@ -31,7 +32,7 @@ def _extract_session_id() -> str | None:
     auth_header = req.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         return auth_header[7:]
-    cookie_name = getattr(Config, "SESSION_COOKIE_NAME", "session_id")
+    cookie_name = session_cookie_name_for_request(req)
     return req.cookies.get(cookie_name)
 
 

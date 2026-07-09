@@ -15,6 +15,7 @@ import {
   createWorkflowComponentsAliasPlugin,
 } from './vite.shared-alias.js'
 import { resolveApiBase } from './vite/resolveApiBase.js'
+import { injectClientShellOnProxyReq } from './vite/devProxy.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const hostRoot = __dirname
@@ -70,12 +71,9 @@ function buildDevProxy(apiBase) {
       target: apiBase,
       changeOrigin: true,
       configure: (proxy) => {
-        // changeOrigin 会把 Host 改成后端地址；透传原始 Host 让 pairing 等逻辑拿到手机真实访问端口
+        // changeOrigin 会把 Host 改成后端地址；透传原始 Host + 强制管理端壳头
         proxy.on('proxyReq', (proxyReq, req) => {
-          const origHost = req.headers['host'] || ''
-          if (origHost) {
-            proxyReq.setHeader('X-Forwarded-Host', origHost)
-          }
+          injectClientShellOnProxyReq(proxyReq, req, 'admin')
         })
       },
     },

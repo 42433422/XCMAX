@@ -39,12 +39,10 @@ def _auth_header(raw: str) -> str:
 
 
 def session_id_from_request(request: Request) -> str:
-    cookie_name = os.environ.get("SESSION_COOKIE_NAME", "session_id")
-    cookies = getattr(request, "cookies", None)
-    headers = getattr(request, "headers", None)
-    cookie_sid = cookies.get(cookie_name) if isinstance(cookies, Mapping) else ""
-    header_sid = headers.get("X-Session-ID") if isinstance(headers, Mapping) else ""
-    return str(cookie_sid or header_sid or "").strip()
+    """与 auth dependencies 一致：按客户端壳读 admin_session_id / session_id。"""
+    from app.infrastructure.auth.dependencies import session_id_from_request as _sid
+
+    return _sid(request)
 
 
 def bind_market_auth_to_session(

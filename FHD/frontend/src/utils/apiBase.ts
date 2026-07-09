@@ -1,5 +1,6 @@
 import { readActiveExtensionModIdFromStorage } from './xcagiStorageKeys'
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from './csrfCookie'
+import { clientShellRequestHeaders } from './clientShell'
 
 /**
  * Mod 列表、loading-status、routes 等读请求上限。
@@ -180,9 +181,11 @@ export function apiFetch(input: string, init?: ApiFetchInit): Promise<Response> 
 
   const modsOffHeaders = getClientModsUiOffHeader()
   const modScopeHeaders = getActiveExtensionModHeaders(url)
+  const shellHeaders = clientShellRequestHeaders()
   const headers: Record<string, string> = {
     ...modsOffHeaders,
     ...modScopeHeaders,
+    ...shellHeaders,
     ...(typeof userHeaders === 'object' &&
     userHeaders !== null &&
     typeof (userHeaders as Headers).forEach === 'function'

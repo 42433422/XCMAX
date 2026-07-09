@@ -26,6 +26,10 @@ describe('installFetchDbReadToken', () => {
       getActiveExtensionModHeaders: vi.fn().mockReturnValue({}),
       getClientModsUiOffHeader: vi.fn().mockReturnValue({}),
     }))
+    vi.doMock('@/utils/clientShell', () => ({
+      clientShellRequestHeaders: () => ({ 'X-XCMAX-Client-Shell': 'enterprise' }),
+      resolveClientShellId: () => 'enterprise',
+    }))
 
     const { installFetchDbReadToken } = await import('@/fhd/installFetchDbReadToken')
     window.fetch = originalFetch
@@ -46,6 +50,10 @@ describe('installFetchDbReadToken', () => {
       getActiveExtensionModHeaders: vi.fn().mockReturnValue({}),
       getClientModsUiOffHeader: vi.fn().mockReturnValue({}),
     }))
+    vi.doMock('@/utils/clientShell', () => ({
+      clientShellRequestHeaders: () => ({ 'X-XCMAX-Client-Shell': 'enterprise' }),
+      resolveClientShellId: () => 'enterprise',
+    }))
 
     const { installFetchDbReadToken } = await import('@/fhd/installFetchDbReadToken')
     window.fetch = originalFetch
@@ -56,7 +64,7 @@ describe('installFetchDbReadToken', () => {
     expect(window.fetch).toBe(firstPatched)
   })
 
-  it('calls native fetch for requests', async () => {
+  it('attaches X-XCMAX-Client-Shell on patched fetch', async () => {
     vi.doMock('@/components/fhd/dbTokenHeaders', () => ({
       dbReadHeaders: vi.fn().mockReturnValue({}),
       dbWriteHeaders: vi.fn().mockReturnValue({}),
@@ -68,6 +76,10 @@ describe('installFetchDbReadToken', () => {
       getActiveExtensionModHeaders: vi.fn().mockReturnValue({}),
       getClientModsUiOffHeader: vi.fn().mockReturnValue({}),
     }))
+    vi.doMock('@/utils/clientShell', () => ({
+      clientShellRequestHeaders: () => ({ 'X-XCMAX-Client-Shell': 'admin' }),
+      resolveClientShellId: () => 'admin',
+    }))
 
     const mockFetch = vi.fn().mockResolvedValue(new Response())
     window.fetch = mockFetch
@@ -78,5 +90,8 @@ describe('installFetchDbReadToken', () => {
 
     await window.fetch('/api/test')
     expect(mockFetch).toHaveBeenCalled()
+    const init = mockFetch.mock.calls[0][1] as RequestInit
+    const headers = new Headers(init.headers)
+    expect(headers.get('X-XCMAX-Client-Shell')).toBe('admin')
   })
 })

@@ -1,8 +1,10 @@
 /**
- * 为裸 fetch('/api/...') 合并「原版模式」头，使未走 api 封装的请求仍与业务显示策略一致。
+ * 为裸 fetch('/api/...') 合并「原版模式」头 + 客户端壳头，使未走 api 封装的请求
+ * 仍与业务显示策略 / 管理端·企业端 Cookie 分壳一致。
  * 数据库读写口令已下线，本补丁不再附带任何 DB token。
  */
 import { getActiveExtensionModHeaders, getApiBase, getClientModsUiOffHeader } from '@/utils/apiBase';
+import { clientShellRequestHeaders } from '@/utils/clientShell';
 
 declare global {
   interface Window {
@@ -66,7 +68,8 @@ export function installFetchDbReadToken(): void {
 
     const modsOff = getClientModsUiOffHeader();
     const activeMod = getActiveExtensionModHeaders(url);
-    const merged = { ...modsOff, ...activeMod };
+    const shell = clientShellRequestHeaders();
+    const merged = { ...modsOff, ...activeMod, ...shell };
     if (!Object.keys(merged).length) return native(input, init);
 
     if (typeof input === 'string' || input instanceof URL) {
