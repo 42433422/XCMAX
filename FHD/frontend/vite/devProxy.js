@@ -2,13 +2,19 @@
 
 /** 管理端 Vite (:5011) 代理时强制注入壳头，避免裸请求/旧缓存漏带导致 Cookie 串壳。 */
 export function injectClientShellOnProxyReq(proxyReq, req, shell) {
-  const existing = String(req.headers['x-xcmax-client-shell'] || '').trim()
-  if (!existing) {
-    proxyReq.setHeader('X-XCMAX-Client-Shell', shell)
-  }
-  const origHost = req.headers['host'] || ''
-  if (origHost) {
-    proxyReq.setHeader('X-Forwarded-Host', origHost)
+  try {
+    const headers = (req && req.headers) || {}
+    const existing = String(headers['x-xcmax-client-shell'] || '').trim()
+    if (!existing && proxyReq && typeof proxyReq.setHeader === 'function') {
+      proxyReq.setHeader('X-XCMAX-Client-Shell', shell)
+    }
+    const origHost = headers['host'] || ''
+    if (origHost && proxyReq && typeof proxyReq.setHeader === 'function') {
+      proxyReq.setHeader('X-Forwarded-Host', origHost)
+    }
+  } catch (err) {
+    // 代理注入失败不得拖垮登录；后端仍可凭 Referer/Origin 识别管理端壳
+    console.warn('[vite-proxy] injectClientShellOnProxyReq failed:', err && err.message ? err.message : err)
   }
 }
 
