@@ -361,6 +361,196 @@ class TestRecoverIfCorrupt:
             out = mig.recover_if_corrupt(tmp_path)
         assert out["action"] == "ok"
 
+    def test_disk_free_low_still_ok(self, tmp_path):
+        import sqlite3
+        from collections import namedtuple
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        db = dirs["data"] / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        Usage = namedtuple("Usage", "total used free")
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig.shutil, "disk_usage", return_value=Usage(1, 1, 100)),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "ok"
+
+    def test_rename_corrupt_oserror(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        bad = dirs["data"] / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig, "_quick_check_ok", return_value=False),
+            patch.object(Path, "rename", side_effect=OSError("busy")),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "corrupt_no_backup"
+        assert "rename failed" in out["detail"]
+
+    def test_restored_from_legacy_bak(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        bad = dirs["data"] / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        legacy = dirs["data"] / "database_backups"
+        legacy.mkdir()
+        good = legacy / "snap.bak"
+        conn = sqlite3.connect(str(good))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        with patch.object(mig, "ensure_desktop_dirs", return_value=dirs):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "restored"
+        assert out["detail"] == "snap.bak"
+
+    def test_restore_copy_oserror_then_next(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        dirs = self._dirs(tmp_path)
+        bad = dirs["data"] / "xcagi.db"
+        bad.write_bytes(b"not-a-db" * 50)
+        first = dirs["backups"] / "xcagi-a.db"
+        second = dirs["backups"] / "xcagi-b.db"
+        for p in (first, second):
+            conn = sqlite3.connect(str(p))
+            conn.execute("CREATE TABLE t (x INTEGER)")
+            conn.commit()
+            conn.close()
+        # Make first newer so it is tried first, then fail copy2 once.
+        first.touch()
+        calls = {"n": 0}
+        real_copy2 = shutil.copy2
+
+        def _copy2_real(src, dst):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise OSError("disk full")
+            return real_copy2(src, dst)
+
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig.shutil, "copy2", side_effect=_copy2_real),
+        ):
+            out = mig.recover_if_corrupt(tmp_path)
+        assert out["action"] == "restored"
+
+
+class TestBackupDatabaseErrors:
+    def test_sqlite_error_returns_none(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        db = data / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+
+        class _Conn:
+            def backup(self, *_a, **_k):
+                raise sqlite3.Error("boom")
+
+            def close(self):
+                return None
+
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig.sqlite3, "connect", side_effect=[_Conn(), _Conn()]),
+            patch.object(
+                mig,
+                "utc_now_naive",
+                return_value=MagicMock(strftime=MagicMock(return_value="20260101120000")),
+            ),
+        ):
+            assert mig.backup_database(tmp_path, version="1.0") is None
+
+    def test_integrity_fail_unlinks(self, tmp_path):
+        import sqlite3
+
+        from app.desktop_runtime import migrate as mig
+
+        data = tmp_path / "data"
+        backups = tmp_path / "backups"
+        data.mkdir()
+        backups.mkdir()
+        db = data / "xcagi.db"
+        conn = sqlite3.connect(str(db))
+        conn.execute("CREATE TABLE t (x INTEGER)")
+        conn.commit()
+        conn.close()
+        dirs = {
+            "root": tmp_path,
+            "data": data,
+            "backups": backups,
+            "mods": tmp_path / "mods",
+            "models": tmp_path / "models",
+            "logs": tmp_path / "logs",
+        }
+        with (
+            patch.object(mig, "ensure_desktop_dirs", return_value=dirs),
+            patch.object(mig, "_integrity_check_ok", return_value=False),
+            patch.object(
+                mig,
+                "utc_now_naive",
+                return_value=MagicMock(strftime=MagicMock(return_value="20260101120001")),
+            ),
+        ):
+            assert mig.backup_database(tmp_path, version="1.0") is None
+
+
+class TestRunAlembicUpgradeBootstrap:
+    def test_bootstrap_stamps_head(self, tmp_path):
+        from app.desktop_runtime import migrate as mig
+
+        with (
+            patch.object(mig, "configure_desktop_environment"),
+            patch.object(mig, "_should_bootstrap_sqlite", return_value=True),
+            patch.object(mig, "bootstrap_sqlite_schema") as boot,
+            patch.object(mig, "_run_alembic_cli") as cli,
+        ):
+            mig.run_alembic_upgrade(tmp_path)
+        boot.assert_called_once()
+        cli.assert_called_once_with("stamp", "head")
+
+    def test_main_upgrade_calls_run(self, tmp_path):
+        from app.desktop_runtime.migrate import main
+
+        with (
+            patch("app.desktop_runtime.migrate.configure_desktop_environment"),
+            patch("app.desktop_runtime.migrate.run_alembic_upgrade") as up,
+        ):
+            rc = main(["--upgrade", "head"])
+        assert rc == 0
+        up.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # support_bundle.py

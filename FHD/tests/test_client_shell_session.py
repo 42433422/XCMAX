@@ -157,3 +157,19 @@ def test_session_cookie_name_from_headers() -> None:
 
     assert session_cookie_name_from_headers({"X-XCMAX-Client-Shell": "admin"}) == "admin_session_id"
     assert session_cookie_name_from_headers({}) == "session_id"
+
+
+def test_header_get_mapping_without_get_returns_empty() -> None:
+    class NoGet:
+        pass
+
+    assert client_shell_from_headers(NoGet()) == ENTERPRISE_SHELL
+
+
+def test_resolve_session_id_bearer_disallowed(monkeypatch) -> None:
+    monkeypatch.delenv("FHD_ALLOW_BEARER_AS_SESSION_ID", raising=False)
+    req = _make_request(
+        shell="enterprise",
+        extra_headers=[(b"authorization", b"Bearer ignored-sid")],
+    )
+    assert resolve_session_id_from_request(req) == ""

@@ -181,3 +181,57 @@ class TestGuessLanAndRuntime:
 
     def test_requested_5000_yields_to_request_port(self):
         assert ph._pairing_issue_port(_mock_request("127.0.0.1:17500"), 5000) == 17500
+
+    def test_guess_lan_ipv4_loopback_fallback(self):
+        class _Sock:
+            def connect(self, *_a):
+                return None
+
+            def getsockname(self):
+                return ("127.0.0.1", 0)
+
+            def close(self):
+                return None
+
+        with patch.object(ph.socket, "socket", return_value=_Sock()):
+            assert ph._guess_lan_ipv4() == "127.0.0.1"
+
+    def test_read_runtime_api_port_missing_file(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ph, "_REPO_ROOT", tmp_path)
+        assert ph._read_runtime_api_port(default=42) == 42
+
+    def test_read_runtime_api_port_out_of_range(self, tmp_path, monkeypatch):
+        runtime = tmp_path / ".runtime"
+        runtime.mkdir()
+        (runtime / "api.port").write_text("70000\n", encoding="utf-8")
+        monkeypatch.setattr(ph, "_REPO_ROOT", tmp_path)
+        assert ph._read_runtime_api_port(default=7) == 7
+
+    def test_backend_listen_host_falls_back_to_fastapi(self, monkeypatch):
+        monkeypatch.delenv("XCAGI_API_HOST", raising=False)
+        monkeypatch.setenv("FASTAPI_HOST", "0.0.0.0")
+        assert ph._backend_listen_host() == "0.0.0.0"
+
+    def test_backend_listen_host_default(self, monkeypatch):
+        monkeypatch.delenv("XCAGI_API_HOST", raising=False)
+        monkeypatch.delenv("FASTAPI_HOST", raising=False)
+        assert ph._backend_listen_host() == "0.0.0.0"
+
+    def test_request_host_port_non_digit(self):
+        assert ph._request_host_port(_mock_request("host:abc")) == 0
+
+    def test_tcp_port_is_listening_invalid_and_oserror(self):
+        assert ph._tcp_port_is_listening(0) is False
+        with patch.object(ph.socket, "create_connection", side_effect=OSError("refused")):
+            assert ph._tcp_port_is_listening(5011) is False
+
+    def test_reachable_port_falls_back_to_5001(self):
+        with (
+            patch.object(ph, "_backend_listens_loopback_only", return_value=True),
+            patch.object(
+                ph,
+                "_tcp_port_is_listening",
+                side_effect=lambda p, h="127.0.0.1": p == 5001,
+            ),
+        ):
+            assert ph._pairing_reachable_port(None, 17500) == 5001
