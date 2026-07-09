@@ -1399,8 +1399,11 @@ class MobileRepository {
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
     }
-    // 派工前刷新云端桌面上报的 local_base_url（桌面 IP/端口会变；旧值直连必失败）。
-    await _refreshLanBindingFromRelayDesktops();
+    // 有缓存绑定就先用；仅缺地址时才向云端拉一次桌面 local_base_url（失效才刷新）。
+    if (!session.hasLanBinding ||
+        (session.localBaseUrl.trim().isEmpty && session.fhdHost.trim().isEmpty)) {
+      await _refreshLanBindingFromRelayDesktops();
+    }
     final refreshed = await _client.loadSession();
     final localBase = refreshed.localBaseUrl.trim();
     if (localBase.isNotEmpty) {

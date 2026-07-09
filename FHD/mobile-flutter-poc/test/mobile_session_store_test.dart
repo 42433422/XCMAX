@@ -354,6 +354,8 @@ void main() {
         relayDesktopId: 'relay-1',
         relayBaseUrl: 'https://xiu-ci.com/fhd-api',
         localBaseUrl: 'http://192.168.31.8:5112/fhd-api',
+        lanAccessToken: 'lan-access',
+        lanRefreshToken: 'lan-refresh',
         relaySessionToken: 'relay-session',
         relayAccountId: 'account-1',
         relayTenantId: 'tenant-1',
@@ -391,15 +393,19 @@ void main() {
     expect(saved.userId, 0);
     expect(saved.marketAccessToken, '');
     expect(saved.marketRefreshToken, '');
+    // 登出保留局域网绑定缓存，下次开局域网模式无需重扫。
     expect(saved.fhdHost, '192.168.31.8:5112');
     expect(saved.serverMode, 'lan');
-    expect(saved.relayDesktopId, '');
-    expect(saved.relayBaseUrl, '');
-    expect(saved.localBaseUrl, '');
-    expect(saved.relaySessionToken, '');
-    expect(saved.relayAccountId, '');
-    expect(saved.relayTenantId, '');
-    expect(saved.relayPairedAt, '');
+    expect(saved.relayDesktopId, 'relay-1');
+    expect(saved.relayBaseUrl, 'https://xiu-ci.com/fhd-api');
+    expect(saved.localBaseUrl, 'http://192.168.31.8:5112/fhd-api');
+    expect(saved.lanAccessToken, 'lan-access');
+    expect(saved.lanRefreshToken, 'lan-refresh');
+    expect(saved.relaySessionToken, 'relay-session');
+    expect(saved.relayAccountId, 'account-1');
+    expect(saved.relayTenantId, 'tenant-1');
+    expect(saved.relayPairedAt, '2026-07-01T00:00:00Z');
+    expect(saved.hasLanBinding, isTrue);
     expect(saved.setupComplete, isFalse);
     expect(saved.savedUsername, 'remembered');
     expect(saved.savedPassword, 'secret');

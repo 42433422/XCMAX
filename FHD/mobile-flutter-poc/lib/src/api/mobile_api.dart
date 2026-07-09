@@ -555,13 +555,13 @@ class AndroidAuthHeaderPolicy {
       return market;
     }
     // 局域网私网地址优先用配对签发的本机 JWT（云端 JWT 本机验签必失败）。
-    if (lan.isNotEmpty && _isPrivateLanUrl(url)) {
+    if (lan.isNotEmpty && isPrivateLanUrl(url)) {
       return lan;
     }
     return fhd.isNotEmpty ? fhd : market;
   }
 
-  static bool _isPrivateLanUrl(String url) {
+  static bool isPrivateLanUrl(String url) {
     final uri = Uri.tryParse(url);
     if (uri == null || uri.host.isEmpty) return false;
     final host = uri.host.toLowerCase();
@@ -864,6 +864,7 @@ class MobileApiClient {
     final current = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
         );
+    // 登出只清云端账号态；局域网绑定缓存保留，下次开局域网模式可直接复用。
     await _saveSession(
       current.copyWith(
         accessToken: '',
@@ -874,13 +875,6 @@ class MobileApiClient {
         userId: 0,
         marketAccessToken: '',
         marketRefreshToken: '',
-        relayDesktopId: '',
-        relayBaseUrl: '',
-        localBaseUrl: '',
-        relaySessionToken: '',
-        relayAccountId: '',
-        relayTenantId: '',
-        relayPairedAt: '',
         inflightRelayTasks: const <String, String>{},
         walletBalanceJson: '',
         setupComplete: false,
@@ -2341,7 +2335,24 @@ class MobileApiClient {
     request.contentLength = bytes.length;
     request.add(bytes);
 
-    final response = await request.close().timeout(_config.timeout);
+    var response = await request.close().timeout(_config.timeout);
+    if (response.statusCode == 401 &&
+        effectiveBaseUrl != null &&
+        AndroidAuthHeaderPolicy.isPrivateLanUrl(effectiveBaseUrl)) {
+      final refreshed =
+          await _refreshLanAccessToken(lanBaseUrl: effectiveBaseUrl);
+      if (refreshed) {
+        final retry = await _open(
+          'POST',
+          path,
+          baseUrl: effectiveBaseUrl,
+        );
+        retry.headers.set(HttpHeaders.acceptHeader, 'text/event-stream');
+        retry.contentLength = bytes.length;
+        retry.add(bytes);
+        response = await retry.close().timeout(_config.timeout);
+      }
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await utf8.decodeStream(response).timeout(_config.timeout);
       final errBody = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
@@ -2457,6 +2468,73 @@ class MobileApiClient {
     }
   }
 
+  Future<bool>? _lanRefreshInFlight;
+
+  /// 局域网本机 JWT 过期时，用配对时缓存的 lanRefreshToken 静默续期（无需重扫）。
+  Future<bool> _refreshLanAccessToken({required String lanBaseUrl}) async {
+    if (_lanRefreshInFlight != null) {
+      return _lanRefreshInFlight!;
+    }
+    final future = _refreshLanAccessTokenImpl(lanBaseUrl: lanBaseUrl);
+    _lanRefreshInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_lanRefreshInFlight, future)) {
+        _lanRefreshInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _refreshLanAccessTokenImpl({required String lanBaseUrl}) async {
+    final session = await loadSession();
+    final refresh = session.lanRefreshToken.trim();
+    final base = lanBaseUrl.trim();
+    if (refresh.isEmpty || base.isEmpty) return false;
+    try {
+      final json = await _sendJsonRequest(
+        method: 'POST',
+        path: XcagiMobileEndpoints.authRefresh,
+        body: {'refresh_token': refresh},
+        baseUrl: base,
+        allowAuthRefresh: false,
+      );
+      final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+      if (!envelope.success) return false;
+      final data = envelope.data;
+      if (data == null || data.isEmpty) return false;
+      final access = _readString(data, const ['access_token']);
+      if (access.isEmpty) return false;
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      await _saveSession(
+        current.copyWith(
+          lanAccessToken: access,
+          lanRefreshToken: _firstNonBlank([
+            _readString(data, const ['refresh_token']),
+            current.lanRefreshToken,
+          ]),
+        ),
+      );
+      return true;
+    } on MobileApiException {
+      // 本机 refresh 失效才清 LAN token；保留 host/localBase 便于提示重扫。
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      await _saveSession(
+        current.copyWith(
+          lanAccessToken: '',
+          lanRefreshToken: '',
+        ),
+      );
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, Object?>> _sendJsonRequest({
     required String method,
     required String path,
@@ -2489,6 +2567,13 @@ class MobileApiClient {
           error.statusCode != 401 ||
           AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
         rethrow;
+      }
+      final effectiveBase = (baseUrl ?? '').trim();
+      if (effectiveBase.isNotEmpty &&
+          AndroidAuthHeaderPolicy.isPrivateLanUrl(effectiveBase)) {
+        final refreshed = await _refreshLanAccessToken(lanBaseUrl: effectiveBase);
+        if (!refreshed) rethrow;
+        return perform();
       }
       final refreshed = await _refreshFhdAccessToken();
       if (!refreshed) rethrow;

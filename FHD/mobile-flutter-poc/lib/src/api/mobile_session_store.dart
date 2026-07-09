@@ -99,6 +99,12 @@ class MobileSessionData {
   bool get canAutoLoginForAndroid =>
       autoLogin && savedUsername.trim().isNotEmpty && savedPassword.isNotEmpty;
 
+  /// 已缓存的局域网绑定（地址或本机 JWT），开局域网模式时可直接复用，无需重扫。
+  bool get hasLanBinding =>
+      fhdHost.trim().isNotEmpty ||
+      localBaseUrl.trim().isNotEmpty ||
+      lanAccessToken.trim().isNotEmpty;
+
   String get androidServerModeLabel {
     if (relayDesktopId.trim().isNotEmpty) return '云端中继 · 电脑工具';
     final host = fhdHost.trim();

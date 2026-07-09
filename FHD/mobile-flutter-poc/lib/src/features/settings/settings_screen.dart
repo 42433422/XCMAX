@@ -434,6 +434,9 @@ bool _isLanModeEnabled(MobileSessionData session) {
 
 String _lanModeDescription(MobileSessionData session) {
   if (!_isLanModeEnabled(session)) {
+    if (session.hasLanBinding) {
+      return '关闭时走云中继；已缓存电脑绑定，重新开启即可直连';
+    }
     return '关闭时超级员工经云中继执行';
   }
   final host = session.fhdHost.trim();
@@ -441,8 +444,8 @@ String _lanModeDescription(MobileSessionData session) {
   if (host.isNotEmpty) {
     return '优先直连 $host（失败时自动回云中继）';
   }
-  if (localBase.isNotEmpty) {
+  if (localBase.isNotEmpty || session.lanAccessToken.trim().isNotEmpty) {
     return '优先直连已绑定电脑（失败时自动回云中继）';
   }
-  return '已开启；请先绑定电脑或填写局域网地址';
+  return '已开启；请先扫码绑定电脑（绑定后会缓存，无需每次重扫）';
 }
