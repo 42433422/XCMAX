@@ -107,6 +107,8 @@ def test_desktop_electron_and_ci_node_toolchain_are_supported() -> None:
     assert package["devDependencies"]["electron"] == "41.10.1"
     assert package["devDependencies"]["cross-env"].startswith("^10.")
     assert package["engines"]["node"] == ">=22.12.0"
+    assert "copyFileSync" in package["scripts"]["build"]
+    assert "&& cp " not in package["scripts"]["build"]
     assert package["scripts"]["test"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
     assert package["scripts"]["test:watch"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
     assert package["scripts"]["test:coverage"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
