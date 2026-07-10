@@ -102,6 +102,20 @@ describe('updater — parseYamlField', () => {
   })
 })
 
+describe('updater — parseBuildIdentityJson', () => {
+  it('accepts Windows PowerShell UTF-8 BOM build metadata', async () => {
+    const { parseBuildIdentityJson } = await import('./updater.js')
+    expect(parseBuildIdentityJson(
+      '\uFEFF{"version":"10.0.0","gitSha":"abc123","builtAt":"2026-07-10T22:00:00Z"}',
+      '0.0.0'
+    )).toEqual({
+      version: '10.0.0',
+      buildSha: 'abc123',
+      builtAt: '2026-07-10T22:00:00Z',
+    })
+  })
+})
+
 describe('updater — same-version rebuild ordering', () => {
   it('accepts a newer same-version rebuild with a different build SHA', async () => {
     const { isNewerSameVersionRebuild } = await import('./updater.js')

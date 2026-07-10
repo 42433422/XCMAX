@@ -57,6 +57,8 @@ def test_windows_build_identity_records_an_orderable_timestamp() -> None:
 
     assert "schema_version = 2" in script
     assert "builtAt = (Get-Date).ToUniversalTime().ToString('o')" in script
+    assert "[System.IO.File]::WriteAllText($buildInfoPath" in script
+    assert "Set-Content -Path $buildInfoPath -Encoding UTF8" not in script
 
 
 def test_windows_build_verifies_the_packaged_runtime_dependency_graph() -> None:

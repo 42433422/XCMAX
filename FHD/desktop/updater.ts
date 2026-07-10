@@ -82,6 +82,20 @@ export type BuildIdentity = {
   builtAt: string
 }
 
+export function parseBuildIdentityJson(content: string, fallbackVersion: string): BuildIdentity {
+  const raw = JSON.parse(content.replace(/^\uFEFF/, '')) as {
+    version?: string
+    gitSha?: string
+    buildSha?: string
+    builtAt?: string
+  }
+  return {
+    version: String(raw.version || fallbackVersion).trim(),
+    buildSha: String(raw.gitSha || raw.buildSha || '').trim(),
+    builtAt: String(raw.builtAt || '').trim(),
+  }
+}
+
 export function readLocalBuildIdentity(): BuildIdentity {
   if (!app.isPackaged) {
     return {
@@ -97,17 +111,10 @@ export function readLocalBuildIdentity(): BuildIdentity {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
-        version?: string
-        gitSha?: string
-        buildSha?: string
-        builtAt?: string
-      }
-      const identity = {
-        version: String(raw.version || app.getVersion()).trim(),
-        buildSha: String(raw.gitSha || raw.buildSha || '').trim(),
-        builtAt: String(raw.builtAt || '').trim(),
-      }
+      const identity = parseBuildIdentityJson(
+        fs.readFileSync(filePath, 'utf8'),
+        app.getVersion()
+      )
       if (identity.buildSha || identity.builtAt) return identity
     } catch {
       /* try next */
