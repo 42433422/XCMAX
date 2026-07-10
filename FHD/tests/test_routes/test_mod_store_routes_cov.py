@@ -224,6 +224,7 @@ def _restore_real_entitlement_functions():
     for name, value in _REAL_ENTITLEMENT_ATTRS.items():
         setattr(_entitlements_mod, name, value)
 
+
 # --- infrastructure mods stubs ---
 _mm_mock = MagicMock(
     install_mod_package=MagicMock(return_value=(True, "installed", None)),
