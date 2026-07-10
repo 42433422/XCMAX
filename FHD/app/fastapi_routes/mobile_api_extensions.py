@@ -8,12 +8,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
 import re
 import subprocess
-import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +27,12 @@ from app.application.codex_super_employee_service import CodexSuperEmployeeServi
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
+from app.application.mobile_super_employee_cancellation import (
+    MobileSuperEmployeeTaskConflict,
+    MobileSuperEmployeeTaskIdError,
+    mobile_super_employee_cancellations,
+)
+from app.application.super_employee_service import SuperEmployeeExecutionCancelled
 from app.application.trae_super_employee_service import TraeSuperEmployeeService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
@@ -79,6 +85,7 @@ from app.fastapi_routes.mobile_extensions.models import (
     RelayDesktopRegisterBody,
     RelayMobileBindAccountBody,
     RelayTaskCreateBody,
+    RelayThreadCreateBody,
     SyncAckBody,
     SyncPullBody,
     SyncPushBody,
@@ -97,15 +104,18 @@ from app.fastapi_routes.mobile_extensions.pairing_helpers import (
 from app.fastapi_routes.mobile_extensions.relay_helpers import (
     _mobile_user_identity,
     _mobile_user_public_dict,
-    _relay_admin_fallback_user,
     _relay_mobile_auth_payload,
 )
 from app.mod_sdk.assistant_ssot import dedicated_cs_label
 from app.security.mobile_pairing import (
+    clear_pairing_failures,
     consume_by_shortcode,
     consume_pairing_nonce,
     issue_pairing_nonce,
     lookup_by_shortcode,
+    lookup_pairing_nonce,
+    pairing_failure_retry_after,
+    record_pairing_failure,
 )
 from app.utils.mobile_api import format_mobile_response, paginate_list
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -218,71 +228,17 @@ def _ensure_outbox_table() -> None:
         logger.warning("mobile_notification_outbox ensure: %s", exc)
 
 
-# ── 中继用户解析（使用 RECOVERABLE_ERRORS，需留在主模块以支持测试 patch） ──
-
-
-def _resolve_mobile_relay_user(user: Any, *, prefer_admin: bool = False) -> dict[str, Any]:
-    """Resolve the mobile user for physical QR/device-code relay binding.
-
-    A relay pairing code already proves physical access to the desktop settings
-    screen, so first-time mobile binding must not require a pre-existing mobile
-    JWT. Prefer an existing admin account; create a local relay admin only when
-    the database has no active users yet.
-    """
-    uid, _ = _mobile_user_identity(user)
-    role = str(getattr(user, "role", "") or "").strip()
-    if uid > 0 and (not prefer_admin or role in {"admin", "super_admin", "owner"}):
-        return _mobile_user_public_dict(user)
-
-    from app.db.models import User
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            row = None
-            if prefer_admin or uid <= 0:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .filter(User.role.in_(["admin", "super_admin", "owner"]))
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                row = (
-                    db.query(User)
-                    .filter(User.is_active == True)  # noqa: E712
-                    .order_by(User.id.asc())
-                    .first()
-                )
-            if row is None:
-                now = datetime.utcnow()
-                row = User(
-                    username=f"mobile_relay_{uuid.uuid4().hex[:8]}",
-                    password=uuid.uuid4().hex,
-                    display_name="移动端设备绑定",
-                    email="",
-                    role="admin",
-                    is_active=True,
-                    created_at=now,
-                    last_login=now,
-                )
-                db.add(row)
-                db.flush()
-            public = _mobile_user_public_dict(row)
-            if hasattr(db, "expunge"):
-                db.expunge(row)
-            return public
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mobile relay admin fallback: %s", exc)
-        if prefer_admin:
-            return _relay_admin_fallback_user()
-        raise
-
-
 def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] | None:
-    enabled = (os.environ.get("XCAGI_RELAY_PAIRING_ENABLED") or "1").strip().lower()
-    if enabled in {"0", "false", "off", "no"}:
+    configured = os.environ.get("XCAGI_RELAY_PAIRING_ENABLED")
+    if configured is None:
+        # Only a real desktop runtime can execute a phone's relay work.  A
+        # cloud API registering itself calls back into the same single worker,
+        # stalls pairing until timeout, and advertises an unusable 127/private
+        # address.  Explicit configuration may still override this default.
+        enabled = (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower()
+    else:
+        enabled = configured.strip().lower()
+    if enabled not in {"1", "true", "on", "yes"}:
         return None
     if not _host_is_private_or_loopback(host):
         return None
@@ -336,6 +292,195 @@ def _pairing_issue_host(requested: str) -> str:
     if host in ("127.0.0.1", "localhost", "0.0.0.0"):
         return _guess_lan_ipv4()
     return host
+
+
+def _pairing_issuer_binding(
+    request: Request,
+    user: Any,
+) -> tuple[dict[str, Any], JSONResponse | None]:
+    """Authorize a management-session issuer and freeze its pairing identity."""
+    if user is None or int(getattr(user, "id", 0) or 0) <= 0:
+        return {}, _mobile_unauthorized_response()
+    authorization = str(request.headers.get("Authorization") or "").strip()
+    if authorization.startswith("Bearer "):
+        return {}, JSONResponse(
+            format_mobile_response(
+                None,
+                "配对码只能由已登录的管理端页面签发",
+                success=False,
+                code=403,
+            ),
+            status_code=403,
+        )
+    meta = _mobile_session_meta(request) or {}
+    role = str(getattr(user, "role", "") or "").strip().lower()
+    tier = str(getattr(user, "tier", "") or "").strip().lower()
+    account_kind = str(meta.get("account_kind") or "").strip().lower()
+    is_admin = (
+        role in {"admin", "super_admin", "owner"}
+        or tier == "admin"
+        or (account_kind == "admin" and bool(meta.get("market_is_admin")))
+    )
+    if not is_admin or not bool(getattr(user, "is_active", True)):
+        return {}, JSONResponse(
+            format_mobile_response(
+                None,
+                "需要已认证的管理端管理员账号",
+                success=False,
+                code=403,
+            ),
+            status_code=403,
+        )
+    raw_tenant = meta.get("tenant_id")
+    if raw_tenant is None:
+        raw_tenant = getattr(user, "tenant_id", None)
+    try:
+        tenant_id = int(raw_tenant) if raw_tenant is not None else 0
+    except (TypeError, ValueError):
+        tenant_id = 0
+    username = str(
+        getattr(user, "username", "") or getattr(user, "display_name", "") or "management"
+    ).strip()
+    company_brand = str(
+        meta.get("company_brand")
+        or meta.get("tenant_name")
+        or getattr(user, "company_brand", "")
+        or username
+    ).strip()[:256]
+    uid = int(user.id)
+    return {
+        "issuer_user_id": uid,
+        "subject_user_id": uid,
+        "subject_username": username,
+        "tenant_id": tenant_id,
+        "company_brand": company_brand,
+    }, None
+
+
+def _pairing_record_is_bound(record: dict[str, Any]) -> bool:
+    try:
+        issuer_uid = int(record.get("issuer_user_id") or 0)
+        subject_uid = int(record.get("subject_user_id") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (
+        issuer_uid > 0
+        and subject_uid > 0
+        and str(record.get("account_kind") or "").strip() == "enterprise"
+        and str(record.get("token_scope") or "").strip() == "enterprise_pairing"
+    )
+
+
+def _pairing_caller_error(
+    request: Request,
+    user: Any,
+    record: dict[str, Any],
+) -> JSONResponse | None:
+    """Reject authenticated callers that do not match the code's user/tenant."""
+    if user is None:
+        return None
+    try:
+        caller_uid = int(getattr(user, "id", 0) or 0)
+        subject_uid = int(record.get("subject_user_id") or 0)
+    except (TypeError, ValueError):
+        caller_uid = 0
+        subject_uid = 0
+    meta = _mobile_session_meta(request) or {}
+    raw_caller_tenant = meta.get("tenant_id")
+    if raw_caller_tenant is None:
+        raw_caller_tenant = getattr(user, "tenant_id", None)
+    raw_record_tenant = record.get("tenant_id")
+    try:
+        caller_tenant = int(raw_caller_tenant) if raw_caller_tenant is not None else None
+        record_tenant = int(raw_record_tenant) if raw_record_tenant is not None else None
+    except (TypeError, ValueError):
+        return JSONResponse(
+            format_mobile_response(None, "配对租户无效", success=False, code=403),
+            status_code=403,
+        )
+    if caller_uid != subject_uid or (caller_tenant is not None and caller_tenant != record_tenant):
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                "配对码不属于当前用户或租户",
+                success=False,
+                code=403,
+            ),
+            status_code=403,
+        )
+    return None
+
+
+def _pairing_subject_user(record: dict[str, Any]) -> dict[str, Any] | None:
+    """Resolve only the exact active user bound at issue time; never pick an admin."""
+    from app.db.models import User
+    from app.db.session import get_db
+
+    try:
+        subject_uid = int(record.get("subject_user_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if subject_uid <= 0:
+        return None
+    try:
+        with get_db() as db:
+            row = db.query(User).filter(User.id == subject_uid).first()
+            if row is None or not bool(getattr(row, "is_active", False)):
+                return None
+            record_tenant = record.get("tenant_id")
+            row_tenant = getattr(row, "tenant_id", None)
+            if row_tenant is not None and record_tenant is not None:
+                if int(row_tenant) != int(record_tenant):
+                    return None
+            public = _mobile_user_public_dict(row)
+    except RECOVERABLE_ERRORS:
+        logger.exception("pairing subject lookup failed")
+        return None
+    public.update(
+        {
+            "username": str(record.get("subject_username") or public.get("username") or "mobile"),
+            "display_name": str(
+                record.get("subject_username") or public.get("display_name") or "移动企业端"
+            ),
+            "role": "enterprise",
+            "tier": "enterprise",
+            "tenant_id": record.get("tenant_id"),
+        }
+    )
+    return public
+
+
+def _pairing_rate_limit_keys(request: Request) -> list[str]:
+    """Build non-spoofable IP plus optional device dimensions for pairing."""
+    client = getattr(request, "client", None)
+    client_host = str(getattr(client, "host", "") or "unknown").strip().lower()
+    keys = [f"pairing:ip:{client_host}"]
+    device_id = str(
+        request.headers.get("X-Device-ID") or request.headers.get("X-Client-Device-ID") or ""
+    ).strip()
+    if device_id:
+        digest = hashlib.sha256(device_id.encode("utf-8")).hexdigest()[:24]
+        keys.append(f"pairing:device:{digest}")
+    return keys
+
+
+def _pairing_rate_limited_response(retry_after: int) -> JSONResponse:
+    wait_seconds = max(1, int(retry_after or 1))
+    return JSONResponse(
+        format_mobile_response(
+            {"retry_after": wait_seconds, "requires_new_pairing": False},
+            "配对尝试过多，请稍后重试",
+            success=False,
+            code=429,
+        ),
+        status_code=429,
+        headers={"Retry-After": str(wait_seconds)},
+    )
+
+
+def _pairing_failure_response_or_none(keys: list[str]) -> JSONResponse | None:
+    retry_after = record_pairing_failure(keys)
+    return _pairing_rate_limited_response(retry_after) if retry_after > 0 else None
 
 
 # ── 服务桥接状态 ──
@@ -1020,12 +1165,19 @@ async def mobile_notifications_pending(
 
 
 @extension_router.post("/pairing/issue")
-async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
-    """桌面或运维签发配对 QR 载荷（开发/内网）。"""
+async def mobile_pairing_issue(
+    body: PairingIssueBody,
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    """由已认证管理端签发绑定用户与租户的配对 QR 载荷。"""
+    binding, auth_error = _pairing_issuer_binding(request, user)
+    if auth_error is not None:
+        return auth_error
     host = _pairing_issue_host(body.host or (request.url.hostname or ""))
     api_port = _pairing_issue_port(request, int(body.port))
     port = _pairing_reachable_port(request, api_port)
-    payload = issue_pairing_nonce(host, port)
+    payload = issue_pairing_nonce(host, port, **binding)
     data = _enrich_pairing_payload(payload, request)
     relay = _register_desktop_relay_for_pairing(host, port)
     if relay:
@@ -1037,10 +1189,17 @@ async def mobile_pairing_issue(body: PairingIssueBody, request: Request):
 
 
 @extension_router.post("/pairing/lookup")
-async def mobile_pairing_lookup(body: PairingLookupBody):
+async def mobile_pairing_lookup(body: PairingLookupBody, request: Request):
+    rate_keys = _pairing_rate_limit_keys(request)
+    retry_after = pairing_failure_retry_after(rate_keys)
+    if retry_after > 0:
+        return _pairing_rate_limited_response(retry_after)
     code = body.code.strip()
     rec = lookup_by_shortcode(code)
     if not rec:
+        limited = _pairing_failure_response_or_none(rate_keys)
+        if limited is not None:
+            return limited
         return JSONResponse(
             format_mobile_response(None, "配对码不存在或已过期", success=False, code=404),
             status_code=404,
@@ -1059,26 +1218,79 @@ async def mobile_pairing_lookup(body: PairingLookupBody):
 
 
 @extension_router.post("/pairing/exchange")
-async def mobile_pairing_exchange(body: PairingExchangeBody, user=Depends(get_mobile_user)):
+async def mobile_pairing_exchange(
+    body: PairingExchangeBody,
+    request: Request,
+    user=Depends(get_mobile_user),
+):
     nonce = body.nonce.strip()
     code = body.code.strip()
+    rate_keys = _pairing_rate_limit_keys(request) if code else []
+    retry_after = pairing_failure_retry_after(rate_keys) if rate_keys else 0
+    if retry_after > 0:
+        return _pairing_rate_limited_response(retry_after)
     if not nonce and not code:
         return JSONResponse(
             format_mobile_response(None, "缺少配对码", success=False, code=400),
             status_code=400,
         )
-    rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
-    if not rec:
+    preview = lookup_by_shortcode(code) if code else lookup_pairing_nonce(nonce)
+    if not preview:
+        limited = _pairing_failure_response_or_none(rate_keys) if rate_keys else None
+        if limited is not None:
+            return limited
         return JSONResponse(
             format_mobile_response(
                 None, "配对码无效或已过期，请刷新二维码", success=False, code=400
             ),
             status_code=400,
         )
-    user_public = _resolve_mobile_relay_user(user, prefer_admin=True)
+    caller_error = _pairing_caller_error(request, user, preview)
+    if caller_error is not None:
+        limited = _pairing_failure_response_or_none(rate_keys) if rate_keys else None
+        if limited is not None:
+            return limited
+        return caller_error
+    rec = consume_by_shortcode(code) if code else consume_pairing_nonce(nonce)
+    if not rec or not _pairing_record_is_bound(rec):
+        limited = _pairing_failure_response_or_none(rate_keys) if rate_keys else None
+        if limited is not None:
+            return limited
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                "配对码未绑定有效管理身份，请在管理端重新生成",
+                success=False,
+                code=400,
+            ),
+            status_code=400,
+        )
+    user_public = _pairing_subject_user(rec)
+    if not user_public:
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                "配对签发用户已失效或租户已变更",
+                success=False,
+                code=403,
+            ),
+            status_code=403,
+        )
+    if rate_keys:
+        clear_pairing_failures(rate_keys)
+    tenant_id = rec.get("tenant_id")
+    company_brand = str(rec.get("company_brand") or "").strip()
+    issuer_user_id = int(rec.get("issuer_user_id") or 0)
     data = {
         **_enrich_pairing_payload(rec),
-        **_relay_mobile_auth_payload(user_public),
+        **_relay_mobile_auth_payload(
+            user_public,
+            account_kind_override="enterprise",
+            token_scope="enterprise_pairing",
+            tenant_id=int(tenant_id) if tenant_id is not None else None,
+            company_brand=company_brand,
+            paired_by_user_id=issuer_user_id,
+        ),
         "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
     }
     relay = _cached_desktop_relay_for_account_binding()
@@ -1264,6 +1476,161 @@ async def mobile_relay_desktops(user=Depends(get_mobile_user)):
         )
 
 
+def _mobile_memory_service():
+    from app.services.user_memory_service import get_user_memory_service
+
+    return get_user_memory_service()
+
+
+@extension_router.get("/assistant/memory")
+async def mobile_assistant_memory_list(
+    status: str | None = Query(default=None),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    try:
+        service = _mobile_memory_service()
+        records = service.list_memories(str(uid), status=status)
+        return format_mobile_response(
+            data={
+                "user_id": str(uid),
+                "memories": records,
+                "summary": service.get_memory_v2_summary(str(uid)),
+            }
+        )
+    except (TypeError, ValueError) as exc:
+        return JSONResponse(
+            format_mobile_response(None, str(exc), success=False, code=400),
+            status_code=400,
+        )
+
+
+@extension_router.post("/assistant/memory/candidates")
+async def mobile_assistant_memory_create(
+    body: dict = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    service = _mobile_memory_service()
+    result = service.propose_memory_candidate(
+        str(uid),
+        memory_type=str(body.get("memory_type") or "preference"),
+        key=str(body.get("key") or ""),
+        value=body.get("value"),
+        source="memory_v2_api",
+        confidence=float(body.get("confidence") or 1.0),
+    )
+    status_code = 200 if result.get("success") else 400
+    return JSONResponse(
+        format_mobile_response(
+            data=result,
+            message=str(result.get("message") or ""),
+            success=bool(result.get("success")),
+            code=status_code,
+        ),
+        status_code=status_code,
+    )
+
+
+@extension_router.post("/assistant/memory/{memory_id}/confirm")
+async def mobile_assistant_memory_confirm(
+    memory_id: str,
+    body: dict = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    correction = {
+        key: body[key] for key in ("memory_type", "key", "value", "confidence") if key in body
+    }
+    result = _mobile_memory_service().confirm_memory_candidate(
+        str(uid), memory_id, correction=correction or None
+    )
+    status_code = 200 if result.get("success") else 404
+    return JSONResponse(
+        format_mobile_response(
+            data=result,
+            message=str(result.get("message") or ""),
+            success=bool(result.get("success")),
+            code=status_code,
+        ),
+        status_code=status_code,
+    )
+
+
+@extension_router.patch("/assistant/memory/{memory_id}")
+async def mobile_assistant_memory_correct(
+    memory_id: str,
+    body: dict = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    key = str(body["key"]) if "key" in body else None
+    value = body.get("value") if "value" in body else None
+    result = _mobile_memory_service().correct_memory(
+        str(uid),
+        memory_id,
+        key=key,
+        value=value,
+        reason=str(body.get("reason") or "mobile_user_correction"),
+    )
+    status_code = 200 if result.get("success") else 404
+    return JSONResponse(
+        format_mobile_response(
+            data=result,
+            message=str(result.get("message") or ""),
+            success=bool(result.get("success")),
+            code=status_code,
+        ),
+        status_code=status_code,
+    )
+
+
+@extension_router.delete("/assistant/memory/{memory_id}")
+async def mobile_assistant_memory_delete(
+    memory_id: str,
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401),
+            status_code=401,
+        )
+    result = _mobile_memory_service().delete_memory(
+        str(uid), memory_id, reason="mobile_user_delete"
+    )
+    status_code = 200 if result.get("success") else 404
+    return JSONResponse(
+        format_mobile_response(
+            data=result,
+            message=str(result.get("message") or ""),
+            success=bool(result.get("success")),
+            code=status_code,
+        ),
+        status_code=status_code,
+    )
+
+
 @extension_router.post("/relay/tasks")
 async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_mobile_user)):
     uid, _ = _mobile_user_identity(user)
@@ -1280,6 +1647,8 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
             relay_id=body.relay_id,
             kind=body.kind,
             payload=payload,
+            thread_id=str(getattr(body, "thread_id", "") or ""),
+            work_item_id=str(getattr(body, "work_item_id", "") or ""),
         )
         if not task:
             return JSONResponse(
@@ -1293,6 +1662,67 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
             format_mobile_response(None, str(exc), success=False, code=500),
             status_code=500,
         )
+
+
+@extension_router.get("/relay/tasks")
+async def mobile_relay_tasks(
+    thread_id: str = Query(default="", max_length=80),
+    active_only: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=300),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    items = MobileRelayService().list_tasks(
+        user_id=uid, thread_id=thread_id, active_only=active_only, limit=limit
+    )
+    return format_mobile_response(data={"items": items, "count": len(items)})
+
+
+@extension_router.post("/relay/threads")
+async def mobile_relay_thread_create(body: RelayThreadCreateBody, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    thread = MobileRelayService().create_thread(
+        user_id=uid,
+        relay_id=body.relay_id,
+        employee_id=body.employee_id,
+        title=body.title,
+        context=body.context,
+    )
+    if not thread:
+        return JSONResponse(
+            format_mobile_response(None, "超级员工或电脑执行端无效", success=False, code=404),
+            status_code=404,
+        )
+    return format_mobile_response(data={"thread": thread})
+
+
+@extension_router.get("/relay/threads")
+async def mobile_relay_threads(
+    employee_id: str = Query(default="", max_length=80),
+    include_archived: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=300),
+    user=Depends(get_mobile_user),
+):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    items = MobileRelayService().list_threads(
+        user_id=uid,
+        employee_id=employee_id,
+        include_archived=include_archived,
+        limit=limit,
+    )
+    return format_mobile_response(data={"items": items, "count": len(items)})
 
 
 @extension_router.get("/relay/tasks/{task_id}")
@@ -1329,6 +1759,46 @@ async def mobile_relay_task_cancel(task_id: str, user=Depends(get_mobile_user)):
     return format_mobile_response(data={"task": task})
 
 
+@extension_router.post("/relay/tasks/{task_id}/retry")
+async def mobile_relay_task_retry(task_id: str, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    if uid <= 0:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    task = MobileRelayService().retry_task(user_id=uid, task_id=task_id)
+    if not task:
+        return JSONResponse(
+            format_mobile_response(None, "任务正在运行或不存在", success=False, code=409),
+            status_code=409,
+        )
+    return format_mobile_response(data={"task": task})
+
+
+@extension_router.get("/relay/threads/{thread_id}")
+async def mobile_relay_thread_detail(thread_id: str, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    thread = MobileRelayService().get_thread(user_id=uid, thread_id=thread_id) if uid > 0 else None
+    if not thread:
+        return JSONResponse(
+            format_mobile_response(None, "对话不存在", success=False, code=404), status_code=404
+        )
+    return format_mobile_response(data={"thread": thread})
+
+
+@extension_router.post("/relay/threads/{thread_id}/archive")
+async def mobile_relay_thread_archive(thread_id: str, user=Depends(get_mobile_user)):
+    uid, _ = _mobile_user_identity(user)
+    thread = (
+        MobileRelayService().archive_thread(user_id=uid, thread_id=thread_id) if uid > 0 else None
+    )
+    if not thread:
+        return JSONResponse(
+            format_mobile_response(None, "对话不存在", success=False, code=404), status_code=404
+        )
+    return format_mobile_response(data={"thread": thread})
+
+
 @extension_router.post("/relay/desktop/poll")
 async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
     try:
@@ -1336,6 +1806,9 @@ async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
             relay_id=body.relay_id,
             desktop_token=body.desktop_token,
             max_tasks=body.max_tasks,
+            busy_tools=list(getattr(body, "busy_tools", []) or []),
+            inflight_task_ids=list(getattr(body, "inflight_task_ids", []) or []),
+            capabilities=dict(getattr(body, "capabilities", {}) or {}),
         )
         if not data:
             return JSONResponse(
@@ -1569,14 +2042,41 @@ async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
     )
 
 
+def _mobile_super_employee_result_response(
+    result: dict[str, Any] | None,
+) -> dict[str, Any] | JSONResponse:
+    payload = result if isinstance(result, dict) else {}
+    if payload.get("ok") is not False:
+        return format_mobile_response(data=payload)
+    error_code = str(payload.get("error_code") or "cli_failed").strip()
+    message = str(
+        payload.get("error_message") or payload.get("error") or "超级员工执行失败，请在电脑端重试"
+    ).strip()
+    status_code = {
+        "usage_limit": 429,
+        "authentication_failed": 503,
+        "provider_unavailable": 503,
+        "request_not_allowed": 403,
+    }.get(error_code, 502)
+    return JSONResponse(
+        format_mobile_response(
+            data=payload,
+            message=message,
+            success=False,
+            code=status_code,
+        ),
+        status_code=status_code,
+    )
+
+
 @extension_router.get("/admin/codex-super-employee/messages")
 async def mobile_admin_codex_super_employee_messages(
     request: Request,
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Codex 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端 Codex 超级员工对话记录（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1604,8 +2104,8 @@ async def mobile_admin_codex_super_employee_invoke(
     body: CodexSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Codex 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端软件内 Codex 调用入口（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1624,7 +2124,7 @@ async def mobile_admin_codex_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
-    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
+    # 仅真实管理端铸造工厂授权；已配对企业端始终保留产品域权限。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
@@ -1632,12 +2132,17 @@ async def mobile_admin_codex_super_employee_invoke(
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = factory_context(workspace_id=_wsid, base=context)
     try:
-        result = CodexSuperEmployeeService().invoke(
+        result, cancellation_error = await _invoke_mobile_super_employee_direct(
+            request=request,
+            user=user,
+            service=CodexSuperEmployeeService(),
             user_id=uid,
             message=text,
             context=context,
         )
-        return format_mobile_response(data=result)
+        if cancellation_error is not None:
+            return cancellation_error
+        return _mobile_super_employee_result_response(result)
     except ValueError:
         return JSONResponse(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
@@ -1657,8 +2162,8 @@ async def mobile_admin_claude_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Claude 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端 Claude 超级员工对话记录（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1686,8 +2191,8 @@ async def mobile_admin_claude_super_employee_invoke(
     body: ClaudeSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Claude 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端软件内 Claude 调用入口（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1706,7 +2211,7 @@ async def mobile_admin_claude_super_employee_invoke(
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
-    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
+    # 仅真实管理端铸造工厂授权；已配对企业端始终保留产品域权限。
     if (
         str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
         == "admin"
@@ -1714,12 +2219,17 @@ async def mobile_admin_claude_super_employee_invoke(
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = factory_context(workspace_id=_wsid, base=context)
     try:
-        result = ClaudeSuperEmployeeService().invoke(
+        result, cancellation_error = await _invoke_mobile_super_employee_direct(
+            request=request,
+            user=user,
+            service=ClaudeSuperEmployeeService(),
             user_id=uid,
             message=text,
             context=context,
         )
-        return format_mobile_response(data=result)
+        if cancellation_error is not None:
+            return cancellation_error
+        return _mobile_super_employee_result_response(result)
     except ValueError:
         return JSONResponse(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
@@ -1739,8 +2249,8 @@ async def mobile_admin_cursor_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Cursor 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端 Cursor 超级员工对话记录（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1768,8 +2278,8 @@ async def mobile_admin_cursor_super_employee_invoke(
     body: CursorSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Cursor 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端软件内 Cursor 调用入口（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1789,12 +2299,17 @@ async def mobile_admin_cursor_super_employee_invoke(
     context.setdefault("device_scope", "all_devices")
     context.setdefault("target_devices", ["all"])
     try:
-        result = CursorSuperEmployeeService().invoke(
+        result, cancellation_error = await _invoke_mobile_super_employee_direct(
+            request=request,
+            user=user,
+            service=CursorSuperEmployeeService(),
             user_id=uid,
             message=text,
             context=context,
         )
-        return format_mobile_response(data=result)
+        if cancellation_error is not None:
+            return cancellation_error
+        return _mobile_super_employee_result_response(result)
     except ValueError:
         return JSONResponse(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
@@ -1814,8 +2329,8 @@ async def mobile_admin_trae_super_employee_messages(
     limit: int = Query(default=80, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的 Trae 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端 Trae 超级员工对话记录（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1843,8 +2358,8 @@ async def mobile_admin_trae_super_employee_invoke(
     body: TraeSuperEmployeeMobileMessageBody,
     user=Depends(get_mobile_user),
 ):
-    """移动端管理员信息页的软件内 Trae 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
+    """移动端软件内 Trae 调用入口（管理端或已配对企业端）。"""
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1871,12 +2386,17 @@ async def mobile_admin_trae_super_employee_invoke(
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = factory_context(workspace_id=_wsid, base=context)
     try:
-        result = TraeSuperEmployeeService().invoke(
+        result, cancellation_error = await _invoke_mobile_super_employee_direct(
+            request=request,
+            user=user,
+            service=TraeSuperEmployeeService(),
             user_id=uid,
             message=text,
             context=context,
         )
-        return format_mobile_response(data=result)
+        if cancellation_error is not None:
+            return cancellation_error
+        return _mobile_super_employee_result_response(result)
     except ValueError:
         return JSONResponse(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
@@ -1891,6 +2411,98 @@ async def mobile_admin_trae_super_employee_invoke(
 
 
 # ── 超级员工 LAN SSE 流式直答 ──
+
+
+def _mobile_super_employee_tenant_id(request: Request, user: Any) -> int:
+    meta = _mobile_session_meta(request) or {}
+    candidates = (
+        meta.get("tenant_id"),
+        getattr(user, "tenant_id", None),
+        getattr(getattr(request, "state", None), "tenant_id", None),
+    )
+    tenant_ids: list[int] = []
+    for raw in candidates:
+        if raw is None:
+            continue
+        if isinstance(raw, bool):
+            raise MobileSuperEmployeeTaskIdError("tenant_id is invalid")
+        try:
+            tenant_id = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise MobileSuperEmployeeTaskIdError("tenant_id is invalid") from exc
+        if tenant_id < 0:
+            raise MobileSuperEmployeeTaskIdError("tenant_id is invalid")
+        tenant_ids.append(tenant_id)
+    if len(set(tenant_ids)) > 1:
+        raise MobileSuperEmployeeTaskIdError("tenant_id does not match authenticated user")
+    return tenant_ids[0] if tenant_ids else 0
+
+
+def _mobile_super_employee_client_task_id(
+    body: Any,
+    context: dict[str, Any],
+) -> str:
+    top_level = body.get("client_task_id") if isinstance(body, dict) else None
+    return str(top_level or context.get("client_task_id") or "").strip()
+
+
+def _mobile_super_employee_task_error(
+    message: str,
+    *,
+    status_code: int,
+) -> JSONResponse:
+    return JSONResponse(
+        format_mobile_response(None, message, success=False, code=status_code),
+        status_code=status_code,
+    )
+
+
+async def _invoke_mobile_super_employee_direct(
+    *,
+    request: Request,
+    user: Any,
+    service: Any,
+    user_id: int,
+    message: str,
+    context: dict[str, Any],
+) -> tuple[dict[str, Any] | None, JSONResponse | None]:
+    """Run direct fallback off-loop and optionally bind its authenticated cancel id."""
+
+    client_task_id = _mobile_super_employee_client_task_id({}, context)
+    lease = None
+    if client_task_id:
+        try:
+            lease = mobile_super_employee_cancellations.acquire(
+                tenant_id=_mobile_super_employee_tenant_id(request, user),
+                user_id=user_id,
+                client_task_id=client_task_id,
+            )
+        except MobileSuperEmployeeTaskConflict:
+            return None, _mobile_super_employee_task_error(
+                "client_task_id 正在执行或刚刚结束",
+                status_code=409,
+            )
+        except MobileSuperEmployeeTaskIdError:
+            return None, _mobile_super_employee_task_error(
+                "client_task_id 或调用主体无效",
+                status_code=400,
+            )
+        service.set_cancellation_event(lease.event)
+    try:
+        result = await asyncio.to_thread(
+            service.invoke,
+            user_id=user_id,
+            message=message,
+            context=context,
+        )
+        return result, None
+    except SuperEmployeeExecutionCancelled:
+        return None, _mobile_super_employee_task_error("任务已取消", status_code=409)
+    finally:
+        if lease is not None:
+            # Also stops a to_thread invocation if the HTTP consumer disconnects.
+            lease.event.set()
+            mobile_super_employee_cancellations.release(lease)
 
 
 def _super_employee_service_for_tool(tool: str):
@@ -1914,7 +2526,7 @@ async def _stream_super_employee_invoke(
     user,
 ):
     """超级员工 SSE 流式直答的共享实现。"""
-    _, err = _require_mobile_admin(request, user)
+    _, err = _require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     uid = _mobile_request_user_id(request, user)
@@ -1945,6 +2557,29 @@ async def _stream_super_employee_invoke(
     ):
         _wsid = str((body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax")
         context = factory_context(workspace_id=_wsid, base=context)
+    client_task_id = _mobile_super_employee_client_task_id(body, context)
+    if not client_task_id:
+        return _mobile_super_employee_task_error(
+            "client_task_id 必填",
+            status_code=400,
+        )
+    try:
+        lease = mobile_super_employee_cancellations.acquire(
+            tenant_id=_mobile_super_employee_tenant_id(request, user),
+            user_id=uid,
+            client_task_id=client_task_id,
+        )
+    except MobileSuperEmployeeTaskConflict:
+        return _mobile_super_employee_task_error(
+            "client_task_id 正在执行或刚刚结束",
+            status_code=409,
+        )
+    except MobileSuperEmployeeTaskIdError:
+        return _mobile_super_employee_task_error(
+            "client_task_id 或调用主体无效",
+            status_code=400,
+        )
+    service.set_cancellation_event(lease.event)
 
     async def sse_gen():
         try:
@@ -1957,6 +2592,10 @@ async def _stream_super_employee_invoke(
         except Exception:  # noqa: BLE001
             logger.exception("mobile_super_employee_stream failed")
             yield _sse_line({"type": "error", "message": "超级员工流式调用暂时不可用，请稍后重试"})
+        finally:
+            # Disconnecting the SSE must stop persistent/to_thread CLI paths too.
+            lease.event.set()
+            mobile_super_employee_cancellations.release(lease)
 
     return StreamingResponse(
         sse_gen(),
@@ -1965,7 +2604,48 @@ async def _stream_super_employee_invoke(
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
+            "X-XCAGI-Client-Task-ID": lease.client_task_id,
         },
+    )
+
+
+@extension_router.post("/admin/super-employee/tasks/{client_task_id}/cancel")
+async def mobile_admin_super_employee_cancel(
+    request: Request,
+    client_task_id: str,
+    user=Depends(get_mobile_user),
+):
+    """Cancel only the current tenant/user's active LAN super-employee task."""
+
+    _, err = _require_mobile_admin_or_enterprise(request, user)
+    if err is not None:
+        return err
+    uid = _mobile_request_user_id(request, user)
+    if uid <= 0:
+        return _mobile_unauthorized_response()
+    try:
+        acknowledged = mobile_super_employee_cancellations.cancel(
+            tenant_id=_mobile_super_employee_tenant_id(request, user),
+            user_id=uid,
+            client_task_id=client_task_id,
+        )
+    except MobileSuperEmployeeTaskIdError:
+        return _mobile_super_employee_task_error(
+            "client_task_id 或调用主体无效",
+            status_code=400,
+        )
+    if not acknowledged:
+        # Do not disclose whether the id belongs to a different user or tenant.
+        return _mobile_super_employee_task_error(
+            "任务不存在或已结束",
+            status_code=404,
+        )
+    return format_mobile_response(
+        data={
+            "ack": True,
+            "client_task_id": client_task_id,
+            "status": "cancelling",
+        }
     )
 
 

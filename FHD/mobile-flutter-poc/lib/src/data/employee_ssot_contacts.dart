@@ -67,12 +67,10 @@ List<EmployeeSsotContactRecord> employeeContactsFromSsotPayload(
 List<EmployeeSsotContactRecord> platformEmployeeContactsFromSsotPayload(
   Map<String, Object?>? payload,
 ) {
-  return employeeContactsFromSsotPayload(payload)
-      .where((row) {
-        final source = row.source.trim().toLowerCase();
-        return source != 'builtin' && source != 'codex';
-      })
-      .toList(growable: false);
+  return employeeContactsFromSsotPayload(payload).where((row) {
+    final source = row.source.trim().toLowerCase();
+    return source != 'builtin' && source != 'codex';
+  }).toList(growable: false);
 }
 
 WorkflowEmployeeInfo workflowEmployeeFromSsotContact(
@@ -114,9 +112,8 @@ WorkflowEmployeeInfo workflowEmployeeFromSsotContact(
 
 ModInfo adminDutyModFromSsotContacts(Map<String, Object?>? payload) {
   final contacts = platformEmployeeContactsFromSsotPayload(payload);
-  final employees = contacts
-      .map(workflowEmployeeFromSsotContact)
-      .toList(growable: false);
+  final employees =
+      contacts.map(workflowEmployeeFromSsotContact).toList(growable: false);
   if (employees.isEmpty) {
     return ModInfo(
       id: adminDutyModId,

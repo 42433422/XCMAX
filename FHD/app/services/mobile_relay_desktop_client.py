@@ -75,6 +75,8 @@ def _migrate_legacy_config_once() -> None:
 # 并发执行：poll 循环只负责"认领+派发"，每个任务在独立线程里跑，
 # 避免单个长任务(开发任务可跑数分钟)堵死整条队列、导致新消息卡住。
 _INFLIGHT: set[str] = set()
+_INFLIGHT_TOOLS: dict[str, str] = {}
+_CANCEL_EVENTS: dict[str, threading.Event] = {}
 _INFLIGHT_LOCK = threading.Lock()
 
 _BRANCH_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,179}")
@@ -111,6 +113,20 @@ _FAILURE_BODY_MARKERS = (
     "未修改文件",
     "无测试证据",
     "没有测试证据",
+    "Failed to authenticate",
+    "authentication_failed",
+    "Request not allowed",
+    "request timed out",
+    "Reconnecting...",
+    "CLI 调用失败",
+    "本次返回失败",
+    "CLI 暂时没有返回内容",
+    "判定卡住",
+    "用量已耗尽",
+    "尚未登录或登录已失效",
+    "服务连接超时",
+    "拒绝了本次请求",
+    "执行失败",
     "正在搜索",
     "正在实现",
     "正在处理",
@@ -234,9 +250,9 @@ def _ensure_super_employee_service_classes() -> None:
 
 def _max_concurrent() -> int:
     try:
-        return max(1, int(os.environ.get("XCAGI_RELAY_MAX_CONCURRENT") or "3"))
+        return max(1, int(os.environ.get("XCAGI_RELAY_MAX_CONCURRENT") or "4"))
     except (TypeError, ValueError):
-        return 3
+        return 4
 
 
 def _relay_base_url() -> str:
@@ -253,6 +269,41 @@ def _relay_base_url() -> str:
 def _api_url(path: str, base_url: str | None = None) -> str:
     base = (base_url or _relay_base_url()).rstrip("/") + "/"
     return f"{base}{path.lstrip('/')}"
+
+
+def _super_employee_capabilities(*, host: str = "", port: int = 0) -> dict[str, Any]:
+    """Report executable truth for mobile routing instead of hardcoded flags."""
+    from app.application.super_employee_service import (
+        CLAUDE_PROFILE,
+        CODEX_PROFILE,
+        CURSOR_PROFILE,
+        TRAE_PROFILE,
+    )
+
+    capabilities: dict[str, Any] = {
+        "desktop": True,
+        "platform": platform.platform(),
+        "checked_at": int(time.time()),
+    }
+    if host:
+        capabilities["host"] = host
+    if int(port) > 0:
+        capabilities["port"] = int(port)
+    for profile in (CODEX_PROFILE, CLAUDE_PROFILE, CURSOR_PROFILE, TRAE_PROFILE):
+        candidates = [
+            os.environ.get(f"{profile.env_tool_prefix}_CLI_PATH", ""),
+            *profile.cli_extra_candidates,
+            shutil.which(profile.cli_binary) or "",
+        ]
+        available = any(
+            Path(str(candidate or "").strip()).is_file()
+            for candidate in candidates
+            if str(candidate or "").strip()
+        )
+        key = profile.avatar_key or profile.display_tool.lower()
+        capabilities[key] = available
+        capabilities[profile.capability_key] = available
+    return capabilities
 
 
 def _read_config() -> dict[str, Any]:
@@ -354,20 +405,7 @@ def register_desktop_relay(
         "label": device_label,
         "device_id": get_stable_device_id(),
         "relay_base_url": base_url,
-        "capabilities": {
-            "codex": True,
-            "codex_cli": True,
-            "claude": True,
-            "claude_cli": True,
-            "cursor": True,
-            "cursor_cli": True,
-            "trae": True,
-            "trae_cli": True,
-            "desktop": True,
-            "host": host,
-            "port": int(port),
-            "platform": platform.platform(),
-        },
+        "capabilities": _super_employee_capabilities(host=host, port=port),
     }
     timeout = float(os.environ.get("XCAGI_RELAY_REGISTER_TIMEOUT_SEC") or "5")
     try:
@@ -485,9 +523,19 @@ def _complete_relay_task(
     """在独立线程里执行单个任务并回写结果；不阻塞 poll 循环。"""
     task_id = str(task.get("task_id") or "")
     started = time.monotonic()
+    cancel_event = threading.Event()
+    with _INFLIGHT_LOCK:
+        _CANCEL_EVENTS[task_id] = cancel_event
     try:
-        result = _execute_task(task)
+        result = _execute_task(task, cancel_event=cancel_event)
         relay_status = str(result.pop("_relay_status", "") or "").strip()
+        if cancel_event.is_set():
+            relay_status = "cancelled"
+            result = {
+                "ok": False,
+                "error": "任务已取消",
+                "error_code": "cancelled",
+            }
         if not relay_status:
             relay_status = "failed" if result.get("error") else "completed"
         # 结构化执行结果契约：体验层卡片/时长/精准报错的数据底座。
@@ -511,6 +559,8 @@ def _complete_relay_task(
     finally:
         with _INFLIGHT_LOCK:
             _INFLIGHT.discard(task_id)
+            _INFLIGHT_TOOLS.pop(task_id, None)
+            _CANCEL_EVENTS.pop(task_id, None)
 
 
 def _poll_once() -> None:
@@ -522,14 +572,25 @@ def _poll_once() -> None:
         return
     # 只认领空闲槽位数量的任务：claim 后必须有线程去跑，否则会把任务卡在 running。
     with _INFLIGHT_LOCK:
+        for stale_task_id in set(_INFLIGHT_TOOLS) - _INFLIGHT:
+            _INFLIGHT_TOOLS.pop(stale_task_id, None)
         free = _max_concurrent() - len(_INFLIGHT)
-    if free <= 0:
-        return
+        busy_tools = sorted(set(_INFLIGHT_TOOLS.values()))
+        inflight_task_ids = sorted(_INFLIGHT)
     timeout = float(os.environ.get("XCAGI_RELAY_POLL_TIMEOUT_SEC") or "30")
     with _relay_http_client(timeout) as client:
         resp = client.post(
             _api_url("/api/mobile/v1/relay/desktop/poll", base_url),
-            json={"relay_id": relay_id, "desktop_token": desktop_token, "max_tasks": free},
+            json={
+                "relay_id": relay_id,
+                "desktop_token": desktop_token,
+                # Even with no free execution slot we must poll with max_tasks=0
+                # so the server can deliver cancellation signals for running CLIs.
+                "max_tasks": max(0, free),
+                "busy_tools": busy_tools,
+                "inflight_task_ids": inflight_task_ids,
+                "capabilities": _super_employee_capabilities(),
+            },
         )
         if resp.status_code == 404:
             return
@@ -537,6 +598,13 @@ def _poll_once() -> None:
         body = resp.json()
         data = body.get("data") if isinstance(body, dict) else {}
         tasks = data.get("tasks") if isinstance(data, dict) else []
+        cancelled_task_ids = data.get("cancelled_task_ids") if isinstance(data, dict) else []
+    if isinstance(cancelled_task_ids, list):
+        with _INFLIGHT_LOCK:
+            for raw_task_id in cancelled_task_ids:
+                event = _CANCEL_EVENTS.get(str(raw_task_id or "").strip())
+                if event is not None:
+                    event.set()
     # poll 成功且服务端已把本 relay 配对到某手机账号时，持久化 paired 标志：register 据此复用本身份、
     # 绝不再换新 relay_id（即便配对码早已过期），根治「重启/出码即丢配对」。
     desktop = data.get("desktop") if isinstance(data, dict) else None
@@ -550,16 +618,20 @@ def _poll_once() -> None:
             _write_config(config)
     if not isinstance(tasks, list):
         return
+    if free <= 0:
+        return
     for task in tasks:
         if not isinstance(task, dict):
             continue
         task_id = str(task.get("task_id") or "")
         if not task_id:
             continue
+        tool = str(task.get("kind") or "").strip().split(".", 1)[0] or "unknown"
         with _INFLIGHT_LOCK:
-            if task_id in _INFLIGHT:
+            if task_id in _INFLIGHT or tool in _INFLIGHT_TOOLS.values():
                 continue
             _INFLIGHT.add(task_id)
+            _INFLIGHT_TOOLS[task_id] = tool
         threading.Thread(
             target=_complete_relay_task,
             args=(task, relay_id, desktop_token, base_url),
@@ -630,7 +702,11 @@ def _extract_tool_calls(assistant: dict[str, Any], tool_label: str) -> list[dict
     return calls
 
 
-def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
+def _execute_task(
+    task: dict[str, Any],
+    *,
+    cancel_event: threading.Event | None = None,
+) -> dict[str, Any]:
     kind = str(task.get("kind") or "codex.invoke").strip()
     payload = task.get("payload") if isinstance(task.get("payload"), dict) else {}
     # git 操作（合并/diff/丢弃）：手机底部功能键触发，不需要 message，只需 payload.branch。
@@ -645,6 +721,12 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
     ).strip()
     if not message:
         return {"error": "任务缺少 message"}
+    if cancel_event is not None and cancel_event.is_set():
+        return {
+            "ok": False,
+            "error": "任务已取消",
+            "_relay_status": "cancelled",
+        }
     parsed_git_op = _git_op_from_message(payload, message)
     if parsed_git_op is not None:
         git_kind, git_payload = parsed_git_op
@@ -665,6 +747,9 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         tool_label = "Codex"
     else:
         return {"error": f"暂不支持的任务类型：{kind}"}
+    set_cancellation_event = getattr(service, "set_cancellation_event", None)
+    if callable(set_cancellation_event):
+        set_cancellation_event(cancel_event)
     user_id = int(task.get("created_by_user_id") or payload.get("user_id") or 1)
     context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
     branch = str(payload.get("branch") or "").strip()
@@ -712,6 +797,12 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
             message=message,
             context=context,
         )
+        if cancel_event is not None and cancel_event.is_set():
+            return {
+                "ok": False,
+                "error": "任务已取消",
+                "_relay_status": "cancelled",
+            }
         dispatch = result.get("dispatch") if isinstance(result.get("dispatch"), dict) else {}
         dispatch_status = str(dispatch.get("status") or "").strip().lower()
         if dispatch_status == "completed":
@@ -746,6 +837,12 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
         interval = max(0.05, float(os.environ.get("XCAGI_RELAY_CODEX_WAIT_INTERVAL_SEC") or "2"))
         deadline = time.monotonic() + timeout
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                return {
+                    "ok": False,
+                    "error": "任务已取消",
+                    "_relay_status": "cancelled",
+                }
             terminal = _terminal_codex_message(
                 service.list_messages(user_id=user_id, limit=200),
                 request_id=request_id,
@@ -772,6 +869,12 @@ def _execute_task(task: dict[str, Any]) -> dict[str, Any]:
             "_relay_status": "blocked",
         }
     except Exception as exc:
+        if cancel_event is not None and cancel_event.is_set():
+            return {
+                "ok": False,
+                "error": "任务已取消",
+                "_relay_status": "cancelled",
+            }
         logger.exception("mobile relay Codex task failed")
         return {"error": str(exc)[:1000]}
 
@@ -933,6 +1036,10 @@ def _body_indicates_failed(body: str) -> bool:
             "❌",
             "error",
             "Error",
+            "authentication_failed",
+            "Failed to authenticate",
+            "Request not allowed",
+            "request timed out",
         )
     )
 

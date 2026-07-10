@@ -12,7 +12,7 @@ Future<void> runAndroidUpdateCheck(
       const MethodChannelAndroidPackageUpdateInstaller(),
 }) async {
   try {
-    final result = await api.checkForUpdate();
+    final result = await api.checkForUpdateForInstalledBuild();
     if (!context.mounted) return;
     if (!result.available) {
       _showSnack(context, '已是最新版本');

@@ -72,7 +72,6 @@ class AuthInterceptor @Inject constructor(
             path.endsWith("/" + ApiEndpoints.AUTH_REFRESH) ||
             path.endsWith("/" + ApiEndpoints.AUTH_OIDC_EXCHANGE) ||
             path.endsWith("/" + ApiEndpoints.AUTH_QR_CONFIRM) ||
-            path.endsWith("/" + ApiEndpoints.PAIRING_ISSUE) ||
             path.endsWith("/" + ApiEndpoints.PAIRING_EXCHANGE)
     }
 

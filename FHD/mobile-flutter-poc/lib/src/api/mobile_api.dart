@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:package_info_plus/package_info_plus.dart';
+
 import '../platform/credential_cipher.dart';
 import '../policy/android_runtime_policy.dart';
 import 'mobile_models.dart';
@@ -43,6 +45,7 @@ class XcagiMobileEndpoints {
   static const relayMobileBindAccount = '$base/relay/mobile/bind-account';
   static const relayMobileDesktops = '$base/relay/mobile/desktops';
   static const relayTasks = '$base/relay/tasks';
+  static const relayThreads = '$base/relay/threads';
   static const walletBalance = '$base/wallet/balance';
   static const onboardingIndustries = '$base/onboarding/industries';
   static const onboardingIndustryBaseline =
@@ -74,6 +77,10 @@ class XcagiMobileEndpoints {
   static const financeSummary = 'api/finance/summary';
   static const aiChat = 'api/ai/chat';
   static const aiChatStream = 'api/ai/chat/stream';
+  static const tts = 'api/tts';
+  static const memoryV2 = '$base/assistant/memory';
+  static const officeChatUpload = 'api/platform-shell/chat-office-file-upload';
+  static const ocrRecognize = 'api/ocr/recognize';
   static const approvalDetailTemplate = 'api/approval/requests/{id}';
   static const approvalApproveTemplate = 'api/approval/requests/{id}/approve';
   static const approvalRejectTemplate = 'api/approval/requests/{id}/reject';
@@ -103,6 +110,10 @@ class XcagiMobileEndpoints {
   static const circleLikeTemplate = '$base/circle/posts/{postId}/like';
   static const circleCommentsTemplate = '$base/circle/posts/{postId}/comments';
   static const relayTasksDetail = '$base/relay/tasks/{taskId}';
+  static const relayThreadsDetail = '$base/relay/threads/{threadId}';
+  static const relayTasksCancelTemplate = '$relayTasksDetail/cancel';
+  static const relayTasksRetryTemplate = '$relayTasksDetail/retry';
+  static const relayThreadsArchiveTemplate = '$relayThreadsDetail/archive';
   static const aiGroupMessagesTemplate = '$base/ai-groups/{groupId}/messages';
   static const aiGroupMembersTemplate = '$base/ai-groups/{groupId}/members';
   static const aiGroupMemberTemplate =
@@ -184,7 +195,31 @@ class XcagiMobileEndpoints {
   }
 
   static String relayTaskCancel(String taskId) {
-    return '${relayTasksDetail.replaceFirst('{taskId}', Uri.encodeComponent(taskId))}/cancel';
+    return relayTasksCancelTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String relayTaskRetry(String taskId) {
+    return relayTasksRetryTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String relayThreadDetail(String threadId) {
+    return relayThreadsDetail.replaceFirst(
+      '{threadId}',
+      Uri.encodeComponent(threadId),
+    );
+  }
+
+  static String relayThreadArchive(String threadId) {
+    return relayThreadsArchiveTemplate.replaceFirst(
+      '{threadId}',
+      Uri.encodeComponent(threadId),
+    );
   }
 
   static String approvalDetail(int id) {
@@ -500,6 +535,46 @@ class AndroidServerRouter {
   }
 }
 
+/// Android must permit cleartext at the manifest level for dynamic LAN IPs,
+/// so the application layer enforces the narrower production rule: cleartext
+/// is accepted only for loopback and RFC1918/link-local hosts.
+class AndroidTransportSecurityPolicy {
+  const AndroidTransportSecurityPolicy._();
+
+  static bool permits(Uri uri) {
+    final scheme = uri.scheme.toLowerCase();
+    if (scheme == 'https' || scheme == 'wss') return true;
+    if (scheme != 'http' && scheme != 'ws') return false;
+    return isPrivateLanHost(uri.host);
+  }
+
+  static bool isPrivateLanHost(String rawHost) {
+    final host = rawHost.trim().toLowerCase();
+    if (host == 'localhost' || host == '::1') return true;
+    if (host.startsWith('fc') ||
+        host.startsWith('fd') ||
+        host.startsWith('fe8') ||
+        host.startsWith('fe9') ||
+        host.startsWith('fea') ||
+        host.startsWith('feb')) {
+      return host.contains(':');
+    }
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    final octets = parts.map(int.tryParse).toList(growable: false);
+    if (octets.any((value) => value == null || value < 0 || value > 255)) {
+      return false;
+    }
+    final a = octets[0]!;
+    final b = octets[1]!;
+    return a == 10 ||
+        a == 127 ||
+        (a == 169 && b == 254) ||
+        (a == 172 && b >= 16 && b <= 31) ||
+        (a == 192 && b == 168);
+  }
+}
+
 class AndroidAuthHeaderPolicy {
   const AndroidAuthHeaderPolicy._();
 
@@ -579,7 +654,6 @@ class AndroidAuthHeaderPolicy {
       '/${XcagiMobileEndpoints.authRefresh}',
       '/${XcagiMobileEndpoints.authOidcExchange}',
       '/${XcagiMobileEndpoints.authQrConfirm}',
-      '/${XcagiMobileEndpoints.pairingIssue}',
       '/${XcagiMobileEndpoints.pairingExchange}',
     };
     return publicPaths.any(path.endsWith);
@@ -594,7 +668,32 @@ class MobileAndroidBuild {
   static const versionCode = 10;
   static const versionName = '10.0.0';
   static const displayVersion = 'v$versionName';
-  static const profileVersionText = '版本 10.0.0 (10)';
+  static const profileVersionText = '版本 10.0.0';
+
+  /// Reads the version embedded in the installed package. Release builds use
+  /// a monotonic build number, so OTA checks must not rely on the source
+  /// fallback when Android package metadata is available.
+  static Future<int> installedVersionCode() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      final parsed = int.tryParse(info.buildNumber.trim());
+      if (parsed != null && parsed > 0) return parsed;
+    } catch (_) {
+      // Tests and unsupported platforms may not register the package-info
+      // channel. Only those environments use the source fallback.
+    }
+    return versionCode;
+  }
+
+  static Future<String> installedVersionName() async {
+    try {
+      final value = (await PackageInfo.fromPlatform()).version.trim();
+      if (value.isNotEmpty) return value;
+    } catch (_) {
+      // Keep the source version as an offline/test fallback.
+    }
+    return versionName;
+  }
 }
 
 class MobileUpdateCheckResult {
@@ -611,6 +710,10 @@ class MobileUpdateCheckResult {
   final String versionName;
   final String downloadUrl;
   final Map<String, Object?> raw;
+
+  String get apkSha256 => _readString(raw, const ['apk_sha256']);
+
+  int get apkSize => _readInt(raw, const ['apk_size'], 0);
 
   String get title => force ? '需要更新' : '发现新版本';
 
@@ -642,6 +745,7 @@ class MobileApiClient {
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
   Future<bool>? _refreshInFlight;
+  Future<bool>? _localRefreshInFlight;
 
   String get configuredRelayId => _config.relayId.trim();
   String get localAvatarSource => _config.localAvatarSource.trim();
@@ -698,7 +802,10 @@ class MobileApiClient {
 
   Future<String> _encodeSavedCredential(String password) async {
     if (password.isEmpty) return '';
-    return _credentialCipher.encrypt(password).catchError((_) => password);
+    // Never persist the login password in plaintext if Android Keystore is
+    // unavailable. Auto-login can be disabled safely; leaking a credential
+    // cannot be undone.
+    return _credentialCipher.encrypt(password).catchError((_) => '');
   }
 
   void _rememberSession(MobileSessionData session) {
@@ -849,6 +956,9 @@ class MobileApiClient {
         accessToken: '',
         refreshToken: '',
         sessionId: '',
+        localAccessToken: '',
+        localRefreshToken: '',
+        localSessionId: '',
         username: '',
         accountKind: '',
         userId: 0,
@@ -862,6 +972,7 @@ class MobileApiClient {
         relayTenantId: '',
         relayPairedAt: '',
         inflightRelayTasks: const <String, String>{},
+        activeSuperEmployeeThreads: const <String, String>{},
         walletBalanceJson: '',
         setupComplete: false,
         autoLogin: false,
@@ -910,8 +1021,7 @@ class MobileApiClient {
     );
     await _saveSession(
       next.copyWith(
-        setupComplete:
-            fallbackAccountKind.trim().toLowerCase() == 'admin' ||
+        setupComplete: fallbackAccountKind.trim().toLowerCase() == 'admin' ||
             fallbackAccountKind.trim().toLowerCase() == 'admin_portal' ||
             next.setupComplete,
         serverMode: _preferredServerModeAfterLogin(next),
@@ -1002,16 +1112,31 @@ class MobileApiClient {
 
     var next = current;
     final access = _readString(payload, const ['access_token']);
+    final localRefresh = _readString(payload, const ['refresh_token']);
+    final localSession = _readString(
+      payload,
+      const ['session_id', 'session_token'],
+    );
     final user = _asObjectMap(payload['user']);
+    // A desktop pairing token is signed by the desktop backend and is not
+    // interchangeable with the cloud account JWT. Keep both credentials so
+    // toggling LAN mode never logs the user out of cloud mode (or vice versa).
+    if (access.isNotEmpty) {
+      next = next.copyWith(
+        localAccessToken: access,
+        localRefreshToken: localRefresh,
+        localSessionId: localSession,
+      );
+    }
     if (!preserveActiveAuth && access.isNotEmpty) {
       next = next.copyWith(
         accessToken: access,
         refreshToken: _firstNonBlank([
-          _readString(payload, const ['refresh_token']),
+          localRefresh,
           current.refreshToken,
         ]),
         sessionId: _firstNonBlank([
-          _readString(payload, const ['session_id', 'session_token']),
+          localSession,
           current.sessionId,
         ]),
         username: _firstNonBlank([
@@ -1062,12 +1187,14 @@ class MobileApiClient {
         fhdHost: resolvedHost,
         serverMode: 'lan',
         inflightRelayTasks: const <String, String>{},
+        activeSuperEmployeeThreads: const <String, String>{},
       );
     }
     if (clearRelayDesktop) {
       next = next.copyWith(
         relayDesktopId: '',
         inflightRelayTasks: const <String, String>{},
+        activeSuperEmployeeThreads: const <String, String>{},
       );
     }
     if (setupComplete) {
@@ -1536,6 +1663,15 @@ class MobileApiClient {
     return data;
   }
 
+  Future<MobileAppConfigData> appConfigForInstalledBuild({
+    String sku = MobileAndroidBuild.productSku,
+  }) async {
+    return appConfig(
+      currentVersionCode: await MobileAndroidBuild.installedVersionCode(),
+      sku: sku,
+    );
+  }
+
   Future<MobileUpdateCheckResult> checkForUpdate({
     int currentVersionCode = MobileAndroidBuild.versionCode,
     String sku = MobileAndroidBuild.productSku,
@@ -1570,6 +1706,15 @@ class MobileApiClient {
       versionName: latestVersionName,
       downloadUrl: _readString(json, const ['apk_download_url']),
       raw: json,
+    );
+  }
+
+  Future<MobileUpdateCheckResult> checkForUpdateForInstalledBuild({
+    String sku = MobileAndroidBuild.productSku,
+  }) async {
+    return checkForUpdate(
+      currentVersionCode: await MobileAndroidBuild.installedVersionCode(),
+      sku: sku,
     );
   }
 
@@ -1691,7 +1836,6 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
-
   Future<MobileEnvelope<Map<String, Object?>>> relayBindAccount(
     String relayId,
   ) async {
@@ -1714,10 +1858,14 @@ class MobileApiClient {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String threadId = '',
+    String workItemId = '',
   }) async {
     final json = await postJson(XcagiMobileEndpoints.relayTasks, {
       'relay_id': relayId.trim(),
       'kind': kind.trim(),
+      'thread_id': threadId.trim(),
+      'work_item_id': workItemId.trim(),
       'payload': payload,
     });
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -1735,6 +1883,73 @@ class MobileApiClient {
   ) async {
     final json = await postJson(
       XcagiMobileEndpoints.relayTaskCancel(taskId),
+      <String, Object?>{},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayRetryTask(
+    String taskId,
+  ) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.relayTaskRetry(taskId),
+      <String, Object?>{},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayTasks({
+    String threadId = '',
+    bool activeOnly = false,
+    int limit = 100,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.relayTasks,
+      query: {
+        if (threadId.trim().isNotEmpty) 'thread_id': threadId.trim(),
+        'active_only': activeOnly ? 'true' : 'false',
+        'limit': '${limit.clamp(1, 300)}',
+      },
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateThread({
+    required String relayId,
+    required String employeeId,
+    String title = '',
+    Map<String, Object?> context = const {},
+  }) async {
+    final json = await postJson(XcagiMobileEndpoints.relayThreads, {
+      'relay_id': relayId.trim(),
+      'employee_id': employeeId.trim(),
+      'title': title.trim(),
+      'context': context,
+    });
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayThreads({
+    String employeeId = '',
+    bool includeArchived = false,
+    int limit = 100,
+  }) async {
+    final json = await getJson(
+      XcagiMobileEndpoints.relayThreads,
+      query: {
+        if (employeeId.trim().isNotEmpty) 'employee_id': employeeId.trim(),
+        'include_archived': includeArchived ? 'true' : 'false',
+        'limit': '${limit.clamp(1, 300)}',
+      },
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> relayArchiveThread(
+    String threadId,
+  ) async {
+    final json = await postJson(
+      XcagiMobileEndpoints.relayThreadArchive(threadId),
       <String, Object?>{},
     );
     return MobileEnvelope.fromJson(json, _asObjectMap);
@@ -2078,18 +2293,19 @@ class MobileApiClient {
     String? sessionId,
     int userId = 0,
     List<Map<String, String>> recentMessages = const [],
+    Map<String, Object?> context = const {},
     void Function(String token)? onToken,
   }) async {
-    final context = <String, Object?>{};
+    final requestContext = Map<String, Object?>.of(context);
     if (recentMessages.isNotEmpty) {
-      context['recent_messages'] = recentMessages;
+      requestContext['recent_messages'] = recentMessages;
     }
     final body = <String, Object?>{
       'message': message,
       'source': 'pro',
       'mode': 'professional',
       if (userId > 0) 'user_id': '$userId',
-      if (context.isNotEmpty) 'context': context,
+      if (requestContext.isNotEmpty) 'context': requestContext,
     };
 
     final request = await _open('POST', XcagiMobileEndpoints.aiChatStream);
@@ -2165,6 +2381,183 @@ class MobileApiClient {
       }
     }
     return buffer.toString().ifEmpty('（无回复）');
+  }
+
+  Future<Map<String, Object?>> synthesizeSpeech(
+    String text, {
+    String voice = 'zh-CN-XiaoxiaoNeural',
+  }) {
+    return postJson(XcagiMobileEndpoints.tts, {
+      'text': text.trim(),
+      'lang': 'zh',
+      'voice': voice,
+    });
+  }
+
+  /// Keyless search fallback for mobile clients connected to an older server.
+  ///
+  /// New FHD servers perform the same Bing RSS search on the backend. Keeping
+  /// this small compatibility path here means the "联网" mode still returns
+  /// real source cards while a desktop/cloud node is waiting to be upgraded.
+  Future<List<Map<String, Object?>>> keylessWebSearch(
+    String query, {
+    int maxResults = 5,
+  }) async {
+    final text = query.trim();
+    if (text.isEmpty) return const [];
+    final uri = Uri.https('cn.bing.com', '/search', {
+      'format': 'rss',
+      'setlang': 'zh-Hans',
+      'cc': 'CN',
+      'q': text,
+    });
+    final request = await _httpClient.getUrl(uri).timeout(_config.timeout);
+    request.headers.set(
+      HttpHeaders.userAgentHeader,
+      'XCAGI/10 mobile-assistant',
+    );
+    final response = await request.close().timeout(_config.timeout);
+    final body = await utf8.decodeStream(response).timeout(_config.timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MobileApiException(
+        statusCode: response.statusCode,
+        message: '联网搜索暂不可用（HTTP ${response.statusCode}）',
+        body: const {},
+      );
+    }
+    final results = <Map<String, Object?>>[];
+    final seen = <String>{};
+    final itemPattern = RegExp(
+      r'<item\b[^>]*>([\s\S]*?)</item>',
+      caseSensitive: false,
+    );
+    for (final item in itemPattern.allMatches(body)) {
+      final xml = item.group(1) ?? '';
+      final url = _rssElement(xml, 'link');
+      if (url.isEmpty ||
+          !url.startsWith(RegExp(r'https?://', caseSensitive: false)) ||
+          !seen.add(url)) {
+        continue;
+      }
+      final title = _rssElement(xml, 'title');
+      final snippet = _rssElement(xml, 'description');
+      results.add({
+        'title': title.isEmpty ? url : title,
+        'url': url,
+        'snippet': snippet,
+      });
+      if (results.length >= maxResults.clamp(1, 10)) break;
+    }
+    return results;
+  }
+
+  Future<Map<String, Object?>> memoryV2List({
+    required String userId,
+    String status = '',
+  }) {
+    return getJson(
+      XcagiMobileEndpoints.memoryV2,
+      query: {
+        'user_id': userId.trim().isEmpty ? 'default' : userId.trim(),
+        if (status.trim().isNotEmpty) 'status': status.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> memoryV2Create({
+    required String userId,
+    required String key,
+    required String value,
+    String memoryType = 'preference',
+  }) {
+    return postJson('${XcagiMobileEndpoints.memoryV2}/candidates', {
+      'user_id': userId.trim().isEmpty ? 'default' : userId.trim(),
+      'memory_type': memoryType,
+      'key': key.trim(),
+      'value': value.trim(),
+      'source': 'memory_v2_api',
+      'confidence': 1.0,
+    });
+  }
+
+  Future<Map<String, Object?>> memoryV2Confirm({
+    required String userId,
+    required String memoryId,
+  }) {
+    return postJson(
+      '${XcagiMobileEndpoints.memoryV2}/${Uri.encodeComponent(memoryId)}/confirm',
+      {'user_id': userId.trim().isEmpty ? 'default' : userId.trim()},
+    );
+  }
+
+  Future<Map<String, Object?>> memoryV2Correct({
+    required String userId,
+    required String memoryId,
+    required String key,
+    required String value,
+  }) {
+    return patchJson(
+      '${XcagiMobileEndpoints.memoryV2}/${Uri.encodeComponent(memoryId)}',
+      {
+        'user_id': userId.trim().isEmpty ? 'default' : userId.trim(),
+        'key': key.trim(),
+        'value': value.trim(),
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> memoryV2Delete({
+    required String userId,
+    required String memoryId,
+  }) {
+    return deleteJson(
+      '${XcagiMobileEndpoints.memoryV2}/${Uri.encodeComponent(memoryId)}',
+      query: {
+        'user_id': userId.trim().isEmpty ? 'default' : userId.trim(),
+        'reason': 'mobile_user_delete',
+      },
+    );
+  }
+
+  Future<Map<String, Object?>> uploadOfficeFile({
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) {
+    return postMultipartBytes(
+      XcagiMobileEndpoints.officeChatUpload,
+      fieldName: 'file',
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
+
+  Future<Map<String, Object?>> recognizeImage({
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+  }) {
+    return postMultipartBytes(
+      XcagiMobileEndpoints.ocrRecognize,
+      fieldName: 'image',
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
+  }
+
+  Future<Map<String, Object?>> runOfficeEmployee({
+    required String employeeId,
+    required String filePath,
+    required String workspaceRoot,
+  }) {
+    final id = Uri.encodeComponent(employeeId.trim());
+    return postJson('api/mod/$id/employees/$id/run', {
+      'file_path': filePath.trim(),
+      'workspace_root': workspaceRoot.trim(),
+      'action': 'convert',
+    });
   }
 
   Future<String> streamEmployeeChat({
@@ -2272,13 +2665,18 @@ class MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
   }) async {
     final json = await postJson(
       XcagiMobileEndpoints.superEmployeeMessages(tool),
       {
         'body': body,
         'message': body,
-        'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+        'context': {
+          'source': 'mobile',
+          'client_surface': 'mobile',
+          ...context,
+        },
       },
       baseUrl: baseUrl.trim().isEmpty ? null : baseUrl.trim(),
     );
@@ -2294,6 +2692,7 @@ class MobileApiClient {
     void Function(String token)? onToken,
     void Function(String status)? onStatus,
     bool Function()? isCancelled,
+    Map<String, Object?> context = const {},
   }) async {
     final path = XcagiMobileEndpoints.superEmployeeStream(tool);
     final effectiveBaseUrl = baseUrl.trim().isEmpty ? null : baseUrl.trim();
@@ -2306,7 +2705,11 @@ class MobileApiClient {
     final bytes = utf8.encode(jsonEncode({
       'body': body,
       'message': body,
-      'context': const {'source': 'mobile', 'client_surface': 'mobile'},
+      'context': {
+        'source': 'mobile',
+        'client_surface': 'mobile',
+        ...context,
+      },
     }));
     request.contentLength = bytes.length;
     request.add(bytes);
@@ -2314,7 +2717,8 @@ class MobileApiClient {
     final response = await request.close().timeout(_config.timeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await utf8.decodeStream(response).timeout(_config.timeout);
-      final errBody = _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
+      final errBody =
+          _asObjectMap(text.trim().isEmpty ? null : jsonDecode(text));
       throw MobileApiException(
         statusCode: response.statusCode,
         message: errBody['message']?.toString() ??
@@ -2427,6 +2831,75 @@ class MobileApiClient {
     }
   }
 
+  Future<bool> _refreshLocalAccessToken({required String baseUrl}) async {
+    if (_localRefreshInFlight != null) {
+      return _localRefreshInFlight!;
+    }
+    final future = _refreshLocalAccessTokenImpl(baseUrl: baseUrl);
+    _localRefreshInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_localRefreshInFlight, future)) {
+        _localRefreshInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _refreshLocalAccessTokenImpl({required String baseUrl}) async {
+    final session = await loadSession();
+    final refresh = session.localRefreshToken.trim();
+    if (refresh.isEmpty) return false;
+    try {
+      final json = await _sendJsonRequest(
+        method: 'POST',
+        path: XcagiMobileEndpoints.authRefresh,
+        body: {'refresh_token': refresh},
+        baseUrl: baseUrl,
+        allowAuthRefresh: false,
+      );
+      final envelope = MobileEnvelope.fromJson(json, _asObjectMap);
+      if (!envelope.success) return false;
+      final data = envelope.data;
+      if (data == null || data.isEmpty) return false;
+      final access = _readString(data, const ['access_token']);
+      if (access.isEmpty) return false;
+      final current = await _sessionStore.load().catchError(
+            (_) => MobileSessionData.empty,
+          );
+      await _saveSession(
+        current.copyWith(
+          localAccessToken: access,
+          localRefreshToken: _firstNonBlank([
+            _readString(data, const ['refresh_token']),
+            current.localRefreshToken,
+          ]),
+          localSessionId: _firstNonBlank([
+            _readString(data, const ['session_id']),
+            current.localSessionId,
+          ]),
+        ),
+      );
+      return true;
+    } on MobileApiException catch (error) {
+      if (error.statusCode == 401) {
+        final current = await _sessionStore.load().catchError(
+              (_) => MobileSessionData.empty,
+            );
+        await _saveSession(
+          current.copyWith(
+            localAccessToken: '',
+            localRefreshToken: '',
+            localSessionId: '',
+          ),
+        );
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<Map<String, Object?>> _sendJsonRequest({
     required String method,
     required String path,
@@ -2460,7 +2933,14 @@ class MobileApiClient {
           AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(path)) {
         rethrow;
       }
-      final refreshed = await _refreshFhdAccessToken();
+      final session = await loadSession();
+      final requestUri = _buildUri(path, query, baseUrl: baseUrl);
+      final isLocal = _isLocalFhdRequest(session: session, url: requestUri);
+      final refreshed = isLocal
+          ? await _refreshLocalAccessToken(
+              baseUrl: baseUrl ?? requestUri.resolve('/').toString(),
+            )
+          : await _refreshFhdAccessToken();
       if (!refreshed) rethrow;
       return perform();
     }
@@ -2531,6 +3011,48 @@ class MobileApiClient {
     );
   }
 
+  Future<Map<String, Object?>> patchJson(
+    String path,
+    Map<String, Object?> body, {
+    Map<String, String> query = const {},
+  }) async {
+    return _sendJsonRequest(
+      method: 'PATCH',
+      path: path,
+      query: query,
+      body: body,
+    );
+  }
+
+  Future<Map<String, Object?>> postMultipartBytes(
+    String path, {
+    required String fieldName,
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) async {
+    final boundary =
+        '----xcagi-${DateTime.now().microsecondsSinceEpoch.toRadixString(16)}';
+    final safeName =
+        filename.replaceAll('"', '').replaceAll('\r', '').replaceAll('\n', '');
+    final safeField = fieldName.replaceAll('"', '');
+    final head = utf8.encode(
+      '--$boundary\r\n'
+      'Content-Disposition: form-data; name="$safeField"; filename="$safeName"\r\n'
+      'Content-Type: $contentType\r\n\r\n',
+    );
+    final tail = utf8.encode('\r\n--$boundary--\r\n');
+    final payload = <int>[...head, ...bytes, ...tail];
+    final request = await _open('POST', path);
+    request.headers.set(
+      HttpHeaders.contentTypeHeader,
+      'multipart/form-data; boundary=$boundary',
+    );
+    request.contentLength = payload.length;
+    request.add(payload);
+    return _readJsonResponse(request);
+  }
+
   Future<Map<String, Object?>> deleteJson(
     String path, {
     Map<String, String> query = const {},
@@ -2546,6 +3068,13 @@ class MobileApiClient {
     String? authToken,
   }) async {
     final uri = _buildUri(path, query, baseUrl: baseUrl);
+    if (!AndroidTransportSecurityPolicy.permits(uri)) {
+      throw MobileApiException(
+        statusCode: 0,
+        message: '已阻止不安全的非局域网明文连接',
+        body: {'host': uri.host, 'scheme': uri.scheme},
+      );
+    }
     final request =
         await _httpClient.openUrl(method, uri).timeout(_config.timeout);
     request.headers.set(HttpHeaders.acceptHeader, 'application/json');
@@ -2575,10 +3104,17 @@ class MobileApiClient {
         );
       }
     }
-    final sessionId = _firstNonBlank([
-      _config.sessionId,
-      session.sessionId,
-    ]);
+    final localRequest = _isLocalFhdRequest(session: session, url: uri);
+    final sessionId = localRequest
+        ? _firstNonBlank([
+            session.localSessionId,
+            _config.sessionId,
+            session.sessionId,
+          ])
+        : _firstNonBlank([
+            _config.sessionId,
+            session.sessionId,
+          ]);
     if (sessionId.isNotEmpty) {
       request.headers.set('X-Session-ID', sessionId);
       request.headers.set(HttpHeaders.cookieHeader, 'session_id=$sessionId');
@@ -2643,6 +3179,10 @@ class MobileApiClient {
     required MobileSessionData session,
     required Uri url,
   }) {
+    if (_isLocalFhdRequest(session: session, url: url) &&
+        session.localAccessToken.trim().isNotEmpty) {
+      return session.localAccessToken.trim();
+    }
     return AndroidAuthHeaderPolicy.selectBearer(
       url: url.toString(),
       fhdToken: _firstNonBlank([
@@ -2656,6 +3196,45 @@ class MobileApiClient {
       modstoreBaseUrl: _config.modstoreBaseUrl,
       enterpriseFhdBaseUrl: XcagiMobileTopology.fhdApiBaseUrl,
     );
+  }
+
+  bool _isLocalFhdRequest({
+    required MobileSessionData session,
+    required Uri url,
+  }) {
+    if (url.host.isEmpty || url.host == XcagiMobileTopology.productionHost) {
+      return false;
+    }
+
+    bool sameAuthority(String raw) {
+      final text = raw.trim();
+      if (text.isEmpty) return false;
+      final candidate = Uri.tryParse(
+        text.contains('://') ? text : 'http://$text',
+      );
+      if (candidate == null || candidate.host.isEmpty) return false;
+      return candidate.host == url.host && candidate.port == url.port;
+    }
+
+    final hasConfiguredLocalOrigin = session.localBaseUrl.trim().isNotEmpty ||
+        session.fhdHost.trim().isNotEmpty;
+    if (hasConfiguredLocalOrigin) {
+      return sameAuthority(session.localBaseUrl) ||
+          sameAuthority(session.fhdHost);
+    }
+    if (session.serverMode.trim().toLowerCase() != 'lan') return false;
+    final host = url.host.toLowerCase();
+    if (host == 'localhost' || host.endsWith('.local')) return true;
+    final parts = host.split('.');
+    if (parts.length != 4) return false;
+    final octets = parts.map(int.tryParse).toList(growable: false);
+    if (octets.any((value) => value == null)) return false;
+    final a = octets[0]!;
+    final b = octets[1]!;
+    return a == 10 ||
+        a == 127 ||
+        (a == 192 && b == 168) ||
+        (a == 172 && b >= 16 && b <= 31);
   }
 
   Future<Map<String, Object?>> _readJsonResponse(
@@ -2681,6 +3260,38 @@ class MobileApiClient {
     }
     return body;
   }
+}
+
+String _rssElement(String xml, String tag) {
+  final match = RegExp(
+    '<$tag\\b[^>]*>([\\s\\S]*?)</$tag>',
+    caseSensitive: false,
+  ).firstMatch(xml);
+  var value = (match?.group(1) ?? '').trim();
+  if (value.startsWith('<![CDATA[') && value.endsWith(']]>')) {
+    value = value.substring(9, value.length - 3);
+  }
+  value = value.replaceAll(RegExp(r'<[^>]+>'), ' ');
+  value = value
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&#39;', "'");
+  value = value.replaceAllMapped(
+    RegExp(r'&#(x[0-9a-fA-F]+|[0-9]+);'),
+    (match) {
+      final raw = match.group(1) ?? '';
+      final radix = raw.toLowerCase().startsWith('x') ? 16 : 10;
+      final digits = radix == 16 ? raw.substring(1) : raw;
+      final codePoint = int.tryParse(digits, radix: radix);
+      return codePoint == null
+          ? match.group(0)!
+          : String.fromCharCode(codePoint);
+    },
+  );
+  return value.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
 class MobileApiException implements Exception {

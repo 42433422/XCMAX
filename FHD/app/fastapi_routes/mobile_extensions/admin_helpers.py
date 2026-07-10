@@ -308,6 +308,10 @@ def _mobile_session_meta(request: Request) -> dict[str, Any]:
                 "account_kind": account_kind,
                 "market_is_admin": account_kind == "admin",
                 "username": str(payload.get("username") or "").strip(),
+                "tenant_id": payload.get("tenant_id"),
+                "company_brand": str(payload.get("company_brand") or "").strip(),
+                "token_scope": str(payload.get("token_scope") or "").strip(),
+                "paired_by_user_id": payload.get("paired_by_user_id"),
             }
     if not sid:
         try:

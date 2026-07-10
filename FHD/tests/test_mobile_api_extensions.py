@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 
@@ -10,12 +11,47 @@ from fastapi.testclient import TestClient
 def client(monkeypatch):
     monkeypatch.setenv("LAN_GUARD_ENABLED", "0")
     monkeypatch.setenv("LAN_CIDR_GUARD_ENABLED", "0")
-    from app.fastapi_app.factory import create_fastapi_app
+    from app.fastapi_routes.mobile_api import get_mobile_user
+    from app.fastapi_routes.mobile_api_extensions import extension_router
 
-    return TestClient(create_fastapi_app(enable_cors=False))
+    app = FastAPI()
+    app.include_router(extension_router, prefix="/api/mobile/v1")
+    return TestClient(app)
 
 
-def test_pairing_issue_and_exchange(client: TestClient):
+def _admin_user():
+    return type(
+        "PairingAdmin",
+        (),
+        {
+            "id": 1,
+            "username": "admin",
+            "display_name": "管理端",
+            "role": "admin",
+            "tier": "admin",
+            "tenant_id": 1,
+            "is_active": True,
+        },
+    )()
+
+
+def test_pairing_issue_and_exchange(client: TestClient, monkeypatch):
+    from app.fastapi_routes import mobile_api_extensions as mobile_ext
+    from app.fastapi_routes.mobile_api import get_mobile_user
+
+    client.app.dependency_overrides[get_mobile_user] = lambda: _admin_user()
+
+    monkeypatch.setattr(
+        mobile_ext,
+        "_pairing_subject_user",
+        lambda record: {
+            "id": record["subject_user_id"],
+            "username": record["subject_username"],
+            "role": "enterprise",
+            "tenant_id": record["tenant_id"],
+            "is_active": True,
+        },
+    )
     issue = client.post(
         "/api/mobile/v1/pairing/issue",
         json={"host": "192.168.1.10", "port": 5000},
@@ -25,6 +61,8 @@ def test_pairing_issue_and_exchange(client: TestClient):
     assert body.get("success") is True
     nonce = body.get("data", {}).get("nonce")
     assert nonce
+    # Exchange is a first-pairing call and therefore intentionally anonymous.
+    client.app.dependency_overrides[get_mobile_user] = lambda: None
     ex = client.post("/api/mobile/v1/pairing/exchange", json={"nonce": nonce})
     assert ex.status_code == 200
     assert ex.json().get("data", {}).get("host") == "192.168.1.10"

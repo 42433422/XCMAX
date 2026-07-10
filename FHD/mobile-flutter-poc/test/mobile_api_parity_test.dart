@@ -185,6 +185,11 @@ Map<String, String> _flutterMobileEndpointTemplates() => {
       'RELAY_MOBILE_DESKTOPS': XcagiMobileEndpoints.relayMobileDesktops,
       'RELAY_TASKS': XcagiMobileEndpoints.relayTasks,
       'RELAY_TASKS_DETAIL': XcagiMobileEndpoints.relayTasksDetail,
+      'RELAY_TASKS_CANCEL': XcagiMobileEndpoints.relayTasksCancelTemplate,
+      'RELAY_TASKS_RETRY': XcagiMobileEndpoints.relayTasksRetryTemplate,
+      'RELAY_THREADS': XcagiMobileEndpoints.relayThreads,
+      'RELAY_THREADS_DETAIL': XcagiMobileEndpoints.relayThreadsDetail,
+      'RELAY_THREADS_ARCHIVE': XcagiMobileEndpoints.relayThreadsArchiveTemplate,
       'CS_INFO': XcagiMobileEndpoints.csInfo,
       'CS_MESSAGES': XcagiMobileEndpoints.csMessages,
       'ADMIN_CS_INBOX': XcagiMobileEndpoints.adminCsInbox,
@@ -285,7 +290,14 @@ Set<String> _flutterFhdApiEndpointPairs() => {
       'POST ${XcagiMobileEndpoints.relayMobileBindAccount}',
       'GET ${XcagiMobileEndpoints.relayMobileDesktops}',
       'POST ${XcagiMobileEndpoints.relayTasks}',
+      'GET ${XcagiMobileEndpoints.relayTasks}',
       'GET ${XcagiMobileEndpoints.relayTasksDetail}',
+      'POST ${XcagiMobileEndpoints.relayTasksCancelTemplate}',
+      'POST ${XcagiMobileEndpoints.relayTasksRetryTemplate}',
+      'POST ${XcagiMobileEndpoints.relayThreads}',
+      'GET ${XcagiMobileEndpoints.relayThreads}',
+      'GET ${XcagiMobileEndpoints.relayThreadsDetail}',
+      'POST ${XcagiMobileEndpoints.relayThreadsArchiveTemplate}',
       'POST ${XcagiMobileEndpoints.marketAccountSync}',
       'GET ${XcagiMobileEndpoints.marketSessionHandoff}',
       'GET ${XcagiMobileEndpoints.financeSummary}',
@@ -357,7 +369,7 @@ void main() {
     final androidEndpointPairs = _androidFhdApiEndpointPairs();
     final flutterEndpointPairs = _flutterFhdApiEndpointPairs();
 
-    expect(androidEndpointPairs.length, 103);
+    expect(androidEndpointPairs.length, 110);
     expect(flutterEndpointPairs.length, androidEndpointPairs.length);
     expect(
       flutterEndpointPairs,
@@ -394,6 +406,39 @@ void main() {
       const MobileApiConfig().modstoreBaseUrl,
       XcagiMobileTopology.siteRootUrl,
     );
+  });
+
+  test('cleartext transport is limited to private LAN addresses', () {
+    for (final url in const [
+      'http://127.0.0.1:17500/api/health',
+      'http://10.0.0.8:17500/api/health',
+      'http://172.16.1.8:17500/api/health',
+      'http://172.31.255.254:17500/api/health',
+      'http://192.168.10.2:17500/api/health',
+      'http://169.254.1.2:17500/api/health',
+      'ws://[fd00::1]:17500/ws/im',
+      'https://xiu-ci.com/fhd-api/api/health',
+      'wss://xiu-ci.com/fhd-api/ws/im',
+    ]) {
+      expect(
+        AndroidTransportSecurityPolicy.permits(Uri.parse(url)),
+        isTrue,
+        reason: url,
+      );
+    }
+    for (final url in const [
+      'http://xiu-ci.com/api/health',
+      'http://example.com/api/health',
+      'http://8.8.8.8/api/health',
+      'http://172.32.0.1/api/health',
+      'ftp://192.168.1.2/file',
+    ]) {
+      expect(
+        AndroidTransportSecurityPolicy.permits(Uri.parse(url)),
+        isFalse,
+        reason: url,
+      );
+    }
   });
 
   test('Android build network constants mirror Gradle BuildConfig defaults',
@@ -475,6 +520,20 @@ void main() {
       isFalse,
     );
     expect(
+      AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(
+        '/api/mobile/v1/pairing/issue',
+      ),
+      isFalse,
+      reason: 'Only an authenticated management session may issue a code.',
+    );
+    expect(
+      AndroidAuthHeaderPolicy.isPublicAuthWriteRequest(
+        '/api/mobile/v1/pairing/exchange',
+      ),
+      isTrue,
+      reason: 'A one-time code must remain exchangeable before mobile login.',
+    );
+    expect(
       AndroidAuthHeaderPolicy.selectBearer(
         url: 'https://xiu-ci.com/fhd-api/api/mobile/v1/me',
         fhdToken: 'fhd',
@@ -542,6 +601,18 @@ void main() {
     expect(
       XcagiMobileEndpoints.relayTaskStatus('task 1'),
       'api/mobile/v1/relay/tasks/task%201',
+    );
+    expect(
+      XcagiMobileEndpoints.relayTaskRetry('task 1'),
+      'api/mobile/v1/relay/tasks/task%201/retry',
+    );
+    expect(
+      XcagiMobileEndpoints.relayThreadDetail('thread 1'),
+      'api/mobile/v1/relay/threads/thread%201',
+    );
+    expect(
+      XcagiMobileEndpoints.relayThreadArchive('thread 1'),
+      'api/mobile/v1/relay/threads/thread%201/archive',
     );
     expect(
       XcagiMobileEndpoints.aiGroupMessages('group 1'),
@@ -688,6 +759,161 @@ void main() {
     expect(captured['protectedClient'], 'android');
     expect(captured['protectedSku'], 'enterprise');
     expect(captured['protectedSession'], 'session-1');
+  });
+
+  test('LAN super employee uses desktop JWT while cloud keeps cloud JWT',
+      () async {
+    final cloud = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final lan = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final httpClient = HttpClient();
+    addTearDown(() => httpClient.close(force: true));
+    addTearDown(() => cloud.close(force: true));
+    addTearDown(() => lan.close(force: true));
+
+    String? cloudAuthorization;
+    String? cloudSession;
+    String? lanAuthorization;
+    String? lanSession;
+    final cloudDone = cloud.first.then((request) async {
+      cloudAuthorization =
+          request.headers.value(HttpHeaders.authorizationHeader);
+      cloudSession = request.headers.value('X-Session-ID');
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({'success': true, 'data': {}}));
+      await request.response.close();
+    });
+    final lanDone = lan.first.then((request) async {
+      lanAuthorization = request.headers.value(HttpHeaders.authorizationHeader);
+      lanSession = request.headers.value('X-Session-ID');
+      await utf8.decodeStream(request);
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'success': true,
+        'data': {
+          'assistant_message': {'body': 'LAN OK'},
+        },
+      }));
+      await request.response.close();
+    });
+
+    final cloudBase = 'http://${cloud.address.address}:${cloud.port}/';
+    final lanBase = 'http://${lan.address.address}:${lan.port}/';
+    final api = MobileApiClient(
+      config: MobileApiConfig(baseUrl: cloudBase),
+      sessionStore: MemoryMobileSessionStore(
+        MobileSessionData(
+          accessToken: 'cloud-access',
+          sessionId: 'cloud-session',
+          localAccessToken: 'lan-access',
+          localSessionId: 'lan-session',
+          localBaseUrl: lanBase,
+          fhdHost: '${lan.address.address}:${lan.port}',
+          serverMode: 'lan',
+        ),
+      ),
+      httpClient: httpClient,
+    );
+
+    await api.getJson(XcagiMobileEndpoints.me);
+    await api.postSuperEmployeeMessage(
+      'codex',
+      '测试局域网',
+      baseUrl: lanBase,
+    );
+    await Future.wait([cloudDone, lanDone]);
+
+    expect(cloudAuthorization, 'Bearer cloud-access');
+    expect(cloudSession, 'cloud-session');
+    expect(lanAuthorization, 'Bearer lan-access');
+    expect(lanSession, 'lan-session');
+  });
+
+  test('LAN 401 refreshes only desktop JWT and preserves cloud login',
+      () async {
+    final lan = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final httpClient = HttpClient();
+    addTearDown(() => httpClient.close(force: true));
+    addTearDown(() => lan.close(force: true));
+
+    final paths = <String>[];
+    final authorizations = <String?>[];
+    final done = Completer<void>();
+    var count = 0;
+    final subscription = lan.listen((request) async {
+      count += 1;
+      paths.add(request.uri.path);
+      authorizations.add(
+        request.headers.value(HttpHeaders.authorizationHeader),
+      );
+      await utf8.decodeStream(request);
+      request.response.headers.contentType = ContentType.json;
+      if (count == 1) {
+        request.response.statusCode = HttpStatus.unauthorized;
+        request.response.write(jsonEncode({'message': '本地令牌已过期'}));
+      } else if (count == 2) {
+        request.response.write(jsonEncode({
+          'success': true,
+          'data': {
+            'access_token': 'lan-access-new',
+            'refresh_token': 'lan-refresh-new',
+            'session_id': 'lan-session-new',
+          },
+        }));
+      } else {
+        request.response.write(jsonEncode({
+          'success': true,
+          'data': {
+            'assistant_message': {'body': '刷新后成功'},
+          },
+        }));
+      }
+      await request.response.close();
+      if (count == 3 && !done.isCompleted) done.complete();
+    }, onError: done.completeError);
+    addTearDown(subscription.cancel);
+
+    final lanBase = 'http://${lan.address.address}:${lan.port}/';
+    final store = MemoryMobileSessionStore(
+      MobileSessionData(
+        accessToken: 'cloud-access',
+        refreshToken: 'cloud-refresh',
+        sessionId: 'cloud-session',
+        localAccessToken: 'lan-access-old',
+        localRefreshToken: 'lan-refresh-old',
+        localSessionId: 'lan-session-old',
+        localBaseUrl: lanBase,
+        serverMode: 'lan',
+      ),
+    );
+    final api = MobileApiClient(
+      config: const MobileApiConfig(),
+      sessionStore: store,
+      httpClient: httpClient,
+    );
+
+    final result = await api.postSuperEmployeeMessage(
+      'codex',
+      '刷新本地令牌',
+      baseUrl: lanBase,
+    );
+    await done.future;
+
+    expect(result.success, isTrue);
+    expect(paths, [
+      '/api/mobile/v1/admin/codex-super-employee/messages',
+      '/api/mobile/v1/auth/refresh',
+      '/api/mobile/v1/admin/codex-super-employee/messages',
+    ]);
+    expect(authorizations[0], 'Bearer lan-access-old');
+    expect(authorizations[1], isNull);
+    expect(authorizations[2], 'Bearer lan-access-new');
+    final saved = await store.load();
+    expect(saved.accessToken, 'cloud-access');
+    expect(saved.refreshToken, 'cloud-refresh');
+    expect(saved.sessionId, 'cloud-session');
+    expect(saved.localAccessToken, 'lan-access-new');
+    expect(saved.localRefreshToken, 'lan-refresh-new');
+    expect(saved.localSessionId, 'lan-session-new');
   });
 
   test('app config request mirrors Android ModstoreApi root base and headers',

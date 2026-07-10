@@ -5,13 +5,15 @@ VERSION="10.0.0"
 ANDROID_VERSION="10.0.0"
 HARMONY_ARTIFACT=""
 APK_PATH=""
+ANDROID_MANIFEST=""
 SKIP_ZIP=0
 ALLOW_MISSING_HARMONY=0
 
 usage() {
   cat <<'USAGE'
 Usage: stage-release-packages.sh [--version <10.0.0>] [--android-version <10.0.0>] \
-  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--allow-missing-harmony]
+  [--harmony-artifact <path>] [--apk-path <path>] [--android-manifest <path>] \
+  [--skip-zip] [--allow-missing-harmony]
 
 生成鸿蒙企业版发布目录（企业版-only）：
   - release/packages-v${VERSION}/enterprise/
@@ -43,6 +45,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --apk-path)
       APK_PATH="${2:-}"
+      shift 2
+      ;;
+    --android-manifest)
+      ANDROID_MANIFEST="${2:-}"
       shift 2
       ;;
     --skip-zip)
@@ -213,6 +219,16 @@ fi
 cp -f "${APK_SRC}" "${ENTERPRISE_DIR}/XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk"
 cp -f "${APK_SRC}" "${ENTERPRISE_DIR_ZH}/XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk"
 log_info "已纳入企业版 APK：$(basename "${APK_SRC}")"
+
+if [[ -n "${ANDROID_MANIFEST}" ]]; then
+  if [[ ! -f "${ANDROID_MANIFEST}" ]]; then
+    echo "Missing Android release manifest: ${ANDROID_MANIFEST}" >&2
+    exit 1
+  fi
+  cp -f "${ANDROID_MANIFEST}" "${ENTERPRISE_DIR}/android_release_manifest.json"
+  cp -f "${ANDROID_MANIFEST}" "${ENTERPRISE_DIR_ZH}/android_release_manifest.json"
+  log_info "已纳入 Android OTA manifest"
+fi
 
 HARMONY_SRC="$(resolve_harmony_artifact "${HARMONY_ARTIFACT}")" || true
 HARMONY_TARGET=""

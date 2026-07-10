@@ -210,3 +210,115 @@ class TestOfficeSampleCleanup:
         assert resp.status_code == 200
         data = resp.json()
         assert data["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# office workspace path confinement
+# ---------------------------------------------------------------------------
+
+
+class TestOfficeWorkspacePathConfinement:
+    def test_attendance_ignores_client_workspace_root_and_uses_fixed_db(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        upload = workspace / "uploads" / "nested" / "attendance.xlsx"
+        upload.parent.mkdir(parents=True)
+        upload.write_bytes(b"placeholder")
+        attacker_root = tmp_path / "attacker-controlled-root"
+        monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+        monkeypatch.setattr(
+            "app.application.attendance_import_app_service._parse_workbook",
+            lambda _path: ([], [], "mingxi"),
+        )
+
+        response = TestClient(_make_app()).post(
+            "/api/platform-shell/office/confirm",
+            json={
+                "intent": "attendance",
+                "file_path": "uploads/nested/attendance.xlsx",
+                "workspace_root": str(attacker_root),
+            },
+        )
+
+        assert response.status_code == 200
+        expected_db = workspace / "data" / "mod_dbs" / "taiyangniao-pro.db"
+        assert expected_db.is_file()
+        assert response.json()["data"]["db_path"] == str(expected_db)
+        assert not (attacker_root / "data" / "mod_dbs" / "taiyangniao-pro.db").exists()
+
+    @pytest.mark.parametrize(
+        "untrusted",
+        [
+            "../../outside.xlsx",
+            "%252e%252e%252foutside.xlsx",
+        ],
+    )
+    def test_attendance_route_rejects_traversal_and_double_encoding(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        untrusted: str,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+        response = TestClient(_make_app()).post(
+            "/api/platform-shell/office/confirm",
+            json={
+                "intent": "attendance",
+                "file_path": untrusted,
+                "workspace_root": str(tmp_path / "outside"),
+            },
+        )
+
+        assert response.status_code == 400
+        assert not (workspace / "data" / "mod_dbs" / "taiyangniao-pro.db").exists()
+
+    def test_attendance_route_rejects_symlink_escape(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        outside = tmp_path / "outside.xlsx"
+        outside.write_bytes(b"outside")
+        link = workspace / "attendance.xlsx"
+        try:
+            link.symlink_to(outside)
+        except OSError as exc:
+            pytest.skip(f"symlinks unavailable: {exc}")
+        monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+        response = TestClient(_make_app()).post(
+            "/api/platform-shell/office/confirm",
+            json={"intent": "attendance", "file_path": "attendance.xlsx"},
+        )
+
+        assert response.status_code == 400
+
+    def test_workspace_reader_ignores_client_root(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "secret.txt").write_text("secret", encoding="utf-8")
+        monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
+
+        response = TestClient(_make_app()).post(
+            "/api/platform-shell/workspace-read-files",
+            json={"workspace_root": str(outside), "file_paths": ["secret.txt"]},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["data"]["files"] == [
+            {"path": "secret.txt", "kind": "text", "error": "file_not_found"}
+        ]

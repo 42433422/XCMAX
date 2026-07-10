@@ -506,7 +506,10 @@ def test_complete_relay_task_writes_elapsed_and_error_code(monkeypatch):
     monkeypatch.setattr(
         relay,
         "_execute_task",
-        lambda task: {"_relay_status": "blocked", "error": "未执行命令，未修改文件。"},
+        lambda task, **_kwargs: {
+            "_relay_status": "blocked",
+            "error": "未执行命令，未修改文件。",
+        },
     )
     monkeypatch.setattr(relay.httpx, "Client", _Client)
     relay._complete_relay_task({"task_id": "t-1"}, "relay-1", "tok", "https://xiu-ci.com/fhd-api/")
@@ -515,3 +518,40 @@ def test_complete_relay_task_writes_elapsed_and_error_code(monkeypatch):
     assert "elapsed_seconds" in body["result"]
     assert body["result"]["error_code"] == "blocked"
     assert body["result"]["error_message"] == "未执行命令，未修改文件。"
+
+
+def test_execute_task_passes_cancellation_to_real_cli_service(monkeypatch):
+    import threading
+
+    from app.services import mobile_relay_desktop_client as relay
+
+    observed = {}
+
+    class FakeCodexService:
+        def set_cancellation_event(self, event):
+            observed["event"] = event
+
+        def invoke(self, **_kwargs):
+            observed["event"].wait(timeout=2)
+            raise RuntimeError("CLI terminated by cancellation")
+
+    cancel_event = threading.Event()
+    timer = threading.Timer(0.05, cancel_event.set)
+    timer.start()
+    monkeypatch.setattr(relay, "CodexSuperEmployeeService", FakeCodexService)
+    try:
+        result = relay._execute_task(
+            {
+                "task_id": "cancel-task-1",
+                "kind": "codex.invoke",
+                "created_by_user_id": 7,
+                "payload": {"message": "long-running task"},
+            },
+            cancel_event=cancel_event,
+        )
+    finally:
+        timer.cancel()
+
+    assert observed["event"] is cancel_event
+    assert result["_relay_status"] == "cancelled"
+    assert result["ok"] is False

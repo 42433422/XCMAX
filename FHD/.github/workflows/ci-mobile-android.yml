@@ -3,74 +3,66 @@ name: ci-mobile-android
 on:
   push:
     paths:
-      - "mobile-android/**"
+      - "mobile-flutter-poc/**"
       - ".github/workflows/ci-mobile-android.yml"
   pull_request:
     paths:
-      - "mobile-android/**"
+      - "mobile-flutter-poc/**"
       - ".github/workflows/ci-mobile-android.yml"
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-mobile-android-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  assemble-debug:
+  flutter-quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     defaults:
       run:
-        working-directory: mobile-android
+        working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Prepare Google Services config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.4
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --concurrency=4
+
+      - name: Build enterprise debug APK
+        run: flutter build apk --debug
+
+      - name: Verify debug package identity
+        shell: bash
         run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          else
-            cat > app/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "100000000000",
-              "project_id": "xcagi-ci-placeholder",
-              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
-      - name: Ensure gradlew executable
-        run: chmod +x ./gradlew
-      - name: Assemble Debug (personal + enterprise)
-        run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
-      - name: Lint
-        run: ./gradlew lintPersonalDebug --no-daemon
+          apk="build/app/outputs/flutter-apk/app-debug.apk"
+          test -s "${apk}"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          "${build_tools}/aapt" dump badging "${apk}" | grep -F "package: name='com.xiuci.xcagi.mobile.enterprise'"
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-flutter-enterprise-debug
+          path: FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

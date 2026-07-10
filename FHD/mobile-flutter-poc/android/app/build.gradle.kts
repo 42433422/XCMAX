@@ -100,32 +100,27 @@ android {
                 "proguard-rules.pro",
             )
             val releaseSigning = signingConfigs.getByName("release")
-            val requireSigning = System.getenv("XCAGI_REQUIRE_RELEASE_SIGNING") == "1"
-            signingConfig = when {
-                releaseSigning.storeFile != null -> releaseSigning
-                requireSigning -> throw GradleException(
-                    "XCAGI_REQUIRE_RELEASE_SIGNING=1 but no release keystore is configured.",
-                )
-                else -> signingConfigs.getByName("debug")
+            if (releaseSigning.storeFile != null) {
+                signingConfig = releaseSigning
             }
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
     }
 }
 
-tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }.configureEach {
+tasks.matching {
+    (it.name.startsWith("assemble") || it.name.startsWith("bundle")) &&
+        it.name.contains("Release")
+}.configureEach {
     doFirst {
         val releaseSigning = android.signingConfigs.getByName("release")
         if (releaseSigning.storeFile == null) {
-            logger.warn(
-                "XCAGI Flutter Release: no release keystore; output uses the DEBUG key and is not distributable.",
+            throw GradleException(
+                "XCAGI Flutter Release requires production signing. Configure " +
+                    "keystore.properties or XCAGI_ANDROID_* secrets; debug-signed release " +
+                    "artifacts are forbidden.",
             )
-        } else {
-            logger.lifecycle("XCAGI Flutter Release: production signing configured")
         }
+        logger.lifecycle("XCAGI Flutter Release: production signing configured")
     }
 }
 

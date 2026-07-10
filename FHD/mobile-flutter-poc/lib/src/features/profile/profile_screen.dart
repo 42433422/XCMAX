@@ -274,7 +274,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _refreshAppConfig() async {
     try {
-      final config = await _api.appConfig();
+      final config = await _api.appConfigForInstalledBuild();
       if (!mounted) return;
       setState(() {
         _profilePage = config.profilePage;

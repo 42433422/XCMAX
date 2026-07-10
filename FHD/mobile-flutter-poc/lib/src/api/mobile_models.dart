@@ -29,6 +29,8 @@ class MobileAppConfigData {
     required this.ok,
     required this.legalVersion,
     this.sku = '',
+    this.privacyUrl = 'https://xiu-ci.com/privacy.html',
+    this.termsUrl = 'https://xiu-ci.com/privacy.html',
     required this.profilePage,
     required this.raw,
   });
@@ -36,6 +38,8 @@ class MobileAppConfigData {
   final bool ok;
   final String legalVersion;
   final String sku;
+  final String privacyUrl;
+  final String termsUrl;
   final MobileProfilePageConfig profilePage;
   final Map<String, Object?> raw;
 
@@ -52,6 +56,10 @@ class MobileAppConfigData {
       ok: _readBool(json, const ['ok', 'success']),
       legalVersion: _readString(json, const ['legal_version']).ifEmpty('1'),
       sku: _readString(json, const ['sku']),
+      privacyUrl: _readString(json, const ['privacy_url'])
+          .ifEmpty('https://xiu-ci.com/privacy.html'),
+      termsUrl: _readString(json, const ['terms_url'])
+          .ifEmpty('https://xiu-ci.com/privacy.html'),
       profilePage:
           MobileProfilePageConfig.fromJson(_readMap(json['profile_page'])),
       raw: json,

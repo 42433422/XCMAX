@@ -103,6 +103,18 @@ enum ChatRole { assistant, user, system }
 
 enum ChatDeliveryStatus { sent, sending, failed }
 
+class ChatSource {
+  const ChatSource({
+    required this.title,
+    required this.url,
+    this.snippet = '',
+  });
+
+  final String title;
+  final String url;
+  final String snippet;
+}
+
 class ChatMessage {
   const ChatMessage({
     required this.id,
@@ -116,6 +128,7 @@ class ChatMessage {
     this.status = ChatDeliveryStatus.sent,
     this.quote,
     this.cacheTimestampMs = 0,
+    this.sources = const [],
   });
 
   final String id;
@@ -129,6 +142,7 @@ class ChatMessage {
   final ChatDeliveryStatus status;
   final String? quote;
   final int cacheTimestampMs;
+  final List<ChatSource> sources;
 }
 
 class AiGroupMember {

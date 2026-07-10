@@ -380,8 +380,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 }
 
-const _termsUrl = 'https://xiu-ci.com/legal/terms';
-const _privacyUrl = 'https://xiu-ci.com/legal/privacy';
+const _termsUrl = 'https://xiu-ci.com/privacy.html';
+const _privacyUrl = 'https://xiu-ci.com/privacy.html';
 
 class _AuthLogo extends StatelessWidget {
   const _AuthLogo();

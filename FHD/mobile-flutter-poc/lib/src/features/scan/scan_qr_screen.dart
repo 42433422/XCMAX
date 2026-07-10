@@ -29,7 +29,8 @@ class ScanQrScreen extends StatefulWidget {
   State<ScanQrScreen> createState() => _ScanQrScreenState();
 }
 
-class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver {
+class _ScanQrScreenState extends State<ScanQrScreen>
+    with WidgetsBindingObserver {
   late final MobileRepository _repository;
   CameraController? _cameraController;
   late final ImagePicker _imagePicker;
@@ -158,22 +159,27 @@ class _ScanQrScreenState extends State<ScanQrScreen> with WidgetsBindingObserver
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
-                      if (cameraEnabled && scannerReady && _cameraController != null)
+                      if (cameraEnabled &&
+                          scannerReady &&
+                          _cameraController != null)
                         Positioned.fill(
                           child: FittedBox(
                             fit: BoxFit.cover,
                             clipBehavior: Clip.hardEdge,
                             child: SizedBox(
-                              width: _cameraController!.value.previewSize?.height ??
+                              width: _cameraController!
+                                      .value.previewSize?.height ??
                                   MediaQuery.sizeOf(context).width,
-                              height: _cameraController!.value.previewSize?.width ??
-                                  MediaQuery.sizeOf(context).height,
+                              height:
+                                  _cameraController!.value.previewSize?.width ??
+                                      MediaQuery.sizeOf(context).height,
                               child: CameraPreview(_cameraController!),
                             ),
                           ),
                         )
                       else if (cameraEnabled &&
-                          (_checkingCameraPermission || _requestingCameraPermission))
+                          (_checkingCameraPermission ||
+                              _requestingCameraPermission))
                         Center(
                           child: CircularProgressIndicator(color: colors.brand),
                         )

@@ -2213,7 +2213,18 @@ class TestMobileExtPairingRoutes:
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body, request)
+            result = await ext_mod.mobile_pairing_issue(
+                body,
+                request,
+                user=SimpleNamespace(
+                    id=1,
+                    username="admin",
+                    role="admin",
+                    tier="admin",
+                    tenant_id=1,
+                    is_active=True,
+                ),
+            )
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
@@ -2223,7 +2234,7 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_lookup_invalid_code(self, ext_mod):
         body = ext_mod.PairingLookupBody(code="000000")
-        result = await ext_mod.mobile_pairing_lookup(body)
+        result = await ext_mod.mobile_pairing_lookup(body, MagicMock())
         assert result.status_code == 404
 
     @pytest.mark.asyncio
@@ -2234,7 +2245,7 @@ class TestMobileExtPairingRoutes:
             "lookup_by_shortcode",
             return_value={"host": "h", "port": 5000, "nonce": "n", "exp": 9999999999},
         ):
-            result = await ext_mod.mobile_pairing_lookup(body)
+            result = await ext_mod.mobile_pairing_lookup(body, MagicMock())
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
@@ -2244,18 +2255,34 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_exchange_no_credentials(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body)
+        result = await ext_mod.mobile_pairing_exchange(body, MagicMock(), user=None)
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_pairing_exchange_by_code(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456")
-        with patch.object(
-            ext_mod,
-            "consume_by_shortcode",
-            return_value={"host": "h", "port": 5000, "shortCode": "123456"},
+        record = {
+            "host": "h",
+            "port": 5000,
+            "shortCode": "123456",
+            "issuer_user_id": 1,
+            "subject_user_id": 1,
+            "subject_username": "admin",
+            "tenant_id": 1,
+            "company_brand": "tenant-1",
+            "account_kind": "enterprise",
+            "token_scope": "enterprise_pairing",
+        }
+        with (
+            patch.object(ext_mod, "lookup_by_shortcode", return_value=record),
+            patch.object(ext_mod, "consume_by_shortcode", return_value=record),
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
         ):
-            result = await ext_mod.mobile_pairing_exchange(body)
+            result = await ext_mod.mobile_pairing_exchange(body, MagicMock(), user=None)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:
@@ -2265,12 +2292,29 @@ class TestMobileExtPairingRoutes:
     @pytest.mark.asyncio
     async def test_pairing_exchange_by_nonce(self, ext_mod):
         body = ext_mod.PairingExchangeBody(nonce="abc123")
-        with patch.object(
-            ext_mod,
-            "consume_pairing_nonce",
-            return_value={"host": "h", "port": 5000, "shortCode": "123456"},
+        record = {
+            "host": "h",
+            "port": 5000,
+            "nonce": "abc123",
+            "shortCode": "123456",
+            "issuer_user_id": 1,
+            "subject_user_id": 1,
+            "subject_username": "admin",
+            "tenant_id": 1,
+            "company_brand": "tenant-1",
+            "account_kind": "enterprise",
+            "token_scope": "enterprise_pairing",
+        }
+        with (
+            patch.object(ext_mod, "lookup_pairing_nonce", return_value=record),
+            patch.object(ext_mod, "consume_pairing_nonce", return_value=record),
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
         ):
-            result = await ext_mod.mobile_pairing_exchange(body)
+            result = await ext_mod.mobile_pairing_exchange(body, MagicMock(), user=None)
         if hasattr(result, "body"):
             data = json.loads(result.body)
         else:

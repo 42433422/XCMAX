@@ -9,6 +9,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from app.infrastructure.workspace import (
+    resolve_safe_workspace_file,
+    resolve_safe_workspace_relpath,
+)
+
+ATTENDANCE_DB_RELPATH = "data/mod_dbs/taiyangniao-pro.db"
+ATTENDANCE_WORKBOOK_SUFFIXES = frozenset({".xlsx", ".xlsm", ".xls"})
+
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
     conn.execute(
@@ -366,8 +374,7 @@ def _import_daily_records_if_possible(
 
 
 def import_attendance_workbook(
-    excel_path: Path,
-    db_path: Path,
+    excel_relpath: str,
     *,
     source_file_key: str | None = None,
     sync_ui_tables: bool = True,
@@ -379,8 +386,12 @@ def import_attendance_workbook(
     longer contain DingTalk raw punch records.
     """
 
-    if not excel_path.is_file():
-        raise FileNotFoundError(f"Excel 文件不存在: {excel_path}")
+    excel_path = resolve_safe_workspace_file(excel_relpath)
+    if excel_path.suffix.lower() not in ATTENDANCE_WORKBOOK_SUFFIXES:
+        raise ValueError("不支持的考勤文件类型")
+    # The database location is a server-owned constant.  Callers can select an
+    # input workbook, never an arbitrary SQLite output path.
+    db_path = resolve_safe_workspace_relpath(ATTENDANCE_DB_RELPATH)
 
     departments, employees, workbook_kind = _parse_workbook(excel_path)
     source_file = (source_file_key or "").strip() or str(excel_path.resolve())
@@ -481,4 +492,4 @@ def import_attendance_workbook(
         conn.close()
 
 
-__all__ = ["import_attendance_workbook"]
+__all__ = ["ATTENDANCE_DB_RELPATH", "import_attendance_workbook"]

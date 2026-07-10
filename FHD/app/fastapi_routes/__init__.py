@@ -83,6 +83,13 @@ def register_deferred_routes(app: FastAPI) -> None:
     else:
         register_legacy_compat_routes(app)
 
+    # Desktop fast-start registers the SPA catch-all before this deferred
+    # phase.  Move it back to the end or every late /api route is present in
+    # OpenAPI yet unreachable at runtime (the fallback returns a misleading
+    # 404 first).
+    from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+    ensure_spa_fallback_last(app)
     logger.info("Deferred FastAPI routes registered successfully")
 
 

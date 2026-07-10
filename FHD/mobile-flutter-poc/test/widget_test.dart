@@ -29,6 +29,7 @@ import 'package:xcagi_flutter_poc/src/features/cs/admin_cs_console_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/cs/cs_chat_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/discover/discover_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/enterprise/enterprise_module_screen.dart';
+import 'package:xcagi_flutter_poc/src/features/devtools/execution_review_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/finance/longtail_screen.dart';
 import 'package:xcagi_flutter_poc/src/features/groups/ai_group_screens.dart';
 import 'package:xcagi_flutter_poc/src/features/im/im_messenger_screen.dart';
@@ -188,7 +189,10 @@ void main() {
     expect(find.text('P-W 网站部'), findsOneWidget);
     expect(find.text('小C助理'), findsWidgets);
     expect(find.text('超级员工-Codex'), findsWidgets);
-
+    expect(
+      find.byKey(const ValueKey('super_employee_run_capsule')),
+      findsOneWidget,
+    );
     final headerPadding = tester.widget<Padding>(
       find.byKey(const ValueKey('message_home_header_padding')),
     );
@@ -1160,7 +1164,7 @@ void main() {
     expect(buttonStyle?.height, textTheme.bodyLarge?.height);
   });
 
-  testWidgets('chat detail uses Android compact 48dp top bar', (
+  testWidgets('small C chat uses its comfortable 58dp assistant top bar', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(
@@ -1174,8 +1178,10 @@ void main() {
     );
 
     expect(
-      tester.getSize(find.byKey(const ValueKey('we_top_bar_surface_小C助理'))),
-      const Size(800, 48),
+      tester.getSize(
+        find.byKey(const ValueKey('assistant_top_bar_surface_小C助理')),
+      ),
+      const Size(800, 58),
     );
   });
 
@@ -1319,6 +1325,8 @@ void main() {
     });
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.text('专属客服'), findsNothing);
+    await tester.drag(find.byType(ListView).first, const Offset(0, -320));
+    await tester.pumpAndSettle();
     expect(find.text('客户客服'), findsWidgets);
     expect(find.text('查看并回复企业客户的客服消息'), findsWidgets);
 
@@ -1353,7 +1361,7 @@ void main() {
     await tester.tap(find.text('小C助理').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('发消息'), findsOneWidget);
+    expect(find.text('问问小C…'), findsOneWidget);
     expect(find.text('消息'), findsNothing);
     expect(find.text('AI员工'), findsNothing);
     expect(find.text('探索'), findsNothing);
@@ -2253,21 +2261,12 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_divider_拍照识别')),
       findsOneWidget,
     );
-    expect(find.text('入口'), findsOneWidget);
-    expect(find.text('调用企业端 OCR 引擎处理图片文字'), findsOneWidget);
+    expect(find.text('图片文字识别'), findsOneWidget);
+    expect(find.text('拍下票据、表格或文档，交给企业 OCR'), findsOneWidget);
     expect(find.text('从相册选择'), findsOneWidget);
-    expect(find.text('批量识别'), findsOneWidget);
     expect(find.text('状态'), findsOneWidget);
     expect(find.text('OCR 服务'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.camera_alt));
-    await tester.pumpAndSettle();
-    expect(find.text('移动端拍照上传正在接入，请先使用电脑端 OCR'), findsOneWidget);
-    await tester.pump(const Duration(seconds: 4));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byIcon(Icons.photo_library));
-    await tester.pumpAndSettle();
-    expect(find.text('移动端相册识别正在接入，请先使用电脑端 OCR'), findsOneWidget);
+    expect(find.text('移动端上传链路已接通'), findsOneWidget);
   });
 
   testWidgets('OCR page follows Android dark theme tokens', (
@@ -2879,20 +2878,27 @@ void main() {
     expect(accepted, isTrue);
   });
 
-  testWidgets('legal agreement row toggles without opening webview', (
+  testWidgets('legal agreement link opens external URL without accepting', (
     WidgetTester tester,
   ) async {
+    final opened = <Uri>[];
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: const LegalConsentScreen(),
+        home: LegalConsentScreen(
+          openExternalUrl: (uri) async {
+            opened.add(uri);
+            return true;
+          },
+        ),
       ),
     );
 
     await tester.tap(find.text('《用户协议》'));
     await tester.pumpAndSettle();
 
-    expect(find.text('进入 XCAGI'), findsOneWidget);
+    expect(opened, [Uri.parse('https://xiu-ci.com/privacy.html')]);
+    expect(find.text('进入 XCAGI'), findsNothing);
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
 
@@ -3051,8 +3057,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(opened, [
-      Uri.parse('https://xiu-ci.com/legal/terms'),
-      Uri.parse('https://xiu-ci.com/legal/privacy'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
+      Uri.parse('https://xiu-ci.com/privacy.html'),
     ]);
     expect(find.byType(DesktopToolWebViewScreen), findsNothing);
   });
@@ -5527,6 +5533,10 @@ void main() {
 
     expect(find.text('超级员工-Codex'), findsWidgets);
     expect(find.byIcon(Icons.mic), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('super_employee_run_capsule')),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.add), findsOneWidget);
     expect(find.text('发送'), findsNothing);
     expect(find.textContaining('api/mobile'), findsNothing);
@@ -5553,16 +5563,16 @@ void main() {
 
     expect(find.text('发送'), findsOneWidget);
     final sendText = tester.widget<Text>(find.text('发送'));
-    expect(sendText.style?.fontSize, 15);
+    expect(sendText.style?.fontSize, 14);
     expect(sendText.style?.height, typography.labelLarge?.height);
-    expect(sendText.style?.fontWeight, FontWeight.w500);
+    expect(sendText.style?.fontWeight, FontWeight.w700);
 
     await tester.tap(find.byTooltip('更多工具'));
     await tester.pump();
 
-    // Codex 超级员工无活跃 git 分支时，仅显示执行回顾 + 共享操作。
+    // 四个超级员工统一显示真实新建对话 + 执行回顾 + 共享操作。
     expect(find.text('执行回顾'), findsOneWidget);
-    expect(find.text('新建对话'), findsNothing);
+    expect(find.text('新建对话'), findsOneWidget);
     expect(find.text('OCR 识别'), findsNothing);
     expect(find.text('语音输入'), findsNothing);
     expect(find.text('任务派工'), findsOneWidget);
@@ -5571,23 +5581,67 @@ void main() {
     final toolPanel = tester.widget<Padding>(
       find.byKey(const ValueKey('chat_tool_card_panel')),
     );
-    expect(toolPanel.padding, const EdgeInsets.fromLTRB(12, 8, 12, 20));
+    expect(toolPanel.padding, const EdgeInsets.fromLTRB(12, 7, 12, 18));
     expect(
       tester.getSize(find.byKey(const ValueKey('chat_tool_card_任务派工'))).height,
-      92,
+      74,
     );
     expect(
       tester.getSize(find.byKey(const ValueKey('chat_tool_icon_box_任务派工'))),
-      const Size(62, 62),
+      const Size(40, 40),
     );
     final taskToolText = tester.widget<Text>(find.text('任务派工'));
-    expect(taskToolText.style?.fontSize, typography.labelMedium?.fontSize);
+    expect(taskToolText.style?.fontSize, 13);
     expect(taskToolText.style?.height, typography.labelMedium?.height);
+    expect(taskToolText.style?.fontWeight, FontWeight.w700);
 
     await tester.tap(find.text('任务派工'));
     await tester.pump();
 
     expect(find.text('帮我安排并完成这个任务：继续'), findsOneWidget);
+  });
+
+  testWidgets('small C assistant exposes comfortable workbench and modes', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(430, 1000);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    addTearDown(tester.view.resetPhysicalSize);
+    final repository = _FakeRealtimeRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: demoConversations.first,
+          repository: repository,
+          initialMessages: const [],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('我是小C'), findsOneWidget);
+    expect(find.text('快速问答'), findsOneWidget);
+    expect(find.text('深度分析'), findsOneWidget);
+    expect(find.text('安排任务'), findsOneWidget);
+    final horizontalActions = find.byWidgetPredicate(
+      (widget) =>
+          widget is ListView && widget.scrollDirection == Axis.horizontal,
+    );
+    expect(horizontalActions, findsOneWidget);
+    await tester.drag(horizontalActions, const Offset(-420, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('会议纪要'), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant_mode_quick')), findsOneWidget);
+    expect(find.byKey(const ValueKey('assistant_mode_deep')), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('assistant_mode_execute')), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('assistant_welcome_meeting')));
+    await tester.pumpAndSettle();
+    expect(find.text('录下来，小C帮你整理成 Word'), findsOneWidget);
   });
 
   testWidgets('chat detail streams into Android assistant placeholder bubble', (
@@ -5635,6 +5689,37 @@ void main() {
 
     expect(find.text('开始处理完成'), findsOneWidget);
     expect(find.text('发送失败'), findsNothing);
+  });
+
+  testWidgets('chat detail can send after fixed-length remote history loads', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeFixedMessagesStreamingChatRepository();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ChatScreen(
+          conversation: _fakeUnreadConversation,
+          repository: repository,
+          initialMessages: const [],
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('远端历史消息'), findsOneWidget);
+    await tester.enterText(find.byType(TextField), '继续');
+    await tester.pump();
+    await tester.tap(find.text('发送'));
+    await tester.pump();
+
+    expect(tester.takeException(), isNull);
+    expect(repository.calls.single['body'], '继续');
+
+    repository.finish.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('开始处理完成'), findsOneWidget);
   });
 
   testWidgets('chat detail long press supports Android reply and delete', (
@@ -5746,6 +5831,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('停止'), findsOneWidget);
+    expect(find.text('中断'), findsNothing);
+    expect(find.text('云中继 · Codex 正在执行'), findsOneWidget);
     expect(find.textContaining('思考中'), findsOneWidget);
 
     repository.finish.complete('电脑工具已完成任务。');
@@ -5888,6 +5975,31 @@ void main() {
 
     expect(find.textContaining('执行时间线'), findsOneWidget);
   });
+
+  testWidgets('execution review renders real run status and actions', (
+    WidgetTester tester,
+  ) async {
+    final repository = _FakeExecutionReviewRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ExecutionReviewScreen(
+          repository: repository,
+          threadId: 'thread-codex',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.lastThreadId, 'thread-codex');
+    expect(find.text('Codex · 第 1 次执行'), findsOneWidget);
+    expect(find.text('Claude · 第 2 次执行'), findsOneWidget);
+    expect(find.text('运行中'), findsOneWidget);
+    expect(find.text('失败'), findsOneWidget);
+    expect(find.text('停止'), findsOneWidget);
+    expect(find.text('重试'), findsOneWidget);
+    expect(find.text('分支与审批'), findsOneWidget);
+  });
 }
 
 Future<void> _tapHeaderPlusMenuItem(
@@ -5933,6 +6045,46 @@ const _fakeUnreadConversation = ConversationItem(
   isFollowed: true,
   isHidden: false,
 );
+
+class _FakeExecutionReviewRepository extends MobileRepository {
+  String lastThreadId = '';
+
+  @override
+  Future<List<RelayRunSummary>> loadRelayRuns({
+    String threadId = '',
+    bool activeOnly = false,
+    int limit = 100,
+  }) async {
+    lastThreadId = threadId;
+    return const [
+      RelayRunSummary(
+        taskId: 'run-codex',
+        threadId: 'thread-codex',
+        workItemId: 'work-codex',
+        employeeId: 'codex-super-employee',
+        kind: 'codex.invoke',
+        status: 'running',
+        attemptNo: 1,
+        createdAt: '2026-07-10T00:00:00Z',
+        updatedAt: '2026-07-10T00:01:00Z',
+        message: '修复移动端',
+        branch: 'super-employee/codex/thread-codex',
+      ),
+      RelayRunSummary(
+        taskId: 'run-claude',
+        threadId: 'thread-claude',
+        workItemId: 'work-claude',
+        employeeId: 'claude-super-employee',
+        kind: 'claude.invoke',
+        status: 'failed',
+        attemptNo: 2,
+        createdAt: '2026-07-10T00:00:00Z',
+        updatedAt: '2026-07-10T00:02:00Z',
+        resultText: '鉴权失败',
+      ),
+    ];
+  }
+}
 
 class _FakeRealtimeRepository extends MobileRepository {
   final List<Map<String, String>> gitOperations = [];
@@ -6241,6 +6393,24 @@ class _FakeStreamingChatRepository extends _FakeRealtimeRepository {
   }
 }
 
+class _FakeFixedMessagesStreamingChatRepository
+    extends _FakeStreamingChatRepository {
+  @override
+  Future<List<ChatMessage>> loadInitialMessages(
+    ConversationItem conversation,
+  ) async {
+    return List<ChatMessage>.unmodifiable(const [
+      ChatMessage(
+        id: 'remote-fixed-1',
+        conversationId: 'employee:demo:customer',
+        role: ChatRole.assistant,
+        body: '远端历史消息',
+        timeText: '刚刚',
+      ),
+    ]);
+  }
+}
+
 class _FakeFailThenStreamingRepository extends _FakeRealtimeRepository {
   final calls = <String>[];
 
@@ -6286,6 +6456,11 @@ class _FakeInflightRelayRepository extends _FakeRealtimeRepository {
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
+    onStatus?.call(const RelayTaskProgress(
+      taskId: 'task-codex',
+      status: 'running',
+      toolLabel: 'Codex',
+    ));
     onToken?.call('思考中...');
     if (!firstToken.isCompleted) firstToken.complete();
     return finish.future;
@@ -6775,6 +6950,16 @@ class _FakeSettingsApi extends MobileApiClient {
     });
     return updateResult;
   }
+
+  @override
+  Future<MobileUpdateCheckResult> checkForUpdateForInstalledBuild({
+    String sku = MobileAndroidBuild.productSku,
+  }) async {
+    return checkForUpdate(
+      currentVersionCode: MobileAndroidBuild.versionCode,
+      sku: sku,
+    );
+  }
 }
 
 class _FakeUpdateInstaller implements AndroidPackageUpdateInstaller {
@@ -6880,6 +7065,16 @@ class _FakeProfileApi extends MobileApiClient {
       legalVersion: '1',
       profilePage: profilePage,
       raw: const {'ok': true},
+    );
+  }
+
+  @override
+  Future<MobileAppConfigData> appConfigForInstalledBuild({
+    String sku = MobileAndroidBuild.productSku,
+  }) async {
+    return appConfig(
+      currentVersionCode: MobileAndroidBuild.versionCode,
+      sku: sku,
     );
   }
 

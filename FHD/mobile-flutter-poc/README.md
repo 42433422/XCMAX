@@ -3,7 +3,7 @@
 > **2026-07-07**：移动统一交付 **仅** 维护本目录。`../mobile-android/`、`../mobile-ios/` 进入归档，禁止新增产品流程。  
 > 文档：[`docs/guides/MOBILE_FLUTTER.md`](../docs/guides/MOBILE_FLUTTER.md) · SSOT：[`docs/mobile_tri_platform_ssot.md`](../docs/mobile_tri_platform_ssot.md)
 
-Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约。Android-first Flutter proof of concept for the XCAGI mobile core flows.
+Android + iOS 单代码库，对接 `/api/mobile/v1/*` 与 OpenAPI 契约，是 XCAGI 移动端唯一生产交付主线。
 
 迁移期行为仍可对齐已归档的 `mobile-android`（Kotlin）实现；**新功能与 UX 修复只在本仓落地**。
 

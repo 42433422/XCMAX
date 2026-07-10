@@ -94,9 +94,55 @@ def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
         display_name=username,
         email="",
         role=role,
+        tier=role,
         is_active=True,
         wx_avatar_url=None,
         tenant_id=payload.get("tenant_id"),
+        token_scope=str(payload.get("token_scope") or "").strip(),
+        company_brand=str(payload.get("company_brand") or "").strip(),
+    )
+
+
+def _enterprise_pairing_user(user: Any, payload: dict[str, Any]) -> Any | None:
+    """Project a relay-bound administrator into an enterprise-only principal.
+
+    The JWT subject remains the exact user that issued the pairing code so it can
+    be revoked by disabling that account, while role/tier are deliberately
+    downgraded.  This prevents a paired phone from inheriting management rights.
+    """
+    token_scope = str(payload.get("token_scope") or "").strip()
+    if token_scope not in {"enterprise_pairing", "enterprise_relay"}:
+        return None
+    uid = int(getattr(user, "id", 0) or 0)
+    try:
+        paired_by = int(payload.get("paired_by_user_id") or 0)
+    except (TypeError, ValueError):
+        return None
+    if uid <= 0 or paired_by != uid:
+        return None
+    if str(payload.get("account_kind") or "").strip().lower() != "enterprise":
+        return None
+    raw_tenant = payload.get("tenant_id")
+    try:
+        tenant_id = int(raw_tenant) if raw_tenant is not None else None
+    except (TypeError, ValueError):
+        return None
+    user_tenant = getattr(user, "tenant_id", None)
+    if user_tenant is not None and tenant_id is not None and int(user_tenant) != tenant_id:
+        return None
+    username = str(payload.get("username") or getattr(user, "username", "") or "mobile").strip()
+    return SimpleNamespace(
+        id=uid,
+        username=username,
+        display_name=username,
+        email="",
+        role="enterprise",
+        tier="enterprise",
+        is_active=bool(getattr(user, "is_active", True)),
+        wx_avatar_url=getattr(user, "wx_avatar_url", None),
+        tenant_id=tenant_id,
+        token_scope=token_scope,
+        company_brand=str(payload.get("company_brand") or "").strip(),
     )
 
 
@@ -134,6 +180,13 @@ async def get_mobile_user(
             with get_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
                 if user and user.is_active:
+                    if str((jwt_payload or {}).get("token_scope") or "").strip() in {
+                        "enterprise_pairing",
+                        "enterprise_relay",
+                    }:
+                        projected = _enterprise_pairing_user(user, jwt_payload or {})
+                        _bind_mobile_user_tenant_to_request(request, projected)
+                        return projected
                     jwt_account_kind = (
                         str((jwt_payload or {}).get("account_kind") or "").strip().lower()
                     )
@@ -159,6 +212,13 @@ async def get_mobile_user(
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
+        if str((jwt_payload or {}).get("token_scope") or "").strip() in {
+            "enterprise_pairing",
+            "enterprise_relay",
+        }:
+            # Pairing credentials are revocable through their bound DB user and
+            # must never fall back to a synthetic/admin principal.
+            return None
         fallback_user = _mobile_user_from_jwt_payload(jwt_payload or {})
         _bind_mobile_user_tenant_to_request(request, fallback_user)
         return fallback_user

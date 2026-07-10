@@ -174,6 +174,9 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
         return LegalConsentScreen(
           api: _client,
           legalVersion: _appConfig?.legalVersion ?? '1',
+          termsUrl: _appConfig?.termsUrl ?? 'https://xiu-ci.com/privacy.html',
+          privacyUrl:
+              _appConfig?.privacyUrl ?? 'https://xiu-ci.com/privacy.html',
           onAccepted: _acceptLegalAndRefresh,
         );
       case AndroidStartupRoute.authAutoLogin:
@@ -199,7 +202,7 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     final session = await _client.loadSession();
     MobileAppConfigData? config;
     try {
-      config = await _client.appConfig();
+      config = await _client.appConfigForInstalledBuild();
     } catch (_) {
       config = null;
     }

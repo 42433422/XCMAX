@@ -33,6 +33,18 @@ def _mock_pairing_request(host_header: str = "127.0.0.1:5112", hostname: str = "
     )
 
 
+def _pairing_admin():
+    return SimpleNamespace(
+        id=1,
+        username="admin",
+        display_name="管理端",
+        role="admin",
+        tier="admin",
+        tenant_id=1,
+        is_active=True,
+    )
+
+
 # ---------------------------------------------------------------------------
 # _ensure_mobile_device_table
 # ---------------------------------------------------------------------------
@@ -145,7 +157,7 @@ class TestPairingIssue:
                 return_value={"nonce": "abc123", "host": "192.168.1.10", "port": 5000},
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body, request)
+            result = await ext_mod.mobile_pairing_issue(body, request, user=_pairing_admin())
         # format_mobile_response returns a dict
         if hasattr(result, "body"):
             import json
@@ -174,7 +186,7 @@ class TestPairingIssue:
             ),
             patch.object(ext_mod, "_register_desktop_relay_for_pairing", return_value=None),
         ):
-            result = await ext_mod.mobile_pairing_issue(body, request)
+            result = await ext_mod.mobile_pairing_issue(body, request, user=_pairing_admin())
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
         payload = data["data"]
         assert payload["api_base_url"] == "http://192.168.0.38:17500/"
@@ -210,7 +222,7 @@ class TestPairingIssue:
                 },
             ),
         ):
-            result = await ext_mod.mobile_pairing_issue(body, request)
+            result = await ext_mod.mobile_pairing_issue(body, request, user=_pairing_admin())
         data = result if isinstance(result, dict) else __import__("json").loads(result.body)
         payload = data["data"]
         assert payload["code"] == "123456"
@@ -226,7 +238,7 @@ class TestPairingLookup:
     @pytest.mark.asyncio
     async def test_invalid_code(self, ext_mod):
         body = ext_mod.PairingLookupBody(code="000000")
-        result = await ext_mod.mobile_pairing_lookup(body)
+        result = await ext_mod.mobile_pairing_lookup(body, _mock_pairing_request())
         import json
 
         data = json.loads(result.body)
@@ -244,15 +256,42 @@ class TestPairingExchange:
             ),
             patch(
                 "app.security.mobile_pairing.consume_pairing_nonce",
-                return_value={"host": "192.168.1.10", "port": 5000, "shortCode": "123456"},
+                return_value={
+                    "host": "192.168.1.10",
+                    "port": 5000,
+                    "nonce": "abc123",
+                    "shortCode": "123456",
+                    "issuer_user_id": 1,
+                    "subject_user_id": 1,
+                    "subject_username": "admin",
+                    "tenant_id": 1,
+                    "company_brand": "tenant-1",
+                    "account_kind": "enterprise",
+                    "token_scope": "enterprise_pairing",
+                },
             ),
             patch.object(ext_mod, "_pairing_issue_host", return_value="192.168.1.10"),
+            patch.object(
+                ext_mod,
+                "lookup_pairing_nonce",
+                return_value={
+                    "nonce": "abc123",
+                    "subject_user_id": 1,
+                    "tenant_id": 1,
+                },
+            ),
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
         ):
             # First issue a pairing to get a nonce
             body_issue = ext_mod.PairingIssueBody(host="192.168.1.10", port=5000)
             issue_result = await ext_mod.mobile_pairing_issue(
                 body_issue,
                 _mock_pairing_request("192.168.1.10:5000", "192.168.1.10"),
+                user=_pairing_admin(),
             )
             if hasattr(issue_result, "body"):
                 import json
@@ -262,7 +301,11 @@ class TestPairingExchange:
                 issue_data = issue_result
             nonce = issue_data.get("data", {}).get("nonce", "abc123")
             body_exchange = ext_mod.PairingExchangeBody(nonce=nonce)
-            result = await ext_mod.mobile_pairing_exchange(body_exchange)
+            result = await ext_mod.mobile_pairing_exchange(
+                body_exchange,
+                _mock_pairing_request("192.168.1.10:5000", "192.168.1.10"),
+                user=None,
+            )
             if hasattr(result, "body"):
                 import json
 
@@ -274,17 +317,33 @@ class TestPairingExchange:
     @pytest.mark.asyncio
     async def test_exchange_by_shortcode(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456")
-        with patch.object(
-            ext_mod,
-            "consume_by_shortcode",
-            return_value={
-                "host": "192.168.1.20",
-                "port": 5100,
-                "nonce": "n1",
-                "shortCode": "123456",
-            },
-        ) as consume:
-            result = await ext_mod.mobile_pairing_exchange(body)
+        record = {
+            "host": "192.168.1.20",
+            "port": 5100,
+            "nonce": "n1",
+            "shortCode": "123456",
+            "issuer_user_id": 1,
+            "subject_user_id": 1,
+            "subject_username": "admin",
+            "tenant_id": 1,
+            "company_brand": "tenant-1",
+            "account_kind": "enterprise",
+            "token_scope": "enterprise_pairing",
+        }
+        with (
+            patch.object(ext_mod, "lookup_by_shortcode", return_value=record),
+            patch.object(ext_mod, "consume_by_shortcode", return_value=record) as consume,
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
+        ):
+            result = await ext_mod.mobile_pairing_exchange(
+                body,
+                _mock_pairing_request(),
+                user=None,
+            )
         consume.assert_called_once_with("123456")
         if hasattr(result, "body"):
             import json
@@ -300,7 +359,11 @@ class TestPairingExchange:
     @pytest.mark.asyncio
     async def test_exchange_no_credentials(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body)
+        result = await ext_mod.mobile_pairing_exchange(
+            body,
+            _mock_pairing_request(),
+            user=None,
+        )
         assert result.status_code == 400
 
 
@@ -383,8 +446,8 @@ class TestUnauthorizedRoutes:
 
 class TestServiceBridgeRoutes:
     @pytest.mark.asyncio
-    async def test_codex_super_employee_messages_rejects_enterprise_user(self, ext_mod):
-        # 超级员工已收口为仅管理端可达：企业端账号一律 403，且不触达 Service。
+    async def test_codex_super_employee_messages_accepts_enterprise_user(self, ext_mod):
+        # LAN 配对后的企业端可使用超级员工，但仍不可访问普通管理接口。
         user = SimpleNamespace(id=901, role="enterprise")
         with (
             patch.object(
@@ -399,11 +462,11 @@ class TestServiceBridgeRoutes:
                 limit=80,
                 user=user,
             )
-        assert result.status_code == 403
-        mock_service.return_value.list_messages.assert_not_called()
+        assert result["success"] is True
+        mock_service.return_value.list_messages.assert_called_once_with(user_id=901, limit=80)
 
     @pytest.mark.asyncio
-    async def test_codex_super_employee_invoke_rejects_enterprise_user(self, ext_mod):
+    async def test_codex_super_employee_invoke_accepts_enterprise_user(self, ext_mod):
         user = SimpleNamespace(id=901, role="enterprise")
         with (
             patch.object(
@@ -418,8 +481,8 @@ class TestServiceBridgeRoutes:
                 body=ext_mod.CodexSuperEmployeeMobileMessageBody(message="帮我做点什么"),
                 user=user,
             )
-        assert result.status_code == 403
-        mock_service.return_value.invoke.assert_not_called()
+        assert result["success"] is True
+        mock_service.return_value.invoke.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_codex_super_employee_messages_rejects_personal_user(self, ext_mod):

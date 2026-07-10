@@ -869,6 +869,32 @@ class TestCliReplyBody:
             result = svc._cli_reply_body("hi", {})
         assert "CLI" in result or "code" in result
 
+    def test_usage_limit_is_actionable_and_invoke_is_failed(self, tmp_path):
+        cli = tmp_path / "codex"
+        cli.write_text("#!/bin/sh\n")
+        cli.chmod(0o755)
+
+        def limited_runner(cmd, **kw):
+            return subprocess.CompletedProcess(
+                cmd,
+                1,
+                stdout="ERROR: Reconnecting... 5/5",
+                stderr=(
+                    "You've hit your usage limit. Purchase more credits or try again at 3:27 PM."
+                ),
+            )
+
+        svc = _make_svc(tmp_path, cli_runner=limited_runner)
+        with patch.object(svc, "_cli_path", return_value=str(cli)):
+            result = svc.invoke(user_id=7, message="请直接回答这个问题", context={"mode": "chat"})
+
+        assert result["ok"] is False
+        assert result["error_code"] == "usage_limit"
+        assert "3:27 PM" in result["error_message"]
+        assert result["assistant_message"]["status"] == "failed"
+        assert result["dispatch"]["status"] == "failed"
+        assert result["dispatch"]["accepted"] is False
+
     def test_claude_profile_reads_stdout(self, tmp_path):
         import json as _json
 

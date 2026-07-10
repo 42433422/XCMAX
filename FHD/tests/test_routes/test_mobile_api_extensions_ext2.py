@@ -38,6 +38,24 @@ def _mock_user():
     return user
 
 
+def _bound_pairing_record(**overrides):
+    record = {
+        "host": "192.168.1.1",
+        "port": 5000,
+        "nonce": "abc123",
+        "shortCode": "123456",
+        "issuer_user_id": 1,
+        "subject_user_id": 1,
+        "subject_username": "admin",
+        "tenant_id": 1,
+        "company_brand": "tenant-1",
+        "account_kind": "enterprise",
+        "token_scope": "enterprise_pairing",
+    }
+    record.update(overrides)
+    return record
+
+
 # ---------------------------------------------------------------------------
 # mobile_approval_list with user
 # ---------------------------------------------------------------------------
@@ -234,7 +252,7 @@ class TestMobilePairingLookupSuccess:
             "app.security.mobile_pairing.lookup_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "nonce": "abc", "exp": 1234},
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, request=MagicMock())
         assert hasattr(result, "body") or isinstance(result, dict)
 
 
@@ -247,47 +265,61 @@ class TestMobilePairingExchangeSuccess:
     @pytest.mark.asyncio
     async def test_exchange_by_code(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="123456", nonce="")
-        with patch(
-            "app.security.mobile_pairing.consume_by_shortcode",
-            return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
+        record = _bound_pairing_record()
+        with (
+            patch.object(ext_mod, "lookup_by_shortcode", return_value=record),
+            patch.object(ext_mod, "consume_by_shortcode", return_value=record),
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+            result = await ext_mod.mobile_pairing_exchange(
+                body=body, request=MagicMock(), user=None
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_exchange_by_nonce_success(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="abc123")
-        with patch(
-            "app.security.mobile_pairing.consume_pairing_nonce",
-            return_value={"host": "192.168.1.1", "port": 5000, "shortCode": "123456"},
+        record = _bound_pairing_record()
+        with (
+            patch.object(ext_mod, "lookup_pairing_nonce", return_value=record),
+            patch.object(ext_mod, "consume_pairing_nonce", return_value=record),
+            patch.object(
+                ext_mod,
+                "_pairing_subject_user",
+                return_value={"id": 1, "username": "admin", "role": "enterprise"},
+            ),
         ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+            result = await ext_mod.mobile_pairing_exchange(
+                body=body, request=MagicMock(), user=None
+            )
         assert hasattr(result, "body") or isinstance(result, dict)
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_both_empty(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="")
-        result = await ext_mod.mobile_pairing_exchange(body=body)
+        result = await ext_mod.mobile_pairing_exchange(body=body, request=MagicMock(), user=None)
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_code_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="000000", nonce="")
-        with patch(
-            "app.security.mobile_pairing.consume_by_shortcode",
-            return_value=None,
-        ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+        with patch.object(ext_mod, "lookup_by_shortcode", return_value=None):
+            result = await ext_mod.mobile_pairing_exchange(
+                body=body, request=MagicMock(), user=None
+            )
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_exchange_invalid_nonce_returns_none(self, ext_mod):
         body = ext_mod.PairingExchangeBody(code="", nonce="bad")
-        with patch(
-            "app.security.mobile_pairing.consume_pairing_nonce",
-            return_value=None,
-        ):
-            result = await ext_mod.mobile_pairing_exchange(body=body)
+        with patch.object(ext_mod, "lookup_pairing_nonce", return_value=None):
+            result = await ext_mod.mobile_pairing_exchange(
+                body=body, request=MagicMock(), user=None
+            )
         assert result.status_code == 400
 
 

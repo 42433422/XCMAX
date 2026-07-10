@@ -2545,19 +2545,26 @@ class AiGroupChatService:
                 }
             ]
 
-        work_orders: list[dict[str, Any]] = []
-        for member in assignments:
-            report = await self._execute_employee_work(
-                group=group,
-                member=member,
-                task=task,
-                assigned_task=str(member.get("assigned_task") or task),
-                assignment_focus=str(member.get("assignment_focus") or ""),
-                work_order_id=work_order_id,
-                user_id=user_id,
-                sender_name=sender_name,
-                branch_context=branch_context,
+        # 四个超级员工分别拥有独立 CLI 槽位；群派工必须并行提交，不能让前一个
+        # 长任务阻塞后三个员工。gather 保持 assignments 顺序，消息/验收展示仍稳定。
+        reports = await asyncio.gather(
+            *(
+                self._execute_employee_work(
+                    group=group,
+                    member=member,
+                    task=task,
+                    assigned_task=str(member.get("assigned_task") or task),
+                    assignment_focus=str(member.get("assignment_focus") or ""),
+                    work_order_id=work_order_id,
+                    user_id=user_id,
+                    sender_name=sender_name,
+                    branch_context=branch_context,
+                )
+                for member in assignments
             )
+        )
+        work_orders: list[dict[str, Any]] = []
+        for member, report in zip(assignments, reports, strict=True):
             work_orders.append(report)
             row = self._message_row(
                 user_id=user_id,

@@ -83,6 +83,11 @@ object ApiEndpoints {
     const val RELAY_MOBILE_DESKTOPS = "$BASE/relay/mobile/desktops"
     const val RELAY_TASKS = "$BASE/relay/tasks"
     const val RELAY_TASKS_DETAIL = "$BASE/relay/tasks/{taskId}"
+    const val RELAY_TASKS_CANCEL = "$RELAY_TASKS_DETAIL/cancel"
+    const val RELAY_TASKS_RETRY = "$RELAY_TASKS_DETAIL/retry"
+    const val RELAY_THREADS = "$BASE/relay/threads"
+    const val RELAY_THREADS_DETAIL = "$BASE/relay/threads/{threadId}"
+    const val RELAY_THREADS_ARCHIVE = "$RELAY_THREADS_DETAIL/archive"
 
     // 客服
     const val CS_INFO = "$BASE/cs/info"

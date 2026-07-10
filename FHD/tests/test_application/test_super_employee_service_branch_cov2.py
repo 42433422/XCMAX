@@ -31,6 +31,9 @@ from __future__ import annotations
 
 import json
 import subprocess
+import sys
+import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -43,6 +46,7 @@ from app.application.super_employee_service import (
     CODEX_PROFILE,
     CURSOR_PROFILE,
     DISPATCHER_MESSAGE_KIND,
+    TRAE_PROFILE,
     SuperEmployeeService,
     SuperEmployeeToolProfile,
     _claude_cli_command,
@@ -1108,6 +1112,16 @@ class TestParseStreamJsonFull:
         body, sid = svc._parse_stream_json_full(out)
         assert body == "ok"
 
+    def test_codex_thread_and_agent_message_events(self, tmp_path) -> None:
+        svc = _make_svc(tmp_path, cli_runner=_null_runner)
+        out = (
+            '{"type":"thread.started","thread_id":"codex-thread-1"}\n'
+            '{"type":"item.completed","item":{"type":"agent_message","text":"完成"}}\n'
+        )
+        body, sid = svc._parse_stream_json_full(out)
+        assert body == "完成"
+        assert sid == "codex-thread-1"
+
 
 # ───────────────────── _parse_claude_stream_json ─────────────────────
 
@@ -1658,8 +1672,90 @@ class TestConversationCmd:
     def test_with_resume(self, tmp_path) -> None:
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         cmd = svc._conversation_cmd("/cli", "prompt", "sess-123")
-        assert "--resume" in cmd
+        assert cmd[:3] == ["/cli", "exec", "resume"]
         assert "sess-123" in cmd
+
+    @pytest.mark.parametrize(
+        ("profile", "resume_marker"),
+        [
+            (CLAUDE_PROFILE, "--resume"),
+            (CURSOR_PROFILE, "--resume"),
+            (TRAE_PROFILE, "--resume=native-session"),
+        ],
+    )
+    def test_non_codex_tools_use_native_resume(self, tmp_path, profile, resume_marker) -> None:
+        svc = _make_svc(tmp_path, profile=profile, cli_runner=_null_runner)
+        cmd = svc._conversation_cmd("/cli", "继续", "native-session")
+        assert resume_marker in cmd
+        assert any("native-session" in part for part in cmd)
+
+    def test_trae_new_thread_gets_explicit_session_id(self, tmp_path) -> None:
+        svc = _make_svc(tmp_path, profile=TRAE_PROFILE, cli_runner=_null_runner)
+        cmd = svc._conversation_cmd("/cli", "第一轮", None, "trae-session")
+        assert "--session-id" in cmd
+        assert "trae-session" in cmd
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [CODEX_PROFILE, CLAUDE_PROFILE, CURSOR_PROFILE, TRAE_PROFILE],
+)
+def test_all_four_tools_persist_and_resume_native_thread(tmp_path, monkeypatch, profile) -> None:
+    monkeypatch.setattr(
+        "app.application.super_employee_service.get_app_data_dir",
+        lambda: str(tmp_path),
+    )
+    workspace = tmp_path / f"{profile.tool_name}-workspace"
+    workspace.mkdir()
+    svc = _make_svc(tmp_path, profile=profile)
+    commands: list[list[str]] = []
+
+    def fake_idle(cmd, cwd, idle_timeout, hard_cap):
+        commands.append(list(cmd))
+        round_no = len(commands)
+        stdout = json.dumps(
+            {
+                "type": "result",
+                "result": f"第 {round_no} 轮回复",
+                "session_id": f"{profile.tool_name}-native-session",
+            },
+            ensure_ascii=False,
+        )
+        return 0, stdout, "", ""
+
+    context = {
+        "persistent_conversation": True,
+        "conversation_id": f"thread-{profile.tool_name}",
+        "thread_id": f"thread-{profile.tool_name}",
+    }
+    with (
+        patch.object(svc, "_cli_workspace", return_value=str(tmp_path)),
+        patch.object(
+            svc,
+            "_ensure_session_workspace",
+            return_value=(str(workspace), f"super-employee/{profile.tool_name}/thread"),
+        ),
+        patch.object(svc, "_run_cli_idle", side_effect=fake_idle),
+    ):
+        assert svc._run_conversation_turn("/cli", "第一轮", context) == "第 1 轮回复"
+        assert svc._run_conversation_turn("/cli", "继续第二轮", context) == "第 2 轮回复"
+
+    native_session = f"{profile.tool_name}-native-session"
+    assert native_session not in commands[0]
+    assert any(native_session in part for part in commands[1])
+    if profile is CODEX_PROFILE:
+        assert commands[1][:3] == ["/cli", "exec", "resume"]
+    elif profile is TRAE_PROFILE:
+        assert f"--resume={native_session}" in commands[1]
+    else:
+        assert "--resume" in commands[1]
+    assert svc._last_session_runtime == {
+        "session_id": native_session,
+        "workspace_root": str(workspace),
+        "branch": f"super-employee/{profile.tool_name}/thread",
+        "thread_id": f"thread-{profile.tool_name}",
+        "tool": profile.tool_name,
+    }
 
 
 # ───────────────────── _dev_loop_enabled ─────────────────────
@@ -1847,6 +1943,32 @@ class TestCliIdleTimeoutSeconds:
         monkeypatch.setenv("XCMAX_CODEX_CLI_TIMEOUT_SEC", "240")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         assert svc._cli_idle_timeout_seconds() == 240.0
+
+
+def test_run_cli_idle_cancellation_terminates_real_process(tmp_path) -> None:
+    svc = _make_svc(tmp_path)
+    cancel = threading.Event()
+    svc.set_cancellation_event(cancel)
+    timer = threading.Timer(0.2, cancel.set)
+    timer.start()
+    started = time.monotonic()
+    try:
+        returncode, _stdout, _stderr, killed = svc._run_cli_idle(
+            [
+                sys.executable,
+                "-u",
+                "-c",
+                "import time; print('started', flush=True); time.sleep(30)",
+            ],
+            str(tmp_path),
+            idle_timeout=60,
+            hard_cap=60,
+        )
+    finally:
+        timer.cancel()
+    assert killed == "cancelled"
+    assert returncode != 0
+    assert time.monotonic() - started < 5
 
 
 # ───────────────────── _cli_fix_prompt ─────────────────────

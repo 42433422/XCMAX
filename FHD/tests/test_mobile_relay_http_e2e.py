@@ -39,7 +39,7 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
         role="admin",
         is_active=True,
         account_id="account-7",
-        tenant_id="tenant-a",
+        tenant_id=41,
     )
     client = TestClient(app)
 
@@ -67,23 +67,40 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     assert confirm_response.status_code == 200
     binding = confirm_response.json()["data"]
     assert binding["account_id"] == "account-7"
-    assert binding["tenant_id"] == "tenant-a"
+    assert binding["tenant_id"] == 41
     assert binding["session_token"]
     assert binding["relay_base_url"] == "https://relay.example.test/api/"
     assert binding["local_base_url"] == "http://192.168.1.8:17500"
     assert binding["paired_at"]
+
+    thread_response = client.post(
+        "/api/mobile/v1/relay/threads",
+        json={
+            "relay_id": registered["relay_id"],
+            "employee_id": "codex-super-employee",
+            "title": "移动端 Codex 多轮对话",
+            "context": {"workspace_root": "/workspace/XCMAX"},
+        },
+    )
+    assert thread_response.status_code == 200
+    thread = thread_response.json()["data"]["thread"]
+    assert thread["employee_id"] == "codex-super-employee"
+    assert client.get("/api/mobile/v1/relay/threads").json()["data"]["count"] == 1
 
     create_response = client.post(
         "/api/mobile/v1/relay/tasks",
         json={
             "relay_id": registered["relay_id"],
             "kind": "codex.invoke",
+            "thread_id": thread["thread_id"],
             "payload": {"message": "修复并运行测试"},
         },
     )
     assert create_response.status_code == 200
     task = create_response.json()["data"]["task"]
     assert task["status"] == "queued"
+    assert task["thread_id"] == thread["thread_id"]
+    assert task["payload"]["context"]["persistent_conversation"] is True
 
     poll_response = client.post(
         "/api/mobile/v1/relay/desktop/poll",
@@ -105,6 +122,11 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
             "result": {
                 "ok": True,
                 "codex": {"assistant_message": {"body": "真实 Codex 已完成并回写"}},
+                "session": {
+                    "session_id": "codex-session-1",
+                    "workspace_root": "/workspace/thread-1",
+                    "branch": "super-employee/codex/thread-1",
+                },
             },
         },
     )
@@ -116,3 +138,61 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     final_task = status_response.json()["data"]["task"]
     assert final_task["status"] == "completed"
     assert final_task["result"]["codex"]["assistant_message"]["body"] == "真实 Codex 已完成并回写"
+    thread_after = client.get(f"/api/mobile/v1/relay/threads/{thread['thread_id']}").json()["data"][
+        "thread"
+    ]
+    assert thread_after["cli_session_id"] == "codex-session-1"
+    assert thread_after["branch"] == "super-employee/codex/thread-1"
+    history = client.get(
+        "/api/mobile/v1/relay/tasks", params={"thread_id": thread["thread_id"]}
+    ).json()["data"]
+    assert history["count"] == 1
+
+    cancel_create = client.post(
+        "/api/mobile/v1/relay/tasks",
+        json={
+            "relay_id": registered["relay_id"],
+            "kind": "codex.invoke",
+            "thread_id": thread["thread_id"],
+            "payload": {"message": "运行一个可取消的长任务"},
+        },
+    )
+    cancel_task = cancel_create.json()["data"]["task"]
+    claimed_cancel_task = client.post(
+        "/api/mobile/v1/relay/desktop/poll",
+        json={
+            "relay_id": registered["relay_id"],
+            "desktop_token": registered["desktop_token"],
+            "max_tasks": 1,
+        },
+    ).json()["data"]["tasks"][0]
+    assert claimed_cancel_task["task_id"] == cancel_task["task_id"]
+    assert (
+        client.post(f"/api/mobile/v1/relay/tasks/{cancel_task['task_id']}/cancel").json()["data"][
+            "task"
+        ]["status"]
+        == "cancelled"
+    )
+    cancellation_poll = client.post(
+        "/api/mobile/v1/relay/desktop/poll",
+        json={
+            "relay_id": registered["relay_id"],
+            "desktop_token": registered["desktop_token"],
+            "max_tasks": 0,
+            "inflight_task_ids": [cancel_task["task_id"]],
+        },
+    )
+    assert cancellation_poll.status_code == 200
+    assert cancellation_poll.json()["data"]["tasks"] == []
+    assert cancellation_poll.json()["data"]["cancelled_task_ids"] == [cancel_task["task_id"]]
+    late_complete = client.post(
+        f"/api/mobile/v1/relay/desktop/tasks/{cancel_task['task_id']}/complete",
+        json={
+            "relay_id": registered["relay_id"],
+            "desktop_token": registered["desktop_token"],
+            "status": "completed",
+            "result": {"ok": True, "answer": "late"},
+        },
+    )
+    assert late_complete.status_code == 200
+    assert late_complete.json()["data"]["task"]["status"] == "cancelled"

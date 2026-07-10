@@ -8,16 +8,10 @@ on:
         required: false
         type: string
         default: "10.0.0"
-      upload_crashlytics_mapping:
-        description: Upload ProGuard mapping to Firebase Crashlytics
-        type: boolean
-        default: false
       harmony_artifact:
-        description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
+        description: Enterprise HarmonyOS .hap/.hsp path. If empty, packaging fails unless an artifact is already staged.
         required: false
         type: string
-  # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
-  # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
 permissions:
   contents: write
@@ -29,144 +23,174 @@ concurrency:
 jobs:
   assemble-release:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
-        working-directory: mobile-android
+        working-directory: mobile-flutter-poc
+    outputs:
+      version: ${{ steps.release_version.outputs.version }}
+      version_code: ${{ steps.release_version.outputs.version_code }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
+
       - uses: android-actions/setup-android@v3
-      - name: Prepare Google Services config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          else
-            cat > app/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "100000000000",
-              "project_id": "xcagi-ci-placeholder",
-              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
-      - name: Resolve release version
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.4
+          cache: true
+
+      - name: Resolve monotonic release version
         id: release_version
+        shell: bash
         run: |
           raw="${{ github.event.inputs.version || github.ref_name }}"
-          # For manual runs, default to 10.0.0 to match the project anchor unless the
-          # ref itself looks like a version tag.
-          if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
+          if [[ "${raw}" == "main" || "${raw}" == "master" || -z "${raw}" ]]; then
             raw="10.0.0"
           fi
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          if [[ -z "${raw}" ]]; then
-            raw="10.0.0"
+          if [[ ! "${raw}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid Android release version: ${raw}" >&2
+            exit 1
+          fi
+          version_code="$(date +%s)"
+          if (( version_code <= 1783711620 || version_code > 2147483647 )); then
+            echo "Generated versionCode ${version_code} is not monotonic or exceeds Android limits" >&2
+            exit 1
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
-      - name: Ensure gradlew executable
-        run: chmod +x ./gradlew
-      - name: Configure release signing
-        id: signing
+          echo "version_code=${version_code}" >> "${GITHUB_OUTPUT}"
+
+      - name: Require and configure production signing
+        shell: bash
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
-            echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::ANDROID_KEYSTORE_BASE64 secret 未配置,release APK 将用 debug key 签名(仅适用于测试,不可用于生产分发)"
-          else
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > signing/xcagi-release.jks
-            chmod 600 signing/xcagi-release.jks
-            echo "configured=true" >> "${GITHUB_OUTPUT}"
-            echo "已配置正式签名 keystore"
-          fi
-      - name: Assemble Release (enterprise only)
-        id: assemble
-        env:
-          XCAGI_ANDROID_KEYSTORE: ${{ steps.signing.outputs.configured == 'true' && 'signing/xcagi-release.jks' || '' }}
-          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          XCAGI_REQUIRE_RELEASE_SIGNING: ${{ steps.signing.outputs.configured == 'true' && '1' || '0' }}
-        run: |
-          # 治根:stamp 真实递增 versionCode(构建时间戳),让 OTA 自更新能合法触发。
-          # 之前 versionCode 写死 10、永不递增,是「永久发现新版本」假提示的根因。
-          # versionName 不在此覆盖,守 VERSION.md 的 v10 锚点(build.gradle 默认 10.0.0)。
-          VCODE=$(date +%s)
-          echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
-          ./gradlew assembleEnterpriseRelease \
-            -PandroidVersionCode="$VCODE" \
-            -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
-            --no-daemon
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required production signing secret: ${name}" >&2
+              exit 1
+            fi
+          done
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/xcagi-release.jks
+          chmod 600 android/xcagi-release.jks
           {
-            echo "### 📱 Android release versionCode = \`$VCODE\`"
-            echo ""
-            echo "部署时**必须**把服务器 \`.env\` 设为同一个数,否则装机后仍会无限「发现新版本」:"
-            echo '```'
-            echo "XCAGI_ANDROID_LATEST_VERSION_CODE=$VCODE"
-            echo "XCAGI_ANDROID_MIN_VERSION_CODE=10"
-            echo "XCAGI_ANDROID_LATEST_VERSION_NAME=${{ steps.release_version.outputs.version }}"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Stage mobile package distribution
+            printf 'storeFile=xcagi-release.jks\n'
+            printf 'storePassword=%s\n' "${ANDROID_KEYSTORE_PASSWORD}"
+            printf 'keyAlias=%s\n' "${ANDROID_KEY_ALIAS}"
+            printf 'keyPassword=%s\n' "${ANDROID_KEY_PASSWORD}"
+          } > android/keystore.properties
+          chmod 600 android/keystore.properties
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --concurrency=4
+
+      - name: Build signed enterprise APK and AAB
+        env:
+          XCAGI_ANDROID_VERSION_CODE: ${{ steps.release_version.outputs.version_code }}
+          XCAGI_ANDROID_VERSION_NAME: ${{ steps.release_version.outputs.version }}
+          XCAGI_REQUIRE_RELEASE_SIGNING: "1"
+        run: |
+          flutter build apk --release \
+            --build-name "${{ steps.release_version.outputs.version }}" \
+            --build-number "${{ steps.release_version.outputs.version_code }}"
+          flutter build appbundle --release \
+            --build-name "${{ steps.release_version.outputs.version }}" \
+            --build-number "${{ steps.release_version.outputs.version_code }}"
+
+      - name: Verify package identity, version and production signature
+        shell: bash
+        run: |
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          aab="build/app/outputs/bundle/release/app-release.aab"
+          test -s "${apk}"
+          test -s "${aab}"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          badging="$("${build_tools}/aapt" dump badging "${apk}")"
+          printf '%s\n' "${badging}" | grep -F "package: name='com.xiuci.xcagi.mobile.enterprise'"
+          printf '%s\n' "${badging}" | grep -F "versionCode='${{ steps.release_version.outputs.version_code }}'"
+          printf '%s\n' "${badging}" | grep -F "versionName='${{ steps.release_version.outputs.version }}'"
+          if printf '%s\n' "${badging}" | grep -q "application-debuggable"; then
+            echo "Release APK is debuggable" >&2
+            exit 1
+          fi
+          certs="$("${build_tools}/apksigner" verify --verbose --print-certs "${apk}")"
+          printf '%s\n' "${certs}"
+          if printf '%s\n' "${certs}" | grep -qi "Android Debug"; then
+            echo "Release APK uses the Android debug certificate" >&2
+            exit 1
+          fi
+
+      - name: Generate and verify atomic OTA manifest
+        shell: bash
+        run: |
+          staged="build/ota/enterprise"
+          mkdir -p "${staged}"
+          apk="${staged}/XCAGI-Enterprise-Android-${{ steps.release_version.outputs.version }}.apk"
+          manifest="${staged}/android_release_manifest.json"
+          cp -f "build/app/outputs/flutter-apk/app-release.apk" "${apk}"
+          python3 "../../成都修茈科技有限公司/MODstore_deploy/scripts/android_release_manifest.py" write \
+            --sku enterprise \
+            --apk "${apk}" \
+            --output "${manifest}" \
+            --version-code "${{ steps.release_version.outputs.version_code }}" \
+            --version-name "${{ steps.release_version.outputs.version }}" \
+            --min-version-code 10 \
+            --download-url "https://xiu-ci.com/download/enterprise/XCAGI-Enterprise-Android-${{ steps.release_version.outputs.version }}.apk"
+          python3 "../../成都修茈科技有限公司/MODstore_deploy/scripts/android_release_manifest.py" check \
+            --sku enterprise \
+            --manifest "${manifest}"
+
+      - name: Stage enterprise distribution package
         run: |
           bash ../mobile-harmony/scripts/stage-release-packages.sh \
             --version "${{ steps.release_version.outputs.version }}" \
             --android-version "${{ steps.release_version.outputs.version }}" \
+            --apk-path "$(pwd)/build/ota/enterprise/XCAGI-Enterprise-Android-${{ steps.release_version.outputs.version }}.apk" \
+            --android-manifest "$(pwd)/build/ota/enterprise/android_release_manifest.json" \
             --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
-      - name: Upload mobile package artifacts
+
+      - name: Upload verified release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-enterprise-mobile-release-packages
+          name: xcagi-enterprise-mobile-release-${{ steps.release_version.outputs.version_code }}
           path: |
-            FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
+            FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk
+            FHD/mobile-flutter-poc/build/app/outputs/bundle/release/app-release.aab
             release/packages-v${{ steps.release_version.outputs.version }}/enterprise/
             release/packages-v${{ steps.release_version.outputs.version }}/企业版/
             release/XCAGI-Enterprise-Mobile-Packages-v${{ steps.release_version.outputs.version }}.zip
           if-no-files-found: error
+          retention-days: 30
 
   publish-release:
     needs: assemble-release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-enterprise-mobile-release-packages
+          name: xcagi-enterprise-mobile-release-${{ needs.assemble-release.outputs.version_code }}
           path: artifacts
-      - name: Upload mobile packages to release
+      - name: Upload verified mobile packages to release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}

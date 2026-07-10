@@ -6,6 +6,16 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from fastapi import HTTPException
+
+from app.infrastructure.workspace import (
+    read_safe_workspace_file,
+    resolve_safe_workspace_file,
+    resolve_safe_workspace_relpath,
+)
+from app.infrastructure.workspace import (
+    workspace_root as configured_workspace_root,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -50,6 +60,17 @@ async def run_office_read_employee(
     if not mod_id:
         raise ValueError("缺少 employee_id")
 
+    # ``workspace_root`` is retained only for caller compatibility.  The server
+    # configuration is the sole authority for filesystem access.
+    _ = workspace_root
+    root = configured_workspace_root()
+    safe_file = resolve_safe_workspace_file(file_path)
+    safe_file_rel = safe_file.relative_to(root).as_posix()
+    safe_output_rel = ""
+    if output_relpath:
+        safe_output = resolve_safe_workspace_relpath(output_relpath)
+        safe_output_rel = safe_output.relative_to(root).as_posix()
+
     mod_path = ""
     try:
         from app.infrastructure.mods.mod_manager import get_mod_manager
@@ -69,12 +90,12 @@ async def run_office_read_employee(
         raise RuntimeError(f"办公员工 Mod 未找到: {mod_id}")
 
     payload: dict[str, Any] = {
-        "file_path": file_path,
-        "workspace_root": workspace_root,
+        "file_path": safe_file_rel,
+        "workspace_root": str(root),
         "action": "convert",
     }
-    if output_relpath:
-        payload["output_relpath"] = output_relpath
+    if safe_output_rel:
+        payload["output_relpath"] = safe_output_rel
 
     stem = mod_id.replace("-", "_")
     blueprints = import_mod_backend_py(mod_path, mod_id, "blueprints")
@@ -89,30 +110,25 @@ async def run_office_read_employee(
 
 
 def read_workspace_output_files(
-    workspace_root: str,
     file_paths: list[str],
     *,
     max_bytes: int = 2_097_152,
 ) -> list[dict[str, Any]]:
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
-
     out: list[dict[str, Any]] = []
     for raw in file_paths:
-        rel = str(raw or "").strip().lstrip("/")
+        rel = str(raw or "").strip()
         if not rel:
             continue
         try:
-            path = resolve_safe_workspace_relpath(rel)
-        except ValueError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
+            path, blob = read_safe_workspace_file(rel, max_bytes=max_bytes)
+        except HTTPException:
+            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
             continue
-        if not path.is_file():
+        except FileNotFoundError:
             out.append({"path": rel, "kind": "text", "error": "file_not_found"})
             continue
-        try:
-            blob = path.read_bytes()[:max_bytes]
-        except OSError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
+        except OSError:
+            out.append({"path": rel, "kind": "text", "error": "read_failed"})
             continue
         suffix = path.suffix.lower()
         if suffix == ".json":

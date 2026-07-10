@@ -110,6 +110,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: FHD/mobile-android",
     )
     content = content.replace(
+        "working-directory: mobile-flutter-poc",
+        "working-directory: FHD/mobile-flutter-poc",
+    )
+    content = content.replace(
         "working-directory: mobile-ios",
         "working-directory: FHD/mobile-ios",
     )

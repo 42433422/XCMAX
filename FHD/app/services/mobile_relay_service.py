@@ -12,12 +12,22 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import text
 
 from app.db.session import get_db
 from app.infrastructure.topology import FHD_API_BASE_URL
 
 logger = logging.getLogger(__name__)
+
+_SUPER_EMPLOYEE_TOOLS: dict[str, str] = {
+    "codex-super-employee": "codex",
+    "claude-super-employee": "claude",
+    "cursor-super-employee": "cursor",
+    "trae-super-employee": "trae",
+}
+_TOOL_EMPLOYEES = {tool: employee for employee, tool in _SUPER_EMPLOYEE_TOOLS.items()}
+_ACTIVE_TASK_STATUSES = {"queued", "running", "assigned", "processing", "in_progress"}
 
 
 def _utc_now() -> str:
@@ -59,7 +69,7 @@ def _token_hash(token: str) -> str:
 
 def _row_dict(row: Any) -> dict[str, Any]:
     data = dict(row or {})
-    for key in ("capabilities_json", "payload_json", "result_json"):
+    for key in ("capabilities_json", "payload_json", "result_json", "context_json"):
         if key in data:
             data[key.removesuffix("_json")] = _json_loads(data.pop(key))
     return data
@@ -106,6 +116,10 @@ class MobileRelayService:
                 CREATE TABLE IF NOT EXISTS mobile_relay_tasks (
                     task_id VARCHAR(64) PRIMARY KEY,
                     relay_id VARCHAR(64) NOT NULL,
+                    thread_id VARCHAR(64) NOT NULL DEFAULT '',
+                    work_item_id VARCHAR(64) NOT NULL DEFAULT '',
+                    employee_id VARCHAR(80) NOT NULL DEFAULT '',
+                    attempt_no INTEGER NOT NULL DEFAULT 1,
                     kind VARCHAR(64) NOT NULL DEFAULT 'codex.invoke',
                     payload_json TEXT NOT NULL DEFAULT '{}',
                     status VARCHAR(32) NOT NULL DEFAULT 'queued',
@@ -121,6 +135,58 @@ class MobileRelayService:
         )
         db.execute(
             text(
+                """
+                CREATE TABLE IF NOT EXISTS mobile_super_employee_threads (
+                    thread_id VARCHAR(64) PRIMARY KEY,
+                    relay_id VARCHAR(64) NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    employee_id VARCHAR(80) NOT NULL,
+                    tool VARCHAR(32) NOT NULL,
+                    title VARCHAR(200) NOT NULL DEFAULT '',
+                    status VARCHAR(32) NOT NULL DEFAULT 'idle',
+                    cli_session_id VARCHAR(160) NOT NULL DEFAULT '',
+                    workspace_root VARCHAR(1024) NOT NULL DEFAULT '',
+                    branch VARCHAR(256) NOT NULL DEFAULT '',
+                    last_task_id VARCHAR(64) NOT NULL DEFAULT '',
+                    context_json TEXT NOT NULL DEFAULT '{}',
+                    created_at VARCHAR(64) NOT NULL,
+                    updated_at VARCHAR(64) NOT NULL,
+                    archived_at VARCHAR(64)
+                )
+                """
+            )
+        )
+        db.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS mobile_super_employee_work_items (
+                    work_item_id VARCHAR(64) PRIMARY KEY,
+                    thread_id VARCHAR(64) NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    title VARCHAR(240) NOT NULL DEFAULT '',
+                    status VARCHAR(32) NOT NULL DEFAULT 'queued',
+                    last_run_id VARCHAR(64) NOT NULL DEFAULT '',
+                    created_at VARCHAR(64) NOT NULL,
+                    updated_at VARCHAR(64) NOT NULL,
+                    completed_at VARCHAR(64)
+                )
+                """
+            )
+        )
+        # 兼容已经存在的 relay 数据库。SQLAlchemy inspector 同时覆盖 SQLite/PostgreSQL，
+        # 避免直接执行重复 ALTER 导致 PostgreSQL 事务进入 aborted 状态。
+        self._ensure_column(
+            db, "mobile_relay_tasks", "thread_id", "VARCHAR(64) NOT NULL DEFAULT ''"
+        )
+        self._ensure_column(
+            db, "mobile_relay_tasks", "work_item_id", "VARCHAR(64) NOT NULL DEFAULT ''"
+        )
+        self._ensure_column(
+            db, "mobile_relay_tasks", "employee_id", "VARCHAR(80) NOT NULL DEFAULT ''"
+        )
+        self._ensure_column(db, "mobile_relay_tasks", "attempt_no", "INTEGER NOT NULL DEFAULT 1")
+        db.execute(
+            text(
                 "CREATE INDEX IF NOT EXISTS ix_mobile_relay_desktops_user "
                 "ON mobile_relay_desktops(mobile_user_id)"
             )
@@ -131,6 +197,40 @@ class MobileRelayService:
                 "ON mobile_relay_tasks(relay_id, status, created_at)"
             )
         )
+        db.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_mobile_relay_tasks_thread "
+                "ON mobile_relay_tasks(thread_id, created_at)"
+            )
+        )
+        db.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_mobile_super_threads_user_tool "
+                "ON mobile_super_employee_threads(user_id, employee_id, updated_at)"
+            )
+        )
+
+    @staticmethod
+    def _ensure_column(db, table: str, column: str, ddl: str) -> None:
+        # Inspect through the session's existing connection.  Inspecting the
+        # Engine can open a second PostgreSQL connection while this transaction
+        # still owns CREATE/ALTER metadata locks, which deadlocks the first
+        # mobile relay poll and stalls the whole async API worker.
+        connection = db.connection()
+        columns = {
+            str(item.get("name") or "") for item in sa_inspect(connection).get_columns(table)
+        }
+        if column not in columns:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+
+    @staticmethod
+    def _tool_for_employee(employee_id: str) -> str:
+        return _SUPER_EMPLOYEE_TOOLS.get((employee_id or "").strip(), "")
+
+    @staticmethod
+    def _employee_for_kind(kind: str) -> str:
+        tool = (kind or "").strip().split(".", 1)[0]
+        return _TOOL_EMPLOYEES.get(tool, "")
 
     def register_desktop(
         self,
@@ -406,6 +506,123 @@ class MobileRelayService:
             )
             return [self._public_desktop(_row_dict(row)) for row in rows]
 
+    def create_thread(
+        self,
+        *,
+        user_id: int,
+        relay_id: str,
+        employee_id: str,
+        title: str = "",
+        context: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
+        """Create a real, resumable mobile conversation for one super employee."""
+        clean_employee = (employee_id or "").strip()
+        tool = self._tool_for_employee(clean_employee)
+        if not tool or not self._desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
+            return None
+        now = _utc_now()
+        thread_id = uuid.uuid4().hex
+        clean_title = (title or f"{tool.title()} 新对话").strip()[:200]
+        with get_db() as db:
+            self.ensure_tables(db)
+            db.execute(
+                text(
+                    """
+                    INSERT INTO mobile_super_employee_threads (
+                        thread_id, relay_id, user_id, employee_id, tool, title,
+                        status, context_json, created_at, updated_at
+                    ) VALUES (
+                        :thread_id, :relay_id, :user_id, :employee_id, :tool, :title,
+                        'idle', :context_json, :created_at, :updated_at
+                    )
+                    """
+                ),
+                {
+                    "thread_id": thread_id,
+                    "relay_id": relay_id.strip(),
+                    "user_id": int(user_id),
+                    "employee_id": clean_employee,
+                    "tool": tool,
+                    "title": clean_title,
+                    "context_json": _json_dumps(context or {}),
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
+        return self.get_thread(user_id=user_id, thread_id=thread_id)
+
+    def get_thread(self, *, user_id: int, thread_id: str) -> dict[str, Any] | None:
+        with get_db() as db:
+            self.ensure_tables(db)
+            row = (
+                db.execute(
+                    text(
+                        """
+                        SELECT * FROM mobile_super_employee_threads
+                        WHERE thread_id = :thread_id AND user_id = :user_id
+                        """
+                    ),
+                    {"thread_id": thread_id.strip(), "user_id": int(user_id)},
+                )
+                .mappings()
+                .first()
+            )
+            return _row_dict(row) if row else None
+
+    def list_threads(
+        self,
+        *,
+        user_id: int,
+        employee_id: str = "",
+        include_archived: bool = False,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses = ["user_id = :user_id"]
+        params: dict[str, Any] = {
+            "user_id": int(user_id),
+            "limit": max(1, min(300, int(limit))),
+        }
+        if employee_id.strip():
+            clauses.append("employee_id = :employee_id")
+            params["employee_id"] = employee_id.strip()
+        if not include_archived:
+            clauses.append("archived_at IS NULL")
+        where = " AND ".join(clauses)
+        with get_db() as db:
+            self.ensure_tables(db)
+            rows = (
+                db.execute(
+                    text(
+                        f"""
+                        SELECT * FROM mobile_super_employee_threads
+                        WHERE {where}
+                        ORDER BY updated_at DESC
+                        LIMIT :limit
+                        """  # nosec B608 - clauses are fixed literals; values stay bound.
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
+            return [_row_dict(row) for row in rows]
+
+    def archive_thread(self, *, user_id: int, thread_id: str) -> dict[str, Any] | None:
+        now = _utc_now()
+        with get_db() as db:
+            self.ensure_tables(db)
+            db.execute(
+                text(
+                    """
+                    UPDATE mobile_super_employee_threads
+                    SET status = 'archived', archived_at = :now, updated_at = :now
+                    WHERE thread_id = :thread_id AND user_id = :user_id
+                    """
+                ),
+                {"thread_id": thread_id.strip(), "user_id": int(user_id), "now": now},
+            )
+        return self.get_thread(user_id=user_id, thread_id=thread_id)
+
     def create_task(
         self,
         *,
@@ -413,22 +630,93 @@ class MobileRelayService:
         relay_id: str,
         kind: str,
         payload: dict[str, Any] | None = None,
+        thread_id: str = "",
+        work_item_id: str = "",
     ) -> dict[str, Any] | None:
         if not self._desktop_belongs_to_user(user_id=user_id, relay_id=relay_id):
             return None
         task_id = uuid.uuid4().hex
         now = _utc_now()
         safe_kind = (kind or "codex.invoke").strip()[:64] or "codex.invoke"
+        employee_id = self._employee_for_kind(safe_kind)
+        clean_thread_id = (thread_id or "").strip()
+        thread: dict[str, Any] | None = None
+        if clean_thread_id:
+            thread = self.get_thread(user_id=user_id, thread_id=clean_thread_id)
+            if (
+                not thread
+                or str(thread.get("relay_id") or "") != relay_id.strip()
+                or str(thread.get("employee_id") or "") != employee_id
+                or thread.get("archived_at")
+            ):
+                return None
+        safe_payload = dict(payload or {})
+        context = (
+            safe_payload.get("context") if isinstance(safe_payload.get("context"), dict) else {}
+        )
+        if clean_thread_id:
+            context = {
+                **context,
+                "thread_id": clean_thread_id,
+                "conversation_id": clean_thread_id,
+                "persistent_conversation": True,
+            }
+            safe_payload["context"] = context
+            safe_payload["thread_id"] = clean_thread_id
+        clean_work_item_id = (work_item_id or "").strip() or uuid.uuid4().hex
         with get_db() as db:
             self.ensure_tables(db)
+            attempt_no = 1
+            if work_item_id.strip():
+                previous = db.execute(
+                    text(
+                        "SELECT MAX(attempt_no) FROM mobile_relay_tasks "
+                        "WHERE work_item_id = :work_item_id"
+                    ),
+                    {"work_item_id": clean_work_item_id},
+                ).scalar()
+                attempt_no = int(previous or 0) + 1
+            title = str(
+                safe_payload.get("message")
+                or safe_payload.get("body")
+                or safe_payload.get("prompt")
+                or safe_kind
+            ).strip()[:240]
+            db.execute(
+                text(
+                    """
+                    INSERT INTO mobile_super_employee_work_items (
+                        work_item_id, thread_id, user_id, title, status,
+                        last_run_id, created_at, updated_at
+                    ) VALUES (
+                        :work_item_id, :thread_id, :user_id, :title, 'queued',
+                        :last_run_id, :created_at, :updated_at
+                    )
+                    ON CONFLICT(work_item_id) DO UPDATE SET
+                        status = 'queued', last_run_id = :last_run_id, updated_at = :updated_at,
+                        completed_at = NULL
+                    """
+                ),
+                {
+                    "work_item_id": clean_work_item_id,
+                    "thread_id": clean_thread_id,
+                    "user_id": int(user_id),
+                    "title": title,
+                    "last_run_id": task_id,
+                    "created_at": now,
+                    "updated_at": now,
+                },
+            )
             db.execute(
                 text(
                     """
                     INSERT INTO mobile_relay_tasks (
-                        task_id, relay_id, kind, payload_json, status,
+                        task_id, relay_id, thread_id, work_item_id, employee_id,
+                        attempt_no, kind, payload_json, status,
                         result_json, created_by_user_id, created_at, updated_at
                     ) VALUES (
-                        :task_id, :relay_id, :kind, :payload_json, 'queued',
+                        :task_id, :relay_id, :thread_id, :work_item_id, :employee_id,
+                        :attempt_no, :kind, :payload_json, 'queued',
                         '{}', :created_by_user_id, :created_at, :updated_at
                     )
                     """
@@ -436,13 +724,33 @@ class MobileRelayService:
                 {
                     "task_id": task_id,
                     "relay_id": relay_id.strip(),
+                    "thread_id": clean_thread_id,
+                    "work_item_id": clean_work_item_id,
+                    "employee_id": employee_id,
+                    "attempt_no": attempt_no,
                     "kind": safe_kind,
-                    "payload_json": _json_dumps(payload or {}),
+                    "payload_json": _json_dumps(safe_payload),
                     "created_by_user_id": int(user_id),
                     "created_at": now,
                     "updated_at": now,
                 },
             )
+            if clean_thread_id:
+                db.execute(
+                    text(
+                        """
+                        UPDATE mobile_super_employee_threads
+                        SET status = 'queued', last_task_id = :task_id, updated_at = :now
+                        WHERE thread_id = :thread_id AND user_id = :user_id
+                        """
+                    ),
+                    {
+                        "task_id": task_id,
+                        "thread_id": clean_thread_id,
+                        "user_id": int(user_id),
+                        "now": now,
+                    },
+                )
         return self.get_task(user_id=user_id, task_id=task_id)
 
     def get_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
@@ -465,6 +773,60 @@ class MobileRelayService:
                 .first()
             )
             return _row_dict(row) if row else None
+
+    def list_tasks(
+        self,
+        *,
+        user_id: int,
+        thread_id: str = "",
+        active_only: bool = False,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        clauses = ["d.mobile_user_id = :user_id", "d.status = 'paired'"]
+        params: dict[str, Any] = {
+            "user_id": int(user_id),
+            "limit": max(1, min(300, int(limit))),
+        }
+        if thread_id.strip():
+            clauses.append("t.thread_id = :thread_id")
+            params["thread_id"] = thread_id.strip()
+        if active_only:
+            clauses.append(
+                "t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')"
+            )
+        where = " AND ".join(clauses)
+        with get_db() as db:
+            self.ensure_tables(db)
+            rows = (
+                db.execute(
+                    text(
+                        f"""
+                        SELECT t.* FROM mobile_relay_tasks t
+                        JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+                        WHERE {where}
+                        ORDER BY t.created_at DESC
+                        LIMIT :limit
+                        """  # nosec B608 - clauses are fixed literals; values stay bound.
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
+            return [_row_dict(row) for row in rows]
+
+    def retry_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
+        previous = self.get_task(user_id=user_id, task_id=task_id)
+        if not previous or str(previous.get("status") or "") in _ACTIVE_TASK_STATUSES:
+            return None
+        return self.create_task(
+            user_id=user_id,
+            relay_id=str(previous.get("relay_id") or ""),
+            kind=str(previous.get("kind") or "codex.invoke"),
+            payload=previous.get("payload") if isinstance(previous.get("payload"), dict) else {},
+            thread_id=str(previous.get("thread_id") or ""),
+            work_item_id=str(previous.get("work_item_id") or ""),
+        )
 
     def cancel_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         """手机端取消任务：仅 queued/running 可取消，标记为 cancelled。"""
@@ -504,7 +866,39 @@ class MobileRelayService:
                 ),
                 {"task_id": task_id.strip(), "now": now},
             )
-            return _row_dict(row)
+            thread_id = str(row.get("thread_id") or "")
+            work_item_id = str(row.get("work_item_id") or "")
+            if work_item_id:
+                db.execute(
+                    text(
+                        """
+                        UPDATE mobile_super_employee_work_items
+                        SET status = 'cancelled', completed_at = :now, updated_at = :now
+                        WHERE work_item_id = :work_item_id
+                        """
+                    ),
+                    {"work_item_id": work_item_id, "now": now},
+                )
+            if thread_id:
+                db.execute(
+                    text(
+                        """
+                        UPDATE mobile_super_employee_threads
+                        SET status = 'cancelled', updated_at = :now
+                        WHERE thread_id = :thread_id AND user_id = :user_id
+                        """
+                    ),
+                    {"thread_id": thread_id, "user_id": int(user_id), "now": now},
+                )
+            cancelled = _row_dict(row)
+            cancelled.update(
+                {
+                    "status": "cancelled",
+                    "completed_at": now,
+                    "updated_at": now,
+                }
+            )
+            return cancelled
 
     def poll_desktop(
         self,
@@ -512,6 +906,9 @@ class MobileRelayService:
         relay_id: str,
         desktop_token: str,
         max_tasks: int = 5,
+        busy_tools: list[str] | None = None,
+        inflight_task_ids: list[str] | None = None,
+        capabilities: dict[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         now = _utc_now()
         with get_db() as db:
@@ -519,15 +916,30 @@ class MobileRelayService:
             desktop = self._desktop_for_token(db, relay_id=relay_id, desktop_token=desktop_token)
             if not desktop:
                 return None
+            clean_capabilities = capabilities if isinstance(capabilities, dict) else {}
+            existing_capabilities = (
+                desktop.get("capabilities") if isinstance(desktop.get("capabilities"), dict) else {}
+            )
+            merged_capabilities = {**existing_capabilities, **clean_capabilities}
             db.execute(
                 text(
                     """
                     UPDATE mobile_relay_desktops
-                    SET last_seen_at = :now, updated_at = :now
+                    SET last_seen_at = :now,
+                        updated_at = :now,
+                        capabilities_json = CASE
+                            WHEN :has_capabilities = 1 THEN :capabilities_json
+                            ELSE capabilities_json
+                        END
                     WHERE relay_id = :relay_id
                     """
                 ),
-                {"now": now, "relay_id": relay_id.strip()},
+                {
+                    "now": now,
+                    "relay_id": relay_id.strip(),
+                    "has_capabilities": 1 if clean_capabilities else 0,
+                    "capabilities_json": _json_dumps(merged_capabilities),
+                },
             )
             # 孤儿回收：执行端中途死会把任务永久卡在 running（poll 只发 queued，无人再认领）。
             # 每次 poll 先把本 relay claimed_at 超 TTL 的 running 重置回 queued，活 relay 自动重认领，
@@ -553,6 +965,37 @@ class MobileRelayService:
                 ),
                 {"relay_id": relay_id.strip(), "now": now, "stale_before": stale_before},
             )
+            # Cancellation delivery is scoped twice: the desktop token above must
+            # authenticate this relay, and only task ids that the same desktop says
+            # it is currently executing are echoed back.  A tenant cannot cancel or
+            # signal another relay's process by guessing a task id.
+            requested_inflight = {
+                str(task_id or "").strip()
+                for task_id in (inflight_task_ids or [])[:20]
+                if str(task_id or "").strip()
+            }
+            cancelled_task_ids: list[str] = []
+            if requested_inflight:
+                cancelled_rows = (
+                    db.execute(
+                        text(
+                            """
+                            SELECT task_id FROM mobile_relay_tasks
+                            WHERE relay_id = :relay_id AND status = 'cancelled'
+                            ORDER BY updated_at DESC
+                            LIMIT 100
+                            """
+                        ),
+                        {"relay_id": relay_id.strip()},
+                    )
+                    .mappings()
+                    .all()
+                )
+                cancelled_task_ids = [
+                    str(row.get("task_id") or "")
+                    for row in cancelled_rows
+                    if str(row.get("task_id") or "") in requested_inflight
+                ]
             rows = (
                 db.execute(
                     text(
@@ -560,17 +1003,29 @@ class MobileRelayService:
                         SELECT * FROM mobile_relay_tasks
                         WHERE relay_id = :relay_id AND status = 'queued'
                         ORDER BY created_at ASC
-                        LIMIT :limit
+                        LIMIT 500
                         """
                     ),
-                    {"relay_id": relay_id.strip(), "limit": max(1, min(20, int(max_tasks)))},
+                    {"relay_id": relay_id.strip()},
                 )
                 .mappings()
                 .all()
             )
-            tasks = [_row_dict(row) for row in rows]
-            for task in tasks:
-                db.execute(
+            # 每个超级员工只有一个执行槽：同一工具内部串行，不同工具可以并行。
+            # 执行端把当前 busy_tools 传来，避免服务端把第二个 Codex 提前 claim 成 running。
+            claimed_tools = {
+                str(tool or "").strip().split(".", 1)[0]
+                for tool in (busy_tools or [])
+                if str(tool or "").strip()
+            }
+            limit = max(0, min(20, int(max_tasks)))
+            tasks: list[dict[str, Any]] = []
+            for row in rows if limit > 0 else []:
+                task = _row_dict(row)
+                tool = str(task.get("kind") or "").strip().split(".", 1)[0] or "unknown"
+                if tool in claimed_tools:
+                    continue
+                claimed = db.execute(
                     text(
                         """
                         UPDATE mobile_relay_tasks
@@ -580,12 +1035,45 @@ class MobileRelayService:
                     ),
                     {"task_id": task["task_id"], "now": now},
                 )
+                # 多个 poll 请求重叠时只有一个能把 queued 原子切到 running；
+                # 未抢到的请求不能把同一任务再次返回给另一个执行线程。
+                if int(claimed.rowcount or 0) != 1:
+                    continue
+                tasks.append(task)
+                claimed_tools.add(tool)
                 task["status"] = "running"
                 task["claimed_at"] = now
+                thread_id = str(task.get("thread_id") or "")
+                work_item_id = str(task.get("work_item_id") or "")
+                if work_item_id:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE mobile_super_employee_work_items
+                            SET status = 'running', last_run_id = :task_id, updated_at = :now
+                            WHERE work_item_id = :work_item_id
+                            """
+                        ),
+                        {"work_item_id": work_item_id, "task_id": task["task_id"], "now": now},
+                    )
+                if thread_id:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE mobile_super_employee_threads
+                            SET status = 'running', last_task_id = :task_id, updated_at = :now
+                            WHERE thread_id = :thread_id
+                            """
+                        ),
+                        {"thread_id": thread_id, "task_id": task["task_id"], "now": now},
+                    )
+                if len(tasks) >= limit:
+                    break
         return {
             "desktop": self._public_desktop(desktop),
             "tasks": tasks,
             "task_count": len(tasks),
+            "cancelled_task_ids": cancelled_task_ids,
         }
 
     def complete_desktop_task(
@@ -615,10 +1103,13 @@ class MobileRelayService:
                 text(
                     """
                     UPDATE mobile_relay_tasks
-                    SET status = :status,
-                        result_json = :result_json,
-                        completed_at = :now,
-                        updated_at = :now
+                    SET status = CASE WHEN status = 'cancelled' THEN status ELSE :status END,
+                        result_json = CASE WHEN status = 'cancelled'
+                            THEN result_json ELSE :result_json END,
+                        completed_at = CASE WHEN status = 'cancelled'
+                            THEN completed_at ELSE :now END,
+                        updated_at = CASE WHEN status = 'cancelled'
+                            THEN updated_at ELSE :now END
                     WHERE task_id = :task_id AND relay_id = :relay_id
                     """
                 ),
@@ -639,12 +1130,83 @@ class MobileRelayService:
                 .first()
             )
             task_row = _row_dict(row) if row else None
+            if task_row:
+                effective_status = str(task_row.get("status") or final_status).strip().lower()
+                thread_id = str(task_row.get("thread_id") or "")
+                work_item_id = str(task_row.get("work_item_id") or "")
+                if work_item_id:
+                    db.execute(
+                        text(
+                            """
+                            UPDATE mobile_super_employee_work_items
+                            SET status = :status, last_run_id = :task_id,
+                                completed_at = :now, updated_at = :now
+                            WHERE work_item_id = :work_item_id
+                            """
+                        ),
+                        {
+                            "status": effective_status,
+                            "task_id": task_id.strip(),
+                            "work_item_id": work_item_id,
+                            "now": now,
+                        },
+                    )
+                if thread_id:
+                    runtime = (
+                        {"cli_session_id": "", "workspace_root": "", "branch": ""}
+                        if effective_status == "cancelled"
+                        else self._thread_runtime_from_result(result or {})
+                    )
+                    db.execute(
+                        text(
+                            """
+                            UPDATE mobile_super_employee_threads
+                            SET status = :status, last_task_id = :task_id,
+                                cli_session_id = CASE WHEN :cli_session_id <> ''
+                                    THEN :cli_session_id ELSE cli_session_id END,
+                                workspace_root = CASE WHEN :workspace_root <> ''
+                                    THEN :workspace_root ELSE workspace_root END,
+                                branch = CASE WHEN :branch <> '' THEN :branch ELSE branch END,
+                                updated_at = :now
+                            WHERE thread_id = :thread_id
+                            """
+                        ),
+                        {
+                            "status": effective_status,
+                            "task_id": task_id.strip(),
+                            "cli_session_id": runtime["cli_session_id"],
+                            "workspace_root": runtime["workspace_root"],
+                            "branch": runtime["branch"],
+                            "thread_id": thread_id,
+                            "now": now,
+                        },
+                    )
         # 终态主动推送创建者手机（FCM + 离线队列轮询补发）——在 DB 事务收尾后再发，
         # 不让推送网络耗时拖住 complete 回写。此前任务完成只写库，手机要等下次打开
         # App 轮询才知道结果，"超级员工干完活"对老板完全无感。
         if task_row:
             self._notify_task_creator(task_row)
         return task_row
+
+    @staticmethod
+    def _thread_runtime_from_result(result: dict[str, Any]) -> dict[str, str]:
+        """Extract executor session/workspace metadata without coupling to one CLI result shape."""
+        nested = result.get("codex") if isinstance(result.get("codex"), dict) else {}
+        session = result.get("session") if isinstance(result.get("session"), dict) else {}
+        nested_session = nested.get("session") if isinstance(nested.get("session"), dict) else {}
+        merged = {**nested_session, **session}
+        return {
+            "cli_session_id": str(
+                merged.get("session_id")
+                or merged.get("cli_session_id")
+                or result.get("session_id")
+                or ""
+            ).strip()[:160],
+            "workspace_root": str(
+                merged.get("workspace_root") or result.get("workspace_root") or ""
+            ).strip()[:1024],
+            "branch": str(merged.get("branch") or result.get("branch") or "").strip()[:256],
+        }
 
     @staticmethod
     def _notify_task_creator(task: dict[str, Any]) -> None:

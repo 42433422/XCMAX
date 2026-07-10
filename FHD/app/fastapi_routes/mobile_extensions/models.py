@@ -44,13 +44,26 @@ class RelayMobileBindAccountBody(BaseModel):
 class RelayTaskCreateBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     kind: str = Field(default="codex.invoke", max_length=64)
+    thread_id: str = Field(default="", max_length=80)
+    work_item_id: str = Field(default="", max_length=80)
     payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class RelayThreadCreateBody(BaseModel):
+    relay_id: str = Field(..., min_length=8, max_length=80)
+    employee_id: str = Field(..., min_length=4, max_length=80)
+    title: str = Field(default="", max_length=200)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class RelayDesktopPollBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
     desktop_token: str = Field(..., min_length=16, max_length=256)
-    max_tasks: int = Field(default=5, ge=1, le=20)
+    # Zero means heartbeat/cancellation-only poll while every executor slot is busy.
+    max_tasks: int = Field(default=5, ge=0, le=20)
+    busy_tools: list[str] = Field(default_factory=list, max_length=8)
+    inflight_task_ids: list[str] = Field(default_factory=list, max_length=20)
+    capabilities: dict[str, Any] = Field(default_factory=dict)
 
 
 class RelayDesktopCompleteBody(BaseModel):

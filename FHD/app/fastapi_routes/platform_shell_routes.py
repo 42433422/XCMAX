@@ -190,7 +190,9 @@ async def platform_shell_workspace_read_files(
     """Read selected output files that are confined to the active workspace."""
     from app.application.office_parse_app_service import read_workspace_output_files
 
-    files = read_workspace_output_files(body.workspace_root, body.file_paths or [])
+    # ``workspace_root`` remains in the request model for older clients, but it
+    # is intentionally ignored.  Only the server-configured workspace is trusted.
+    files = read_workspace_output_files(body.file_paths or [])
     return {"success": True, "data": {"files": files}}
 
 
@@ -218,16 +220,10 @@ async def platform_shell_office_confirm(
     if intent == "attendance":
         if not body.file_path:
             raise HTTPException(status_code=400, detail="file_path ??")
-        from pathlib import Path
-
         from app.application.attendance_import_app_service import import_attendance_workbook
-        from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 
-        excel_path = resolve_safe_workspace_relpath(body.file_path)
-        db_path = Path(body.workspace_root or ".") / "data" / "mod_dbs" / "taiyangniao-pro.db"
         result = import_attendance_workbook(
-            excel_path,
-            db_path,
+            body.file_path,
             source_file_key=body.source_name or body.file_path,
             sync_ui_tables=True,
         )

@@ -117,149 +117,34 @@ class TestAiCircleEmployeeProfiles:
 
 
 # ============================================================
-# _resolve_mobile_relay_user — lines 155-211
-# ============================================================
-
-
-class TestResolveMobileRelayUser:
-    def test_uid_positive_not_prefer_admin(self, m):
-        """branch [174,182] not taken — uid > 0 and not prefer_admin: returns early."""
-        u = _user(uid=5, role="user")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 5
-
-    def test_uid_positive_prefer_admin_non_admin_role(self, m):
-        """uid > 0 but prefer_admin=True and role not admin → falls through to DB path."""
-        u = _user(uid=5, role="user")
-        mock_row = MagicMock()
-        mock_row.id = 10
-        pub = {"id": 10, "username": "admin"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 10
-
-    def test_uid_zero_admin_row_found(self, m):
-        """branch [182,183]: admin row found → use that row, skip any-user query."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 99
-        pub = {"id": 99, "username": "admin99"}
-        mock_db = _ctx_db(MagicMock())
-        # first query (admin) returns row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 99
-
-    def test_uid_zero_no_admin_row_but_any_user_row(self, m):
-        """branch [182,189],[189,190] not taken: fall to any-user query which returns row."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 7
-        pub = {"id": 7, "username": "somebody"}
-
-        first_call = [True]
-
-        def first_side_effect():
-            if first_call[0]:
-                first_call[0] = False
-                return None  # admin query returns nothing
-            return mock_row  # any-user query
-
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value = mock_q
-        mock_q.first.side_effect = first_side_effect
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value = mock_q
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 7
-
-    def test_uid_zero_no_rows_creates_new_user(self, m):
-        """branch [189,190]: both queries return None → create new user."""
-        u = _user(uid=0)
-        new_row = MagicMock()
-        new_row.id = 55
-        pub = {"id": 55, "username": "mobile_relay_xxx"}
-
-        mock_q = MagicMock()
-        mock_q.filter.return_value = mock_q
-        mock_q.order_by.return_value = mock_q
-        mock_q.first.return_value = None
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value = mock_q
-        # db.flush sets row.id
-        mock_db.flush = MagicMock()
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch("app.db.models.User", MagicMock(return_value=new_row)),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result["id"] == 55
-
-    def test_db_expunge_called_when_available(self, m):
-        """branch [204,205]: db.expunge exists → called."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 3
-        pub = {"id": 3, "username": "x"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        mock_db.expunge = MagicMock()
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            m._resolve_mobile_relay_user(u, prefer_admin=False)
-        mock_db.expunge.assert_called_once_with(mock_row)
-
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch [209,211]: RECOVERABLE_ERRORS + prefer_admin → _relay_admin_fallback_user."""
-        u = _user(uid=0)
-        fallback = {"id": 0, "username": "relay_admin"}
-        err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-            patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
-
-
-# ============================================================
 # _register_desktop_relay_for_pairing — lines 214-231
 # ============================================================
 
 
 class TestRegisterDesktopRelayForPairing:
+    def test_cloud_default_does_not_register_itself(self, m, monkeypatch):
+        monkeypatch.delenv("XCAGI_RELAY_PAIRING_ENABLED", raising=False)
+        monkeypatch.delenv("XCAGI_DESKTOP_MODE", raising=False)
+        with patch(
+            "app.application.facades.mobile_relay_facade.register_desktop_relay"
+        ) as register:
+            assert m._register_desktop_relay_for_pairing("127.0.0.1", 5100) is None
+        register.assert_not_called()
+
+    def test_desktop_default_registers_relay(self, m, monkeypatch):
+        monkeypatch.delenv("XCAGI_RELAY_PAIRING_ENABLED", raising=False)
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        with (
+            patch.object(m, "_host_is_private_or_loopback", return_value=True),
+            patch(
+                "app.application.facades.mobile_relay_facade.register_desktop_relay",
+                return_value={"relay_id": "r1", "desktop_token": "secret"},
+            ) as register,
+        ):
+            result = m._register_desktop_relay_for_pairing("192.168.1.1", 5000)
+        register.assert_called_once()
+        assert result == {"relay_id": "r1"}
+
     def test_disabled_by_env(self, m, monkeypatch):
         """branch [216,217]: env var set to '0' → returns None immediately."""
         monkeypatch.setenv("XCAGI_RELAY_PAIRING_ENABLED", "0")
@@ -996,7 +881,7 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_codex_super_employee_messages(
@@ -1009,7 +894,7 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         """branch [1175,1176]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1027,7 +912,7 @@ class TestMobileAdminCodexSuperEmployeeMessages:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1061,7 +946,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_codex_super_employee_invoke(
@@ -1074,7 +959,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1202,1203]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1091,7 +976,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         """branch [1219,1220]: ValueError from invoke → 400."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1111,7 +996,7 @@ class TestMobileAdminCodexSuperEmployeeInvoke:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1138,7 +1023,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_claude_super_employee_messages(
@@ -1151,7 +1036,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         """branch [1243,1244]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1169,7 +1054,7 @@ class TestMobileAdminClaudeSuperEmployeeMessages:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1203,7 +1088,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_claude_super_employee_invoke(
@@ -1216,7 +1101,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1270,1271]: uid <= 0 → 401."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1233,7 +1118,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         """branch [1287,1288]: ValueError → 400."""
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1253,7 +1138,7 @@ class TestMobileAdminClaudeSuperEmployeeInvoke:
         err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(

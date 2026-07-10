@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -40,7 +41,7 @@ from app.application.git_workspace_manager import GitWorkspaceManager
 from app.application.message_repository import MessageRepository
 from app.application.relay_workspace import resolve_verified_relay_workspace_root
 from app.application.workspaces import WorkspaceError, get_workspace_registry
-from app.utils.path_utils import get_app_data_dir
+from app.utils.path_utils import get_app_data_dir, get_desktop_state_dir
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +52,10 @@ DISPATCHER_MESSAGE_KIND = "dispatcher"
 # worktree（620M 只建一次），并发任务必须排队使用，避免 git 状态相互踩踏。
 _RELAY_WT_LOCKS: dict[str, threading.Lock] = {}
 _RELAY_WT_LOCKS_GUARD = threading.Lock()
+
+
+class SuperEmployeeExecutionCancelled(RuntimeError):
+    """Raised when the owning relay task asks a running CLI to stop."""
 
 
 def _relay_wt_lock(key: str) -> threading.Lock:
@@ -275,7 +280,10 @@ CODEX_PROFILE = SuperEmployeeToolProfile(
     env_super_prefix="XCMAX_CODEX_SUPER_EMPLOYEE",
     env_tool_prefix="XCMAX_CODEX",
     cli_binary="codex",
-    cli_extra_candidates=("/Applications/Codex.app/Contents/Resources/codex",),
+    cli_extra_candidates=(
+        "/Applications/ChatGPT.app/Contents/Resources/codex",
+        "/Applications/Codex.app/Contents/Resources/codex",
+    ),
     cli_reads_output_file=True,
     cli_command_builder=_codex_cli_command,
     avatar_key="codex",
@@ -386,6 +394,9 @@ class SuperEmployeeService:
         self._outbox_dir = self._messages.outbox_dir
         self._http_client_factory = http_client_factory or self._default_http_client
         self._cli_runner = cli_runner or subprocess.run
+        self._last_session_runtime: dict[str, str] = {}
+        self._last_cli_failure: dict[str, str] = {}
+        self._cancellation_event: threading.Event | None = None
         # Only worktrees created by this service may be traversed during the
         # validation phase.  Explicit storage_root is a dependency-injection
         # seam used by the isolated filesystem tests; production instances do
@@ -414,6 +425,33 @@ class SuperEmployeeService:
         ]
         return rows[-max(1, min(int(limit), 200)) :]
 
+    def set_cancellation_event(self, event: threading.Event | None) -> None:
+        """Bind a relay-owned cancellation signal to this one service invocation.
+
+        Service objects are created per relay task, so the event cannot cancel a
+        different user, employee, or task.  The desktop relay owns the event and
+        sets it only after an authenticated poll reports that exact task id as
+        cancelled.
+        """
+
+        self._cancellation_event = event
+
+    def _cancel_requested(self) -> bool:
+        event = self._cancellation_event
+        return event is not None and event.is_set()
+
+    def _raise_if_cancelled(self) -> None:
+        if self._cancel_requested():
+            raise SuperEmployeeExecutionCancelled("relay task cancelled")
+
+    @staticmethod
+    def _cancelled_stream_event() -> dict[str, str]:
+        return {
+            "type": "error",
+            "message": "任务已取消",
+            "error_code": "cancelled",
+        }
+
     def invoke(
         self,
         *,
@@ -424,6 +462,7 @@ class SuperEmployeeService:
         text = (message or "").strip()
         if not text:
             raise ValueError("message 不能为空")
+        self._last_cli_failure = {}
         ctx = context if isinstance(context, dict) else {}
         # 解析执行授权（deny-by-default：缺/错平台令牌即产品域），随后立即把令牌抹出 context，
         # 确保它绝不流入 dispatch 请求 / messages.jsonl / Para 载荷 / 日志。
@@ -460,26 +499,39 @@ class SuperEmployeeService:
         )
         if self._should_reply_with_cli(text, ctx):
             direct_body, direct_dispatcher = self._compose_direct_chat_reply(text, ctx)
+            cli_failure = dict(self._last_cli_failure)
             assistant_msg = self._message_row(
                 user_id=int(user_id),
                 role="assistant",
                 body=direct_body,
                 created_at=_utc_now(),
                 request_id=request_id,
-                status="completed",
-                extra={"kind": self._p.direct_kind},
+                status="failed" if cli_failure else "completed",
+                extra={
+                    "kind": self._p.direct_kind,
+                    **(
+                        {"error_code": cli_failure.get("error_code", "cli_failed")}
+                        if cli_failure
+                        else {}
+                    ),
+                },
             )
             self._append_messages([user_msg, assistant_msg])
             dispatch = {
                 "request_id": request_id,
-                "status": "completed",
-                "accepted": True,
+                "status": "failed" if cli_failure else "completed",
+                "accepted": not bool(cli_failure),
                 "queued": False,
                 "para_tier": 1,
                 "device_scope": "local_device",
                 "dispatcher": direct_dispatcher,
+                **(
+                    {"error_code": cli_failure.get("error_code", "cli_failed")}
+                    if cli_failure
+                    else {}
+                ),
             }
-            return {
+            result = {
                 "employee": {
                     "id": self._p.employee_id,
                     "name": self._p.employee_name,
@@ -489,7 +541,17 @@ class SuperEmployeeService:
                 "message": self._public_message(user_msg),
                 "assistant_message": self._public_message(assistant_msg),
                 "messages": self.list_messages(user_id=int(user_id)),
+                "session": dict(self._last_session_runtime),
             }
+            if cli_failure:
+                result.update(
+                    {
+                        "ok": False,
+                        "error_code": cli_failure.get("error_code", "cli_failed"),
+                        "error_message": cli_failure.get("message") or direct_body,
+                    }
+                )
+            return result
 
         dispatch_request = self._build_dispatch_request(
             request_id=request_id,
@@ -507,17 +569,25 @@ class SuperEmployeeService:
             if fallback_body and not fallback_body.startswith(
                 f"{self._p.display_tool} CLI 暂时没有返回内容"
             ):
+                cli_failure = dict(self._last_cli_failure)
                 assistant_msg = self._message_row(
                     user_id=int(user_id),
                     role="assistant",
                     body=fallback_body,
                     created_at=_utc_now(),
                     request_id=request_id,
-                    status="completed",
-                    extra={"kind": self._p.direct_kind},
+                    status="failed" if cli_failure else "completed",
+                    extra={
+                        "kind": self._p.direct_kind,
+                        **(
+                            {"error_code": cli_failure.get("error_code", "cli_failed")}
+                            if cli_failure
+                            else {}
+                        ),
+                    },
                 )
                 self._append_messages([user_msg, assistant_msg])
-                return {
+                result = {
                     "employee": {
                         "id": self._p.employee_id,
                         "name": self._p.employee_name,
@@ -525,15 +595,31 @@ class SuperEmployeeService:
                     },
                     "dispatch": {
                         **dispatch,
-                        "status": "completed",
+                        "status": "failed" if cli_failure else "completed",
+                        "accepted": not bool(cli_failure),
                         "para_tier": 1,
                         "device_scope": "local_device",
                         "fallback": fallback_dispatcher,
+                        **(
+                            {"error_code": cli_failure.get("error_code", "cli_failed")}
+                            if cli_failure
+                            else {}
+                        ),
                     },
                     "message": self._public_message(user_msg),
                     "assistant_message": self._public_message(assistant_msg),
                     "messages": self.list_messages(user_id=int(user_id)),
+                    "session": dict(self._last_session_runtime),
                 }
+                if cli_failure:
+                    result.update(
+                        {
+                            "ok": False,
+                            "error_code": cli_failure.get("error_code", "cli_failed"),
+                            "error_message": cli_failure.get("message") or fallback_body,
+                        }
+                    )
+                return result
         dispatcher_msg = self._message_row(
             user_id=int(user_id),
             role="system",
@@ -588,6 +674,9 @@ class SuperEmployeeService:
         if not text:
             yield {"type": "error", "message": "message 不能为空"}
             return
+        if self._cancel_requested():
+            yield self._cancelled_stream_event()
+            return
         ctx = context if isinstance(context, dict) else {}
         self._grant = CapabilityGrant.resolve(ctx)
         self._relay_cli_trusted = ctx.get("force_cli_direct") is True
@@ -598,6 +687,9 @@ class SuperEmployeeService:
         if canned:
             yield {"type": "status", "text": f"已连接 {self._p.display_tool}"}
             for chunk in _chunk_text(canned):
+                if self._cancel_requested():
+                    yield self._cancelled_stream_event()
+                    return
                 yield {"type": "token", "text": chunk}
                 await asyncio.sleep(0.02)
             yield {"type": "done", "result": {"response": canned, "dispatcher": "faq"}}
@@ -609,12 +701,39 @@ class SuperEmployeeService:
             fallback_body, dispatcher = self._compose_direct_chat_reply(text, ctx)
             yield {"type": "status", "text": f"已连接 {self._p.display_tool}"}
             for chunk in _chunk_text(fallback_body):
+                if self._cancel_requested():
+                    yield self._cancelled_stream_event()
+                    return
                 yield {"type": "token", "text": chunk}
                 await asyncio.sleep(0.02)
             yield {
                 "type": "done",
                 "result": {"response": fallback_body, "dispatcher": dispatcher},
             }
+            return
+
+        if ctx.get("persistent_conversation") is True:
+            yield {"type": "status", "text": f"{self._p.display_tool} 正在续接当前对话…"}
+            try:
+                body = await asyncio.to_thread(self._run_conversation_turn, cli_path, text, ctx)
+                for chunk in _chunk_text(body):
+                    if self._cancel_requested():
+                        raise SuperEmployeeExecutionCancelled("LAN task cancelled")
+                    yield {"type": "token", "text": chunk}
+                    await asyncio.sleep(0.02)
+                yield {
+                    "type": "done",
+                    "result": {
+                        "response": body,
+                        "dispatcher": "persistent_cli_session",
+                        "session": dict(self._last_session_runtime),
+                    },
+                }
+            except SuperEmployeeExecutionCancelled:
+                yield self._cancelled_stream_event()
+            except Exception:  # noqa: BLE001
+                logger.exception("invoke_stream persistent session failed")
+                yield {"type": "error", "message": "对话续接暂时失败，请稍后重试"}
             return
 
         # 闲聊/开发任务分流
@@ -630,9 +749,13 @@ class SuperEmployeeService:
                 )
                 yield {"type": "status", "text": "开发任务完成，正在整理回复…"}
                 for chunk in _chunk_text(body):
+                    if self._cancel_requested():
+                        raise SuperEmployeeExecutionCancelled("LAN task cancelled")
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
                 yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
+            except SuperEmployeeExecutionCancelled:
+                yield self._cancelled_stream_event()
             except Exception:  # noqa: BLE001
                 logger.exception("invoke_stream dev_loop failed")
                 yield {"type": "error", "message": "开发任务暂时执行失败，请稍后重试"}
@@ -665,6 +788,54 @@ class SuperEmployeeService:
                 "message": f"{self._p.display_tool} CLI 暂时不可用，请稍后重试",
             }
 
+    @staticmethod
+    async def _terminate_async_cli_process(proc: asyncio.subprocess.Process) -> None:
+        """TERM then KILL the async CLI process group and reap the leader."""
+
+        if proc.returncode is not None:
+            return
+        if os.name == "nt":
+            try:
+                killer = await asyncio.create_subprocess_exec(
+                    "taskkill",
+                    "/PID",
+                    str(proc.pid),
+                    "/T",
+                    "/F",
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                await asyncio.wait_for(killer.wait(), timeout=5)
+            except (OSError, subprocess.SubprocessError, TimeoutError):
+                proc.kill()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=2)
+            return
+        except TimeoutError:
+            pass
+        if os.name == "nt":
+            proc.kill()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    return
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=3)
+        except TimeoutError:
+            logger.warning("CLI process tree did not exit after LAN cancellation pid=%s", proc.pid)
+
     async def _run_cli_streaming(
         self,
         cli_path: str,
@@ -676,12 +847,22 @@ class SuperEmployeeService:
         - stream-json 工具（claude/cursor/trae）：每行是 JSON 事件，解析出 text token
         - 非 stream-json 工具（codex）：stdout 不是结果，读 output-last-message 文件
         """
+        if self._cancel_requested():
+            yield self._cancelled_stream_event()
+            return
         with tempfile.TemporaryDirectory(prefix=f"xcagi-{self._p.tool_name}-stream-") as tmp:
             output_path = Path(tmp) / "last_message.txt"
             cmd = self._apply_scope_to_cmd(
                 self._p.cli_command_builder(cli_path, prompt, output_path, cwd)
             )
             env = self._cli_subprocess_env()
+            process_group_args: dict[str, Any]
+            if os.name == "nt":
+                process_group_args = {
+                    "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+                }
+            else:
+                process_group_args = {"start_new_session": True}
             try:
                 proc = await asyncio.create_subprocess_exec(
                     *cmd,
@@ -689,6 +870,7 @@ class SuperEmployeeService:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
+                    **process_group_args,
                 )
             except (OSError, FileNotFoundError):
                 logger.exception("%s CLI failed to start", self._p.display_tool)
@@ -714,46 +896,62 @@ class SuperEmployeeService:
                 except TimeoutError:
                     return ""
 
-            while True:
-                if proc.stdout is None:
-                    break
-                try:
-                    raw_line = await asyncio.wait_for(proc.stdout.readline(), timeout=3.0)
-                except TimeoutError:
-                    # 检查 idle/hardcap 超时
-                    now = time.monotonic()
-                    if idle_timeout > 0 and (now - last_activity) > idle_timeout:
-                        proc.kill()
-                        yield {
-                            "type": "error",
-                            "message": f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无输出，判定卡住。",
-                        }
+            try:
+                while True:
+                    if self._cancel_requested():
+                        await self._terminate_async_cli_process(proc)
+                        yield self._cancelled_stream_event()
                         return
-                    if hard_cap > 0 and (now - started) > hard_cap:
-                        proc.kill()
-                        yield {
-                            "type": "error",
-                            "message": f"{self._p.display_tool} CLI 运行超过 {hard_cap:g} 秒，已停止。",
-                        }
-                        return
-                    continue
-                if not raw_line:
-                    # EOF — 进程结束
-                    break
-                last_activity = time.monotonic()
-                line = raw_line.decode("utf-8", errors="replace").rstrip()
-                if not line:
-                    continue
-                if stream_json and line.startswith("{"):
-                    token = self._parse_stream_json_line(line)
-                    if token:
-                        text_parts.append(token)
-                        yield {"type": "token", "text": token}
-                # 非 stream-json 的 stdout 行不 yield（codex 的 stdout 是日志，不是回复）
+                    if proc.stdout is None:
+                        break
+                    try:
+                        raw_line = await asyncio.wait_for(
+                            proc.stdout.readline(),
+                            timeout=0.25 if self._cancellation_event is not None else 3.0,
+                        )
+                    except TimeoutError:
+                        # 检查取消/idle/hardcap 超时
+                        if self._cancel_requested():
+                            await self._terminate_async_cli_process(proc)
+                            yield self._cancelled_stream_event()
+                            return
+                        now = time.monotonic()
+                        if idle_timeout > 0 and (now - last_activity) > idle_timeout:
+                            proc.kill()
+                            yield {
+                                "type": "error",
+                                "message": f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无输出，判定卡住。",
+                            }
+                            return
+                        if hard_cap > 0 and (now - started) > hard_cap:
+                            proc.kill()
+                            yield {
+                                "type": "error",
+                                "message": f"{self._p.display_tool} CLI 运行超过 {hard_cap:g} 秒，已停止。",
+                            }
+                            return
+                        continue
+                    if not raw_line:
+                        # EOF — 进程结束
+                        break
+                    last_activity = time.monotonic()
+                    line = raw_line.decode("utf-8", errors="replace").rstrip()
+                    if not line:
+                        continue
+                    if stream_json and line.startswith("{"):
+                        token = self._parse_stream_json_line(line)
+                        if token:
+                            text_parts.append(token)
+                            yield {"type": "token", "text": token}
+                    # 非 stream-json 的 stdout 行不 yield（codex 的 stdout 是日志，不是回复）
 
-            # 等待进程退出
-            await proc.wait()
-            returncode = int(proc.returncode or 0)
+                # 等待进程退出
+                await proc.wait()
+                returncode = int(proc.returncode or 0)
+            finally:
+                # Client disconnect/async-generator close must not orphan the CLI.
+                if proc.returncode is None:
+                    await self._terminate_async_cli_process(proc)
 
             # stream-json：text_parts 已收集
             if stream_json:
@@ -763,11 +961,13 @@ class SuperEmployeeService:
                     return
                 # 没拿到文本 → 尝试 stderr
                 if returncode != 0:
-                    await _read_stderr()
+                    stderr = await _read_stderr()
                     logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
+                    message = self._cli_failure_message(returncode, "", stderr)
                     yield {
                         "type": "error",
-                        "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}），请查看本机日志",
+                        "message": message,
+                        "error_code": self._last_cli_failure.get("error_code", "cli_failed"),
                     }
                     return
                 yield {"type": "done", "text": ""}
@@ -780,11 +980,13 @@ class SuperEmployeeService:
                     yield {"type": "done", "text": body}
                     return
             if returncode != 0:
-                await _read_stderr()
+                stderr = await _read_stderr()
                 logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
+                message = self._cli_failure_message(returncode, "", stderr)
                 yield {
                     "type": "error",
-                    "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}），请查看本机日志",
+                    "message": message,
+                    "error_code": self._last_cli_failure.get("error_code", "cli_failed"),
                 }
                 return
             yield {"type": "done", "text": ""}
@@ -1509,6 +1711,8 @@ class SuperEmployeeService:
         return match.group(1).strip() if match else ""
 
     def _should_reply_with_cli(self, text: str, context: dict[str, Any]) -> bool:
+        if context.get("persistent_conversation") is True:
+            return True
         # 全局开关：所有 claude.invoke/codex.invoke 都走 FHD 进程内 CLI 直答，
         # 绕开 Para 派工（watchdog token 不可用时的兜底路径）。FHD 进程继承
         # 用户 Terminal 的 claude/codex 鉴权，无需额外配置。env: XCMAX_<TOOL>_FORCE_CLI_DIRECT=1。
@@ -1551,16 +1755,16 @@ class SuperEmployeeService:
         cli_path = self._cli_path()
         if not cli_path:
             return ""
-        # 口袋 Claude Code：claude 生产路径走"持久会话续接 + 隔离工作区"——有上下文、能动手、
-        # 体验接近直接和 Claude Code 交互。codex / 测试注入仍走原"闲聊 or dev-loop"逻辑。
-        # 但中继工单(force_cli_direct)要的是"真交付"：必须走 dev-loop(用各工具自己的命令
-        # 构造器 → 真改文件→提交→推分支)，绝不能落进 claude 式 --resume 会话(对 cursor/trae
-        # 命令不对、且不产出分支)。这是 Trae/Cursor 也能真执行的关键。
+        # 四个超级员工统一支持持久会话。移动 thread 明确携带 persistent_conversation，
+        # 即使它来自 force_cli_direct 中继也必须续接；无 thread 的历史调用保持原 dev-loop。
+        persistent_thread = context.get("persistent_conversation") is True
         if (
-            self._p.cli_stream_json
-            and self._cli_runner is subprocess.run
+            self._cli_runner is subprocess.run
             and self._conversation_mode_enabled()
-            and not context.get("force_cli_direct")
+            and (
+                persistent_thread
+                or (self._p.cli_stream_json and not context.get("force_cli_direct"))
+            )
         ):
             return self._run_conversation_turn(cli_path, text, context)
         base_cwd = self._cli_workspace(context)
@@ -1617,20 +1821,23 @@ class SuperEmployeeService:
         conv = str((context or {}).get("conversation_id") or "").strip()
         return f"{self._p.tool_name}:{conv}" if conv else self._p.tool_name
 
-    def _ensure_session_workspace(self, key: str) -> tuple[str | None, str | None]:
+    def _ensure_session_workspace(
+        self, key: str, base_cwd: str | None = None
+    ) -> tuple[str | None, str | None]:
         """持久隔离工作区：同一会话复用一个 git worktree（不碰 live checkout、不破坏运行中的 FHD）。"""
         rec = self._session_get(key)
         wt = str(rec.get("workspace") or "")
         branch = str(rec.get("branch") or "")
         if wt and Path(wt).exists():
             return wt, branch
-        base = self._cli_workspace({})
+        base = base_cwd or self._cli_workspace({})
         if not self._is_git_repo(base):
             return None, None
         slug = re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-") or "session"
         if not branch:
             branch = f"super-employee/{self._p.tool_name}/{slug}"
-        wt = str(Path(get_app_data_dir()) / self._p.storage_subdir / f"ws-{slug}")
+        state_root = Path(get_desktop_state_dir()) if base_cwd else Path(get_app_data_dir())
+        wt = str(state_root / "relay_threads" / self._p.storage_subdir / f"ws-{slug}")
         try:
             self._git(base, "worktree", "remove", "--force", wt, timeout=30)
         except Exception:  # noqa: BLE001
@@ -1663,9 +1870,10 @@ class SuperEmployeeService:
         )
 
     def _parse_stream_json_full(self, out: str) -> tuple[str, str]:
-        """从 stream-json 取 (最终回复, session_id)。session_id 取最后出现的(result 事件含)。"""
+        """Parse final text + native session id from all four supported CLI JSON streams."""
         text = self._parse_claude_stream_json(out)
         sid = ""
+        extra_texts: list[str] = []
         for line in out.splitlines():
             s = line.strip()
             if not s.startswith("{"):
@@ -1674,9 +1882,20 @@ class SuperEmployeeService:
                 ev = json.loads(s)
             except json.JSONDecodeError:
                 continue
-            if isinstance(ev, dict) and ev.get("session_id"):
-                sid = str(ev.get("session_id") or "")
-        return text, sid
+            if not isinstance(ev, dict):
+                continue
+            for key in ("session_id", "thread_id", "chat_id", "conversation_id"):
+                if ev.get(key):
+                    sid = str(ev.get(key) or "").strip()
+            item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
+            for key in ("session_id", "thread_id", "chat_id", "conversation_id"):
+                if item.get(key):
+                    sid = str(item.get(key) or "").strip()
+            if str(item.get("type") or "") in {"agent_message", "assistant_message"}:
+                value = item.get("text") or item.get("message") or item.get("content")
+                if isinstance(value, str) and value.strip():
+                    extra_texts.append(value.strip())
+        return text or "\n".join(extra_texts).strip(), sid
 
     def _conversation_perm(self) -> str:
         # 默认 acceptEdits：可对话+读写改文件(覆盖大部分 Claude Code 用法)，但不自动跑任意命令，
@@ -1718,44 +1937,113 @@ class SuperEmployeeService:
         return out
 
     def _conversation_cmd(
-        self, cli_path: str, prompt: str, resume_session_id: str | None
+        self,
+        cli_path: str,
+        prompt: str,
+        resume_session_id: str | None,
+        initial_session_id: str = "",
     ) -> list[str]:
-        cmd = [
-            cli_path,
-            "--print",
-            "--output-format",
-            "stream-json",
-            "--verbose",
-            "--permission-mode",
-            self._conversation_perm(),
-        ]
+        tool = self._p.tool_name
+        if tool == "codex":
+            sandbox = (
+                os.environ.get("XCMAX_CODEX_SANDBOX_MODE")
+                or os.environ.get("DEVFLEET_CODEX_SANDBOX_MODE")
+                or "workspace-write"
+            ).strip()
+            if sandbox not in {"read-only", "workspace-write", "danger-full-access"}:
+                sandbox = "workspace-write"
+            if resume_session_id:
+                return [
+                    cli_path,
+                    "exec",
+                    "resume",
+                    "--json",
+                    "--skip-git-repo-check",
+                    "-c",
+                    'approval_policy="never"',
+                    "-c",
+                    f'sandbox_mode="{sandbox}"',
+                    resume_session_id,
+                    prompt,
+                ]
+            return [
+                cli_path,
+                "--ask-for-approval",
+                "never",
+                "exec",
+                "--sandbox",
+                sandbox,
+                "--skip-git-repo-check",
+                "--json",
+                prompt,
+            ]
+
+        if tool == "claude_code":
+            cmd = [
+                cli_path,
+                "--print",
+                "--output-format",
+                "stream-json",
+                "--verbose",
+                "--permission-mode",
+                self._conversation_perm(),
+            ]
+            if resume_session_id:
+                cmd += ["--resume", resume_session_id]
+            cmd.append(prompt)
+            return self._apply_scope_to_cmd(cmd)
+
+        with tempfile.TemporaryDirectory(prefix=f"xcagi-{tool}-session-cmd-") as tmp:
+            cmd = self._p.cli_command_builder(cli_path, prompt, Path(tmp) / "last_message.txt", "")
         if resume_session_id:
-            cmd += ["--resume", resume_session_id]
-        cmd.append(prompt)
+            if tool == "trae":
+                # trae-cli (Go pflag) 的 --resume 带可选值；空格写法会把 session id
+                # 当成新的 positional prompt。必须用等号才是真正续接指定会话。
+                cmd[-1:-1] = [f"--resume={resume_session_id}"]
+            else:
+                cmd[-1:-1] = ["--resume", resume_session_id]
+        elif tool == "trae" and initial_session_id:
+            cmd[-1:-1] = ["--session-id", initial_session_id]
         return self._apply_scope_to_cmd(cmd)
 
     def _run_conversation_turn(self, cli_path: str, text: str, context: dict[str, Any]) -> str:
+        self._raise_if_cancelled()
         key = self._session_key(context)
-        # 像 Claude Code 一样直接在工程根工作：零额外磁盘(不建 536M/会话的 worktree)、
-        # 改动你审了再落地(底部 git 键)。上下文靠 claude session 续接，不靠工作区隔离。
-        cwd = self._cli_workspace(context)
+        base_cwd = self._cli_workspace(context)
         rec = self._session_get(key)
+        persistent = context.get("persistent_conversation") is True
+        cwd = base_cwd
+        branch = str(rec.get("branch") or "").strip()
+        if persistent:
+            workspace, prepared_branch = self._ensure_session_workspace(key, base_cwd)
+            if workspace:
+                cwd = workspace
+                branch = str(prepared_branch or branch)
         session_id = str(rec.get("session_id") or "").strip()
+        initial_session_id = uuid.uuid4().hex if self._p.tool_name == "trae" else ""
         idle_timeout = self._cli_idle_timeout_seconds()
         hard_cap = self._cli_hard_cap_seconds()
 
-        def _run(prompt: str, resume: str | None) -> tuple[int, str, str, str]:
-            cmd = self._conversation_cmd(cli_path, prompt, resume)
-            return self._run_cli_idle(cmd, cwd, idle_timeout, hard_cap)
+        def _run(
+            prompt: str, resume: str | None, first_session_id: str = ""
+        ) -> tuple[int, str, str, str]:
+            self._raise_if_cancelled()
+            cmd = self._conversation_cmd(cli_path, prompt, resume, first_session_id)
+            with _relay_wt_lock(cwd):
+                self._raise_if_cancelled()
+                return self._run_cli_idle(cmd, cwd, idle_timeout, hard_cap)
 
         try:
             returncode, stdout, stderr, killed = _run(
                 self._conversation_prompt(text, cwd, bool(session_id)),
                 session_id or None,
+                initial_session_id,
             )
         except (OSError, subprocess.SubprocessError):
             logger.exception("%s conversation CLI failed", self._p.display_tool)
             return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
+        if killed == "cancelled":
+            raise SuperEmployeeExecutionCancelled("relay task cancelled")
         body, new_sid = self._parse_stream_json_full(stdout)
         # resume 失效(会话被清/找不到)兜底：清掉 session_id，按新会话重来一次。
         if session_id and not body and not killed:
@@ -1765,8 +2053,12 @@ class SuperEmployeeService:
                 self._session_set(key, rec)
                 try:
                     returncode, stdout, stderr, killed = _run(
-                        self._conversation_prompt(text, cwd, False), None
+                        self._conversation_prompt(text, cwd, False),
+                        None,
+                        initial_session_id,
                     )
+                    if killed == "cancelled":
+                        raise SuperEmployeeExecutionCancelled("relay task cancelled")
                     body, new_sid = self._parse_stream_json_full(stdout)
                 except (OSError, subprocess.SubprocessError):
                     pass
@@ -1774,18 +2066,86 @@ class SuperEmployeeService:
             return f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
         if killed.startswith("hardcap"):
             return f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
+        new_sid = new_sid or (initial_session_id if self._p.tool_name == "trae" else "")
         if new_sid and new_sid != session_id:
             rec["session_id"] = new_sid
             self._session_set(key, rec)
+        self._last_session_runtime = {
+            "session_id": new_sid or session_id,
+            "workspace_root": cwd,
+            "branch": branch,
+            "thread_id": str(context.get("thread_id") or context.get("conversation_id") or ""),
+            "tool": self._p.tool_name,
+        }
         if body:
+            self._last_cli_failure = {}
             return body
         if returncode != 0:
             logger.warning("%s conversation returned code %s", self._p.display_tool, returncode)
-            return f"{self._p.display_tool} 本次返回失败（code {returncode}），请查看本机日志"
+            return self._cli_failure_message(returncode, stdout, stderr)
         return ""
+
+    def _cli_failure_message(self, returncode: int, stdout: str, stderr: str) -> str:
+        """Turn provider/CLI stderr into a safe, actionable product error."""
+
+        combined = f"{stderr}\n{stdout}".strip()
+        lowered = combined.lower()
+        error_code = "cli_failed"
+        if any(
+            marker in lowered
+            for marker in (
+                "usage limit",
+                "purchase more credits",
+                "insufficient_quota",
+                "credit balance",
+            )
+        ):
+            error_code = "usage_limit"
+            retry = re.search(
+                r"try again at\s+([0-9]{1,2}:[0-9]{2}(?:\s*[ap]m)?)",
+                combined,
+                flags=re.IGNORECASE,
+            )
+            retry_hint = f"，请在 {retry.group(1)} 后重试" if retry else "，请稍后重试"
+            message = (
+                f"{self._p.display_tool} 当前用量已耗尽{retry_hint}，"
+                f"或前往 {self._p.display_tool} 用量设置补充额度。"
+            )
+        elif any(
+            marker in lowered
+            for marker in (
+                "failed to authenticate",
+                "authentication_failed",
+                "not authenticated",
+                "please log in",
+                "please login",
+            )
+        ):
+            error_code = "authentication_failed"
+            message = f"{self._p.display_tool} 尚未登录或登录已失效，请在电脑端重新登录后重试。"
+        elif any(
+            marker in lowered
+            for marker in (
+                "request timed out",
+                "stream disconnected",
+                "reconnecting...",
+                "connection timed out",
+                "failed to connect",
+            )
+        ):
+            error_code = "provider_unavailable"
+            message = f"{self._p.display_tool} 服务连接超时，请检查电脑网络后重试。"
+        elif "request not allowed" in lowered:
+            error_code = "request_not_allowed"
+            message = f"{self._p.display_tool} 拒绝了本次请求，请检查账号或组织策略。"
+        else:
+            message = f"{self._p.display_tool} 执行失败（code {int(returncode)}），请在电脑端重试。"
+        self._last_cli_failure = {"error_code": error_code, "message": message}
+        return message
 
     def _run_cli_once(self, cli_path: str, prompt: str, cwd: str) -> str:
         """运行一次 CLI 取最终回复文本（coding/闲聊共用；含测试注入与 idle-timeout 两路）。"""
+        self._raise_if_cancelled()
         idle_timeout = self._cli_idle_timeout_seconds()
         hard_cap = self._cli_hard_cap_seconds()
         with tempfile.TemporaryDirectory(prefix=f"xcagi-{self._p.tool_name}-cli-") as tmp:
@@ -1805,6 +2165,7 @@ class SuperEmployeeService:
                 stdout = str(getattr(proc, "stdout", "") or "")
                 stderr = str(getattr(proc, "stderr", "") or "")
                 killed_reason = ""
+                self._raise_if_cancelled()
             else:
                 try:
                     returncode, stdout, stderr, killed_reason = self._run_cli_idle(
@@ -1813,6 +2174,8 @@ class SuperEmployeeService:
                 except (OSError, subprocess.SubprocessError):
                     logger.exception("%s CLI runner failed", self._p.display_tool)
                     return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
+            if killed_reason == "cancelled":
+                raise SuperEmployeeExecutionCancelled("relay task cancelled")
             if killed_reason.startswith("idle"):
                 return (
                     f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无任何输出，判定卡住已结束。"
@@ -1827,29 +2190,32 @@ class SuperEmployeeService:
             if self._p.cli_stream_json:
                 body = self._parse_claude_stream_json(stdout)
                 if body:
+                    self._last_cli_failure = {}
                     return body
                 if returncode != 0:
                     logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
-                    return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）"
+                    return self._cli_failure_message(returncode, stdout, stderr)
                 return ""
             # 非 stream(codex)：先读 last-message 文件，再退 stdout。
             if self._p.cli_reads_output_file and output_path.exists():
                 body = output_path.read_text(encoding="utf-8", errors="replace").strip()
                 if body:
+                    self._last_cli_failure = {}
                     return body
-            cleaned = self._clean_cli_stdout(stdout.strip())
-            if cleaned:
-                return cleaned
             if returncode != 0:
                 logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
-                return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）"
+                return self._cli_failure_message(returncode, stdout, stderr)
+            cleaned = self._clean_cli_stdout(stdout.strip())
+            if cleaned:
+                self._last_cli_failure = {}
+                return cleaned
         return ""
 
     def _cli_path(self) -> str:
         candidates = [
             os.environ.get(f"{self._p.env_tool_prefix}_CLI_PATH", ""),
-            shutil.which(self._p.cli_binary) or "",
             *self._p.cli_extra_candidates,
+            shutil.which(self._p.cli_binary) or "",
         ]
         for item in candidates:
             value = str(item or "").strip()
@@ -1976,6 +2342,15 @@ class SuperEmployeeService:
         只要还在产出就不杀。返回 (returncode, stdout, stderr, killed_reason)。"""
         import threading
 
+        if self._cancel_requested():
+            return 130, "", "", "cancelled"
+        process_group_args: dict[str, Any]
+        if os.name == "nt":
+            process_group_args = {
+                "creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+            }
+        else:
+            process_group_args = {"start_new_session": True}
         proc = subprocess.Popen(
             cmd,
             cwd=cwd,
@@ -1984,6 +2359,7 @@ class SuperEmployeeService:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env=self._cli_subprocess_env(),
+            **process_group_args,
         )
         out_parts: list[str] = []
         err_parts: list[str] = []
@@ -2011,8 +2387,12 @@ class SuperEmployeeService:
         started = time.monotonic()
         killed_reason = ""
         while True:
+            if self._cancel_requested():
+                killed_reason = "cancelled"
+                self._terminate_cli_process(proc)
+                break
             try:
-                proc.wait(timeout=3)
+                proc.wait(timeout=0.5 if self._cancellation_event is not None else 3)
                 break
             except subprocess.TimeoutExpired:
                 pass
@@ -2024,15 +2404,53 @@ class SuperEmployeeService:
             elif hard_cap > 0 and (now - started) > hard_cap:
                 killed_reason = f"hardcap:{hard_cap:g}"
             if killed_reason:
-                proc.kill()
-                try:
-                    proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    pass
+                self._terminate_cli_process(proc)
                 break
         t_out.join(timeout=2)
         t_err.join(timeout=2)
         return int(proc.returncode or 0), "".join(out_parts), "".join(err_parts), killed_reason
+
+    @staticmethod
+    def _terminate_cli_process(proc: subprocess.Popen[str]) -> None:
+        """Terminate the CLI and its child process tree where the OS permits it."""
+
+        if proc.poll() is not None:
+            return
+        if os.name == "nt":
+            try:
+                subprocess.run(
+                    ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                proc.kill()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            except (OSError, ProcessLookupError):
+                try:
+                    proc.terminate()
+                except OSError:
+                    return
+        try:
+            proc.wait(timeout=2)
+            return
+        except subprocess.TimeoutExpired:
+            pass
+        if os.name == "nt":
+            proc.kill()
+        else:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                proc.kill()
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            logger.warning("CLI process tree did not exit after cancellation pid=%s", proc.pid)
 
     def _parse_claude_stream_json(self, out: str) -> str:
         """从 claude --output-format stream-json 的事件流里取最终回复。"""
@@ -2353,6 +2771,7 @@ class SuperEmployeeService:
         context: dict[str, Any] | None = None,
     ) -> str:
         """开发任务全闭环：隔离 worktree → coding → view(验证,失败修一次) → push → 清理。"""
+        self._raise_if_cancelled()
         # 持久复用模式下，同一 worktree 必须串行使用（并发任务排队），避免 git 状态相互踩踏。
         persistent = self._relay_persistent_worktree_path()
         if persistent:
@@ -2368,6 +2787,7 @@ class SuperEmployeeService:
         context: dict[str, Any] | None = None,
     ) -> str:
         branch_hint = self._safe_context_branch(context)
+        self._raise_if_cancelled()
         prepared = self._prepare_worktree(base_cwd, text, branch_hint)
         if not prepared:
             if branch_hint:
@@ -2383,7 +2803,9 @@ class SuperEmployeeService:
             self._remove_worktree(base_cwd, wt_path)
             return "❌ 工作分支准备失败，未执行任务。"
         try:
+            self._raise_if_cancelled()
             body = self._run_cli_once(cli_path, self._cli_work_prompt(text, wt_path), wt_path)
+            self._raise_if_cancelled()
             ok, vmsg = self._verify_workspace(wt_path)
             # 迭代修复：验证未过则让 CLI 再修，最多 N 轮（env 可调），而非『只修一次』即放弃，
             # 显著提升 dev-loop 通过率，少落 blocked。
@@ -2393,9 +2815,12 @@ class SuperEmployeeService:
                 max_fix = 3
             attempt = 0
             while not ok and attempt < max_fix:
+                self._raise_if_cancelled()
                 attempt += 1
                 self._run_cli_once(cli_path, self._cli_fix_prompt(vmsg, wt_path), wt_path)
+                self._raise_if_cancelled()
                 ok, vmsg = self._verify_workspace(wt_path)
+            self._raise_if_cancelled()
             pushed, pmsg = self._commit_and_push(wt_path, branch, text)
             status = "✅" if (ok and pushed) else ("⚠️" if pushed else "❌")
             tail = (
@@ -2427,13 +2852,13 @@ class SuperEmployeeService:
         text: str,
         context: dict[str, Any],
     ) -> tuple[str, str]:
-        """普通对话直答：FAQ → CLI → 明确不可用提示。"""
-        canned = self._direct_reply_body(text)
-        if canned:
-            return canned, f"{self._p.tool_name}_direct"
+        """普通对话直答：真实 CLI → 离线 FAQ → 明确不可用提示。"""
         cli_body = self._cli_reply_body(text, context)
         if cli_body:
             return cli_body, f"{self._p.tool_name}_cli"
+        canned = self._direct_reply_body(text)
+        if canned:
+            return canned, f"{self._p.tool_name}_direct"
         return (
             f"{self._p.display_tool} CLI 暂时没有返回内容，"
             f"请确认本机 {self._p.display_tool} 已登录后重试。",

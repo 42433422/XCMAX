@@ -16,12 +16,15 @@ class MethodChannelAndroidPackageUpdateInstaller
 
   @override
   Future<String> startPackageUpdate(MobileUpdateCheckResult result) async {
+    final currentVersionCode = await MobileAndroidBuild.installedVersionCode();
     final message = await _channel.invokeMethod<String>(
       'startPackageUpdate',
       {
         'downloadUrl': result.downloadUrl,
         'versionName': result.versionName,
-        'currentVersionCode': MobileAndroidBuild.versionCode,
+        'currentVersionCode': currentVersionCode,
+        'apkSha256': result.apkSha256,
+        'apkSize': result.apkSize,
         'delta': result.apkDelta,
       },
     );

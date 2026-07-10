@@ -3,11 +3,16 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 
+import '../platform/credential_cipher.dart';
+
 class MobileSessionData {
   const MobileSessionData({
     this.accessToken = '',
     this.refreshToken = '',
     this.sessionId = '',
+    this.localAccessToken = '',
+    this.localRefreshToken = '',
+    this.localSessionId = '',
     this.username = '',
     this.accountKind = '',
     this.userId = 0,
@@ -38,6 +43,9 @@ class MobileSessionData {
     this.autoLogin = false,
     this.walletBalanceJson = '',
     this.inflightRelayTasks = const {},
+    this.activeSuperEmployeeThreads = const {},
+    this.localSuperEmployeeThreads = const {},
+    this.localSuperEmployeeRuns = const {},
     this.cachedChatMessages = const {},
     this.conversationListStates = const {},
     this.cachedModInfos = const [],
@@ -46,6 +54,12 @@ class MobileSessionData {
   final String accessToken;
   final String refreshToken;
   final String sessionId;
+
+  /// JWT issued by the paired desktop backend. It must stay separate from
+  /// [accessToken], which belongs to the cloud account and uses another key.
+  final String localAccessToken;
+  final String localRefreshToken;
+  final String localSessionId;
   final String username;
   final String accountKind;
   final int userId;
@@ -76,6 +90,9 @@ class MobileSessionData {
   final bool autoLogin;
   final String walletBalanceJson;
   final Map<String, String> inflightRelayTasks;
+  final Map<String, String> activeSuperEmployeeThreads;
+  final Map<String, Map<String, Object?>> localSuperEmployeeThreads;
+  final Map<String, Map<String, Object?>> localSuperEmployeeRuns;
   final Map<String, List<Map<String, Object?>>> cachedChatMessages;
   final Map<String, Map<String, Object?>> conversationListStates;
   final List<Map<String, Object?>> cachedModInfos;
@@ -84,7 +101,9 @@ class MobileSessionData {
   static const Object _unset = Object();
 
   bool get hasAuth =>
-      accessToken.trim().isNotEmpty || marketAccessToken.trim().isNotEmpty;
+      accessToken.trim().isNotEmpty ||
+      localAccessToken.trim().isNotEmpty ||
+      marketAccessToken.trim().isNotEmpty;
 
   bool get hasIdentity =>
       username.trim().isNotEmpty ||
@@ -108,6 +127,9 @@ class MobileSessionData {
       accessToken: _readString(json, 'access_token'),
       refreshToken: _readString(json, 'refresh_token'),
       sessionId: _readString(json, 'session_id'),
+      localAccessToken: _readString(json, 'local_access_token'),
+      localRefreshToken: _readString(json, 'local_refresh_token'),
+      localSessionId: _readString(json, 'local_session_id'),
       username: _readString(json, 'username'),
       accountKind: _readString(json, 'account_kind'),
       userId: _readInt(json, 'user_id'),
@@ -139,6 +161,11 @@ class MobileSessionData {
       autoLogin: _readBool(json, 'auto_login'),
       walletBalanceJson: _readString(json, 'wallet_balance_json'),
       inflightRelayTasks: _readStringMap(json, 'inflight_relay_tasks'),
+      activeSuperEmployeeThreads:
+          _readStringMap(json, 'active_super_employee_threads'),
+      localSuperEmployeeThreads:
+          _readObjectMap(json, 'local_super_employee_threads'),
+      localSuperEmployeeRuns: _readObjectMap(json, 'local_super_employee_runs'),
       cachedChatMessages: _readChatCache(json, 'cached_chat_messages'),
       conversationListStates: _readObjectMap(json, 'conversation_list_states'),
       cachedModInfos: _readObjectList(json, 'cached_mod_infos'),
@@ -149,6 +176,9 @@ class MobileSessionData {
         'access_token': accessToken,
         'refresh_token': refreshToken,
         'session_id': sessionId,
+        'local_access_token': localAccessToken,
+        'local_refresh_token': localRefreshToken,
+        'local_session_id': localSessionId,
         'username': username,
         'account_kind': accountKind,
         'user_id': userId,
@@ -179,6 +209,9 @@ class MobileSessionData {
         'auto_login': autoLogin,
         'wallet_balance_json': walletBalanceJson,
         'inflight_relay_tasks': inflightRelayTasks,
+        'active_super_employee_threads': activeSuperEmployeeThreads,
+        'local_super_employee_threads': localSuperEmployeeThreads,
+        'local_super_employee_runs': localSuperEmployeeRuns,
         'cached_chat_messages': cachedChatMessages,
         'conversation_list_states': conversationListStates,
         'cached_mod_infos': cachedModInfos,
@@ -195,6 +228,11 @@ class MobileSessionData {
       accessToken: _firstNonBlank(other.accessToken, accessToken),
       refreshToken: _firstNonBlank(other.refreshToken, refreshToken),
       sessionId: _firstNonBlank(other.sessionId, sessionId),
+      localAccessToken:
+          _firstNonBlank(other.localAccessToken, localAccessToken),
+      localRefreshToken:
+          _firstNonBlank(other.localRefreshToken, localRefreshToken),
+      localSessionId: _firstNonBlank(other.localSessionId, localSessionId),
       username: _firstNonBlank(other.username, username),
       accountKind: _firstNonBlank(other.accountKind, accountKind),
       userId: other.userId > 0 ? other.userId : userId,
@@ -234,6 +272,18 @@ class MobileSessionData {
         ...inflightRelayTasks,
         ...other.inflightRelayTasks,
       },
+      activeSuperEmployeeThreads: {
+        ...activeSuperEmployeeThreads,
+        ...other.activeSuperEmployeeThreads,
+      },
+      localSuperEmployeeThreads: {
+        ...localSuperEmployeeThreads,
+        ...other.localSuperEmployeeThreads,
+      },
+      localSuperEmployeeRuns: {
+        ...localSuperEmployeeRuns,
+        ...other.localSuperEmployeeRuns,
+      },
       cachedChatMessages: {
         ...cachedChatMessages,
         ...other.cachedChatMessages,
@@ -252,6 +302,9 @@ class MobileSessionData {
     Object? accessToken = _unset,
     Object? refreshToken = _unset,
     Object? sessionId = _unset,
+    Object? localAccessToken = _unset,
+    Object? localRefreshToken = _unset,
+    Object? localSessionId = _unset,
     Object? username = _unset,
     Object? accountKind = _unset,
     Object? userId = _unset,
@@ -282,6 +335,9 @@ class MobileSessionData {
     Object? autoLogin = _unset,
     Object? walletBalanceJson = _unset,
     Object? inflightRelayTasks = _unset,
+    Object? activeSuperEmployeeThreads = _unset,
+    Object? localSuperEmployeeThreads = _unset,
+    Object? localSuperEmployeeRuns = _unset,
     Object? cachedChatMessages = _unset,
     Object? conversationListStates = _unset,
     Object? cachedModInfos = _unset,
@@ -295,6 +351,15 @@ class MobileSessionData {
           : refreshToken as String,
       sessionId:
           identical(sessionId, _unset) ? this.sessionId : sessionId as String,
+      localAccessToken: identical(localAccessToken, _unset)
+          ? this.localAccessToken
+          : localAccessToken as String,
+      localRefreshToken: identical(localRefreshToken, _unset)
+          ? this.localRefreshToken
+          : localRefreshToken as String,
+      localSessionId: identical(localSessionId, _unset)
+          ? this.localSessionId
+          : localSessionId as String,
       username:
           identical(username, _unset) ? this.username : username as String,
       accountKind: identical(accountKind, _unset)
@@ -374,6 +439,15 @@ class MobileSessionData {
       inflightRelayTasks: identical(inflightRelayTasks, _unset)
           ? this.inflightRelayTasks
           : inflightRelayTasks as Map<String, String>,
+      activeSuperEmployeeThreads: identical(activeSuperEmployeeThreads, _unset)
+          ? this.activeSuperEmployeeThreads
+          : activeSuperEmployeeThreads as Map<String, String>,
+      localSuperEmployeeThreads: identical(localSuperEmployeeThreads, _unset)
+          ? this.localSuperEmployeeThreads
+          : localSuperEmployeeThreads as Map<String, Map<String, Object?>>,
+      localSuperEmployeeRuns: identical(localSuperEmployeeRuns, _unset)
+          ? this.localSuperEmployeeRuns
+          : localSuperEmployeeRuns as Map<String, Map<String, Object?>>,
       cachedChatMessages: identical(cachedChatMessages, _unset)
           ? this.cachedChatMessages
           : cachedChatMessages as Map<String, List<Map<String, Object?>>>,
@@ -396,36 +470,89 @@ abstract class MobileSessionStore {
 }
 
 class FileMobileSessionStore implements MobileSessionStore {
-  FileMobileSessionStore({String? filePath}) : _filePath = filePath;
+  FileMobileSessionStore({
+    String? filePath,
+    AndroidCredentialCipher? cipher,
+    bool? encryptAtRest,
+  })  : _filePath = filePath,
+        _cipher = cipher ?? const AndroidCredentialCipher(),
+        // Explicit paths are used by host-side tests and migration tools.
+        // The production Android store always encrypts the full session.
+        _encryptAtRest = encryptAtRest ?? filePath == null;
 
   static const _channel = MethodChannel('xcagi/session_store');
   final String? _filePath;
+  final AndroidCredentialCipher _cipher;
+  final bool _encryptAtRest;
   File? _cachedFile;
+  Future<void> _writeTail = Future<void>.value();
 
   @override
   Future<MobileSessionData> load() async {
+    await _writeTail;
     final file = await _file();
     if (!await file.exists()) return MobileSessionData.empty;
-    final text = await file.readAsString();
+    var text = await file.readAsString();
     if (text.trim().isEmpty) return MobileSessionData.empty;
+    final encrypted = text.startsWith('enc:v1:');
+    if (encrypted) {
+      text = await _cipher.decrypt(text);
+    }
     final json = jsonDecode(text);
     if (json is! Map) return MobileSessionData.empty;
-    return MobileSessionData.fromJson(
+    final data = MobileSessionData.fromJson(
       json.map((key, value) => MapEntry(key.toString(), value)),
     );
+    if (_encryptAtRest && !encrypted) {
+      // Upgrade legacy plaintext sessions immediately on first read; waiting
+      // for an unrelated settings mutation could leave live JWTs exposed.
+      await _saveNow(data);
+    }
+    return data;
   }
 
   @override
-  Future<void> save(MobileSessionData data) async {
+  Future<void> save(MobileSessionData data) {
+    final operation = _writeTail.then((_) => _saveNow(data));
+    _writeTail = operation.then<void>(
+      (_) {},
+      onError: (_, __) {},
+    );
+    return operation;
+  }
+
+  Future<void> _saveNow(MobileSessionData data) async {
     final file = await _file();
     await file.parent.create(recursive: true);
-    await file.writeAsString(jsonEncode(data.toJson()), flush: true);
+    var payload = jsonEncode(data.toJson());
+    if (_encryptAtRest) {
+      payload = await _cipher.encrypt(payload);
+    }
+    final temporary = File('${file.path}.tmp');
+    await temporary.writeAsString(payload, flush: true);
+    try {
+      await temporary.rename(file.path);
+    } on FileSystemException {
+      if (await file.exists()) await file.delete();
+      await temporary.rename(file.path);
+    }
   }
 
   @override
-  Future<void> clear() async {
+  Future<void> clear() {
+    final operation = _writeTail.then((_) => _clearNow());
+    _writeTail = operation.then<void>(
+      (_) {},
+      onError: (_, __) {},
+    );
+    return operation;
+  }
+
+  Future<void> _clearNow() async {
     final file = await _file();
     if (await file.exists()) await file.delete();
+    final temporary = File('${file.path}.tmp');
+    if (await temporary.exists()) await temporary.delete();
   }
 
   Future<File> _file() async {

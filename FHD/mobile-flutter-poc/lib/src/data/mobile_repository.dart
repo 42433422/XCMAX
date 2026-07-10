@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
+
 import '../api/mobile_api.dart';
 import '../api/mobile_models.dart';
 import '../models/conversation.dart';
@@ -9,6 +11,7 @@ import '../policy/android_runtime_policy.dart';
 import '../policy/avatar_policy.dart';
 import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
+import 'assistant_assets.dart';
 import 'duty_roster_ssot.dart';
 import 'employee_pending_question.dart';
 import '../im/im_websocket_client.dart';
@@ -22,6 +25,11 @@ class MobileRepository {
         _imWebSocket = imWebSocket ?? ImWebSocketClient();
 
   static const customerServiceRequestType = 'mobile_ai_customer_service';
+  static final Set<String> _activeLocalRunIds = <String>{};
+  static final Set<String> _stopRequestedLocalRunIds = <String>{};
+  static final Set<String> _cancelledLocalRunIds = <String>{};
+  static final Map<String, Future<bool>> _localCancellationRequests =
+      <String, Future<bool>>{};
 
   final MobileApiClient _client;
   final ImWebSocketClient _imWebSocket;
@@ -605,7 +613,8 @@ class MobileRepository {
     return '';
   }
 
-  Future<List<String>> _lanPairingCandidateBaseUrls(String configuredHost) async {
+  Future<List<String>> _lanPairingCandidateBaseUrls(
+      String configuredHost) async {
     const lanPorts = [5011, 5100, 17500, 5001, 5000];
     final hostPorts = <String>[];
     final configured = _normalizePairingHost(configuredHost);
@@ -620,7 +629,8 @@ class MobileRepository {
     }
 
     try {
-      final ifaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      final ifaces =
+          await NetworkInterface.list(type: InternetAddressType.IPv4);
       for (final iface in ifaces) {
         for (final addr in iface.addresses) {
           final ip = addr.address;
@@ -656,7 +666,8 @@ class MobileRepository {
     return '';
   }
 
-  String _pairingExchangeNonce(PairingPayload? parsed, String raw, String code) {
+  String _pairingExchangeNonce(
+      PairingPayload? parsed, String raw, String code) {
     if (parsed != null) {
       if (parsed.version >= 2 && code.isEmpty) {
         return parsed.nonce.ifEmpty(parsed.token);
@@ -809,11 +820,20 @@ class MobileRepository {
   Future<List<ChatMessage>> loadInitialMessages(
     ConversationItem conversation,
   ) async {
-    final cached = await _loadCachedChat(conversation.id);
+    final usesPersistentThread = conversation.type.superTool != null ||
+        conversation.id == PinnedIds.assistant;
+    final threadId = usesPersistentThread
+        ? await activeSuperEmployeeThreadId(conversation.id)
+        : '';
+    final cacheId = _superEmployeeCacheId(conversation.id, threadId);
+    final cached = await _loadCachedChat(cacheId);
     if (cached.isNotEmpty) return cached;
 
     final tool = conversation.type.superTool;
     if (tool == null) return const [];
+    // A real thread owns its own local transcript; never mix the legacy global
+    // employee message feed into a newly created conversation.
+    if (threadId.isNotEmpty) return const [];
 
     final response = await _client.superEmployeeMessages(tool);
     if (!response.success) {
@@ -863,6 +883,477 @@ class MobileRepository {
     return _assistantMessage(conversation.id, reply);
   }
 
+  Future<String> streamAssistantMessage({
+    required String body,
+    bool deepAnalysis = false,
+    int userId = 0,
+    List<ChatMessage> recentMessages = const [],
+    void Function(String token)? onToken,
+    bool Function()? isCancelled,
+  }) async {
+    final text = body.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('消息不能为空');
+    }
+    final threadId = await activeSuperEmployeeThreadId(PinnedIds.assistant);
+    final cacheId = _superEmployeeCacheId(PinnedIds.assistant, threadId);
+    await _cacheChatMessage(cacheId, role: ChatRole.user, body: text);
+    final prompt = deepAnalysis
+        ? '请进入深度分析模式：先明确问题与假设，再给出有依据的分析、风险和可执行建议。\n\n用户问题：$text'
+        : text;
+    final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
+    final memoryContext = await _assistantMemoryPromptContext();
+    final reply = await _client.streamChat(
+      prompt,
+      sessionId: cacheId,
+      userId: effectiveUserId,
+      recentMessages: _recentChatContext(recentMessages),
+      context: {
+        'source': 'mobile_assistant',
+        'client_surface': 'mobile',
+        if (memoryContext.isNotEmpty) 'assistant_memory': memoryContext,
+      },
+      onToken: onToken,
+    );
+    _throwIfCancelled(isCancelled);
+    await _cacheChatMessage(
+      cacheId,
+      role: ChatRole.assistant,
+      body: reply,
+    );
+    return reply;
+  }
+
+  Future<AssistantSearchResult> searchAssistantMessage({
+    required String body,
+    int userId = 0,
+    List<ChatMessage> recentMessages = const [],
+  }) async {
+    final text = body.trim();
+    if (text.isEmpty) throw const MobileRepositoryException('搜索内容不能为空');
+    final threadId = await activeSuperEmployeeThreadId(PinnedIds.assistant);
+    final cacheId = _superEmployeeCacheId(PinnedIds.assistant, threadId);
+    await _cacheChatMessage(cacheId, role: ChatRole.user, body: text);
+    final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
+    final memoryContext = await _assistantMemoryPromptContext();
+    final context = <String, Object?>{
+      'source': 'mobile_assistant_search',
+      'client_surface': 'mobile',
+      'kitten_analyzer': true,
+      'kitten_web_search': true,
+      'kitten_session_id': cacheId,
+      if (effectiveUserId > 0) 'user_id': '$effectiveUserId',
+      if (recentMessages.isNotEmpty)
+        'recent_messages': _recentChatContext(recentMessages),
+      if (memoryContext.isNotEmpty) 'assistant_memory': memoryContext,
+    };
+    Map<String, Object?> response = const {};
+    Object? serverError;
+    try {
+      response = await _client.chat(
+        text,
+        sessionId: cacheId,
+        context: context,
+      );
+    } catch (error) {
+      serverError = error;
+    }
+    var answer = _assistantReplyFromMap(response);
+    var sources = _assistantSourcesFromRows(
+      _deepObjectListForKey(response, 'web_search_results'),
+    );
+    final meta = _deepObjectMapForKey(response, 'web_search_meta');
+    var provider = _stringField(meta, 'provider');
+    var warning = _deepStringForKey(response, 'web_search_error');
+
+    // Compatibility fallback: an already-installed app can be connected to a
+    // cloud/desktop node that has not yet received the new search endpoint.
+    // Fetch real sources directly, then use the existing streaming chat path
+    // to produce a grounded answer instead of showing "离线同步不可用".
+    if (sources.isEmpty) {
+      try {
+        final rows = await _client.keylessWebSearch(text);
+        sources = _assistantSourcesFromRows(rows);
+        if (sources.isNotEmpty) {
+          provider = 'bing_rss';
+          final groundedPrompt = _groundedSearchPrompt(text, sources);
+          try {
+            answer = await _client.streamChat(
+              groundedPrompt,
+              sessionId: cacheId,
+              userId: effectiveUserId,
+              recentMessages: _recentChatContext(recentMessages),
+              context: {
+                ...context,
+                'kitten_web_search': false,
+                'mobile_search_sources': rows,
+              },
+            );
+          } catch (_) {
+            // Keep a valid answer returned by an older non-stream endpoint.
+          }
+        }
+      } catch (error) {
+        warning = error.toString();
+      }
+    }
+    if (answer.trim().isEmpty && sources.isNotEmpty) {
+      answer = '已找到 ${sources.length} 条实时来源，请先查看下方来源卡片；回答服务恢复后可继续追问。';
+      warning = warning.ifEmpty(serverError?.toString() ?? '');
+    } else if (answer.trim().isEmpty && serverError != null) {
+      throw MobileRepositoryException(serverError.toString());
+    }
+    answer = answer.ifEmpty('没有获得有效回答。');
+    await _cacheChatMessage(
+      cacheId,
+      role: ChatRole.assistant,
+      body: answer,
+      sources: sources,
+    );
+    return AssistantSearchResult(
+      answer: answer,
+      sources: sources,
+      provider: provider,
+      query: _stringField(meta, 'query').ifEmpty(text),
+      warning: warning,
+    );
+  }
+
+  Future<bool> assistantMemoryEnabled() async {
+    final session = await _client.loadSession();
+    final settings = session.conversationListStates['__assistant_settings__'];
+    final raw = settings?['memory_enabled'];
+    return raw is bool ? raw : true;
+  }
+
+  Future<void> setAssistantMemoryEnabled(bool enabled) async {
+    final session = await _client.loadSession();
+    final states = Map<String, Map<String, Object?>>.of(
+      session.conversationListStates,
+    );
+    states['__assistant_settings__'] = {
+      ...?states['__assistant_settings__'],
+      'memory_enabled': enabled,
+    };
+    await _client.saveSession(session.copyWith(conversationListStates: states));
+  }
+
+  Future<List<AssistantMemoryRecord>> loadAssistantMemories({
+    String status = '',
+  }) async {
+    final local = await _loadLocalAssistantMemories();
+    final userId = await _assistantMemoryUserId();
+    try {
+      final response = await _client.memoryV2List(userId: userId);
+      final remote = _deepObjectListForKey(response, 'memories')
+          .map(_assistantMemoryFromMap)
+          .where((record) => record.id.isNotEmpty)
+          .toList(growable: false);
+      final merged = _mergeAssistantMemories(local, remote);
+      await _saveLocalAssistantMemories(merged);
+      return _filterAssistantMemories(merged, status);
+    } catch (_) {
+      return _filterAssistantMemories(local, status);
+    }
+  }
+
+  Future<AssistantMemoryRecord> addAssistantMemory({
+    required String key,
+    required String value,
+    String memoryType = 'preference',
+  }) async {
+    final cleanKey = key.trim();
+    final cleanValue = value.trim();
+    if (cleanKey.isEmpty || cleanValue.isEmpty) {
+      throw const MobileRepositoryException('记忆名称和内容不能为空');
+    }
+    final userId = await _assistantMemoryUserId();
+    try {
+      final created = await _client.memoryV2Create(
+        userId: userId,
+        key: cleanKey,
+        value: cleanValue,
+        memoryType: memoryType,
+      );
+      var memory = _deepObjectMapForKey(created, 'memory');
+      if (memory.isEmpty) {
+        memory = _deepObjectMapForKey(created, 'candidate');
+      }
+      var memoryId = _stringField(memory, 'memory_id');
+      if (memoryId.isEmpty) {
+        final pending = await loadAssistantMemories(status: 'pending');
+        for (final item in pending) {
+          if (item.key == cleanKey && item.value == cleanValue) {
+            memoryId = item.id;
+            break;
+          }
+        }
+      }
+      if (memoryId.isEmpty) {
+        throw const MobileRepositoryException(
+          '记忆已提交，但没有返回可确认的记录',
+        );
+      }
+      final confirmed = await _client.memoryV2Confirm(
+        userId: userId,
+        memoryId: memoryId,
+      );
+      memory = _deepObjectMapForKey(confirmed, 'memory');
+      final record = memory.isNotEmpty
+          ? _assistantMemoryFromMap(memory)
+          : AssistantMemoryRecord(
+              id: memoryId,
+              type: memoryType,
+              key: cleanKey,
+              value: cleanValue,
+              status: 'active',
+            );
+      await _upsertLocalAssistantMemory(record);
+      return record;
+    } catch (_) {
+      final record = AssistantMemoryRecord(
+        id: 'local_${DateTime.now().microsecondsSinceEpoch}',
+        type: memoryType,
+        key: cleanKey,
+        value: cleanValue,
+        status: 'active',
+        updatedAt: DateTime.now().toUtc().toIso8601String(),
+      );
+      await _upsertLocalAssistantMemory(record);
+      return record;
+    }
+  }
+
+  Future<void> updateAssistantMemory(AssistantMemoryRecord record) async {
+    if (!record.id.startsWith('local_')) {
+      try {
+        await _client.memoryV2Correct(
+          userId: await _assistantMemoryUserId(),
+          memoryId: record.id,
+          key: record.key,
+          value: record.value,
+        );
+      } catch (_) {
+        // Keep the device copy usable until the server is upgraded.
+      }
+    }
+    await _upsertLocalAssistantMemory(
+      AssistantMemoryRecord(
+        id: record.id,
+        type: record.type,
+        key: record.key,
+        value: record.value,
+        status: record.status,
+        updatedAt: DateTime.now().toUtc().toIso8601String(),
+      ),
+    );
+  }
+
+  Future<void> deleteAssistantMemory(String memoryId) async {
+    if (!memoryId.startsWith('local_')) {
+      try {
+        await _client.memoryV2Delete(
+          userId: await _assistantMemoryUserId(),
+          memoryId: memoryId,
+        );
+      } catch (_) {
+        // Removing the local copy must not depend on server rollout timing.
+      }
+    }
+    final local = await _loadLocalAssistantMemories();
+    await _saveLocalAssistantMemories(
+      local.where((record) => record.id != memoryId).toList(growable: false),
+    );
+  }
+
+  Future<List<AssistantMemoryRecord>> _loadLocalAssistantMemories() async {
+    final session = await _client.loadSession();
+    final settings = session.conversationListStates['__assistant_settings__'];
+    return _objectList(settings?['local_memories'])
+        .map(_assistantMemoryFromMap)
+        .where((record) => record.id.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  Future<void> _saveLocalAssistantMemories(
+    List<AssistantMemoryRecord> records,
+  ) async {
+    final session = await _client.loadSession();
+    final states = Map<String, Map<String, Object?>>.of(
+      session.conversationListStates,
+    );
+    states['__assistant_settings__'] = {
+      ...?states['__assistant_settings__'],
+      'local_memories': records
+          .where((record) => record.status != 'deleted')
+          .take(100)
+          .map(_assistantMemoryToMap)
+          .toList(growable: false),
+    };
+    await _client.saveSession(session.copyWith(conversationListStates: states));
+  }
+
+  Future<void> _upsertLocalAssistantMemory(
+    AssistantMemoryRecord record,
+  ) async {
+    final local = await _loadLocalAssistantMemories();
+    final updated = <AssistantMemoryRecord>[record];
+    for (final item in local) {
+      if (item.id != record.id) updated.add(item);
+    }
+    await _saveLocalAssistantMemories(updated);
+  }
+
+  List<AssistantMemoryRecord> _mergeAssistantMemories(
+    List<AssistantMemoryRecord> local,
+    List<AssistantMemoryRecord> remote,
+  ) {
+    final merged = <String, AssistantMemoryRecord>{};
+    for (final item in local) {
+      merged[item.id] = item;
+    }
+    for (final item in remote) {
+      merged[item.id] = item;
+    }
+    return merged.values
+        .where((item) => item.status != 'deleted')
+        .toList(growable: false);
+  }
+
+  List<AssistantMemoryRecord> _filterAssistantMemories(
+    List<AssistantMemoryRecord> records,
+    String status,
+  ) {
+    final selected = status.trim();
+    if (selected.isEmpty) return records;
+    return records
+        .where((record) => record.status == selected)
+        .toList(growable: false);
+  }
+
+  Future<String> synthesizeAssistantSpeech(String text) async {
+    final response = await _client.synthesizeSpeech(_take(text.trim(), 1600));
+    final data = _deepObjectMapForKey(response, 'data');
+    final audio = _stringField(data, 'audioBase64');
+    if (audio.isEmpty) {
+      throw MobileRepositoryException(
+        _deepStringForKey(response, 'message').ifEmpty('在线语音暂不可用'),
+      );
+    }
+    return audio;
+  }
+
+  Future<AssistantFileAnalysis> analyzeAssistantOfficeFile({
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'application/octet-stream',
+  }) async {
+    final employeeId = _officeEmployeeForFilename(filename);
+    if (employeeId.isEmpty) {
+      throw const MobileRepositoryException(
+        '支持 PDF、Word、Excel、CSV 和 PowerPoint 文件',
+      );
+    }
+    final localPreview = _localOfficeText(filename, bytes);
+    final uploaded = await _client.uploadOfficeFile(
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
+    final uploadData = _deepObjectMapForKey(uploaded, 'data');
+    final filePath = _stringField(uploadData, 'file_path');
+    final workspaceRoot = _stringField(uploadData, 'workspace_root');
+    if (filePath.isEmpty || workspaceRoot.isEmpty) {
+      throw const MobileRepositoryException('文件上传成功，但服务器没有返回工作区路径');
+    }
+    final result = await _client.runOfficeEmployee(
+      employeeId: employeeId,
+      filePath: filePath,
+      workspaceRoot: workspaceRoot,
+    );
+    final serverSummary = _officeAnalysisSummary(result);
+    final summary = localPreview.isNotEmpty &&
+            (serverSummary.isEmpty || _looksLikeOfficeMetadata(serverSummary))
+        ? localPreview
+        : serverSummary;
+    return AssistantFileAnalysis(
+      filename: filename,
+      employeeId: employeeId,
+      summary: summary.ifEmpty('文件已读取，但没有提取到可展示的文字。'),
+      filePath: filePath,
+    );
+  }
+
+  Future<String> recognizeAssistantImage({
+    required String filename,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    final response = await _client.recognizeImage(
+      filename: filename,
+      bytes: bytes,
+      contentType: contentType,
+    );
+    return _firstNonBlank([
+      _deepStringForKey(response, 'text'),
+      _deepStringForKey(response, 'message'),
+    ]);
+  }
+
+  Future<AssistantEmployeeAvailability>
+      loadAssistantEmployeeAvailability() async {
+    final response = await _client.relayDesktops();
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('执行端状态加载失败'));
+    }
+    final rows = _relayDesktopRows(response.data)
+        .where(_relayDesktopIsDispatchable)
+        .where(_relayDesktopIsFresh)
+        .toList(growable: false);
+    final online = <String>{};
+    var label = '';
+    var checkedAt = '';
+    for (final row in rows) {
+      label = label.ifEmpty(_stringField(row, 'label'));
+      final capabilities = _objectMap(row['capabilities']);
+      checkedAt = _firstNonBlank([
+        checkedAt,
+        _stringField(capabilities, 'checked_at'),
+        _stringField(row, 'last_seen_at'),
+      ]);
+      if (_boolField(capabilities, 'codex_cli')) online.add(PinnedIds.codex);
+      if (_boolField(capabilities, 'claude_cli')) online.add(PinnedIds.claude);
+      if (_boolField(capabilities, 'cursor_cli')) online.add(PinnedIds.cursor);
+      if (_boolField(capabilities, 'trae_cli')) online.add(PinnedIds.trae);
+    }
+    return AssistantEmployeeAvailability(
+      onlineConversationIds: Set.unmodifiable(online),
+      desktopLabel: label,
+      checkedAt: checkedAt,
+    );
+  }
+
+  Future<String> _assistantMemoryPromptContext() async {
+    if (!await assistantMemoryEnabled()) return '';
+    try {
+      final rows = await loadAssistantMemories(status: 'active');
+      if (rows.isEmpty) return '';
+      return rows
+          .take(20)
+          .map((item) => '${item.key}：${item.value}')
+          .join('\n');
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<String> _assistantMemoryUserId() async {
+    final id = await _loadCurrentUserId();
+    if (id > 0) return '$id';
+    final session = await _client.loadSession();
+    return session.username.trim().ifEmpty('default');
+  }
+
   Future<String> streamMessage({
     required ConversationItem conversation,
     required String body,
@@ -879,69 +1370,54 @@ class MobileRepository {
     }
 
     if (tool != null) {
+      var threadId = await _ensureActiveSuperEmployeeThread(conversation);
+      var cacheId = _superEmployeeCacheId(conversation.id, threadId);
       await _cacheChatMessage(
-        conversation.id,
+        cacheId,
         role: ChatRole.user,
         body: text,
       );
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
-        // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
-        try {
-          final reply = await _client.streamSuperEmployeeMessage(
-            tool,
-            text,
-            baseUrl: localBaseUrl,
-            onToken: (token) {
-              if (isCancelled != null && isCancelled()) return;
-              onToken?.call(token);
-            },
-            onStatus: (status) {
-              if (isCancelled != null && isCancelled()) return;
-              onToken?.call('\n$status\n');
-            },
-            isCancelled: isCancelled,
-          );
-          _throwIfCancelled(isCancelled);
-          await _cacheChatMessage(
-            conversation.id,
-            role: ChatRole.assistant,
-            body: reply,
-          );
+        final reply = await _tryLanSuperEmployeeTask(
+          conversation: conversation,
+          tool: tool,
+          text: text,
+          threadId: threadId,
+          cacheId: cacheId,
+          baseUrl: localBaseUrl,
+          onToken: onToken,
+          onStatus: onStatus,
+          isCancelled: isCancelled,
+        );
+        if (reply != null) {
           return reply;
-        } catch (sseError) {
-          _throwIfCancelled(isCancelled);
-          // 第 2 级：LAN 直答（一次性返回，SSE 不可用时的同城 fallback）
-          try {
-            final reply = await _postSuperEmployeeMessage(
-              tool,
-              text,
-              baseUrl: localBaseUrl,
-            );
-            _throwIfCancelled(isCancelled);
-            await _cacheChatMessage(
-              conversation.id,
-              role: ChatRole.assistant,
-              body: reply,
-            );
-            return reply;
-          } catch (e) {
-            _throwIfCancelled(isCancelled);
-            final sink = onToken;
-            if (sink != null) {
-              sink('〔局域网连接失败，正在切换到云端中继〕\n');
-            }
-          }
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
       final relayId = await _relayIdForSuperEmployeeDispatch();
       if (relayKind != null && relayId.isNotEmpty) {
+        if (threadId.isEmpty || threadId.startsWith('local-')) {
+          try {
+            final thread = await _createSuperEmployeeThread(
+              conversation,
+              relayId: relayId,
+            );
+            threadId = thread.threadId;
+            cacheId = _superEmployeeCacheId(conversation.id, threadId);
+          } catch (_) {
+            // Older relay servers can execute tasks but do not expose the
+            // optional thread API yet. Keep the local transcript and dispatch
+            // a threadless task instead of blocking Send with 404/405.
+          }
+        }
         // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
         final reply = await _streamRelaySuperEmployeeTask(
           relayId: relayId,
           relayKind: relayKind,
           conversationId: conversation.id,
+          threadId: threadId.startsWith('local-') ? '' : threadId,
+          cacheId: cacheId,
           message: text,
           onToken: onToken,
           onStatus: onStatus,
@@ -950,17 +1426,21 @@ class MobileRepository {
         _throwIfCancelled(isCancelled);
         if (reply.trim().isNotEmpty) {
           await _cacheChatMessage(
-            conversation.id,
+            cacheId,
             role: ChatRole.assistant,
             body: reply,
           );
         }
         return reply.ifEmpty('已收到，我会继续处理。');
       }
-      final reply = await _postSuperEmployeeMessage(tool, text);
+      final reply = await _postSuperEmployeeMessage(
+        tool,
+        text,
+        threadId: threadId,
+      );
       _throwIfCancelled(isCancelled);
       await _cacheChatMessage(
-        conversation.id,
+        cacheId,
         role: ChatRole.assistant,
         body: reply,
       );
@@ -992,22 +1472,28 @@ class MobileRepository {
       return reply;
     }
 
+    final cacheId = conversation.id == PinnedIds.assistant
+        ? _superEmployeeCacheId(
+            conversation.id,
+            await activeSuperEmployeeThreadId(conversation.id),
+          )
+        : conversation.id;
     await _cacheChatMessage(
-      conversation.id,
+      cacheId,
       role: ChatRole.user,
       body: text,
     );
     final effectiveUserId = userId > 0 ? userId : await _loadCurrentUserId();
     final reply = await _client.streamChat(
       text,
-      sessionId: conversation.id,
+      sessionId: cacheId,
       userId: effectiveUserId,
       recentMessages: _recentChatContext(recentMessages),
       onToken: onToken,
     );
     _throwIfCancelled(isCancelled);
     await _cacheChatMessage(
-      conversation.id,
+      cacheId,
       role: ChatRole.assistant,
       body: reply,
     );
@@ -1015,7 +1501,9 @@ class MobileRepository {
   }
 
   Future<bool> hasInflightRelay(String conversationId) async {
-    return _inflightRelayTask(conversationId).then((value) => value.isNotEmpty);
+    final threadId = await activeSuperEmployeeThreadId(conversationId);
+    final cacheId = _superEmployeeCacheId(conversationId, threadId);
+    return _inflightRelayTask(cacheId).then((value) => value.isNotEmpty);
   }
 
   Future<String?> resumeRelayTask({
@@ -1024,9 +1512,11 @@ class MobileRepository {
     void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
-    final taskId = await _inflightRelayTask(conversationId);
+    final threadId = await activeSuperEmployeeThreadId(conversationId);
+    final cacheId = _superEmployeeCacheId(conversationId, threadId);
+    final taskId = await _inflightRelayTask(cacheId);
     if (taskId.isEmpty) return null;
-    if (await _clearInflightIfRelayChanged(conversationId, taskId)) {
+    if (await _clearInflightIfRelayChanged(cacheId, taskId)) {
       return null;
     }
     final kind = relayKindForConversation(conversationId);
@@ -1040,7 +1530,7 @@ class MobileRepository {
     final reply = await _pollRelayTask(
       taskId: taskId,
       toolLabel: toolLabel,
-      conversationId: conversationId,
+      conversationId: cacheId,
       onToken: onToken,
       onStatus: onStatus,
       isCancelled: isCancelled,
@@ -1048,7 +1538,7 @@ class MobileRepository {
     _throwIfCancelled(isCancelled);
     if (reply.trim().isNotEmpty) {
       await _cacheChatMessage(
-        conversationId,
+        cacheId,
         role: ChatRole.assistant,
         body: reply,
       );
@@ -1271,6 +1761,9 @@ class MobileRepository {
   /// 取消正在执行的 relay 任务。
   Future<bool> cancelRelayTask(String taskId) async {
     if (taskId.trim().isEmpty) return false;
+    if (taskId.trim().startsWith('local-run-')) {
+      return _cancelLocalSuperEmployeeRun(taskId.trim());
+    }
     final response = await _client.relayCancelTask(taskId.trim());
     if (!response.success) return false;
     final task = _objectMap(response.data?['task']);
@@ -1354,11 +1847,18 @@ class MobileRepository {
     String tool,
     String text, {
     String baseUrl = '',
+    String threadId = '',
+    String clientTaskId = '',
   }) async {
     final response = await _client.postSuperEmployeeMessage(
       tool,
       text,
       baseUrl: baseUrl,
+      context: {
+        ..._superEmployeeThreadContext(threadId),
+        if (clientTaskId.trim().isNotEmpty)
+          'client_task_id': clientTaskId.trim(),
+      },
     );
     if (!response.success) {
       throw MobileRepositoryException(response.message.ifEmpty('超级员工回复失败'));
@@ -1367,11 +1867,32 @@ class MobileRepository {
         .ifEmpty('已收到，我会继续处理。');
   }
 
+  String _superEmployeeExecutionErrorCode(MobileApiException error) {
+    final nested = _objectMap(error.body['data']);
+    return _firstNonBlank([
+      _stringField(error.body, 'error_code'),
+      _stringField(nested, 'error_code'),
+      error.statusCode == 429 ? 'usage_limit' : '',
+    ]);
+  }
+
+  bool _isSuperEmployeeExecutionFailure(MobileApiException error) {
+    if (_superEmployeeExecutionErrorCode(error).isNotEmpty) return true;
+    return error.statusCode >= 200 &&
+        error.statusCode < 300 &&
+        _stringField(error.body, 'type') == 'error';
+  }
+
   Future<String> _superEmployeeLanBaseUrl() async {
     final session = await _client.loadSession();
     if (session.serverMode.trim().toLowerCase() != 'lan') {
       return '';
     }
+    // Cloud and desktop JWTs are signed independently. A legacy session may
+    // know the LAN address but not have completed a desktop credential
+    // exchange yet; in that case skip the guaranteed-401 direct attempt and
+    // continue through the already paired cloud relay.
+    if (session.localAccessToken.trim().isEmpty) return '';
     final localBase = session.localBaseUrl.trim();
     if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
     final host = session.fhdHost.trim();
@@ -1383,10 +1904,314 @@ class MobileRepository {
     ).lanReachableBaseUrl();
   }
 
+  Future<String?> _tryLanSuperEmployeeTask({
+    required ConversationItem conversation,
+    required String tool,
+    required String text,
+    required String threadId,
+    required String cacheId,
+    required String baseUrl,
+    void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
+    bool Function()? isCancelled,
+  }) async {
+    final run = await _beginLocalSuperEmployeeRun(
+      conversation: conversation,
+      tool: tool,
+      threadId: threadId,
+      message: text,
+    );
+    try {
+      final stopwatch = Stopwatch()..start();
+      final toolLabel = toolLabelForRelayKind('${tool.toLowerCase()}.invoke');
+      bool cancelled() =>
+          _stopRequestedLocalRunIds.contains(run.taskId) ||
+          _cancelledLocalRunIds.contains(run.taskId) ||
+          (isCancelled?.call() ?? false);
+      onStatus?.call(
+        RelayTaskProgress(
+          taskId: run.taskId,
+          status: 'running',
+          toolLabel: toolLabel,
+          source: 'lan',
+        ),
+      );
+
+      Future<Never> finishExecutionFailure(MobileApiException error) async {
+        final message = error.message.trim().ifEmpty('超级员工执行失败，请在电脑端重试');
+        await _finishLocalSuperEmployeeRun(
+          run.taskId,
+          status: 'failed',
+          resultText: message,
+          elapsedSeconds: stopwatch.elapsedMilliseconds / 1000,
+        );
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: run.taskId,
+            status: 'failed',
+            toolLabel: toolLabel,
+            source: 'lan',
+          ),
+        );
+        throw MobileRepositoryException(message);
+      }
+
+      Future<String> finishSuccess(String reply) async {
+        if (cancelled()) {
+          await _cancelLocalSuperEmployeeRun(run.taskId);
+          throw const _MobileRepositoryCancelled();
+        }
+        await _finishLocalSuperEmployeeRun(
+          run.taskId,
+          status: 'completed',
+          resultText: reply,
+          elapsedSeconds: stopwatch.elapsedMilliseconds / 1000,
+        );
+        await _cacheChatMessage(
+          cacheId,
+          role: ChatRole.assistant,
+          body: reply,
+        );
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: run.taskId,
+            status: 'completed',
+            toolLabel: toolLabel,
+            source: 'lan',
+          ),
+        );
+        return reply;
+      }
+
+      try {
+        // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）。
+        final reply = await _client.streamSuperEmployeeMessage(
+          tool,
+          text,
+          baseUrl: baseUrl,
+          onToken: (token) {
+            if (!cancelled()) onToken?.call(token);
+          },
+          onStatus: (status) {
+            if (!cancelled()) onToken?.call('\n$status\n');
+          },
+          isCancelled: cancelled,
+          context: {
+            ..._superEmployeeThreadContext(threadId),
+            'client_task_id': run.taskId,
+          },
+        );
+        return finishSuccess(reply);
+      } on _MobileRepositoryCancelled {
+        rethrow;
+      } on MobileApiException catch (error) {
+        if (_isSuperEmployeeExecutionFailure(error)) {
+          await finishExecutionFailure(error);
+        }
+        if (cancelled()) {
+          await _cancelLocalSuperEmployeeRun(run.taskId);
+          throw const _MobileRepositoryCancelled();
+        }
+      } catch (_) {
+        if (cancelled()) {
+          await _cancelLocalSuperEmployeeRun(run.taskId);
+          throw const _MobileRepositoryCancelled();
+        }
+      }
+
+      try {
+        // 第 2 级：LAN 直答。SSE 不可用时仍在同一条真实 local-run 中收口。
+        final reply = await _postSuperEmployeeMessage(
+          tool,
+          text,
+          baseUrl: baseUrl,
+          threadId: threadId,
+          clientTaskId: run.taskId,
+        );
+        return finishSuccess(reply);
+      } on _MobileRepositoryCancelled {
+        rethrow;
+      } on MobileApiException catch (error) {
+        if (_isSuperEmployeeExecutionFailure(error)) {
+          await finishExecutionFailure(error);
+        }
+        if (cancelled()) {
+          await _cancelLocalSuperEmployeeRun(run.taskId);
+          throw const _MobileRepositoryCancelled();
+        }
+        await _finishLocalSuperEmployeeRun(
+          run.taskId,
+          status: 'failed',
+          resultText: '局域网执行失败，已尝试切换云中继：${_take(error.toString(), 240)}',
+          elapsedSeconds: stopwatch.elapsedMilliseconds / 1000,
+        );
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: run.taskId,
+            status: 'failed',
+            toolLabel: toolLabel,
+            source: 'lan',
+          ),
+        );
+        onToken?.call('〔局域网连接失败，正在切换到云端中继〕\n');
+        return null;
+      } catch (error) {
+        if (cancelled()) {
+          await _cancelLocalSuperEmployeeRun(run.taskId);
+          throw const _MobileRepositoryCancelled();
+        }
+        await _finishLocalSuperEmployeeRun(
+          run.taskId,
+          status: 'failed',
+          resultText: '局域网执行失败，已尝试切换云中继：${_take(error.toString(), 240)}',
+          elapsedSeconds: stopwatch.elapsedMilliseconds / 1000,
+        );
+        onStatus?.call(
+          RelayTaskProgress(
+            taskId: run.taskId,
+            status: 'failed',
+            toolLabel: toolLabel,
+            source: 'lan',
+          ),
+        );
+        onToken?.call('〔局域网连接失败，正在切换到云端中继〕\n');
+        return null;
+      }
+    } finally {
+      _activeLocalRunIds.remove(run.taskId);
+      _stopRequestedLocalRunIds.remove(run.taskId);
+      _cancelledLocalRunIds.remove(run.taskId);
+    }
+  }
+
+  Future<RelayRunSummary> _beginLocalSuperEmployeeRun({
+    required ConversationItem conversation,
+    required String tool,
+    required String threadId,
+    required String message,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final taskId = 'local-run-${now.microsecondsSinceEpoch}';
+    final session = await _client.loadSession();
+    final runs = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeRuns,
+    );
+    final attemptNo = runs.values
+            .where((row) =>
+                _stringField(row, 'thread_id') == threadId &&
+                _stringField(row, 'kind') == '${tool.toLowerCase()}.invoke')
+            .length +
+        1;
+    final row = <String, Object?>{
+      'task_id': taskId,
+      'thread_id': threadId,
+      'conversation_id': conversation.id,
+      'work_item_id': 'local-work-${now.microsecondsSinceEpoch}',
+      'employee_id': _superEmployeeIdForConversation(conversation.id) ??
+          '${tool.toLowerCase()}-super-employee',
+      'kind': '${tool.toLowerCase()}.invoke',
+      'status': 'running',
+      'attempt_no': attemptNo,
+      'created_at': now.toIso8601String(),
+      'updated_at': now.toIso8601String(),
+      'source': 'lan',
+      'payload': {'message': message},
+      'result': const <String, Object?>{},
+    };
+    runs[taskId] = row;
+    final threads = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeThreads,
+    );
+    if (threadId.startsWith('local-') || threads.containsKey(threadId)) {
+      final existing = threads[threadId] ?? const <String, Object?>{};
+      final existingTitle = _stringField(existing, 'title');
+      threads[threadId] = {
+        ...existing,
+        'thread_id': threadId,
+        'conversation_id': conversation.id,
+        'employee_id': row['employee_id'],
+        'tool': tool.toLowerCase(),
+        'title': existingTitle.isEmpty || existingTitle.endsWith('· 新对话')
+            ? _localSuperEmployeeThreadTitle(message)
+            : existingTitle,
+        'status': 'active',
+        'source': 'lan',
+        'created_at':
+            _stringField(existing, 'created_at').ifEmpty(now.toIso8601String()),
+        'updated_at': now.toIso8601String(),
+        'last_task_id': taskId,
+      };
+    }
+    await _client.saveSession(
+      session.copyWith(
+        localSuperEmployeeRuns: _trimLocalRecordMap(runs, 240),
+        localSuperEmployeeThreads: _trimLocalRecordMap(threads, 80),
+      ),
+    );
+    _activeLocalRunIds.add(taskId);
+    _stopRequestedLocalRunIds.remove(taskId);
+    _cancelledLocalRunIds.remove(taskId);
+    return RelayRunSummary.fromMap(row);
+  }
+
+  Future<void> _finishLocalSuperEmployeeRun(
+    String taskId, {
+    required String status,
+    required String resultText,
+    required double elapsedSeconds,
+  }) async {
+    final session = await _client.loadSession();
+    final runs = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeRuns,
+    );
+    final current = runs[taskId];
+    if (current == null) return;
+    final now = DateTime.now().toUtc().toIso8601String();
+    final cancelled = _cancelledLocalRunIds.contains(taskId) ||
+        _stringField(current, 'status') == 'cancelled';
+    final effectiveStatus = cancelled ? 'cancelled' : status;
+    runs[taskId] = {
+      ...current,
+      'status': effectiveStatus,
+      'updated_at': now,
+      if (!const {'running', 'queued'}.contains(effectiveStatus))
+        'completed_at': now,
+      'result': {
+        if (const {'failed', 'blocked'}.contains(effectiveStatus))
+          'error': resultText
+        else
+          'reply': resultText,
+        'elapsed_seconds': elapsedSeconds,
+        'execution_source': 'lan',
+      },
+    };
+    final threads = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeThreads,
+    );
+    final threadId = _stringField(current, 'thread_id');
+    if (threads.containsKey(threadId)) {
+      threads[threadId] = {
+        ...threads[threadId]!,
+        'status': 'idle',
+        'updated_at': now,
+        'last_task_id': taskId,
+      };
+    }
+    await _client.saveSession(
+      session.copyWith(
+        localSuperEmployeeRuns: runs,
+        localSuperEmployeeThreads: threads,
+      ),
+    );
+    _activeLocalRunIds.remove(taskId);
+  }
+
   Future<String> _streamRelaySuperEmployeeTask({
     required String relayId,
     required String relayKind,
     required String conversationId,
+    required String threadId,
+    required String cacheId,
     required String message,
     void Function(String token)? onToken,
     void Function(RelayTaskProgress progress)? onStatus,
@@ -1395,10 +2220,13 @@ class MobileRepository {
     final created = await _client.relayCreateTask(
       relayId: relayId,
       kind: relayKind,
+      threadId: threadId,
       payload: {
         'message': message,
         'workspace_root': _xcmaxDefaultWorkspaceRoot,
-        'context': _superEmployeeRelayContext(conversationId: conversationId),
+        'context': _superEmployeeRelayContext(
+          conversationId: threadId.ifEmpty(conversationId),
+        ),
       },
     );
     if (!created.success) {
@@ -1409,7 +2237,7 @@ class MobileRepository {
     if (taskId.isEmpty) {
       throw const MobileRepositoryException('中继任务缺少 task_id');
     }
-    await _setInflightRelayTask(conversationId, taskId);
+    await _setInflightRelayTask(cacheId, taskId);
     final toolLabel = toolLabelForRelayKind(relayKind);
     onStatus?.call(RelayTaskProgress(
       taskId: taskId,
@@ -1420,7 +2248,7 @@ class MobileRepository {
     return _pollRelayTask(
       taskId: taskId,
       toolLabel: toolLabel,
-      conversationId: conversationId,
+      conversationId: cacheId,
       onToken: onToken,
       onStatus: onStatus,
       isCancelled: isCancelled,
@@ -1735,6 +2563,10 @@ class MobileRepository {
     if (sessionId.isEmpty) return;
     final url = await _imWebSocketUrl(sessionId);
     _imWebSocketSubscription ??= _imWebSocket.events.listen((_) {});
+    final uri = Uri.tryParse(url);
+    if (uri == null || !AndroidTransportSecurityPolicy.permits(uri)) {
+      throw const MobileRepositoryException('已阻止不安全的非局域网消息连接');
+    }
     _imWebSocket.connect(sessionId: sessionId, url: url);
   }
 
@@ -1924,6 +2756,588 @@ class MobileRepository {
     ]);
   }
 
+  Future<String> activeSuperEmployeeThreadId(String conversationId) async {
+    final session = await _client.loadSession();
+    return session.activeSuperEmployeeThreads[conversationId.trim()]?.trim() ??
+        '';
+  }
+
+  Future<SuperEmployeeThread> startNewAssistantConversation() async {
+    final threadId = 'assistant-${DateTime.now().microsecondsSinceEpoch}';
+    await switchSuperEmployeeThread(PinnedIds.assistant, threadId);
+    return SuperEmployeeThread(
+      threadId: threadId,
+      employeeId: 'xcagi-assistant',
+      tool: 'assistant',
+      title: '小C助理 · 新对话',
+      status: 'active',
+      updatedAt: DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  Future<List<SuperEmployeeThread>> loadAssistantConversations() async {
+    final session = await _client.loadSession();
+    final activeId =
+        session.activeSuperEmployeeThreads[PinnedIds.assistant]?.trim() ?? '';
+    const prefix = '${PinnedIds.assistant}::';
+    final threads = <SuperEmployeeThread>[];
+
+    void addThread(
+      String threadId,
+      List<Map<String, Object?>> rows,
+    ) {
+      final title = _assistantThreadTitle(rows);
+      final latestTs = rows.fold<int>(
+        0,
+        (value, row) =>
+            _intField(row, 'ts') > value ? _intField(row, 'ts') : value,
+      );
+      threads.add(SuperEmployeeThread(
+        threadId: threadId,
+        employeeId: 'xcagi-assistant',
+        tool: 'assistant',
+        title: title,
+        status:
+            threadId == activeId || (threadId == 'legacy' && activeId.isEmpty)
+                ? 'active'
+                : 'idle',
+        updatedAt: latestTs > 0
+            ? DateTime.fromMillisecondsSinceEpoch(latestTs)
+                .toUtc()
+                .toIso8601String()
+            : '',
+      ));
+    }
+
+    final legacyRows = session.cachedChatMessages[PinnedIds.assistant];
+    if (legacyRows != null && legacyRows.isNotEmpty) {
+      addThread('legacy', legacyRows);
+    }
+    for (final entry in session.cachedChatMessages.entries) {
+      if (!entry.key.startsWith(prefix) || entry.value.isEmpty) continue;
+      final threadId = entry.key.substring(prefix.length).trim();
+      if (threadId.isEmpty) continue;
+      addThread(threadId, entry.value);
+    }
+    if (activeId.isNotEmpty &&
+        !threads.any((thread) => thread.threadId == activeId)) {
+      addThread(activeId, const []);
+    }
+    threads.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return List<SuperEmployeeThread>.unmodifiable(threads);
+  }
+
+  Future<List<ChatMessage>> switchAssistantConversation(
+    String threadId,
+  ) async {
+    final clean = threadId.trim();
+    final persisted = clean == 'legacy' ? '' : clean;
+    await switchSuperEmployeeThread(PinnedIds.assistant, persisted);
+    return _loadCachedChat(
+      _superEmployeeCacheId(PinnedIds.assistant, persisted),
+    );
+  }
+
+  Future<void> cacheAssistantExchange({
+    required String userMessage,
+    required String assistantMessage,
+  }) async {
+    final threadId = await activeSuperEmployeeThreadId(PinnedIds.assistant);
+    final cacheId = _superEmployeeCacheId(PinnedIds.assistant, threadId);
+    if (userMessage.trim().isNotEmpty) {
+      await _cacheChatMessage(
+        cacheId,
+        role: ChatRole.user,
+        body: userMessage.trim(),
+      );
+    }
+    if (assistantMessage.trim().isNotEmpty) {
+      await _cacheChatMessage(
+        cacheId,
+        role: ChatRole.assistant,
+        body: assistantMessage.trim(),
+      );
+    }
+  }
+
+  Future<String> summarizeMeetingMinutes({
+    required String title,
+    required String transcript,
+    String participants = '',
+  }) async {
+    final cleanTranscript = transcript.trim();
+    if (cleanTranscript.isEmpty) {
+      throw const MobileRepositoryException('会议转写内容为空');
+    }
+    final prompt = '''
+请把下面的会议转写整理成专业、简洁、忠于原文的会议纪要。
+只能使用以下纯文本结构，不要使用 Markdown 代码块：
+【会议摘要】
+一段不超过 180 字的摘要
+【讨论要点】
+- 要点
+【决策事项】
+- 决策；没有则写“无”
+【待办事项】
+- 事项｜负责人｜截止时间；信息缺失写“待确认”
+
+会议主题：${title.trim()}
+参会人员：${participants.trim().isEmpty ? '未填写' : participants.trim()}
+原始转写：
+$cleanTranscript
+''';
+    final response = await _client.chat(
+      prompt,
+      sessionId: 'meeting-minutes-${DateTime.now().millisecondsSinceEpoch}',
+      context: const {
+        'source': 'mobile_meeting_minutes',
+        'client_surface': 'mobile',
+      },
+    );
+    return _assistantReplyFromMap(response).trim();
+  }
+
+  Future<SuperEmployeeThread> startNewSuperEmployeeConversation(
+    ConversationItem conversation,
+  ) async {
+    final localBaseUrl = await _superEmployeeLanBaseUrl();
+    var relayId = '';
+    if (localBaseUrl.isEmpty) {
+      try {
+        relayId = await _relayIdForSuperEmployeeDispatch();
+      } catch (_) {
+        // A local persistent conversation remains available while offline.
+      }
+    }
+    if (relayId.isEmpty) {
+      final employeeId = _superEmployeeIdForConversation(conversation.id);
+      if (employeeId == null) {
+        throw const MobileRepositoryException('当前会话不是超级员工。');
+      }
+      final threadId = 'local-${DateTime.now().microsecondsSinceEpoch}';
+      final now = DateTime.now().toUtc().toIso8601String();
+      final thread = SuperEmployeeThread(
+        threadId: threadId,
+        employeeId: employeeId,
+        tool: conversation.type.superTool?.toLowerCase() ?? '',
+        title: '${conversation.title} · 新对话',
+        status: 'idle',
+        updatedAt: now,
+        cliSessionId: '',
+        workspaceRoot: '',
+        branch: '',
+        lastTaskId: '',
+        archived: false,
+        source: localBaseUrl.isNotEmpty ? 'lan' : 'cloud',
+      );
+      await _persistLocalSuperEmployeeThread(
+        thread,
+        conversationId: conversation.id,
+        createdAt: now,
+      );
+      await switchSuperEmployeeThread(conversation.id, threadId);
+      return thread;
+    }
+    return _createSuperEmployeeThread(conversation, relayId: relayId);
+  }
+
+  Future<SuperEmployeeThread> _createSuperEmployeeThread(
+    ConversationItem conversation, {
+    required String relayId,
+  }) async {
+    final employeeId = _superEmployeeIdForConversation(conversation.id);
+    if (employeeId == null) {
+      throw const MobileRepositoryException('当前会话不是超级员工。');
+    }
+    final response = await _client.relayCreateThread(
+      relayId: relayId,
+      employeeId: employeeId,
+      title: '${conversation.title} · 新对话',
+      context: const {'workspace_root': _xcmaxDefaultWorkspaceRoot},
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('新建对话失败'));
+    }
+    final row = _objectMap(response.data?['thread']);
+    final thread = SuperEmployeeThread.fromMap(row);
+    if (thread.threadId.isEmpty) {
+      throw const MobileRepositoryException('新建对话缺少 thread_id');
+    }
+    await switchSuperEmployeeThread(conversation.id, thread.threadId);
+    return thread;
+  }
+
+  Future<String> _ensureActiveSuperEmployeeThread(
+    ConversationItem conversation,
+  ) async {
+    final active = await activeSuperEmployeeThreadId(conversation.id);
+    if (active.isNotEmpty) return active;
+    try {
+      return (await startNewSuperEmployeeConversation(conversation)).threadId;
+    } catch (_) {
+      // LAN-only development still receives an isolated conversation key. When
+      // a cloud relay becomes available the send path upgrades it to a server thread.
+      final local = 'local-${DateTime.now().microsecondsSinceEpoch}';
+      await switchSuperEmployeeThread(conversation.id, local);
+      return local;
+    }
+  }
+
+  Future<void> switchSuperEmployeeThread(
+    String conversationId,
+    String threadId,
+  ) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    final session = await _client.loadSession();
+    final active = Map<String, String>.of(session.activeSuperEmployeeThreads);
+    final cleanThread = threadId.trim();
+    if (cleanThread.isEmpty) {
+      active.remove(id);
+    } else {
+      active[id] = cleanThread;
+    }
+    await _client.saveSession(
+      session.copyWith(activeSuperEmployeeThreads: active),
+    );
+  }
+
+  Future<List<SuperEmployeeThread>> loadSuperEmployeeThreads(
+    ConversationItem conversation, {
+    bool includeArchived = false,
+  }) async {
+    final employeeId = _superEmployeeIdForConversation(conversation.id);
+    if (employeeId == null) return const [];
+    final local = await _loadLocalSuperEmployeeThreads(
+      conversation.id,
+      includeArchived: includeArchived,
+    );
+    List<SuperEmployeeThread> remote = const [];
+    try {
+      final response = await _client.relayThreads(
+        employeeId: employeeId,
+        includeArchived: includeArchived,
+      );
+      if (!response.success) {
+        throw MobileRepositoryException(response.message.ifEmpty('对话列表加载失败'));
+      }
+      remote = _objectList(response.data?['items'])
+          .map(SuperEmployeeThread.fromMap)
+          .where((item) => item.threadId.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      if (local.isEmpty) rethrow;
+    }
+    final merged = <String, SuperEmployeeThread>{
+      for (final thread in remote) thread.threadId: thread,
+      for (final thread in local) thread.threadId: thread,
+    }.values.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return List<SuperEmployeeThread>.unmodifiable(merged);
+  }
+
+  Future<List<RelayRunSummary>> loadRelayRuns({
+    String threadId = '',
+    bool activeOnly = false,
+    int limit = 100,
+  }) async {
+    final local = await _loadLocalSuperEmployeeRuns(
+      threadId: threadId,
+      activeOnly: activeOnly,
+    );
+    List<RelayRunSummary> remote = const [];
+    try {
+      final response = await _client.relayTasks(
+        threadId: threadId,
+        activeOnly: activeOnly,
+        limit: limit,
+      );
+      if (!response.success) {
+        throw MobileRepositoryException(response.message.ifEmpty('执行记录加载失败'));
+      }
+      remote = _objectList(response.data?['items'])
+          .map(RelayRunSummary.fromMap)
+          .where((item) => item.taskId.isNotEmpty)
+          .toList(growable: false);
+    } catch (_) {
+      if (local.isEmpty) rethrow;
+    }
+    final merged = <String, RelayRunSummary>{
+      for (final run in remote) run.taskId: run,
+      for (final run in local) run.taskId: run,
+    }.values.toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return List<RelayRunSummary>.unmodifiable(merged.take(limit));
+  }
+
+  Future<RelayRunSummary> retryRelayRun(String taskId) async {
+    if (taskId.trim().startsWith('local-run-')) {
+      return _retryLocalSuperEmployeeRun(taskId.trim());
+    }
+    final response = await _client.relayRetryTask(taskId);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('重试任务失败'));
+    }
+    return RelayRunSummary.fromMap(_objectMap(response.data?['task']));
+  }
+
+  Future<void> archiveSuperEmployeeThread(
+    String conversationId,
+    String threadId,
+  ) async {
+    final cleanThreadId = threadId.trim();
+    final session = await _client.loadSession();
+    if (session.localSuperEmployeeThreads.containsKey(cleanThreadId)) {
+      final threads = Map<String, Map<String, Object?>>.of(
+        session.localSuperEmployeeThreads,
+      );
+      final now = DateTime.now().toUtc().toIso8601String();
+      threads[cleanThreadId] = {
+        ...threads[cleanThreadId]!,
+        'status': 'archived',
+        'archived_at': now,
+        'updated_at': now,
+      };
+      final active = Map<String, String>.of(
+        session.activeSuperEmployeeThreads,
+      );
+      if (active[conversationId.trim()] == cleanThreadId) {
+        active.remove(conversationId.trim());
+      }
+      await _client.saveSession(
+        session.copyWith(
+          localSuperEmployeeThreads: threads,
+          activeSuperEmployeeThreads: active,
+        ),
+      );
+      return;
+    }
+    final response = await _client.relayArchiveThread(threadId);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('归档对话失败'));
+    }
+    if (await activeSuperEmployeeThreadId(conversationId) == cleanThreadId) {
+      await switchSuperEmployeeThread(conversationId, '');
+    }
+  }
+
+  Future<void> _persistLocalSuperEmployeeThread(
+    SuperEmployeeThread thread, {
+    required String conversationId,
+    required String createdAt,
+  }) async {
+    final session = await _client.loadSession();
+    final threads = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeThreads,
+    );
+    threads[thread.threadId] = {
+      'thread_id': thread.threadId,
+      'conversation_id': conversationId,
+      'employee_id': thread.employeeId,
+      'tool': thread.tool,
+      'title': thread.title,
+      'status': thread.status,
+      'source': thread.source,
+      'created_at': createdAt,
+      'updated_at': thread.updatedAt,
+      'last_task_id': thread.lastTaskId,
+    };
+    await _client.saveSession(
+      session.copyWith(
+        localSuperEmployeeThreads: _trimLocalRecordMap(threads, 80),
+      ),
+    );
+  }
+
+  Future<List<SuperEmployeeThread>> _loadLocalSuperEmployeeThreads(
+    String conversationId, {
+    required bool includeArchived,
+  }) async {
+    final session = await _client.loadSession();
+    final rows = session.localSuperEmployeeThreads.values
+        .where((row) =>
+            _stringField(row, 'conversation_id') == conversationId.trim())
+        .where((row) =>
+            includeArchived || _stringField(row, 'archived_at').isEmpty)
+        .map(SuperEmployeeThread.fromMap)
+        .where((thread) => thread.threadId.isNotEmpty)
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return List<SuperEmployeeThread>.unmodifiable(rows);
+  }
+
+  Future<List<RelayRunSummary>> _loadLocalSuperEmployeeRuns({
+    String threadId = '',
+    bool activeOnly = false,
+  }) async {
+    var session = await _client.loadSession();
+    final stored = Map<String, Map<String, Object?>>.of(
+      session.localSuperEmployeeRuns,
+    );
+    var reconciled = false;
+    final now = DateTime.now().toUtc().toIso8601String();
+    for (final entry in stored.entries.toList(growable: false)) {
+      final status = _stringField(entry.value, 'status');
+      if (!const {'queued', 'running', 'assigned', 'processing', 'in_progress'}
+              .contains(status) ||
+          _activeLocalRunIds.contains(entry.key)) {
+        continue;
+      }
+      stored[entry.key] = {
+        ...entry.value,
+        'status': 'blocked',
+        'updated_at': now,
+        'completed_at': now,
+        'result': const {
+          'error': '应用重启前未获得局域网任务的最终结果，可重新执行',
+          'execution_source': 'lan',
+        },
+      };
+      reconciled = true;
+    }
+    if (reconciled) {
+      session = session.copyWith(localSuperEmployeeRuns: stored);
+      await _client.saveSession(session);
+    }
+    final selectedThread = threadId.trim();
+    final rows = stored.values
+        .where((row) =>
+            selectedThread.isEmpty ||
+            _stringField(row, 'thread_id') == selectedThread)
+        .map(RelayRunSummary.fromMap)
+        .where((run) => run.taskId.isNotEmpty)
+        .where((run) => !activeOnly || run.active)
+        .toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return List<RelayRunSummary>.unmodifiable(rows);
+  }
+
+  Future<bool> _cancelLocalSuperEmployeeRun(String taskId) async {
+    final existing = _localCancellationRequests[taskId];
+    if (existing != null) return existing;
+    final request = _cancelLocalSuperEmployeeRunImpl(taskId);
+    _localCancellationRequests[taskId] = request;
+    try {
+      return await request;
+    } finally {
+      if (identical(_localCancellationRequests[taskId], request)) {
+        _localCancellationRequests.remove(taskId);
+      }
+    }
+  }
+
+  Future<bool> _cancelLocalSuperEmployeeRunImpl(String taskId) async {
+    final session = await _client.loadSession();
+    final current = session.localSuperEmployeeRuns[taskId];
+    if (current == null) return false;
+    final currentStatus = _stringField(current, 'status');
+    if (currentStatus == 'cancelled') return true;
+    if (!const {
+      'queued',
+      'running',
+      'assigned',
+      'processing',
+      'in_progress',
+    }.contains(currentStatus)) {
+      return false;
+    }
+
+    _stopRequestedLocalRunIds.add(taskId);
+    final baseUrl = await _superEmployeeLanBaseUrl();
+    var acknowledged = false;
+    if (baseUrl.isNotEmpty) {
+      try {
+        final response = await _client.postJson(
+          'api/mobile/v1/admin/super-employee/tasks/'
+          '${Uri.encodeComponent(taskId)}/cancel',
+          const <String, Object?>{},
+          baseUrl: baseUrl,
+        );
+        final data = _objectMap(response['data']);
+        acknowledged = _boolField(data, 'ack') ||
+            _boolField(response, 'ack') ||
+            _boolField(_objectMap(data['task']), 'ack');
+      } catch (_) {
+        acknowledged = false;
+      }
+    }
+
+    if (acknowledged) {
+      _cancelledLocalRunIds.add(taskId);
+      await _finishLocalSuperEmployeeRun(
+        taskId,
+        status: 'cancelled',
+        resultText: '电脑已确认停止本次局域网执行',
+        elapsedSeconds: 0,
+      );
+      return true;
+    }
+
+    // Closing the mobile SSE only stops waiting on the phone. Without an
+    // authenticated server acknowledgement the CLI may still be changing
+    // files, so keep the record explicitly unconfirmed instead of pretending
+    // that the task was cancelled.
+    await _finishLocalSuperEmployeeRun(
+      taskId,
+      status: 'blocked',
+      resultText: '只能停止等待，电脑任务可能继续',
+      elapsedSeconds: 0,
+    );
+    return false;
+  }
+
+  Future<RelayRunSummary> _retryLocalSuperEmployeeRun(String taskId) async {
+    final session = await _client.loadSession();
+    final row = session.localSuperEmployeeRuns[taskId];
+    if (row == null) {
+      throw const MobileRepositoryException('没有找到这条局域网执行记录');
+    }
+    final baseUrl = await _superEmployeeLanBaseUrl();
+    if (baseUrl.isEmpty) {
+      throw const MobileRepositoryException('局域网执行电脑当前不可用，无法重试本地任务');
+    }
+    final conversationId = _stringField(row, 'conversation_id');
+    final conversation = _superEmployeeConversationForId(conversationId);
+    if (conversation == null) {
+      throw const MobileRepositoryException('局域网执行记录缺少员工信息');
+    }
+    final kind = _stringField(row, 'kind');
+    final tool = kind.split('.').first.ifEmpty(
+          conversation.type.superTool?.toLowerCase() ?? '',
+        );
+    final message = _firstString(
+      _objectMap(row['payload']),
+      const ['message', 'body', 'prompt'],
+    );
+    if (message.isEmpty) {
+      throw const MobileRepositoryException('局域网执行记录缺少原任务内容');
+    }
+    final threadId = _stringField(row, 'thread_id');
+    final reply = await _tryLanSuperEmployeeTask(
+      conversation: conversation,
+      tool: tool,
+      text: message,
+      threadId: threadId,
+      cacheId: _superEmployeeCacheId(conversationId, threadId),
+      baseUrl: baseUrl,
+    );
+    if (reply == null) {
+      throw const MobileRepositoryException('局域网重试失败，请检查电脑服务后再试');
+    }
+    final refreshed = await _loadLocalSuperEmployeeRuns(threadId: threadId);
+    return refreshed.firstWhere(
+      (run) => run.taskId != taskId && run.message == message,
+      orElse: () => throw const MobileRepositoryException('局域网重试完成但记录未写入'),
+    );
+  }
+
+  Future<List<ChatMessage>> loadActiveSuperEmployeeMessages(
+    String conversationId,
+  ) async {
+    final threadId = await activeSuperEmployeeThreadId(conversationId);
+    return _loadCachedChat(_superEmployeeCacheId(conversationId, threadId));
+  }
+
   Future<String> _relayIdForSuperEmployeeDispatch() async {
     final session = await _client.loadSession();
     final storedRelayId = session.relayDesktopId.trim();
@@ -2024,6 +3438,7 @@ class MobileRepository {
     String conversationId, {
     required ChatRole role,
     required String body,
+    List<ChatSource> sources = const [],
   }) async {
     final id = conversationId.trim();
     final text = body.trim();
@@ -2044,6 +3459,16 @@ class MobileRepository {
       'ts': timestampMs,
       'has_employee_profile': role == ChatRole.assistant,
       'status': ChatDeliveryStatus.sent.name,
+      if (sources.isNotEmpty)
+        'sources': sources
+            .map(
+              (source) => {
+                'title': source.title,
+                'url': source.url,
+                'snippet': source.snippet,
+              },
+            )
+            .toList(growable: false),
     });
     cache[id] = rows.length > 80
         ? rows.sublist(rows.length - 80).toList(growable: false)
@@ -2051,10 +3476,14 @@ class MobileRepository {
     final states = Map<String, Map<String, Object?>>.of(
       session.conversationListStates,
     );
-    states[id] = _ConversationListState(
+    final listState = _ConversationListState(
       preview: _conversationPreviewForRole(role, text),
       timestampMs: timestampMs,
     ).toJson();
+    states[id] = listState;
+    if (id.contains('::')) {
+      states[id.split('::').first] = listState;
+    }
     await _client.saveSession(
       session.copyWith(
         cachedChatMessages: cache,
@@ -2073,6 +3502,104 @@ Map<String, Object?> _superEmployeeRelayContext({
     'workspace_root': _xcmaxDefaultWorkspaceRoot,
     if (conversationId.trim().isNotEmpty)
       'conversation_id': conversationId.trim(),
+  };
+}
+
+Map<String, Object?> _superEmployeeThreadContext(String threadId) {
+  final id = threadId.trim();
+  return {
+    'source': 'mobile_chat',
+    'client_surface': 'mobile',
+    'workspace_root': _xcmaxDefaultWorkspaceRoot,
+    if (id.isNotEmpty) ...{
+      'thread_id': id,
+      'conversation_id': id,
+      'persistent_conversation': true,
+    },
+  };
+}
+
+String _superEmployeeCacheId(String conversationId, String threadId) {
+  final base = conversationId.trim();
+  final thread = threadId.trim();
+  return thread.isEmpty ? base : '$base::$thread';
+}
+
+String _assistantThreadTitle(List<Map<String, Object?>> rows) {
+  for (final row in rows) {
+    if (_stringField(row, 'role') != ChatRole.user.name) continue;
+    final body = _stringField(row, 'body').replaceAll(RegExp(r'\s+'), ' ');
+    if (body.isEmpty) continue;
+    return body.length > 22 ? '${body.substring(0, 22)}…' : body;
+  }
+  return '小C助理 · 新对话';
+}
+
+String? _superEmployeeIdForConversation(String conversationId) {
+  switch (conversationId.trim()) {
+    case PinnedIds.codex:
+      return AiGroupMemberIds.codexSuperEmployee;
+    case PinnedIds.claude:
+      return AiGroupMemberIds.claudeSuperEmployee;
+    case PinnedIds.cursor:
+      return AiGroupMemberIds.cursorSuperEmployee;
+    case PinnedIds.trae:
+      return AiGroupMemberIds.traeSuperEmployee;
+    default:
+      return null;
+  }
+}
+
+ConversationItem? _superEmployeeConversationForId(String conversationId) {
+  return switch (conversationId.trim()) {
+    PinnedIds.codex => const ConversationItem(
+        id: PinnedIds.codex,
+        type: ConversationType.pinnedCodex,
+        title: '超级员工-Codex',
+        subtitle: '',
+        timestampText: '',
+      ),
+    PinnedIds.claude => const ConversationItem(
+        id: PinnedIds.claude,
+        type: ConversationType.pinnedClaude,
+        title: '超级员工-Claude',
+        subtitle: '',
+        timestampText: '',
+      ),
+    PinnedIds.cursor => const ConversationItem(
+        id: PinnedIds.cursor,
+        type: ConversationType.pinnedCursor,
+        title: '超级员工-Cursor',
+        subtitle: '',
+        timestampText: '',
+      ),
+    PinnedIds.trae => const ConversationItem(
+        id: PinnedIds.trae,
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+    _ => null,
+  };
+}
+
+String _localSuperEmployeeThreadTitle(String message) {
+  final clean = message.replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (clean.isEmpty) return '局域网新对话';
+  return clean.length > 22 ? '${clean.substring(0, 22)}…' : clean;
+}
+
+Map<String, Map<String, Object?>> _trimLocalRecordMap(
+  Map<String, Map<String, Object?>> source,
+  int limit,
+) {
+  if (source.length <= limit) return source;
+  final entries = source.entries.toList()
+    ..sort((a, b) => _stringField(b.value, 'updated_at')
+        .compareTo(_stringField(a.value, 'updated_at')));
+  return {
+    for (final entry in entries.take(limit)) entry.key: entry.value,
   };
 }
 
@@ -3069,6 +4596,242 @@ List<Map<String, Object?>> _objectList(Object? value) {
   return const <Map<String, Object?>>[];
 }
 
+List<Map<String, Object?>> _deepObjectListForKey(Object? value, String key) {
+  if (value is Map) {
+    final map = _objectMap(value);
+    final direct = _objectList(map[key]);
+    if (direct.isNotEmpty) return direct;
+    for (final nested in map.values) {
+      final found = _deepObjectListForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  } else if (value is List) {
+    for (final nested in value) {
+      final found = _deepObjectListForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  }
+  return const <Map<String, Object?>>[];
+}
+
+Map<String, Object?> _deepObjectMapForKey(Object? value, String key) {
+  if (value is Map) {
+    final map = _objectMap(value);
+    final direct = _objectMap(map[key]);
+    if (direct.isNotEmpty) return direct;
+    for (final nested in map.values) {
+      final found = _deepObjectMapForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  } else if (value is List) {
+    for (final nested in value) {
+      final found = _deepObjectMapForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  }
+  return const <String, Object?>{};
+}
+
+String _deepStringForKey(Object? value, String key) {
+  if (value is Map) {
+    final map = _objectMap(value);
+    final direct = map[key];
+    if (direct is String && direct.trim().isNotEmpty) return direct.trim();
+    for (final nested in map.values) {
+      final found = _deepStringForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  } else if (value is List) {
+    for (final nested in value) {
+      final found = _deepStringForKey(nested, key);
+      if (found.isNotEmpty) return found;
+    }
+  }
+  return '';
+}
+
+List<ChatSource> _assistantSourcesFromRows(
+  List<Map<String, Object?>> rows,
+) {
+  return rows
+      .map(
+        (row) => ChatSource(
+          title: _stringField(row, 'title').ifEmpty(
+            _stringField(row, 'url'),
+          ),
+          url: _stringField(row, 'url'),
+          snippet: _stringField(row, 'snippet'),
+        ),
+      )
+      .where((source) => source.url.isNotEmpty)
+      .toList(growable: false);
+}
+
+String _groundedSearchPrompt(String query, List<ChatSource> sources) {
+  final evidence = sources
+      .take(5)
+      .toList(growable: false)
+      .asMap()
+      .entries
+      .map(
+        (entry) =>
+            '[${entry.key + 1}] ${entry.value.title}\n${entry.value.snippet}\n${entry.value.url}',
+      )
+      .join('\n\n');
+  return '请基于下面的实时联网来源回答用户问题。先给结论，再给关键依据；不要编造来源中没有的信息。\n\n'
+      '用户问题：$query\n\n联网来源：\n$evidence';
+}
+
+AssistantMemoryRecord _assistantMemoryFromMap(Map<String, Object?> row) {
+  final value = row['value'];
+  final valueText = value is String
+      ? value.trim()
+      : value == null
+          ? ''
+          : jsonEncode(value);
+  return AssistantMemoryRecord(
+    id: _stringField(row, 'memory_id').ifEmpty(_stringField(row, 'id')),
+    type: _stringField(row, 'memory_type').ifEmpty('preference'),
+    key: _stringField(row, 'key'),
+    value: valueText,
+    status: _stringField(row, 'status').ifEmpty('pending'),
+    updatedAt: _stringField(row, 'updated_at'),
+  );
+}
+
+Map<String, Object?> _assistantMemoryToMap(AssistantMemoryRecord record) => {
+      'memory_id': record.id,
+      'memory_type': record.type,
+      'key': record.key,
+      'value': record.value,
+      'status': record.status,
+      if (record.updatedAt.isNotEmpty) 'updated_at': record.updatedAt,
+    };
+
+String _officeEmployeeForFilename(String filename) {
+  final clean = filename.toLowerCase().trim();
+  if (clean.endsWith('.xlsx') ||
+      clean.endsWith('.xlsm') ||
+      clean.endsWith('.xls')) {
+    return 'excel-full-read-employee';
+  }
+  if (clean.endsWith('.csv')) return 'csv-full-read-employee';
+  if (clean.endsWith('.docx') || clean.endsWith('.doc')) {
+    return 'word-full-read-employee';
+  }
+  if (clean.endsWith('.pdf')) return 'pdf-full-read-employee';
+  if (clean.endsWith('.pptx') || clean.endsWith('.ppt')) {
+    return 'ppt-full-read-employee';
+  }
+  return '';
+}
+
+String _localOfficeText(String filename, List<int> bytes) {
+  final clean = filename.toLowerCase().trim();
+  if (clean.endsWith('.csv')) {
+    try {
+      return _take(utf8.decode(bytes, allowMalformed: true).trim(), 12000);
+    } catch (_) {
+      return '';
+    }
+  }
+  if (!clean.endsWith('.docx') &&
+      !clean.endsWith('.pptx') &&
+      !clean.endsWith('.xlsx')) {
+    return '';
+  }
+  try {
+    final archive = ZipDecoder().decodeBytes(bytes, verify: true);
+    if (clean.endsWith('.docx')) {
+      final document = archive.findFile('word/document.xml');
+      if (document == null) return '';
+      return _take(_officeXmlText(utf8.decode(document.content)), 12000);
+    }
+    if (clean.endsWith('.pptx')) {
+      final slides = archive.files
+          .where(
+            (file) =>
+                file.isFile &&
+                RegExp(r'^ppt/slides/slide\d+\.xml$').hasMatch(file.name),
+          )
+          .toList()
+        ..sort((left, right) => left.name.compareTo(right.name));
+      return _take(
+        slides
+            .asMap()
+            .entries
+            .map((entry) {
+              final text = _officeXmlText(utf8.decode(entry.value.content));
+              return text.isEmpty ? '' : '第 ${entry.key + 1} 页\n$text';
+            })
+            .where((text) => text.isNotEmpty)
+            .join('\n\n'),
+        12000,
+      );
+    }
+    final sharedStrings = archive.findFile('xl/sharedStrings.xml');
+    if (sharedStrings == null) return '';
+    final xml = utf8.decode(sharedStrings.content);
+    final rows = RegExp(r'<si\b[^>]*>([\s\S]*?)</si>')
+        .allMatches(xml)
+        .map((match) => _officeXmlText(match.group(1) ?? ''))
+        .where((text) => text.isNotEmpty)
+        .toList(growable: false);
+    return _take(rows.join('\n'), 12000);
+  } catch (_) {
+    return '';
+  }
+}
+
+String _officeXmlText(String xml) {
+  var text = xml
+      .replaceAll(RegExp(r'</(?:w:p|a:p|row|si)>'), '\n')
+      .replaceAll(RegExp(r'<(?:w:tab|w:br|a:br)\b[^>]*/>'), '\n')
+      .replaceAll(RegExp(r'<[^>]+>'), ' ')
+      .replaceAll('&amp;', '&')
+      .replaceAll('&lt;', '<')
+      .replaceAll('&gt;', '>')
+      .replaceAll('&quot;', '"')
+      .replaceAll('&apos;', "'")
+      .replaceAll('&#39;', "'");
+  text = text.replaceAllMapped(
+    RegExp(r'&#(x[0-9a-fA-F]+|[0-9]+);'),
+    (match) {
+      final raw = match.group(1) ?? '';
+      final radix = raw.toLowerCase().startsWith('x') ? 16 : 10;
+      final digits = radix == 16 ? raw.substring(1) : raw;
+      final codePoint = int.tryParse(digits, radix: radix);
+      return codePoint == null
+          ? match.group(0)!
+          : String.fromCharCode(codePoint);
+    },
+  );
+  return text
+      .split('\n')
+      .map((line) => line.replaceAll(RegExp(r'[ \t]+'), ' ').trim())
+      .where((line) => line.isNotEmpty)
+      .join('\n');
+}
+
+bool _looksLikeOfficeMetadata(String text) {
+  final value = text.toLowerCase();
+  return value.contains('output_path') &&
+      (value.contains('text_output_path') || value.contains('output_schema'));
+}
+
+String _officeAnalysisSummary(Map<String, Object?> response) {
+  for (final key in const ['summary', 'markdown', 'text', 'content']) {
+    final value = _deepStringForKey(response, key);
+    if (value.isNotEmpty) return _take(value, 12000);
+  }
+  try {
+    final data = _nestedDataMap(response);
+    return _take(jsonEncode(data), 12000);
+  } catch (_) {
+    return '';
+  }
+}
+
 List<Map<String, Object?>> _firstObjectList(List<Object?> values) {
   for (final value in values) {
     final rows = _objectList(value);
@@ -3175,6 +4938,13 @@ int _intField(Map<String, Object?> json, String key) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value.trim()) ?? 0;
+  return 0;
+}
+
+double _doubleField(Map<String, Object?> json, String key) {
+  final value = json[key];
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.trim()) ?? 0;
   return 0;
 }
 
@@ -3650,6 +5420,16 @@ ChatMessage? _chatMessageFromCache(Map<String, Object?> json) {
     status: status,
     quote: _stringField(json, 'quote'),
     cacheTimestampMs: _cachedChatTimestampMs(json),
+    sources: _objectList(json['sources'])
+        .map(
+          (source) => ChatSource(
+            title: _stringField(source, 'title'),
+            url: _stringField(source, 'url'),
+            snippet: _stringField(source, 'snippet'),
+          ),
+        )
+        .where((source) => source.url.isNotEmpty)
+        .toList(growable: false),
   );
 }
 
@@ -3773,11 +5553,138 @@ class RelayTaskProgress {
     required this.taskId,
     required this.status,
     required this.toolLabel,
+    this.source = 'cloud',
   });
 
   final String taskId;
   final String status;
   final String toolLabel;
+  final String source;
+
+  String get sourceLabel => source == 'lan' ? '局域网' : '云中继';
+}
+
+class SuperEmployeeThread {
+  const SuperEmployeeThread({
+    required this.threadId,
+    required this.employeeId,
+    required this.tool,
+    required this.title,
+    required this.status,
+    required this.updatedAt,
+    this.cliSessionId = '',
+    this.workspaceRoot = '',
+    this.branch = '',
+    this.lastTaskId = '',
+    this.archived = false,
+    this.source = 'cloud',
+  });
+
+  factory SuperEmployeeThread.fromMap(Map<String, Object?> json) {
+    return SuperEmployeeThread(
+      threadId: _stringField(json, 'thread_id'),
+      employeeId: _stringField(json, 'employee_id'),
+      tool: _stringField(json, 'tool'),
+      title: _stringField(json, 'title').ifEmpty('未命名对话'),
+      status: _stringField(json, 'status').ifEmpty('idle'),
+      updatedAt: _stringField(json, 'updated_at'),
+      cliSessionId: _stringField(json, 'cli_session_id'),
+      workspaceRoot: _stringField(json, 'workspace_root'),
+      branch: _stringField(json, 'branch'),
+      lastTaskId: _stringField(json, 'last_task_id'),
+      archived: _stringField(json, 'archived_at').isNotEmpty,
+      source: _stringField(json, 'source').ifEmpty('cloud'),
+    );
+  }
+
+  final String threadId;
+  final String employeeId;
+  final String tool;
+  final String title;
+  final String status;
+  final String updatedAt;
+  final String cliSessionId;
+  final String workspaceRoot;
+  final String branch;
+  final String lastTaskId;
+  final bool archived;
+  final String source;
+
+  String get sourceLabel => source == 'lan' ? '局域网' : '云中继';
+}
+
+class RelayRunSummary {
+  const RelayRunSummary({
+    required this.taskId,
+    required this.threadId,
+    required this.workItemId,
+    required this.employeeId,
+    required this.kind,
+    required this.status,
+    required this.attemptNo,
+    required this.createdAt,
+    required this.updatedAt,
+    this.completedAt = '',
+    this.message = '',
+    this.resultText = '',
+    this.branch = '',
+    this.elapsedSeconds = 0,
+    this.source = 'cloud',
+  });
+
+  factory RelayRunSummary.fromMap(Map<String, Object?> json) {
+    final payload = _objectMap(json['payload']);
+    final result = _objectMap(json['result']);
+    final nested = _objectMap(result['codex']);
+    final session = _objectMap(result['session']).isNotEmpty
+        ? _objectMap(result['session'])
+        : _objectMap(nested['session']);
+    return RelayRunSummary(
+      taskId: _stringField(json, 'task_id'),
+      threadId: _stringField(json, 'thread_id'),
+      workItemId: _stringField(json, 'work_item_id'),
+      employeeId: _stringField(json, 'employee_id'),
+      kind: _stringField(json, 'kind'),
+      status: _stringField(json, 'status'),
+      attemptNo: _intField(json, 'attempt_no') <= 0
+          ? 1
+          : _intField(json, 'attempt_no'),
+      createdAt: _stringField(json, 'created_at'),
+      updatedAt: _stringField(json, 'updated_at'),
+      completedAt: _stringField(json, 'completed_at'),
+      message: _firstString(payload, const ['message', 'body', 'prompt']),
+      resultText: _relayTaskResultText(json),
+      branch: _firstString(session, const ['branch']),
+      elapsedSeconds: _doubleField(result, 'elapsed_seconds'),
+      source: _stringField(json, 'source').ifEmpty('cloud'),
+    );
+  }
+
+  final String taskId;
+  final String threadId;
+  final String workItemId;
+  final String employeeId;
+  final String kind;
+  final String status;
+  final int attemptNo;
+  final String createdAt;
+  final String updatedAt;
+  final String completedAt;
+  final String message;
+  final String resultText;
+  final String branch;
+  final double elapsedSeconds;
+  final String source;
+
+  String get sourceLabel => source == 'lan' ? '局域网' : '云中继';
+
+  bool get active => const {
+        'queued',
+        'running',
+        'assigned',
+        'processing',
+        'in_progress',
+      }.contains(status);
 }
 
 class _MobileRepositoryCancelled implements Exception {

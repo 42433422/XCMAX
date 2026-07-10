@@ -1,14 +1,20 @@
 package com.xiuci.xcagi.mobile
 
 import android.Manifest
+import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
+import android.media.MediaPlayer
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import android.speech.RecognizerIntent
+import android.speech.tts.TextToSpeech
 import android.util.Base64
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
@@ -34,6 +40,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
 import java.security.MessageDigest
+import java.util.Locale
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -49,6 +56,9 @@ private const val LegacySessionDataStorePath = "datastore/xcagi_session_enterpri
 private const val LegacySessionMigrationMarkerName = "xcagi_session_legacy_migrated"
 private const val RecordAudioPermissionRequestCode = 4242
 private const val CameraPermissionRequestCode = 4243
+private const val AssistantFilePickerRequestCode = 4244
+private const val AssistantSpeechRecognitionRequestCode = 4245
+private const val NotificationPermissionRequestCode = 4246
 
 private data class PackageDeltaSpec(
     val available: Boolean,
@@ -73,6 +83,10 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingDeepLinkRoute: String? = null
     private var pendingRecordAudioPermissionResult: MethodChannel.Result? = null
     private var pendingCameraPermissionResult: MethodChannel.Result? = null
+    private var pendingAssistantFileResult: MethodChannel.Result? = null
+    private var pendingAssistantSpeechResult: MethodChannel.Result? = null
+    private var assistantMediaPlayer: MediaPlayer? = null
+    private var assistantTextToSpeech: TextToSpeech? = null
     private val legacySessionDataStore: DataStore<Preferences> by lazy {
         PreferenceDataStoreFactory.create(
             produceFile = { File(filesDir, LegacySessionDataStorePath) },
@@ -143,9 +157,19 @@ class MainActivity : FlutterFragmentActivity() {
             val downloadUrl = call.argument<String>("downloadUrl").orEmpty()
             val versionName = call.argument<String>("versionName").orEmpty()
             val currentVersionCode = call.argument<Int>("currentVersionCode") ?: 0
+            val apkSha256 = call.argument<String>("apkSha256").orEmpty()
+            val apkSize = call.argument<Number>("apkSize")?.toLong() ?: 0L
             @Suppress("UNCHECKED_CAST")
             val delta = call.argument<Map<String, Any?>>("delta").orEmpty()
-            startPackageUpdate(downloadUrl, versionName, currentVersionCode, delta, result)
+            startPackageUpdate(
+                downloadUrl,
+                versionName,
+                currentVersionCode,
+                apkSha256,
+                apkSize,
+                delta,
+                result,
+            )
         }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -155,8 +179,10 @@ class MainActivity : FlutterFragmentActivity() {
                 result.notImplemented()
                 return@setMethodCallHandler
             }
+            val loggedIn = call.argument<Boolean>("loggedIn") ?: false
             val autoSync = call.argument<Boolean>("autoSync") ?: true
             val autoLanProbe = call.argument<Boolean>("autoLanProbe") ?: false
+            if (loggedIn) ensureNotificationPermission()
             val state = XcagiBackgroundWork.reconcile(this, autoSync, autoLanProbe)
             result.success(state)
         }
@@ -205,6 +231,151 @@ class MainActivity : FlutterFragmentActivity() {
                     }
                 }
             }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "xcagi/meeting_minutes",
+        ).setMethodCallHandler { call, result ->
+            if (call.method != "shareDocx") {
+                result.notImplemented()
+                return@setMethodCallHandler
+            }
+            val requestedName = call.argument<String>("filename").orEmpty()
+            val bytes = call.argument<ByteArray>("bytes")
+            if (bytes == null || bytes.isEmpty()) {
+                result.error("EMPTY_DOCX", "Word 文档内容为空", null)
+                return@setMethodCallHandler
+            }
+            try {
+                val file = writeMeetingMinutesDocx(requestedName, bytes)
+                shareMeetingMinutesDocx(file)
+                result.success(file.absolutePath)
+            } catch (error: Throwable) {
+                result.error(
+                    "MEETING_DOCX_FAILED",
+                    error.message ?: "会议纪要 Word 生成失败",
+                    null,
+                )
+            }
+        }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "xcagi/assistant_native",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "pickFile" -> pickAssistantFile(result)
+                "recognizeSpeech" -> recognizeAssistantSpeech(result)
+                "playBase64Audio" -> {
+                    val audio = call.argument<String>("audioBase64").orEmpty()
+                    playAssistantAudio(audio, result)
+                }
+                "speakText" -> {
+                    val text = call.argument<String>("text").orEmpty()
+                    speakAssistantText(text, result)
+                }
+                "stopSpeech" -> {
+                    stopAssistantSpeech()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        stopAssistantSpeech()
+        assistantTextToSpeech?.shutdown()
+        assistantTextToSpeech = null
+        super.onDestroy()
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == AssistantSpeechRecognitionRequestCode) {
+            val pending = pendingAssistantSpeechResult
+            pendingAssistantSpeechResult = null
+            if (pending == null) return
+            if (resultCode != RESULT_OK) {
+                pending.success(null)
+                return
+            }
+            val text =
+                data
+                    ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                    ?.firstOrNull()
+                    ?.trim()
+                    .orEmpty()
+            pending.success(text.ifBlank { null })
+            return
+        }
+        if (requestCode != AssistantFilePickerRequestCode) return
+        val pending = pendingAssistantFileResult
+        pendingAssistantFileResult = null
+        if (pending == null) return
+        if (resultCode != RESULT_OK || data?.data == null) {
+            pending.success(null)
+            return
+        }
+        val uri = data.data ?: run {
+            pending.success(null)
+            return
+        }
+        thread(name = "xcagi-assistant-file-reader") {
+            try {
+                val metadata = assistantFileMetadata(uri)
+                val bytes = contentResolver.openInputStream(uri)?.use { stream ->
+                    stream.readBytes()
+                } ?: throw IllegalStateException("无法读取所选文件")
+                require(bytes.size <= 32 * 1024 * 1024) { "文件超过 32MB，请选择较小文件" }
+                val payload = mapOf(
+                    "name" to metadata.first,
+                    "mimeType" to (contentResolver.getType(uri) ?: "application/octet-stream"),
+                    "bytes" to bytes,
+                    "size" to bytes.size,
+                )
+                runOnUiThread { pending.success(payload) }
+            } catch (error: Throwable) {
+                runOnUiThread {
+                    pending.error(
+                        "FILE_PICK_FAILED",
+                        error.message ?: "读取文件失败",
+                        null,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun recognizeAssistantSpeech(result: MethodChannel.Result) {
+        if (pendingAssistantSpeechResult != null) {
+            result.error("SPEECH_BUSY", "语音识别正在进行", null)
+            return
+        }
+        val intent =
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+                )
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "zh-CN")
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+                putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话")
+            }
+        if (intent.resolveActivity(packageManager) == null) {
+            result.error("SPEECH_UNAVAILABLE", "系统没有可用的语音识别服务", null)
+            return
+        }
+        pendingAssistantSpeechResult = result
+        try {
+            startActivityForResult(intent, AssistantSpeechRecognitionRequestCode)
+        } catch (error: Throwable) {
+            pendingAssistantSpeechResult = null
+            result.error(
+                "SPEECH_START_FAILED",
+                error.message ?: "无法启动系统语音识别",
+                null,
+            )
         }
     }
 
@@ -312,6 +483,20 @@ class MainActivity : FlutterFragmentActivity() {
     private fun isCameraPermissionGranted(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) ==
             PackageManager.PERMISSION_GRANTED
+
+    private fun ensureNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NotificationPermissionRequestCode,
+        )
+    }
 
     private fun ensureCameraPermission(result: MethodChannel.Result) {
         if (isCameraPermissionGranted()) {
@@ -469,6 +654,8 @@ class MainActivity : FlutterFragmentActivity() {
         downloadUrl: String,
         versionName: String,
         currentVersionCode: Int,
+        apkSha256: String,
+        apkSize: Long,
         delta: Map<String, Any?>,
         result: MethodChannel.Result,
     ) {
@@ -495,6 +682,11 @@ class MainActivity : FlutterFragmentActivity() {
         thread(name = "xcagi-apk-update") {
             runCatching {
                 val apk = downloadUpdateApk(safeUri, versionName, deltaSpec, currentVersionCode)
+                require(apkSha256.matches(Regex("^[0-9a-fA-F]{64}$"))) {
+                    "安装包缺少可信 SHA-256 校验值"
+                }
+                require(apkSize > 0L && apk.length() == apkSize) { "安装包大小校验失败" }
+                verifyExpectedSha(apk, apkSha256, "安装包完整性校验失败")
                 runOnUiThread {
                     openInstaller(apk)
                     result.success("系统安装器已打开，请确认安装")
@@ -510,9 +702,7 @@ class MainActivity : FlutterFragmentActivity() {
     private fun validateApkUrl(raw: String): Uri {
         require(raw.isNotBlank()) { "安装包下载地址为空" }
         val uri = Uri.parse(raw.trim())
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        require(scheme == "https" || scheme == "http") { "安装包下载地址必须是 http(s)" }
-        require(!uri.host.isNullOrBlank()) { "安装包下载地址缺少域名" }
+        validateApprovedUpdateUri(uri)
         require(uri.path.orEmpty().lowercase().endsWith(".apk")) { "更新地址不是 APK 安装包" }
         return uri
     }
@@ -520,10 +710,24 @@ class MainActivity : FlutterFragmentActivity() {
     private fun validatePatchUrl(raw: String): Uri {
         require(raw.isNotBlank()) { "增量包下载地址为空" }
         val uri = Uri.parse(raw.trim())
-        val scheme = uri.scheme?.lowercase().orEmpty()
-        require(scheme == "https" || scheme == "http") { "增量包下载地址必须是 http(s)" }
-        require(!uri.host.isNullOrBlank()) { "增量包下载地址缺少域名" }
+        validateApprovedUpdateUri(uri)
+        require(uri.path.orEmpty().lowercase().endsWith(".xcapkdiff")) {
+            "增量更新地址格式无效"
+        }
         return uri
+    }
+
+    private fun validateApprovedUpdateUri(uri: Uri) {
+        require(uri.scheme?.lowercase() == "https") { "更新地址必须使用 HTTPS" }
+        require(uri.host?.lowercase() in setOf("xiu-ci.com", "www.xiu-ci.com")) {
+            "更新地址域名不受信任"
+        }
+        require(uri.userInfo.isNullOrBlank() && uri.query.isNullOrBlank() && uri.fragment.isNullOrBlank()) {
+            "更新地址包含不允许的认证或参数"
+        }
+        require(uri.path.orEmpty().startsWith("/download/enterprise/")) {
+            "更新地址不属于企业版发布目录"
+        }
     }
 
     private fun parseDeltaSpec(raw: Map<String, Any?>): PackageDeltaSpec? {
@@ -613,6 +817,7 @@ class MainActivity : FlutterFragmentActivity() {
             if (code !in 200..299) {
                 throw IllegalStateException("下载更新文件失败：HTTP $code")
             }
+            validateApprovedUpdateUri(Uri.parse(connection.url.toString()))
             connection.inputStream.use { input ->
                 FileOutputStream(tmp).use { output ->
                     input.copyTo(output)
@@ -644,6 +849,171 @@ class MainActivity : FlutterFragmentActivity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
+    }
+
+    private fun writeMeetingMinutesDocx(
+        requestedName: String,
+        bytes: ByteArray,
+    ): File {
+        val dir = File(cacheDir, "meeting_minutes").also { it.mkdirs() }
+        val clean =
+            requestedName
+                .trim()
+                .replace(Regex("[\\\\/:*?\"<>|]"), "-")
+                .take(80)
+                .ifBlank { "会议纪要.docx" }
+        val filename = if (clean.endsWith(".docx", ignoreCase = true)) clean else "$clean.docx"
+        val target = File(dir, filename)
+        target.writeBytes(bytes)
+        require(target.length() > 0L) { "Word 文档写入失败" }
+        dir.listFiles()
+            ?.filter { it != target && it.extension.equals("docx", ignoreCase = true) }
+            ?.sortedByDescending { it.lastModified() }
+            ?.drop(8)
+            ?.forEach { it.delete() }
+        return target
+    }
+
+    private fun shareMeetingMinutesDocx(file: File) {
+        val uri =
+            FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file,
+            )
+        val mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        val intent =
+            Intent(Intent.ACTION_SEND)
+                .setType(mime)
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, file.nameWithoutExtension)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        intent.clipData = ClipData.newRawUri(file.name, uri)
+        startActivity(Intent.createChooser(intent, "保存或分享会议纪要"))
+    }
+
+    private fun pickAssistantFile(result: MethodChannel.Result) {
+        if (pendingAssistantFileResult != null) {
+            result.error("FILE_PICK_BUSY", "文件选择器正在使用中", null)
+            return
+        }
+        pendingAssistantFileResult = result
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+            .putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf(
+                    "application/pdf",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    "text/csv",
+                    "image/jpeg",
+                    "image/png",
+                    "image/webp",
+                ),
+            )
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, AssistantFilePickerRequestCode)
+        } catch (error: Throwable) {
+            pendingAssistantFileResult = null
+            result.error("FILE_PICK_FAILED", error.message ?: "无法打开文件选择器", null)
+        }
+    }
+
+    private fun assistantFileMetadata(uri: Uri): Pair<String, Long> {
+        var name = "所选文件"
+        var size = 0L
+        var cursor: Cursor? = null
+        try {
+            cursor = contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null,
+            )
+            if (cursor != null && cursor.moveToFirst()) {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (nameIndex >= 0) name = cursor.getString(nameIndex).orEmpty().ifBlank { name }
+                if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) size = cursor.getLong(sizeIndex)
+            }
+        } finally {
+            cursor?.close()
+        }
+        return name to size
+    }
+
+    private fun playAssistantAudio(audioBase64: String, result: MethodChannel.Result) {
+        val encoded = audioBase64.substringAfter(',', audioBase64).trim()
+        if (encoded.isEmpty()) {
+            result.error("EMPTY_AUDIO", "语音内容为空", null)
+            return
+        }
+        try {
+            stopAssistantSpeech()
+            val bytes = Base64.decode(encoded, Base64.DEFAULT)
+            val dir = File(cacheDir, "assistant_voice").also { it.mkdirs() }
+            val audioFile = File(dir, "reply-${System.currentTimeMillis()}.mp3")
+            audioFile.writeBytes(bytes)
+            assistantMediaPlayer = MediaPlayer().apply {
+                setDataSource(audioFile.absolutePath)
+                setOnPreparedListener {
+                    it.start()
+                    result.success(true)
+                }
+                setOnCompletionListener {
+                    it.release()
+                    if (assistantMediaPlayer === it) assistantMediaPlayer = null
+                    audioFile.delete()
+                }
+                setOnErrorListener { player, _, _ ->
+                    player.release()
+                    if (assistantMediaPlayer === player) assistantMediaPlayer = null
+                    audioFile.delete()
+                    true
+                }
+                prepareAsync()
+            }
+        } catch (error: Throwable) {
+            result.error("AUDIO_PLAY_FAILED", error.message ?: "语音播放失败", null)
+        }
+    }
+
+    private fun speakAssistantText(text: String, result: MethodChannel.Result) {
+        val clean = text.trim()
+        if (clean.isEmpty()) {
+            result.error("EMPTY_TEXT", "朗读内容为空", null)
+            return
+        }
+        stopAssistantSpeech()
+        val existing = assistantTextToSpeech
+        if (existing != null) {
+            existing.language = Locale.SIMPLIFIED_CHINESE
+            existing.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "xcagi-assistant")
+            result.success(true)
+            return
+        }
+        assistantTextToSpeech = TextToSpeech(this) { status ->
+            val engine = assistantTextToSpeech
+            if (status == TextToSpeech.SUCCESS && engine != null) {
+                engine.language = Locale.SIMPLIFIED_CHINESE
+                engine.speak(clean, TextToSpeech.QUEUE_FLUSH, null, "xcagi-assistant")
+                result.success(true)
+            } else {
+                result.error("TTS_UNAVAILABLE", "系统朗读服务不可用", null)
+            }
+        }
+    }
+
+    private fun stopAssistantSpeech() {
+        assistantMediaPlayer?.runCatching { stop() }
+        assistantMediaPlayer?.release()
+        assistantMediaPlayer = null
+        assistantTextToSpeech?.stop()
     }
 
     private fun apkFileName(versionName: String): String {
@@ -806,7 +1176,7 @@ private object CredentialCipher {
             System.arraycopy(cipherText, 0, packed, iv.size, cipherText.size)
             PREFIX + Base64.encodeToString(packed, Base64.NO_WRAP)
         } catch (_: Exception) {
-            plain
+            ""
         }
     }
 

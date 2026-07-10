@@ -25,6 +25,7 @@ MOBILE_JWT_ISS = "xcagi-mobile"
 MOBILE_JWT_ALG = "HS256"
 MOBILE_ACCESS_TTL_HOURS = 24
 MOBILE_REFRESH_TTL_HOURS = 168
+MOBILE_RELAY_TOKEN_SCOPES = frozenset({"enterprise_pairing", "enterprise_relay"})
 
 # 未配置 SECRET_KEY 时的进程级随机回退（不可预测），替代旧的硬编码
 # ``xcagi-dev-secret``。生产应显式配置 SECRET_KEY；否则进程重启后历史 token
@@ -85,7 +86,7 @@ def _mark_refresh_jti_used(jti: str, ttl_seconds: int) -> None:
 def verify_mobile_jwt(token: str) -> dict[str, Any] | None:
     """校验移动端 JWT：HS256 白名单 + iss/aud/exp 必校验。失败返回 None。"""
     try:
-        return jwt.decode(
+        payload = jwt.decode(
             token,
             _secret_key(),
             algorithms=[MOBILE_JWT_ALG],
@@ -93,9 +94,42 @@ def verify_mobile_jwt(token: str) -> dict[str, Any] | None:
             issuer=MOBILE_JWT_ISS,
             options={"require": ["exp", "aud", "iss"]},
         )
+        if not _relay_token_is_current(payload):
+            logger.info("legacy or privileged mobile relay token rejected")
+            return None
+        return payload
     except jwt.PyJWTError as exc:
         logger.debug("mobile jwt verify failed: %s", exc)
         return None
+
+
+def _relay_token_is_current(payload: dict[str, Any]) -> bool:
+    """Fail closed for pre-upgrade LAN credentials.
+
+    Older pairing flows minted an administrator JWT with a ``mobile-relay-*``
+    session and no explicit scope.  Those credentials must stop working as soon
+    as the upgraded backend starts, rather than retaining management access until
+    their natural expiry.  Current relay credentials are always enterprise-only
+    and bound to an exact DB user, tenant namespace and issuer.
+    """
+    session_id = str(payload.get("session_id") or "").strip()
+    if not session_id.startswith("mobile-relay-"):
+        return True
+    scope = str(payload.get("token_scope") or "").strip()
+    account_kind = str(payload.get("account_kind") or "").strip().lower()
+    try:
+        user_id = int(payload.get("user_id") or 0)
+        paired_by_user_id = int(payload.get("paired_by_user_id") or 0)
+    except (TypeError, ValueError):
+        return False
+    return (
+        scope in MOBILE_RELAY_TOKEN_SCOPES
+        and account_kind == "enterprise"
+        and user_id > 0
+        and paired_by_user_id == user_id
+        and "tenant_id" in payload
+        and bool(str(payload.get("company_brand") or "").strip())
+    )
 
 
 def issue_mobile_tokens(
@@ -104,12 +138,20 @@ def issue_mobile_tokens(
     session_id: str,
     account_kind: str = "enterprise",
     username: str = "",
+    token_scope: str = "",
+    tenant_id: int | None = None,
+    company_brand: str = "",
+    paired_by_user_id: int | None = None,
 ) -> dict[str, str]:
     access = _issue_token(
         user_id=user_id,
         session_id=session_id,
         account_kind=account_kind,
         username=username,
+        token_scope=token_scope,
+        tenant_id=tenant_id,
+        company_brand=company_brand,
+        paired_by_user_id=paired_by_user_id,
         ttl_hours=MOBILE_ACCESS_TTL_HOURS,
         token_type="access",
     )
@@ -118,6 +160,10 @@ def issue_mobile_tokens(
         session_id=session_id,
         account_kind=account_kind,
         username=username,
+        token_scope=token_scope,
+        tenant_id=tenant_id,
+        company_brand=company_brand,
+        paired_by_user_id=paired_by_user_id,
         ttl_hours=MOBILE_REFRESH_TTL_HOURS,
         token_type="refresh",
     )
@@ -144,6 +190,10 @@ def refresh_mobile_access_token(refresh_token: str) -> dict[str, str] | None:
         session_id=str(sid),
         account_kind=str(payload.get("account_kind") or "enterprise"),
         username=str(payload.get("username") or ""),
+        token_scope=str(payload.get("token_scope") or ""),
+        tenant_id=_optional_int(payload.get("tenant_id")),
+        company_brand=str(payload.get("company_brand") or ""),
+        paired_by_user_id=_optional_int(payload.get("paired_by_user_id")),
     )
 
 
@@ -153,6 +203,10 @@ def _issue_token(
     session_id: str,
     account_kind: str,
     username: str,
+    token_scope: str,
+    tenant_id: int | None,
+    company_brand: str,
+    paired_by_user_id: int | None,
     ttl_hours: int,
     token_type: str,
 ) -> str:
@@ -169,7 +223,22 @@ def _issue_token(
         "exp": now + ttl_hours * 3600,
         "jti": uuid.uuid4().hex,
     }
+    if token_scope.strip():
+        payload["token_scope"] = token_scope.strip()[:64]
+    if tenant_id is not None:
+        payload["tenant_id"] = int(tenant_id)
+    if company_brand.strip():
+        payload["company_brand"] = company_brand.strip()[:256]
+    if paired_by_user_id is not None:
+        payload["paired_by_user_id"] = int(paired_by_user_id)
     return jwt.encode(payload, _secret_key(), algorithm=MOBILE_JWT_ALG)
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def user_id_from_mobile_bearer(authorization: str | None) -> int | None:

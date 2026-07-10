@@ -12,7 +12,14 @@ class AndroidCredentialCipher {
     final value = await _channel.invokeMethod<String>('encrypt', {
       'plain': plain,
     });
-    return value ?? plain;
+    final encrypted = value?.trim() ?? '';
+    if (!encrypted.startsWith('enc:v1:') || encrypted == plain) {
+      throw PlatformException(
+        code: 'credential_encryption_unavailable',
+        message: 'Android Keystore encryption is unavailable',
+      );
+    }
+    return encrypted;
   }
 
   Future<String> decrypt(String stored) async {
@@ -20,6 +27,12 @@ class AndroidCredentialCipher {
     final value = await _channel.invokeMethod<String>('decrypt', {
       'stored': stored,
     });
-    return value ?? '';
+    if (value == null || value.isEmpty) {
+      throw PlatformException(
+        code: 'credential_decryption_failed',
+        message: 'Android Keystore decryption failed',
+      );
+    }
+    return value;
   }
 }

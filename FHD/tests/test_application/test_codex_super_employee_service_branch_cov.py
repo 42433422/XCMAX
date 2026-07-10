@@ -1712,7 +1712,10 @@ class TestCliPathBoundary:
         with patch(
             "app.application.super_employee_service.shutil.which", return_value="/found/codex"
         ):
-            with patch("app.application.super_employee_service.Path.is_file", return_value=True):
+            with patch(
+                "app.application.super_employee_service.Path.is_file",
+                side_effect=[False, False, True],
+            ):
                 assert svc._cli_path() == "/found/codex"
 
     def test_nonexistent_returns_empty(self, tmp_path, monkeypatch):

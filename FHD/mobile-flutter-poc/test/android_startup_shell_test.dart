@@ -582,6 +582,13 @@ class _FakeStartupApi extends MobileApiClient {
   }
 
   @override
+  Future<MobileAppConfigData> appConfigForInstalledBuild({
+    String sku = MobileAndroidBuild.productSku,
+  }) async {
+    return config;
+  }
+
+  @override
   Future<void> saveLegalAcceptedVersion(String version) async {
     session = session.copyWith(legalAcceptedVersion: version.trim());
     _changes.add(session);

@@ -97,7 +97,7 @@ class XcagiMobileSyncWorker(
     override fun doWork(): Result {
         val session = XcagiWorkerSession.load(applicationContext)
         if (!session.autoSync) return Result.success()
-        if (session.accessToken.isBlank()) return Result.success()
+        if (session.effectiveAccessToken.isBlank()) return Result.success()
         if (session.fhdHost.isBlank() && session.serverMode.lowercase() != "cloud") {
             return Result.success()
         }
@@ -131,7 +131,7 @@ class XcagiPushPollWorker(
 ) : Worker(context, params) {
     override fun doWork(): Result {
         val session = XcagiWorkerSession.load(applicationContext)
-        if (session.accessToken.isBlank()) return Result.success()
+        if (session.effectiveAccessToken.isBlank()) return Result.success()
 
         return try {
             val response =
@@ -196,12 +196,28 @@ private data class XcagiWorkerSession(
     val json: JSONObject,
 ) {
     val accessToken: String = json.optString("access_token")
+    val localAccessToken: String = json.optString("local_access_token")
     val sessionId: String = json.optString("session_id")
+    val localSessionId: String = json.optString("local_session_id")
     val serverMode: String = json.optString("server_mode", "cloud")
     val fhdHost: String = json.optString("fhd_host")
     val relayBaseUrl: String = json.optString("relay_base_url")
     val autoSync: Boolean = json.optBoolean("auto_sync", true)
     val syncCursor: Int = json.optInt("sync_cursor", 0)
+    val effectiveAccessToken: String
+        get() =
+            if (serverMode.lowercase() == "lan" && localAccessToken.isNotBlank()) {
+                localAccessToken
+            } else {
+                accessToken
+            }
+    val effectiveSessionId: String
+        get() =
+            if (serverMode.lowercase() == "lan" && localSessionId.isNotBlank()) {
+                localSessionId
+            } else {
+                sessionId
+            }
 
     fun baseUrl(): String {
         if (serverMode.lowercase() == "lan" && fhdHost.isNotBlank()) {
@@ -266,12 +282,12 @@ private object XcagiWorkerHttp {
             setRequestProperty("Content-Type", "application/json")
             setRequestProperty("X-XCAGI-Client", ClientHeader)
             setRequestProperty("X-XCAGI-SKU", ProductSku)
-            if (session.accessToken.isNotBlank()) {
-                setRequestProperty("Authorization", "Bearer ${session.accessToken}")
+            if (session.effectiveAccessToken.isNotBlank()) {
+                setRequestProperty("Authorization", "Bearer ${session.effectiveAccessToken}")
             }
-            if (session.sessionId.isNotBlank()) {
-                setRequestProperty("X-Session-ID", session.sessionId)
-                setRequestProperty("Cookie", "session_id=${session.sessionId}")
+            if (session.effectiveSessionId.isNotBlank()) {
+                setRequestProperty("X-Session-ID", session.effectiveSessionId)
+                setRequestProperty("Cookie", "session_id=${session.effectiveSessionId}")
             }
             if (body != null) doOutput = true
         }

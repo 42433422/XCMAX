@@ -491,7 +491,7 @@ class TestMobilePairingLookupAdditional:
             "lookup_by_shortcode",
             return_value={"host": "192.168.1.1", "port": 5000, "nonce": "abc"},
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, request=_mock_pairing_request())
         # format_mobile_response returns a dict (not JSONResponse)
         if hasattr(result, "body"):
             import json
@@ -514,7 +514,7 @@ class TestMobilePairingLookupAdditional:
                 "exp": 9999,
             },
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, request=_mock_pairing_request())
         if hasattr(result, "body"):
             import json
 
@@ -531,7 +531,7 @@ class TestMobilePairingLookupAdditional:
             "lookup_by_shortcode",
             return_value=None,
         ):
-            result = await ext_mod.mobile_pairing_lookup(body=body)
+            result = await ext_mod.mobile_pairing_lookup(body=body, request=_mock_pairing_request())
         assert result.status_code == 404
 
 

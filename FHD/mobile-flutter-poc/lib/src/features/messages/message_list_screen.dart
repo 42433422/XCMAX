@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../api/mobile_models.dart';
@@ -9,11 +11,13 @@ import '../../theme/app_theme.dart';
 import '../../theme/message_avatar_layout.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/group_grid_avatar.dart';
+import '../../widgets/super_employee_run_capsule.dart';
 import '../chat/chat_screen.dart';
 import '../contacts/contacts_screen.dart';
 import '../cs/admin_cs_console_screen.dart';
 import '../cs/cs_chat_screen.dart';
 import '../discover/discover_screen.dart';
+import '../devtools/execution_review_screen.dart';
 import '../groups/ai_group_screens.dart';
 import '../scan/scan_qr_screen.dart';
 
@@ -54,11 +58,42 @@ class MessageListScreen extends StatefulWidget {
 class _MessageListScreenState extends State<MessageListScreen> {
   String _query = '';
   MobileRepository? _fallbackRepository;
+  List<RelayRunSummary> _activeRuns = const [];
+  SuperEmployeeRunAvailability _runAvailability =
+      SuperEmployeeRunAvailability.checking;
+  Timer? _activeRunsTimer;
 
   MobileRepository get _repository =>
       widget.repository ??
       MobileRepositoryScope.maybeRead(context) ??
       (_fallbackRepository ??= MobileRepository());
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _refreshActiveRuns();
+      _activeRunsTimer = Timer.periodic(
+        const Duration(seconds: 4),
+        (_) => _refreshActiveRuns(),
+      );
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant MessageListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repository != widget.repository) {
+      unawaited(_refreshActiveRuns());
+    }
+  }
+
+  @override
+  void dispose() {
+    _activeRunsTimer?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -91,6 +126,11 @@ class _MessageListScreenState extends State<MessageListScreen> {
               onClearQuery: () => setState(() => _query = ''),
               onMenuSelected: _handleHeaderMenu,
             ),
+            SuperEmployeeRunCapsule(
+              runs: _activeRuns,
+              availability: _runAvailability,
+              onTap: _openExecutionReview,
+            ),
             Expanded(
               child: RefreshIndicator(
                 onRefresh: widget.onRefresh ?? () async {},
@@ -106,14 +146,14 @@ class _MessageListScreenState extends State<MessageListScreen> {
                     if (entry is AiGroupConversation) {
                       return GroupConversationRow(
                         group: entry,
-                        onTap: () => _openGroup(entry),
+                        onTap: () => unawaited(_openGroup(entry)),
                         onLongPress: () => _showGroupActions(entry),
                       );
                     }
                     final item = entry as ConversationItem;
                     return ConversationRowTile(
                       item: item,
-                      onTap: () => _openConversation(item),
+                      onTap: () => unawaited(_openConversation(item)),
                       onLongPress: () => _showConversationActions(item),
                     );
                   },
@@ -141,6 +181,84 @@ class _MessageListScreenState extends State<MessageListScreen> {
     );
   }
 
+  Future<void> _refreshActiveRuns() async {
+    final repository = widget.repository ??
+        (mounted ? MobileRepositoryScope.maybeRead(context) : null);
+    if (repository == null) return;
+    try {
+      final session = await repository.client.loadSession();
+      final lanMode = session.serverMode.trim().toLowerCase() == 'lan';
+      final hasLanPairing = lanMode &&
+          session.localAccessToken.trim().isNotEmpty &&
+          (session.localBaseUrl.trim().isNotEmpty ||
+              session.fhdHost.trim().isNotEmpty);
+      final hasRelayPairing = session.relayDesktopId.trim().isNotEmpty;
+      if (!hasLanPairing && !hasRelayPairing) {
+        if (!mounted) return;
+        setState(() {
+          _activeRuns = const [];
+          _runAvailability = SuperEmployeeRunAvailability.unpaired;
+        });
+        return;
+      }
+      final runs = await repository.loadRelayRuns(activeOnly: true, limit: 20);
+      if (!mounted) return;
+      setState(() {
+        _activeRuns = runs;
+        _runAvailability = SuperEmployeeRunAvailability.ready;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _activeRuns = const [];
+        _runAvailability = _runAvailabilityForError(error);
+      });
+    }
+  }
+
+  Future<void> _openExecutionReview() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ExecutionReviewScreen(
+          repository: _repository,
+          title: '四员工运行任务',
+        ),
+      ),
+    );
+    await _refreshActiveRuns();
+  }
+
+  SuperEmployeeRunAvailability _runAvailabilityForError(Object error) {
+    final message = error.toString().trim().toLowerCase();
+    if (const [
+      'socketexception',
+      'clientexception',
+      'failed host lookup',
+      'connection refused',
+      'connection reset',
+      'network is unreachable',
+      'timed out',
+      'timeout',
+      '网络不可用',
+      '连接失败',
+      '无法连接',
+    ].any(message.contains)) {
+      return SuperEmployeeRunAvailability.offline;
+    }
+    if (const [
+      '401',
+      '403',
+      'unauthorized',
+      'forbidden',
+      '未配对',
+      '未绑定',
+      '授权失效',
+    ].any(message.contains)) {
+      return SuperEmployeeRunAvailability.unpaired;
+    }
+    return SuperEmployeeRunAvailability.unknown;
+  }
+
   bool _matchesQuery(ConversationItem item) {
     final keyword = _query.trim().toLowerCase();
     if (keyword.isEmpty) return true;
@@ -154,8 +272,8 @@ class _MessageListScreenState extends State<MessageListScreen> {
     return group.name.toLowerCase().contains(keyword);
   }
 
-  void _openGroup(AiGroupConversation group) {
-    Navigator.of(context).push(
+  Future<void> _openGroup(AiGroupConversation group) async {
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
         builder: (_) => AiGroupChatScreen(
           initialGroup: group,
@@ -163,34 +281,34 @@ class _MessageListScreenState extends State<MessageListScreen> {
         ),
       ),
     );
+    await _refreshHomeAfterChat();
   }
 
-  void _openConversation(ConversationItem item) {
+  Future<void> _openConversation(ConversationItem item) async {
+    late final Widget destination;
     if (item.type == ConversationType.pinnedCs) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => CsChatScreen(repository: _repository),
-        ),
+      destination = CsChatScreen(repository: _repository);
+    } else if (_isAdminCustomerServiceConversation(item)) {
+      destination = AdminCsConsoleScreen(repository: _repository);
+    } else {
+      destination = ChatScreen(
+        conversation: item,
+        initialMessages: const [],
+        repository: _repository,
       );
-      return;
     }
-    if (_isAdminCustomerServiceConversation(item)) {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => AdminCsConsoleScreen(repository: _repository),
-        ),
-      );
-      return;
-    }
-    Navigator.of(context).push(
+    await Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          conversation: item,
-          initialMessages: const [],
-          repository: _repository,
-        ),
+        builder: (_) => destination,
       ),
     );
+    await _refreshHomeAfterChat();
+  }
+
+  Future<void> _refreshHomeAfterChat() async {
+    if (!mounted) return;
+    await widget.onRefresh?.call();
+    if (mounted) await _refreshActiveRuns();
   }
 
   bool _isAdminCustomerServiceConversation(ConversationItem item) {

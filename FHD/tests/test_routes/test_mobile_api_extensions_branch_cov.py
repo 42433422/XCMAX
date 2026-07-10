@@ -1107,7 +1107,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_cursor_super_employee_messages(
@@ -1119,7 +1119,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
     async def test_uid_zero(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1135,7 +1135,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
     async def test_success(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1154,7 +1154,7 @@ class TestMobileAdminCursorSuperEmployeeMessages:
         err_class = _err_class(m)
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1187,7 +1187,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
         err_resp = MagicMock()
         err_resp.status_code = 403
         with patch(
-            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+            "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
             return_value=(None, err_resp),
         ):
             result = await m.mobile_admin_cursor_super_employee_invoke(
@@ -1199,7 +1199,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_uid_zero(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1215,7 +1215,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_value_error(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1234,7 +1234,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
         err_class = _err_class(m)
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -1252,7 +1252,7 @@ class TestMobileAdminCursorSuperEmployeeInvoke:
     async def test_success(self, m):
         with (
             patch(
-                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin",
+                "app.fastapi_routes.mobile_api_extensions._require_mobile_admin_or_enterprise",
                 return_value=({}, None),
             ),
             patch(
@@ -2947,46 +2947,66 @@ class TestMobilePairingExchangeBranchCov:
     async def test_no_nonce_no_code_returns_400(self, m):
         """branch: both nonce and code empty → 400."""
         body = SimpleNamespace(nonce="", code="")
-        result = await m.mobile_pairing_exchange(body=body, user=_user())
+        result = await m.mobile_pairing_exchange(body=body, request=MagicMock(), user=None)
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_rec_none_returns_400(self, m):
         """branch: consume returns None → 400."""
         body = SimpleNamespace(nonce="n1", code="")
-        with patch.object(m, "consume_pairing_nonce", return_value=None):
-            result = await m.mobile_pairing_exchange(body=body, user=_user())
+        with patch.object(m, "lookup_pairing_nonce", return_value=None):
+            result = await m.mobile_pairing_exchange(body=body, request=MagicMock(), user=None)
         assert result.status_code == 400
 
     @pytest.mark.asyncio
     async def test_success_by_nonce(self, m):
         """branch: success by nonce, no cached relay."""
         body = SimpleNamespace(nonce="n1", code="")
-        rec = {"host": "h", "port": 5000, "nonce": "n1"}
+        rec = {
+            "host": "h",
+            "port": 5000,
+            "nonce": "n1",
+            "issuer_user_id": 1,
+            "subject_user_id": 1,
+            "tenant_id": 1,
+            "account_kind": "enterprise",
+            "token_scope": "enterprise_pairing",
+        }
         with (
+            patch.object(m, "lookup_pairing_nonce", return_value=rec),
             patch.object(m, "consume_pairing_nonce", return_value=rec),
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
+            patch.object(m, "_pairing_subject_user", return_value={"id": 1, "username": "u"}),
             patch.object(m, "_enrich_pairing_payload", return_value={"host": "h"}),
             patch.object(m, "_relay_mobile_auth_payload", return_value={"token": "t"}),
             patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=None),
         ):
-            result = await m.mobile_pairing_exchange(body=body, user=_user())
+            result = await m.mobile_pairing_exchange(body=body, request=MagicMock(), user=None)
         assert result is not None
 
     @pytest.mark.asyncio
     async def test_success_by_code(self, m):
         """branch: success by code, with cached relay."""
         body = SimpleNamespace(nonce="", code="CODE1")
-        rec = {"host": "h", "port": 5000, "nonce": "n1"}
+        rec = {
+            "host": "h",
+            "port": 5000,
+            "nonce": "n1",
+            "issuer_user_id": 1,
+            "subject_user_id": 1,
+            "tenant_id": 1,
+            "account_kind": "enterprise",
+            "token_scope": "enterprise_pairing",
+        }
         relay = {"relay_id": "r1", "relay_base_url": "http://r", "exp": 0}
         with (
+            patch.object(m, "lookup_by_shortcode", return_value=rec),
             patch.object(m, "consume_by_shortcode", return_value=rec),
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
+            patch.object(m, "_pairing_subject_user", return_value={"id": 1, "username": "u"}),
             patch.object(m, "_enrich_pairing_payload", return_value={"host": "h"}),
             patch.object(m, "_relay_mobile_auth_payload", return_value={"token": "t"}),
             patch.object(m, "_cached_desktop_relay_for_account_binding", return_value=relay),
         ):
-            result = await m.mobile_pairing_exchange(body=body, user=_user())
+            result = await m.mobile_pairing_exchange(body=body, request=MagicMock(), user=None)
         assert result is not None
 
 
@@ -3715,189 +3735,3 @@ class TestMobileModItemsDictBranches:
         ):
             result = m._mobile_mod_items()
         assert len(result) == 100
-
-
-# ============================================================
-# _resolve_mobile_relay_user additional branches
-# ============================================================
-
-
-class TestResolveMobileRelayUserBranchCov:
-    def test_uid_positive_prefer_admin_admin_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='admin' → return early."""
-        u = _user(uid=5, role="admin")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_uid_positive_prefer_admin_super_admin_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='super_admin' → return early."""
-        u = _user(uid=5, role="super_admin")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_uid_positive_prefer_admin_owner_role(self, m):
-        """branch: uid > 0, prefer_admin=True, role='owner' → return early."""
-        u = _user(uid=5, role="owner")
-        pub = {"id": 5, "username": "u5"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(5, "u5")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result["id"] == 5
-
-    def test_recoverable_error_not_prefer_admin_raises(self, m):
-        """branch: RECOVERABLE_ERRORS without prefer_admin → raise."""
-        u = _user(uid=0)
-        err_class = _err_class(m)
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-        ):
-            with pytest.raises(err_class):
-                m._resolve_mobile_relay_user(u, prefer_admin=False)
-
-    def test_db_no_expunge_attribute(self, m):
-        """branch: db has no expunge method → skip expunge."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 3
-        pub = {"id": 3, "username": "x"}
-        mock_db = _ctx_db(MagicMock())
-        # uid=0 → uid<=0 True → admin-filtered query (two .filter() calls) is used
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        # Remove expunge attribute to hit the `hasattr(db, "expunge")` False branch
-        del mock_db.expunge
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-
-    def test_db_has_expunge_attribute_calls_expunge(self, m):
-        """branch: db has expunge method → expunge called."""
-        u = _user(uid=0)
-        mock_row = MagicMock()
-        mock_row.id = 7
-        pub = {"id": 7, "username": "expunged"}
-        mock_db = _ctx_db(MagicMock())
-        # uid=0 → uid<=0 True → admin-filtered query (two .filter() calls) is used
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = mock_row
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-        mock_db.expunge.assert_called_once_with(mock_row)
-
-    def test_admin_query_returns_row_skips_all_users_query(self, m):
-        """branch: prefer_admin=True and admin query returns a row → skip all-users query."""
-        u = _user(uid=0)
-        admin_row = MagicMock()
-        admin_row.id = 11
-        pub = {"id": 11, "username": "admin"}
-        mock_db = _ctx_db(MagicMock())
-        # Admin-filtered query returns a row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = admin_row
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub
-
-    def test_admin_query_none_all_users_query_returns_row(self, m):
-        """branch: admin query returns None → fallback to all-users query returns row."""
-        u = _user(uid=0)
-        any_row = MagicMock()
-        any_row.id = 22
-        pub = {"id": 22, "username": "any"}
-        mock_db = _ctx_db(MagicMock())
-        # First call (admin-filtered) returns None; second call (all users) returns row
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            any_row
-        )
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub
-
-    def test_no_users_creates_new_relay_admin(self, m):
-        """branch: both queries return None → create new User row."""
-        u = _user(uid=0)
-        pub = {"id": 99, "username": "new_relay"}
-        mock_db = _ctx_db(MagicMock())
-        # Both queries return None
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = None
-        mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = (
-            None
-        )
-        with (
-            patch("app.db.session.get_db", return_value=mock_db),
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-        # Verify db.add was called (new user created)
-        mock_db.add.assert_called_once()
-        mock_db.flush.assert_called_once()
-
-    def test_recoverable_error_prefer_admin_returns_fallback(self, m):
-        """branch: RECOVERABLE_ERRORS with prefer_admin=True → return fallback user."""
-        u = _user(uid=0)
-        err_class = _err_class(m)
-        fallback = {"id": -1, "username": "fallback"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(0, "")),
-            patch("app.db.session.get_db", side_effect=err_class("boom")),
-            patch.object(m, "_relay_admin_fallback_user", return_value=fallback),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == fallback
-
-    def test_uid_positive_not_prefer_admin_returns_public(self, m):
-        """branch: uid > 0 and not prefer_admin → return public dict early."""
-        u = _user(uid=8, role="user")
-        pub = {"id": 8, "username": "u8"}
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(8, "u8")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=False)
-        assert result == pub
-
-    def test_uid_positive_prefer_admin_non_admin_role_falls_through(self, m):
-        """branch: uid > 0, prefer_admin=True, role not in admin set → fall through to DB."""
-        u = _user(uid=8, role="user")
-        any_row = MagicMock()
-        any_row.id = 100
-        pub = {"id": 100, "username": "from_db"}
-        mock_db = _ctx_db(MagicMock())
-        mock_db.query.return_value.filter.return_value.filter.return_value.order_by.return_value.first.return_value = any_row
-        with (
-            patch.object(m, "_mobile_user_identity", return_value=(8, "u8")),
-            patch.object(m, "_mobile_user_public_dict", return_value=pub),
-            patch("app.db.session.get_db", return_value=mock_db),
-        ):
-            result = m._resolve_mobile_relay_user(u, prefer_admin=True)
-        assert result == pub

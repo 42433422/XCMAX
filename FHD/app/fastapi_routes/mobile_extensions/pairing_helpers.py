@@ -129,6 +129,18 @@ def _enrich_pairing_payload(
     request: Request | None = None,
 ) -> dict[str, Any]:
     data = dict(payload)
+    # Identity/tenant binding is server-side authorization state.  The QR and
+    # lookup response only need connection coordinates and one-time secrets.
+    for internal_key in (
+        "issuer_user_id",
+        "subject_user_id",
+        "subject_username",
+        "tenant_id",
+        "company_brand",
+        "account_kind",
+        "token_scope",
+    ):
+        data.pop(internal_key, None)
     host = str(data.get("host") or "").strip()
     api_port = int(data.get("port") or 0)
     port = _pairing_reachable_port(request, api_port)

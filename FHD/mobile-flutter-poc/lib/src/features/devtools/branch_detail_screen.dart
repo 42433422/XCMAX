@@ -247,9 +247,11 @@ class _CommitRow extends StatelessWidget {
     final colors = AppTheme.colors(context);
     final sha = (commit['sha'] as String?) ?? (commit['hash'] as String?) ?? '';
     final shortSha = sha.length > 7 ? sha.substring(0, 7) : sha;
-    final message = (commit['message'] as String?) ?? (commit['subject'] as String?) ?? '';
+    final message =
+        (commit['message'] as String?) ?? (commit['subject'] as String?) ?? '';
     final author = (commit['author'] as String?) ?? '';
-    final date = (commit['date'] as String?) ?? (commit['time'] as String?) ?? '';
+    final date =
+        (commit['date'] as String?) ?? (commit['time'] as String?) ?? '';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(

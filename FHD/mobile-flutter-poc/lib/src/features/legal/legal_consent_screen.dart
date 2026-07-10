@@ -1,23 +1,32 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/mobile_api.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_assets.dart';
 import '../../theme/app_theme.dart';
 
+typedef LegalUrlLauncher = Future<bool> Function(Uri uri);
+
 class LegalConsentScreen extends StatefulWidget {
   const LegalConsentScreen({
     super.key,
     this.api,
     this.legalVersion = 'public-v1',
+    this.termsUrl = 'https://xiu-ci.com/privacy.html',
+    this.privacyUrl = 'https://xiu-ci.com/privacy.html',
+    this.openExternalUrl,
     this.onAccepted,
     this.onAbout,
   });
 
   final MobileApiClient? api;
   final String legalVersion;
+  final String termsUrl;
+  final String privacyUrl;
+  final LegalUrlLauncher? openExternalUrl;
   final VoidCallback? onAccepted;
   final VoidCallback? onAbout;
 
@@ -130,7 +139,10 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                 letterSpacing: 0,
                               ),
                             ),
-                            const _LegalLabel('《用户协议》'),
+                            _LegalLabel(
+                              '《用户协议》',
+                              onTap: () => _openLegalUrl(widget.termsUrl),
+                            ),
                             Text(
                               '和',
                               style: TextStyle(
@@ -140,7 +152,10 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
                                 letterSpacing: 0,
                               ),
                             ),
-                            const _LegalLabel('《隐私政策》'),
+                            _LegalLabel(
+                              '《隐私政策》',
+                              onTap: () => _openLegalUrl(widget.privacyUrl),
+                            ),
                           ],
                         ),
                       ),
@@ -181,25 +196,54 @@ class _LegalConsentScreenState extends State<LegalConsentScreen> {
     if (!mounted) return;
     widget.onAccepted?.call();
   }
+
+  Future<void> _openLegalUrl(String rawUrl) async {
+    final uri = Uri.tryParse(rawUrl.trim());
+    if (uri == null || uri.scheme != 'https') {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('协议地址不可用，请稍后重试')),
+        );
+      }
+      return;
+    }
+    final launcher = widget.openExternalUrl;
+    final opened = launcher != null
+        ? await launcher(uri)
+        : await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法打开协议，请检查网络设置')),
+      );
+    }
+  }
 }
 
 class _LegalLabel extends StatelessWidget {
-  const _LegalLabel(this.label);
+  const _LegalLabel(this.label, {required this.onTap});
 
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final foreground = AppTheme.colors(context).chatUserBubbleText;
-    return Text(
-      label,
-      style: TextStyle(
-        color: foreground,
-        fontSize: 12,
-        height: 1.34,
-        decoration: TextDecoration.underline,
-        decorationColor: foreground,
-        letterSpacing: 0,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: foreground,
+            fontSize: 12,
+            height: 1.34,
+            decoration: TextDecoration.underline,
+            decorationColor: foreground,
+            letterSpacing: 0,
+          ),
+        ),
       ),
     );
   }

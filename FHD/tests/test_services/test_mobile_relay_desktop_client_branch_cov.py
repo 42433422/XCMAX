@@ -69,10 +69,14 @@ def _reset_inflight_state():
     """Clear _INFLIGHT set and STOP event before each test."""
     with _module._INFLIGHT_LOCK:
         _module._INFLIGHT.clear()
+        _module._INFLIGHT_TOOLS.clear()
+        _module._CANCEL_EVENTS.clear()
     _module._STOP_EVENT.clear()
     yield
     with _module._INFLIGHT_LOCK:
         _module._INFLIGHT.clear()
+        _module._INFLIGHT_TOOLS.clear()
+        _module._CANCEL_EVENTS.clear()
     _module._STOP_EVENT.clear()
 
 
@@ -84,7 +88,7 @@ def _reset_inflight_state():
 class TestMaxConcurrent:
     def test_default_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("XCAGI_RELAY_MAX_CONCURRENT", raising=False)
-        assert _max_concurrent() == 3
+        assert _max_concurrent() == 4
 
     def test_custom_value(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_RELAY_MAX_CONCURRENT", "5")
@@ -92,7 +96,7 @@ class TestMaxConcurrent:
 
     def test_invalid_value_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_RELAY_MAX_CONCURRENT", "not-a-number")
-        assert _max_concurrent() == 3
+        assert _max_concurrent() == 4
 
     def test_zero_clamped_to_one(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_RELAY_MAX_CONCURRENT", "0")
@@ -104,7 +108,7 @@ class TestMaxConcurrent:
 
     def test_empty_string_falls_back(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("XCAGI_RELAY_MAX_CONCURRENT", "")
-        assert _max_concurrent() == 3
+        assert _max_concurrent() == 4
 
 
 # ---------------------------------------------------------------------------
@@ -366,6 +370,27 @@ class TestGitOpFromMessage:
         payload = {}
         result = _git_op_from_message(payload, "just a regular message")
         assert result is None
+
+
+@pytest.mark.parametrize(
+    ("body", "expected_status"),
+    [
+        ("Failed to authenticate. API Error: 403 Request not allowed", "failed"),
+        ("authentication_failed", "failed"),
+        ("Reconnecting... 2/5 (request timed out)", "failed"),
+        ("Cursor CLI 静默 180 秒判定卡住已结束，请重试。", "blocked"),
+    ],
+)
+def test_real_cli_connectivity_errors_are_not_marked_completed(
+    body: str, expected_status: str
+) -> None:
+    ok, relay_status, error = _module._classify_terminal_result(
+        {"status": "completed", "body": body},
+        message="继续聊",
+    )
+    assert ok is False
+    assert relay_status == expected_status
+    assert error
 
     def test_source_from_text_source(self) -> None:
         payload = {}
@@ -1304,7 +1329,9 @@ class TestPollOnceAdditional:
         # Should not raise
         _poll_once()
 
-    def test_free_zero_returns_early(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_free_zero_still_polls_for_cancellation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         cfg_file = tmp_path / "relay.json"
         cfg_file.write_text(
             json.dumps(
@@ -1317,13 +1344,26 @@ class TestPollOnceAdditional:
             encoding="utf-8",
         )
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
-        # Fill _INFLIGHT to make free=0 (default max_concurrent=3)
+        cancel_event = threading.Event()
+        # Fill _INFLIGHT to make free=0. Cancellation delivery must still work.
         with _module._INFLIGHT_LOCK:
             _module._INFLIGHT.update({"t1", "t2", "t3", "t4"})
-        # Should not make HTTP call
-        with patch("httpx.Client") as mock_client_cls:
+            _module._CANCEL_EVENTS["t1"] = cancel_event
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {"data": {"tasks": [], "cancelled_task_ids": ["t1"]}}
+        with patch.object(_module, "_relay_http_client") as client_factory:
+            client = MagicMock()
+            client.__enter__ = lambda s: client
+            client.__exit__ = MagicMock(return_value=False)
+            client.post.return_value = mock_resp
+            client_factory.return_value = client
             _poll_once()
-            mock_client_cls.assert_not_called()
+        payload = client.post.call_args.kwargs["json"]
+        assert payload["max_tasks"] == 0
+        assert set(payload["inflight_task_ids"]) == {"t1", "t2", "t3", "t4"}
+        assert cancel_event.is_set()
 
     def test_successful_poll_with_tasks(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -1589,6 +1629,32 @@ class TestCompleteRelayTask:
 
         call_kwargs = mock_client.post.call_args[1]["json"]
         assert call_kwargs["status"] == "failed"
+
+    def test_cancel_signal_wins_over_late_success(self) -> None:
+        task = {"task_id": "cancel-late", "kind": "codex.invoke", "payload": {"message": "hi"}}
+
+        def late_success(_task, *, cancel_event):
+            cancel_event.set()
+            return {"ok": True, "_relay_status": "completed"}
+
+        with (
+            patch.object(_module, "_execute_task", side_effect=late_success),
+            patch("httpx.Client") as mock_client_cls,
+        ):
+            mock_client = MagicMock()
+            mock_client.__enter__ = lambda s: mock_client
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_resp = MagicMock()
+            mock_resp.raise_for_status.return_value = None
+            mock_client.post.return_value = mock_resp
+            mock_client_cls.return_value = mock_client
+
+            _complete_relay_task(task, "r1", "tok", "https://x.example.com")
+
+        payload = mock_client.post.call_args.kwargs["json"]
+        assert payload["status"] == "cancelled"
+        assert payload["result"]["error_code"] == "cancelled"
+        assert "cancel-late" not in _module._CANCEL_EVENTS
 
 
 # ---------------------------------------------------------------------------

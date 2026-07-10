@@ -688,7 +688,7 @@ def test_list_desktops_decodes_rows(monkeypatch) -> None:
     [
         (None, None),
         ({"task_id": "t", "status": "completed"}, "completed"),
-        ({"task_id": "t", "status": "queued"}, "queued"),
+        ({"task_id": "t", "status": "queued"}, "cancelled"),
     ],
 )
 def test_cancel_task_boundaries(monkeypatch, row, expected) -> None:

@@ -17,7 +17,8 @@ class EmployeeQuestionsScreen extends StatefulWidget {
   final String? employeeId;
 
   @override
-  State<EmployeeQuestionsScreen> createState() => _EmployeeQuestionsScreenState();
+  State<EmployeeQuestionsScreen> createState() =>
+      _EmployeeQuestionsScreenState();
 }
 
 class _EmployeeQuestionsScreenState extends State<EmployeeQuestionsScreen> {
@@ -280,8 +281,7 @@ class _QuestionCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(10),
@@ -351,10 +351,10 @@ class _QuestionCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: submitting ||
-                            answerController.text.trim().isEmpty
-                        ? null
-                        : onSubmitAnswer,
+                    onPressed:
+                        submitting || answerController.text.trim().isEmpty
+                            ? null
+                            : onSubmitAnswer,
                     child: Text(submitting ? '发送中' : '发送回答'),
                   ),
                 ],

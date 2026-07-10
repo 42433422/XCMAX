@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -7,6 +8,7 @@ import 'package:xcagi_flutter_poc/src/api/mobile_session_store.dart';
 import 'package:xcagi_flutter_poc/src/data/mobile_repository.dart';
 import 'package:xcagi_flutter_poc/src/models/conversation.dart';
 import 'package:xcagi_flutter_poc/src/policy/android_runtime_policy.dart';
+import 'package:xcagi_flutter_poc/src/policy/pinned_ids.dart';
 import 'package:xcagi_flutter_poc/src/platform/credential_cipher.dart';
 
 void main() {
@@ -28,6 +30,9 @@ void main() {
         accessToken: 'fhd-access',
         refreshToken: 'fhd-refresh',
         sessionId: 'session-1',
+        localAccessToken: 'lan-access',
+        localRefreshToken: 'lan-refresh',
+        localSessionId: 'lan-session',
         username: 'admin',
         accountKind: 'admin',
         userId: 1,
@@ -58,6 +63,7 @@ void main() {
         autoLogin: true,
         walletBalanceJson: '{"balance":12.5}',
         inflightRelayTasks: {'pinned:codex': 'task-1'},
+        activeSuperEmployeeThreads: {'pinned:codex': 'thread-1'},
         cachedChatMessages: {
           'pinned:codex': [
             {
@@ -87,6 +93,9 @@ void main() {
     expect(loaded.accessToken, 'fhd-access');
     expect(loaded.refreshToken, 'fhd-refresh');
     expect(loaded.sessionId, 'session-1');
+    expect(loaded.localAccessToken, 'lan-access');
+    expect(loaded.localRefreshToken, 'lan-refresh');
+    expect(loaded.localSessionId, 'lan-session');
     expect(loaded.username, 'admin');
     expect(loaded.accountKind, 'admin');
     expect(loaded.userId, 1);
@@ -118,12 +127,85 @@ void main() {
     expect(loaded.walletBalanceJson, '{"balance":12.5}');
     expect(loaded.androidServerModeLabel, '云端中继 · 电脑工具');
     expect(loaded.inflightRelayTasks['pinned:codex'], 'task-1');
+    expect(loaded.activeSuperEmployeeThreads['pinned:codex'], 'thread-1');
     expect(loaded.cachedChatMessages['pinned:codex']?.single['body'], '已完成');
     expect(loaded.cachedModInfos.single['id'], 'avatar-mod');
     expect(
       (loaded.cachedModInfos.single['workflow_employees'] as List).single['id'],
       'avatar-generation-employee',
     );
+  });
+
+  test('production file session encrypts tokens and cache at rest', () async {
+    final file = File(
+      '${Directory.systemTemp.path}/xcagi_encrypted_session_store_test.bin',
+    );
+    if (file.existsSync()) file.deleteSync();
+    addTearDown(() {
+      if (file.existsSync()) file.deleteSync();
+    });
+    final store = FileMobileSessionStore(
+      filePath: file.path,
+      cipher: const _FakeAtRestCipher(),
+      encryptAtRest: true,
+    );
+
+    await store.save(
+      const MobileSessionData(
+        accessToken: 'cloud-secret-token',
+        localAccessToken: 'lan-secret-token',
+        cachedChatMessages: {
+          'pinned:codex': [
+            {'role': 'assistant', 'body': 'confidential-result'},
+          ],
+        },
+      ),
+    );
+
+    final raw = await file.readAsString();
+    expect(raw, startsWith('enc:v1:'));
+    expect(raw, isNot(contains('cloud-secret-token')));
+    expect(raw, isNot(contains('lan-secret-token')));
+    expect(raw, isNot(contains('confidential-result')));
+
+    final loaded = await store.load();
+    expect(loaded.accessToken, 'cloud-secret-token');
+    expect(loaded.localAccessToken, 'lan-secret-token');
+    expect(
+      loaded.cachedChatMessages['pinned:codex']?.single['body'],
+      'confidential-result',
+    );
+  });
+
+  test('production file session migrates legacy plaintext on first load',
+      () async {
+    final file = File(
+      '${Directory.systemTemp.path}/xcagi_plaintext_session_migration_test.json',
+    );
+    if (file.existsSync()) file.deleteSync();
+    addTearDown(() {
+      if (file.existsSync()) file.deleteSync();
+    });
+    await file.writeAsString(
+      jsonEncode({
+        'access_token': 'legacy-cloud-token',
+        'local_access_token': 'legacy-lan-token',
+      }),
+    );
+    final store = FileMobileSessionStore(
+      filePath: file.path,
+      cipher: const _FakeAtRestCipher(),
+      encryptAtRest: true,
+    );
+
+    final loaded = await store.load();
+
+    expect(loaded.accessToken, 'legacy-cloud-token');
+    expect(loaded.localAccessToken, 'legacy-lan-token');
+    final migrated = await file.readAsString();
+    expect(migrated, startsWith('enc:v1:'));
+    expect(migrated, isNot(contains('legacy-cloud-token')));
+    expect(migrated, isNot(contains('legacy-lan-token')));
   });
 
   test('MobileSessionData mirrors Android server mode label priority', () {
@@ -231,7 +313,10 @@ void main() {
   test('MobileApiClient persists Android local auth and settings flags',
       () async {
     final store = MemoryMobileSessionStore();
-    final client = MobileApiClient(sessionStore: store);
+    final client = MobileApiClient(
+      sessionStore: store,
+      credentialCipher: const _FakeCredentialCipher(),
+    );
 
     await client.saveLoginPreferences(
       username: 'admin',
@@ -255,7 +340,7 @@ void main() {
 
     var saved = await store.load();
     expect(saved.savedUsername, 'admin');
-    expect(saved.savedPassword, 'secret');
+    expect(saved.savedPassword, 'enc:v1:secret');
     expect(saved.rememberPassword, isTrue);
     expect(saved.autoLogin, isTrue);
     expect(saved.themeMode, 'dark');
@@ -344,6 +429,9 @@ void main() {
         accessToken: 'access',
         refreshToken: 'refresh',
         sessionId: 'session',
+        localAccessToken: 'local-access',
+        localRefreshToken: 'local-refresh',
+        localSessionId: 'local-session',
         username: 'admin',
         accountKind: 'admin',
         userId: 7,
@@ -365,6 +453,7 @@ void main() {
         autoLogin: true,
         walletBalanceJson: '{"balance":12.5}',
         inflightRelayTasks: {'pinned:codex': 'task-1'},
+        activeSuperEmployeeThreads: {'pinned:codex': 'thread-1'},
         cachedChatMessages: {
           'pinned:codex': [
             {'id': 'cache-1', 'body': '清理'},
@@ -386,6 +475,9 @@ void main() {
     expect(saved.accessToken, '');
     expect(saved.refreshToken, '');
     expect(saved.sessionId, '');
+    expect(saved.localAccessToken, '');
+    expect(saved.localRefreshToken, '');
+    expect(saved.localSessionId, '');
     expect(saved.username, '');
     expect(saved.accountKind, '');
     expect(saved.userId, 0);
@@ -407,6 +499,7 @@ void main() {
     expect(saved.autoLogin, isFalse);
     expect(saved.walletBalanceJson, '');
     expect(saved.inflightRelayTasks, isEmpty);
+    expect(saved.activeSuperEmployeeThreads, isEmpty);
     expect(saved.cachedChatMessages, isEmpty);
     expect(saved.conversationListStates, isEmpty);
   });
@@ -439,6 +532,9 @@ void main() {
 
     var saved = await store.load();
     expect(saved.accessToken, 'access-from-pair');
+    expect(saved.localAccessToken, 'access-from-pair');
+    expect(saved.localRefreshToken, 'refresh-from-pair');
+    expect(saved.localSessionId, 'session-from-pair');
     expect(saved.sessionId, 'session-from-pair');
     expect(saved.username, 'mobile-admin');
     expect(saved.accountKind, 'enterprise');
@@ -504,6 +600,9 @@ void main() {
     expect(saved.accessToken, 'cloud-access');
     expect(saved.refreshToken, 'cloud-refresh');
     expect(saved.sessionId, 'cloud-session');
+    expect(saved.localAccessToken, 'desktop-access');
+    expect(saved.localRefreshToken, 'desktop-refresh');
+    expect(saved.localSessionId, 'desktop-session');
     expect(saved.username, 'cloud-user');
     expect(saved.userId, 42);
     // 桌面端绑定关系仍然建立
@@ -668,6 +767,42 @@ void main() {
     expect(messages.last.body, '继续处理回访记录');
   });
 
+  test('MobileRepository keeps independent persistent small C conversations',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final repository = MobileRepository(
+      client: MobileApiClient(sessionStore: store),
+    );
+
+    final first = await repository.startNewAssistantConversation();
+    await repository.cacheAssistantExchange(
+      userMessage: '分析产品方案',
+      assistantMessage: '先明确目标用户。',
+    );
+    final second = await repository.startNewAssistantConversation();
+    await repository.cacheAssistantExchange(
+      userMessage: '安排真机测试',
+      assistantMessage: '已准备测试清单。',
+    );
+
+    final threads = await repository.loadAssistantConversations();
+    expect(threads.map((thread) => thread.threadId), contains(first.threadId));
+    expect(threads.map((thread) => thread.threadId), contains(second.threadId));
+    expect(threads.map((thread) => thread.title), contains('分析产品方案'));
+    expect(threads.map((thread) => thread.title), contains('安排真机测试'));
+
+    final restored = await repository.switchAssistantConversation(
+      first.threadId,
+    );
+    expect(restored, hasLength(2));
+    expect(restored.first.role, ChatRole.user);
+    expect(restored.first.body, '分析产品方案');
+    expect(
+      await repository.activeSuperEmployeeThreadId(PinnedIds.assistant),
+      first.threadId,
+    );
+  });
+
   test('MobileRepository does not cache super employee reply after stop',
       () async {
     final store = MemoryMobileSessionStore();
@@ -691,12 +826,16 @@ void main() {
       throwsA(anything),
     );
 
-    final cached = (await store.load()).cachedChatMessages['pinned:codex'];
+    final stoppedSession = await store.load();
+    final stoppedThread =
+        stoppedSession.activeSuperEmployeeThreads['pinned:codex'];
+    final cached =
+        stoppedSession.cachedChatMessages['pinned:codex::$stoppedThread'];
     expect(cached, hasLength(1));
     expect(cached?.single['role'], 'user');
     expect(cached?.single['body'], '继续');
 
-    final state = (await store.load()).conversationListStates['pinned:codex'];
+    final state = stoppedSession.conversationListStates['pinned:codex'];
     expect(state?['last_message_preview'], '我: 继续');
     expect(state?['last_message_at'], isA<int>());
 
@@ -743,7 +882,135 @@ void main() {
     expect(claudeReply.body, 'Claude 真实后端回复');
     expect(api.postedTools, ['Cursor', 'Claude']);
     final session = await store.load();
-    expect(session.cachedChatMessages['pinned:cursor'], hasLength(2));
+    final cursorThread = session.activeSuperEmployeeThreads['pinned:cursor'];
+    expect(
+      session.cachedChatMessages['pinned:cursor::$cursorThread'],
+      hasLength(2),
+    );
+  });
+
+  test(
+      'MobileRepository creates independent persistent threads for all four tools',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+    const conversations = [
+      ConversationItem(
+        id: 'pinned:codex',
+        type: ConversationType.pinnedCodex,
+        title: '超级员工-Codex',
+        subtitle: '',
+        timestampText: '',
+      ),
+      ConversationItem(
+        id: 'pinned:claude',
+        type: ConversationType.pinnedClaude,
+        title: '超级员工-Claude',
+        subtitle: '',
+        timestampText: '',
+      ),
+      ConversationItem(
+        id: 'pinned:cursor',
+        type: ConversationType.pinnedCursor,
+        title: '超级员工-Cursor',
+        subtitle: '',
+        timestampText: '',
+      ),
+      ConversationItem(
+        id: 'pinned:trae',
+        type: ConversationType.pinnedTrae,
+        title: '超级员工-Trae',
+        subtitle: '',
+        timestampText: '',
+      ),
+    ];
+
+    for (final conversation in conversations) {
+      final thread =
+          await repository.startNewSuperEmployeeConversation(conversation);
+      expect(thread.employeeId, contains('super-employee'));
+      expect(thread.threadId, startsWith('thread-'));
+    }
+
+    final active = (await store.load()).activeSuperEmployeeThreads;
+    expect(active.keys, containsAll(conversations.map((item) => item.id)));
+    expect(active.values.toSet(), hasLength(4));
+  });
+
+  test('MobileRepository can create an isolated LAN-only conversation',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final repository = MobileRepository(client: _SuperEmployeeDirectApi(store));
+    const conversation = ConversationItem(
+      id: 'pinned:codex',
+      type: ConversationType.pinnedCodex,
+      title: '超级员工-Codex',
+      subtitle: '',
+      timestampText: '',
+    );
+
+    final thread =
+        await repository.startNewSuperEmployeeConversation(conversation);
+
+    expect(thread.threadId, startsWith('local-'));
+    expect(thread.employeeId, 'codex-super-employee');
+    expect(
+      (await store.load()).activeSuperEmployeeThreads[conversation.id],
+      thread.threadId,
+    );
+  });
+
+  test('MobileRepository dispatches when relay thread API is unavailable',
+      () async {
+    final store = MemoryMobileSessionStore();
+    final api = _RelayWithoutThreadsApi(store);
+    final repository = MobileRepository(client: api);
+    const conversation = ConversationItem(
+      id: 'pinned:trae',
+      type: ConversationType.pinnedTrae,
+      title: '超级员工-Trae',
+      subtitle: '',
+      timestampText: '',
+    );
+
+    final reply = await repository.streamMessage(
+      conversation: conversation,
+      body: '继续',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.lastThreadId, isEmpty);
+    expect(
+      (await store.load()).activeSuperEmployeeThreads[conversation.id],
+      startsWith('local-'),
+    );
+  });
+
+  test('RelayRunSummary exposes taskbar status and execution evidence', () {
+    final run = RelayRunSummary.fromMap({
+      'task_id': 'run-1',
+      'thread_id': 'thread-1',
+      'work_item_id': 'work-1',
+      'employee_id': 'codex-super-employee',
+      'kind': 'codex.invoke',
+      'status': 'running',
+      'attempt_no': 2,
+      'created_at': '2026-07-10T00:00:00Z',
+      'updated_at': '2026-07-10T00:01:00Z',
+      'payload': {'message': '修复并测试'},
+      'result': {
+        'elapsed_seconds': 61.5,
+        'session': {'branch': 'super-employee/codex/thread-1'},
+      },
+    });
+
+    expect(run.active, isTrue);
+    expect(run.attemptNo, 2);
+    expect(run.message, '修复并测试');
+    expect(run.branch, 'super-employee/codex/thread-1');
+    expect(run.elapsedSeconds, 61.5);
   });
 
   test('MobileRepository ignores configured relay id without paired desktop',
@@ -813,7 +1080,7 @@ void main() {
     expect(api.lastPayload?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
     final context = api.lastPayload?['context'] as Map<String, Object?>?;
     expect(context?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
-    expect(context?['conversation_id'], 'pinned:trae');
+    expect(context?['conversation_id'], 'thread-trae-super-employee');
   });
 
   test('MobileRepository skips LAN when server mode is cloud', () async {
@@ -845,11 +1112,41 @@ void main() {
     expect(api.lastKind, 'cursor.invoke');
   });
 
+  test('MobileRepository skips LAN address without desktop credential',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'lan',
+        localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:codex',
+        type: ConversationType.pinnedCodex,
+        title: '超级员工-Codex',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '旧会话没有本地凭证时不要制造 401',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.postedBaseUrls, isEmpty);
+    expect(api.lastKind, 'codex.invoke');
+  });
+
   test('MobileRepository prefers LAN direct super employee over fresh relay',
       () async {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
         serverMode: 'lan',
+        localAccessToken: 'lan-access',
         localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
         relayDesktopId: 'fresh-relay',
       ),
@@ -877,6 +1174,7 @@ void main() {
     final store = MemoryMobileSessionStore(
       const MobileSessionData(
         serverMode: 'lan',
+        localAccessToken: 'lan-access',
         fhdHost: '192.168.31.8:17500',
         relayDesktopId: 'fresh-relay',
       ),
@@ -1441,6 +1739,7 @@ class _CancelAwareSuperEmployeeApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
   }) async {
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1498,6 +1797,7 @@ class _SuperEmployeeDirectApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
   }) async {
     postedTools.add(tool);
     final data = <String, Object?>{
@@ -1571,6 +1871,8 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String threadId = '',
+    String workItemId = '',
   }) async {
     createdRelayTasks += 1;
     return const MobileEnvelope<Map<String, Object?>>(
@@ -1615,6 +1917,7 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
   }) async {
     postedTools.add(tool);
     postedBaseUrls.add(baseUrl);
@@ -1664,7 +1967,32 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
 
   String lastRelayId = '';
   String lastKind = '';
+  String lastThreadId = '';
   Map<String, Object?>? lastPayload;
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateThread({
+    required String relayId,
+    required String employeeId,
+    String title = '',
+    Map<String, Object?> context = const {},
+  }) async {
+    return MobileEnvelope<Map<String, Object?>>(
+      success: true,
+      message: '',
+      data: {
+        'thread': {
+          'thread_id': 'thread-$employeeId',
+          'employee_id': employeeId,
+          'tool': employeeId.split('-').first,
+          'title': title,
+          'status': 'idle',
+          'updated_at': DateTime.now().toUtc().toIso8601String(),
+        },
+      },
+      raw: const {},
+    );
+  }
 
   @override
   Future<MobileEnvelope<Map<String, Object?>>> relayDesktops() async {
@@ -1700,10 +2028,13 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
     required String relayId,
     required String kind,
     required Map<String, Object?> payload,
+    String threadId = '',
+    String workItemId = '',
   }) async {
     createdRelayTasks += 1;
     lastRelayId = relayId;
     lastKind = kind;
+    lastThreadId = threadId;
     lastPayload = payload;
     return const MobileEnvelope<Map<String, Object?>>(
       success: true,
@@ -1742,6 +2073,24 @@ class _FreshPairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
   }
 }
 
+class _RelayWithoutThreadsApi extends _FreshPairedRelayApi {
+  _RelayWithoutThreadsApi(super.store);
+
+  @override
+  Future<MobileEnvelope<Map<String, Object?>>> relayCreateThread({
+    required String relayId,
+    required String employeeId,
+    String title = '',
+    Map<String, Object?> context = const {},
+  }) {
+    throw const MobileApiException(
+      statusCode: 405,
+      message: 'Method Not Allowed',
+      body: {},
+    );
+  }
+}
+
 class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
   _LanFailFreshRelayApi(super.store);
 
@@ -1750,6 +2099,7 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
     String tool,
     String body, {
     String baseUrl = '',
+    Map<String, Object?> context = const {},
   }) async {
     postedTools.add(tool);
     postedBaseUrls.add(baseUrl);
@@ -1761,7 +2111,12 @@ class _LanFailFreshRelayApi extends _FreshPairedRelayApi {
         raw: {'success': false, 'message': 'lan unavailable'},
       );
     }
-    return super.postSuperEmployeeMessage(tool, body, baseUrl: baseUrl);
+    return super.postSuperEmployeeMessage(
+      tool,
+      body,
+      baseUrl: baseUrl,
+      context: context,
+    );
   }
 }
 
@@ -1774,6 +2129,7 @@ class _PlainChatCacheApi extends MobileApiClient {
     String? sessionId,
     int userId = 0,
     List<Map<String, String>> recentMessages = const [],
+    Map<String, Object?> context = const {},
     void Function(String token)? onToken,
   }) async {
     onToken?.call('普通');
@@ -1799,6 +2155,7 @@ class _EmployeeChatRoutingApi extends MobileApiClient {
     String? sessionId,
     int userId = 0,
     List<Map<String, String>> recentMessages = const [],
+    Map<String, Object?> context = const {},
     void Function(String token)? onToken,
   }) async {
     genericChatCalled = true;
@@ -1925,5 +2282,22 @@ class _FakeCredentialCipher extends AndroidCredentialCipher {
     if (stored.isEmpty) return '';
     if (!stored.startsWith('enc:v1:')) return stored;
     return stored.substring('enc:v1:'.length);
+  }
+}
+
+class _FakeAtRestCipher extends AndroidCredentialCipher {
+  const _FakeAtRestCipher();
+
+  @override
+  Future<String> encrypt(String plain) async {
+    if (plain.isEmpty) return '';
+    return 'enc:v1:${base64Encode(utf8.encode(plain))}';
+  }
+
+  @override
+  Future<String> decrypt(String stored) async {
+    if (stored.isEmpty) return '';
+    if (!stored.startsWith('enc:v1:')) return stored;
+    return utf8.decode(base64Decode(stored.substring('enc:v1:'.length)));
   }
 }

@@ -11,7 +11,10 @@ import pytest
 
 @pytest.fixture
 def mobile_routes():
-    from app.fastapi_routes import mobile_api_extensions
+    from app.fastapi_routes import (
+        mobile_api,  # noqa: F401
+        mobile_api_extensions,
+    )
 
     return mobile_api_extensions
 
@@ -34,7 +37,11 @@ async def test_super_employee_message_routes_hide_internal_errors(
     service.list_messages.side_effect = RuntimeError(secret)
 
     with (
-        patch.object(mobile_routes, "_require_mobile_admin", return_value=({}, None)),
+        patch.object(
+            mobile_routes,
+            "_require_mobile_admin_or_enterprise",
+            return_value=({}, None),
+        ),
         patch.object(mobile_routes, "_mobile_request_user_id", return_value=7),
         patch.object(mobile_routes, service_name, return_value=service),
     ):
@@ -67,7 +74,11 @@ async def test_super_employee_invoke_routes_hide_internal_errors(
     body = SimpleNamespace(message="执行任务", body="", context={}, workspace_id="")
 
     with (
-        patch.object(mobile_routes, "_require_mobile_admin", return_value=({}, None)),
+        patch.object(
+            mobile_routes,
+            "_require_mobile_admin_or_enterprise",
+            return_value=({}, None),
+        ),
         patch.object(mobile_routes, "_mobile_request_user_id", return_value=7),
         patch.object(mobile_routes, "_mobile_session_meta", return_value={}),
         patch.object(mobile_routes, service_name, return_value=service),
@@ -86,7 +97,11 @@ async def test_super_employee_invoke_routes_hide_internal_errors(
 async def test_super_employee_invoke_keeps_actionable_empty_message_error(mobile_routes) -> None:
     body = SimpleNamespace(message="", body="", context={}, workspace_id="")
     with (
-        patch.object(mobile_routes, "_require_mobile_admin", return_value=({}, None)),
+        patch.object(
+            mobile_routes,
+            "_require_mobile_admin_or_enterprise",
+            return_value=({}, None),
+        ),
         patch.object(mobile_routes, "_mobile_request_user_id", return_value=7),
     ):
         response = await mobile_routes.mobile_admin_codex_super_employee_invoke(

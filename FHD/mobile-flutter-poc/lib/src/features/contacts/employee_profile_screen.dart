@@ -90,7 +90,8 @@ class _AiEmployeeProfileScreenState extends State<AiEmployeeProfileScreen> {
                           employee: employee,
                           onOpenChat: () => _openChat(context, employee),
                           onOpenCircle: () => _openCircle(context),
-                          onOpenQuestions: () => _openQuestions(context, employee),
+                          onOpenQuestions: () =>
+                              _openQuestions(context, employee),
                         ),
                 ),
               ],

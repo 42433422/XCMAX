@@ -85,7 +85,16 @@ data class RelayBindAccountBody(val relay_id: String)
 data class RelayTaskCreateBody(
     val relay_id: String,
     val kind: String = "codex.invoke",
+    val thread_id: String = "",
+    val work_item_id: String = "",
     val payload: Map<String, Any?> = emptyMap(),
+)
+
+data class RelayThreadCreateBody(
+    val relay_id: String,
+    val employee_id: String,
+    val title: String = "",
+    val context: Map<String, Any?> = emptyMap(),
 )
 
 data class SyncPullBody(val since_cursor: Int = 0)
@@ -332,8 +341,37 @@ interface FhdApi {
     @POST(ApiEndpoints.RELAY_TASKS)
     suspend fun relayCreateTask(@Body body: RelayTaskCreateBody): MobileEnvelope<Map<String, Any?>>
 
+    @GET(ApiEndpoints.RELAY_TASKS)
+    suspend fun relayTasks(
+        @Query("thread_id") threadId: String = "",
+        @Query("active_only") activeOnly: Boolean = false,
+        @Query("limit") limit: Int = 100,
+    ): MobileEnvelope<Map<String, Any?>>
+
     @GET(ApiEndpoints.RELAY_TASKS_DETAIL)
     suspend fun relayTaskStatus(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_TASKS_CANCEL)
+    suspend fun relayCancelTask(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_TASKS_RETRY)
+    suspend fun relayRetryTask(@Path("taskId") taskId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_THREADS)
+    suspend fun relayCreateThread(@Body body: RelayThreadCreateBody): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.RELAY_THREADS)
+    suspend fun relayThreads(
+        @Query("employee_id") employeeId: String = "",
+        @Query("include_archived") includeArchived: Boolean = false,
+        @Query("limit") limit: Int = 100,
+    ): MobileEnvelope<Map<String, Any?>>
+
+    @GET(ApiEndpoints.RELAY_THREADS_DETAIL)
+    suspend fun relayThread(@Path("threadId") threadId: String): MobileEnvelope<Map<String, Any?>>
+
+    @POST(ApiEndpoints.RELAY_THREADS_ARCHIVE)
+    suspend fun relayArchiveThread(@Path("threadId") threadId: String): MobileEnvelope<Map<String, Any?>>
 
     @POST("api/market/account-sync")
     suspend fun marketAccountSync(@Body body: Map<String, String>): Map<String, Any?>

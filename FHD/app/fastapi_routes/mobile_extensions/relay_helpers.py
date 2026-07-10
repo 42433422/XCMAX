@@ -32,29 +32,41 @@ def _mobile_user_public_dict(user: Any) -> dict[str, Any]:
     }
 
 
-def _relay_admin_fallback_user() -> dict[str, Any]:
-    return {
-        "id": 1,
-        "username": "admin",
-        "display_name": "管理员账号",
-        "email": "",
-        "role": "admin",
-        "is_active": True,
-    }
-
-
 def _relay_mobile_auth_payload(
     user_public: dict[str, Any],
     desktop: dict[str, Any] | None = None,
+    *,
+    account_kind_override: str = "enterprise",
+    token_scope: str = "enterprise_relay",
+    tenant_id: int | None = None,
+    company_brand: str = "",
+    paired_by_user_id: int | None = None,
 ) -> dict[str, Any]:
     uid = int(user_public.get("id") or 0)
+    if uid <= 0:
+        raise ValueError("relay credential requires an authenticated user")
     username = str(user_public.get("username") or user_public.get("display_name") or "mobile")
-    role = str(user_public.get("role") or "")
-    account_kind = "admin" if role in {"admin", "super_admin", "owner"} else "enterprise"
+    account_kind = account_kind_override.strip().lower()
+    if account_kind != "enterprise":
+        raise ValueError("relay credentials are enterprise-only")
+    # A relay credential is an enterprise-side execution credential even when
+    # the bound DB subject is the administrator who opened the settings page.
+    # Never echo the administrator role into the phone-side identity payload.
+    token_user = dict(user_public)
+    if account_kind == "enterprise":
+        token_user["role"] = "enterprise"
+        token_user["tier"] = "enterprise"
+    if tenant_id is None:
+        raw_tenant_id = user_public.get("tenant_id")
+        tenant_id = int(raw_tenant_id) if raw_tenant_id is not None else 0
+    if not company_brand:
+        company_brand = str(user_public.get("company_brand") or username).strip()
+    if paired_by_user_id is None:
+        paired_by_user_id = uid
     session_id = f"mobile-relay-{uuid.uuid4().hex}"
     relay = desktop or {}
     return {
-        "user": user_public,
+        "user": token_user,
         "session_id": session_id,
         "session_token": str(
             relay.get("session_token") or user_public.get("session_token") or session_id
@@ -74,6 +86,14 @@ def _relay_mobile_auth_payload(
             session_id=session_id,
             account_kind=account_kind,
             username=username,
+            token_scope=token_scope,
+            tenant_id=tenant_id,
+            company_brand=company_brand,
+            paired_by_user_id=paired_by_user_id,
         ),
         "expires_in": 24 * 3600,
+        **({"token_scope": token_scope} if token_scope else {}),
+        **({"tenant_id": tenant_id} if tenant_id is not None else {}),
+        **({"company_brand": company_brand} if company_brand else {}),
+        **({"paired_by_user_id": paired_by_user_id} if paired_by_user_id is not None else {}),
     }

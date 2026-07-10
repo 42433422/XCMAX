@@ -234,9 +234,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _setLanModeEnabled(bool value) {
     setState(() {
       _lanModeEnabled = value;
-      _lanModeSubtitle = value
-          ? '优先局域网直连超级员工（需电脑 FHD 在线）'
-          : '关闭时超级员工经云中继执行';
+      _lanModeSubtitle = value ? '优先局域网直连超级员工（需电脑 FHD 在线）' : '关闭时超级员工经云中继执行';
     });
     unawaited(_persistLanMode(value));
   }
@@ -438,6 +436,12 @@ String _lanModeDescription(MobileSessionData session) {
   }
   final host = session.fhdHost.trim();
   final localBase = session.localBaseUrl.trim();
+  if (session.localAccessToken.trim().isEmpty) {
+    if (host.isNotEmpty || localBase.isNotEmpty) {
+      return '已找到电脑但未取得局域网授权；请重新扫码绑定（当前使用云中继）';
+    }
+    return '未取得局域网授权；请先扫码绑定电脑（当前使用云中继）';
+  }
   if (host.isNotEmpty) {
     return '优先直连 $host（失败时自动回云中继）';
   }
