@@ -153,15 +153,26 @@ jobs:
           XCAGI_SKIP_LEGACY_COMPAT_ROUTES: "1"
         run: python scripts/dev/coverage_ratchet.py --check --require-backend
 
+      - name: Persist backend coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          # `uses:` paths resolve from the repository root, not the FHD run cwd.
+          name: backend-coverage
+          path: |
+            FHD/coverage.xml
+            FHD/coverage.json
+          if-no-files-found: error
+          retention-days: 7
+
       # Codecov policy: optional until CODECOV_TOKEN is in repo secrets
       # (Settings → Secrets and variables → Actions). Without token this step is
-      # best-effort (continue-on-error); coverage.xml + htmlcov/ remain local SSOT.
+      # best-effort (continue-on-error); the Actions artifact above is the durable evidence.
       - name: Upload coverage report
         continue-on-error: true
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./coverage.xml
+          files: ./FHD/coverage.xml
           flags: backend
           name: xcagi-backend
           fail_ci_if_error: false
