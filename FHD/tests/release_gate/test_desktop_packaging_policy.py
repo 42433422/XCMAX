@@ -167,6 +167,15 @@ def test_modstore_desktop_shell_uses_supported_electron() -> None:
     assert lock["packages"][""]["devDependencies"]["electron"] == "41.10.1"
     assert lock["packages"]["node_modules/electron"]["version"] == "41.10.1"
 
+    workflows = [
+        REPO_ROOT.parent / ".github" / "workflows" / "modstore-build-desktop.yml",
+        shell_root.parent / ".github" / "workflows" / "build-desktop.yml",
+    ]
+    for workflow in workflows:
+        content = workflow.read_text(encoding="utf-8")
+        assert "$missingSigningVars.Count -gt 0" in content
+        assert "$LASTEXITCODE -ne 0" in content
+
 
 def test_mutable_update_metadata_is_never_immutably_cached() -> None:
     corp_root = REPO_ROOT.parent / "成都修茈科技有限公司"
