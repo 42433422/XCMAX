@@ -367,13 +367,13 @@ class TestManifestHandler:
     """fhd-core-maintainer manifest 配置验证。"""
 
     def test_handlers_is_agent(self):
-        manifest = json.loads(_MANIFEST_PATH.read_text())
+        manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
         handlers = manifest["employee_config_v2"]["actions"]["handlers"]
         assert "agent" in handlers
         assert "direct_python" not in handlers
 
     def test_workspace_policy_intact(self):
-        manifest = json.loads(_MANIFEST_PATH.read_text())
+        manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
         wp = manifest["employee_config_v2"]["workspace_policy"]
         assert "FHD/app/**" in wp["scope_globs"]
         assert "FHD/tests/**" in wp["scope_globs"]
@@ -381,7 +381,7 @@ class TestManifestHandler:
         assert "MODstore_deploy/**" in wp["forbidden_globs"]
 
     def test_triggers_declared(self):
-        manifest = json.loads(_MANIFEST_PATH.read_text())
+        manifest = json.loads(_MANIFEST_PATH.read_text(encoding="utf-8"))
         triggers = manifest.get("triggers", {})
         assert triggers.get("on_error") is True
         assert triggers.get("on_quality_fail") is True
