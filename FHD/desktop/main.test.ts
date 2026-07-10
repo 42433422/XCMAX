@@ -104,6 +104,22 @@ const updaterMocks = vi.hoisted(() => ({
 vi.mock('electron', () => electronMocks)
 vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
 
+describe('main — resolveDesktopUserDataPath', () => {
+  it('uses the XCAGI default below appData when no override is configured', async () => {
+    const { resolveDesktopUserDataPath } = await import('./main.js')
+    const appData = path.join(os.tmpdir(), 'xcagi-app-data')
+
+    expect(resolveDesktopUserDataPath(appData, '')).toBe(path.join(appData, 'XCAGI'))
+  })
+
+  it('uses an explicit XCAGI_DATA_DIR for isolated launch and startup measurements', async () => {
+    const { resolveDesktopUserDataPath } = await import('./main.js')
+    const isolated = path.join(os.tmpdir(), 'xcagi-isolated-data')
+
+    expect(resolveDesktopUserDataPath('/ignored', `  ${isolated}  `)).toBe(path.resolve(isolated))
+  })
+})
+
 describe('main — resolveDefaultDesktopPort', () => {
   beforeEach(() => {
     delete process.env.XCAGI_DESKTOP_PORT
