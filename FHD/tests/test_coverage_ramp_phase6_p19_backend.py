@@ -813,7 +813,11 @@ class TestPerformanceOptimizerHealthCheck:
         from app.utils.performance_initializer import PerformanceOptimizer
 
         opt = PerformanceOptimizer()
-        health = opt.get_health_check()
+        mock_process = MagicMock()
+        mock_process.memory_info.return_value = SimpleNamespace(rss=256 * 1024 * 1024)
+        mock_process.memory_percent.return_value = 10.0
+        with patch("psutil.Process", return_value=mock_process):
+            health = opt.get_health_check()
         assert health["status"] == "healthy"
 
     def test_degraded_redis_unavailable(self):
