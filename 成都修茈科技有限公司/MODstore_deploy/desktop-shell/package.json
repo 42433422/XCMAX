@@ -11,12 +11,15 @@
     "type": "git",
     "url": "https://github.com/42433422/xcagi-modstore.git"
   },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
     "start": "electron .",
     "dist:win": "electron-builder --win --x64 --publish never --config electron-builder.config.cjs"
   },
   "devDependencies": {
-    "electron": "^31.7.6",
+    "electron": "41.10.1",
     "electron-builder": "^26.15.3"
   }
 }

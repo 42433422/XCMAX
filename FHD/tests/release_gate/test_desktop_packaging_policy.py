@@ -159,3 +159,14 @@ def test_frontend_uses_patched_echarts_with_modular_types() -> None:
         assert paths[f"echarts/{module}"] == [
             f"./node_modules/echarts/types/dist/{module}.d.ts"
         ]
+
+
+def test_modstore_desktop_shell_uses_supported_electron() -> None:
+    shell_root = REPO_ROOT.parent / "成都修茈科技有限公司" / "MODstore_deploy" / "desktop-shell"
+    package = json.loads((shell_root / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((shell_root / "package-lock.json").read_text(encoding="utf-8"))
+
+    assert package["devDependencies"]["electron"] == "41.10.1"
+    assert package["engines"]["node"] == ">=22.12.0"
+    assert lock["packages"][""]["devDependencies"]["electron"] == "41.10.1"
+    assert lock["packages"]["node_modules/electron"]["version"] == "41.10.1"
