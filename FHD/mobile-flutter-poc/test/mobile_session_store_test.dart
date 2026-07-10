@@ -897,7 +897,7 @@ void main() {
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
   });
 
   test('MobileRepository clears stale inflight relay without paired desktop',

@@ -1,0 +1,75 @@
+name: mobile-flutter
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/mobile-flutter.yml"
+      - "FHD/mobile-flutter-poc/**"
+      - "FHD/mobile-android/app/src/main/**"
+      - "FHD/config/deployment_modes.yaml"
+      - "FHD/config/deployment_modes.generated.json"
+      - "FHD/scripts/dev/deployment_modes_ssot.py"
+  push:
+    branches:
+      - main
+      - "codex/**"
+    paths:
+      - ".github/workflows/mobile-flutter.yml"
+      - "FHD/mobile-flutter-poc/**"
+      - "FHD/mobile-android/app/src/main/**"
+      - "FHD/config/deployment_modes.yaml"
+      - "FHD/config/deployment_modes.generated.json"
+      - "FHD/scripts/dev/deployment_modes_ssot.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: analyze, test, debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: FHD/mobile-flutter-poc
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.4
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test --concurrency=4
+
+      - name: Build debug APK
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-flutter-debug-apk
+          path: FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7

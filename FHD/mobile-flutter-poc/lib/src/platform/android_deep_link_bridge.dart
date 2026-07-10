@@ -255,7 +255,6 @@ String? resolveAndroidDeepLinkRoute({
   return null;
 }
 
-@visibleForTesting
 String? pairingPayloadFromDeepLinkRoute(String route) {
   final trimmed = route.trim();
   if (trimmed.isEmpty) return null;
@@ -265,8 +264,8 @@ String? pairingPayloadFromDeepLinkRoute(String route) {
   final queryStart = trimmed.indexOf('?');
   if (queryStart < 0) return null;
   final params = Uri.splitQueryString(trimmed.substring(queryStart + 1));
-  final code = (params['code'] ?? params['shortCode'] ?? params['t'] ?? '')
-      .trim();
+  final code =
+      (params['code'] ?? params['shortCode'] ?? params['t'] ?? '').trim();
   if (RegExp(r'^\d{6}$').hasMatch(code)) return code;
   final host = (params['host'] ?? '').trim();
   final port = int.tryParse(params['port'] ?? '') ?? 0;

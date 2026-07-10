@@ -2322,7 +2322,10 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('请输入电脑端显示的 6 位设备码'), findsOneWidget);
+    expect(
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
+      findsOneWidget,
+    );
     expect(find.text('连接'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
@@ -2363,7 +2366,7 @@ void main() {
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
     final sheetSubtitle = tester.widget<Text>(
-      find.text('请输入电脑端显示的 6 位设备码'),
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
     );
 
     expect(sheetTitle.style?.color, colors.textPrimary);
@@ -2448,7 +2451,7 @@ void main() {
     expect(find.text('安全'), findsOneWidget);
     expect(find.text('生物识别解锁'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('settings_we_switch'))),
+      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
       const Size(46, 28),
     );
     expect(find.text('外观'), findsOneWidget);
@@ -2498,7 +2501,10 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_设置')),
     );
     final switchWidget = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('settings_we_switch')),
+      find.descendant(
+        of: find.byKey(const ValueKey('settings_biometric_switch')),
+        matching: find.byType(AnimatedContainer),
+      ),
     );
     final switchDecoration = switchWidget.decoration! as BoxDecoration;
     final themeIcon = tester.widget<Icon>(
@@ -2552,7 +2558,7 @@ void main() {
 
     await tester.tap(find.text('浅色'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings_we_switch')));
+    await tester.tap(find.byKey(const ValueKey('settings_biometric_switch')));
     await tester.pumpAndSettle();
 
     expect(api.session.themeMode, 'light');
@@ -3461,7 +3467,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('会话 #12'), findsOneWidget);
-    expect(find.text('WebSocket 已连接，消息实时同步'), findsOneWidget);
+    expect(find.text('正在连接 WebSocket…'), findsOneWidget);
     expect(find.text('用户 0'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('输入消息'), findsOneWidget);
@@ -4612,7 +4618,7 @@ void main() {
           isPinned: true,
         ),
       ),
-      isNull,
+      FixedPartnerKind.trae,
     );
   });
 
@@ -5845,7 +5851,7 @@ void main() {
   ) async {
     final repository = _FakeRealtimeRepository();
     const branch = 'super-employee/codex/fix-bug';
-    final body = '闭环结果：\n'
+    const body = '闭环结果：\n'
         '分支：$branch\n'
         '验证：通过（ruff lint 0 errors）\n'
         '推送：已推送到远端';
@@ -5856,7 +5862,7 @@ void main() {
         home: ChatScreen(
           conversation: demoConversations[1],
           repository: repository,
-          initialMessages: [
+          initialMessages: const [
             ChatMessage(
               id: 'a1',
               conversationId: 'pinned:codex',
@@ -6719,7 +6725,8 @@ class _FakeSettingsApi extends MobileApiClient {
   );
 
   @override
-  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async =>
+      session;
 
   @override
   Future<void> saveLocalSettings({
@@ -6801,7 +6808,8 @@ class _FakeProfileApi extends MobileApiClient {
   var meLoads = 0;
 
   @override
-  Future<MobileSessionData> loadSession({bool forceReload = false}) async => session;
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async =>
+      session;
 
   @override
   Future<void> clearActiveAuth() async {
