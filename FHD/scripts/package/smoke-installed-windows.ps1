@@ -1,6 +1,7 @@
 param(
   [string]$BaseUrl = 'http://127.0.0.1:17500',
   [string]$ProductSku = 'enterprise',
+  [string]$ExpectedVersion = '10.0.0',
   [string]$InstalledExe = '',
   [switch]$RestartApp,
   [int]$ReadyTimeoutSeconds = 180,
@@ -106,8 +107,22 @@ $script:PassCount = 0
 $script:FailCount = 0
 
 Invoke-Check 'health' {
-  $resp = Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + '/api/health') -UseBasicParsing -TimeoutSec 5
-  "code=$($resp.StatusCode)"
+  $payload = Invoke-XcagiJson '/api/health'
+  if ($payload.version -ne $ExpectedVersion) {
+    throw "version=$($payload.version), expected=$ExpectedVersion"
+  }
+  "code=200;version=$($payload.version)"
+}
+
+Invoke-Check 'spa-home' {
+  $resp = Invoke-WebRequest -Uri ($BaseUrl.TrimEnd('/') + '/') -UseBasicParsing -TimeoutSec 15
+  $contentType = [string]$resp.Headers['Content-Type']
+  $contentSecurityPolicy = [string]$resp.Headers['Content-Security-Policy']
+  if ($resp.StatusCode -ne 200) { throw "status=$($resp.StatusCode)" }
+  if ($contentType -notmatch 'text/html') { throw "content-type=$contentType" }
+  if ($resp.Content -notmatch '<div\s+id=["'']app["'']') { throw 'missing #app root' }
+  if ($contentSecurityPolicy -notmatch "default-src\s+'self'") { throw 'missing runtime CSP' }
+  "code=200;content-type=$contentType;csp=present;bytes=$($resp.RawContentLength)"
 }
 
 Invoke-Check 'desktop-status' {

@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Config, get_config
 from app.infrastructure.mods.mod_auth import ModContextMiddleware
 from app.middleware.auth_rate_limit import AuthRateLimitMiddleware
+from app.middleware.conditional_gzip import ConditionalGZipMiddleware
 from app.middleware.csrf import CSRFMiddleware
 from app.middleware.global_rate_limit import GlobalRateLimitMiddleware
 from app.middleware.industry_context import IndustryContextMiddleware
@@ -83,6 +84,9 @@ def create_fastapi_app(
 
     app.state.config = config_object
 
+    # Registered first so it is the innermost middleware. It compresses only complete
+    # responses; SSE and other streamed bodies remain unbuffered.
+    app.add_middleware(ConditionalGZipMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(CSRFMiddleware)
     app.add_middleware(XSSSanitizerMiddleware)

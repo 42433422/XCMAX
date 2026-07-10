@@ -123,12 +123,31 @@ class ApprovalService:
         logger.info("创建审批请求: %s for %s.%s", request_id, node.tool_id, node.action)
 
         # 同时持久化到 DB（防止重启丢失，且与 /api/approval/requests 工作台共享可见性）
-        self._persist_request_to_db(request)
+        self._persist_request_to_db(request, runtime_context=runtime_context)
         return request
 
-    def _persist_request_to_db(self, request: ApprovalRequest) -> None:
+    def _persist_request_to_db(
+        self,
+        request: ApprovalRequest,
+        *,
+        runtime_context: dict[str, Any] | None = None,
+    ) -> None:
         """将内存审批请求写入 DB approval_requests 表（幂等）。"""
         import json as _json
+
+        raw_applicant_id = (runtime_context or {}).get("user_id")
+        try:
+            applicant_id = int(raw_applicant_id)
+        except (TypeError, ValueError):
+            applicant_id = 0
+        if applicant_id <= 0:
+            # Anonymous/background probes still remain blocked by the in-memory gate,
+            # but must not create an ownerless request that every user could approve.
+            logger.info(
+                "AI 审批请求未持久化：缺少有效 user_id request_id=%s",
+                request.request_id,
+            )
+            return
 
         try:
             from sqlalchemy import text
@@ -145,10 +164,11 @@ class ApprovalService:
                         text(
                             "INSERT INTO approval_requests "
                             "(request_no, flow_id, business_type, title, description, applicant_id, status, created_at) "
-                            "VALUES (:rno, NULL, 'workflow_tool', :title, :desc, NULL, 'pending', :created)"
+                            "VALUES (:rno, NULL, 'workflow_tool', :title, :desc, :applicant_id, 'pending', :created)"
                         ),
                         {
                             "rno": request.request_id,
+                            "applicant_id": applicant_id,
                             "title": f"{request.tool_id}.{request.action}",
                             "desc": _json.dumps(
                                 request.params or {}, ensure_ascii=False, default=str

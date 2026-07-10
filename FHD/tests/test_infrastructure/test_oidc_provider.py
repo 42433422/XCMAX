@@ -73,20 +73,25 @@ class TestSecretKey:
         monkeypatch.setenv("XCAGI_SECRET_KEY", "xcagi-long-secret-key-value")
         assert oidc_provider._secret_key() == "xcagi-long-secret-key-value"
 
-    def test_short_key_uses_dev_fallback(self, monkeypatch):
+    def test_short_key_uses_random_process_fallback(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "short")
         monkeypatch.delenv("XCAGI_SECRET_KEY", raising=False)
-        assert oidc_provider._secret_key() == "xcagi-dev-oidc-state-key"
+        key = oidc_provider._secret_key()
+        assert key != "short"
+        assert key != "xcagi-dev-oidc-state-key"
+        assert len(key) >= 32
 
-    def test_empty_key_uses_dev_fallback(self, monkeypatch):
+    def test_empty_key_uses_random_process_fallback(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "")
         monkeypatch.delenv("XCAGI_SECRET_KEY", raising=False)
-        assert oidc_provider._secret_key() == "xcagi-dev-oidc-state-key"
+        key = oidc_provider._secret_key()
+        assert key != "xcagi-dev-oidc-state-key"
+        assert len(key) >= 32
 
-    def test_no_key_uses_dev_fallback(self, monkeypatch):
+    def test_no_key_fallback_is_stable_within_process(self, monkeypatch):
         monkeypatch.delenv("SECRET_KEY", raising=False)
         monkeypatch.delenv("XCAGI_SECRET_KEY", raising=False)
-        assert oidc_provider._secret_key() == "xcagi-dev-oidc-state-key"
+        assert oidc_provider._secret_key() == oidc_provider._secret_key()
 
 
 # ---------------------------------------------------------------------------

@@ -54,6 +54,11 @@ if (-not $SkipFrontend) {
   Pop-Location
 }
 
+$frontendIndex = Join-Path $Root "templates\vue-dist\index.html"
+if (-not (Test-Path $frontendIndex -PathType Leaf)) {
+  throw "Required desktop frontend missing: $frontendIndex"
+}
+
 python -m pip install --upgrade pip
 python -m pip install -e ".[server-api]"
 if ($LASTEXITCODE -ne 0) { throw "pip install -e FHD[server-api] failed" }
@@ -80,6 +85,10 @@ if ($ProductSku) {
 }
 python -m PyInstaller --noconfirm --clean "scripts\package\xcagi_backend.spec"
 if ($LASTEXITCODE -ne 0) { throw "PyInstaller xcagi_backend.spec failed" }
+$bundledFrontendIndex = Join-Path $Root "dist\xcagi-backend\_internal\templates\vue-dist\index.html"
+if (-not (Test-Path $bundledFrontendIndex -PathType Leaf)) {
+  throw "PyInstaller output missing desktop frontend: $bundledFrontendIndex"
+}
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR -ErrorAction SilentlyContinue

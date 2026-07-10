@@ -471,6 +471,34 @@ describe('main — isTrustedDesktopOrigin', () => {
   })
 })
 
+describe('main — isSafeExternalUrl', () => {
+  it.each([
+    'https://xiu-ci.com/market',
+    'http://192.168.1.10:17500/docs',
+    'mailto:support@xiu-ci.com'
+  ])('allows expected external link %s', async url => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl(url)).toBe(true)
+  })
+
+  it.each([
+    'file:///etc/passwd',
+    'smb://attacker/share',
+    'javascript:alert(1)',
+    'ms-msdt:/id PCWDiagnostic',
+    'not a url',
+    ''
+  ])('blocks unsafe external link %s', async url => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl(url)).toBe(false)
+  })
+
+  it('blocks missing input', async () => {
+    const { isSafeExternalUrl } = await import('./main.js')
+    expect(isSafeExternalUrl(undefined)).toBe(false)
+  })
+})
+
 describe('main — readPackagedAppVersion', () => {
   it('returns "dev" in unpackaged mode', async () => {
     electronMocks.app.isPackaged = false

@@ -219,6 +219,10 @@ class EmployeeAgent:
         employee_id = self.employee_id
         t0 = time.perf_counter()
         payload = dict(input_data or {})
+        if user_id > 0 and "user_id" not in payload:
+            # The write-approval gate needs the authenticated owner so persisted AI
+            # approval requests can be scoped to a real account.
+            payload["user_id"] = user_id
         if workspace_root and "workspace_root" not in payload:
             payload["workspace_root"] = workspace_root
         logger.info(

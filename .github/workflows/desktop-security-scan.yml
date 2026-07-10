@@ -45,7 +45,7 @@ jobs:
   electronegativity-scan:
     name: Electronegativity (Electron security)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: FHD/desktop
@@ -55,7 +55,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22.12.0"
           cache: "npm"
           cache-dependency-path: FHD/desktop/package-lock.json
 
@@ -65,66 +65,16 @@ jobs:
       - name: Build TypeScript (so dist/main.js exists for AST checks)
         run: npm run build
 
-      - name: Install electronegativity
-        # 锁定 1.10.3: 与本地验证一致;v2+ 依赖更新但 CLI 选项兼容。
-        run: npm install -g @doyensec/electronegativity@1.10.3
-
-      - name: Prepare clean scan target (exclude build artifacts)
-        # electronegativity 无 -e/--exclude 路径选项,需先把源码同步到干净目录。
-        run: |
-          mkdir -p /tmp/desktop-scan
-          rsync -a --delete \
-            --exclude='node_modules' \
-            --exclude='dist' \
-            --exclude='build' \
-            --exclude='coverage' \
-            --exclude='.vitest-cache' \
-            --exclude='*.log' \
-            --exclude='release/' \
-            ./ /tmp/desktop-scan/
-          echo "[scan] prepared /tmp/desktop-scan:"
-          ls -la /tmp/desktop-scan/
-
-      - name: Run electronegativity (SARIF for Code Scanning)
-        # SARIF 不含 severity 字段(electronegativity 只输出 warning/note level),仅用于 PR 行内标注。
-        run: |
-          mkdir -p /tmp/en-report
-          npx electronegativity \
-            -i /tmp/desktop-scan \
-            -o /tmp/en-report/electronegativity.sarif \
-            -r \
-            -v false || code=$?
-          # electronegativity 在无 finding 时也可能非 0 退出,以文件是否存在为准
-          if [ ! -f /tmp/en-report/electronegativity.sarif ]; then
-            echo '{"$schema":"http://json.schemastore.org/sarif-2.1.0","version":"2.1.0","runs":[{"tool":{"driver":{"name":"Electronegativity","rules":[]}},"results":[]}]}' > /tmp/en-report/electronegativity.sarif
-          fi
-          echo "[scan] SARIF size: $(wc -c < /tmp/en-report/electronegativity.sarif) bytes"
-
-      - name: Run electronegativity (CSV for gating)
-        # CSV 含 severity 字段,用于解析+门禁。
-        run: |
-          npx electronegativity \
-            -i /tmp/desktop-scan \
-            -o /tmp/en-report/electronegativity.csv \
-            -r \
-            -v false || code=$?
-          if [ ! -f /tmp/en-report/electronegativity.csv ]; then
-            echo "issue, severity, confidence, filename, location, sample, description, url" > /tmp/en-report/electronegativity.csv
-          fi
-          echo "[scan] CSV size: $(wc -c < /tmp/en-report/electronegativity.csv) bytes"
-          echo "[scan] CSV preview:"
-          head -20 /tmp/en-report/electronegativity.csv
-
-      - name: Parse findings & gate on HIGH severity
+      - name: Run real scan and gate (no synthetic reports)
         id: gate
-        working-directory: ${{ github.workspace }}
         env:
           GATE_SEVERITY: ${{ github.event.inputs.gate_severity || (github.event_name == 'schedule' && 'medium' || 'high') }}
+          ELECTRONEGATIVITY_REPORT_DIR: /tmp/en-report
+          ELECTRONEGATIVITY_TIMEOUT_SECONDS: "420"
         run: |
-          node .github/scripts/parse-electronegativity-csv.js \
-            /tmp/en-report/electronegativity.csv \
+          bash scripts/security-scan.sh \
             --gate-severity "${GATE_SEVERITY}" \
-            --suppressions .github/electronegativity-suppressions.json
+            --no-build
 
       - name: Upload SARIF to GitHub Code Scanning
         if: always()

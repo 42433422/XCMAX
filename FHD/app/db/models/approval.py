@@ -160,8 +160,8 @@ class ApprovalRequest(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     request_no: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
 
-    flow_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("approval_flows.id"), nullable=False, index=True
+    flow_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("approval_flows.id"), nullable=True, index=True
     )
     business_type: Mapped[str] = mapped_column(String(64), nullable=False)
     business_id: Mapped[Optional[int]] = mapped_column(Integer)

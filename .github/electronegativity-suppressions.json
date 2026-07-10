@@ -34,5 +34,41 @@
     "addedBy": "platform-wave2",
     "addedAt": "2026-07-05",
     "reviewCadence": "同上"
+  },
+  {
+    "ruleId": "CSP_GLOBAL_CHECK",
+    "filenamePattern": "N/A",
+    "reason": "Electron 只加载本地 FastAPI 页面；SecurityHeadersMiddleware 在每个 HTTP 响应注入 CSP，安装包 smoke 同时强制校验根页面 CSP。Electronegativity 静态扫描无法看到服务端响应头。",
+    "expires": "2026-10-01",
+    "addedBy": "production-readiness-20260709",
+    "addedAt": "2026-07-09",
+    "reviewCadence": "每次修改 SecurityHeadersMiddleware、桌面加载地址或 Electronegativity 版本时复审"
+  },
+  {
+    "ruleId": "AUXCLICK_JS_CHECK",
+    "filenamePattern": "main.ts",
+    "reason": "BrowserWindow 的 will-navigate 与 setWindowOpenHandler 已按本地可信源和协议白名单拦截导航；main.test.ts 覆盖 file、smb、javascript、ms-msdt 等危险协议。",
+    "expires": "2026-10-01",
+    "addedBy": "production-readiness-20260709",
+    "addedAt": "2026-07-09",
+    "reviewCadence": "每次修改外链、导航或 BrowserWindow 事件处理时复审"
+  },
+  {
+    "ruleId": "OPEN_EXTERNAL_JS_CHECK",
+    "filenamePattern": "main.ts",
+    "reason": "shell.openExternal 仅在 isSafeExternalUrl 通过 http、https、mailto 协议白名单后调用，危险协议已有单元测试。",
+    "expires": "2026-10-01",
+    "addedBy": "production-readiness-20260709",
+    "addedAt": "2026-07-09",
+    "reviewCadence": "每次修改 isSafeExternalUrl 或 shell.openExternal 调用时复审"
+  },
+  {
+    "ruleId": "OPEN_EXTERNAL_JS_CHECK",
+    "filenamePattern": "dist/main.js",
+    "reason": "main.ts 安全外链白名单的编译产物；由同一组 Vitest 用例验证源逻辑。",
+    "expires": "2026-10-01",
+    "addedBy": "production-readiness-20260709",
+    "addedAt": "2026-07-09",
+    "reviewCadence": "每次修改 isSafeExternalUrl、构建流程或 shell.openExternal 调用时复审"
   }
 ]

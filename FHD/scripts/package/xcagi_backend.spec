@@ -9,6 +9,13 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path.cwd().resolve()
 
+FRONTEND_INDEX = ROOT / "templates" / "vue-dist" / "index.html"
+if not FRONTEND_INDEX.is_file():
+    raise FileNotFoundError(
+        "Required desktop frontend asset missing: templates/vue-dist/index.html. "
+        "Run the SKU frontend build before PyInstaller."
+    )
+
 
 def add_data(relative_path: str):
     """Bundle data for PyInstaller.

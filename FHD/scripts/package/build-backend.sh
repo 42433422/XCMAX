@@ -38,6 +38,12 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   esac
 fi
 
+FRONTEND_INDEX="${ROOT}/templates/vue-dist/index.html"
+if [[ ! -f "${FRONTEND_INDEX}" ]]; then
+  echo "[err] Required desktop frontend missing: ${FRONTEND_INDEX}" >&2
+  exit 1
+fi
+
 PYTHON="${PYTHON:-python3}"
 
 "${PYTHON}" -m pip install --upgrade pip
@@ -57,5 +63,11 @@ fi
 mkdir -p release
 printf '%s\n' "${VERSION}" > release/VERSION
 "${PYTHON}" -m PyInstaller --noconfirm --clean scripts/package/xcagi_backend.spec
+
+BUNDLED_FRONTEND_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/vue-dist/index.html"
+if [[ ! -f "${BUNDLED_FRONTEND_INDEX}" ]]; then
+  echo "[err] PyInstaller output missing desktop frontend: ${BUNDLED_FRONTEND_INDEX}" >&2
+  exit 1
+fi
 
 echo "Backend build complete: dist/xcagi-backend"

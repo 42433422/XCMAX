@@ -45,11 +45,17 @@ reset_lan_config_cache()
 client = TestClient(create_fastapi_app())
 h = client.get("/api/health")
 assert h.status_code == 200, h.text
+assert h.json().get("version") == "10.0.0", h.text
+home = client.get("/")
+assert home.status_code == 200, home.text
+assert "text/html" in home.headers.get("content-type", "")
+assert '<div id="app">' in home.text
+assert "default-src 'self'" in home.headers.get("content-security-policy", "")
 d = client.get("/api/platform-shell/deliverable-status").json()
 assert d.get("success") is True
 data = d.get("data") or {}
 assert "deliverable" in data
-print("[OK] FastAPI health + deliverable-status")
+print("[OK] FastAPI health/version + SPA/CSP + deliverable-status")
 PY
 
 log "[OK] FastAPI contract"

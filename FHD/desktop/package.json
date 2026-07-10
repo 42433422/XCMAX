@@ -2,6 +2,9 @@
   "name": "xcagi-desktop",
   "version": "10.0.0",
   "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "author": "XCAGI",
   "description": "XCAGI desktop shell for Windows and macOS",
   "main": "dist/main.js",
@@ -26,7 +29,7 @@
     "@electron/notarize": "3.1.1",
     "@types/node": "25.6.0",
     "@vitest/coverage-v8": "^3.2.6",
-    "electron": "41.3.0",
+    "electron": "41.10.1",
     "electron-builder": "26.8.1",
     "typescript": "6.0.3",
     "vitest": "^3.2.6"

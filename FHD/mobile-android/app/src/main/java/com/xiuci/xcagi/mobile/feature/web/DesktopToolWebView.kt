@@ -10,9 +10,12 @@ import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.xiuci.xcagi.mobile.ui.components.mobile.WeTopBar
 
@@ -33,9 +36,17 @@ fun DesktopToolWebView(
     onUrlOverride: ((String) -> Boolean)? = null,
     onBack: () -> Unit = {},
 ) {
-    val injectMarket = shouldInjectMarketTokens(url) && marketAccess.isNotBlank()
-    val injectFhd = shouldInjectFhdSession(url) && fhdAccess.isNotBlank()
-    val injectScript = injectMarket || injectFhd
+    if (!UrlHostPolicy.isTrustedWebViewUrl(url)) {
+        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+            WeTopBar(title = title, onBack = onBack)
+            Text(
+                "页面地址不受信任，已阻止加载",
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(24.dp),
+            )
+        }
+        return
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         WeTopBar(title = title, onBack = onBack)
@@ -53,21 +64,32 @@ fun DesktopToolWebView(
                             view: WebView?,
                             request: WebResourceRequest?,
                         ): Boolean {
-                            val nextUrl = request?.url?.toString() ?: return false
+                            val nextUrl = request?.url?.toString() ?: return true
+                            if (!UrlHostPolicy.isTrustedWebViewUrl(nextUrl)) {
+                                onUrlOverride?.invoke(nextUrl)
+                                return true
+                            }
                             return onUrlOverride?.invoke(nextUrl) == true
                         }
 
                         @Deprecated("Deprecated in Android API")
                         override fun shouldOverrideUrlLoading(view: WebView?, nextUrl: String?): Boolean {
-                            if (nextUrl.isNullOrBlank()) return false
+                            if (nextUrl.isNullOrBlank()) return true
+                            if (!UrlHostPolicy.isTrustedWebViewUrl(nextUrl)) {
+                                onUrlOverride?.invoke(nextUrl)
+                                return true
+                            }
                             return onUrlOverride?.invoke(nextUrl) == true
                         }
 
                         override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                            val currentUrl = finishedUrl ?: return
                             if (onUrlOverride != null) {
                                 view?.evaluateJavascript(webLocationBridgeScript(), null)
                             }
-                            if (injectScript) {
+                            val injectMarket = shouldInjectMarketTokens(currentUrl) && marketAccess.isNotBlank()
+                            val injectFhd = shouldInjectFhdSession(currentUrl) && fhdAccess.isNotBlank()
+                            if (injectMarket || injectFhd) {
                                 view?.evaluateJavascript(
                                     buildTokenInjectScript(
                                         accessToken = if (injectMarket) marketAccess else "",
@@ -81,7 +103,7 @@ fun DesktopToolWebView(
                     }
                     val headers = buildMap {
                         put("X-XCAGI-Client", "android")
-                        if (bearer.isNotBlank() && !injectMarket) {
+                        if (bearer.isNotBlank() && shouldInjectFhdSession(url)) {
                             put("Authorization", bearer)
                         }
                     }

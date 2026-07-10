@@ -946,6 +946,17 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?
   }
 }
 
+/** Only hand normal web and mail links to the operating system. */
+export function isSafeExternalUrl(rawUrl: string | undefined): boolean {
+  if (!rawUrl) return false
+  try {
+    const parsed = new URL(rawUrl)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' || parsed.protocol === 'mailto:'
+  } catch {
+    return false
+  }
+}
+
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1042,7 +1053,11 @@ async function createWindow(): Promise<void> {
     if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
       return { action: 'allow' }
     }
-    void shell.openExternal(url)
+    if (isSafeExternalUrl(url)) {
+      void shell.openExternal(url)
+    } else {
+      console.warn(`[xcagi-desktop] blocked window.open to unsafe url: ${url}`)
+    }
     return { action: 'deny' }
   })
 
