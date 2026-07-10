@@ -118,3 +118,26 @@ def test_desktop_electron_and_ci_node_toolchain_are_supported() -> None:
         content = workflow.read_text(encoding="utf-8")
         assert 'node-version: "20"' not in content
         assert 'node-version: "22.12.0"' in content
+
+
+def test_windows_formal_release_requires_authenticode_signing() -> None:
+    build_script = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
+        encoding="utf-8"
+    )
+    verify_script = (
+        REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1"
+    ).read_text(encoding="utf-8")
+    workflows = [
+        REPO_ROOT.parent / ".github" / "workflows" / "fhd-release-desktop.yml",
+        REPO_ROOT / ".github" / "workflows" / "release-desktop.yml",
+    ]
+
+    assert "XCAGI_REQUIRE_WINDOWS_SIGNING" in build_script
+    assert "azureSignOptions.endpoint" in build_script
+    assert "Get-AuthenticodeSignature" in verify_script
+    assert "Status -ne 'Valid'" in verify_script
+    for workflow in workflows:
+        content = workflow.read_text(encoding="utf-8")
+        assert 'XCAGI_REQUIRE_WINDOWS_SIGNING: "1"' in content
+        assert "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE" in content
+        assert "verify-windows-signature.ps1" in content

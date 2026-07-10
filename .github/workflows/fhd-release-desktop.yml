@@ -45,6 +45,15 @@ jobs:
           dotnet-version: "8.0.x"
       - name: Build Windows ${{ matrix.sku }} installer
         shell: pwsh
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+          XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}
+          XCAGI_REQUIRE_WINDOWS_SIGNING: "1"
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
@@ -57,6 +66,11 @@ jobs:
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
           scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku ${{ matrix.sku }}
+          $label = if ('${{ matrix.sku }}' -eq 'enterprise') { 'Enterprise' } else { 'Personal' }
+          $installer = "release/xcagi-v$v/${{ matrix.sku }}/XCAGI-$label-Setup-$v-x64.exe"
+          scripts/package/verify-windows-signature.ps1 `
+            -Path $installer `
+            -ExpectedPublisher '${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME }}'
       - name: Assert critical resources packaged (${{ matrix.sku }})
         shell: pwsh
         run: |

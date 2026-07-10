@@ -133,12 +133,48 @@ npm version $Version --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-`${version}-`${arch}.`${ext}"
-npx electron-builder --win nsis zip --x64 --publish never `
-  "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
-  "--config.appId=$ebAppId" `
-  "--config.publish.url=$ebPublishUrl" `
-  "--config.nsis.artifactName=$ebArtifact" `
+$requiredSigningVars = @(
+  'AZURE_TENANT_ID',
+  'AZURE_CLIENT_ID',
+  'AZURE_CLIENT_SECRET',
+  'AZURE_TRUSTED_SIGNING_ENDPOINT',
+  'AZURE_TRUSTED_SIGNING_ACCOUNT',
+  'AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE'
+)
+$missingSigningVars = @($requiredSigningVars | Where-Object {
+  -not [Environment]::GetEnvironmentVariable($_)
+})
+$requireSigning = $env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1'
+if ($requireSigning -and $missingSigningVars.Count -gt 0) {
+  throw "Windows signing required, but missing: $($missingSigningVars -join ', ')"
+}
+if ($requireSigning -and -not $SkipUiInstaller) {
+  throw 'Signed production builds must use -SkipUiInstaller; the custom WPF wrapper is not Authenticode-signed by electron-builder.'
+}
+
+$builderArgs = @(
+  'electron-builder', '--win', 'nsis', 'zip', '--x64', '--publish', 'never',
+  "--config.directories.output=../release/xcagi-v$Version/$outSubdir",
+  "--config.appId=$ebAppId",
+  "--config.publish.url=$ebPublishUrl",
+  "--config.nsis.artifactName=$ebArtifact",
   "--config.extraMetadata.productSku=$ProductSku"
+)
+if ($missingSigningVars.Count -eq 0) {
+  $publisherName = if ($env:XCAGI_WINDOWS_PUBLISHER_NAME) {
+    $env:XCAGI_WINDOWS_PUBLISHER_NAME
+  } else {
+    '成都修茈科技有限公司'
+  }
+  $builderArgs += @(
+    "--config.win.azureSignOptions.endpoint=$env:AZURE_TRUSTED_SIGNING_ENDPOINT",
+    "--config.win.azureSignOptions.codeSigningAccountName=$env:AZURE_TRUSTED_SIGNING_ACCOUNT",
+    "--config.win.azureSignOptions.certificateProfileName=$env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE",
+    "--config.win.azureSignOptions.publisherName=$publisherName"
+  )
+}
+& npx @builderArgs
+if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
 
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
@@ -214,6 +250,12 @@ if (-not $SkipUiInstaller) {
 } elseif ($nsisExe) {
   $env:XCAGI_BUILD_SHA = $buildSha
   node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $Version win
+}
+
+if ($requireSigning) {
+  & "$PSScriptRoot\verify-windows-signature.ps1" `
+    -Path $finalSetupPath `
+    -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
 }
 
 $dlProj = Join-Path $Root "tools\XcagiDownloader\XcagiDownloader.csproj"
