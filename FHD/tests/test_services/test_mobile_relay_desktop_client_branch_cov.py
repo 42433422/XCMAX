@@ -173,6 +173,81 @@ class TestSuperEmployeeCapabilities:
 
 
 # ---------------------------------------------------------------------------
+# cached relay payload fallbacks
+# ---------------------------------------------------------------------------
+
+
+class TestCachedRelayPayloadFallbacks:
+    def test_public_payload_without_expiry_metadata_stays_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_module.time, "time", lambda: 1000.0)
+
+        payload = _public_payload_from_config(
+            {
+                "relay_id": "relay-1",
+                "pairing_code": "pair-1",
+                "registered_at": 0,
+                "paired": False,
+                "relay_base_url": "https://relay.example.com",
+            }
+        )
+
+        assert payload is not None
+        assert payload["relay_id"] == "relay-1"
+        assert payload["paired"] is False
+        assert "exp" not in payload
+        assert "expires_at" not in payload
+
+    def test_cached_paired_identity_survives_expired_pairing_code(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            _module,
+            "_read_config",
+            lambda: {
+                "paired": True,
+                "relay_id": "relay-1",
+                "relay_base_url": "https://relay.example.com",
+            },
+        )
+
+        assert cached_desktop_relay_payload() == {
+            "relay_id": "relay-1",
+            "relay_base_url": "https://relay.example.com",
+            "paired": True,
+        }
+
+        monkeypatch.setattr(
+            _module,
+            "_read_config",
+            lambda: {"paired": True, "relay_id": ""},
+        )
+        assert cached_desktop_relay_payload() is None
+
+
+# ---------------------------------------------------------------------------
+# orphan workspace GC
+# ---------------------------------------------------------------------------
+
+
+class TestOrphanWorkspaceGc:
+    def test_failed_removal_is_not_counted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        orphan = tmp_path / "xcagi-wt-stuck"
+        orphan.mkdir()
+        os.utime(orphan, (1, 1))
+        monkeypatch.setenv("XCAGI_RELAY_WORKSPACE_GC_MAX_AGE_SEC", "1")
+        monkeypatch.setattr(_module.tempfile, "gettempdir", lambda: str(tmp_path))
+        monkeypatch.setattr(_module.time, "time", lambda: 1000.0)
+        monkeypatch.setattr(_module.shutil, "rmtree", lambda *_args, **_kwargs: None)
+
+        assert _module._gc_orphan_workspaces() == 0
+        assert orphan.is_dir()
+
+
+# ---------------------------------------------------------------------------
 # _trim_branch_token
 # ---------------------------------------------------------------------------
 
@@ -1577,6 +1652,56 @@ class TestPollOnceAdditional:
             mock_client.post.return_value = mock_resp
             mock_client_cls.return_value = mock_client
             _poll_once()  # should not raise
+
+    def test_reconciles_stale_state_pairing_and_duplicate_tasks(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg_file = tmp_path / "relay.json"
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "desktop_token": "tok",
+                    "relay_base_url": "https://x.example.com",
+                    "paired": False,
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+        with _module._INFLIGHT_LOCK:
+            _module._INFLIGHT.add("running-task")
+            _module._INFLIGHT_TOOLS["running-task"] = "codex"
+            _module._INFLIGHT_TOOLS["stale-task"] = "claude"
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.json.return_value = {
+            "data": {
+                "cancelled_task_ids": ["unknown-task"],
+                "desktop": {"status": "paired", "mobile_user_id": 0},
+                "tasks": [
+                    {"task_id": "running-task", "kind": "claude.invoke"},
+                    {"task_id": "new-task", "kind": "codex.invoke"},
+                ],
+            }
+        }
+        with (
+            patch.object(_module, "_relay_http_client") as client_factory,
+            patch.object(_module.threading, "Thread") as thread_cls,
+        ):
+            client = MagicMock()
+            client.__enter__ = lambda _self: client
+            client.__exit__ = MagicMock(return_value=False)
+            client.post.return_value = mock_resp
+            client_factory.return_value = client
+
+            _poll_once()
+
+        assert "stale-task" not in _module._INFLIGHT_TOOLS
+        assert json.loads(cfg_file.read_text(encoding="utf-8"))["paired"] is True
+        thread_cls.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
