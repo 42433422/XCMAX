@@ -391,6 +391,7 @@ class SuperEmployeeService:
         # seam used by the isolated filesystem tests; production instances do
         # not add the application data directory to this allow-list.
         self._verification_workspaces: set[str] = set()
+        self._prepared_worktree_branch = ""
         if storage_root is not None:
             self._remember_verification_workspace(root)
         # 执行授权（deny-by-default）。每个 Service 实例按请求新建（见路由），无跨请求竞态；
@@ -2139,8 +2140,9 @@ class SuperEmployeeService:
         base_cwd: str,
         _text: str,
         branch_hint: str = "",
-    ) -> tuple[str, str] | None:
+    ) -> str | None:
         """建独立 worktree；有 branch_hint 时基于现有分支写回，否则自动新建任务分支。"""
+        self._prepared_worktree_branch = ""
         if not self._is_git_repo(base_cwd):
             return None
         uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
@@ -2179,7 +2181,8 @@ class SuperEmployeeService:
                 logger.warning("worktree 验证目录登记失败")
                 self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=120)
                 return None
-            return wt_path, branch
+            self._prepared_worktree_branch = branch
+            return wt_path
         except Exception:  # noqa: BLE001
             logger.warning("worktree add 异常", exc_info=True)
             return None
@@ -2196,7 +2199,7 @@ class SuperEmployeeService:
 
     def _prepare_persistent_worktree(
         self, base_cwd: str, wt_path: str, branch: str
-    ) -> tuple[str, str] | None:
+    ) -> str | None:
         """复用同一个 worktree：重置为 base 干净基线 + 开新任务分支；不存在则建一次。"""
         try:
             head = self._git(base_cwd, "rev-parse", "HEAD", timeout=15)
@@ -2223,7 +2226,8 @@ class SuperEmployeeService:
             if not self._remember_verification_workspace(wt_path):
                 logger.warning("持久 worktree 验证目录登记失败")
                 return None
-            return wt_path, branch
+            self._prepared_worktree_branch = branch
+            return wt_path
         except Exception:  # noqa: BLE001
             logger.warning("持久 worktree 准备异常", exc_info=True)
             return None
@@ -2375,7 +2379,11 @@ class SuperEmployeeService:
                 )
             # 无法隔离（非 git 仓库 / worktree 冲突）→ 退回只改不推，保证仍可用。
             return self._run_cli_once(cli_path, self._cli_work_prompt(text, base_cwd), base_cwd)
-        wt_path, branch = prepared
+        wt_path = prepared
+        branch = self._prepared_worktree_branch
+        if not branch:
+            self._remove_worktree(base_cwd, wt_path)
+            return "❌ 工作分支准备失败，未执行任务。"
         try:
             body = self._run_cli_once(cli_path, self._cli_work_prompt(text, wt_path), wt_path)
             ok, vmsg = self._verify_workspace(wt_path)

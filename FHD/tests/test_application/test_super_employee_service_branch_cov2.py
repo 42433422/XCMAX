@@ -1388,7 +1388,9 @@ class TestPrepareWorktree:
         ):
             result = svc._prepare_worktree(str(tmp_path), "task")
             assert result is not None
-            wt_path, branch = result
+            wt_path = result
+            branch = svc._prepared_worktree_branch
+            assert wt_path
             assert "super-employee/codex/" in branch
 
     def test_worktree_add_selected_branch_uses_detached_ref(self, tmp_path) -> None:
@@ -1404,7 +1406,7 @@ class TestPrepareWorktree:
         ):
             result = svc._prepare_worktree(str(tmp_path), "task", "origin/feature/mobile")
             assert result is not None
-            _, branch = result
+            branch = svc._prepared_worktree_branch
             assert branch == "feature/mobile"
             assert "--detach" in mock_git.call_args.args
             assert mock_git.call_args.args[-1] == "origin/feature/mobile"
@@ -1447,8 +1449,9 @@ class TestRunDevTaskLoop:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("fixed"))
         wt_path = str(tmp_path / "wt")
         Path(wt_path).mkdir()
+        svc._prepared_worktree_branch = "branch"
         with (
-            patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")),
+            patch.object(svc, "_prepare_worktree", return_value=wt_path),
             patch.object(svc, "_verify_workspace", side_effect=[(False, "error"), (True, "ok")]),
             patch.object(svc, "_commit_and_push", return_value=(True, "pushed")),
             patch.object(svc, "_remove_worktree"),
@@ -1460,8 +1463,9 @@ class TestRunDevTaskLoop:
         svc = _make_svc(tmp_path, cli_runner=_stdout_runner("done"))
         wt_path = str(tmp_path / "wt")
         Path(wt_path).mkdir()
+        svc._prepared_worktree_branch = "branch"
         with (
-            patch.object(svc, "_prepare_worktree", return_value=(wt_path, "branch")),
+            patch.object(svc, "_prepare_worktree", return_value=wt_path),
             patch.object(svc, "_verify_workspace", return_value=(True, "ok")),
             patch.object(svc, "_commit_and_push", return_value=(True, "pushed")),
             patch.object(svc, "_remove_worktree"),
