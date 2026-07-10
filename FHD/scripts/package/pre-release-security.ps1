@@ -21,11 +21,28 @@ function Fail([string]$msg) {
 function Scan-SecretsInTree {
   param([string]$Dir, [string]$Label)
   if (-not (Test-Path $Dir)) { return }
+  # Names such as security_secrets_guard.py describe source behaviour; they are
+  # not credential payloads. Keep the filename guard for data/config artifacts,
+  # while treating common source-code extensions as code.
+  $sourceExtensions = @(
+    '.c', '.cc', '.cpp', '.cs', '.go', '.h', '.hpp', '.java', '.js', '.jsx',
+    '.kt', '.kts', '.mjs', '.cjs', '.ps1', '.py', '.pyi', '.rs', '.sh',
+    '.ts', '.tsx', '.vue'
+  )
+  $privateMaterialExtensions = @(
+    '.jks', '.key', '.keystore', '.p12', '.pem', '.pfx'
+  )
   $hits = Get-ChildItem -Path $Dir -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object {
-      $_.Name -match '\.env$' -and $_.Name -ne '.env.example' -or
-      $_.Name -match 'secret|private_key' -or
-      $_.Extension -in @('.pem', '.key')
+      $name = $_.Name.ToLowerInvariant()
+      $extension = $_.Extension.ToLowerInvariant()
+      $isTemplate = $name -match '(^|[._-])(example|sample|template|placeholder)([._-]|$)'
+      $isDotEnv = $name -eq '.env' -or $name.StartsWith('.env.')
+      $hasSensitiveName = $name -match '(^|[._-])(secrets?|private[_-]?key|client[_-]?secret|service[_-]?account|credentials?)([._-]|$)'
+
+      ($isDotEnv -and -not $isTemplate) -or
+      $extension -in $privateMaterialExtensions -or
+      ($hasSensitiveName -and -not $isTemplate -and $extension -notin $sourceExtensions)
     } |
     Where-Object {
       $_.FullName -notmatch '\\node_modules\\' -and
