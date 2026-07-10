@@ -42,7 +42,7 @@ describe('mods store smoke', () => {
   })
 
   it('initialize 成功后写入 mods 并标记 isLoaded', async () => {
-    // initialize：fetchModsWithRetry → GET /api/mods/，再 fetchModRoutes → GET /api/mods/routes（apiFetch → fetch）
+    // initialize：fetchModsWithRetry → GET /api/mods，再 fetchModRoutes → GET /api/mods/routes（apiFetch → fetch）
     global.fetch
       .mockResolvedValueOnce({
         ok: true,
@@ -75,7 +75,7 @@ describe('mods store smoke', () => {
     expect(store.mods[0].id).toBe('taiyangniao-pro')
     expect(global.fetch).toHaveBeenNthCalledWith(
       1,
-      '/api/mods/',
+      '/api/mods',
       expect.objectContaining({ credentials: 'include' })
     )
   })
