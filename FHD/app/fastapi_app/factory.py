@@ -34,6 +34,8 @@ from .middleware_extra import register_extra_middleware, register_prometheus_met
 def _desktop_fast_start_enabled() -> bool:
     raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
     return raw not in {"0", "false", "off", "no"}
+
+
 from .static_mounts import (
     mount_admin_console_static,
     mount_vue_dist_assets_dir,

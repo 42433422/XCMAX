@@ -95,7 +95,9 @@ class _GZipResponder:
             return
 
         buffer = io.BytesIO()
-        with gzip.GzipFile(mode="wb", fileobj=buffer, compresslevel=self.compresslevel, mtime=0) as fh:
+        with gzip.GzipFile(
+            mode="wb", fileobj=buffer, compresslevel=self.compresslevel, mtime=0
+        ) as fh:
             fh.write(body)
         compressed = buffer.getvalue()
 
