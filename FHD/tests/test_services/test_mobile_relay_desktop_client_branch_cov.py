@@ -112,6 +112,67 @@ class TestMaxConcurrent:
 
 
 # ---------------------------------------------------------------------------
+# _super_employee_capabilities
+# ---------------------------------------------------------------------------
+
+
+class TestSuperEmployeeCapabilities:
+    def test_reports_real_cli_paths_and_endpoint_metadata(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        executable = tmp_path / "cli"
+        executable.write_text("#!/bin/sh\n", encoding="utf-8")
+        for prefix in ("CODEX", "CLAUDE", "CURSOR", "TRAE"):
+            monkeypatch.setenv(f"XCMAX_{prefix}_CLI_PATH", str(executable))
+        monkeypatch.setattr(_module.time, "time", lambda: 1234.0)
+
+        capabilities = _module._super_employee_capabilities(
+            host="192.168.10.2",
+            port=17500,
+        )
+
+        assert capabilities["desktop"] is True
+        assert capabilities["checked_at"] == 1234
+        assert capabilities["host"] == "192.168.10.2"
+        assert capabilities["port"] == 17500
+        for key in (
+            "codex",
+            "codex_cli",
+            "claude",
+            "claude_cli",
+            "cursor",
+            "cursor_cli",
+            "trae",
+            "trae_cli",
+        ):
+            assert capabilities[key] is True
+
+    def test_reports_unavailable_without_claiming_endpoint_metadata(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        for prefix in ("CODEX", "CLAUDE", "CURSOR", "TRAE"):
+            monkeypatch.delenv(f"XCMAX_{prefix}_CLI_PATH", raising=False)
+        monkeypatch.setattr(_module.shutil, "which", lambda _binary: None)
+        monkeypatch.setattr(Path, "is_file", lambda _path: False)
+
+        capabilities = _module._super_employee_capabilities()
+
+        assert "host" not in capabilities
+        assert "port" not in capabilities
+        for key in (
+            "codex",
+            "codex_cli",
+            "claude",
+            "claude_cli",
+            "cursor",
+            "cursor_cli",
+            "trae",
+            "trae_cli",
+        ):
+            assert capabilities[key] is False
+
+
+# ---------------------------------------------------------------------------
 # _trim_branch_token
 # ---------------------------------------------------------------------------
 
