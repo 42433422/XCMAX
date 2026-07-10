@@ -1693,6 +1693,13 @@ class TestRegisterDesktopRelaySuccess:
     def test_successful_registration(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         cfg_file = tmp_path / "relay.json"
         monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+        detected_capabilities = {
+            "desktop": True,
+            "codex_cli": True,
+            "trae_cli": True,
+            "claude_cli": True,
+            "cursor_cli": True,
+        }
 
         mock_resp = MagicMock()
         mock_resp.raise_for_status.return_value = None
@@ -1710,6 +1717,11 @@ class TestRegisterDesktopRelaySuccess:
         with (
             patch("httpx.Client") as mock_cls,
             patch.object(_module, "start_desktop_relay_poller") as mock_start,
+            patch.object(
+                _module,
+                "_super_employee_capabilities",
+                return_value=detected_capabilities,
+            ) as mock_capabilities,
         ):
             mock_c = MagicMock()
             mock_c.__enter__ = lambda s: mock_c
@@ -1723,10 +1735,8 @@ class TestRegisterDesktopRelaySuccess:
         assert result["relay_id"] == "r1"
         call_body = mock_c.post.call_args[1]["json"]
         capabilities = call_body["capabilities"]
-        assert capabilities["codex_cli"] is True
-        assert capabilities["trae_cli"] is True
-        assert capabilities["claude_cli"] is True
-        assert capabilities["cursor_cli"] is True
+        assert capabilities == detected_capabilities
+        mock_capabilities.assert_called_once_with(host="127.0.0.1", port=8000)
         mock_start.assert_called_once()
         # Config should be written
         assert cfg_file.is_file()
