@@ -89,9 +89,7 @@ def test_desktop_security_gate_cannot_synthesize_green_reports() -> None:
     workflow = (REPO_ROOT.parent / ".github" / "workflows" / "desktop-security-scan.yml").read_text(
         encoding="utf-8"
     )
-    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(
-        encoding="utf-8"
-    )
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
 
     assert "bash scripts/security-scan.sh" in workflow
     assert "ELECTRONEGATIVITY_REPORT_DIR: /tmp/en-report" in workflow
@@ -130,9 +128,9 @@ def test_windows_formal_release_requires_authenticode_signing() -> None:
     build_script = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
         encoding="utf-8"
     )
-    verify_script = (
-        REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1"
-    ).read_text(encoding="utf-8")
+    verify_script = (REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1").read_text(
+        encoding="utf-8"
+    )
     workflows = [
         REPO_ROOT.parent / ".github" / "workflows" / "fhd-release-desktop.yml",
         REPO_ROOT / ".github" / "workflows" / "release-desktop.yml",
@@ -156,9 +154,7 @@ def test_frontend_uses_patched_echarts_with_modular_types() -> None:
     assert package["dependencies"]["echarts"] == "^6.1.0"
     paths = tsconfig["compilerOptions"]["paths"]
     for module in ("core", "charts", "components", "renderers"):
-        assert paths[f"echarts/{module}"] == [
-            f"./node_modules/echarts/types/dist/{module}.d.ts"
-        ]
+        assert paths[f"echarts/{module}"] == [f"./node_modules/echarts/types/dist/{module}.d.ts"]
 
 
 def test_modstore_desktop_shell_uses_supported_electron() -> None:

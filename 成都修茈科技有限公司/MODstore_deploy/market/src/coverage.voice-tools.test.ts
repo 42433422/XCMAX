@@ -100,7 +100,7 @@ describe('voice and link utility coverage', () => {
 
   it('builds XCAGI download names, URLs, mac architecture labels, and ops deep links', () => {
     expect(DEFAULT_XCAGI_DOWNLOAD_VERSION).toBe('10.0.0')
-    expect(normalizeXcagiDownloadBase(undefined, '11.0.0')).toBe('https://dl.xiu-ci.com/xcagi-v11.0.0')
+    expect(normalizeXcagiDownloadBase(undefined, '11.0.0')).toBe('https://xiu-ci.com/xcagi-v11.0.0')
     expect(normalizeXcagiDownloadBase('https://cdn.example.com/root/')).toBe('https://cdn.example.com/root')
 
     expect(xcagiDownloadFileName('personal', 'win', '1.2.3')).toBe('XCAGI-Personal-Setup-1.2.3-x64.exe')
