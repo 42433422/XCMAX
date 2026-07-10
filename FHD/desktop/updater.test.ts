@@ -102,6 +102,56 @@ describe('updater — parseYamlField', () => {
   })
 })
 
+describe('updater — same-version rebuild ordering', () => {
+  it('accepts a newer same-version rebuild with a different build SHA', async () => {
+    const { isNewerSameVersionRebuild } = await import('./updater.js')
+    expect(isNewerSameVersionRebuild({
+      remoteVersion: '10.0.0',
+      remoteBuildSha: 'new',
+      remoteReleaseDate: '2026-07-11T05:00:00.000Z',
+      localVersion: '10.0.0',
+      localBuildSha: 'old',
+      localBuiltAt: '2026-07-11T04:00:00.000Z',
+    })).toBe(true)
+  })
+
+  it('rejects an older same-version rebuild so a fresh install cannot roll back', async () => {
+    const { isNewerSameVersionRebuild } = await import('./updater.js')
+    expect(isNewerSameVersionRebuild({
+      remoteVersion: '10.0.0',
+      remoteBuildSha: 'old',
+      remoteReleaseDate: '2026-07-11T03:00:00.000Z',
+      localVersion: '10.0.0',
+      localBuildSha: 'new',
+      localBuiltAt: '2026-07-11T04:00:00.000Z',
+    })).toBe(false)
+  })
+
+  it('never treats a lower version as a rebuild update', async () => {
+    const { isNewerSameVersionRebuild } = await import('./updater.js')
+    expect(isNewerSameVersionRebuild({
+      remoteVersion: '9.9.9',
+      remoteBuildSha: 'other',
+      remoteReleaseDate: '2026-07-11T05:00:00.000Z',
+      localVersion: '10.0.0',
+      localBuildSha: 'local',
+      localBuiltAt: '2026-07-11T04:00:00.000Z',
+    })).toBe(false)
+  })
+
+  it('keeps the repair path for legacy builds without a builtAt timestamp', async () => {
+    const { isNewerSameVersionRebuild } = await import('./updater.js')
+    expect(isNewerSameVersionRebuild({
+      remoteVersion: '10.0.0',
+      remoteBuildSha: 'new',
+      remoteReleaseDate: '2026-07-11T05:00:00.000Z',
+      localVersion: '10.0.0',
+      localBuildSha: 'old',
+      localBuiltAt: '',
+    })).toBe(true)
+  })
+})
+
 describe('updater — verifyLatestMetadataSignature', () => {
   const savedEnv = { ...process.env }
 

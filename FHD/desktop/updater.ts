@@ -73,8 +73,22 @@ export function isUpdateDownloaded(): boolean {
 }
 
 export function readLocalBuildSha(): string {
+  return readLocalBuildIdentity().buildSha
+}
+
+export type BuildIdentity = {
+  version: string
+  buildSha: string
+  builtAt: string
+}
+
+export function readLocalBuildIdentity(): BuildIdentity {
   if (!app.isPackaged) {
-    return String(process.env.XCAGI_BUILD_SHA || '').trim()
+    return {
+      version: app.getVersion(),
+      buildSha: String(process.env.XCAGI_BUILD_SHA || '').trim(),
+      builtAt: String(process.env.XCAGI_BUILD_AT || '').trim(),
+    }
   }
   const candidates = [
     path.join(process.resourcesPath, 'build-info.json'),
@@ -83,14 +97,43 @@ export function readLocalBuildSha(): string {
   for (const filePath of candidates) {
     try {
       if (!fs.existsSync(filePath)) continue
-      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { gitSha?: string; buildSha?: string }
-      const sha = String(raw.gitSha || raw.buildSha || '').trim()
-      if (sha) return sha
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as {
+        version?: string
+        gitSha?: string
+        buildSha?: string
+        builtAt?: string
+      }
+      const identity = {
+        version: String(raw.version || app.getVersion()).trim(),
+        buildSha: String(raw.gitSha || raw.buildSha || '').trim(),
+        builtAt: String(raw.builtAt || '').trim(),
+      }
+      if (identity.buildSha || identity.builtAt) return identity
     } catch {
       /* try next */
     }
   }
-  return ''
+  return { version: app.getVersion(), buildSha: '', builtAt: '' }
+}
+
+export function isNewerSameVersionRebuild(input: {
+  remoteVersion: string
+  remoteBuildSha: string
+  remoteReleaseDate: string
+  localVersion: string
+  localBuildSha: string
+  localBuiltAt: string
+}): boolean {
+  if (!input.remoteVersion || input.remoteVersion !== input.localVersion) return false
+  if (!input.remoteBuildSha || !input.localBuildSha) return false
+  if (input.remoteBuildSha === input.localBuildSha) return false
+
+  // Legacy installers did not record builtAt. Preserve their same-version repair path.
+  if (!input.localBuiltAt) return true
+
+  const remoteTime = Date.parse(input.remoteReleaseDate)
+  const localTime = Date.parse(input.localBuiltAt)
+  return Number.isFinite(remoteTime) && Number.isFinite(localTime) && remoteTime > localTime
 }
 
 export function parseYamlField(content: string, field: string): string {
@@ -116,8 +159,15 @@ function installSameVersionRebuildHook(): void {
     const remoteSha = String(
       (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
     ).trim()
-    const localSha = readLocalBuildSha()
-    return Boolean(remoteSha && localSha && remoteSha !== localSha)
+    const local = readLocalBuildIdentity()
+    return isNewerSameVersionRebuild({
+      remoteVersion: String(updateInfo.version || '').trim(),
+      remoteBuildSha: remoteSha,
+      remoteReleaseDate: String(updateInfo.releaseDate || '').trim(),
+      localVersion: local.version,
+      localBuildSha: local.buildSha,
+      localBuiltAt: local.builtAt,
+    })
   }
 }
 
@@ -158,15 +208,43 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', async info => {
+    const local = readLocalBuildIdentity()
+    const remoteSha = String(
+      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
+    ).trim()
+    if (
+      info.version === local.version &&
+      !isNewerSameVersionRebuild({
+        remoteVersion: info.version,
+        remoteBuildSha: remoteSha,
+        remoteReleaseDate: String(info.releaseDate || '').trim(),
+        localVersion: local.version,
+        localBuildSha: local.buildSha,
+        localBuiltAt: local.builtAt,
+      })
+    ) {
+      updateDownloaded = false
+      appendUpdaterEvent('download_ignored_stale_same_version', {
+        version: info.version,
+        remoteBuildSha: remoteSha,
+        localBuildSha: local.buildSha,
+      })
+      send('update-not-available', { ...info, reason: 'stale-same-version' })
+      return
+    }
+
     updateDownloaded = true
     send('update-downloaded', info)
+    const sameVersionRebuild = info.version === local.version
     const result = await dialog.showMessageBox(mainWindow, {
       type: 'info',
       buttons: ['稍后', '立即重启安装'],
       defaultId: 1,
       cancelId: 0,
       title: 'XCAGI 更新已下载',
-      message: `新版本 ${info.version} 已准备好，是否立即重启安装？`
+      message: sameVersionRebuild
+        ? `版本 ${info.version} 的维护更新已准备好，是否立即重启安装？`
+        : `新版本 ${info.version} 已准备好，是否立即重启安装？`
     })
     if (result.response === 1) {
       try {

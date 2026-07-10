@@ -102,7 +102,12 @@ if (-not $buildSha) {
   }
 }
 $buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
-$buildInfo = @{ schema_version = 1; gitSha = $buildSha; version = $Version }
+$buildInfo = @{
+  schema_version = 2
+  gitSha = $buildSha
+  version = $Version
+  builtAt = (Get-Date).ToUniversalTime().ToString('o')
+}
 $buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent

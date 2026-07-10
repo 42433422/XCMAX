@@ -54,3 +54,12 @@ def test_backup_script_does_not_bind_path_array_as_join_path_child_path() -> Non
     assert '    (Join-Path $env:LOCALAPPDATA "Programs\\XCAGI' in script
     assert '    Join-Path $env:LOCALAPPDATA "Programs\\XCAGI' not in script
     assert "-WorkingDirectory $backendDir" in script
+
+
+def test_windows_build_identity_records_an_orderable_timestamp() -> None:
+    script = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "schema_version = 2" in script
+    assert "builtAt = (Get-Date).ToUniversalTime().ToString('o')" in script
