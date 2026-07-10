@@ -182,9 +182,14 @@ if ($missingSigningVars.Count -eq 0) {
 if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
 
-Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"
+$packagedAppAsar = Join-Path $outDir "win-unpacked\resources\app.asar"
+Assert-FileExists $packagedAppAsar "Electron app.asar"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
+& node (Join-Path $Root "desktop\scripts\verify-packaged-runtime.cjs") $packagedAppAsar
+if ($LASTEXITCODE -ne 0) {
+  throw "Electron packaged runtime dependency verification failed"
+}
 
 $nsisExe = Get-ChildItem $outDir -Filter "XCAGI-$label-Setup-*.exe" -File -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending |
