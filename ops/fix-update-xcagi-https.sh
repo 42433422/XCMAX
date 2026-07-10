@@ -72,7 +72,12 @@ server {
         try_files $uri =404;
     }
 
-    location ~* \.(exe|dmg|pkg|zip|blockmap|yml)$ {
+    location ~* /latest(?:-mac)?\.yml$ {
+        add_header Cache-Control "no-cache, no-store, must-revalidate" always;
+        try_files $uri =404;
+    }
+
+    location ~* \.(exe|dmg|pkg|zip|blockmap)$ {
         add_header Cache-Control "public, max-age=31536000, immutable";
         try_files $uri =404;
     }

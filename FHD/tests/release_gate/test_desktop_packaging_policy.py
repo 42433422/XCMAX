@@ -166,3 +166,25 @@ def test_modstore_desktop_shell_uses_supported_electron() -> None:
     assert package["engines"]["node"] == ">=22.12.0"
     assert lock["packages"][""]["devDependencies"]["electron"] == "41.10.1"
     assert lock["packages"]["node_modules/electron"]["version"] == "41.10.1"
+
+
+def test_mutable_update_metadata_is_never_immutably_cached() -> None:
+    corp_root = REPO_ROOT.parent / "成都修茈科技有限公司"
+    configs = [
+        corp_root / "nginx-xiu-ci-root.conf",
+        corp_root / "nginx-xiu-ci.conf",
+        corp_root / "deploy" / "nginx" / "snippets" / "xcagi-cos-alias.inc.conf",
+    ]
+    binary_location = r"location ~* ^/releases/stable/(.+\.(?:exe|dmg|pkg|zip|blockmap))$"
+    metadata_cache = 'add_header Cache-Control "no-cache, no-store, must-revalidate" always;'
+
+    for config in configs:
+        content = config.read_text(encoding="utf-8")
+        assert binary_location in content
+        assert metadata_cache in content
+
+    repair_script = (REPO_ROOT.parent / "ops" / "fix-update-xcagi-https.sh").read_text(
+        encoding="utf-8"
+    )
+    assert r"location ~* /latest(?:-mac)?\.yml$" in repair_script
+    assert r"\.(exe|dmg|pkg|zip|blockmap|yml)$" not in repair_script
