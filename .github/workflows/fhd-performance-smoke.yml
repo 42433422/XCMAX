@@ -63,8 +63,10 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: k6-results
-          path: results.json
-          if-no-files-found: ignore
+          # `uses:` steps resolve paths from the repository root, not
+          # `defaults.run.working-directory` added by the root publisher.
+          path: FHD/results.json
+          if-no-files-found: error
 
       - name: Teardown
         if: always()
