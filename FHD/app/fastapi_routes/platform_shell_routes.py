@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -50,16 +51,24 @@ async def decoupling_progress():
     return {"success": True, "data": build_decoupling_progress_payload(installed)}
 
 
-@router.get("/deliverable-status")
-async def platform_shell_deliverable_status(request: Request):
-    """Deliverable acceptance: edition pack, mod routes, recommended next step."""
+def _build_deliverable_status_safely(app):
+    """Keep framework exception rendering outside the public route boundary."""
     from app.mod_sdk.deliverable_status import build_deliverable_status
 
     try:
-        return {"success": True, "data": build_deliverable_status(app=request.app)}
+        return build_deliverable_status(app=app)
     except Exception:
         logger.exception("platform_shell: deliverable status failed")
-        raise HTTPException(status_code=503, detail="交付状态暂时不可用") from None
+        return None
+
+
+@router.get("/deliverable-status")
+async def platform_shell_deliverable_status(request: Request):
+    """Deliverable acceptance: edition pack, mod routes, recommended next step."""
+    data = _build_deliverable_status_safely(request.app)
+    if data is None:
+        return JSONResponse(status_code=503, content={"detail": "交付状态暂时不可用"})
+    return {"success": True, "data": data}
 
 
 @router.get("/industry-baseline")

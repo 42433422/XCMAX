@@ -386,6 +386,13 @@ class SuperEmployeeService:
         self._outbox_dir = self._messages.outbox_dir
         self._http_client_factory = http_client_factory or self._default_http_client
         self._cli_runner = cli_runner or subprocess.run
+        # Only worktrees created by this service may be traversed during the
+        # validation phase.  Explicit storage_root is a dependency-injection
+        # seam used by the isolated filesystem tests; production instances do
+        # not add the application data directory to this allow-list.
+        self._verification_workspaces: set[str] = set()
+        if storage_root is not None:
+            self._remember_verification_workspace(root)
         # 执行授权（deny-by-default）。每个 Service 实例按请求新建（见路由），无跨请求竞态；
         # 默认产品域，invoke() 里据 context 重解析。任何绕过 invoke 的路径也仍是安全档。
         self._grant = CapabilityGrant.product()
@@ -2165,12 +2172,20 @@ class SuperEmployeeService:
             if r.returncode != 0:
                 logger.warning("worktree add 失败: %s", (r.stderr or r.stdout)[:300])
                 return None
+            if not self._remember_verification_workspace(wt_path):
+                logger.warning("worktree 验证目录登记失败")
+                self._git(base_cwd, "worktree", "remove", "--force", wt_path, timeout=120)
+                return None
             return wt_path, branch
         except Exception:  # noqa: BLE001
             logger.warning("worktree add 异常", exc_info=True)
             return None
 
     def _remove_worktree(self, base_cwd: str, wt_path: str) -> None:
+        try:
+            self._verification_workspaces.discard(str(Path(wt_path).resolve(strict=False)))
+        except (OSError, RuntimeError):
+            pass
         self._git_mgr.remove_worktree(base_cwd, wt_path)
 
     def _relay_persistent_worktree_path(self) -> str:
@@ -2202,13 +2217,45 @@ class SuperEmployeeService:
                 if r.returncode != 0:
                     logger.warning("持久 worktree 创建失败: %s", (r.stderr or r.stdout)[:300])
                     return None
+            if not self._remember_verification_workspace(wt_path):
+                logger.warning("持久 worktree 验证目录登记失败")
+                return None
             return wt_path, branch
         except Exception:  # noqa: BLE001
             logger.warning("持久 worktree 准备异常", exc_info=True)
             return None
 
+    def _remember_verification_workspace(self, cwd: str | Path) -> bool:
+        """Register an internally-created worktree as a validation boundary."""
+        try:
+            # Registration follows a successful `git worktree add`.  Using
+            # strict=False also keeps the mocked Git seam deterministic in
+            # unit tests; actual validation below still requires existence.
+            workspace = Path(cwd).resolve(strict=False)
+        except (OSError, RuntimeError):
+            return False
+        self._verification_workspaces.add(str(workspace))
+        return True
+
+    def _trusted_verification_workspace(self, cwd: str) -> Path | None:
+        """Resolve ``cwd`` only when it exactly matches an owned worktree."""
+        try:
+            # The exact canonical path must already have been registered after
+            # a successful `git worktree add`; no request-provided parent or
+            # filename is accepted as a traversal root.
+            workspace = Path(cwd).resolve(strict=True)  # lgtm[py/path-injection]
+        except (OSError, RuntimeError):
+            return None
+        if str(workspace) not in self._verification_workspaces:
+            return None
+        return workspace
+
     def _verify_workspace(self, cwd: str) -> tuple[bool, str]:
         """view 阶段：验证改动可编译。优先 XCMAX_CLAUDE_VERIFY_CMD；否则对改动的 .py 做语法编译。"""
+        workspace = self._trusted_verification_workspace(cwd)
+        if workspace is None:
+            return False, "拒绝验证未登记的工作区"
+        cwd = str(workspace)
         custom = str(os.environ.get("XCMAX_CLAUDE_VERIFY_CMD") or "").strip()
         if custom:
             try:
@@ -2251,8 +2298,10 @@ class SuperEmployeeService:
             errs: list[str] = []
             compiled = 0
             try:
-                workspace = Path(cwd).resolve(strict=True)
-                candidates = workspace.rglob("*.py")
+                # `workspace` is an exact member of the service-owned
+                # allow-list above; Git-reported filenames are only used for
+                # equality checks and never joined into a filesystem path.
+                candidates = workspace.rglob("*.py")  # lgtm[py/path-injection]
                 for candidate in candidates:
                     relative = candidate.relative_to(workspace).as_posix()
                     if relative not in py:
