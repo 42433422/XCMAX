@@ -96,10 +96,18 @@ jobs:
             --cov-report=term-missing --cov-report=xml \
             --cov-fail-under=${MODSTORE_PY_COVERAGE_FLOOR}
 
+      - name: Persist MODstore backend coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: modstore-backend-coverage
+          path: 成都修茈科技有限公司/MODstore_deploy/coverage.xml
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload coverage report
         uses: codecov/codecov-action@v4
         with:
-          files: ./coverage.xml
+          files: ./成都修茈科技有限公司/MODstore_deploy/coverage.xml
           flags: backend
           name: modstore-backend
           fail_ci_if_error: false
