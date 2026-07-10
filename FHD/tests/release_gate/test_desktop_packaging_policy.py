@@ -105,7 +105,11 @@ def test_desktop_security_gate_cannot_synthesize_green_reports() -> None:
 def test_desktop_electron_and_ci_node_toolchain_are_supported() -> None:
     package = json.loads((REPO_ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
     assert package["devDependencies"]["electron"] == "41.10.1"
+    assert package["devDependencies"]["cross-env"].startswith("^10.")
     assert package["engines"]["node"] == ">=22.12.0"
+    assert package["scripts"]["test"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
+    assert package["scripts"]["test:watch"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
+    assert package["scripts"]["test:coverage"].startswith("cross-env XCAGI_DESKTOP_TEST=1 ")
 
     workflows = [
         REPO_ROOT.parent / ".github" / "workflows" / "desktop-security-scan.yml",
