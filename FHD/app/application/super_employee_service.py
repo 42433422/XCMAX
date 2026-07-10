@@ -632,9 +632,9 @@ class SuperEmployeeService:
                     yield {"type": "token", "text": chunk}
                     await asyncio.sleep(0.03)
                 yield {"type": "done", "result": {"response": body, "dispatcher": "dev_loop"}}
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("invoke_stream dev_loop failed: %s", exc)
-                yield {"type": "error", "message": f"开发任务执行失败：{exc}"}
+            except Exception:  # noqa: BLE001
+                logger.exception("invoke_stream dev_loop failed")
+                yield {"type": "error", "message": "开发任务暂时执行失败，请稍后重试"}
             return
 
         # 闲聊或简单 dev-loop（非多步骤）→ CLI 流式
@@ -657,9 +657,12 @@ class SuperEmployeeService:
             if not body:
                 body = f"{self._p.display_tool} CLI 暂时没有返回内容，请确认本机 {self._p.display_tool} 已登录后重试。"
             yield {"type": "done", "result": {"response": body, "dispatcher": "cli_stream"}}
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("invoke_stream cli failed: %s", exc)
-            yield {"type": "error", "message": f"{self._p.display_tool} CLI 调用失败：{exc}"}
+        except Exception:  # noqa: BLE001
+            logger.exception("invoke_stream cli failed")
+            yield {
+                "type": "error",
+                "message": f"{self._p.display_tool} CLI 暂时不可用，请稍后重试",
+            }
 
     async def _run_cli_streaming(
         self,
@@ -686,10 +689,11 @@ class SuperEmployeeService:
                     stderr=asyncio.subprocess.PIPE,
                     env=env,
                 )
-            except (OSError, FileNotFoundError) as exc:
+            except (OSError, FileNotFoundError):
+                logger.exception("%s CLI failed to start", self._p.display_tool)
                 yield {
                     "type": "error",
-                    "message": f"{self._p.display_tool} CLI 启动失败：{exc}",
+                    "message": f"{self._p.display_tool} CLI 启动失败，请检查安装与登录状态",
                 }
                 return
 
@@ -758,10 +762,11 @@ class SuperEmployeeService:
                     return
                 # 没拿到文本 → 尝试 stderr
                 if returncode != 0:
-                    stderr_text = await _read_stderr()
+                    await _read_stderr()
+                    logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
                     yield {
                         "type": "error",
-                        "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}）：{stderr_text[:300]}",
+                        "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}），请查看本机日志",
                     }
                     return
                 yield {"type": "done", "text": ""}
@@ -774,10 +779,11 @@ class SuperEmployeeService:
                     yield {"type": "done", "text": body}
                     return
             if returncode != 0:
-                stderr_text = await _read_stderr()
+                await _read_stderr()
+                logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
                 yield {
                     "type": "error",
-                    "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}）：{stderr_text[:300]}",
+                    "message": f"{self._p.display_tool} CLI 返回失败（code {returncode}），请查看本机日志",
                 }
                 return
             yield {"type": "done", "text": ""}
@@ -1746,8 +1752,9 @@ class SuperEmployeeService:
                 self._conversation_prompt(text, cwd, bool(session_id)),
                 session_id or None,
             )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+        except (OSError, subprocess.SubprocessError):
+            logger.exception("%s conversation CLI failed", self._p.display_tool)
+            return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
         body, new_sid = self._parse_stream_json_full(stdout)
         # resume 失效(会话被清/找不到)兜底：清掉 session_id，按新会话重来一次。
         if session_id and not body and not killed:
@@ -1772,10 +1779,8 @@ class SuperEmployeeService:
         if body:
             return body
         if returncode != 0:
-            return (
-                f"{self._p.display_tool} 本次返回失败（code {returncode}）："
-                f"{(stderr.strip() or stdout.strip())[:400]}"
-            )
+            logger.warning("%s conversation returned code %s", self._p.display_tool, returncode)
+            return f"{self._p.display_tool} 本次返回失败（code {returncode}），请查看本机日志"
         return ""
 
     def _run_cli_once(self, cli_path: str, prompt: str, cwd: str) -> str:
@@ -1792,8 +1797,9 @@ class SuperEmployeeService:
             if self._cli_runner is not subprocess.run:
                 try:
                     proc = self._cli_runner(cmd, text=True, capture_output=True, cwd=cwd)
-                except (OSError, subprocess.SubprocessError) as exc:
-                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+                except (OSError, subprocess.SubprocessError):
+                    logger.exception("%s injected CLI runner failed", self._p.display_tool)
+                    return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
                 returncode = int(getattr(proc, "returncode", 0) or 0)
                 stdout = str(getattr(proc, "stdout", "") or "")
                 stderr = str(getattr(proc, "stderr", "") or "")
@@ -1803,8 +1809,9 @@ class SuperEmployeeService:
                     returncode, stdout, stderr, killed_reason = self._run_cli_idle(
                         cmd, cwd, idle_timeout, hard_cap
                     )
-                except (OSError, subprocess.SubprocessError) as exc:
-                    return f"{self._p.display_tool} CLI 调用失败：{str(exc)[:300]}"
+                except (OSError, subprocess.SubprocessError):
+                    logger.exception("%s CLI runner failed", self._p.display_tool)
+                    return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
             if killed_reason.startswith("idle"):
                 return (
                     f"{self._p.display_tool} CLI 静默 {idle_timeout:g} 秒无任何输出，判定卡住已结束。"
@@ -1821,11 +1828,8 @@ class SuperEmployeeService:
                 if body:
                     return body
                 if returncode != 0:
-                    detail = (stderr.strip() or stdout.strip())[:500]
-                    return (
-                        f"{self._p.display_tool} CLI 已接入，但本次返回失败"
-                        f"（code {returncode}）：{detail}"
-                    )
+                    logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
+                    return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）"
                 return ""
             # 非 stream(codex)：先读 last-message 文件，再退 stdout。
             if self._p.cli_reads_output_file and output_path.exists():
@@ -1836,10 +1840,8 @@ class SuperEmployeeService:
             if cleaned:
                 return cleaned
             if returncode != 0:
-                return (
-                    f"{self._p.display_tool} CLI 已接入，但本次返回失败"
-                    f"（code {returncode}）：{stderr.strip()[:500]}"
-                )
+                logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
+                return f"{self._p.display_tool} CLI 已接入，但本次返回失败（code {returncode}）"
         return ""
 
     def _cli_path(self) -> str:
@@ -2135,16 +2137,17 @@ class SuperEmployeeService:
     def _prepare_worktree(
         self,
         base_cwd: str,
-        text: str,
+        _text: str,
         branch_hint: str = "",
     ) -> tuple[str, str] | None:
         """建独立 worktree；有 branch_hint 时基于现有分支写回，否则自动新建任务分支。"""
         if not self._is_git_repo(base_cwd):
             return None
-        slug = re.sub(r"[^a-z0-9]+", "-", text.strip().lower())[:24].strip("-") or "task"
         uniq = f"{os.getpid()}-{int.from_bytes(os.urandom(3), 'big'):x}"
         selected_branch = self._safe_branch_name(branch_hint)
-        branch = selected_branch or f"super-employee/{self._p.tool_name}/{slug}-{uniq}"
+        # Request text must never influence a branch or filesystem-adjacent
+        # value. The random task id is enough for operators to distinguish it.
+        branch = selected_branch or f"super-employee/{self._p.tool_name}/task-{uniq}"
         # 持久复用：中继真仓库模式下，自动新建分支的工单复用同一个 worktree（620M 只建一次），
         # 每任务仍开新分支真推送。选定既有分支的写回任务走每任务新建（语义更清晰）。
         persistent = self._relay_persistent_worktree_path()
@@ -2243,7 +2246,7 @@ class SuperEmployeeService:
             # The exact canonical path must already have been registered after
             # a successful `git worktree add`; no request-provided parent or
             # filename is accepted as a traversal root.
-            workspace = Path(cwd).resolve(strict=True)  # lgtm[py/path-injection]
+            workspace = Path(cwd).resolve(strict=True)
         except (OSError, RuntimeError):
             return None
         if str(workspace) not in self._verification_workspaces:
@@ -2270,9 +2273,11 @@ class SuperEmployeeService:
                 )
                 if r.returncode == 0:
                     return True, "自定义验证命令通过"
-                return False, (r.stderr.strip() or r.stdout.strip())[:1500]
-            except Exception as e:  # noqa: BLE001
-                return False, f"验证命令异常：{str(e)[:300]}"
+                logger.warning("custom workspace verification returned code %s", r.returncode)
+                return False, "自定义验证命令未通过，请查看本机日志"
+            except Exception:  # noqa: BLE001
+                logger.exception("custom workspace verification command failed")
+                return False, "验证命令异常，请查看本机日志"
         # 用 status --porcelain 枚举改动：必须含"未跟踪新文件"（claude 常新建文件，
         # 如 PressEffect.kt 就是新建；git diff HEAD 抓不到未跟踪文件会漏验证）。
         changed: list[str] = []
@@ -2301,7 +2306,7 @@ class SuperEmployeeService:
                 # `workspace` is an exact member of the service-owned
                 # allow-list above; Git-reported filenames are only used for
                 # equality checks and never joined into a filesystem path.
-                candidates = workspace.rglob("*.py")  # lgtm[py/path-injection]
+                candidates = workspace.rglob("*.py")
                 for candidate in candidates:
                     relative = candidate.relative_to(workspace).as_posix()
                     if relative not in py:
@@ -2312,10 +2317,12 @@ class SuperEmployeeService:
                     compiled += 1
                     try:
                         compile(candidate.read_bytes(), relative, "exec")
-                    except (OSError, SyntaxError, UnicodeError) as exc:
-                        errs.append(str(exc)[:400])
-            except (OSError, ValueError) as exc:
-                return False, f"工作区路径验证失败：{str(exc)[:300]}"
+                    except (OSError, SyntaxError, UnicodeError):
+                        logger.exception("Python validation failed for %s", relative)
+                        errs.append(f"{relative}：语法检查未通过")
+            except (OSError, ValueError):
+                logger.exception("workspace validation traversal failed")
+                return False, "工作区路径验证失败，请检查目录权限后重试"
             if errs:
                 return False, "Python 语法错误：\n" + "\n".join(errs)
             return True, f"已对 {compiled} 个改动的 .py 通过语法编译"

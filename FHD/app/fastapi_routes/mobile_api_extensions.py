@@ -1588,7 +1588,7 @@ async def mobile_admin_codex_super_employee_messages(
     try:
         messages = CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_codex_super_employee_messages")
         return JSONResponse(
             format_mobile_response(
@@ -1643,7 +1643,7 @@ async def mobile_admin_codex_super_employee_invoke(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_codex_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
@@ -1670,7 +1670,7 @@ async def mobile_admin_claude_super_employee_messages(
     try:
         messages = ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_claude_super_employee_messages")
         return JSONResponse(
             format_mobile_response(
@@ -1725,7 +1725,7 @@ async def mobile_admin_claude_super_employee_invoke(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_claude_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
@@ -1752,7 +1752,7 @@ async def mobile_admin_cursor_super_employee_messages(
     try:
         messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_cursor_super_employee_messages")
         return JSONResponse(
             format_mobile_response(
@@ -1800,7 +1800,7 @@ async def mobile_admin_cursor_super_employee_invoke(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_cursor_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
@@ -1827,7 +1827,7 @@ async def mobile_admin_trae_super_employee_messages(
     try:
         messages = TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_trae_super_employee_messages")
         return JSONResponse(
             format_mobile_response(
@@ -1882,7 +1882,7 @@ async def mobile_admin_trae_super_employee_invoke(
             format_mobile_response(None, "消息内容无效，请检查后重试", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS:
+    except Exception:  # noqa: BLE001 - public HTTP exception boundary
         logger.exception("mobile_admin_trae_super_employee_invoke")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
@@ -4267,35 +4267,8 @@ def _extract_employee_reply_text(result: dict) -> str:
 
 
 def _extract_employee_failure_text(result: dict) -> str:
-    for key in ("message", "error"):
-        value = result.get(key)
-        if value:
-            return str(value)
-    payload = result.get("result")
-    if not isinstance(payload, dict):
-        return ""
-    for key in ("message", "error", "summary", "cognition_error"):
-        value = payload.get(key)
-        if value:
-            return str(value)
-    outputs = payload.get("outputs")
-    if isinstance(outputs, list):
-        for out in outputs:
-            if not isinstance(out, dict):
-                continue
-            for key in ("error", "summary", "message", "text"):
-                value = out.get(key)
-                if value:
-                    return str(value)
-            nested = out.get("output")
-            if isinstance(nested, dict):
-                for key in ("error", "summary", "message", "text"):
-                    value = nested.get(key)
-                    if value:
-                        return str(value)
-            elif nested:
-                return str(nested)
-    return ""
+    logger.warning("employee execution failed; internal detail omitted from mobile response")
+    return "员工暂时无法完成此任务，请稍后重试"
 
 
 @extension_router.post("/employees/{employee_id}/chat/stream")

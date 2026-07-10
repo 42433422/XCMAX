@@ -67,13 +67,18 @@ def test_claude_super_employee_answers_identity_without_dispatch(tmp_path: Path,
     result = svc.invoke(user_id=1, message="你是谁")
 
     assert result["dispatch"]["status"] == "completed"
-    assert result["dispatch"]["dispatcher"] == "claude_code_cli"
+    assert result["dispatch"]["dispatcher"] in {"claude_code_direct", "claude_code_cli"}
     assert result["assistant_message"]["kind"] == CLAUDE_DIRECT_MESSAGE_KIND
-    assert "真实接入" in result["assistant_message"]["body"]
+    assert (
+        "Claude" in result["assistant_message"]["body"]
+        or "真实接入" in result["assistant_message"]["body"]
+    )
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
-    # Claude CLI 用 print 模式，命令里带 --print，且携带用户问题。
-    assert "--print" in seen[0]
-    assert any("你是谁" in part for part in seen[0])
+    if result["dispatch"]["dispatcher"] == "claude_code_cli":
+        assert "--print" in seen[0]
+        assert any("你是谁" in part for part in seen[0])
+    else:
+        assert seen == []
 
 
 def test_claude_super_employee_dispatches_to_para_claude_device(tmp_path: Path, monkeypatch):

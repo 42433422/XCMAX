@@ -200,8 +200,9 @@ def seed_edition_mods_from_bundle(
         try:
             shutil.copytree(src, dst)
             results.append({"mod_id": mod_id, "status": "seeded", "message": str(dst)})
-        except OSError as exc:
-            results.append({"mod_id": mod_id, "status": "error", "message": str(exc)})
+        except OSError:
+            logger.exception("failed to seed bundled mod %s", mod_id)
+            results.append({"mod_id": mod_id, "status": "error", "message": "bundle copy failed"})
 
     return results
 

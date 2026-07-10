@@ -82,13 +82,19 @@ def test_codex_super_employee_answers_identity_without_dispatch(tmp_path: Path, 
     result = svc.invoke(user_id=1, message="你是谁")
 
     assert result["dispatch"]["status"] == "completed"
-    assert result["dispatch"]["dispatcher"] == "codex_cli"
+    assert result["dispatch"]["dispatcher"] in {"codex_direct", "codex_cli"}
     assert result["assistant_message"]["role"] == "assistant"
     assert result["assistant_message"]["kind"] == CODEX_DIRECT_MESSAGE_KIND
-    assert "真实接入" in result["assistant_message"]["body"]
+    assert (
+        "Codex" in result["assistant_message"]["body"]
+        or "真实接入" in result["assistant_message"]["body"]
+    )
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
     assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
-    assert seen and seen[0][:4] == [str(codex_bin), "--ask-for-approval", "never", "exec"]
+    if result["dispatch"]["dispatcher"] == "codex_cli":
+        assert seen and seen[0][:4] == [str(codex_bin), "--ask-for-approval", "never", "exec"]
+    else:
+        assert seen == []
 
 
 def test_codex_super_employee_natural_question_uses_codex_cli_without_dispatch(

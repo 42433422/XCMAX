@@ -396,8 +396,10 @@ class TestSeedEditionModsFromBundle:
             patch(_ED_MOD_MANAGER_PATH, return_value=mm),
             patch("app.mod_sdk.edition_policy.edition_mod_ids", return_value=(mod_id,)),
             patch("app.mod_sdk.edition_policy._resolve_mod_seed_source", return_value=src),
-            patch("shutil.copytree", side_effect=OSError("permission denied")),
+            patch("shutil.copytree", side_effect=OSError("secret path /private/bundle")),
         ):
             result = seed_edition_mods_from_bundle(mods_root=mods_root)
 
-        assert any(r["status"] == "error" for r in result)
+        error = next(r for r in result if r["status"] == "error")
+        assert error["message"] == "bundle copy failed"
+        assert "/private/bundle" not in str(result)

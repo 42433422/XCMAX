@@ -187,7 +187,7 @@ class TestInvokeDirect:
             cli_runner=_stdout_runner("cli answer"),
         )
         with patch.object(svc, "_cli_path", return_value=str(cli)):
-            result = svc.invoke(user_id=1, message="你好", context={"mode": "chat"})
+            result = svc.invoke(user_id=1, message="帮我分析这个现象", context={"mode": "chat"})
         assert result["dispatch"]["status"] == "completed"
         assert result["dispatch"]["dispatcher"] == "codex_cli"
 

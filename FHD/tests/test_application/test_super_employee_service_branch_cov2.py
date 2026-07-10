@@ -1197,14 +1197,13 @@ class TestVerifyWorkspace:
         assert ok is False
         assert "验证命令异常" in msg
 
-    def test_custom_command_nonzero_returns_stderr(self, tmp_path, monkeypatch) -> None:
-        # A nonexistent command via shell returns non-zero exit code (not an
-        # exception); the stderr/stdout is returned as the failure message.
+    def test_custom_command_nonzero_hides_stderr(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("XCMAX_CLAUDE_VERIFY_CMD", "nonexistent_cmd_xyz")
         svc = _make_svc(tmp_path, cli_runner=_null_runner)
         ok, msg = svc._verify_workspace(str(tmp_path))
         assert ok is False
-        assert "nonexistent_cmd_xyz" in msg or "not found" in msg
+        assert msg == "自定义验证命令未通过，请查看本机日志"
+        assert "nonexistent_cmd_xyz" not in msg
 
     def test_no_changes_passes(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)

@@ -56,19 +56,22 @@ def _err_class(m):
 
 
 def test_extract_employee_reply_text_uses_nested_output_error(m):
+    secret = "不支持的 handler：direct_python /private/customer.db"
     result = {
         "success": False,
         "result": {
             "outputs": [
                 {
                     "handler": "direct_python",
-                    "output": {"ok": False, "error": "不支持的 handler：direct_python"},
+                    "output": {"ok": False, "error": secret},
                 }
             ]
         },
     }
 
-    assert "不支持的 handler：direct_python" in m._extract_employee_reply_text(result)
+    reply = m._extract_employee_reply_text(result)
+    assert reply == "⚠️ 员工执行失败：员工暂时无法完成此任务，请稍后重试"
+    assert secret not in reply
 
 
 @pytest.mark.asyncio
