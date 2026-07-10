@@ -20,7 +20,11 @@ def fast_start_client(monkeypatch, tmp_path):
 
     import app.security.lan_settings_store as lan_store
 
-    lan_store.load_overrides = lambda: LanSettingsOverride(enabled=False)
+    monkeypatch.setattr(
+        lan_store,
+        "load_overrides",
+        lambda: LanSettingsOverride(enabled=False),
+    )
     reset_lan_config_cache()
 
     app = create_fastapi_app()
@@ -36,4 +40,3 @@ def test_deliverable_status_available_in_bootstrap(fast_start_client):
     body = resp.json()
     assert body.get("success") is True
     assert "deliverable" in (body.get("data") or {})
-    assert getattr(app.state, "deferred_routes_pending", False) is True

@@ -551,7 +551,7 @@ class TestModstorePlatformAdapterFromSession:
         assert a.auth_token == "env_token"
         assert a._source == "env"
 
-    def test_from_session_with_request_auth_header(self, monkeypatch):
+    def test_from_session_does_not_forward_fhd_authorization(self, monkeypatch):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
 
         monkeypatch.delenv("MODSTORE_AUTH_TOKEN", raising=False)
@@ -561,10 +561,9 @@ class TestModstorePlatformAdapterFromSession:
         mock_request = MagicMock()
         mock_request.headers.get.return_value = "Bearer req_token"
 
-        # The request Authorization header should be picked up directly
+        # Request Authorization carries an FHD JWT, not a MODstore market token.
         a = ModstorePlatformAdapter.from_session(request=mock_request)
-        # The token from request header should be set (no session lookup needed)
-        assert a.auth_token == "req_token"
+        assert a.auth_token == ""
 
     def test_from_session_no_token_no_session(self, monkeypatch):
         from app.services.conversation.modstore_adapter import ModstorePlatformAdapter
