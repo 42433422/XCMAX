@@ -2197,9 +2197,7 @@ class SuperEmployeeService:
     def _relay_persistent_worktree_path(self) -> str:
         return self._git_mgr.relay_persistent_worktree_path()
 
-    def _prepare_persistent_worktree(
-        self, base_cwd: str, wt_path: str, branch: str
-    ) -> str | None:
+    def _prepare_persistent_worktree(self, base_cwd: str, wt_path: str, branch: str) -> str | None:
         """复用同一个 worktree：重置为 base 干净基线 + 开新任务分支；不存在则建一次。"""
         try:
             head = self._git(base_cwd, "rev-parse", "HEAD", timeout=15)
