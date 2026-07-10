@@ -11,6 +11,7 @@ registered in sys.modules (not real package trees), we patch them via
 """
 
 import asyncio
+import importlib
 import sys
 import types
 from typing import Any
@@ -20,6 +21,17 @@ import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+# These are lightweight production modules and are imported by other test
+# modules during collection.  Keep the real package tree in ``sys.modules``;
+# replacing ``app.enterprise`` with a package stub makes collection order
+# determine whether those unrelated tests can import their symbols.
+importlib.import_module("app.enterprise.account_mod_binding")
+importlib.import_module("app.enterprise.mod_entitlements")
+
+_MISSING_MODULE = object()
+_ORIGINAL_MODULES: dict[str, object] = {}
+_TEST_MODULES: dict[str, types.ModuleType] = {}
+
 # ---------------------------------------------------------------------------
 # Module-level stubs: inject thin fake modules so the import chain works
 # even when heavy infrastructure is absent.
@@ -27,14 +39,30 @@ from starlette.testclient import TestClient
 
 
 def _ensure_stub(name: str, attrs: dict | None = None) -> types.ModuleType:
+    if name not in _ORIGINAL_MODULES:
+        _ORIGINAL_MODULES[name] = sys.modules.get(name, _MISSING_MODULE)
     if name in sys.modules:
-        return sys.modules[name]
-    mod = types.ModuleType(name)
-    mod.__path__ = []  # mark as package so submodule imports don't raise "not a package"
-    for k, v in (attrs or {}).items():
-        setattr(mod, k, v)
-    sys.modules[name] = mod
+        mod = sys.modules[name]
+    else:
+        mod = types.ModuleType(name)
+        mod.__path__ = []  # mark as package so submodule imports don't raise "not a package"
+        for k, v in (attrs or {}).items():
+            setattr(mod, k, v)
+        sys.modules[name] = mod
+    _TEST_MODULES[name] = mod
     return mod
+
+
+@pytest.fixture(autouse=True)
+def _scope_module_stubs(monkeypatch):
+    """Install this module's stubs only while one of its tests is running."""
+    for name, module in _TEST_MODULES.items():
+        monkeypatch.setitem(sys.modules, name, module)
+        parent_name, _, child_name = name.rpartition(".")
+        parent = sys.modules.get(parent_name)
+        if parent is not None and child_name:
+            monkeypatch.setattr(parent, child_name, module, raising=False)
+    yield
 
 
 # Parent package stubs (must come first so dotted children can be registered)
@@ -179,6 +207,22 @@ _entitlements_mod = _ensure_stub(
         "get_cached_entitled_client_mod_ids": MagicMock(return_value=set()),
     },
 )
+_REAL_ENTITLEMENT_ATTRS = {
+    name: getattr(_entitlements_mod, name)
+    for name in (
+        "enterprise_mod_filter_active",
+        "sync_entitlements_from_request",
+        "get_cached_entitled_client_mod_ids",
+    )
+}
+
+
+@pytest.fixture(autouse=True)
+def _restore_real_entitlement_functions():
+    """Prevent route mocks from leaking into later enterprise tests."""
+    yield
+    for name, value in _REAL_ENTITLEMENT_ATTRS.items():
+        setattr(_entitlements_mod, name, value)
 
 # --- infrastructure mods stubs ---
 _mm_mock = MagicMock(
@@ -223,6 +267,15 @@ _ensure_stub(
 # Import the module under test (AFTER stubs are in place)
 # ---------------------------------------------------------------------------
 import app.fastapi_routes.mod_store_routes as _mod  # noqa: E402
+
+# Collection imports every test module in one interpreter.  Restore the real
+# dependency graph immediately; the autouse fixture above reinstalls the stubs
+# only for tests in this file.
+for _name, _original in reversed(tuple(_ORIGINAL_MODULES.items())):
+    if _original is _MISSING_MODULE:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _original
 
 # ---------------------------------------------------------------------------
 # Helpers for patching stub modules by direct attribute assignment

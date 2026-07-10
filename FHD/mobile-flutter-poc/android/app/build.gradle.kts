@@ -1,3 +1,6 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -39,6 +42,54 @@ android {
         versionName = injectedVersionName
     }
 
+    signingConfigs {
+        create("release") {
+            val localPropsFile = rootProject.file("keystore.properties")
+            val nativePropsFile = rootProject.file("../../mobile-android/keystore.properties")
+            val propsFile = when {
+                localPropsFile.isFile -> localPropsFile
+                nativePropsFile.isFile -> nativePropsFile
+                else -> localPropsFile
+            }
+            val keystoreProps = Properties()
+            if (propsFile.isFile) {
+                propsFile.inputStream().use { keystoreProps.load(it) }
+            }
+
+            fun property(name: String, key: String): String? =
+                System.getenv(name)?.trim()?.takeIf { it.isNotEmpty() }
+                    ?: keystoreProps.getProperty(key)?.trim()?.takeIf { it.isNotEmpty() }
+
+            val envStorePath = System.getenv("XCAGI_ANDROID_KEYSTORE")
+                ?.trim()
+                ?.takeIf { it.isNotEmpty() }
+            val storePath = envStorePath
+                ?: keystoreProps.getProperty("storeFile")?.trim()?.takeIf { it.isNotEmpty() }
+            if (storePath != null) {
+                val configuredFile = File(storePath)
+                val resolved = when {
+                    configuredFile.isAbsolute -> configuredFile
+                    envStorePath != null -> rootProject.file(storePath)
+                    else -> File(propsFile.parentFile, storePath)
+                }
+                if (!resolved.isFile) {
+                    throw GradleException("Release keystore not found: ${resolved.absolutePath}")
+                }
+                storeFile = resolved
+                storePassword = property("XCAGI_ANDROID_KEYSTORE_PASSWORD", "storePassword")
+                keyAlias = property("XCAGI_ANDROID_KEY_ALIAS", "keyAlias")
+                keyPassword = property("XCAGI_ANDROID_KEY_PASSWORD", "keyPassword")
+                    ?: storePassword
+                if (storePassword.isNullOrBlank() || keyAlias.isNullOrBlank()) {
+                    throw GradleException(
+                        "Release signing incomplete: configure keystore password and alias via " +
+                            "keystore.properties or XCAGI_ANDROID_* environment variables.",
+                    )
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Keep WorkManager/Room classes used by the Kotlin background
@@ -48,13 +99,32 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            val releaseSigning = signingConfigs.getByName("release")
+            val requireSigning = System.getenv("XCAGI_REQUIRE_RELEASE_SIGNING") == "1"
+            signingConfig = when {
+                releaseSigning.storeFile != null -> releaseSigning
+                requireSigning -> throw GradleException(
+                    "XCAGI_REQUIRE_RELEASE_SIGNING=1 but no release keystore is configured.",
+                )
+                else -> signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith("assemble") && it.name.contains("Release") }.configureEach {
+    doFirst {
+        val releaseSigning = android.signingConfigs.getByName("release")
+        if (releaseSigning.storeFile == null) {
+            logger.warn(
+                "XCAGI Flutter Release: no release keystore; output uses the DEBUG key and is not distributable.",
+            )
+        } else {
+            logger.lifecycle("XCAGI Flutter Release: production signing configured")
         }
     }
 }

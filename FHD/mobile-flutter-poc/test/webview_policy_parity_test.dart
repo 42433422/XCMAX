@@ -19,16 +19,22 @@ void main() {
       isTrue,
     );
     expect(isAndroidWebViewUrlAllowedForTest('http://127.0.0.1:5100'), isTrue);
+    expect(isAndroidWebViewUrlAllowedForTest('http://localhost:5100'), isTrue);
     expect(
         isAndroidWebViewUrlAllowedForTest('http://192.168.1.8:5100'), isTrue);
+    expect(isAndroidWebViewUrlAllowedForTest('http://10.0.0.9:5100'), isTrue);
+    expect(isAndroidWebViewUrlAllowedForTest('http://172.20.0.9:5100'), isTrue);
+    expect(isAndroidWebViewUrlAllowedForTest('http://xiu-ci.com/a'), isFalse);
+    expect(isAndroidWebViewUrlAllowedForTest('https://10.0.0.9/a'), isFalse);
     expect(
       isAndroidWebViewUrlAllowedForTest(
-        'http://10.0.0.9:5100',
-        extraLanHost: '10.0.0.9:5100',
+        'http://100.64.0.9:5100',
+        extraLanHost: '100.64.0.9:5100',
       ),
       isTrue,
     );
-    expect(isAndroidWebViewUrlAllowedForTest('http://10.0.0.9:5100'), isFalse);
+    expect(
+        isAndroidWebViewUrlAllowedForTest('http://100.64.0.9:5100'), isFalse);
     expect(isAndroidWebViewUrlAllowedForTest('https://example.com'), isFalse);
   });
 
@@ -39,8 +45,8 @@ void main() {
     );
     expect(
       shouldInjectMarketTokensForTest('https://example.com/?next=xiu-ci.com'),
-      isTrue,
-      reason: 'Android checks the whole URL string for xiu-ci.com.',
+      isFalse,
+      reason: 'Tokens must be scoped to the parsed production host.',
     );
     expect(
       shouldInjectMarketTokensForTest('https://example.com/market'),
@@ -77,15 +83,13 @@ void main() {
 
 Set<String> _androidWebViewAllowedHosts() {
   final source = File(
-    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/feature/web/WebViewUrlPolicy.kt',
+    '../mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/feature/web/UrlHostPolicy.kt',
   ).readAsStringSync();
-  final block = RegExp(
-    r'allowedHosts\s*=\s*setOf\(([\s\S]*?)\)',
+  final productionHost = RegExp(
+    r'PROD_HOST\s*=\s*"([^"]+)"',
   ).firstMatch(source);
-  if (block == null) {
-    throw StateError('Android WebViewUrlPolicy allowedHosts not found');
+  if (productionHost == null) {
+    throw StateError('Android UrlHostPolicy PROD_HOST not found');
   }
-  return RegExp(
-    r'"([^"]+)"',
-  ).allMatches(block.group(1)!).map((match) => match.group(1)!).toSet();
+  return {productionHost.group(1)!};
 }

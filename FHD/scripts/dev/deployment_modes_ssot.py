@@ -120,6 +120,12 @@ def render_ts(m: dict[str, Any]) -> str:
     )
 
 
+def _dart_string(value: Any) -> str:
+    """Render a stable single-quoted Dart string literal."""
+    escaped = str(value).replace("\\", "\\\\").replace("'", "\\'").replace("\n", "\\n")
+    return f"'{escaped}'"
+
+
 def render_dart(m: dict[str, Any]) -> str:
     policies = m.get("mobileConnectionPolicy") or {}
     lan_first = [
@@ -130,7 +136,7 @@ def render_dart(m: dict[str, Any]) -> str:
     ]
     ids = [row["id"] for row in m["modes"]]
     lan_lines = ["  static const mobileLanFirstConnections = <String>["]
-    lan_lines += [f"    {json.dumps(item, ensure_ascii=False)}," for item in lan_first]
+    lan_lines += [f"    {_dart_string(item)}," for item in lan_first]
     lan_lines += ["  ];"]
     return "\n".join(
         [
@@ -140,8 +146,8 @@ def render_dart(m: dict[str, Any]) -> str:
             "class DeploymentModesSsot {",
             "  const DeploymentModesSsot._();",
             "",
-            f"  static const defaultMode = {json.dumps(m['defaultMode'], ensure_ascii=False)};",
-            f"  static const modeIds = <String>[{', '.join(json.dumps(x, ensure_ascii=False) for x in ids)}];",
+            f"  static const defaultMode = {_dart_string(m['defaultMode'])};",
+            f"  static const modeIds = <String>[{', '.join(_dart_string(x) for x in ids)}];",
             *lan_lines,
             "",
             "  static bool mobileConnectionPrefersLan(String value) =>",

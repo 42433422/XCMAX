@@ -55,7 +55,11 @@ from typing import Any, Iterable
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    # This file lives at ``<project>/scripts/tools``.  Using ``parents[1]``
+    # resolves to ``<project>/scripts`` and makes strict mode look for the
+    # warning baseline under ``scripts/docs`` instead of the real ``docs``
+    # directory.
+    return Path(__file__).resolve().parents[2]
 
 
 def _norm_method(m: str) -> str:
@@ -157,9 +161,7 @@ def collect_runtime_routes(app) -> list[RuntimeRoute]:
             endpoint = r.endpoint
             ep_mod = getattr(endpoint, "__module__", "") or ""
             ep_qname = (
-                getattr(endpoint, "__qualname__", "")
-                or getattr(endpoint, "__name__", "")
-                or ""
+                getattr(endpoint, "__qualname__", "") or getattr(endpoint, "__name__", "") or ""
             )
             fq = f"{ep_mod}.{ep_qname}" if ep_mod and ep_qname else (ep_qname or ep_mod)
             out.append(
@@ -512,11 +514,7 @@ def _new_warnings_against_baseline(
     baseline_path: Path,
 ) -> list[Finding]:
     known = _load_warning_baseline(baseline_path)
-    return [
-        f
-        for f in findings
-        if f.level == "warn" and _warning_key(f) not in known
-    ]
+    return [f for f in findings if f.level == "warn" and _warning_key(f) not in known]
 
 
 def render_markdown_report(

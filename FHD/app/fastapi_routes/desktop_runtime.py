@@ -4,6 +4,7 @@ import os
 from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -89,7 +90,8 @@ def desktop_status(request: Request):
 
 
 @router.get("/deployment")
-def desktop_deployment_status():
+def desktop_deployment_status() -> dict[str, Any]:
+    """Return the active desktop deployment profile and migration plan."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()
@@ -142,7 +144,10 @@ def desktop_deployment_status():
 
 
 @router.put("/deployment")
-def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
+def update_desktop_deployment_settings(
+    request: DeploymentSettingsUpdate,
+) -> dict[str, Any]:
+    """Persist the requested deployment mode and report restart requirements."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse
@@ -183,7 +184,10 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
 
 
 @router.post("/workspace-read-files")
-async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody):
+async def platform_shell_workspace_read_files(
+    body: WorkspaceReadFilesBody,
+) -> dict[str, Any]:
+    """Read selected output files that are confined to the active workspace."""
     from app.application.office_parse_app_service import read_workspace_output_files
 
     files = read_workspace_output_files(body.workspace_root, body.file_paths or [])
@@ -191,7 +195,10 @@ async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody):
 
 
 @router.post("/office/confirm")
-async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Request):
+async def platform_shell_office_confirm(
+    body: OfficeConfirmBody,
+    request: Request,
+) -> dict[str, Any]:
     """Office confirm ingest: knowledge / business intent."""
     from fastapi import HTTPException
 
@@ -242,7 +249,11 @@ class OnboardingSeedBody(BaseModel):
 
 
 @router.post("/onboarding/seed-demo")
-async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request: Request):
+async def platform_shell_onboarding_seed_demo(
+    body: OnboardingSeedBody,
+    request: Request,
+) -> dict[str, Any]:
+    """Seed tenant-scoped demonstration data for the chosen industry."""
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
     from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -268,7 +279,8 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
 
 
 @router.get("/auth/permission-matrix")
-async def platform_shell_permission_matrix(request: Request):
+async def platform_shell_permission_matrix(request: Request) -> dict[str, Any]:
+    """Return the effective permission matrix for the authenticated session."""
     from app.application.auth_permission_resolver import resolve_permissions
     from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request

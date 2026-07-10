@@ -136,3 +136,10 @@ def test_warning_baseline_detects_new_warning(tmp_path: Path):
     )
 
     assert checker._new_warnings_against_baseline([known, new], baseline) == [new]
+
+
+def test_checker_resolves_the_fhd_project_root():
+    """Strict mode must resolve baselines relative to the FHD project root."""
+    checker = _load_checker_module()
+
+    assert checker._repo_root() == PROJECT_ROOT

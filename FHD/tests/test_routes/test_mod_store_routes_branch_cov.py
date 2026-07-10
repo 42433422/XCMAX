@@ -18,6 +18,7 @@ registered in sys.modules (not real package trees), we patch them via
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import sys
 import types
@@ -29,6 +30,16 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from starlette.testclient import TestClient
 
+# Preserve the real enterprise package during collection.  Other test modules
+# import additional symbols from it and must not observe this file's thin
+# dependency stubs.
+importlib.import_module("app.enterprise.account_mod_binding")
+importlib.import_module("app.enterprise.mod_entitlements")
+
+_MISSING_MODULE = object()
+_ORIGINAL_MODULES: dict[str, object] = {}
+_TEST_MODULES: dict[str, types.ModuleType] = {}
+
 # ---------------------------------------------------------------------------
 # Module-level stubs: inject thin fake modules so the import chain works
 # even when heavy infrastructure is absent.
@@ -36,14 +47,30 @@ from starlette.testclient import TestClient
 
 
 def _ensure_stub(name: str, attrs: dict | None = None) -> types.ModuleType:
+    if name not in _ORIGINAL_MODULES:
+        _ORIGINAL_MODULES[name] = sys.modules.get(name, _MISSING_MODULE)
     if name in sys.modules:
-        return sys.modules[name]
-    mod = types.ModuleType(name)
-    mod.__path__ = []
-    for k, v in (attrs or {}).items():
-        setattr(mod, k, v)
-    sys.modules[name] = mod
+        mod = sys.modules[name]
+    else:
+        mod = types.ModuleType(name)
+        mod.__path__ = []
+        for k, v in (attrs or {}).items():
+            setattr(mod, k, v)
+        sys.modules[name] = mod
+    _TEST_MODULES[name] = mod
     return mod
+
+
+@pytest.fixture(autouse=True)
+def _scope_module_stubs(monkeypatch):
+    """Install this module's stubs only while one of its tests is running."""
+    for name, module in _TEST_MODULES.items():
+        monkeypatch.setitem(sys.modules, name, module)
+        parent_name, _, child_name = name.rpartition(".")
+        parent = sys.modules.get(parent_name)
+        if parent is not None and child_name:
+            monkeypatch.setattr(parent, child_name, module, raising=False)
+    yield
 
 
 for _pkg in [
@@ -210,6 +237,13 @@ _ensure_stub(
 # Import the module under test (AFTER stubs are in place)
 # ---------------------------------------------------------------------------
 import app.fastapi_routes.mod_store_routes as _mod  # noqa: E402
+
+# Do not leak collection-time dependency doubles into unrelated modules.
+for _name, _original in reversed(tuple(_ORIGINAL_MODULES.items())):
+    if _original is _MISSING_MODULE:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _original
 
 # ---------------------------------------------------------------------------
 # Helpers

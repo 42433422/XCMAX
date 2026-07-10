@@ -331,34 +331,75 @@ String _buildTokenInjectScript({
 }
 
 bool _shouldInjectMarketTokens(Uri uri) {
-  return uri.toString().toLowerCase().contains('xiu-ci.com');
+  return uri.scheme.toLowerCase() == 'https' &&
+      _isAndroidProductionHost(_androidHttpHost(uri));
 }
 
 const _androidWebViewAllowedHosts = {
   'xiu-ci.com',
-  'www.xiu-ci.com',
 };
 
 bool _isAndroidWebViewUrlAllowed(String rawUrl, {String? extraLanHost}) {
-  final uri = Uri.tryParse(rawUrl);
-  final host = uri?.host.toLowerCase();
-  if (host == null || host.isEmpty) return false;
-  for (final allowed in _androidWebViewAllowedHosts) {
-    if (host == allowed || host.endsWith('.$allowed')) return true;
-  }
-  final lan = extraLanHost?.split(':').first.trim().toLowerCase();
-  if (lan != null && lan.isNotEmpty && host == lan) return true;
-  return host == '127.0.0.1' || host.startsWith('192.168.');
+  final uri = Uri.tryParse(rawUrl.trim());
+  if (uri == null) return false;
+  final scheme = uri.scheme.toLowerCase();
+  final host = _androidHttpHost(uri);
+  if (host == null) return false;
+  if (_isAndroidProductionHost(host)) return scheme == 'https';
+  if (_isAndroidPrivateLanHost(host)) return scheme == 'http';
+  final lan = extraLanHost
+      ?.split(':')
+      .first
+      .trim()
+      .replaceFirst(RegExp(r'\.$'), '')
+      .toLowerCase();
+  return scheme == 'http' && lan != null && lan.isNotEmpty && host == lan;
 }
 
 bool _shouldInjectFhdSession(Uri uri) {
-  if (_shouldInjectMarketTokens(uri)) return false;
-  final lower = uri.toString().toLowerCase();
-  return lower.startsWith('http://') &&
-      (lower.contains('127.0.0.1') ||
-          lower.contains('192.168.') ||
-          lower.contains('10.') ||
-          lower.contains('localhost'));
+  return uri.scheme.toLowerCase() == 'http' &&
+      _isAndroidPrivateLanHost(_androidHttpHost(uri));
+}
+
+String? _androidHttpHost(Uri uri) {
+  final scheme = uri.scheme.toLowerCase();
+  if (scheme != 'http' && scheme != 'https') return null;
+  final host = uri.host.trim().replaceFirst(RegExp(r'\.$'), '').toLowerCase();
+  return host.isEmpty ? null : host;
+}
+
+bool _isAndroidProductionHost(String? host) {
+  if (host == null || host.isEmpty) return false;
+  final productionHost = _androidWebViewAllowedHosts.single;
+  return host == productionHost || host.endsWith('.$productionHost');
+}
+
+bool _isAndroidPrivateLanHost(String? host) {
+  if (host == null || host.isEmpty) return false;
+  if (host == 'localhost' || host == '::1') return true;
+  final octets = _parseAndroidIpv4(host);
+  if (octets == null) return false;
+  final a = octets[0];
+  final b = octets[1];
+  return a == 127 ||
+      a == 10 ||
+      (a == 192 && b == 168) ||
+      (a == 172 && b >= 16 && b <= 31);
+}
+
+List<int>? _parseAndroidIpv4(String host) {
+  final parts = host.split('.');
+  if (parts.length != 4) return null;
+  final octets = <int>[];
+  for (final part in parts) {
+    if (part.isEmpty || part.length > 3 || !RegExp(r'^\d+$').hasMatch(part)) {
+      return null;
+    }
+    final value = int.tryParse(part);
+    if (value == null || value > 255) return null;
+    octets.add(value);
+  }
+  return octets;
 }
 
 bool isAndroidRegisterCompleteUrl(String rawUrl) {
