@@ -25,8 +25,7 @@ _LOG = logging.getLogger(__name__)
 _DEFAULT_BASE = "https://xiu-ci.com"
 _LEGAL_VERSION = os.environ.get("XCAGI_LEGAL_VERSION", "1").strip() or "1"
 _ICP_NUMBER = (
-    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-3A").strip()
-    or "蜀ICP备2026014056号-3A"
+    os.environ.get("XCAGI_ICP_NUMBER", "蜀ICP备2026014056号-3A").strip() or "蜀ICP备2026014056号-3A"
 )
 _APP_FILING_NUMBER = (
     os.environ.get("XCAGI_APP_FILING_NUMBER", "蜀ICP备2026014056号-3A").strip()
@@ -86,9 +85,7 @@ def _public_base_url() -> str:
 
 
 def _release_manifest_path(sku: str) -> tuple[Path, bool]:
-    specific = os.environ.get(
-        f"XCAGI_ANDROID_RELEASE_MANIFEST_{sku.upper()}", ""
-    ).strip()
+    specific = os.environ.get(f"XCAGI_ANDROID_RELEASE_MANIFEST_{sku.upper()}", "").strip()
     if specific:
         return Path(specific), True
     generic = os.environ.get("XCAGI_ANDROID_RELEASE_MANIFEST", "").strip()
@@ -101,9 +98,7 @@ def _release_manifest_path(sku: str) -> tuple[Path, bool]:
     return _release_root() / sku / "android_release_manifest.json", False
 
 
-def _safe_int(
-    value: Any, *, minimum: int = 0, maximum: int = _MAX_ANDROID_VERSION_CODE
-) -> int:
+def _safe_int(value: Any, *, minimum: int = 0, maximum: int = _MAX_ANDROID_VERSION_CODE) -> int:
     if isinstance(value, bool):
         return -1
     if isinstance(value, int):
@@ -186,9 +181,7 @@ def _artifact_matches(path: Path, *, expected_sha256: str, expected_size: int) -
         stat = path.stat()
         if not path.is_file() or stat.st_size != expected_size:
             return False
-        actual = _artifact_sha256(
-            str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size
-        )
+        actual = _artifact_sha256(str(path), stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
     except OSError:
         return False
     return actual == expected_sha256
@@ -264,9 +257,7 @@ def _legacy_env_value(name: str, sku: str) -> str:
     specific = os.environ.get(f"{name}_{sku.upper()}", "").strip()
     if specific:
         return specific
-    legacy_sku = (
-        os.environ.get("XCAGI_ANDROID_LEGACY_SKU", "enterprise").strip().lower()
-    )
+    legacy_sku = os.environ.get("XCAGI_ANDROID_LEGACY_SKU", "enterprise").strip().lower()
     return os.environ.get(name, "").strip() if legacy_sku == sku else ""
 
 
@@ -286,9 +277,7 @@ def _legacy_env_release(
     if direct_url:
         download_url = direct_url
     else:
-        base = (os.environ.get("XCAGI_ANDROID_DOWNLOAD_BASE") or _DEFAULT_BASE).rstrip(
-            "/"
-        )
+        base = (os.environ.get("XCAGI_ANDROID_DOWNLOAD_BASE") or _DEFAULT_BASE).rstrip("/")
         download_url = f"{base}/download/{sku}/{_expected_apk_name(sku, name)}"
     raw = {
         "schema_version": 1,
@@ -297,8 +286,7 @@ def _legacy_env_release(
         "sku": sku,
         "version_code": code,
         "version_name": name,
-        "min_version_code": _legacy_env_value("XCAGI_ANDROID_MIN_VERSION_CODE", sku)
-        or 0,
+        "min_version_code": _legacy_env_value("XCAGI_ANDROID_MIN_VERSION_CODE", sku) or 0,
         "force_update": _legacy_env_value("XCAGI_ANDROID_FORCE_UPDATE", sku).lower()
         in {"1", "true", "yes", "on"},
         "download_url": download_url,
@@ -313,11 +301,7 @@ def _legacy_env_release(
         current_version_code=0,
         source="legacy_env",
     )
-    if (
-        release
-        and current_version_code > 0
-        and release.version_code <= current_version_code
-    ):
+    if release and current_version_code > 0 and release.version_code <= current_version_code:
         return None
     return release
 
@@ -471,15 +455,10 @@ def _apk_delta(
 
 _PROFILE_PAGE_DEFAULTS: Dict[str, Any] = {
     "enabled": True,
-    "revision": os.environ.get(
-        "XCAGI_PROFILE_PAGE_REVISION", "2026-06-26.profile-hot-v1"
-    ).strip()
+    "revision": os.environ.get("XCAGI_PROFILE_PAGE_REVISION", "2026-06-26.profile-hot-v1").strip()
     or "2026-06-26.profile-hot-v1",
-    "hero_variant": os.environ.get("XCAGI_PROFILE_PAGE_HERO_VARIANT", "glass").strip()
-    or "glass",
-    "headline": os.environ.get(
-        "XCAGI_PROFILE_PAGE_HEADLINE", "XCAGI 企业工作身份"
-    ).strip()
+    "hero_variant": os.environ.get("XCAGI_PROFILE_PAGE_HERO_VARIANT", "glass").strip() or "glass",
+    "headline": os.environ.get("XCAGI_PROFILE_PAGE_HEADLINE", "XCAGI 企业工作身份").strip()
     or "XCAGI 企业工作身份",
     "subtitle": os.environ.get(
         "XCAGI_PROFILE_PAGE_SUBTITLE", "账号、工作台与执行端状态统一管理"
@@ -586,9 +565,7 @@ def api_app_config(
         "release_source": release.source if release else "none",
         "apk_delta": _apk_delta(sku_norm, current_version_code, release),
         "profile_page": _profile_page_config(sku_norm),
-        "feedback_email": os.environ.get(
-            "XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com"
-        ).strip(),
+        "feedback_email": os.environ.get("XCAGI_FEEDBACK_EMAIL", "support@xiu-ci.com").strip(),
     }
 
 

@@ -11,7 +11,6 @@ import pytest
 
 from modstore_server import app_config_api as ota
 
-
 _OTA_ENV_KEYS = {
     "XCAGI_ANDROID_RELEASE_ROOT",
     "XCAGI_ANDROID_RELEASE_MANIFEST",
@@ -112,16 +111,12 @@ def test_valid_manifest_wins_over_stale_process_env(monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_ANDROID_APK_SHA256", "f" * 64)
     monkeypatch.setenv("XCAGI_ANDROID_APK_SIZE", "999")
 
-    config = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=100
-    )
+    config = ota.api_app_config(platform="android", sku="enterprise", current_version_code=100)
 
     assert config["update_available"] is True
     assert config["latest_android_version"] == 200
     assert config["latest_android_version_name"] == "12.0.0"
-    assert config["apk_download_url"].endswith(
-        "/enterprise/XCAGI-Enterprise-Android-12.0.0.apk"
-    )
+    assert config["apk_download_url"].endswith("/enterprise/XCAGI-Enterprise-Android-12.0.0.apk")
     assert config["apk_sha256"] == _sha256(b"enterprise-apk")
     assert config["apk_size"] == len(b"enterprise-apk")
     assert config["release_source"] == "manifest"
@@ -136,9 +131,7 @@ def test_manifest_downgrade_is_safe_no_update(monkeypatch, tmp_path):
     )
     monkeypatch.setenv("XCAGI_ANDROID_RELEASE_ROOT", str(tmp_path))
 
-    config = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=201
-    )
+    config = ota.api_app_config(platform="android", sku="enterprise", current_version_code=201)
 
     assert config["update_available"] is False
     assert config["latest_android_version"] == 0
@@ -174,9 +167,7 @@ def test_tampered_or_cross_sku_manifest_never_falls_back_to_old_env(
     monkeypatch.setenv("XCAGI_ANDROID_APK_SHA256", "a" * 64)
     monkeypatch.setenv("XCAGI_ANDROID_APK_SIZE", "100")
 
-    config = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=100
-    )
+    config = ota.api_app_config(platform="android", sku="enterprise", current_version_code=100)
 
     assert config["update_available"] is False
     assert config["release_source"] == "none"
@@ -205,12 +196,8 @@ def test_enterprise_and_personal_manifests_are_isolated(monkeypatch, tmp_path):
         version_name="11.5.0",
         content=b"personal",
     )
-    personal = ota.api_app_config(
-        platform="android", sku="personal", current_version_code=100
-    )
-    enterprise = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=100
-    )
+    personal = ota.api_app_config(platform="android", sku="personal", current_version_code=100)
+    enterprise = ota.api_app_config(platform="android", sku="enterprise", current_version_code=100)
     assert personal["latest_android_version"] == 150
     assert "/download/personal/" in personal["apk_download_url"]
     assert enterprise["latest_android_version"] == 210
@@ -222,9 +209,7 @@ def test_missing_manifest_and_incomplete_env_return_no_update(monkeypatch, tmp_p
     monkeypatch.setenv("XCAGI_ANDROID_LATEST_VERSION_CODE", "300")
     monkeypatch.setenv("XCAGI_ANDROID_LATEST_VERSION_NAME", "13.0.0")
 
-    config = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=100
-    )
+    config = ota.api_app_config(platform="android", sku="enterprise", current_version_code=100)
 
     assert config["update_available"] is False
     assert config["latest_android_version"] == 0
@@ -242,20 +227,14 @@ def test_complete_legacy_env_remains_enterprise_only_compatible(monkeypatch, tmp
     monkeypatch.setenv("XCAGI_ANDROID_APK_SHA256", _sha256(apk))
     monkeypatch.setenv("XCAGI_ANDROID_APK_SIZE", str(len(apk)))
 
-    enterprise = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=100
-    )
-    personal = ota.api_app_config(
-        platform="android", sku="personal", current_version_code=100
-    )
+    enterprise = ota.api_app_config(platform="android", sku="enterprise", current_version_code=100)
+    personal = ota.api_app_config(platform="android", sku="personal", current_version_code=100)
     assert enterprise["release_source"] == "legacy_env"
     assert enterprise["latest_android_version"] == 220
     assert personal["update_available"] is False
 
 
-def test_delta_must_match_release_sku_hash_size_and_adjacent_artifact(
-    monkeypatch, tmp_path
-):
+def test_delta_must_match_release_sku_hash_size_and_adjacent_artifact(monkeypatch, tmp_path):
     manifest, _artifact, raw = _create_release(
         tmp_path,
         sku="enterprise",
@@ -293,18 +272,14 @@ def test_delta_must_match_release_sku_hash_size_and_adjacent_artifact(
     )
     monkeypatch.setenv("XCAGI_ANDROID_RELEASE_ROOT", str(tmp_path))
 
-    valid = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=200
-    )
+    valid = ota.api_app_config(platform="android", sku="enterprise", current_version_code=200)
     assert valid["apk_delta"]["available"] is True
 
     delta["sku"] = "personal"
     (manifest.parent / "android_delta_manifest.json").write_text(
         json.dumps(delta), encoding="utf-8"
     )
-    isolated = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=200
-    )
+    isolated = ota.api_app_config(platform="android", sku="enterprise", current_version_code=200)
     assert isolated["apk_delta"]["available"] is False
 
 
@@ -334,9 +309,7 @@ def test_delta_must_match_release_sku_hash_size_and_adjacent_artifact(
         },
     ],
 )
-def test_malformed_delta_is_rejected_without_breaking_config(
-    monkeypatch, tmp_path, bad_delta
-):
+def test_malformed_delta_is_rejected_without_breaking_config(monkeypatch, tmp_path, bad_delta):
     manifest, _artifact, _raw = _create_release(
         tmp_path,
         sku="enterprise",
@@ -348,17 +321,13 @@ def test_malformed_delta_is_rejected_without_breaking_config(
     )
     monkeypatch.setenv("XCAGI_ANDROID_RELEASE_ROOT", str(tmp_path))
 
-    config = ota.api_app_config(
-        platform="android", sku="enterprise", current_version_code=200
-    )
+    config = ota.api_app_config(platform="android", sku="enterprise", current_version_code=200)
 
     assert config["update_available"] is True
     assert config["apk_delta"]["available"] is False
 
 
-def test_privacy_and_terms_use_real_policy_page_with_safe_https_overrides(
-    monkeypatch, tmp_path
-):
+def test_privacy_and_terms_use_real_policy_page_with_safe_https_overrides(monkeypatch, tmp_path):
     monkeypatch.setenv("XCAGI_ANDROID_RELEASE_ROOT", str(tmp_path))
     monkeypatch.setenv("XCAGI_PUBLIC_BASE_URL", "https://xiu-ci.com")
     default = ota.api_app_config(platform="ios", sku="personal", current_version_code=0)
@@ -367,24 +336,18 @@ def test_privacy_and_terms_use_real_policy_page_with_safe_https_overrides(
 
     monkeypatch.setenv("XCAGI_PRIVACY_URL", "https://legal.xiu-ci.com/privacy")
     monkeypatch.setenv("XCAGI_TERMS_URL", "https://legal.xiu-ci.com/terms")
-    overridden = ota.api_app_config(
-        platform="ios", sku="personal", current_version_code=0
-    )
+    overridden = ota.api_app_config(platform="ios", sku="personal", current_version_code=0)
     assert overridden["privacy_url"] == "https://legal.xiu-ci.com/privacy"
     assert overridden["terms_url"] == "https://legal.xiu-ci.com/terms"
 
     monkeypatch.setenv("XCAGI_TERMS_URL", "http://evil.example/terms")
-    unsafe_ignored = ota.api_app_config(
-        platform="ios", sku="personal", current_version_code=0
-    )
+    unsafe_ignored = ota.api_app_config(platform="ios", sku="personal", current_version_code=0)
     assert unsafe_ignored["terms_url"] == "https://xiu-ci.com/privacy.html"
 
     monkeypatch.delenv("XCAGI_PRIVACY_URL")
     monkeypatch.delenv("XCAGI_TERMS_URL")
     monkeypatch.setenv("XCAGI_PUBLIC_BASE_URL", "http://xiu-ci.com")
-    unsafe_base_ignored = ota.api_app_config(
-        platform="ios", sku="personal", current_version_code=0
-    )
+    unsafe_base_ignored = ota.api_app_config(platform="ios", sku="personal", current_version_code=0)
     assert unsafe_base_ignored["privacy_url"] == "https://xiu-ci.com/privacy.html"
     assert unsafe_base_ignored["terms_url"] == "https://xiu-ci.com/privacy.html"
 
@@ -407,9 +370,7 @@ def test_manifest_cli_writes_and_checks_atomically(tmp_path):
     release_dir.mkdir(parents=True)
     apk = release_dir / "XCAGI-Enterprise-Android-14.0.0.apk"
     apk.write_bytes(b"cli-generated-apk")
-    script = (
-        Path(__file__).resolve().parents[1] / "scripts" / "android_release_manifest.py"
-    )
+    script = Path(__file__).resolve().parents[1] / "scripts" / "android_release_manifest.py"
     output = release_dir / "android_release_manifest.json"
     write = subprocess.run(
         [

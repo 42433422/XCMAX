@@ -1477,9 +1477,9 @@ async def mobile_relay_desktops(user=Depends(get_mobile_user)):
 
 
 def _mobile_memory_service():
-    from app.services.user_memory_service import get_user_memory_service
+    from app.application.user_memory_app_service import get_user_memory_app_service
 
-    return get_user_memory_service()
+    return get_user_memory_app_service()
 
 
 @extension_router.get("/assistant/memory")

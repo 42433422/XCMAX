@@ -29,7 +29,10 @@ FLUTTER_THEME = ROOT / "mobile-flutter-poc/lib/src/theme/app_theme.dart"
 ANDROID_THEME = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt"
 ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt"
 ANDROID_SHAPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
-ANDROID_ANALYTICS = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt"
+ANDROID_ANALYTICS = (
+    ROOT
+    / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt"
+)
 
 IOS_PARITY = ROOT / "mobile-ios/PARITY_MATRIX.md"
 IOS_PROJECT_YML = ROOT / "mobile-ios/project.yml"
@@ -156,8 +159,8 @@ def _check_doc(errors: list[str]) -> None:
 
 def _check_unified_stack(errors: list[str]) -> None:
     flutter_readme = _read_text(FLUTTER_README, errors)
-    if flutter_readme and "Flutter proof of concept" not in flutter_readme:
-        errors.append("Flutter README 未声明 Flutter POC 主线")
+    if flutter_readme and "唯一生产交付主线" not in flutter_readme:
+        errors.append("Flutter README 未声明唯一生产交付主线")
     flutter_unification = _read_text(FLUTTER_UNIFICATION, errors)
     if flutter_unification and "Flutter POC exists to converge" not in flutter_unification:
         errors.append("Flutter ANDROID_FIRST_UNIFICATION.md 未声明收敛移动产品线")
@@ -185,12 +188,18 @@ def _check_unified_stack(errors: list[str]) -> None:
 
     fastapi_mobile = _read_text(FASTAPI_MOBILE, errors)
     if fastapi_mobile:
-        for snippet in ('APIRouter(prefix="/api/mobile/v1"', "router.include_router(extension_router)"):
+        for snippet in (
+            'APIRouter(prefix="/api/mobile/v1"',
+            "router.include_router(extension_router)",
+        ):
             if snippet not in fastapi_mobile:
                 errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
     if fastapi_ext:
-        for snippet in ('@extension_router.get("/admin/home")', '@extension_router.get("/ai-groups")'):
+        for snippet in (
+            '@extension_router.get("/admin/home")',
+            '@extension_router.get("/ai-groups")',
+        ):
             if snippet not in fastapi_ext:
                 errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
 
@@ -214,7 +223,11 @@ def _check_tokens(errors: list[str]) -> None:
         errors.append(f"mobile_design_tokens.json radius={radius!r}，应为 {EXPECTED_RADIUS!r}")
 
     typography = data.get("typography")
-    if not isinstance(typography, dict) or "display_large" not in typography or "label_small" not in typography:
+    if (
+        not isinstance(typography, dict)
+        or "display_large" not in typography
+        or "label_small" not in typography
+    ):
         errors.append("mobile_design_tokens.json typography 缺少 display_large/label_small")
 
 
@@ -273,7 +286,10 @@ def check_drift() -> int:
         if len(errors) > 50:
             print(f"  ... 还有 {len(errors) - 50} 条", flush=True)
         return 1
-    print("mobile-tri-platform: OK（Flutter 前端 / OpenAPI 契约 / FastAPI 后端 / 移动 token / 性能监控入口一致）", flush=True)
+    print(
+        "mobile-tri-platform: OK（Flutter 前端 / OpenAPI 契约 / FastAPI 后端 / 移动 token / 性能监控入口一致）",
+        flush=True,
+    )
     return 0
 
 

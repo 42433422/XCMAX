@@ -28,6 +28,117 @@ _SUPER_EMPLOYEE_TOOLS: dict[str, str] = {
 }
 _TOOL_EMPLOYEES = {tool: employee for employee, tool in _SUPER_EMPLOYEE_TOOLS.items()}
 _ACTIVE_TASK_STATUSES = {"queued", "running", "assigned", "processing", "in_progress"}
+_RELAY_TASK_COLUMN_DDL = {
+    (
+        "mobile_relay_tasks",
+        "thread_id",
+        "VARCHAR(64) NOT NULL DEFAULT ''",
+    ): "ALTER TABLE mobile_relay_tasks ADD COLUMN thread_id VARCHAR(64) NOT NULL DEFAULT ''",
+    (
+        "mobile_relay_tasks",
+        "work_item_id",
+        "VARCHAR(64) NOT NULL DEFAULT ''",
+    ): "ALTER TABLE mobile_relay_tasks ADD COLUMN work_item_id VARCHAR(64) NOT NULL DEFAULT ''",
+    (
+        "mobile_relay_tasks",
+        "employee_id",
+        "VARCHAR(80) NOT NULL DEFAULT ''",
+    ): "ALTER TABLE mobile_relay_tasks ADD COLUMN employee_id VARCHAR(80) NOT NULL DEFAULT ''",
+    (
+        "mobile_relay_tasks",
+        "attempt_no",
+        "INTEGER NOT NULL DEFAULT 1",
+    ): "ALTER TABLE mobile_relay_tasks ADD COLUMN attempt_no INTEGER NOT NULL DEFAULT 1",
+}
+
+
+def _thread_list_statement(*, filter_employee: bool, only_unarchived: bool):
+    if filter_employee and only_unarchived:
+        return text(
+            """
+            SELECT * FROM mobile_super_employee_threads
+            WHERE user_id = :user_id
+              AND employee_id = :employee_id
+              AND archived_at IS NULL
+            ORDER BY updated_at DESC
+            LIMIT :limit
+            """
+        )
+    if filter_employee:
+        return text(
+            """
+            SELECT * FROM mobile_super_employee_threads
+            WHERE user_id = :user_id AND employee_id = :employee_id
+            ORDER BY updated_at DESC
+            LIMIT :limit
+            """
+        )
+    if only_unarchived:
+        return text(
+            """
+            SELECT * FROM mobile_super_employee_threads
+            WHERE user_id = :user_id AND archived_at IS NULL
+            ORDER BY updated_at DESC
+            LIMIT :limit
+            """
+        )
+    return text(
+        """
+        SELECT * FROM mobile_super_employee_threads
+        WHERE user_id = :user_id
+        ORDER BY updated_at DESC
+        LIMIT :limit
+        """
+    )
+
+
+def _task_list_statement(*, filter_thread: bool, active_only: bool):
+    if filter_thread and active_only:
+        return text(
+            """
+            SELECT t.* FROM mobile_relay_tasks t
+            JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+            WHERE d.mobile_user_id = :user_id
+              AND d.status = 'paired'
+              AND t.thread_id = :thread_id
+              AND t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+            """
+        )
+    if filter_thread:
+        return text(
+            """
+            SELECT t.* FROM mobile_relay_tasks t
+            JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+            WHERE d.mobile_user_id = :user_id
+              AND d.status = 'paired'
+              AND t.thread_id = :thread_id
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+            """
+        )
+    if active_only:
+        return text(
+            """
+            SELECT t.* FROM mobile_relay_tasks t
+            JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+            WHERE d.mobile_user_id = :user_id
+              AND d.status = 'paired'
+              AND t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')
+            ORDER BY t.created_at DESC
+            LIMIT :limit
+            """
+        )
+    return text(
+        """
+        SELECT t.* FROM mobile_relay_tasks t
+        JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
+        WHERE d.mobile_user_id = :user_id AND d.status = 'paired'
+        ORDER BY t.created_at DESC
+        LIMIT :limit
+        """
+    )
 
 
 def _utc_now() -> str:
@@ -221,7 +332,10 @@ class MobileRelayService:
             str(item.get("name") or "") for item in sa_inspect(connection).get_columns(table)
         }
         if column not in columns:
-            db.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}"))
+            statement = _RELAY_TASK_COLUMN_DDL.get((table, column, ddl))
+            if statement is None:
+                raise ValueError("unsupported relay schema migration")
+            db.execute(text(statement))
 
     @staticmethod
     def _tool_for_employee(employee_id: str) -> str:
@@ -577,28 +691,19 @@ class MobileRelayService:
         include_archived: bool = False,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        clauses = ["user_id = :user_id"]
         params: dict[str, Any] = {
             "user_id": int(user_id),
             "limit": max(1, min(300, int(limit))),
         }
         if employee_id.strip():
-            clauses.append("employee_id = :employee_id")
             params["employee_id"] = employee_id.strip()
-        if not include_archived:
-            clauses.append("archived_at IS NULL")
-        where = " AND ".join(clauses)
         with get_db() as db:
             self.ensure_tables(db)
             rows = (
                 db.execute(
-                    text(
-                        f"""
-                        SELECT * FROM mobile_super_employee_threads
-                        WHERE {where}
-                        ORDER BY updated_at DESC
-                        LIMIT :limit
-                        """  # nosec B608 - clauses are fixed literals; values stay bound.
+                    _thread_list_statement(
+                        filter_employee=bool(employee_id.strip()),
+                        only_unarchived=not include_archived,
                     ),
                     params,
                 )
@@ -782,31 +887,19 @@ class MobileRelayService:
         active_only: bool = False,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        clauses = ["d.mobile_user_id = :user_id", "d.status = 'paired'"]
         params: dict[str, Any] = {
             "user_id": int(user_id),
             "limit": max(1, min(300, int(limit))),
         }
         if thread_id.strip():
-            clauses.append("t.thread_id = :thread_id")
             params["thread_id"] = thread_id.strip()
-        if active_only:
-            clauses.append(
-                "t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')"
-            )
-        where = " AND ".join(clauses)
         with get_db() as db:
             self.ensure_tables(db)
             rows = (
                 db.execute(
-                    text(
-                        f"""
-                        SELECT t.* FROM mobile_relay_tasks t
-                        JOIN mobile_relay_desktops d ON d.relay_id = t.relay_id
-                        WHERE {where}
-                        ORDER BY t.created_at DESC
-                        LIMIT :limit
-                        """  # nosec B608 - clauses are fixed literals; values stay bound.
+                    _task_list_statement(
+                        filter_thread=bool(thread_id.strip()),
+                        active_only=active_only,
                     ),
                     params,
                 )
