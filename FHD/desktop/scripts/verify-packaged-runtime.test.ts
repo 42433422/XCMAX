@@ -6,6 +6,9 @@ import { spawnSync } from 'node:child_process'
 import { afterEach, describe, expect, it } from 'vitest'
 
 const verifier = path.join(__dirname, 'verify-packaged-runtime.cjs')
+const { toAsarLookupPath } = require('./verify-packaged-runtime.cjs') as {
+  toAsarLookupPath: (entry: string, separator?: string) => string
+}
 const tempRoots: string[] = []
 
 function writeJson(filePath: string, value: unknown): void {
@@ -49,6 +52,12 @@ afterEach(() => {
 })
 
 describe('verify-packaged-runtime', () => {
+  it('uses native separators when reading entries from a Windows asar', () => {
+    expect(toAsarLookupPath('node_modules/runtime-a/package.json', '\\')).toBe(
+      'node_modules\\runtime-a\\package.json'
+    )
+  })
+
   it('accepts a complete packaged dependency graph', async () => {
     const archive = await makeArchive(true)
     const result = spawnSync(process.execPath, [verifier, archive], { encoding: 'utf8' })

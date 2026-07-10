@@ -9,6 +9,10 @@ function normalizeArchivePath(entry) {
   return entry.replaceAll('\\', '/').replace(/^\/+/, '')
 }
 
+function toAsarLookupPath(entry, separator = path.sep) {
+  return entry.split('/').join(separator)
+}
+
 function verifyPackagedRuntime(archivePath) {
   const resolvedArchive = path.resolve(archivePath)
   if (!fs.existsSync(resolvedArchive)) {
@@ -33,7 +37,10 @@ function verifyPackagedRuntime(archivePath) {
     if (!entries.has(packageJsonPath)) {
       return null
     }
-    const payload = asar.extractFile(resolvedArchive, packageJsonPath)
+    const payload = asar.extractFile(
+      resolvedArchive,
+      toAsarLookupPath(packageJsonPath)
+    )
     const parsed = JSON.parse(payload.toString('utf8'))
     packageCache.set(packageJsonPath, parsed)
     return parsed
@@ -130,4 +137,8 @@ if (require.main === module) {
   process.exitCode = main(process.argv)
 }
 
-module.exports = { normalizeArchivePath, verifyPackagedRuntime }
+module.exports = {
+  normalizeArchivePath,
+  toAsarLookupPath,
+  verifyPackagedRuntime
+}
