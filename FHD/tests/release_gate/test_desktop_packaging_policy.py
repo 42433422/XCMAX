@@ -145,3 +145,15 @@ def test_windows_formal_release_requires_authenticode_signing() -> None:
         assert 'XCAGI_REQUIRE_WINDOWS_SIGNING: "1"' in content
         assert "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE" in content
         assert "verify-windows-signature.ps1" in content
+
+
+def test_frontend_uses_patched_echarts_with_modular_types() -> None:
+    package = json.loads((REPO_ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))
+    tsconfig = json.loads((REPO_ROOT / "frontend" / "tsconfig.json").read_text(encoding="utf-8"))
+
+    assert package["dependencies"]["echarts"] == "^6.1.0"
+    paths = tsconfig["compilerOptions"]["paths"]
+    for module in ("core", "charts", "components", "renderers"):
+        assert paths[f"echarts/{module}"] == [
+            f"./node_modules/echarts/types/dist/{module}.d.ts"
+        ]

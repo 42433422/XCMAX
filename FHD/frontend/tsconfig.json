@@ -26,7 +26,11 @@
       "@/*": ["./src/*"],
       "@admin-console-inject/adminHostRoutes": ["./src/router/adminHostRoutes.stub.ts"],
       "@/data/workflow-employee-docs.json": ["./public/workflow-employee-docs.json"],
-      "@/data/workflow-employees.json": ["./public/workflow-employees.json"]
+      "@/data/workflow-employees.json": ["./public/workflow-employees.json"],
+      "echarts/core": ["./node_modules/echarts/types/dist/core.d.ts"],
+      "echarts/charts": ["./node_modules/echarts/types/dist/charts.d.ts"],
+      "echarts/components": ["./node_modules/echarts/types/dist/components.d.ts"],
+      "echarts/renderers": ["./node_modules/echarts/types/dist/renderers.d.ts"]
     },
     "types": ["vite/client"]
   },
