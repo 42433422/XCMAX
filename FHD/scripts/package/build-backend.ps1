@@ -33,9 +33,8 @@ if ($ProductSku) {
 
 if (-not $SkipFrontend) {
   Push-Location (Join-Path $Root "frontend")
-  if (-not (Test-Path "node_modules")) {
-    npm install
-  }
+  npm ci --include=dev
+  if ($LASTEXITCODE -ne 0) { throw "frontend npm ci failed with exit code $LASTEXITCODE" }
   if ($ProductSku) {
     $env:VITE_XCAGI_PRODUCT_SKU = $ProductSku
   }
@@ -47,6 +46,7 @@ if (-not $SkipFrontend) {
   } else {
     npm run build
   }
+  if ($LASTEXITCODE -ne 0) { throw "frontend npm build failed with exit code $LASTEXITCODE" }
   Remove-Item Env:VITE_XCAGI_EDITION -ErrorAction SilentlyContinue
   if ($ProductSku) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue

@@ -120,9 +120,10 @@ if (Test-Path $backendSkuDir) {
 & "$PSScriptRoot\create-installer-assets.ps1"
 
 Push-Location (Join-Path $Root "desktop")
-if (-not (Test-Path "node_modules")) {
-  npm install
-}
+npm ci --include=dev
+if ($LASTEXITCODE -ne 0) { throw "desktop npm ci failed with exit code $LASTEXITCODE" }
+$desktopTsc = Join-Path (Get-Location) "node_modules\.bin\tsc.cmd"
+Assert-FileExists $desktopTsc "Desktop TypeScript compiler"
 npm run build
 if ($LASTEXITCODE -ne 0) { throw "desktop npm run build failed" }
 Assert-TextFileContains `

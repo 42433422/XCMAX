@@ -66,3 +66,17 @@ def test_windows_build_verifies_the_packaged_runtime_dependency_graph() -> None:
 
     assert "verify-packaged-runtime.cjs" in script
     assert "Electron packaged runtime dependency verification failed" in script
+
+
+def test_windows_build_uses_clean_checked_node_installs() -> None:
+    installer = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
+        encoding="utf-8"
+    )
+    backend = (FHD_ROOT / "scripts" / "package" / "build-backend.ps1").read_text(encoding="utf-8")
+
+    assert "npm ci --include=dev" in installer
+    assert "desktop npm ci failed" in installer
+    assert "Desktop TypeScript compiler" in installer
+    assert "npm ci --include=dev" in backend
+    assert "frontend npm ci failed" in backend
+    assert "frontend npm build failed" in backend
