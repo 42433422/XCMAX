@@ -17,9 +17,7 @@ def test_per_user_nsis_installer_does_not_enter_uac_plugin_path() -> None:
 
 
 def test_installer_cleans_only_the_known_legacy_uninstall_entry() -> None:
-    installer = (FHD_ROOT / "desktop" / "build" / "installer.nsh").read_text(
-        encoding="utf-8"
-    )
+    installer = (FHD_ROOT / "desktop" / "build" / "installer.nsh").read_text(encoding="utf-8")
 
     assert "6f93bd19-4cab-50af-bfb3-b3aea3badc52" in installer
     assert 'DisplayVersion"' in installer
@@ -32,9 +30,9 @@ def test_backup_task_uses_native_recurring_triggers_and_action_arguments() -> No
         encoding="utf-8"
     )
 
-    assert 'New-ScheduledTaskTrigger -Daily -At $At' in script
-    assert 'New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $At' in script
-    assert '-Argument $ActionArguments' in script
+    assert "New-ScheduledTaskTrigger -Daily -At $At" in script
+    assert "New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At $At" in script
+    assert "-Argument $ActionArguments" in script
     assert '$CmdLine = "powershell.exe "' not in script
     assert "[datetime]$Trigger" not in script
 
@@ -47,9 +45,7 @@ def test_packaged_backup_powershell_scripts_are_windows_5_utf8_safe() -> None:
 
 
 def test_backup_script_does_not_bind_path_array_as_join_path_child_path() -> None:
-    script = (FHD_ROOT / "scripts" / "backup" / "XcagiBackup.ps1").read_text(
-        encoding="utf-8-sig"
-    )
+    script = (FHD_ROOT / "scripts" / "backup" / "XcagiBackup.ps1").read_text(encoding="utf-8-sig")
 
     assert '    (Join-Path $env:LOCALAPPDATA "Programs\\XCAGI' in script
     assert '    Join-Path $env:LOCALAPPDATA "Programs\\XCAGI' not in script
@@ -57,18 +53,14 @@ def test_backup_script_does_not_bind_path_array_as_join_path_child_path() -> Non
 
 
 def test_windows_build_identity_records_an_orderable_timestamp() -> None:
-    script = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
-        encoding="utf-8"
-    )
+    script = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
 
     assert "schema_version = 2" in script
     assert "builtAt = (Get-Date).ToUniversalTime().ToString('o')" in script
 
 
 def test_windows_build_verifies_the_packaged_runtime_dependency_graph() -> None:
-    script = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
-        encoding="utf-8"
-    )
+    script = (FHD_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
 
     assert "verify-packaged-runtime.cjs" in script
     assert "Electron packaged runtime dependency verification failed" in script
