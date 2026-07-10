@@ -47,7 +47,9 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  allowElevation: true
+  # Per-user installers do not need UAC. On Windows 11 build 26200 the NSIS
+  # UAC/System plugin path crashes with 0xc0000005 before extraction.
+  allowElevation: false
   displayLanguageSelector: false
   installerLanguages:
     - zh_CN
