@@ -12,6 +12,14 @@
 ; 由 NSIS 安装时调用 PowerShell 注册。
 
 !macro customInstall
+  ; 清理 XCAGI 8.0.0 遗留的已知 HKCU 卸载项。旧版与当前版共用安装目录，
+  ; 保留该记录会让 Windows“已安装的应用”显示两个 XCAGI。
+  ReadRegStr $1 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\6f93bd19-4cab-50af-bfb3-b3aea3badc52" "DisplayVersion"
+  ${If} $1 == "8.0.0"
+    DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\6f93bd19-4cab-50af-bfb3-b3aea3badc52"
+    DetailPrint "Removed legacy XCAGI 8.0.0 uninstall entry."
+  ${EndIf}
+
   ; 注册定时备份计划任务（幂等，重复安装不会重复注册）
   ; 备份脚本随 PyInstaller datas 打包到 _internal\scripts\backup\
   DetailPrint "Registering XCAGI backup scheduled tasks..."

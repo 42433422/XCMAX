@@ -1,4 +1,4 @@
-# XCMAX 桌面端定时备份脚本（Windows 计划任务调用入口）
+﻿# XCMAX 桌面端定时备份脚本（Windows 计划任务调用入口）
 # =============================================================================
 # 作用：在 XCAGI 应用未运行时（如午休），由 Windows 计划任务触发一次 SQLite
 #       在线热备份。复用 xcagi-backend.exe --desktop --migrate-only --backup
@@ -66,8 +66,8 @@ function Find-BackendExe {
   }
   # 2. 常见安装路径
   $commonPaths = @(
-    Join-Path $env:LOCALAPPDATA "Programs\XCAGI\resources\backend\xcagi-backend.exe",
-    Join-Path $env:LOCALAPPDATA "Programs\xcagi\resources\backend\xcagi-backend.exe",
+    (Join-Path $env:LOCALAPPDATA "Programs\XCAGI\resources\backend\xcagi-backend.exe"),
+    (Join-Path $env:LOCALAPPDATA "Programs\xcagi\resources\backend\xcagi-backend.exe"),
     "C:\Program Files\XCAGI\resources\backend\xcagi-backend.exe",
     "C:\Program Files (x86)\XCAGI\resources\backend\xcagi-backend.exe"
   )
@@ -132,8 +132,9 @@ if ($DataDir) {
 
 Write-Log "invoking: $BackendExe $($cliArgs -join ' ')"
 try {
+  $backendDir = Split-Path $BackendExe -Parent
   $proc = Start-Process -FilePath $BackendExe -ArgumentList $cliArgs `
-    -NoNewWindow -Wait -PassThru -ErrorAction Stop
+    -WorkingDirectory $backendDir -NoNewWindow -Wait -PassThru -ErrorAction Stop
   if ($proc.ExitCode -ne 0) {
     Write-Log "ERROR: backend backup exited with code $($proc.ExitCode)"
     exit $proc.ExitCode
