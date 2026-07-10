@@ -208,7 +208,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-coverage
-          path: frontend/coverage/
+          path: FHD/frontend/coverage/
           retention-days: 7
 
   # PR/push E2E: mock API (E2E_VITE_MOCK_API=1) — npm run test:e2e:p0 → 8 pass / 6 skip

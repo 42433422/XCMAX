@@ -121,6 +121,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
         "working-directory: FHD/desktop\n",
     )
     # upload-artifact / download-artifact / build-push-action ignore defaults.run.working-directory
+    content = content.replace(
+        "path: frontend/coverage/",
+        "path: FHD/frontend/coverage/",
+    )
     content = content.replace("path: mobile-ios/build/", "path: FHD/mobile-ios/build/")
     content = re.sub(r"(?m)^([ \t]+)(dist/deploy/)", r"\1FHD/\2", content)
     content = content.replace("path: dist/deploy\n", "path: FHD/dist/deploy\n")
