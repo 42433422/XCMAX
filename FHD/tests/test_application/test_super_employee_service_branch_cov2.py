@@ -1242,6 +1242,17 @@ class TestVerifyWorkspace:
             assert ok is True
             assert "1 个改动的 .py" in msg
 
+    def test_python_compile_rejects_workspace_escape(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
+        svc = _make_svc(tmp_path, cli_runner=_null_runner)
+        mock_result = MagicMock()
+        mock_result.stdout = "?? ../outside.py\n"
+        mock_result.returncode = 0
+        with patch.object(svc, "_git", return_value=mock_result):
+            ok, msg = svc._verify_workspace(str(tmp_path))
+        assert ok is False
+        assert "工作区外" in msg
+
     def test_non_py_changes_pass_without_compile(self, tmp_path, monkeypatch) -> None:
         monkeypatch.delenv("XCMAX_CLAUDE_VERIFY_CMD", raising=False)
         svc = _make_svc(tmp_path, cli_runner=_null_runner)

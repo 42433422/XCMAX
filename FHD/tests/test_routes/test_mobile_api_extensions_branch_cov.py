@@ -116,6 +116,29 @@ async def test_mobile_employee_chat_stream_marks_interactive_payload(m, monkeypa
     assert any('"type": "done"' in chunk for chunk in chunks)
 
 
+@pytest.mark.asyncio
+async def test_mobile_employee_chat_stream_hides_internal_exception(m, monkeypatch):
+    def fake_execute(*_args, **_kwargs):
+        raise RuntimeError("secret stack detail")
+
+    from app.application.employee_runtime import executor
+
+    monkeypatch.setattr(executor, "execute_employee_task_local", fake_execute)
+    response = await m.mobile_employee_chat_stream(
+        "emp-1",
+        MagicMock(),
+        user=_user(9),
+        body={"message": "你好"},
+    )
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode("utf-8") if isinstance(chunk, bytes) else str(chunk))
+    payload = "".join(chunks)
+
+    assert "员工对话暂时不可用" in payload
+    assert "secret stack detail" not in payload
+
+
 # ============================================================
 # _mobile_session_id_from_request
 # ============================================================

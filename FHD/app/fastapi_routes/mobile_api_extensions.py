@@ -4336,9 +4336,9 @@ async def mobile_employee_chat_stream(
                 yield _sse_line({"type": "token", "text": chunk})
                 await asyncio.sleep(0.05)
             yield _sse_line({"type": "done", "result": {"response": final_text}})
-        except Exception as exc:
-            logger.exception("mobile_employee_chat_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"员工对话失败：{exc}"})
+        except Exception:
+            logger.exception("mobile_employee_chat_stream failed")
+            yield _sse_line({"type": "error", "message": "员工对话暂时不可用，请稍后重试"})
 
     return StreamingResponse(
         sse_gen(),

@@ -89,6 +89,17 @@ class TestDeliverableStatus:
         data = resp.json()
         assert data["success"] is True
 
+    def test_hides_internal_exception(self):
+        client = TestClient(_make_app())
+        with patch(
+            "app.mod_sdk.deliverable_status.build_deliverable_status",
+            side_effect=RuntimeError("secret database path"),
+        ):
+            resp = client.get("/api/platform-shell/deliverable-status")
+        assert resp.status_code == 503
+        assert resp.json()["detail"] == "交付状态暂时不可用"
+        assert "secret database path" not in resp.text
+
 
 # ---------------------------------------------------------------------------
 # industry_baseline

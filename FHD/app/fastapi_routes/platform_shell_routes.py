@@ -55,7 +55,11 @@ async def platform_shell_deliverable_status(request: Request):
     """Deliverable acceptance: edition pack, mod routes, recommended next step."""
     from app.mod_sdk.deliverable_status import build_deliverable_status
 
-    return {"success": True, "data": build_deliverable_status(app=request.app)}
+    try:
+        return {"success": True, "data": build_deliverable_status(app=request.app)}
+    except Exception:
+        logger.exception("platform_shell: deliverable status failed")
+        raise HTTPException(status_code=503, detail="交付状态暂时不可用") from None
 
 
 @router.get("/industry-baseline")

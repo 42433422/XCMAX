@@ -2242,22 +2242,34 @@ class SuperEmployeeService:
                     changed.append(path)
         except Exception:  # noqa: BLE001
             changed = []
-        py = [f for f in changed if f.endswith(".py")]
+        py = {f.replace("\\", "/") for f in changed if f.endswith(".py")}
         if py:
-            import py_compile
+            unsafe = [item for item in py if Path(item).is_absolute() or ".." in Path(item).parts]
+            if unsafe:
+                return False, "拒绝验证工作区外的 Python 路径"
 
             errs: list[str] = []
-            for f in py:
-                p = Path(cwd) / f
-                if not p.exists():
-                    continue
-                try:
-                    py_compile.compile(str(p), doraise=True)
-                except py_compile.PyCompileError as e:
-                    errs.append(str(e)[:400])
+            compiled = 0
+            try:
+                workspace = Path(cwd).resolve(strict=True)
+                candidates = workspace.rglob("*.py")
+                for candidate in candidates:
+                    relative = candidate.relative_to(workspace).as_posix()
+                    if relative not in py:
+                        continue
+                    if candidate.is_symlink():
+                        errs.append(f"拒绝验证符号链接：{relative}")
+                        continue
+                    compiled += 1
+                    try:
+                        compile(candidate.read_bytes(), relative, "exec")
+                    except (OSError, SyntaxError, UnicodeError) as exc:
+                        errs.append(str(exc)[:400])
+            except (OSError, ValueError) as exc:
+                return False, f"工作区路径验证失败：{str(exc)[:300]}"
             if errs:
                 return False, "Python 语法错误：\n" + "\n".join(errs)
-            return True, f"已对 {len(py)} 个改动的 .py 通过语法编译"
+            return True, f"已对 {compiled} 个改动的 .py 通过语法编译"
         if not changed:
             return True, "无文件改动"
         return True, (
