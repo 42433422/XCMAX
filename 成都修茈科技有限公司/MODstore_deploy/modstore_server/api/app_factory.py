@@ -6,6 +6,7 @@ via ``_payment_backend_proxy_middleware`` wrapping ``payment_backend_proxy_middl
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass
@@ -487,8 +488,21 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
         try:
             from modstore_server.edge_tts_service import warm_defaults
 
-            await warm_defaults()
-            logger.info("startup: edge-tts warm OK")
+            async def _warm_in_background() -> None:
+                try:
+                    await warm_defaults()
+                    logger.info("startup: edge-tts warm OK")
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    logger.debug("startup: edge-tts warm skipped", exc_info=True)
+
+            # TTS warming is a latency optimisation that may require the public
+            # network. It must never hold the API readiness gate during an outage.
+            app.state.edge_tts_warmup_task = asyncio.create_task(
+                _warm_in_background(),
+                name="modstore-edge-tts-warmup",
+            )
         except Exception:
             logger.debug("startup: edge-tts warm skipped", exc_info=True)
 
@@ -502,6 +516,13 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
 
     @app.on_event("shutdown")
     async def _close_shared_http_clients() -> None:
+        warmup_task = getattr(app.state, "edge_tts_warmup_task", None)
+        if warmup_task is not None and not warmup_task.done():
+            warmup_task.cancel()
+            try:
+                await warmup_task
+            except asyncio.CancelledError:
+                pass
         try:
             from modstore_server.infrastructure.http_clients import close_all
 

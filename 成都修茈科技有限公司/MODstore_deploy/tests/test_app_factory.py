@@ -1,3 +1,4 @@
+import asyncio
 import os
 from unittest.mock import MagicMock, patch
 
@@ -95,3 +96,30 @@ class TestCreateApp:
         with patch.dict(os.environ, {}, clear=False):
             app = create_app()
             assert app is not None
+
+    @pytest.mark.asyncio
+    async def test_edge_tts_warmup_does_not_block_api_startup(self, monkeypatch):
+        from modstore_server import edge_tts_service
+
+        warmup_started = asyncio.Event()
+
+        async def _blocked_warmup():
+            warmup_started.set()
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(edge_tts_service, "warm_defaults", _blocked_warmup)
+        app = create_app(AppConfig(profile="llm-only"))
+        startup = next(
+            handler
+            for handler in app.router.on_startup
+            if handler.__name__ == "_warm_edge_tts_on_startup"
+        )
+
+        await asyncio.wait_for(startup(), timeout=0.2)
+        await asyncio.wait_for(warmup_started.wait(), timeout=0.2)
+
+        task = app.state.edge_tts_warmup_task
+        assert task.done() is False
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
