@@ -509,60 +509,179 @@ class _ProfileEditorDialogState extends State<_ProfileEditorDialog> {
   Widget build(BuildContext context) {
     final draft = _controller.text.trim();
     final colors = AppTheme.colors(context);
-    return AlertDialog(
-      title: const Text('个人资料'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ProfileAvatarPreview(avatarPath: _avatarPath, size: 76),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+    final canSave = draft.isNotEmpty;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 340),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: colors.divider.withValues(alpha: 0.7)),
+          boxShadow: [
+            BoxShadow(
+              color: colors.brand.withValues(alpha: 0.14),
+              blurRadius: 28,
+              offset: const Offset(0, 14),
+              spreadRadius: -8,
+            ),
+            BoxShadow(
+              color: colors.textPrimary.withValues(alpha: 0.06),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.alphaBlend(colors.brand.withAlpha(12), colors.surface),
+              colors.surface,
+            ],
+            stops: const [0, 0.28],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              TextButton(
-                onPressed: _pickAvatar,
-                child: const Text('更换头像'),
+              Text(
+                '个人资料',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  height: 1.3,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0,
+                ),
               ),
-              TextButton(
-                onPressed: _avatarPath.isEmpty
-                    ? null
-                    : () => setState(() => _avatarPath = ''),
-                child: const Text('移除'),
+              const SizedBox(height: 4),
+              Text(
+                '头像与昵称会同步到工作台身份',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textTertiary,
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Center(
+                child: Container(
+                  width: 92,
+                  height: 92,
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        colors.brand,
+                        colors.brand.withValues(alpha: 0.45),
+                        colors.brandGradientEnd.withValues(alpha: 0.7),
+                      ],
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: colors.brand.withValues(alpha: 0.22),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: colors.surface,
+                      shape: BoxShape.circle,
+                    ),
+                    child: _ProfileAvatarPreview(
+                      avatarPath: _avatarPath,
+                      size: 80,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _ProfileActionChip(
+                    label: '更换头像',
+                    filled: true,
+                    onTap: _pickAvatar,
+                  ),
+                  const SizedBox(width: 10),
+                  _ProfileActionChip(
+                    label: '移除',
+                    filled: false,
+                    enabled: _avatarPath.isNotEmpty,
+                    onTap: () => setState(() => _avatarPath = ''),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                '昵称',
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  height: 1.3,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              WeField(
+                controller: _controller,
+                placeholder: '输入显示名称',
+                maxLength: 32,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${_controller.text.length}/32',
+                  style: TextStyle(
+                    color: colors.textTertiary,
+                    fontSize: 11,
+                    height: 1.27,
+                    letterSpacing: 0,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ProfileDialogButton(
+                      label: '取消',
+                      primary: false,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _ProfileDialogButton(
+                      label: '保存',
+                      primary: true,
+                      enabled: canSave,
+                      onTap: canSave ? _save : null,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          WeField(
-            controller: _controller,
-            placeholder: '昵称',
-            maxLength: 32,
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 6),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              '${_controller.text.length}/32',
-              style: TextStyle(
-                color: colors.textTertiary,
-                fontSize: 11,
-                height: 1.27,
-                letterSpacing: 0,
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: draft.isEmpty ? null : _save,
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 
@@ -603,33 +722,214 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   @override
   Widget build(BuildContext context) {
     final password = _controller.text;
-    return AlertDialog(
-      title: const Text('注销账号'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('注销后无法恢复，请确认密码。'),
-          const SizedBox(height: 16),
-          WeField(
-            controller: _controller,
-            placeholder: '密码',
-            obscureText: true,
-            singleLine: true,
-            onChanged: (_) => setState(() {}),
+    final colors = AppTheme.colors(context);
+    final canConfirm = password.isNotEmpty;
+    return Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 28, vertical: 24),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 340),
+        decoration: BoxDecoration(
+          color: colors.surface,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: colors.divider.withValues(alpha: 0.7)),
+          boxShadow: [
+            BoxShadow(
+              color: colors.danger.withValues(alpha: 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 12),
+              spreadRadius: -6,
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                '注销账号',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textPrimary,
+                  fontSize: 18,
+                  height: 1.3,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '注销后无法恢复，请输入密码确认。',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 18),
+              WeField(
+                controller: _controller,
+                placeholder: '密码',
+                obscureText: true,
+                singleLine: true,
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ProfileDialogButton(
+                      label: '取消',
+                      primary: false,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _ProfileDialogButton(
+                      label: '确认注销',
+                      primary: true,
+                      danger: true,
+                      enabled: canConfirm,
+                      onTap: canConfirm
+                          ? () => Navigator.of(context).pop(password)
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
+    );
+  }
+}
+
+class _ProfileActionChip extends StatelessWidget {
+  const _ProfileActionChip({
+    required this.label,
+    required this.filled,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final String label;
+  final bool filled;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final fg = filled
+        ? colors.chatUserBubbleText
+        : (enabled ? colors.textSecondary : colors.textTertiary);
+    final bg = filled
+        ? colors.brand
+        : colors.page.withValues(alpha: enabled ? 1 : 0.6);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(999),
+            border: filled
+                ? null
+                : Border.all(color: colors.divider.withValues(alpha: 0.9)),
+            boxShadow: filled
+                ? [
+                    BoxShadow(
+                      color: colors.brand.withValues(alpha: 0.22),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: fg,
+              fontSize: 13,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(password),
-          child: const Text('确认注销'),
+      ),
+    );
+  }
+}
+
+class _ProfileDialogButton extends StatelessWidget {
+  const _ProfileDialogButton({
+    required this.label,
+    required this.primary,
+    this.onTap,
+    this.enabled = true,
+    this.danger = false,
+  });
+
+  final String label;
+  final bool primary;
+  final VoidCallback? onTap;
+  final bool enabled;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = AppTheme.colors(context);
+    final accent = danger ? colors.danger : colors.brand;
+    final bg = primary
+        ? (enabled ? accent : accent.withValues(alpha: 0.35))
+        : colors.page;
+    final fg = primary
+        ? colors.chatUserBubbleText
+        : colors.textSecondary;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled ? onTap : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          height: 46,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: primary
+                ? null
+                : Border.all(color: colors.divider.withValues(alpha: 0.9)),
+            boxShadow: primary && enabled
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.24),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: fg,
+              fontSize: 15,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ),
-      ],
+      ),
     );
   }
 }
