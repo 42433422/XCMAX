@@ -5,30 +5,29 @@ from __future__ import annotations
 import json
 import os
 import sys
-import traceback
-from pathlib import Path
 from typing import Any
 
 
-def _write_response(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(payload, ensure_ascii=False, default=str),
-        encoding="utf-8",
-    )
-    os.chmod(temporary, 0o600)
-    os.replace(temporary, path)
+def _response_stream() -> Any:
+    """Reserve original stdout for the protocol and redirect worker output."""
+
+    response_fd = os.dup(sys.stdout.fileno())
+    os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
+    return os.fdopen(response_fd, "w", encoding="utf-8", closefd=True)
+
+
+def _write_response(stream: Any, payload: dict[str, Any]) -> None:
+    json.dump(payload, stream, ensure_ascii=False, default=str)
+    stream.flush()
 
 
 def main(argv: list[str] | None = None) -> int:
     args = list(argv or sys.argv[1:])
-    if len(args) != 2:
+    if args:
         return 64
-    request_path = Path(args[0])
-    response_path = Path(args[1])
+    response_stream = _response_stream()
     try:
-        request = json.loads(request_path.read_text(encoding="utf-8"))
+        request = json.load(sys.stdin)
         if not isinstance(request, dict):
             raise ValueError("management execution request must be an object")
         from modstore_server.employee_orchestrator import plan_and_dispatch
@@ -42,19 +41,19 @@ def main(argv: list[str] | None = None) -> int:
             max_concurrency=max(1, min(int(request.get("max_concurrency") or 1), 8)),
             allow_high_risk_real_run=bool(request.get("allow_high_risk_real_run", False)),
         )
-        _write_response(response_path, {"ok": True, "result": result})
+        _write_response(response_stream, {"ok": True, "result": result})
         return 0
-    except BaseException as exc:  # noqa: BLE001 - child must always report failure
+    except BaseException:  # noqa: BLE001 - child must always report failure
         _write_response(
-            response_path,
+            response_stream,
             {
                 "ok": False,
-                "error_type": type(exc).__name__,
-                "error": str(exc)[:4000],
-                "traceback": traceback.format_exc(limit=30)[-12_000:],
+                "error_code": "management_worker_failed",
             },
         )
         return 1
+    finally:
+        response_stream.close()
 
 
 if __name__ == "__main__":

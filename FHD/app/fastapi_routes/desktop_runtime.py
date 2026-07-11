@@ -264,7 +264,17 @@ def download_model_asset(request: DownloadModelRequest, _user=Depends(get_logged
 def install_manifest(path: str, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
-    manifest_path = Path(path)
+    dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
+    data_root = dirs["root"].resolve()
+    raw_path = Path(path)
+    try:
+        manifest_path = (raw_path if raw_path.is_absolute() else data_root / raw_path).resolve()
+        manifest_path.relative_to(data_root)
+    except (OSError, RuntimeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="manifest path must stay within desktop data directory",
+        ) from None
     if not manifest_path.is_file():
         raise HTTPException(status_code=404, detail="manifest not found")
     targets = [

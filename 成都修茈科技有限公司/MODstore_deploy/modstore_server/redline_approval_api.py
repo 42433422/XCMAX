@@ -15,6 +15,22 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin/redline", tags=["admin-redline"])
 
 
+def _public_redline_result(result: dict, *, cr_id: int, action: str) -> dict:
+    if not bool(result.get("ok")):
+        return {
+            "ok": False,
+            "error": f"redline_{action}_failed",
+            "data": {"cr_id": int(cr_id), "status": "failed"},
+        }
+    return {
+        "ok": True,
+        "data": {
+            "cr_id": int(cr_id),
+            "status": "approved" if action == "approve" else "rejected",
+        },
+    }
+
+
 class RedlineApprovalRequest(BaseModel):
     comment: str = ""
 
@@ -40,7 +56,7 @@ async def api_approve_redline(
     from modstore_server.redline_approval_gate import approve_redline_request
 
     result = approve_redline_request(cr_id, int(admin.id), comment=body.comment)
-    return {"ok": result.get("ok", False), "data": result}
+    return _public_redline_result(result, cr_id=cr_id, action="approve")
 
 
 @router.post("/requests/{cr_id}/reject")
@@ -52,7 +68,7 @@ async def api_reject_redline(
     from modstore_server.redline_approval_gate import reject_redline_request
 
     result = reject_redline_request(cr_id, int(admin.id), reason=body.reason)
-    return {"ok": result.get("ok", False), "data": result}
+    return _public_redline_result(result, cr_id=cr_id, action="reject")
 
 
 @router.get("/domains")

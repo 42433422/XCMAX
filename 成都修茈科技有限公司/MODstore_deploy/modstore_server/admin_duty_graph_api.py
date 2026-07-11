@@ -44,6 +44,7 @@ from modstore_server.models import (
     User,
     get_session_factory,
 )
+from modstore_server.security_boundary import opaque_ref
 from modstore_server.services.employee import get_default_employee_client
 
 logger = logging.getLogger(__name__)
@@ -712,9 +713,11 @@ def execute_duty_graph_programmatic(
         order, cycle_nodes = _topo_sort(selected, deps_map)
         if cycle_nodes:
             logger.warning(
-                "duty graph cycle detected: %s order=%s",
-                ", ".join(cycle_nodes),
-                order,
+                "duty graph cycle detected graph_ref=%s",
+                opaque_ref(
+                    {"cycle": cycle_nodes, "order": order},
+                    namespace="duty-graph",
+                ),
             )
             return {
                 "ok": False,
@@ -847,9 +850,7 @@ def execute_duty_graph_programmatic(
                         node_status[eid] = "skipped"
                     return
                 risk = cap.get("risk") if isinstance(cap.get("risk"), dict) else {}
-                risk_details = (
-                    risk.get("details") if isinstance(risk.get("details"), list) else []
-                )
+                risk_details = risk.get("details") if isinstance(risk.get("details"), list) else []
                 management_work = (
                     raw_input.get("management_work")
                     if isinstance(raw_input.get("management_work"), dict)
@@ -870,13 +871,9 @@ def execute_duty_graph_programmatic(
                     )
 
                     safe_management_agent = bool(
-                        operation_context.get("protocol")
-                        == "management-operation-v1"
-                        and operation_context.get("require_registered_side_effects")
-                        is True
-                        and _verified_management_operation_context(
-                            eid, operation_context
-                        )
+                        operation_context.get("protocol") == "management-operation-v1"
+                        and operation_context.get("require_registered_side_effects") is True
+                        and _verified_management_operation_context(eid, operation_context)
                     )
                 if (
                     bool(risk.get("high_risk"))

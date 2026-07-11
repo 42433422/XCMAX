@@ -29,6 +29,10 @@ from app.application.codex_super_employee_service import CodexSuperEmployeeServi
 from app.application.cursor_super_employee_service import CursorSuperEmployeeService
 from app.application.execution_scope import factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
+from app.application.mobile_push_app_service import (
+    ensure_mobile_notification_schema,
+    notification_scope_for_user,
+)
 from app.application.mobile_super_employee_cancellation import (
     MobileSuperEmployeeTaskConflict,
     MobileSuperEmployeeTaskIdError,
@@ -141,7 +145,7 @@ def _mobile_session_id_from_request(request: Request) -> str:
             if sid:
                 return sid
         except OPERATIONAL_ERRORS:
-            logger.exception("mobile session id parse failed")
+            logger.warning("mobile session id parse failed")
     sid_raw = request.headers.get("X-Session-ID") or ""
     return sid_raw.strip() if isinstance(sid_raw, str) else ""
 
@@ -165,6 +169,39 @@ def _mobile_unauthorized_response() -> JSONResponse:
         format_mobile_response(None, "未授权", success=False, code=401),
         status_code=401,
     )
+
+
+def _mobile_failure_response(message: str, status_code: int) -> JSONResponse:
+    """Return a stable client error without serializing exception details."""
+
+    return JSONResponse(
+        format_mobile_response(None, message, success=False, code=status_code),
+        status_code=status_code,
+    )
+
+
+def _mobile_market_entitlements(raw: Any) -> dict[str, Any]:
+    """Project the market response onto the fields the mobile client needs."""
+
+    payload = raw if isinstance(raw, dict) else {}
+    success = bool(payload.get("success"))
+
+    def safe_mod_ids(key: str) -> list[str]:
+        values = payload.get(key) if isinstance(payload.get(key), list) else []
+        return [
+            value
+            for item in values
+            if (value := str(item or "").strip()) and re.fullmatch(r"[A-Za-z0-9._-]{1,128}", value)
+        ][:200]
+
+    result: dict[str, Any] = {
+        "success": success,
+        "mod_ids": safe_mod_ids("mod_ids"),
+        "added_mod_ids": safe_mod_ids("added_mod_ids"),
+    }
+    if not success:
+        result["message"] = "市场权益暂未同步，请稍后重试"
+    return result
 
 
 def _ai_circle_user(user: Any) -> tuple[int, str, str | None]:
@@ -204,15 +241,14 @@ def _ensure_mobile_device_table() -> None:
 
         from app.db.models.mobile_device import MobileDeviceToken
         from app.db.session import get_db
-        from app.services.mobile_push import ensure_mobile_notification_schema
 
         with get_db() as db:
             bind = db.get_bind()
             if not inspect(bind).has_table(MobileDeviceToken.__tablename__):
                 MobileDeviceToken.__table__.create(bind, checkfirst=True)
             ensure_mobile_notification_schema(db)
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_device_tokens ensure: %s", exc)
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile device schema ensure failed")
 
 
 def _ensure_outbox_table() -> None:
@@ -221,15 +257,14 @@ def _ensure_outbox_table() -> None:
 
         from app.db.models.mobile_notification import MobileNotificationOutbox
         from app.db.session import get_db
-        from app.services.mobile_push import ensure_mobile_notification_schema
 
         with get_db() as db:
             bind = db.get_bind()
             if not inspect(bind).has_table(MobileNotificationOutbox.__tablename__):
                 MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
             ensure_mobile_notification_schema(db)
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_notification_outbox ensure: %s", exc)
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile notification outbox schema ensure failed")
 
 
 def _mobile_notification_scope(user: Any) -> tuple[str, int]:
@@ -239,8 +274,6 @@ def _mobile_notification_scope(user: Any) -> tuple[str, int]:
     an enterprise pairing is deliberately downgraded even when the issuer is an
     administrator.  Client-provided SKU fields are therefore never an authority.
     """
-
-    from app.services.mobile_push import notification_scope_for_user
 
     return notification_scope_for_user(user)
 
@@ -263,11 +296,11 @@ def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] 
         from app.application.facades.mobile_relay_facade import register_desktop_relay
 
         relay = register_desktop_relay(host=host, port=port)
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("desktop relay registration skipped: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.warning("desktop relay registration skipped")
         return None
-    except Exception as exc:  # noqa: BLE001 — pairing must never block mobile login
-        logger.warning("desktop relay registration skipped after unexpected failure: %s", exc)
+    except Exception:  # noqa: BLE001 — pairing must never block mobile login
+        logger.warning("desktop relay registration skipped after unexpected failure")
         return None
     if not relay:
         return None
@@ -282,8 +315,8 @@ def _cached_desktop_relay_for_account_binding() -> dict[str, Any] | None:
         from app.application.facades.mobile_relay_facade import cached_desktop_relay_payload
 
         relay = cached_desktop_relay_payload()
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("cached desktop relay unavailable: %s", exc)
+    except RECOVERABLE_ERRORS:
+        logger.warning("cached desktop relay unavailable")
         return None
     if not relay:
         return None
@@ -520,7 +553,7 @@ def _pairing_subject_user(record: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             public = _mobile_user_public_dict(row)
     except RECOVERABLE_ERRORS:
-        logger.exception("pairing subject lookup failed")
+        logger.warning("pairing subject lookup failed")
         return None
     if token_scope == "management_pairing":
         if account_kind != "admin":
@@ -638,8 +671,8 @@ def _shipment_items(limit: int = 100) -> list[dict[str, Any]]:
 def _safe_mobile_sync_items(name: str, loader) -> list[dict[str, Any]]:
     try:
         return loader()
-    except Exception as exc:  # noqa: BLE001 - 单个业务表缺失不能拖垮手机拉同步
-        logger.warning("mobile sync: %s skipped: %s", name, exc)
+    except Exception:  # noqa: BLE001 - 单个业务表缺失不能拖垮手机拉同步
+        logger.warning("mobile sync loader skipped")
         return []
 
 
@@ -675,8 +708,8 @@ def _ai_conversation_changes(user: Any, limit: int = 100) -> list[dict[str, Any]
                 }
                 for r in reversed(rows)
             ]
-    except Exception as exc:  # noqa: BLE001 - AI 对话表缺失不能拖垮手机拉同步
-        logger.warning("ai_conversation_changes: %s", exc)
+    except Exception:  # noqa: BLE001 - AI 对话表缺失不能拖垮手机拉同步
+        logger.warning("AI conversation changes unavailable")
         return []
 
 
@@ -764,8 +797,8 @@ def _mobile_mod_items(
             market_connected=market_connected,
         )
         return items[:100]
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile mods list: %s", exc)
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile mod list unavailable")
         items: list[dict[str, Any]] = []
         _upsert_admin_duty_mod_item(
             items,
@@ -1010,9 +1043,9 @@ def _persist_mobile_cs_request(
             db.add(row)
             db.flush()
             return int(row.id), True, ""
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile cs service request persist skipped: %s", exc)
-        return 0, False, str(exc)[:300]
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile cs service request persistence failed")
+        return 0, False, "客服请求暂未保存，请稍后重试"
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1130,8 +1163,8 @@ def _employee_ssot_payload() -> dict[str, Any]:
     installed: set[str] = set()
     try:
         installed = _installed_employee_pack_ids()
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile employee-ssot: 读取已安装 employee_pack 失败: %s", exc)
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile employee SSOT installed-pack lookup failed")
     return derive_employee_ssot(installed_ids=installed)
 
 
@@ -1545,18 +1578,12 @@ async def mobile_service_bridge_request_respond(
         return format_mobile_response(data=req.to_dict())
     except HTTPException:
         raise
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_service_bridge_request_respond")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-    except Exception as exc:
-        logger.exception("mobile service-bridge respond failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile service-bridge response failed")
+        return _mobile_failure_response("服务请求暂未处理，请稍后重试", 500)
+    except Exception:  # noqa: BLE001
+        logger.warning("mobile service-bridge response failed unexpectedly")
+        return _mobile_failure_response("服务请求暂未处理，请稍后重试", 500)
 
 
 # ── 中继服务 ──
@@ -1573,12 +1600,9 @@ async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
             relay_base_url=body.relay_base_url,
         )
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_desktop_register")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay desktop registration failed")
+        return _mobile_failure_response("电脑执行端暂时无法注册，请稍后重试", 500)
 
 
 @extension_router.post("/relay/mobile/bind-account")
@@ -1611,12 +1635,9 @@ async def mobile_relay_bind_account(
                 **_relay_mobile_auth_payload(user_public, desktop),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_bind_account")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay account binding failed")
+        return _mobile_failure_response("电脑执行端暂时无法绑定，请稍后重试", 500)
 
 
 @extension_router.get("/relay/mobile/desktops")
@@ -1630,12 +1651,9 @@ async def mobile_relay_desktops(user=Depends(get_mobile_user)):
     try:
         items = MobileRelayService().list_desktops(user_id=uid)
         return format_mobile_response(data={"items": items, "count": len(items)})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_desktops")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay desktop listing failed")
+        return _mobile_failure_response("电脑执行端列表暂时不可用，请稍后重试", 500)
 
 
 def _mobile_memory_service():
@@ -1665,11 +1683,8 @@ async def mobile_assistant_memory_list(
                 "summary": service.get_memory_v2_summary(str(uid)),
             }
         )
-    except (TypeError, ValueError) as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
-            status_code=400,
-        )
+    except (TypeError, ValueError):
+        return _mobile_failure_response("记忆筛选参数无效，请检查后重试", 400)
 
 
 @extension_router.post("/assistant/memory/candidates")
@@ -1818,12 +1833,9 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
                 status_code=404,
             )
         return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_create_task")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay task creation failed")
+        return _mobile_failure_response("任务暂时无法创建，请稍后重试", 500)
 
 
 def _mobile_relay_task_list_response(
@@ -2036,12 +2048,9 @@ async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
                 status_code=404,
             )
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_desktop_poll")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay desktop polling failed")
+        return _mobile_failure_response("任务轮询暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/relay/desktop/tasks/{task_id}/complete")
@@ -2060,12 +2069,9 @@ async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopComplete
                 status_code=404,
             )
         return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_relay_desktop_complete")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile relay task completion failed")
+        return _mobile_failure_response("任务结果暂时无法提交，请稍后重试", 500)
 
 
 # ── 管理端 ──
@@ -2087,17 +2093,9 @@ async def _mobile_management_work_get(
             base_url=modstore_management_base_url(),
             strict_internal_auth=True,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mobile management work read failed: %s", exc)
-        return JSONResponse(
-            format_mobile_response(
-                None,
-                f"管理端员工任务服务不可用：{exc}",
-                success=False,
-                code=502,
-            ),
-            status_code=502,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile management work read failed")
+        return _mobile_failure_response("管理端员工任务服务暂时不可用，请稍后重试", 502)
 
 
 async def _mobile_management_work_post(
@@ -2125,9 +2123,7 @@ async def _mobile_management_work_post(
         payload.pop("created_by_user_id", None)
         payload.pop("external_actor_ref", None)
         payload.pop("source_ref", None)
-        payload["external_actor_ref"] = (
-            f"fhd:user:{actor_user_id}:tenant:{actor_tenant_id}"
-        )
+        payload["external_actor_ref"] = f"fhd:user:{actor_user_id}:tenant:{actor_tenant_id}"
         return await modstore_post(
             path,
             json_body=payload,
@@ -2135,17 +2131,9 @@ async def _mobile_management_work_post(
             base_url=modstore_management_base_url(),
             strict_internal_auth=True,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("mobile management work write failed: %s", exc)
-        return JSONResponse(
-            format_mobile_response(
-                None,
-                f"管理端员工任务服务不可用：{exc}",
-                success=False,
-                code=502,
-            ),
-            status_code=502,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile management work write failed")
+        return _mobile_failure_response("管理端员工任务服务暂时不可用，请稍后重试", 502)
 
 
 def _mobile_management_work_response(
@@ -2337,7 +2325,7 @@ async def mobile_admin_employees(request: Request, user=Depends(get_mobile_user)
             finally:
                 db.close()
         except RECOVERABLE_ERRORS:
-            logger.debug("employee_im_summary skipped for /admin/employees", exc_info=True)
+            logger.debug("employee IM summary skipped for admin employees")
     items = _admin_employee_items(
         market_profiles, market_connected=market_connected, im_summary=im_summary
     )
@@ -2387,11 +2375,9 @@ async def mobile_im_cs_inbox(request: Request, user=Depends(get_mobile_user)):
             for c in items
         ]
         return format_mobile_response(data={"conversations": conversations})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile cs inbox failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile customer-service inbox listing failed")
+        return _mobile_failure_response("客服会话列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.get("/im/cs/inbox/{conversation_id}/messages")
@@ -2421,11 +2407,9 @@ async def mobile_im_cs_inbox_messages(
             for m in raw
         ]
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile cs inbox messages failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile customer-service inbox messages failed")
+        return _mobile_failure_response("客服会话消息暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/im/cs/inbox/{conversation_id}/reply")
@@ -2454,15 +2438,11 @@ async def mobile_im_cs_inbox_reply(
                 "timestamp": str(sent.get("created_at") or ""),
             }
         )
-    except (ValueError, PermissionError) as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile cs inbox reply failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except (ValueError, PermissionError):
+        return _mobile_failure_response("回复内容或会话状态无效，请检查后重试", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile customer-service inbox reply failed")
+        return _mobile_failure_response("客服回复暂时无法发送，请稍后重试", 500)
 
 
 @extension_router.get("/admin/home")
@@ -2488,7 +2468,7 @@ async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
             finally:
                 db.close()
         except RECOVERABLE_ERRORS:
-            logger.debug("employee_im_summary skipped", exc_info=True)
+            logger.debug("employee IM summary skipped")
     employees = _admin_employee_items(
         market_profiles, market_connected=market_connected, im_summary=im_summary
     )
@@ -2553,7 +2533,7 @@ async def mobile_admin_codex_super_employee_messages(
         messages = CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_codex_super_employee_messages")
+        logger.warning("mobile Codex super-employee messages unavailable")
         return JSONResponse(
             format_mobile_response(
                 None, "超级员工消息暂时不可用，请稍后重试", success=False, code=500
@@ -2613,7 +2593,7 @@ async def mobile_admin_codex_super_employee_invoke(
             status_code=400,
         )
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_codex_super_employee_invoke")
+        logger.warning("mobile Codex super-employee invocation failed")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
@@ -2640,7 +2620,7 @@ async def mobile_admin_claude_super_employee_messages(
         messages = ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_claude_super_employee_messages")
+        logger.warning("mobile Claude super-employee messages unavailable")
         return JSONResponse(
             format_mobile_response(
                 None, "超级员工消息暂时不可用，请稍后重试", success=False, code=500
@@ -2700,7 +2680,7 @@ async def mobile_admin_claude_super_employee_invoke(
             status_code=400,
         )
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_claude_super_employee_invoke")
+        logger.warning("mobile Claude super-employee invocation failed")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
@@ -2727,7 +2707,7 @@ async def mobile_admin_cursor_super_employee_messages(
         messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_cursor_super_employee_messages")
+        logger.warning("mobile Cursor super-employee messages unavailable")
         return JSONResponse(
             format_mobile_response(
                 None, "超级员工消息暂时不可用，请稍后重试", success=False, code=500
@@ -2780,7 +2760,7 @@ async def mobile_admin_cursor_super_employee_invoke(
             status_code=400,
         )
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_cursor_super_employee_invoke")
+        logger.warning("mobile Cursor super-employee invocation failed")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
@@ -2807,7 +2787,7 @@ async def mobile_admin_trae_super_employee_messages(
         messages = TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_trae_super_employee_messages")
+        logger.warning("mobile Trae super-employee messages unavailable")
         return JSONResponse(
             format_mobile_response(
                 None, "超级员工消息暂时不可用，请稍后重试", success=False, code=500
@@ -2867,7 +2847,7 @@ async def mobile_admin_trae_super_employee_invoke(
             status_code=400,
         )
     except Exception:  # noqa: BLE001 - public HTTP exception boundary
-        logger.exception("mobile_admin_trae_super_employee_invoke")
+        logger.warning("mobile Trae super-employee invocation failed")
         return JSONResponse(
             format_mobile_response(None, "超级员工暂时不可用，请稍后重试", success=False, code=500),
             status_code=500,
@@ -3054,7 +3034,7 @@ async def _stream_super_employee_invoke(
             ):
                 yield _sse_line(event)
         except Exception:  # noqa: BLE001
-            logger.exception("mobile_super_employee_stream failed")
+            logger.warning("mobile super-employee stream failed")
             yield _sse_line({"type": "error", "message": "超级员工流式调用暂时不可用，请稍后重试"})
         finally:
             # Disconnecting the SSE must stop persistent/to_thread CLI paths too.
@@ -3337,11 +3317,9 @@ async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
         if not branches:
             branches = _mobile_git_branches_from_remote()
         return format_mobile_response(data={"branches": branches})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_git_branches")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile git branch listing failed")
+        return _mobile_failure_response("分支列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.get("/ai-groups")
@@ -3358,11 +3336,9 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
     try:
         groups = AiGroupChatService(mode=_mobile_group_mode(request)).list_groups(user_id=uid)
         return format_mobile_response(data={"groups": groups})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_groups_list")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group listing failed")
+        return _mobile_failure_response("群聊列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.get("/ai-groups/candidates")
@@ -3385,11 +3361,9 @@ async def mobile_ai_group_candidates(request: Request, user=Depends(get_mobile_u
                 "count": len(candidates),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_candidates")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group candidate listing failed")
+        return _mobile_failure_response("群成员列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/ai-groups")
@@ -3410,15 +3384,11 @@ async def mobile_ai_groups_create(
             user_id=uid, name=body.name
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_groups_create")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊名称或成员参数无效，请检查后重试", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group creation failed")
+        return _mobile_failure_response("群聊暂时无法创建，请稍后重试", 500)
 
 
 @extension_router.get("/ai-groups/{group_id}/messages")
@@ -3442,11 +3412,9 @@ async def mobile_ai_group_messages(
             user_id=uid, group_id=group_id, limit=limit
         )
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group message listing failed")
+        return _mobile_failure_response("群聊消息暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/ai-groups/{group_id}/messages")
@@ -3475,15 +3443,11 @@ async def mobile_ai_group_post(
             context=body.context if isinstance(getattr(body, "context", None), dict) else {},
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_post")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊消息参数无效，请检查后重试", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group message sending failed")
+        return _mobile_failure_response("群聊消息暂时无法发送，请稍后重试", 500)
 
 
 @extension_router.post("/ai-groups/{group_id}/members")
@@ -3512,15 +3476,11 @@ async def mobile_ai_group_add_member(
             },
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_add_member")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群成员参数无效，请检查后重试", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group member addition failed")
+        return _mobile_failure_response("群成员暂时无法添加，请稍后重试", 500)
 
 
 @extension_router.delete("/ai-groups/{group_id}/members/{employee_id}")
@@ -3541,15 +3501,11 @@ async def mobile_ai_group_remove_member(
             user_id=uid, group_id=group_id, employee_id=employee_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_remove_member")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群成员或群聊状态无效，请检查后重试", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group member removal failed")
+        return _mobile_failure_response("群成员暂时无法移除，请稍后重试", 500)
 
 
 @extension_router.put("/ai-groups/{group_id}/pin")
@@ -3570,15 +3526,11 @@ async def mobile_ai_group_toggle_pin(
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_pin")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group pin update failed")
+        return _mobile_failure_response("群聊置顶状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.post("/ai-groups/{group_id}/mark-unread")
@@ -3599,15 +3551,11 @@ async def mobile_ai_group_mark_unread(
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_mark_unread")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group unread update failed")
+        return _mobile_failure_response("群聊未读状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.post("/ai-groups/{group_id}/mark-read")
@@ -3626,15 +3574,11 @@ async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depend
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_mark_read")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group read update failed")
+        return _mobile_failure_response("群聊已读状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.put("/ai-groups/{group_id}/followed")
@@ -3655,15 +3599,11 @@ async def mobile_ai_group_toggle_followed(
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_followed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group follow update failed")
+        return _mobile_failure_response("群聊关注状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.put("/ai-groups/{group_id}/hidden")
@@ -3684,15 +3624,11 @@ async def mobile_ai_group_toggle_hidden(
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_hidden")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group visibility update failed")
+        return _mobile_failure_response("群聊显示状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.delete("/ai-groups/{group_id}")
@@ -3711,15 +3647,11 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
             user_id=uid, group_id=group_id
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_delete")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except ValueError:
+        return _mobile_failure_response("群聊不存在或状态无效", 400)
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile AI group deletion failed")
+        return _mobile_failure_response("群聊暂时无法删除，请稍后重试", 500)
 
 
 # ── 会话状态管理（非群聊的个人 AI 会话） ──
@@ -3745,11 +3677,9 @@ async def mobile_conversation_toggle_pin(conversation_id: str, user=Depends(get_
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_pin")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation pin update failed")
+        return _mobile_failure_response("会话置顶状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.post("/conversations/{conversation_id}/mark-unread")
@@ -3767,11 +3697,9 @@ async def mobile_conversation_mark_unread(conversation_id: str, user=Depends(get
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_mark_unread")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation unread update failed")
+        return _mobile_failure_response("会话未读状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.post("/conversations/{conversation_id}/mark-read")
@@ -3787,11 +3715,9 @@ async def mobile_conversation_mark_read(conversation_id: str, user=Depends(get_m
         return format_mobile_response(
             data=ConversationStateService().mark_read(user_id=uid, conversation_id=conversation_id)
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_mark_read")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation read update failed")
+        return _mobile_failure_response("会话已读状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.put("/conversations/{conversation_id}/followed")
@@ -3809,11 +3735,9 @@ async def mobile_conversation_toggle_followed(conversation_id: str, user=Depends
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_followed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation follow update failed")
+        return _mobile_failure_response("会话关注状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.put("/conversations/{conversation_id}/hidden")
@@ -3831,11 +3755,9 @@ async def mobile_conversation_toggle_hidden(conversation_id: str, user=Depends(g
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_hidden")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation visibility update failed")
+        return _mobile_failure_response("会话显示状态暂时无法更新，请稍后重试", 500)
 
 
 @extension_router.delete("/conversations/{conversation_id}")
@@ -3851,11 +3773,9 @@ async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobi
         return format_mobile_response(
             data=ConversationStateService().delete(user_id=uid, conversation_id=conversation_id)
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_delete")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile conversation deletion failed")
+        return _mobile_failure_response("会话暂时无法删除，请稍后重试", 500)
 
 
 # ── MOD / 平台 / 首页 ──
@@ -3879,7 +3799,7 @@ async def mobile_ai_circle_posts(
 
         await employee_circle_sync.sync_modstore_reports()
     except Exception:  # noqa: BLE001 - 同步失败不影响交流圈展示
-        logger.warning("circle: modstore report sync skipped", exc_info=True)
+        logger.warning("circle report sync skipped")
 
     uid, _, _ = _ai_circle_user(user)
     posts = list_posts(user_id=uid, limit=limit)
@@ -3907,10 +3827,8 @@ async def mobile_ai_circle_create_post(
     try:
         post_id = create_user_post(user_id=uid, author_name=name, avatar=avatar, body=body.body)
         return format_mobile_response(data={"id": post_id}, message="发布成功")
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
+    except ValueError:
+        return _mobile_failure_response("动态内容无效，请检查后重试", 400)
 
 
 @extension_router.post("/circle/posts/{post_id}/like")
@@ -3925,10 +3843,8 @@ async def mobile_ai_circle_toggle_like(post_id: int, user=Depends(get_mobile_use
     try:
         liked = toggle_like(post_id=post_id, user_id=uid)
         return format_mobile_response(data={"liked": liked})
-    except LookupError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
-        )
+    except LookupError:
+        return _mobile_failure_response("动态不存在或已删除", 404)
 
 
 @extension_router.post("/circle/posts/{post_id}/comments")
@@ -3947,14 +3863,10 @@ async def mobile_ai_circle_add_comment(
     try:
         comment_id = add_comment(post_id=post_id, user_id=uid, author_name=name, body=body.body)
         return format_mobile_response(data={"id": comment_id}, message="评论成功")
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except LookupError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
-        )
+    except ValueError:
+        return _mobile_failure_response("评论内容无效，请检查后重试", 400)
+    except LookupError:
+        return _mobile_failure_response("动态不存在或已删除", 404)
 
 
 @extension_router.get("/mods")
@@ -3996,12 +3908,9 @@ async def mobile_onboarding_industries(request: Request, user=Depends(get_mobile
 
         data = await build_onboarding_industry_catalog_for_request(request)
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile onboarding industries failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile onboarding industry listing failed")
+        return _mobile_failure_response("行业列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.get("/onboarding/industry-baseline", response_model=dict[str, Any])
@@ -4018,12 +3927,9 @@ async def mobile_industry_baseline(
 
         data = await build_industry_baseline_plan_for_request(request, industry_id)
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile industry baseline failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile industry baseline loading failed")
+        return _mobile_failure_response("行业方案暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/onboarding/select-industry", response_model=dict[str, Any])
@@ -4058,26 +3964,22 @@ async def mobile_select_onboarding_industry(
                 _mobile_session_id_from_request(request),
                 industry_id,
             )
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("mobile select onboarding industry market sync failed")
-            market_entitlements = {"success": False, "message": str(exc)}
+        except RECOVERABLE_ERRORS:
+            logger.warning("mobile onboarding industry market sync failed")
+            market_entitlements = {
+                "success": False,
+                "message": "市场权益暂未同步，请稍后重试",
+            }
+        market_entitlements = _mobile_market_entitlements(market_entitlements)
         if not market_entitlements.get("success"):
-            logger.warning(
-                "mobile onboarding industry saved while market entitlement sync failed: "
-                "industry=%s message=%s",
-                industry_id,
-                market_entitlements.get("message"),
-            )
+            logger.warning("mobile onboarding industry saved while market entitlement sync failed")
         return format_mobile_response(
             data={**(data or {}), "market_entitlements": market_entitlements},
             message="行业已绑定到当前账号",
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile select onboarding industry failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile onboarding industry selection failed")
+        return _mobile_failure_response("行业选择暂时无法保存，请稍后重试", 500)
 
 
 @extension_router.post("/mod-store/install-host-foundation", response_model=dict[str, Any])
@@ -4098,12 +4000,9 @@ async def mobile_install_host_foundation(
             success=bool(result.success),
             code=200 if result.success else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile install host foundation failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile host foundation installation failed")
+        return _mobile_failure_response("基础组件暂时无法安装，请稍后重试", 500)
 
 
 @extension_router.post("/mod-store/install-industry-seed", response_model=dict[str, Any])
@@ -4134,12 +4033,9 @@ async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mo
             success=bool(data.get("success")),
             code=200 if data.get("success") else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile install industry seed failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile industry seed installation failed")
+        return _mobile_failure_response("行业初始化暂时无法完成，请稍后重试", 500)
 
 
 @extension_router.post("/mod-store/install", response_model=dict[str, Any])
@@ -4163,12 +4059,9 @@ async def mobile_install_mod(body: dict[str, Any], user=Depends(get_mobile_user)
             success=bool(result.success),
             code=200 if result.success else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile install mod failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile mod installation failed")
+        return _mobile_failure_response("组件暂时无法安装，请稍后重试", 500)
 
 
 @extension_router.post(
@@ -4208,12 +4101,9 @@ async def mobile_install_customer_delivery_seed(
             success=bool(data.get("success")),
             code=200 if data.get("success") else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile install customer delivery seed failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile customer delivery seed installation failed")
+        return _mobile_failure_response("交付初始化暂时无法完成，请稍后重试", 500)
 
 
 @extension_router.get("/home")
@@ -4232,8 +4122,9 @@ async def mobile_home(user=Depends(get_mobile_user)):
         from app.db.xcmax_sync import SyncDb
 
         sync_data = SyncDb().get_status()
-    except OPERATIONAL_ERRORS as exc:
-        sync_data = {"error": str(exc)}
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile home sync summary failed")
+        sync_data = {"error": "同步状态暂时不可用"}
     return format_mobile_response(
         data={
             "mods": mod_items,
@@ -4365,8 +4256,8 @@ async def mobile_nav_menu(user=Depends(get_mobile_user)):
                         "mod_id": mod_id,
                     }
                 )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("nav-menu mod items failed: %s", exc)
+    except OPERATIONAL_ERRORS:
+        logger.warning("navigation mod items unavailable")
 
     return format_mobile_response(data={"items": items, "account_kind": account_kind})
 
@@ -4401,7 +4292,7 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
         try:
             await employee_circle_sync.sync_modstore_reports()
         except Exception:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
-            logger.warning("mobile sync: circle modstore report sync skipped", exc_info=True)
+            logger.warning("mobile circle report sync skipped")
 
         uid, _, _ = _ai_circle_user(user)
         posts = list_posts(user_id=uid, limit=limit)
@@ -4412,8 +4303,8 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
                 post["author_name"] = profile["name"]
                 post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
         return posts
-    except Exception as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
-        logger.warning("mobile sync: circle posts skipped: %s", exc)
+    except Exception:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
+        logger.warning("mobile circle posts unavailable")
         return []
 
 
@@ -4433,8 +4324,9 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
             st["inbox_pending"] = conn.execute(
                 "SELECT COUNT(*) FROM sync_inbox WHERE status='pending'",
             ).fetchone()[0]
-    except OPERATIONAL_ERRORS as exc:
-        st = {"error": str(exc), "healthy": False}
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile sync health check failed")
+        st = {"error": "同步状态暂时不可用", "healthy": False}
     st.update(_mobile_sync_runtime_contract())
     return format_mobile_response(data=st)
 
@@ -4474,12 +4366,9 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
                 "shipments": shipments,
             },
         )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_pull: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile sync pull failed")
+        return _mobile_failure_response("同步数据暂时无法获取，请稍后重试", 500)
 
 
 @extension_router.post("/sync/push")
@@ -4509,15 +4398,13 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
             from app.application.xcmax_sync_app import apply_inbox
 
             apply_result = apply_inbox(limit=written + 50) or {}
-        except OPERATIONAL_ERRORS as ae:
-            apply_result = {"error": str(ae)}
+        except OPERATIONAL_ERRORS:
+            logger.warning("mobile sync inbox application failed")
+            apply_result = {"error": "同步数据已接收，但暂未应用"}
         return format_mobile_response(data={"written": written, "apply": apply_result})
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_push: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile sync push failed")
+        return _mobile_failure_response("同步数据暂时无法提交，请稍后重试", 500)
 
 
 @extension_router.post("/sync/ack")
@@ -4532,12 +4419,9 @@ async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
         sync_db = SyncDb()
         sync_db.update_remote_cursor(int(body.cursor))
         return format_mobile_response(data={"acked": int(body.cursor)})
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_ack: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile sync acknowledgement failed")
+        return _mobile_failure_response("同步确认暂时无法提交，请稍后重试", 500)
 
 
 @extension_router.get("/sync/conflicts")
@@ -4559,8 +4443,9 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
                 """,
             ).fetchall()
             items = [dict(r) for r in rows]
-    except OPERATIONAL_ERRORS as exc:
-        return format_mobile_response(data={"items": [], "error": str(exc)})
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile sync conflict listing failed")
+        return format_mobile_response(data={"items": [], "error": "同步冲突暂时不可用"})
     return format_mobile_response(data={"items": items})
 
 
@@ -4683,11 +4568,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         profile = (
             oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
         )
-    except OPERATIONAL_ERRORS as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=502),
-            status_code=502,
-        )
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile OIDC exchange failed")
+        return _mobile_failure_response("企业登录服务暂时不可用，请稍后重试", 502)
     auth_app_service = get_auth_app_service()
     auth_result = auth_app_service.authenticate_oidc_user(profile)
     if not auth_result.get("success"):
@@ -4822,12 +4705,9 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
                 "timestamp": str(sent.get("created_at") or ""),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile cs send via IM failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile customer-service message sending failed")
+        return _mobile_failure_response("客服消息暂时无法发送，请稍后重试", 500)
 
 
 @extension_router.get("/cs/messages")
@@ -4867,9 +4747,9 @@ async def get_cs_messages(
                     }
                     for m in raw
                 ]
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile cs message history (IM) unavailable: %s", exc)
-        error = str(exc)[:300]
+    except OPERATIONAL_ERRORS:
+        logger.warning("mobile customer-service message history failed")
+        error = "客服消息暂时不可用，请稍后重试"
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]
     return format_mobile_response(data={"messages": messages, "persist_error": error})
@@ -4966,12 +4846,9 @@ async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
                 "payment_channels": list(_MOBILE_PAYMENT_CHANNELS),
             }
         return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment plans failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile payment plan listing failed")
+        return _mobile_failure_response("套餐列表暂时不可用，请稍后重试", 500)
 
 
 @extension_router.post("/payment/checkout", response_model=dict[str, Any])
@@ -5029,12 +4906,9 @@ async def mobile_payment_checkout(
                 status_code=status,
             )
         return format_mobile_response(data=payload, message="下单成功")
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment checkout failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile payment checkout creation failed")
+        return _mobile_failure_response("收银台暂时无法创建，请稍后重试", 500)
 
 
 @extension_router.get("/payment/query/{out_trade_no}", response_model=dict[str, Any])
@@ -5064,12 +4938,9 @@ async def mobile_payment_query(
                 status_code=status,
             )
         return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment query failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
+    except RECOVERABLE_ERRORS:
+        logger.warning("mobile payment query failed")
+        return _mobile_failure_response("支付状态暂时无法查询，请稍后重试", 500)
 
 
 @extension_router.get("/wallet/balance")
@@ -5245,19 +5116,20 @@ async def _modstore_admin_proxy(
         try:
             data = resp.json()
         except Exception:  # noqa: BLE001
-            data = {"raw": resp.text[:500]}
+            data = {}
         if resp.is_success:
             return {"ok": True, "status": resp.status_code, "data": data}
         return {
             "ok": False,
             "status": resp.status_code,
-            "error": str(data.get("detail") or data.get("error") or resp.text[:200])[:300],
+            "error": "MODstore 请求未成功",
         }
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
+        logger.warning("mobile MODstore admin proxy connection failed")
         return {
             "ok": False,
             "status": 0,
-            "error": f"无法连接 MODstore 后端：{_compact_text(exc)[:200]}",
+            "error": "MODstore 服务暂时不可用",
         }
 
 
@@ -5293,7 +5165,7 @@ async def mobile_admin_employee_pending_questions(
     if not out.get("ok"):
         return format_mobile_response(
             None,
-            f"拉员工提问失败：{out.get('error') or '未知错误'}",
+            "员工提问暂时无法加载，请稍后重试",
             success=False,
             code=out.get("status") or 502,
         )
@@ -5338,7 +5210,7 @@ async def mobile_admin_employee_pending_question_answer(
     if not out.get("ok"):
         return format_mobile_response(
             None,
-            f"回答失败：{out.get('error') or '未知错误'}",
+            "回答暂未提交，请稍后重试",
             success=False,
             code=out.get("status") or 502,
         )
@@ -5481,8 +5353,8 @@ async def mobile_employee_chat_stream(
                 yield _sse_line({"type": "token", "text": chunk})
                 await asyncio.sleep(0.05)
             yield _sse_line({"type": "done", "result": {"response": final_text}})
-        except Exception:
-            logger.exception("mobile_employee_chat_stream failed")
+        except Exception:  # noqa: BLE001 - public SSE exception boundary
+            logger.warning("mobile employee chat stream failed")
             yield _sse_line({"type": "error", "message": "员工对话暂时不可用，请稍后重试"})
 
     return StreamingResponse(

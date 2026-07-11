@@ -18,7 +18,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-
 _ACTION_KEYWORDS = (
     "修复",
     "修改",
@@ -1081,7 +1080,9 @@ def verify_persisted_fact_evidence(
     if require_passing and parsed_expiry is None:
         return False, f"independent fact evidence {label} has no valid expiry"
     current_time = now or datetime.now(timezone.utc)
-    current_time = current_time if current_time.tzinfo else current_time.replace(tzinfo=timezone.utc)
+    current_time = (
+        current_time if current_time.tzinfo else current_time.replace(tzinfo=timezone.utc)
+    )
     if require_passing and parsed_expiry is not None and parsed_expiry <= current_time:
         return False, f"independent fact evidence {label} has expired"
 
@@ -1110,9 +1111,7 @@ def verify_persisted_fact_evidence(
     return True, "fact evidence row verified"
 
 
-def persisted_fact_bundle_digest(
-    evidence_rows: list[Any], *, task_id: str, attempt: int
-) -> str:
+def persisted_fact_bundle_digest(evidence_rows: list[Any], *, task_id: str, attempt: int) -> str:
     """Digest the current signed fact rows in stable order for receipt binding."""
 
     facts = [

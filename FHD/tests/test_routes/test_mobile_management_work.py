@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from contextlib import contextmanager
 from types import SimpleNamespace
@@ -127,6 +128,69 @@ async def test_mobile_management_bridge_uses_external_actor_and_strict_internal_
         "accepted": True,
         "external_actor_ref": "fhd:user:7:tenant:8",
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "args", "expected_message"),
+    [
+        (
+            "_mobile_management_work_get",
+            ("/api/admin/employee-autonomy/work-items",),
+            "管理端员工任务服务暂时不可用，请稍后重试",
+        ),
+        (
+            "_mobile_management_work_post",
+            ("/api/admin/employee-autonomy/work-items", {}, 7, 8),
+            "管理端员工任务服务暂时不可用，请稍后重试",
+        ),
+    ],
+)
+async def test_mobile_management_bridge_never_exposes_exception_details(
+    monkeypatch,
+    mobile_ext,
+    method,
+    args,
+    expected_message,
+):
+    import app.application.modstore_local_client as client_module
+
+    secret = "authorization=Bearer private-token"
+
+    async def fail(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(client_module, "modstore_get", fail)
+    monkeypatch.setattr(client_module, "modstore_post", fail)
+    if method.endswith("_post"):
+        path, body, user_id, tenant_id = args
+        response = await getattr(mobile_ext, method)(
+            path,
+            body,
+            user_id=user_id,
+            tenant_id=tenant_id,
+        )
+    else:
+        response = await getattr(mobile_ext, method)(*args)
+    payload = json.loads(response.body)
+
+    assert response.status_code == 502
+    assert payload["message"] == expected_message
+    assert secret not in response.body.decode("utf-8")
+
+
+def test_mobile_extension_has_no_exception_detail_serialization(mobile_ext):
+    source = open(mobile_ext.__file__, encoding="utf-8").read()
+
+    for forbidden in (
+        "str(exc)",
+        "str(ae)",
+        "{exc}",
+        "_compact_text(exc)",
+        "logger.exception(",
+        "exc_info=True",
+    ):
+        assert forbidden not in source
 
 
 @pytest.mark.asyncio

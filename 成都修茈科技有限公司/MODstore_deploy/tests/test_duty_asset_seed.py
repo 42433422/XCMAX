@@ -86,9 +86,7 @@ def test_concurrent_clean_load_publishes_one_complete_seed(tmp_path, monkeypatch
         results = list(pool.map(lambda _value: load_duty_registry(), range(16)))
 
     assert all(result["package_count"] == 52 for result in results)
-    persisted = json.loads(
-        (catalog / "duty_employee_registry.json").read_text(encoding="utf-8")
-    )
+    persisted = json.loads((catalog / "duty_employee_registry.json").read_text(encoding="utf-8"))
     assert persisted["package_count"] == 52
     assert len(persisted["packages"]) == 52
     assert len(list((catalog / "files").glob("*"))) == 52
@@ -117,9 +115,10 @@ def _bad_seed(
         source = registry_module._MARKET_FILES_ROOT / filename
         target = seed_root / "files" / filename
         target.parent.mkdir()
-        with zipfile.ZipFile(source, "r") as source_zip, zipfile.ZipFile(
-            target, "w", zipfile.ZIP_DEFLATED
-        ) as target_zip:
+        with (
+            zipfile.ZipFile(source, "r") as source_zip,
+            zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as target_zip,
+        ):
             for info in source_zip.infolist():
                 payload = source_zip.read(info)
                 if info.filename == f"{record['id']}/manifest.json":
@@ -147,9 +146,7 @@ def _bad_seed(
         ("manifest_id", "manifest id mismatch"),
     ],
 )
-def test_bad_seed_fails_closed_without_partial_catalog(
-    tmp_path, monkeypatch, mutation, message
-):
+def test_bad_seed_fails_closed_without_partial_catalog(tmp_path, monkeypatch, mutation, message):
     import modstore_server.duty_employee_registry as registry_module
 
     seed_root = _bad_seed(tmp_path, mutation)

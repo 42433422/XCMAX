@@ -29,7 +29,12 @@ from modstore_server.employee_runtime import (
 from modstore_server.llm_failure_classifier import FAILURE_KIND_QUOTA, classify_failure_kind
 from modstore_server.models import EmployeeExecutionMetric, User, get_session_factory
 from modstore_server.runtime_async import run_coro_sync as _run_coro_sync
+from modstore_server.security_boundary import (
+    opaque_ref,
+    select_authorized_root,
+)
 from modstore_server.services.llm import chat_dispatch_via_session
+from modstore_server.structured_json import parse_json_object
 
 logger = logging.getLogger(__name__)
 
@@ -225,20 +230,16 @@ def _build_management_acceptance_audit_protocol(inp: Any) -> str:
         return ""
     criteria = audit.get("criteria") if isinstance(audit.get("criteria"), list) else []
     evidence_catalog = (
-        audit.get("evidence_catalog")
-        if isinstance(audit.get("evidence_catalog"), list)
-        else []
+        audit.get("evidence_catalog") if isinstance(audit.get("evidence_catalog"), list) else []
     )
     contract = {
         "task_id": str(audit.get("task_id") or "")[:128],
         "criteria": criteria[:30],
         "independent_fact_required": bool(audit.get("independent_fact_required")),
-        "required_fact_evidence_ids": list(
-            audit.get("required_fact_evidence_ids") or []
-        )[:50],
-        "required_operation_evidence_ids": list(
-            audit.get("required_operation_evidence_ids") or []
-        )[:50],
+        "required_fact_evidence_ids": list(audit.get("required_fact_evidence_ids") or [])[:50],
+        "required_operation_evidence_ids": list(audit.get("required_operation_evidence_ids") or [])[
+            :50
+        ],
         "evidence_catalog": evidence_catalog[:50],
     }
     return f"""\
@@ -445,11 +446,11 @@ def _run_cognition_with_transient_retries(
             return reasoning, {}
         delay = 0.4 * (2**attempt)
         logger.warning(
-            "employee_executor cognition transient failure employee_id=%s attempt=%s max_attempts=%s error=%s retry_delay_s=%.2f",
-            employee_id,
+            "employee_executor cognition transient failure employee_ref=%s attempt=%s max_attempts=%s error_ref=%s retry_delay_s=%.2f",
+            opaque_ref(employee_id, namespace="employee"),
             attempt + 1,
             max_extra + 1,
-            err[:400],
+            opaque_ref(err, namespace="cognition-error"),
             delay,
         )
         time.sleep(delay)
@@ -1275,7 +1276,6 @@ def _action_agent_runner(
     if project_root_raw:
         try:
             if operation_context:
-                requested_root = Path(str(project_root_raw)).expanduser().resolve()
                 allowed_roots = []
                 for env_name in (
                     "MODSTORE_MANAGEMENT_WORKSPACE_ROOT",
@@ -1291,13 +1291,12 @@ def _action_agent_runner(
                         candidate,
                         candidate / "成都修茈科技有限公司",
                     ):
-                        if (
-                            allowed_candidate.is_dir()
-                            and allowed_candidate not in allowed_roots
-                        ):
+                        if allowed_candidate.is_dir() and allowed_candidate not in allowed_roots:
                             allowed_roots.append(allowed_candidate)
-                if requested_root not in allowed_roots:
-                    raise ValueError("管理任务 project_root 不是服务端授权工作区")
+                requested_root = select_authorized_root(
+                    str(project_root_raw),
+                    allowed_roots,
+                )
                 resolved = str(requested_root)
             else:
                 from modstore_server.integrations.vibe_adapter import (
@@ -1305,16 +1304,14 @@ def _action_agent_runner(
                 )
 
                 resolved = str(
-                    ensure_within_workspace(
-                        str(project_root_raw), user_id=int(user_id or 0)
-                    )
+                    ensure_within_workspace(str(project_root_raw), user_id=int(user_id or 0))
                 )
             workspace_root = resolved
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001 - return a stable boundary error
             return {
                 "handler": "agent",
                 "ok": False,
-                "error": f"project_root 路径无效: {exc}",
+                "error": "project_root 路径无效或未被服务端授权",
             }
     elif requires_root:
         return {
@@ -1452,9 +1449,12 @@ def _action_agent_runner(
 
     try:
         result = _run_coro_sync(_run())
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("agent runner raised employee=%s", employee_id)
-        return {"handler": "agent", "ok": False, "error": f"agent 执行异常: {exc}"}
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "agent runner failed employee_ref=%s",
+            opaque_ref(employee_id, namespace="employee"),
+        )
+        return {"handler": "agent", "ok": False, "error": "agent_execution_failed"}
 
     tool_calls = result.get("tool_calls") if isinstance(result.get("tool_calls"), list) else []
     cr_ids: set[int] = set()
@@ -1688,9 +1688,12 @@ def _action_direct_python(
                 "output": out,
             }
         return {"handler": "direct_python", "ok": True, "output": out}
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("direct_python handler failed employee_id=%s", employee_id)
-        return {"handler": "direct_python", "ok": False, "error": str(exc)[:1000]}
+    except Exception:  # noqa: BLE001
+        logger.warning(
+            "direct_python handler failed employee_ref=%s",
+            opaque_ref(employee_id, namespace="employee"),
+        )
+        return {"handler": "direct_python", "ok": False, "error": "direct_python_failed"}
 
 
 def _filter_handlers_vibe_coding_maintainer(
@@ -1706,6 +1709,7 @@ def _filter_handlers_vibe_coding_maintainer(
             para_delegate_ready_for_dispatch,
         )
     except Exception:
+
         def para_delegate_enabled() -> bool:
             return False
 
@@ -1848,10 +1852,10 @@ def _actions_real(
             target = str((actions_cfg.get("data_sync") or {}).get("target") or "log")
             if target == "log":
                 logger.info(
-                    "[data_sync] employee=%s task=%s result=%s",
-                    employee_id,
-                    task,
-                    str(reasoning.get("reasoning") or "")[:500],
+                    "[data_sync] employee_ref=%s task_ref=%s result_ref=%s",
+                    opaque_ref(employee_id, namespace="employee"),
+                    opaque_ref(task, namespace="task"),
+                    opaque_ref(reasoning.get("reasoning"), namespace="result"),
                 )
             outputs.append({"handler": "data_sync", "target": target, "status": "ok"})
         elif handler == "direct_python":
@@ -1924,9 +1928,13 @@ def _actions_real(
                 vibe_out = dispatch_vibe_handler(
                     str(handler), actions_cfg, reasoning, task, employee_id, user_id
                 )
-            except Exception as exc:  # noqa: BLE001
-                logger.exception("vibe handler dispatch failed handler=%s", handler)
-                vibe_out = {"handler": str(handler), "ok": False, "error": f"dispatch error: {exc}"}
+            except Exception:  # noqa: BLE001
+                logger.warning("vibe handler dispatch failed")
+                vibe_out = {
+                    "handler": str(handler),
+                    "ok": False,
+                    "error": "vibe_dispatch_failed",
+                }
             outputs.append(vibe_out or {"handler": str(handler), "ok": False, "error": "no output"})
         elif handler == "doc_sync":
             from modstore_server.integrations.doc_sync_handler import dispatch_doc_sync_handler
@@ -1968,7 +1976,8 @@ def _actions_real(
             )
     except Exception:
         logger.debug(
-            "actions_real report im hook skipped employee_id=%s", employee_id, exc_info=True
+            "actions_real report im hook skipped employee_ref=%s",
+            opaque_ref(employee_id, namespace="employee"),
         )
     return {
         "task": task,
@@ -2202,9 +2211,9 @@ def execute_employee_task(
     detail_log = _executor_detail_log_enabled()
     recovery_meta: Dict[str, Any] = {}
     logger.info(
-        "employee_execute_start employee_id=%s user_id=%s task_len=%s",
-        employee_id,
-        user_id,
+        "employee_execute_start employee_ref=%s user_ref=%s task_len=%s",
+        opaque_ref(employee_id, namespace="employee"),
+        opaque_ref(user_id, namespace="user"),
         len(task or ""),
     )
     sem = _get_executor_semaphore()
@@ -2223,9 +2232,8 @@ def execute_employee_task(
                     config, runtime_policy = apply_policy_to_config(employee_id, config)
                 except Exception:
                     logger.debug(
-                        "employee runtime policy apply failed employee_id=%s",
-                        employee_id,
-                        exc_info=True,
+                        "employee runtime policy apply failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                     runtime_policy = {}
                 actions_section = config.get("actions") or {}
@@ -2260,9 +2268,9 @@ def execute_employee_task(
                     )
                     session.commit()
                     logger.info(
-                        "employee_execute_finish employee_id=%s user_id=%s status=blocked_by_risk_gate duration_ms=%s",
-                        employee_id,
-                        user_id,
+                        "employee_execute_finish employee_ref=%s user_ref=%s status=blocked_by_risk_gate duration_ms=%s",
+                        opaque_ref(employee_id, namespace="employee"),
+                        opaque_ref(user_id, namespace="user"),
                         duration_ms,
                     )
                     return {
@@ -2305,9 +2313,10 @@ def execute_employee_task(
                         project_root=Path(_project_root) if _project_root else None,
                         manifest=manifest if isinstance(manifest, dict) else None,
                     )
-                except Exception as _pe_exc:
+                except Exception:
                     logger.debug(
-                        "perception_enricher failed employee_id=%s err=%s", employee_id, _pe_exc
+                        "perception_enricher failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 # 10 项成熟度第 3 项「会判断任务」— 用关键词规则给 task 分类
                 # （bug/feature/ops/test/release/security/doc/handoff/unknown），
@@ -2323,9 +2332,10 @@ def execute_employee_task(
                         task=str(task or ""),
                         perceived=perceived if isinstance(perceived, dict) else {},
                     )
-                except Exception as _tc_exc:
+                except Exception:
                     logger.debug(
-                        "task_classifier failed employee_id=%s err=%s", employee_id, _tc_exc
+                        "task_classifier failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 # 注意：原 perception hook 会把「📋 收到任务：{task}」(即任务提示词)当成
                 # 一条 IM 消息推给老板，导致老板看到的是"提示词"而不是员工产出的内容。
@@ -2368,50 +2378,16 @@ def execute_employee_task(
                     _llm_out_raw = reasoning.get("reasoning") or ""
                     _parsed_llm: Dict[str, Any] = {}
                     if isinstance(_llm_out_raw, str) and _llm_out_raw.strip():
-                        # 1. 直接 json.loads（LLM 直接输出纯 JSON 时）
-                        try:
-                            _parsed_llm = json.loads(_llm_out_raw) or {}
-                        except (ValueError, TypeError):
-                            _parsed_llm = {}
-                        # 2. 从 ```json ... ``` 代码块抽取（贪婪 .*，匹配嵌套 JSON）
-                        if not isinstance(_parsed_llm, dict):
-                            import re as _re
-
-                            _m = _re.search(
-                                r"```(?:json)?\s*(\{.*\})\s*```",
+                        # Linear scanner supports plain, fenced and prose-wrapped
+                        # JSON without backtracking over model-controlled text.
+                        _parsed_llm = parse_json_object(_llm_out_raw)
+                        if not any(key in _parsed_llm for key in ("requires_human", "ask_human")):
+                            required = parse_json_object(
                                 _llm_out_raw,
-                                _re.DOTALL,
+                                required_key="requires_human",
                             )
-                            if _m:
-                                try:
-                                    _parsed_llm = json.loads(_m.group(1)) or {}
-                                except (ValueError, TypeError):
-                                    _parsed_llm = {}
-                        # 3. 剥掉首尾 ```json / ``` 后整体 json.loads
-                        if not isinstance(_parsed_llm, dict):
-                            _stripped = _llm_out_raw.strip()
-                            if _stripped.startswith("```"):
-                                _stripped = _re.sub(r"^```(?:json)?\s*", "", _stripped)
-                                _stripped = _re.sub(r"\s*```\s*$", "", _stripped)
-                                try:
-                                    _parsed_llm = json.loads(_stripped) or {}
-                                except (ValueError, TypeError):
-                                    _parsed_llm = {}
-                        # 4. 兜底：从首个含 requires_human 的 {...} 抽取（处理嵌套：
-                        #    找 requires_human 出现的位置，向前找最近的 {，向后匹配同层 }）
-                        if not isinstance(_parsed_llm, dict):
-                            import re as _re
-
-                            _m2 = _re.search(
-                                r"\{[^{}]*\"requires_human\"[^{}]*\}",
-                                _llm_out_raw,
-                                _re.DOTALL,
-                            )
-                            if _m2:
-                                try:
-                                    _parsed_llm = json.loads(_m2.group(0)) or {}
-                                except (ValueError, TypeError):
-                                    _parsed_llm = {}
+                            if required:
+                                _parsed_llm = required
                     _ask_human = None
                     _human_question_text = ""
                     if isinstance(_parsed_llm, dict):
@@ -2548,9 +2524,10 @@ def execute_employee_task(
                         )
                         if isinstance(reasoning, dict):
                             reasoning["_handoff"] = _handoff_out
-                except Exception as _ho_exc:
+                except Exception:
                     logger.debug(
-                        "handoff perform failed employee_id=%s err=%s", employee_id, _ho_exc
+                        "handoff perform failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 # handoff hook：员工像真人一样通知老板"我把这事转给 @xxx 了"
                 try:
@@ -2577,9 +2554,10 @@ def execute_employee_task(
                     )
                     if isinstance(result, dict):
                         result["path_guard"] = _path_guard
-                except Exception as _pg_exc:
+                except Exception:
                     logger.debug(
-                        "path_guard check failed employee_id=%s err=%s", employee_id, _pg_exc
+                        "path_guard check failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 # 10 项成熟度第 5 项 — 会验证：程序化检查文件存在/测试报告/status/summary/handler output
                 try:
@@ -2595,8 +2573,11 @@ def execute_employee_task(
                     )
                     if isinstance(result, dict):
                         result["verification"] = _verif
-                except Exception as _v_exc:
-                    logger.debug("verification failed employee_id=%s err=%s", employee_id, _v_exc)
+                except Exception:
+                    logger.debug(
+                        "verification failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
+                    )
                 # verification hook：员工像真人一样告诉老板"我做完验证了，通过/失败"
                 try:
                     _verif_dict = _verif if isinstance(_verif, dict) else {}
@@ -2632,9 +2613,10 @@ def execute_employee_task(
                     )
                     if isinstance(result, dict):
                         result["evolution_signal"] = _evo
-                except Exception as _evo_exc:
+                except Exception:
                     logger.debug(
-                        "evolution_signal check failed employee_id=%s err=%s", employee_id, _evo_exc
+                        "evolution_signal check failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 # 把 handoff 结果也写到 result 让 human_report 能读到
                 _ho = reasoning.get("_handoff") if isinstance(reasoning, dict) else None
@@ -2683,9 +2665,10 @@ def execute_employee_task(
                     )
                     if isinstance(result, dict):
                         result["human_report"] = _human_report
-                except Exception as _hr_exc:
+                except Exception:
                     logger.debug(
-                        "build_human_report failed employee_id=%s err=%s", employee_id, _hr_exc
+                        "build_human_report failed employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                 if not handler_ok:
                     # 上游 LLM(认知层)失败常是 handler 失败的根因（如返回空正文）；据其
@@ -2825,27 +2808,19 @@ def execute_employee_task(
                 if isinstance(reasoning, dict):
                     rex = str(reasoning.get("reasoning") or "").strip()[:4000]
 
-                cog_attempts = (
-                    int(recovery_meta.get("attempts") or 1) if recovery_meta.get("recovered") else 1
-                )
                 if detail_log:
                     logger.info(
-                        "employee_execute_finish employee_id=%s user_id=%s status=success duration_ms=%s llm_tokens=%s cognition_attempts=%s handlers=%s",
-                        employee_id,
-                        user_id,
+                        "employee_execute_finish employee_ref=%s user_ref=%s status=success duration_ms=%s",
+                        opaque_ref(employee_id, namespace="employee"),
+                        opaque_ref(user_id, namespace="user"),
                         duration_ms,
-                        llm_tokens,
-                        cog_attempts,
-                        ",".join(handler_list),
                     )
                 else:
                     logger.info(
-                        "employee_execute_finish employee_id=%s user_id=%s status=success duration_ms=%s llm_tokens=%s cognition_attempts=%s",
-                        employee_id,
-                        user_id,
+                        "employee_execute_finish employee_ref=%s user_ref=%s status=success duration_ms=%s",
+                        opaque_ref(employee_id, namespace="employee"),
+                        opaque_ref(user_id, namespace="user"),
                         duration_ms,
-                        llm_tokens,
-                        cog_attempts,
                     )
 
                 return {
@@ -2892,23 +2867,22 @@ def execute_employee_task(
                 session.commit()
                 if failure_kind == FAILURE_KIND_QUOTA:
                     logger.warning(
-                        "employee_execute_finish employee_id=%s user_id=%s status=failed "
-                        "failure_kind=quota duration_ms=%s error=%s "
+                        "employee_execute_finish employee_ref=%s user_ref=%s status=failed "
+                        "failure_kind=quota duration_ms=%s error_ref=%s "
                         "(配额/计费失败，非 prompt 问题，不应触发自进化 prompt 重写)",
-                        employee_id,
-                        user_id,
+                        opaque_ref(employee_id, namespace="employee"),
+                        opaque_ref(user_id, namespace="user"),
                         duration_ms,
-                        err_text[:400],
+                        opaque_ref(err_text, namespace="execution-error"),
                     )
                 else:
                     logger.info(
-                        "employee_execute_finish employee_id=%s user_id=%s status=failed "
-                        "failure_kind=%s duration_ms=%s error=%s",
-                        employee_id,
-                        user_id,
-                        failure_kind or "unknown",
+                        "employee_execute_finish employee_ref=%s user_ref=%s status=failed "
+                        "failure_kind=other duration_ms=%s error_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
+                        opaque_ref(user_id, namespace="user"),
                         duration_ms,
-                        err_text[:400],
+                        opaque_ref(err_text, namespace="execution-error"),
                     )
                 try:
                     from modstore_server.notification_service import notify_employee_execution_done

@@ -580,6 +580,13 @@ def test_spa_fallback_helpers(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None
     resp = spa_fallback._try_serve_vue_dist_root_file("sw.js")
     assert resp is not None
     assert spa_fallback._try_serve_vue_dist_root_file("missing.js") is None
+    assert spa_fallback._try_serve_vue_dist_root_file("../../secret.txt") is None
+    secret = tmp_path / "secret.txt"
+    secret.write_text("secret")
+    (vue / "sw.js").unlink()
+    (vue / "sw.js").symlink_to(secret)
+    assert spa_fallback._try_serve_vue_dist_root_file("sw.js") is None
+    assert spa_fallback._resolved_asset_under(vue, "../secret.txt") is None
 
 
 def test_spa_register_fallback(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:

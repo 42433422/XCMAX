@@ -20,6 +20,7 @@ from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.application.im_app_service import ImApplicationService, ensure_im_tables
+from app.application.mobile_push_app_service import notify_mobile_user
 from app.db import HostSessionLocal, get_host_engine
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -233,9 +234,7 @@ async def internal_employee_message(
         # therefore subscribe to the ordinary IM REST/WS surface.  Persist the
         # event only in the management-audience outbox instead.
         try:
-            from app.services.mobile_push import notify_user
-
-            push_result = notify_user(
+            push_result = notify_mobile_user(
                 int(boss_user_id),
                 title=str(notification.get("title") or display_name or employee_id),
                 body=text,
@@ -316,9 +315,7 @@ async def internal_employee_message(
         push_result: dict[str, bool] = {}
         if notification:
             try:
-                from app.services.mobile_push import notify_user
-
-                push_result = notify_user(
+                push_result = notify_mobile_user(
                     int(boss_user_id),
                     title=str(notification.get("title") or display_name or employee_id),
                     body=text,

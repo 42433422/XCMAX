@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import contextvars
-import json
 import logging
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+from modstore_server.security_boundary import opaque_ref
+from modstore_server.structured_json import parse_json_object
 
 if TYPE_CHECKING:
     from modstore_server.task_router import SubTask
@@ -16,22 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _structured_output_failure(output: Any) -> str:
-    payload = output
-    if isinstance(output, str):
-        raw = output.strip()
-        fenced = re.fullmatch(
-            r"```(?:json)?\s*(.*?)\s*```",
-            raw,
-            flags=re.DOTALL | re.IGNORECASE,
-        )
-        if fenced:
-            raw = fenced.group(1).strip()
-        if not raw.startswith("{"):
-            return ""
-        try:
-            payload = json.loads(raw)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            return ""
+    payload = parse_json_object(output) if isinstance(output, str) else output
     if not isinstance(payload, dict):
         return ""
     status = str(payload.get("status") or "").strip().lower()
@@ -101,9 +87,7 @@ def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
     if path_guard.get("checked") and path_guard.get("ok") is False:
         return False, "blocked_by_path_guard"
 
-    verification = (
-        inner.get("verification") if isinstance(inner.get("verification"), dict) else {}
-    )
+    verification = inner.get("verification") if isinstance(inner.get("verification"), dict) else {}
     if verification and verification.get("passed") is False:
         return False, str(verification.get("summary") or "verification failed")[:500]
 
@@ -182,7 +166,10 @@ def _record_dispatch_metric(
             )
             session.commit()
     except Exception:
-        logger.debug("record_dispatch_metric failed employee=%s", employee_id, exc_info=True)
+        logger.debug(
+            "record_dispatch_metric failed employee_ref=%s",
+            opaque_ref(employee_id, namespace="employee"),
+        )
 
 
 def _resolve_uid(created_by_user_id: int) -> int:
@@ -192,12 +179,7 @@ def _resolve_uid(created_by_user_id: int) -> int:
     if uid <= 0:
         sf = get_session_factory()
         with sf() as session:
-            u = (
-                session.query(User)
-                .filter(User.is_admin.is_(True))
-                .order_by(User.id.asc())
-                .first()
-            )
+            u = session.query(User).filter(User.is_admin.is_(True)).order_by(User.id.asc()).first()
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()
@@ -409,18 +391,25 @@ def _run_layer(
                 "error": None if ok else reason,
                 "validation_reason": reason,
             }
-        except Exception as exc:
+        except Exception:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-            logger.exception("dispatch_subtasks: employee=%s failed", st.employee_id)
+            logger.warning(
+                "dispatch_subtasks failed employee_ref=%s",
+                opaque_ref(st.employee_id, namespace="employee"),
+            )
             _record_dispatch_metric(
                 employee_id=st.employee_id,
                 task_brief=st.task_brief,
                 user_id=uid,
                 ok=False,
-                reason=str(exc),
+                reason="dispatch_failed",
                 duration_ms=duration_ms,
             )
-            return {"ok": False, "employee_id": st.employee_id, "error": str(exc)}
+            return {
+                "ok": False,
+                "employee_id": st.employee_id,
+                "error": "dispatch_failed",
+            }
 
     if len(layer) == 1:
         return [_run_one(layer[0])]

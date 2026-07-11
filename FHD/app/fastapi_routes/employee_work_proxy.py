@@ -52,9 +52,9 @@ async def _get(path: str, *, query: str = "") -> dict[str, Any] | JSONResponse:
             base_url=modstore_management_base_url(),
             strict_internal_auth=True,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"管理端员工任务服务不可用：{exc}"},
+            {"success": False, "message": "管理端员工任务服务暂时不可用，请稍后重试"},
             status_code=502,
         )
 
@@ -74,9 +74,9 @@ async def _post(path: str, body: dict[str, Any]) -> dict[str, Any] | JSONRespons
             base_url=modstore_management_base_url(),
             strict_internal_auth=True,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"管理端员工任务服务不可用：{exc}"},
+            {"success": False, "message": "管理端员工任务服务暂时不可用，请稍后重试"},
             status_code=502,
         )
 

@@ -14,7 +14,9 @@ def test_alembic_revision_ids_fit_default_version_table() -> None:
             if not isinstance(node, (ast.Assign, ast.AnnAssign)):
                 continue
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            if not any(isinstance(target, ast.Name) and target.id == "revision" for target in targets):
+            if not any(
+                isinstance(target, ast.Name) and target.id == "revision" for target in targets
+            ):
                 continue
             value = node.value
             if isinstance(value, ast.Constant) and isinstance(value.value, str):

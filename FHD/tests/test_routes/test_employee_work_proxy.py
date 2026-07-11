@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.responses import JSONResponse
 
@@ -75,6 +77,30 @@ async def test_employee_work_proxy_bridge_requires_strict_internal_auth(monkeypa
 
     assert seen[0][2]["strict_internal_auth"] is True
     assert seen[1][2]["strict_internal_auth"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("method", "args"), [("_get", ("/ledger",)), ("_post", ("/ledger", {}))])
+async def test_employee_work_proxy_never_exposes_bridge_exception(monkeypatch, method, args):
+    import app.application.modstore_local_client as client_module
+    import app.fastapi_routes.employee_work_proxy as proxy
+
+    secret = "database-password=do-not-return"
+
+    async def fail(*_args, **_kwargs):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(client_module, "modstore_get", fail)
+    monkeypatch.setattr(client_module, "modstore_post", fail)
+    result = await getattr(proxy, method)(*args)
+    payload = json.loads(result.body)
+
+    assert result.status_code == 502
+    assert payload == {
+        "success": False,
+        "message": "管理端员工任务服务暂时不可用，请稍后重试",
+    }
+    assert secret not in result.body.decode("utf-8")
 
 
 @pytest.mark.asyncio

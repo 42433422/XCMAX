@@ -1017,7 +1017,8 @@ def test_run_pack_load_recoverable_error_returns_error_result() -> None:
     ):
         out = agent.run("task", input_data={})
     assert out["success"] is False
-    assert "pack not found" in out["error"]
+    assert out["error"] == "员工执行失败，请稍后重试"
+    assert "pack not found" not in out["error"]
     assert out["employee_id"] == "emp-1"
     assert "duration_ms" in out
     assert "executed_at" in out
@@ -1031,7 +1032,8 @@ def test_run_pack_load_runtime_error_returns_error_result() -> None:
     ):
         out = agent.run("task", input_data={})
     assert out["success"] is False
-    assert "disk io" in out["error"]
+    assert out["error"] == "员工执行失败，请稍后重试"
+    assert "disk io" not in out["error"]
 
 
 # ---------------------------------------------------------------------------

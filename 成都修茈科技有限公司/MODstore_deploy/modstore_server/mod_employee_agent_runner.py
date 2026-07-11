@@ -61,6 +61,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Mapping, Optional
 
 from modstore_server.management_work_operations import ManagementOperationConflict
+from modstore_server.security_boundary import (
+    UnsafePath,
+    opaque_ref,
+    resolve_path_under_root,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,12 +116,12 @@ RESEARCH_TOOLS_APPEND = """
 
 
 def _guard_path(workspace_root: str, path: str) -> Optional[str]:
-    """Return resolved absolute path only if it stays inside workspace_root."""
-    resolved = os.path.normpath(os.path.join(workspace_root, path))
-    workspace_abs = os.path.abspath(workspace_root)
-    if not resolved.startswith(workspace_abs + os.sep) and resolved != workspace_abs:
+    """Return a real, symlink-safe path only when it stays in the workspace."""
+
+    try:
+        return str(resolve_path_under_root(workspace_root, path))
+    except (OSError, UnsafePath, ValueError):
         return None
-    return resolved
 
 
 async def tool_read_workspace_file(
@@ -130,17 +135,13 @@ async def tool_read_workspace_file(
         try:
             from modstore_server.integrations.ops_action_handlers import ops_path_allowed
 
-            root = Path(str(rr)).resolve()
-            norm = path.replace("\\", "/").lstrip("./")
+            full = resolve_path_under_root(str(rr), path)
+            root = resolve_path_under_root(str(rr), ".")
+            norm = str(full.relative_to(root)).replace("\\", "/")
             if ops_path_allowed(norm):
-                full = (root / norm).resolve()
-                try:
-                    full.relative_to(root)
-                except ValueError:
-                    return {"ok": False, "error": f"路径越界：{path!r}"}
-                if os.path.isfile(full):
+                if full.is_file():
                     try:
-                        content = Path(full).read_text(encoding="utf-8", errors="replace")
+                        content = full.read_text(encoding="utf-8", errors="replace")
                         truncated = len(content) > 8000
                         return {
                             "ok": True,
@@ -152,8 +153,8 @@ async def tool_read_workspace_file(
                         }
                     except OSError as exc:
                         return {"ok": False, "error": str(exc)[:300]}
-        except Exception as exc:  # noqa: BLE001
-            return {"ok": False, "error": f"ops read failed: {exc}"[:300]}
+        except (OSError, UnsafePath, ValueError):
+            return {"ok": False, "error": "ops read failed: path is not authorized"}
 
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
@@ -254,15 +255,16 @@ async def tool_write_workspace_file(
         )
 
         if not will_defer:
-            compensation = capture_file_compensation(Path(resolved))
+            compensation = capture_file_compensation(
+                Path(resolved),
+                workspace_root=workspace_root,
+            )
             compensation["expected_after_sha256"] = content_sha256
         reserved = begin_operation(
             task_id=str(operation_context.get("task_id") or ""),
             employee_id=emp_id,
             task_revision=int(operation_context.get("task_revision") or 1),
-            logical_step=str(
-                ctx.get("management_operation_step") or "write_workspace_file"
-            ),
+            logical_step=str(ctx.get("management_operation_step") or "write_workspace_file"),
             kind="change_request.submit" if will_defer else "file.write",
             target=str(Path(resolved).resolve()),
             request={
@@ -280,20 +282,15 @@ async def tool_write_workspace_file(
             ),
         )
         operation = reserved.get("operation") if isinstance(reserved.get("operation"), dict) else {}
-        operation_attempt = int(
-            reserved.get("execution_attempt") or operation.get("attempt") or 0
-        )
+        operation_attempt = int(reserved.get("execution_attempt") or operation.get("attempt") or 0)
         operation_nonce = str(reserved.get("execution_nonce") or "")
         if reserved.get("action") == "replay":
             replay = reserved.get("result") if isinstance(reserved.get("result"), dict) else {}
-            if (
-                operation.get("kind") == "change_request.submit"
-                and str(operation.get("external_ref") or "").startswith("change_request:")
-            ):
+            if operation.get("kind") == "change_request.submit" and str(
+                operation.get("external_ref") or ""
+            ).startswith("change_request:"):
                 try:
-                    replay_change_id = int(
-                        str(operation["external_ref"]).split(":", 1)[1]
-                    )
+                    replay_change_id = int(str(operation["external_ref"]).split(":", 1)[1])
                 except (TypeError, ValueError, IndexError):
                     replay_change_id = 0
                 if replay_change_id > 0:
@@ -334,9 +331,7 @@ async def tool_write_workspace_file(
                 scope_globs=sg,
                 forbidden_globs=fg,
                 approval_required_globs=ag,
-                management_operation_id=str(
-                    (operation or {}).get("operation_id") or ""
-                ),
+                management_operation_id=str((operation or {}).get("operation_id") or ""),
                 execution_attempt=operation_attempt,
                 execution_nonce=operation_nonce,
             )
@@ -380,9 +375,7 @@ async def tool_write_workspace_file(
         current_exists = destination.exists()
         current_is_file = destination.is_file()
         current_sha256 = (
-            hashlib.sha256(destination.read_bytes()).hexdigest()
-            if current_is_file
-            else ""
+            hashlib.sha256(destination.read_bytes()).hexdigest() if current_is_file else ""
         )
         if operation:
             from modstore_server.management_work_operations import (
@@ -402,14 +395,11 @@ async def tool_write_workspace_file(
             )
             before_exists = registered.get("before_exists") is True
             before_sha256 = str(registered.get("before_sha256") or "")
-            preimage_matches = (
-                (not before_exists and not current_exists)
-                or (
-                    before_exists
-                    and current_is_file
-                    and bool(before_sha256)
-                    and hmac.compare_digest(current_sha256, before_sha256)
-                )
+            preimage_matches = (not before_exists and not current_exists) or (
+                before_exists
+                and current_is_file
+                and bool(before_sha256)
+                and hmac.compare_digest(current_sha256, before_sha256)
             )
             if not preimage_matches:
                 failed = fail_operation(
@@ -425,9 +415,7 @@ async def tool_write_workspace_file(
                     "management_operation": failed,
                 }
         if current_sha256 != content_sha256:
-            temporary = destination.with_name(
-                f".{destination.name}.xcagi-write-{uuid.uuid4().hex}"
-            )
+            temporary = destination.with_name(f".{destination.name}.xcagi-write-{uuid.uuid4().hex}")
             try:
                 temporary.write_text(content or "", encoding="utf-8")
                 if operation:
@@ -447,14 +435,11 @@ async def tool_write_workspace_file(
                         if latest_is_file
                         else ""
                     )
-                    latest_matches = (
-                        (not before_exists and not latest_exists)
-                        or (
-                            before_exists
-                            and latest_is_file
-                            and bool(before_sha256)
-                            and hmac.compare_digest(latest_sha256, before_sha256)
-                        )
+                    latest_matches = (not before_exists and not latest_exists) or (
+                        before_exists
+                        and latest_is_file
+                        and bool(before_sha256)
+                        and hmac.compare_digest(latest_sha256, before_sha256)
                     )
                     if not latest_matches:
                         failed = fail_operation(
@@ -774,9 +759,9 @@ def _management_read_scope_error(
     from modstore_server.integrations.doc_sync_handler import _match_glob
 
     try:
-        rel = str(
-            candidate.resolve().relative_to(Path(workspace_root).resolve())
-        ).replace("\\", "/")
+        rel = str(candidate.resolve().relative_to(Path(workspace_root).resolve())).replace(
+            "\\", "/"
+        )
     except ValueError:
         rel = ""
     if not rel and candidate.resolve() != Path(workspace_root).resolve():
@@ -785,24 +770,16 @@ def _management_read_scope_error(
     if rel == ".":
         rel = ""
     forbidden = [
-        str(value).strip()
-        for value in (ctx.get("forbidden_globs") or [])
-        if str(value).strip()
+        str(value).strip() for value in (ctx.get("forbidden_globs") or []) if str(value).strip()
     ]
-    scope = [
-        str(value).strip()
-        for value in (ctx.get("scope_globs") or [])
-        if str(value).strip()
-    ]
+    scope = [str(value).strip() for value in (ctx.get("scope_globs") or []) if str(value).strip()]
     if forbidden and _match_glob(rel, forbidden):
         return "路径命中岗位 forbidden_globs"
     if not scope or _match_glob(rel, scope):
         return ""
     if allow_scope_ancestor:
         for pattern in scope:
-            prefix = re.split(r"[*?[]", pattern.replace("\\", "/"), maxsplit=1)[
-                0
-            ].rstrip("/")
+            prefix = re.split(r"[*?[]", pattern.replace("\\", "/"), maxsplit=1)[0].rstrip("/")
             if not rel or prefix == rel or prefix.startswith(f"{rel}/"):
                 return ""
     return "路径不在岗位 scope_globs 允许范围内"
@@ -923,7 +900,7 @@ class EmployeeAgentRunner:
 
             logger.info(
                 "[agent:%s] round=%d tool=%s input_keys=%s",
-                self.ctx.get("employee_id", "?"),
+                opaque_ref(self.ctx.get("employee_id", "?"), namespace="employee"),
                 round_n + 1,
                 tool_name,
                 list(tool_input.keys())[:6],
@@ -1025,9 +1002,7 @@ class EmployeeAgentRunner:
                 return await tool_analyze_project_summary(wr, path)
 
             if name == "run_sandboxed_python":
-                if isinstance(
-                    self.ctx.get("management_work_operation_context"), dict
-                ):
+                if isinstance(self.ctx.get("management_work_operation_context"), dict):
                     return {
                         "ok": False,
                         "error": "管理任务禁止未登记副作用的 Python 执行",

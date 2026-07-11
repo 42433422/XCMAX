@@ -989,6 +989,16 @@ def test_public_chat_body_removes_broken_markdown_links():
     assert "53b992e79ea7453bb7183761fe7d6568" not in body
 
 
+def test_markdown_link_cleanup_handles_adversarial_unclosed_input():
+    value = "[(" * 20_000 + "[结果](https://example.invalid/path)"
+
+    cleaned = group_chat_module._strip_markdown_link_targets(value)
+
+    assert cleaned.endswith("结果")
+    assert "https://example.invalid" not in cleaned
+    assert len(cleaned) <= len(value)
+
+
 def test_append_relay_work_report_adds_acceptance_when_work_order_done(tmp_path: Path):
     svc = make_service(tmp_path)
     group = svc.create_group(user_id=1, name="超级开发部")

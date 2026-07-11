@@ -201,6 +201,13 @@ class DatasetRagApplicationService:
         )
         if denied is not None:
             return denied
+        if not text.strip() and not file_path.strip():
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "text or file_path is required",
+                "error_code": "dataset_ingest_failed",
+            }
 
         try:
             if text.strip():
@@ -212,11 +219,13 @@ class DatasetRagApplicationService:
                 extracted_text, parser, extract_metadata = self._extract_file_text(path)
                 source_label = source.strip() or path.name
                 base_metadata.setdefault("file_path", str(path))
-            else:
-                raise ValueError("text or file_path is required")
-
             if not extracted_text.strip():
-                raise ValueError("document text is empty")
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "message": "document text is empty",
+                    "error_code": "dataset_ingest_failed",
+                }
 
             chunks = self._split_text(
                 extracted_text,
@@ -225,7 +234,12 @@ class DatasetRagApplicationService:
                 chunk_overlap=chunk_overlap,
             )
             if not chunks:
-                raise ValueError("document produced no chunks")
+                return {
+                    "success": False,
+                    "dataset_id": dataset_key,
+                    "message": "document produced no chunks",
+                    "error_code": "dataset_ingest_failed",
+                }
 
             base_metadata.update(extract_metadata)
             base_metadata["tenant_id"] = tenant_key
@@ -302,11 +316,18 @@ class DatasetRagApplicationService:
                 "document": document.to_dict(),
                 "chunk_count": len(chunks),
             }
-        except (*RECOVERABLE_ERRORS, UnsafeDownloadPathError) as exc:
+        except UnsafeDownloadPathError:
             return {
                 "success": False,
                 "dataset_id": dataset_key,
-                "message": str(exc),
+                "message": "path not under allowed dirs",
+                "error_code": "dataset_ingest_failed",
+            }
+        except RECOVERABLE_ERRORS:
+            return {
+                "success": False,
+                "dataset_id": dataset_key,
+                "message": "document ingestion failed; check the file format and content",
                 "error_code": "dataset_ingest_failed",
             }
 

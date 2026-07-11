@@ -50,8 +50,6 @@ CHAT_ACCEPTANCE_SUMMARY_CHARS = 44
 PUBLIC_CHAT_BODY_MAX_CHARS = 900
 PUBLIC_ACCEPTANCE_BODY_MAX_CHARS = 620
 RELAY_PROGRESS_MIN_INTERVAL_SEC = 30
-_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]{1,100})\]\([^)]+\)")
-_BROKEN_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]{1,100})\]\([^，。；\s]*")
 _TEMP_PATH_RE = re.compile(r"(/private)?/var/folders/[^\s，。；)]+")
 _RELAY_TASK_ID_RE = re.compile(r"；中继任务：[0-9a-f]{16,}。?")
 _UNFINISHED_REPORT_MARKERS = (
@@ -124,6 +122,62 @@ _UNFINISHED_REPORT_MARKERS = (
     "等待回写",
     "❌",
 )
+
+
+def _strip_markdown_link_targets(value: str) -> str:
+    """Strip Markdown link targets with bounded, linear-time scanning."""
+
+    text = str(value or "")
+    out: list[str] = []
+    cursor = 0
+    text_len = len(text)
+    while cursor < text_len:
+        if text[cursor] != "[":
+            out.append(text[cursor])
+            cursor += 1
+            continue
+
+        label_end = -1
+        label_scan_end = min(text_len, cursor + 102)
+        scan = cursor + 1
+        while scan < label_scan_end:
+            if text[scan] in "\r\n":
+                break
+            if scan > cursor + 1 and text[scan] == "]" and scan + 1 < text_len:
+                if text[scan + 1] == "(":
+                    label_end = scan
+                    break
+            scan += 1
+        if label_end < 0:
+            out.append("[")
+            cursor += 1
+            continue
+
+        out.append(text[cursor + 1 : label_end])
+        target_start = label_end + 2
+        target_end = -1
+        scan = target_start
+        target_scan_end = min(text_len, target_start + 2048)
+        while scan < target_scan_end:
+            if text[scan] == ")":
+                target_end = scan
+                break
+            if text[scan] in "\r\n":
+                break
+            scan += 1
+        if target_end >= 0:
+            cursor = target_end + 1
+            continue
+
+        # Preserve the old broken-link behavior: discard only the unfinished
+        # target token and leave the following punctuation/whitespace intact.
+        scan = target_start
+        while scan < text_len and text[scan] not in "，。； \t\r\n":
+            scan += 1
+        cursor = scan
+    return "".join(out)
+
+
 _FAILED_REPORT_MARKERS = (
     "失败",
     "failed",
@@ -3310,8 +3364,7 @@ class AiGroupChatService:
     @staticmethod
     def _clean_chat_summary_line(line: str) -> str:
         text = _TEMP_PATH_RE.sub("临时执行工作区", str(line or ""))
-        text = _MARKDOWN_LINK_RE.sub(r"\1", text)
-        text = _BROKEN_MARKDOWN_LINK_RE.sub(r"\1", text)
+        text = _strip_markdown_link_targets(text)
         for token in ("**", "__", "`"):
             text = text.replace(token, "")
         return " ".join(text.split()).strip("；，。 ")
@@ -3751,8 +3804,7 @@ class AiGroupChatService:
         lines = []
         for raw_line in str(body or "").replace("\r\n", "\n").replace("\r", "\n").splitlines():
             line = _TEMP_PATH_RE.sub("临时执行工作区", raw_line)
-            line = _MARKDOWN_LINK_RE.sub(r"\1", line)
-            line = _BROKEN_MARKDOWN_LINK_RE.sub(r"\1", line)
+            line = _strip_markdown_link_targets(line)
             line = _RELAY_TASK_ID_RE.sub("。", line)
             for token in ("**", "__", "`"):
                 line = line.replace(token, "")

@@ -24,6 +24,7 @@ from modstore_server.models import (
     get_engine,
     get_session_factory,
 )
+from modstore_server.security_boundary import resolve_path_under_root
 
 
 class ManagementOperationConflict(RuntimeError):
@@ -328,10 +329,23 @@ def begin_operation(
                 and str(existing.kind or "") == "file.write"
             ):
                 spec = _loads(existing.compensation_json, {})
-                path = Path(str(spec.get("path") or ""))
+                raw_path = str(spec.get("path") or "")
+                workspace_root = str(spec.get("workspace_root") or "")
                 expected_after = str(spec.get("expected_after_sha256") or "")
-                current_exists = path.is_file() if path.is_absolute() else False
-                current_sha = _sha256_file(path) if current_exists else ""
+                try:
+                    path = resolve_path_under_root(
+                        workspace_root,
+                        raw_path,
+                        require_relative=False,
+                    )
+                except (OSError, ValueError):
+                    path = Path()
+                    current_exists = False
+                else:
+                    current_exists = path.is_file()
+                current_sha = (
+                    _sha256_file(path, workspace_root=workspace_root) if current_exists else ""
+                )
                 if expected_after and current_sha == expected_after:
                     previous_attempt = int(existing.attempt or 0)
                     existing.status = "succeeded"
@@ -699,22 +713,30 @@ def list_task_operations(task_id: str) -> list[dict[str, Any]]:
         return [_serialize(row) for row in rows]
 
 
-def _sha256_file(path: Path) -> str:
+def _sha256_file(path: Path, *, workspace_root: str | Path) -> str:
+    resolved = resolve_path_under_root(workspace_root, path, require_relative=False)
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with resolved.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
 
 
-def capture_file_compensation(path: Path, *, max_bytes: int = 256_000) -> dict[str, Any]:
+def capture_file_compensation(
+    path: Path,
+    *,
+    workspace_root: str | Path,
+    max_bytes: int = 256_000,
+) -> dict[str, Any]:
     """Capture a bounded preimage for safe compare-and-restore compensation."""
 
-    resolved = path.resolve()
+    root = resolve_path_under_root(workspace_root, ".", reject_symlinks=False)
+    resolved = resolve_path_under_root(root, path, require_relative=False)
     if not resolved.exists():
         return {
             "kind": "file_restore",
             "path": str(resolved),
+            "workspace_root": str(root),
             "before_exists": False,
             "reversible": True,
         }
@@ -722,6 +744,7 @@ def capture_file_compensation(path: Path, *, max_bytes: int = 256_000) -> dict[s
         return {
             "kind": "file_restore",
             "path": str(resolved),
+            "workspace_root": str(root),
             "before_exists": True,
             "reversible": False,
             "reason": "target is not a regular file",
@@ -730,9 +753,10 @@ def capture_file_compensation(path: Path, *, max_bytes: int = 256_000) -> dict[s
     payload: dict[str, Any] = {
         "kind": "file_restore",
         "path": str(resolved),
+        "workspace_root": str(root),
         "before_exists": True,
         "before_size": int(size),
-        "before_sha256": _sha256_file(resolved),
+        "before_sha256": _sha256_file(resolved, workspace_root=root),
     }
     if size <= max(0, int(max_bytes)):
         payload["before_content_b64"] = base64.b64encode(resolved.read_bytes()).decode("ascii")
@@ -766,12 +790,25 @@ def compensate_task_file_operations(task_id: str, *, reason: str) -> dict[str, A
         )
         for row in rows:
             spec = _loads(row.compensation_json, {})
-            path = Path(str(spec.get("path") or ""))
+            raw_path = str(spec.get("path") or "")
+            workspace_root = str(spec.get("workspace_root") or "")
             after_sha = str(spec.get("after_sha256") or "")
             try:
-                if not path.is_absolute() or not after_sha:
+                if not raw_path or not workspace_root or not after_sha:
                     raise ValueError("compensation record is incomplete")
-                if not path.is_file() or _sha256_file(path) != after_sha:
+                path = resolve_path_under_root(
+                    workspace_root,
+                    raw_path,
+                    require_relative=False,
+                )
+                if (
+                    not path.is_file()
+                    or _sha256_file(
+                        path,
+                        workspace_root=workspace_root,
+                    )
+                    != after_sha
+                ):
                     row.compensation_status = "conflict"
                     row.error = "文件已被后续操作修改，拒绝自动回滚"
                     skipped += 1

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
@@ -47,16 +48,6 @@ _EXCLUDED_PREFIXES = (
 
 
 # vue-dist 根目录单文件（非 full 版可能未挂载 legacy_gaps，须在此兜底，勿返回 index.html）
-_VUE_DIST_ROOT_FILES: dict[str, str] = {
-    "sw.js": "application/javascript",
-    "workflow-employee-docs.json": "application/json",
-    "workflow-employees.json": "application/json",
-    "vite.svg": "image/svg+xml",
-    "brand-xc-logo.jpg": "image/jpeg",
-    "brand-xc-logo.png": "image/png",
-}
-
-
 def _vue_dist_dir() -> str:
     return os.path.join(get_base_dir(), "templates", "vue-dist")
 
@@ -70,18 +61,49 @@ def _workflow_employees_json_candidates() -> list[str]:
     ]
 
 
+def _resolved_asset_under(root: str | Path, filename: str) -> Path | None:
+    """Resolve a trusted asset name and reject symlink escapes from its root."""
+
+    try:
+        safe_root = Path(root).resolve()
+        candidate = (safe_root / filename).resolve()
+        candidate.relative_to(safe_root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return candidate if candidate.is_file() else None
+
+
+def _allowlisted_vue_dist_asset(fallback: str) -> tuple[str, str] | None:
+    """Map an exact request value to a literal filename and media type."""
+
+    if fallback == "sw.js":
+        return "sw.js", "application/javascript"
+    if fallback == "workflow-employee-docs.json":
+        return "workflow-employee-docs.json", "application/json"
+    if fallback == "vite.svg":
+        return "vite.svg", "image/svg+xml"
+    if fallback == "brand-xc-logo.jpg":
+        return "brand-xc-logo.jpg", "image/jpeg"
+    if fallback == "brand-xc-logo.png":
+        return "brand-xc-logo.png", "image/png"
+    return None
+
+
 def _try_serve_vue_dist_root_file(fallback: str) -> FileResponse | None:
-    media = _VUE_DIST_ROOT_FILES.get(fallback)
-    if not media:
-        return None
     if fallback == "workflow-employees.json":
-        for p in _workflow_employees_json_candidates():
-            if os.path.isfile(p):
-                return FileResponse(p, media_type=media)
+        for raw_candidate in _workflow_employees_json_candidates():
+            candidate = Path(raw_candidate)
+            safe_candidate = _resolved_asset_under(candidate.parent, candidate.name)
+            if safe_candidate is not None:
+                return FileResponse(safe_candidate, media_type="application/json")
         return None
-    p = os.path.join(_vue_dist_dir(), fallback)
-    if os.path.isfile(p):
-        return FileResponse(p, media_type=media)
+    allowed = _allowlisted_vue_dist_asset(fallback)
+    if allowed is None:
+        return None
+    filename, media = allowed
+    safe_asset = _resolved_asset_under(_vue_dist_dir(), filename)
+    if safe_asset is not None:
+        return FileResponse(safe_asset, media_type=media)
     return None
 
 

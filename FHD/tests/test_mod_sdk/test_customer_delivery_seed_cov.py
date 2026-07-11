@@ -567,7 +567,8 @@ class TestInstallCustomerDeliverySeedPackage:
             )
 
         assert result["success"] is False
-        assert "network error" in result["message"]
+        assert result["message"] == "客户交付种子包安装失败，请稍后重试"
+        assert "network error" not in result["message"]
         assert result["mod_id"] == "some-mod"
 
     async def test_value_error_is_caught(self, tmp_path):
@@ -602,7 +603,8 @@ class TestInstallCustomerDeliverySeedPackage:
             )
 
         assert result["success"] is False
-        assert "bad zip" in result["message"]
+        assert result["message"] == "客户交付种子包安装失败，请稍后重试"
+        assert "bad zip" not in result["message"]
 
     async def test_tmp_file_cleaned_up_on_success(self, tmp_path):
         """finally block: tmp file is removed after success."""

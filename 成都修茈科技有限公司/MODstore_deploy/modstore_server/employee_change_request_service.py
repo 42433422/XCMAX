@@ -11,6 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from modstore_server.security_boundary import (
+    UnsafePath,
+    opaque_ref,
+    resolve_path_under_root,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -36,12 +42,13 @@ def defer_write_as_change_request(
             from modstore_server.employee_scope_policy import validate_agent_repo_write
 
             try:
-                rel_repo = str(
-                    Path(resolved)
-                    .resolve()
-                    .relative_to(Path(workspace_root).resolve())
-                ).replace("\\", "/")
-            except ValueError:
+                root = resolve_path_under_root(
+                    workspace_root,
+                    ".",
+                    reject_symlinks=False,
+                )
+                rel_repo = str(Path(resolved).relative_to(root)).replace("\\", "/")
+            except (OSError, UnsafePath, ValueError):
                 rel_repo = ""
             if not rel_repo:
                 raise ValueError("无法在仓库根下解析路径（审批暂存仍需 scope 校验）")
@@ -187,9 +194,9 @@ def defer_write_as_change_request(
                         session.commit()
             else:
                 logger.info(
-                    "cr_git_pipeline.stage skipped CR %d: %s",
+                    "cr_git_pipeline.stage skipped CR %d reason_ref=%s",
                     cid,
-                    stage_out.get("reason"),
+                    opaque_ref(stage_out.get("reason"), namespace="cr-stage-reason"),
                 )
         except Exception:
             logger.exception("cr_git_pipeline.stage failed for CR %d", cid)
@@ -236,13 +243,11 @@ def defer_write_as_change_request(
 
 def _guard_under_workspace(workspace_root: str, rel_path: str) -> Optional[str]:
     """与 mod_employee_agent_runner._guard_path 一致。"""
-    import os
 
-    resolved = os.path.normpath(os.path.join(workspace_root, rel_path))
-    workspace_abs = os.path.abspath(workspace_root)
-    if not resolved.startswith(workspace_abs + os.sep) and resolved != workspace_abs:
+    try:
+        return str(resolve_path_under_root(workspace_root, rel_path))
+    except (OSError, UnsafePath, ValueError):
         return None
-    return resolved
 
 
 def _git_suggestions(
@@ -513,9 +518,9 @@ def apply_employee_change_request(
                 ag = []
         rel_repo = relative_path_under_repo(Path(resolved))
         try:
-            rel_scope = str(
-                Path(resolved).resolve().relative_to(Path(ws).resolve())
-            ).replace("\\", "/")
+            rel_scope = str(Path(resolved).resolve().relative_to(Path(ws).resolve())).replace(
+                "\\", "/"
+            )
         except ValueError:
             rel_scope = ""
         if sg or fg:

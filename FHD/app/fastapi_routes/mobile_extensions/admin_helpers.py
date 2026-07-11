@@ -114,8 +114,9 @@ async def _load_market_ai_employee_profile_index() -> tuple[dict[str, dict[str, 
             }
         )
         return profiles, True, ""
-    except Exception as exc:  # noqa: BLE001  # pragma: no cover - network availability is environment-specific
-        error = _compact_text(exc)
+    except Exception:  # noqa: BLE001  # pragma: no cover - network availability is environment-specific
+        error = "市场员工资料暂时不可用"
+        logger.warning("mobile market employee profile loading failed")
         if isinstance(cached_profiles, dict) and cached_profiles:
             _MARKET_AI_EMPLOYEE_CACHE.update(
                 {
@@ -213,8 +214,8 @@ def _load_admin_duty_records() -> list[dict[str, Any]]:
             packages = raw.get("packages") if isinstance(raw, dict) else []
             if isinstance(packages, list):
                 return [p for p in packages if isinstance(p, dict)]
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("mobile admin duty registry read failed: %s", exc)
+        except (OSError, json.JSONDecodeError):
+            logger.warning("mobile admin duty registry read failed")
     return []
 
 

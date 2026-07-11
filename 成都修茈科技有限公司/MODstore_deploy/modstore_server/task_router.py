@@ -7,6 +7,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List
 
+from modstore_server.security_boundary import opaque_ref
+
 logger = logging.getLogger(__name__)
 
 
@@ -140,18 +142,16 @@ def _load_management_employee_profiles() -> List[Dict[str, Any]]:
                 try:
                     loaded_pack = load_employee_pack(session, employee_id)
                     runtime_issues = management_work_runtime_issues(loaded_pack)
-                except Exception as exc:
+                except Exception:
                     logger.warning(
-                        "management router could not validate employee=%s: %s",
-                        employee_id,
-                        exc,
+                        "management router could not validate employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                     continue
                 if runtime_issues:
                     logger.info(
-                        "management router excluded non-executable employee=%s issues=%s",
-                        employee_id,
-                        "; ".join(runtime_issues[:3]),
+                        "management router excluded non-executable employee_ref=%s",
+                        opaque_ref(employee_id, namespace="employee"),
                     )
                     continue
                 profiles.append(
@@ -159,11 +159,7 @@ def _load_management_employee_profiles() -> List[Dict[str, Any]]:
                         "id": employee_id,
                         "name": str(record.get("name") or employee_id),
                         "description": str(record.get("description") or ""),
-                        "domain": str(
-                            record.get("yuangon_area")
-                            or record.get("industry")
-                            or ""
-                        ),
+                        "domain": str(record.get("yuangon_area") or record.get("industry") or ""),
                         "skills": [
                             str(value)
                             for value in (record.get("skills") or [])
@@ -345,7 +341,10 @@ def decompose_task(
         for item in items[:max_subtasks]:
             eid = str(item.get("employee_id") or "").strip()
             if not eid or eid not in valid_ids:
-                logger.warning("task_router: unknown employee_id=%s, skipping", eid)
+                logger.warning(
+                    "task_router: unknown employee_ref=%s, skipping",
+                    opaque_ref(eid, namespace="employee"),
+                )
                 continue
             subtasks.append(
                 SubTask(
@@ -358,8 +357,11 @@ def decompose_task(
                     priority=int(item.get("priority") or 5),
                 )
             )
-    except Exception as exc:
-        logger.warning("task_router: LLM output parse failed: %s\nraw=%s", exc, raw_json[:500])
+    except Exception:
+        logger.warning(
+            "task_router: LLM output parse failed output_ref=%s",
+            opaque_ref(raw_json, namespace="router-output"),
+        )
 
     if not subtasks:
         subtasks = [
@@ -395,11 +397,7 @@ def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
             provider = bench_provider or provider
             model = bench_model or model
         if not provider or provider == "auto" or not model or model == "auto":
-            logger.warning(
-                "task_router: 未配置平台 LLM（provider=%s model=%s），跳过拆解",
-                provider or "",
-                model or "",
-            )
+            logger.warning("task_router: 未配置平台 LLM，跳过拆解")
             return "[]"
 
         messages = [{"role": "user", "content": prompt}]
@@ -418,15 +416,15 @@ def _call_llm(prompt: str, *, llm_provider: str, llm_model: str) -> str:
                 return ""
             if not result.get("ok"):
                 logger.warning(
-                    "task_router: LLM 调用未成功：%s",
-                    str(result.get("error") or "")[:200],
+                    "task_router: LLM call failed error_ref=%s",
+                    opaque_ref(result.get("error"), namespace="router-error"),
                 )
                 return ""
             return str(result.get("content") or "")
 
         raw = run_coro_sync(_inner())
-    except Exception as exc:
-        logger.warning("task_router LLM call failed: %s", exc)
+    except Exception:
+        logger.warning("task_router LLM call failed")
         return "[]"
 
     # 提取 JSON 片段（模型可能输出 markdown 代码块）

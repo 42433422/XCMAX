@@ -847,7 +847,8 @@ class TestPersistMobileCsRequest:
             )
         assert result[0] == 0
         assert result[1] is False
-        assert "db gone" in result[2]
+        assert result[2] == "客服请求暂未保存，请稍后重试"
+        assert "db gone" not in result[2]
 
 
 # ============================================================
@@ -2036,6 +2037,8 @@ class TestMobileSelectOnboardingIndustry:
         assert result["success"] is True
         assert result["data"]["selected_industry_id"] == "涂料"
         assert result["data"]["market_entitlements"]["success"] is False
+        assert result["data"]["market_entitlements"]["message"] == ("市场权益暂未同步，请稍后重试")
+        assert "market failed" not in json.dumps(result, ensure_ascii=False)
         mock_bind.assert_called_once()
 
     @pytest.mark.asyncio

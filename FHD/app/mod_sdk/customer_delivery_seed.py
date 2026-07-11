@@ -153,10 +153,10 @@ async def install_customer_delivery_seed_package(
             "applied": applied,
             "route_ready": route_ready,
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return {
             "success": False,
-            "message": f"客户交付种子包安装失败：{exc}",
+            "message": "客户交付种子包安装失败，请稍后重试",
             "mod_id": mid,
         }
     finally:

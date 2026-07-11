@@ -212,6 +212,46 @@ class TestDownloadModel:
         # Either 200 with zip or some other success-ish code
         assert r.status_code in (200, 201, 202, 400, 500)
 
+    def test_install_manifest_is_confined_to_desktop_data_root(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        data_root = tmp_path / "desktop-data"
+        data_root.mkdir()
+        inside = data_root / "models.json"
+        inside.write_text("[]", encoding="utf-8")
+        outside = tmp_path / "private-models.json"
+        outside.write_text("[]", encoding="utf-8")
+        escaped_link = data_root / "escaped.json"
+        escaped_link.symlink_to(outside)
+        dirs = {"root": data_root}
+
+        with (
+            patch("app.fastapi_routes.desktop_runtime.is_desktop_mode", return_value=True),
+            patch(
+                "app.fastapi_routes.desktop_runtime.ensure_desktop_dirs",
+                return_value=dirs,
+            ),
+            patch("app.fastapi_routes.desktop_runtime.load_manifest", return_value=[]) as load,
+        ):
+            outside_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": str(outside)},
+            )
+            symlink_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": str(escaped_link)},
+            )
+            inside_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": str(inside)},
+            )
+
+        assert outside_response.status_code == 400
+        assert symlink_response.status_code == 400
+        assert inside_response.status_code == 200
+        assert inside_response.json() == {"success": True, "files": []}
+        load.assert_called_once_with(inside.resolve())
+
 
 class TestDesktopDeploymentModes:
     def test_deployment_status_uses_ssot_catalog(

@@ -472,7 +472,10 @@ def test_dispatch_delivers_only_after_file_fact_and_receipt(tmp_path, monkeypatc
 
         operation_context = input_data["management_work"]["operation_context"]
         content = '{"status":"ready","version":"v1"}'
-        compensation = capture_file_compensation(artifact)
+        compensation = capture_file_compensation(
+            artifact,
+            workspace_root=workspace,
+        )
         compensation["expected_after_sha256"] = hashlib.sha256(content.encode("utf-8")).hexdigest()
         reserved = begin_operation(
             task_id=operation_context["task_id"],
@@ -751,7 +754,10 @@ def test_expired_file_operation_reconciles_postimage_without_reexecution(tmp_pat
     claim_work_item(item["task_id"], employee_id="intent-analyst")
     content = "after-crash"
     after_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
-    compensation = capture_file_compensation(target)
+    compensation = capture_file_compensation(
+        target,
+        workspace_root=workspace,
+    )
     compensation["expected_after_sha256"] = after_sha
     first = begin_operation(
         task_id=item["task_id"],
@@ -936,9 +942,7 @@ def test_agent_round_retry_uses_stable_tool_operation_identity(tmp_path, monkeyp
     detail = get_work_item(item["task_id"])
     assert len(detail["operations"]) == 1
     assert detail["operations"][0]["logical_step"] == "tool:write_workspace_file"
-    assert len(
-        [row for row in detail["events"] if row["event_type"] == "operation.started"]
-    ) == 1
+    assert len([row for row in detail["events"] if row["event_type"] == "operation.started"]) == 1
 
 
 def test_unknown_side_effect_blocks_cancel_instead_of_false_cancelled(tmp_path, monkeypatch):
@@ -1292,9 +1296,7 @@ def test_cancelled_execution_cannot_persist_change_request_or_complete_operation
         assert operation.status == "running"
 
 
-def test_stale_or_expired_execution_cannot_persist_change_request(
-    tmp_path, monkeypatch
-):
+def test_stale_or_expired_execution_cannot_persist_change_request(tmp_path, monkeypatch):
     models = _reset_db(tmp_path, monkeypatch)
     workspace = tmp_path / "workspace"
     workspace.mkdir()

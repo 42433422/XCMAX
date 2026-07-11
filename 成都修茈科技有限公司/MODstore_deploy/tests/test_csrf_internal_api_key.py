@@ -19,10 +19,7 @@ def test_valid_internal_key_bypasses_browser_csrf(monkeypatch):
     app.add_middleware(CSRFMiddleware)
     client = TestClient(app)
     assert client.post("/machine").status_code == 403
-    assert (
-        client.post("/machine", headers={"X-Internal-Api-Key": "wrong-key"}).status_code
-        == 403
-    )
+    assert client.post("/machine", headers={"X-Internal-Api-Key": "wrong-key"}).status_code == 403
     response = client.post("/machine", headers={"X-Internal-Api-Key": "shared-key"})
     assert response.status_code == 200
     assert response.json() == {"ok": True}

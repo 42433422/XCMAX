@@ -16,6 +16,7 @@ from modstore_server.employee_config_v2_adapter import (
     translate_v2_to_executor_config,
 )
 from modstore_server.models import CatalogItem
+from modstore_server.security_boundary import UnsafePath, resolve_path_under_root
 
 EXECUTOR_ACTION_HANDLERS = frozenset(
     {
@@ -72,7 +73,11 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
     if not stored:
         issues.append("员工包缺少 stored_filename")
         return issues
-    archive = files_dir() / stored
+    try:
+        archive = resolve_path_under_root(files_dir(), stored)
+    except (OSError, UnsafePath, ValueError):
+        issues.append("员工包 stored_filename 越过受控归档目录")
+        return issues
     if not archive.is_file():
         issues.append(f"员工包文件不存在: {stored}")
         return issues
@@ -130,9 +135,7 @@ def management_work_runtime_issues(
     )
     actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
     handlers = {
-        str(value).strip()
-        for value in (actions.get("handlers") or [])
-        if str(value).strip()
+        str(value).strip() for value in (actions.get("handlers") or []) if str(value).strip()
     }
     approval_required = sorted(handlers.intersection(MANAGEMENT_APPROVAL_REQUIRED_HANDLERS))
     if approval_required and not allow_high_risk_real_run:

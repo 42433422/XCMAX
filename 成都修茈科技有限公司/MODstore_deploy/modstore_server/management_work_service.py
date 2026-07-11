@@ -9,7 +9,6 @@ import os
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import uuid
@@ -23,6 +22,7 @@ from modstore_server.models import (
     ManagementWorkItem,
     get_session_factory,
 )
+from modstore_server.security_boundary import opaque_ref
 
 logger = logging.getLogger(__name__)
 
@@ -573,14 +573,20 @@ def _notify_owner(item: dict[str, Any], *, title: str, content: str, event: str)
             data=data,
         )
     except Exception:
-        logger.exception("management work notification failed task_id=%s", item.get("task_id"))
+        logger.warning(
+            "management work notification failed task_ref=%s",
+            opaque_ref(item.get("task_id"), namespace="management-task"),
+        )
     # IM is an additional delivery channel, not part of the durable state
     # transition.  A dead/public candidate must never make decision, delivery
     # or recovery APIs wait for the sum of every network timeout.  The durable
     # in-app notification above remains synchronous; IM delivery is bounded
     # and best-effort in a daemon thread.
     if not _OWNER_IM_SLOTS.acquire(blocking=False):
-        logger.warning("management work IM queue saturated task_id=%s", item.get("task_id"))
+        logger.warning(
+            "management work IM queue saturated task_ref=%s",
+            opaque_ref(item.get("task_id"), namespace="management-task"),
+        )
         return
 
     def _send_im() -> None:
@@ -887,9 +893,7 @@ def _management_execution_workspace_root(employee_id: str) -> str:
             if str(glob).strip()
         }
         candidates.sort(
-            key=lambda candidate: sum(
-                1 for prefix in prefixes if (candidate / prefix).exists()
-            ),
+            key=lambda candidate: sum(1 for prefix in prefixes if (candidate / prefix).exists()),
             reverse=True,
         )
     return str(candidates[0])
@@ -927,11 +931,35 @@ def _task_has_cancel_request(task_id: str) -> bool:
         return bool(item and item.get("status") == "cancel_requested")
     except Exception:
         logger.warning(
-            "management execution cancel probe failed task_id=%s",
-            task_id,
-            exc_info=True,
+            "management execution cancel probe failed task_ref=%s",
+            opaque_ref(task_id, namespace="management-task"),
         )
         return False
+
+
+def _drain_process_pipe(
+    stream: Any,
+    output: bytearray,
+    *,
+    max_bytes: int,
+    keep_tail: bool,
+    overflow: list[bool],
+) -> None:
+    try:
+        while True:
+            chunk = stream.read(65_536)
+            if not chunk:
+                return
+            if len(output) + len(chunk) > max_bytes:
+                overflow[0] = True
+            output.extend(chunk)
+            if len(output) > max_bytes:
+                if keep_tail:
+                    del output[: len(output) - max_bytes]
+                else:
+                    del output[max_bytes:]
+    except (OSError, ValueError):
+        return
 
 
 def _run_management_execution_process(
@@ -957,103 +985,130 @@ def _run_management_execution_process(
         "max_concurrency": max(1, min(int(max_concurrency or 1), 8)),
         "allow_high_risk_real_run": bool(allow_high_risk_real_run),
     }
-    with tempfile.TemporaryDirectory(prefix="xcagi-management-work-") as directory:
-        root = Path(directory)
-        request_path = root / "request.json"
-        response_path = root / "response.json"
-        log_path = root / "child.log"
-        request_path.write_text(_dumps(request), encoding="utf-8")
-        os.chmod(request_path, 0o600)
-        env = os.environ.copy()
-        # Fact-signing and platform-control credentials stay in the parent
-        # verifier process. Employee code must never be able to mint trusted
-        # evidence or call internal control APIs with inherited secrets.
-        for secret_name in (
-            "MODSTORE_MANAGEMENT_EVIDENCE_HMAC_KEY",
-            "MODSTORE_JWT_SECRET",
-            "PAYMENT_SECRET_KEY",
-            "XCAGI_MARKET_INTERNAL_API_KEY",
-            "MODSTORE_INTERNAL_API_KEY",
-            "XCAGI_CS_INTAKE_LINK_SECRET",
-            "FIREBASE_SERVICE_ACCOUNT_JSON",
-            "FIREBASE_SERVICE_ACCOUNT",
-            "GOOGLE_APPLICATION_CREDENTIALS",
-            "SMTP_PASSWORD",
-        ):
-            env.pop(secret_name, None)
-        inherited_paths = [value for value in sys.path if str(value).strip()]
-        existing_paths = [
-            value for value in str(env.get("PYTHONPATH") or "").split(os.pathsep) if value
-        ]
-        env["PYTHONPATH"] = os.pathsep.join(
-            list(dict.fromkeys([*inherited_paths, *existing_paths]))
-        )
-        deadline = time.monotonic() + float(timeout_seconds)
-        with log_path.open("w+b") as child_log:
-            process = subprocess.Popen(
-                [
-                    sys.executable,
-                    "-m",
-                    "modstore_server.management_work_process",
-                    str(request_path),
-                    str(response_path),
-                ],
-                stdin=subprocess.DEVNULL,
-                stdout=child_log,
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
-            try:
-                while process.poll() is None:
-                    if _task_has_cancel_request(task_id):
-                        _terminate_execution_process(process)
-                        raise ManagementExecutionCancelled(
-                            f"management work {task_id} cancellation interrupted employee process"
-                        )
-                    if time.monotonic() >= deadline:
-                        _terminate_execution_process(process)
-                        raise ManagementExecutionTimeout(
-                            f"{target_employee_id} exceeded hard timeout of {timeout_seconds}s"
-                        )
-                    time.sleep(0.5)
-            except BaseException:
-                _terminate_execution_process(process)
-                raise
-            child_log.flush()
-            child_log.seek(0, os.SEEK_END)
-            log_size = child_log.tell()
-            child_log.seek(max(0, log_size - 12_000))
-            log_tail = child_log.read().decode("utf-8", errors="replace").strip()
+    env = os.environ.copy()
+    # Fact-signing and platform-control credentials stay in the parent verifier.
+    for secret_name in (
+        "MODSTORE_MANAGEMENT_EVIDENCE_HMAC_KEY",
+        "MODSTORE_JWT_SECRET",
+        "PAYMENT_SECRET_KEY",
+        "XCAGI_MARKET_INTERNAL_API_KEY",
+        "MODSTORE_INTERNAL_API_KEY",
+        "XCAGI_CS_INTAKE_LINK_SECRET",
+        "FIREBASE_SERVICE_ACCOUNT_JSON",
+        "FIREBASE_SERVICE_ACCOUNT",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "SMTP_PASSWORD",
+    ):
+        env.pop(secret_name, None)
+    inherited_paths = [value for value in sys.path if str(value).strip()]
+    existing_paths = [
+        value for value in str(env.get("PYTHONPATH") or "").split(os.pathsep) if value
+    ]
+    env["PYTHONPATH"] = os.pathsep.join(list(dict.fromkeys([*inherited_paths, *existing_paths])))
+    process = subprocess.Popen(
+        [sys.executable, "-m", "modstore_server.management_work_process"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        start_new_session=True,
+    )
+    if process.stdin is None or process.stdout is None or process.stderr is None:
+        _terminate_execution_process(process)
+        raise ManagementExecutionProcessError("management worker pipes unavailable")
 
-        if not response_path.is_file():
-            raise ManagementExecutionProcessError(
-                f"employee process exited {process.returncode} without response: {log_tail[-4000:]}"
-            )
-        if response_path.stat().st_size > 4_000_000:
-            raise ManagementExecutionProcessError("employee process response exceeds 4 MB")
+    request_bytes = _dumps(request).encode("utf-8")
+    response_bytes = bytearray()
+    log_tail = bytearray()
+    response_overflow = [False]
+    log_overflow = [False]
+
+    def _send_request() -> None:
         try:
-            response = json.loads(response_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError, json.JSONDecodeError) as exc:
-            raise ManagementExecutionProcessError(
-                f"employee process returned malformed response: {exc}"
-            ) from exc
-        if not isinstance(response, dict) or not response.get("ok"):
-            error_type = (
-                str(response.get("error_type") or "child_error")
-                if isinstance(response, dict)
-                else "child_error"
-            )
-            error = (
-                str(response.get("error") or log_tail or "employee process failed")
-                if isinstance(response, dict)
-                else (log_tail or "employee process failed")
-            )
-            raise ManagementExecutionProcessError(f"{error_type}: {error}"[:4000])
-        result = response.get("result")
-        if not isinstance(result, dict):
-            raise ManagementExecutionProcessError("employee process result must be an object")
-        return result
+            process.stdin.write(request_bytes)
+            process.stdin.flush()
+        except (BrokenPipeError, OSError, ValueError):
+            pass
+        finally:
+            try:
+                process.stdin.close()
+            except (OSError, ValueError):
+                pass
+
+    writer = threading.Thread(target=_send_request, daemon=True)
+    response_reader = threading.Thread(
+        target=_drain_process_pipe,
+        args=(process.stdout, response_bytes),
+        kwargs={
+            "max_bytes": 4_000_000,
+            "keep_tail": False,
+            "overflow": response_overflow,
+        },
+        daemon=True,
+    )
+    log_reader = threading.Thread(
+        target=_drain_process_pipe,
+        args=(process.stderr, log_tail),
+        kwargs={
+            "max_bytes": 12_000,
+            "keep_tail": True,
+            "overflow": log_overflow,
+        },
+        daemon=True,
+    )
+    writer.start()
+    response_reader.start()
+    log_reader.start()
+    deadline = time.monotonic() + float(timeout_seconds)
+    try:
+        while process.poll() is None:
+            if _task_has_cancel_request(task_id):
+                _terminate_execution_process(process)
+                raise ManagementExecutionCancelled(
+                    "management work cancellation interrupted employee process"
+                )
+            if time.monotonic() >= deadline:
+                _terminate_execution_process(process)
+                raise ManagementExecutionTimeout("management employee exceeded hard timeout")
+            time.sleep(0.5)
+    except BaseException:
+        _terminate_execution_process(process)
+        raise
+    finally:
+        writer.join(timeout=1)
+        response_reader.join(timeout=3)
+        log_reader.join(timeout=3)
+        for stream in (process.stdin, process.stdout, process.stderr):
+            try:
+                stream.close()
+            except (OSError, ValueError):
+                pass
+
+    if response_overflow[0]:
+        raise ManagementExecutionProcessError("employee process response exceeds 4 MB")
+    if not response_bytes:
+        raise ManagementExecutionProcessError(
+            "employee process exited without response "
+            f"log_ref={opaque_ref(bytes(log_tail), namespace='management-child-log')}"
+        )
+    try:
+        response = json.loads(response_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
+        raise ManagementExecutionProcessError(
+            "employee process returned malformed response"
+        ) from exc
+    if not isinstance(response, dict) or not response.get("ok"):
+        raw_code = str(response.get("error_code") or "") if isinstance(response, dict) else ""
+        error_code = (
+            raw_code
+            if raw_code in {"invalid_request", "management_worker_failed"}
+            else "management_worker_failed"
+        )
+        raise ManagementExecutionProcessError(error_code)
+    result = response.get("result")
+    if not isinstance(result, dict):
+        raise ManagementExecutionProcessError("employee process result must be an object")
+    return result
 
 
 def _owned_running(
@@ -3089,7 +3144,10 @@ def dispatch_assigned_work_items(*, limit: int = 3, lease_seconds: int = 300) ->
                 else:
                     blocked += 1
                 continue
-            logger.exception("management work execution failed task_id=%s", task_id)
+            logger.warning(
+                "management work execution failed task_ref=%s",
+                opaque_ref(task_id, namespace="management-task"),
+            )
             try:
                 failed = fail_work_item(
                     task_id,

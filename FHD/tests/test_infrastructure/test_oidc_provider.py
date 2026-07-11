@@ -255,7 +255,8 @@ class TestDiscovery:
 
     @pytest.mark.asyncio
     async def test_fetches_discovery_doc(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
+        issuer = "https://idp.example.com"
+        monkeypatch.setenv("XCAGI_OIDC_ISSUER", issuer)
         oidc_provider._discovery_cache.clear()
         mock_response = MagicMock()
         mock_response.json.return_value = {"authorization_endpoint": "https://idp/auth"}
@@ -270,13 +271,14 @@ class TestDiscovery:
             result = await oidc_provider._discovery()
         assert result["authorization_endpoint"] == "https://idp/auth"
         # Verify cached
-        assert "https://idp.example.com" in oidc_provider._discovery_cache
+        assert list(oidc_provider._discovery_cache) == [issuer]
 
     @pytest.mark.asyncio
     async def test_uses_cached_discovery(self, monkeypatch):
-        monkeypatch.setenv("XCAGI_OIDC_ISSUER", "https://idp.example.com")
+        issuer = "https://idp.example.com"
+        monkeypatch.setenv("XCAGI_OIDC_ISSUER", issuer)
         oidc_provider._discovery_cache.clear()
-        oidc_provider._discovery_cache["https://idp.example.com"] = {"cached": True}
+        oidc_provider._discovery_cache[issuer] = {"cached": True}
         result = await oidc_provider._discovery()
         assert result == {"cached": True}
 

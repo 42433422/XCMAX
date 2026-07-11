@@ -19,9 +19,7 @@ logger = logging.getLogger(__name__)
 
 def _mirror_notification_email(user_id: int, title: str, content: str) -> None:
     """可选：将站内通知抄送用户邮箱（``MODSTORE_MIRROR_NOTIFICATIONS_EMAIL=1``）。"""
-    if (
-        os.environ.get("MODSTORE_MIRROR_NOTIFICATIONS_EMAIL") or ""
-    ).strip().lower() not in (
+    if (os.environ.get("MODSTORE_MIRROR_NOTIFICATIONS_EMAIL") or "").strip().lower() not in (
         "1",
         "true",
         "yes",
@@ -101,9 +99,7 @@ def create_notification(
             db.close()
 
 
-def notify_payment_success(
-    user_id: int, order_no: str, amount: float, item_name: str
-) -> None:
+def notify_payment_success(user_id: int, order_no: str, amount: float, item_name: str) -> None:
     if not user_id:
         return
     try:
@@ -118,9 +114,7 @@ def notify_payment_success(
         logger.warning("notify_payment_success failed: %s", e)
 
 
-def notify_employee_execution_done(
-    user_id: int, employee_id: str, task: str, status: str
-) -> None:
+def notify_employee_execution_done(user_id: int, employee_id: str, task: str, status: str) -> None:
     if not user_id:
         return
     try:
@@ -203,12 +197,7 @@ def employee_message_to_boss(
     """
     key = _fhd_internal_api_key()
     body_text = (text or "").strip()
-    if (
-        not key
-        or int(user_id or 0) <= 0
-        or not str(employee_id or "").strip()
-        or not body_text
-    ):
+    if not key or int(user_id or 0) <= 0 or not str(employee_id or "").strip() or not body_text:
         return False
     try:
         import httpx
@@ -236,9 +225,7 @@ def employee_message_to_boss(
                 except Exception as exc:  # noqa: BLE001 - probe next known local endpoint
                     last_error = f"{base} {type(exc).__name__}"
         if last_error:
-            logger.warning(
-                "employee_message_to_boss exhausted candidates: %s", last_error
-            )
+            logger.warning("employee_message_to_boss exhausted candidates: %s", last_error)
         return False
     except Exception as e:  # noqa: BLE001 - 出站 IM 失败不影响主流程
         logger.warning("employee_message_to_boss failed: %s", e)
@@ -289,9 +276,7 @@ def notify_human_question(
     post_employee_question_to_im(user_id, employee_id, question, task)
 
 
-def notify_quota_warning(
-    user_id: int, quota_type: str, remaining: int, total: int
-) -> None:
+def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: int) -> None:
     if not user_id or total <= 0:
         return
     usage_pct = (1 - remaining / total) * 100

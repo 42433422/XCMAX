@@ -155,9 +155,12 @@ def test_runtime_schema_upgrade_handles_users_without_tenant_column() -> None:
         for table in ("mobile_device_tokens", "mobile_notification_outbox"):
             columns = {column["name"] for column in inspect(engine).get_columns(table)}
             assert {"notification_audience", "tenant_id"} <= columns
-            assert connection.execute(
-                text(f"SELECT COUNT(*) FROM {table} WHERE tenant_id IS NULL")
-            ).scalar_one() == 0
+            assert (
+                connection.execute(
+                    text(f"SELECT COUNT(*) FROM {table} WHERE tenant_id IS NULL")
+                ).scalar_one()
+                == 0
+            )
 
 
 def test_database_defaults_keep_rolling_upgrade_writers_compatible() -> None:
@@ -182,16 +185,10 @@ def test_database_defaults_keep_rolling_upgrade_writers_compatible() -> None:
             )
         )
         device_scope = connection.execute(
-            text(
-                "SELECT notification_audience, tenant_id "
-                "FROM mobile_device_tokens"
-            )
+            text("SELECT notification_audience, tenant_id FROM mobile_device_tokens")
         ).one()
         outbox_scope = connection.execute(
-            text(
-                "SELECT notification_audience, tenant_id "
-                "FROM mobile_notification_outbox"
-            )
+            text("SELECT notification_audience, tenant_id FROM mobile_notification_outbox")
         ).one()
     assert device_scope == ("enterprise", 0)
     assert outbox_scope == ("enterprise", 0)

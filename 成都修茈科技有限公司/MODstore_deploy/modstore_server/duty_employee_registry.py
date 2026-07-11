@@ -32,9 +32,7 @@ class DutyAssetSeedError(RuntimeError):
 _DUTY_ASSET_ROOT = Path(__file__).resolve().parent / "duty_assets"
 _MARKET_FILES_ROOT = Path(__file__).resolve().parent / "market_files"
 _SEED_LOCK = threading.Lock()
-_SAFE_ARCHIVE_NAME = re.compile(
-    r"^[A-Za-z0-9][A-Za-z0-9._-]{0,239}\.(?:xcemp|xcmod|zip)$"
-)
+_SAFE_ARCHIVE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,239}\.(?:xcemp|xcmod|zip)$")
 _SAFE_SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MAX_ARCHIVE_BYTES = 20 * 1024 * 1024
 _MAX_ZIP_MEMBERS = 2000
@@ -146,9 +144,7 @@ def _load_validated_seed() -> tuple[Dict[str, Any], list[tuple[Dict[str, Any], P
             raise DutyAssetSeedError("duty asset seed contains a non-object package")
         record = dict(raw)
         package_id = str(record.get("id") or "").strip()
-        if not is_planned_duty_employee_pack(
-            package_id, str(record.get("artifact") or "")
-        ):
+        if not is_planned_duty_employee_pack(package_id, str(record.get("artifact") or "")):
             raise DutyAssetSeedError(f"duty asset seed contains an unplanned package: {package_id}")
         filename = _validate_archive_name(record.get("stored_filename"))
         if package_id in seen_ids or filename in seen_files:

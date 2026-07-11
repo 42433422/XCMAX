@@ -153,10 +153,7 @@ def test_management_owner_im_never_blocks_state_transition(monkeypatch):
         assert sent_im["kwargs"]["notification"]["task_id"] == "mwi_non_blocking"
         assert sent_im["kwargs"]["notification"]["route"] == "management_work/mwi_non_blocking"
         assert sent_im["kwargs"]["notification"]["recipient_kind"] == "management_owner"
-        assert (
-            sent_im["kwargs"]["notification"]["recipient_ref"]
-            == "fhd:user:42:tenant:8"
-        )
+        assert sent_im["kwargs"]["notification"]["recipient_ref"] == "fhd:user:42:tenant:8"
     finally:
         release.set()
 
@@ -220,8 +217,7 @@ def test_management_source_ref_is_server_bound():
         == "modstore:user:7"
     )
     assert (
-        _source_ref(None, {"external_actor_ref": "fhd:user:42:tenant:8"})
-        == "fhd:user:42:tenant:8"
+        _source_ref(None, {"external_actor_ref": "fhd:user:42:tenant:8"}) == "fhd:user:42:tenant:8"
     )
     assert _source_ref(None, {}) == ""
     for invalid in (
@@ -413,9 +409,7 @@ def test_management_work_watchdog_recovers_expired_lease(tmp_path, monkeypatch):
     assert get_work_item(item["task_id"])["status"] == "assigned"
 
 
-def test_expired_lease_rejects_late_worker_transitions_before_watchdog(
-    tmp_path, monkeypatch
-):
+def test_expired_lease_rejects_late_worker_transitions_before_watchdog(tmp_path, monkeypatch):
     models = _reset_db(tmp_path, monkeypatch)
     from modstore_server.management_work_service import (
         WorkItemConflict,
@@ -1250,3 +1244,55 @@ def test_management_execution_process_is_killable(monkeypatch, cancel_requested,
         )
     assert time.monotonic() - started < 5
     assert children and children[0].poll() is not None
+
+
+def test_management_execution_process_uses_memory_pipes(monkeypatch):
+    import modstore_server.management_work_service as service
+
+    real_popen = service.subprocess.Popen
+
+    def _echo_process(_command, **kwargs):
+        code = (
+            "import json,sys;"
+            "request=json.load(sys.stdin);"
+            "json.dump({'ok':True,'result':{'task':request['task']}},sys.stdout)"
+        )
+        return real_popen([service.sys.executable, "-c", code], **kwargs)
+
+    monkeypatch.setattr(service.subprocess, "Popen", _echo_process)
+    monkeypatch.setattr(service, "_task_has_cancel_request", lambda _task_id: False)
+    result = service._run_management_execution_process(
+        "pipe-only task",
+        {"private": "not-written-to-disk"},
+        task_id="mwi_pipe_test",
+        target_employee_id="intent-analyst",
+        created_by_user_id=7,
+        include_dependencies=False,
+        max_concurrency=1,
+        allow_high_risk_real_run=False,
+    )
+
+    assert result == {"task": "pipe-only task"}
+
+
+def test_management_worker_returns_stable_error_without_traceback():
+    import os
+    import subprocess
+    import sys
+
+    completed = subprocess.run(
+        [sys.executable, "-m", "modstore_server.management_work_process"],
+        input=b"not-json",
+        capture_output=True,
+        env=os.environ.copy(),
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode == 1
+    assert json.loads(completed.stdout) == {
+        "ok": False,
+        "error_code": "management_worker_failed",
+    }
+    assert b"Traceback" not in completed.stdout
+    assert b"Traceback" not in completed.stderr

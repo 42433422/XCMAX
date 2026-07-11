@@ -58,7 +58,7 @@ class EmployeeAgent:
         except ImportError:
             return None
         except RECOVERABLE_ERRORS:
-            logger.debug("build agent tools fallback emp=%s", self.employee_id, exc_info=True)
+            logger.debug("build agent tools fallback")
             return None
 
     def _build_agent_gate(
@@ -78,7 +78,7 @@ class EmployeeAgent:
         except ImportError:
             pass
         except RECOVERABLE_ERRORS:
-            logger.debug("build workspace gate fallback emp=%s", self.employee_id, exc_info=True)
+            logger.debug("build workspace gate fallback")
         try:
             from app.application.employee_runtime.write_approval import build_write_approval_gate
 
@@ -86,7 +86,7 @@ class EmployeeAgent:
         except ImportError:
             pass
         except RECOVERABLE_ERRORS:
-            logger.debug("build write gate fallback emp=%s", self.employee_id, exc_info=True)
+            logger.debug("build write gate fallback")
         try:
             from app.application.employee_runtime.write_approval import compose_gates
 
@@ -128,7 +128,7 @@ class EmployeeAgent:
         except ImportError:
             return None
         except RECOVERABLE_ERRORS:
-            logger.debug("upstream collaboration skipped emp=%s", self.employee_id, exc_info=True)
+            logger.debug("upstream collaboration skipped")
             return None
 
     def _perceive(self, config: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
@@ -139,7 +139,7 @@ class EmployeeAgent:
         except ImportError:
             return _ex._perception_real(config, payload)
         except RECOVERABLE_ERRORS:
-            logger.debug("perception fallback emp=%s", self.employee_id, exc_info=True)
+            logger.debug("perception fallback")
             return _ex._perception_real(config, payload)
 
     # ---- 系统提示词注入记忆 ----
@@ -225,12 +225,7 @@ class EmployeeAgent:
             payload["user_id"] = user_id
         if workspace_root and "workspace_root" not in payload:
             payload["workspace_root"] = workspace_root
-        logger.info(
-            "employee_agent_run employee_id=%s task_len=%s session=%s",
-            employee_id,
-            len(task or ""),
-            session_id or "-",
-        )
+        logger.info("employee agent run started")
         try:
             pack = load_employee_pack_from_disk(employee_id)
             manifest = pack.get("manifest") or {}
@@ -413,7 +408,7 @@ class EmployeeAgent:
                         extra={"session_id": session_id, "duration_ms": duration_ms},
                     )
                 except RECOVERABLE_ERRORS:
-                    logger.debug("publish task failed event skipped", exc_info=True)
+                    logger.debug("publish task failed event skipped")
 
             memory_mgr.remember(
                 task,
@@ -435,14 +430,14 @@ class EmployeeAgent:
                 if upstream and not upstream.get("skipped")
                 else None,
             }
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
-            logger.exception("employee_agent_run failed employee_id=%s", employee_id)
+            logger.warning("employee agent run failed")
             return {
                 "employee_id": employee_id,
                 "duration_ms": duration_ms,
                 "success": False,
-                "error": str(exc)[:800],
+                "error": "员工执行失败，请稍后重试",
                 "executed_at": datetime.now(UTC).isoformat(),
             }
 

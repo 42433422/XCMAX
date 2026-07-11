@@ -173,8 +173,8 @@ def _init_database() -> None:
     try:
         from modstore_server.sync_employee_triggers import sync_all_employee_triggers
 
-        n = sync_all_employee_triggers()
-        logger.info("startup: synced %d employee trigger bindings (manifest)", n)
+        sync_all_employee_triggers()
+        logger.info("startup: synced employee trigger bindings (manifest)")
     except Exception:
         logger.exception("startup: sync_employee_triggers failed")
 
@@ -185,8 +185,8 @@ def _init_database() -> None:
         _repo_root = Path(os.environ.get("MODSTORE_REPO_ROOT") or _deploy_root.parent).resolve()
         _yuangon = _repo_root / "yuangon"
         if _yuangon.is_dir():
-            n_y = sync_employee_trigger_bindings_from_yuangon(_yuangon)
-            logger.info("startup: synced %d employee trigger bindings (yuangon)", n_y)
+            sync_employee_trigger_bindings_from_yuangon(_yuangon)
+            logger.info("startup: synced employee trigger bindings (yuangon)")
     except Exception:
         logger.exception("startup: sync_employee_trigger_bindings_from_yuangon failed")
 

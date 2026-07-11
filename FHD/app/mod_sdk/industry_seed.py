@@ -127,7 +127,7 @@ def bundled_industry_seeds_dir() -> Path | None:
         if bundled.is_dir():
             return bundled
     except Exception:  # noqa: BLE001 - 兜底路径解析失败不应阻断安装
-        logger.debug("bundled mods root fallback for industry seeds skipped", exc_info=True)
+        logger.debug("bundled mods root fallback for industry seeds skipped")
     return None
 
 
@@ -155,8 +155,8 @@ def deactivate_other_open_industry_mods(
     for mod_id in other_open_industry_mod_ids(keep_mod_id):
         try:
             mm.unload_mod(mod_id)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("unload open industry mod %s failed: %s", mod_id, exc)
+        except RECOVERABLE_ERRORS:
+            logger.warning("open industry mod unload failed")
         removed = False
         if remove_files:
             dest = Path(mm.mods_root) / mod_id
@@ -164,8 +164,8 @@ def deactivate_other_open_industry_mods(
                 try:
                     shutil.rmtree(dest)
                     removed = True
-                except OSError as exc:
-                    logger.warning("remove industry mod dir %s failed: %s", dest, exc)
+                except OSError:
+                    logger.warning("open industry mod directory removal failed")
         results.append({"mod_id": mod_id, "unloaded": True, "removed_files": removed})
     return results
 
@@ -196,8 +196,8 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
         loaded = False
         try:
             loaded = bool(mm.load_mod(mod_id))
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("load_mod existing industry seed %s: %s", mod_id, exc)
+        except RECOVERABLE_ERRORS:
+            logger.warning("existing industry seed loading failed")
         payload = {
             "success": loaded or dst.is_dir(),
             "status": "already_present",
@@ -234,22 +234,22 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
     try:
         os.makedirs(mm.mods_root, exist_ok=True)
         shutil.copytree(src, dst)
-    except OSError as exc:
+    except OSError:
         return {
             "success": False,
             "status": "copy_error",
             "industry_id": iid,
             "mod_id": mod_id,
             "source": str(src),
-            "message": f"复制行业种子失败：{exc}",
+            "message": "复制行业种子失败，请检查磁盘空间后重试",
         }
 
     loaded = False
     try:
         mm.invalidate_scan_cache()
         loaded = bool(mm.load_mod(mod_id))
-    except RECOVERABLE_ERRORS as exc:
-        logger.warning("load_mod after industry seed %s: %s", mod_id, exc)
+    except RECOVERABLE_ERRORS:
+        logger.warning("installed industry seed loading failed")
 
     return {
         "success": loaded,
@@ -298,12 +298,12 @@ async def install_industry_seed_with_fallback(industry_id: str) -> dict[str, Any
             "status": "catalog_failed",
             "message": catalog.message or result.get("message"),
         }
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         return {
             **result,
             "success": False,
             "status": "catalog_failed",
-            "message": str(exc),
+            "message": "扩展市场暂时不可用，请稍后重试",
         }
 
 

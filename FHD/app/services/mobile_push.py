@@ -130,8 +130,7 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                             text(f"ALTER TABLE {table} ADD COLUMN event_id VARCHAR(256)")
                         )
                     tenant_is_nullable = any(
-                        column["name"] == "tenant_id"
-                        and bool(column.get("nullable", True))
+                        column["name"] == "tenant_id" and bool(column.get("nullable", True))
                         for column in column_rows
                     )
                     if tenant_was_missing or tenant_is_nullable:
@@ -147,10 +146,7 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                             )
                         else:
                             connection.execute(
-                                text(
-                                    f"UPDATE {table} SET tenant_id = 0 "
-                                    "WHERE tenant_id IS NULL"
-                                )
+                                text(f"UPDATE {table} SET tenant_id = 0 WHERE tenant_id IS NULL")
                             )
                     audience_index = f"ix_{table}_notification_audience"
                     if audience_index not in indexes:
@@ -164,15 +160,12 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                     if tenant_index not in indexes:
                         connection.execute(
                             text(
-                                f"CREATE INDEX IF NOT EXISTS {tenant_index} "
-                                f"ON {table} (tenant_id)"
+                                f"CREATE INDEX IF NOT EXISTS {tenant_index} ON {table} (tenant_id)"
                             )
                         )
                 outbox_indexes = {
                     str(index["name"])
-                    for index in inspector.get_indexes(
-                        MobileNotificationOutbox.__tablename__
-                    )
+                    for index in inspector.get_indexes(MobileNotificationOutbox.__tablename__)
                     if index.get("name")
                 }
                 outbox_uniques = {
@@ -352,8 +345,7 @@ def _enqueue_outbox(
                         db.query(MobileNotificationOutbox.id)
                         .filter(
                             MobileNotificationOutbox.user_id == int(user_id),
-                            MobileNotificationOutbox.notification_audience
-                            == normalized_audience,
+                            MobileNotificationOutbox.notification_audience == normalized_audience,
                             MobileNotificationOutbox.tenant_id == normalized_tenant,
                             MobileNotificationOutbox.event_id == event_id,
                         )

@@ -14,6 +14,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from modstore_server import payment_orders
 from modstore_server.models import WorkflowTrigger, get_session_factory
+from modstore_server.security_boundary import opaque_ref
 from modstore_server.workflow_event_runner import run_workflow_for_trigger
 
 logger = logging.getLogger(__name__)
@@ -721,9 +722,7 @@ def start_scheduler() -> None:
 
     _scheduler.add_job(
         _management_work_loop,
-        IntervalTrigger(
-            seconds=max(10, _env_int("MODSTORE_MANAGEMENT_WORK_INTERVAL_SECONDS", 15))
-        ),
+        IntervalTrigger(seconds=max(10, _env_int("MODSTORE_MANAGEMENT_WORK_INTERVAL_SECONDS", 15))),
         id="management_work_loop",
         replace_existing=True,
         coalesce=True,
@@ -757,21 +756,13 @@ def start_scheduler() -> None:
                     lim = int(os.environ.get("MODSTORE_EMPLOYEE_EVOLUTION_SCAN_LIMIT", "20"))
                 except ValueError:
                     lim = 20
-                out = run_employee_evolution_scan(
+                run_employee_evolution_scan(
                     lookback_hours=lookback,
                     min_failures=min_fail,
                     limit=lim,
                     triggered_by="scheduler",
                 )
-                logger.info(
-                    "employee evolution scan: processed=%s created=%s enabled=%s "
-                    "quota_failures=%s circuit_broken=%s",
-                    out.get("processed"),
-                    out.get("created"),
-                    out.get("enabled"),
-                    out.get("quota_failures"),
-                    out.get("circuit_broken"),
-                )
+                logger.info("employee evolution scan completed")
 
             _run_tracked_scheduler_job("employee_evolution_scan_loop", _run)
         except Exception:
@@ -869,11 +860,7 @@ def start_scheduler() -> None:
 
             out = run_telemetry_scan()
             if out.get("ok") and not out.get("skipped"):
-                logger.info(
-                    "telemetry backlog scan: signals=%d ingested=%d",
-                    out.get("signals_found"),
-                    out.get("signals_ingested"),
-                )
+                logger.info("telemetry backlog scan completed")
         except Exception:
             logger.exception("telemetry backlog scan job failed")
 
@@ -1072,8 +1059,15 @@ def _register_employee_cron_jobs() -> None:
                 trigger = CronTrigger.from_crontab(cron_expr)
             elif isinstance(interval_seconds, (int, float)) and interval_seconds >= 60:
                 trigger = IntervalTrigger(seconds=int(interval_seconds))
-        except Exception as exc:
-            logger.warning("employee cron: invalid trigger for %s: %s", emp_id, exc)
+        except Exception:
+            logger.warning(
+                "employee cron invalid trigger employee_ref=%s trigger_ref=%s",
+                opaque_ref(emp_id, namespace="employee"),
+                opaque_ref(
+                    cron_expr or interval_seconds,
+                    namespace="cron-trigger",
+                ),
+            )
             skipped += 1
             continue
 
@@ -1094,18 +1088,24 @@ def _register_employee_cron_jobs() -> None:
                     eid, brief, {"trigger": "schedule"}, user_id=0
                 )
             except Exception:
-                logger.exception("employee cron job failed: %s", eid)
+                logger.warning(
+                    "employee cron job failed employee_ref=%s",
+                    opaque_ref(eid, namespace="employee"),
+                )
 
         try:
             _scheduler.add_job(_runner, trigger, id=job_id, replace_existing=True)
             registered += 1
             logger.info(
-                "employee cron registered: %s -> %s",
-                emp_id,
-                cron_expr or f"interval {interval_seconds}s",
+                "employee cron registered employee_ref=%s trigger_kind=%s",
+                opaque_ref(emp_id, namespace="employee"),
+                "cron" if cron_expr else "interval",
             )
         except Exception:
-            logger.exception("employee cron add_job failed: %s", emp_id)
+            logger.warning(
+                "employee cron add_job failed employee_ref=%s",
+                opaque_ref(emp_id, namespace="employee"),
+            )
             skipped += 1
 
     logger.info("employee cron: registered=%d skipped=%d", registered, skipped)

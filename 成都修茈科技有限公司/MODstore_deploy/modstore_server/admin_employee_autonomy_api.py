@@ -30,11 +30,32 @@ from modstore_server.models import (
     get_session_factory,
 )
 
-router = APIRouter(
-    prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"]
-)
+router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
 
 _MENTION_RE = re.compile(r"@([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})")
+
+_SUGGESTION_ERROR_CODES = {
+    "invalid suggestion id": "invalid_suggestion_id",
+    "not found": "suggestion_not_found",
+    "already rejected": "suggestion_already_rejected",
+    "suggestion rejected": "suggestion_already_rejected",
+    "suggestion disappeared": "suggestion_not_found",
+    "pending medium/high risk suggestion requires approval": "approval_required",
+}
+
+
+def _suggestion_error_code(result: Dict[str, Any]) -> str:
+    raw = str(result.get("error") or "").strip().lower()
+    return _SUGGESTION_ERROR_CODES.get(raw, "suggestion_operation_failed")
+
+
+def _public_suggestion_result(result: Dict[str, Any], suggestion_id: int) -> Dict[str, Any]:
+    dispatch = result.get("dispatch_result")
+    return {
+        "ok": True,
+        "suggestion_id": int(suggestion_id),
+        "dispatch_ok": (bool(dispatch.get("ok")) if isinstance(dispatch, dict) else None),
+    }
 
 
 def _jloads(text: str, default: Any) -> Any:
@@ -155,8 +176,8 @@ def approve_employee_suggestion(
         dispatch_now=dispatch_now,
     )
     if not out.get("ok"):
-        raise HTTPException(400, str(out.get("error") or "approve failed"))
-    return out
+        raise HTTPException(400, _suggestion_error_code(out))
+    return _public_suggestion_result(out, suggestion_id)
 
 
 @router.post("/suggestions/{suggestion_id}/reject")
@@ -174,8 +195,8 @@ def reject_employee_suggestion(
         rejected_by_user_id=int(admin_user.id),
     )
     if not out.get("ok"):
-        raise HTTPException(400, str(out.get("error") or "reject failed"))
-    return out
+        raise HTTPException(400, _suggestion_error_code(out))
+    return _public_suggestion_result(out, suggestion_id)
 
 
 @router.post("/suggestions/batch-review")
@@ -220,9 +241,7 @@ def batch_review_employee_suggestions(
             ok += 1
         else:
             failed += 1
-            errors.append(
-                {"id": sid, "error": str(out.get("error") or "unknown")[:300]}
-            )
+            errors.append({"id": sid, "error": _suggestion_error_code(out)})
     return {
         "ok": True,
         "action": action,
@@ -266,7 +285,15 @@ def run_suggestion_dispatch(
         limit = int(body.get("limit") or 20)
     except ValueError:
         limit = 20
-    return dispatch_pending_suggestions(limit=max(1, min(limit, 100)))
+    result = dispatch_pending_suggestions(limit=max(1, min(limit, 100)))
+    errors = result.get("errors") if isinstance(result.get("errors"), list) else []
+    return {
+        "ok": bool(result.get("ok")),
+        "processed": int(result.get("processed") or 0),
+        "ok_count": int(result.get("ok_count") or 0),
+        "skipped": int(result.get("skipped") or 0),
+        "error_count": len(errors),
+    }
 
 
 @router.post("/evolution/scan")
@@ -304,9 +331,7 @@ def list_collab_threads(
     _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeCollabThread).order_by(
-            EmployeeCollabThread.updated_at.desc()
-        )
+        q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeCollabThread.status == st)
@@ -333,9 +358,7 @@ def create_collab_thread_api(
 ) -> Dict[str, Any]:
     _ = _admin_user
     title = str(body.get("title") or "").strip() or "协作线程"
-    participants = (
-        body.get("participants") if isinstance(body.get("participants"), list) else []
-    )
+    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
     created_by = str(body.get("created_by_employee_id") or "admin").strip() or "admin"
     out = create_collab_thread(
         title=title,
@@ -417,9 +440,7 @@ def post_collab_message_api(
 
 @router.get("/questions")
 def list_pending_human_questions(
-    include_history: bool = Query(
-        False, description="true 则包含 answered/expired 历史"
-    ),
+    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -509,9 +530,7 @@ def human_questions_stats(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(
-                PendingHumanQuestion.status, func.count(PendingHumanQuestion.id)
-            )
+            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
             .filter(PendingHumanQuestion.user_id == _admin_user.id)
             .group_by(PendingHumanQuestion.status)
             .all()
@@ -534,9 +553,7 @@ def human_questions_stats(
 def get_employee_scorecard_api(
     employee_id: str,
     days: int = Query(7, ge=1, le=90, description="回看多少天"),
-    human_friendly: bool = Query(
-        False, description="true 则返回人话文本，否则返回 JSON"
-    ),
+    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。
