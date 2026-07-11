@@ -11,7 +11,7 @@ on:
         type: string
         default: "10.0.0"
       harmony_artifact:
-        description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
+        description: Optional enterprise HarmonyOS .hap/.hsp path. Empty publishes an Android-only package.
         required: false
         type: string
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
@@ -63,22 +63,42 @@ jobs:
         run: |
           flutter pub get
           flutter test
-      - name: Configure release signing (optional)
+      - name: Configure release signing
         id: signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
-            echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::ANDROID_KEYSTORE_BASE64 未配置；Flutter release 当前使用 debug 签名（仅测试分发）"
-          else
-            mkdir -p android/app
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/app/xcagi-release.jks
-            chmod 600 android/app/xcagi-release.jks
-            echo "configured=true" >> "${GITHUB_OUTPUT}"
-          fi
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::${name} 未配置；正式移动版禁止回退到 debug 签名"
+              exit 1
+            fi
+          done
+          mkdir -p android/signing
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/signing/xcagi-release.jks
+          chmod 600 android/signing/xcagi-release.jks
+          echo "configured=true" >> "${GITHUB_OUTPUT}"
+      - name: Verify release signing certificate
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list \
+            -keystore android/signing/xcagi-release.jks \
+            -storepass "${ANDROID_KEYSTORE_PASSWORD}" \
+            -alias "${ANDROID_KEY_ALIAS}" >/dev/null
+          echo "Android release keystore: OK"
       - name: Flutter build apk (release)
         id: assemble
+        env:
+          XCAGI_ANDROID_KEYSTORE: signing/xcagi-release.jks
+          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          XCAGI_REQUIRE_RELEASE_SIGNING: "1"
         run: |
           VCODE=$(date +%s)
           echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
@@ -98,11 +118,18 @@ jobs:
       - name: Stage mobile package distribution
         working-directory: ${{ github.workspace }}
         run: |
-          bash FHD/mobile-harmony/scripts/stage-release-packages.sh \
-            --version "${{ steps.release_version.outputs.version }}" \
-            --android-version "${{ steps.release_version.outputs.version }}" \
-            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" \
-            --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
+          args=(
+            --version "${{ steps.release_version.outputs.version }}"
+            --android-version "${{ steps.release_version.outputs.version }}"
+            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk"
+          )
+          harmony_artifact="${{ github.event.inputs.harmony_artifact || '' }}"
+          if [[ -n "${harmony_artifact}" ]]; then
+            args+=(--harmony-artifact "${harmony_artifact}")
+          else
+            args+=(--allow-missing-harmony)
+          fi
+          bash FHD/mobile-harmony/scripts/stage-release-packages.sh "${args[@]}"
       - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4
         with:

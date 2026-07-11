@@ -167,6 +167,9 @@ describe('ImMessengerView.vue', () => {
       global: { stubs: { RouterLink: true } },
     })
     await flushPromises()
+    await vi.waitFor(() => {
+      expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
+    })
 
     expect(wrapper.text()).not.toContain('企业专属客服')
     expect(wrapper.text()).not.toContain('小C助理')
@@ -177,8 +180,6 @@ describe('ImMessengerView.vue', () => {
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-conv-item--pinned').exists()).toBe(true)
     expect(wrapper.find('.im-pin').exists()).toBe(false)
-    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'admin' })
-
     await wrapper.find('.im-conv-item--pinned').trigger('click')
     await flushPromises()
 
@@ -237,13 +238,14 @@ describe('ImMessengerView.vue', () => {
       global: { stubs: { RouterLink: true } },
     })
     await flushPromises()
+    await vi.waitFor(() => {
+      expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
+    })
 
     expect(wrapper.text()).not.toContain('固定员工')
     expect(wrapper.text()).toContain('超级员工-Codex')
     expect(wrapper.findAll('.im-conv-list')).toHaveLength(1)
     expect(wrapper.find('.im-pin').exists()).toBe(false)
-    expect(fetchCodexSuperEmployeeMessages).toHaveBeenCalledWith({ scope: 'mobile' })
-
     const input = wrapper.find('.im-compose--codex input')
     await input.setValue('手机上调用 Codex')
     await wrapper.find('.im-compose--codex button').trigger('click')
@@ -276,9 +278,11 @@ describe('ImMessengerView.vue', () => {
       global: { stubs: { RouterLink: { template: '<a><slot /></a>' } } },
     })
     await flushPromises()
+    await vi.waitFor(() => {
+      expect(wrapper.text()).toContain('超级开发组 · CLI')
+    })
 
     expect(wrapper.find('a[title="我的群聊"]').exists()).toBe(true)
-    expect(wrapper.text()).toContain('超级开发组 · CLI')
     expect(wrapper.find('.im-cli-model-switch__btn.active').text()).toContain('Codex')
 
     const cursorBtn = wrapper
