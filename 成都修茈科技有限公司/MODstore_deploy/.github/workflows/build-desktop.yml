@@ -9,6 +9,11 @@ on:
         description: "Release version (v10 锁，恒 10.0.0)"
         required: false
         default: "10.0.0"
+      deploy:
+        description: "Build 后部署到 production（默认仅构建验收）"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -68,6 +73,7 @@ jobs:
 
   # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
   deploy:
+    if: ${{ inputs.deploy == true }}
     needs: windows
     runs-on: ubuntu-latest
     defaults:
