@@ -50,10 +50,12 @@
 |----|------|
 | CDN `latest-mac.yml` Ed25519 | **PASS**（公钥验签 OK，`xiu-ci.com/.../enterprise/latest-mac.yml`） |
 | 本机 `/Applications/XCAGI.app` | adhoc（非正式公证安装包；需 Developer ID 重打） |
-| macOS CI Release Desktop | 曾因 `npm Invalid version: main` 失败；已在 `build-installer.sh` / workflow 加 semver 兜底 `10.0.0` |
-| ASC Issuer ID（本机 notarytool） | **缺**（Team API Key 需 Issuer UUID；Secrets 在 GH，本机 `mac-signing.env` 未填） |
+| macOS CI Release Desktop | 曾因 `npm Invalid version: main` 失败；`build-installer.sh` 已加 semver 兜底 `10.0.0`；已对 `fix/v10-full-closure-loop` `workflow_dispatch` `version=10.0.0`（run 29163785828） |
+| ASC Issuer ID（本机 notarytool） | **缺**（Team API Key 需 Issuer UUID；仅在 GitHub Secrets，本机 `mac-signing.env` 未填 Issuer） |
+| Win 热修证据 | `19-win-deliverable-pass.json` |
 
 ## 下一步（运维）
 
-1. 合并 PR #147 → 用 `version=10.0.0` 重跑 `Release Desktop`
-2. 本机公证：把 `APP_STORE_CONNECT_API_ISSUER_ID` 写入 `FHD/scripts/package/mac-signing.env` 后跑 `setup-mac-signing.sh` + `build-installer.sh 10.0.0 enterprise`
+1. 合并 PR #147（勿再改 `FHD/.github/workflows/`，免 Guard Guards）
+2. 本机公证：把 `APP_STORE_CONNECT_API_ISSUER_ID`（UUID）写入 `mac-signing.env` 后 `setup-mac-signing.sh` + `build-installer.sh 10.0.0 enterprise`
+3. 跟进 CI Release Desktop run `29163785828` 产物与 CDN 上传
