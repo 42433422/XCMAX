@@ -6,6 +6,19 @@ const os = require('node:os')
 const path = require('node:path')
 const { notarize } = require('@electron/notarize')
 
+const NOTARYTOOL_TIMEOUT = (
+  process.env.XCAGI_NOTARYTOOL_TIMEOUT || '45m'
+).trim()
+
+function resolveNotarytoolWrapper() {
+  const wrapper = path.join(__dirname, 'notarytool-timeout.sh')
+  if (!fs.existsSync(wrapper)) {
+    throw new Error(`[notarize] notarytool timeout wrapper missing: ${wrapper}`)
+  }
+  fs.chmodSync(wrapper, 0o755)
+  return wrapper
+}
+
 function resolveApiKeyPath() {
   const explicit = (process.env.APP_STORE_CONNECT_API_KEY_PATH || '').trim()
   if (explicit && fs.existsSync(explicit)) return explicit
@@ -68,10 +81,12 @@ exports.default = async function afterSign(context) {
 
   if (apiKeyPath && apiKeyId && apiIssuer) {
     console.log(`[notarize] notarytool via API key for ${appPath}`)
+    console.log(`[notarize] wait timeout: ${NOTARYTOOL_TIMEOUT}`)
     await withRetry('api-key', () =>
       notarize({
         tool: 'notarytool',
         appPath,
+        notarytoolPath: resolveNotarytoolWrapper(),
         appleApiKey: apiKeyPath,
         appleApiKeyId: apiKeyId,
         appleApiIssuer: apiIssuer,
@@ -83,10 +98,12 @@ exports.default = async function afterSign(context) {
 
   if (appleId && appleIdPassword && teamId) {
     console.log(`[notarize] notarytool via Apple ID for ${appPath}`)
+    console.log(`[notarize] wait timeout: ${NOTARYTOOL_TIMEOUT}`)
     await withRetry('apple-id', () =>
       notarize({
         tool: 'notarytool',
         appPath,
+        notarytoolPath: resolveNotarytoolWrapper(),
         appleId,
         appleIdPassword,
         teamId,

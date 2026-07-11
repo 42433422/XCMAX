@@ -35,7 +35,7 @@ jobs:
           cache: "pip"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22.12.0"
           cache: "npm"
           cache-dependency-path: |
             FHD/frontend/package-lock.json
@@ -86,88 +86,9 @@ jobs:
             FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
             FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
 
-  deploy-windows:
-    needs: [windows]
-    if: success()
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: xcagi-desktop-windows-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/artifacts
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            FHD/scripts/dev
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install cryptography
-        run: pip install --quiet cryptography
-      - name: Sign update metadata (Ed25519)
-        env:
-          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
-            exit 1
-          fi
-          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
-          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
-            echo "Signing: $f"
-            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
-          done
-      - name: Upload installers to update server
-        timeout-minutes: 30
-        working-directory: .
-        env:
-          # Unified desktop-upload key: SERVER_SSH_KEY (preferred) with FHD_PUSH_SSH_KEY
-          # fallback so a single SSH secret covers both desktop + CVM tarball pushes.
-          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload Windows installers. Configure secrets or the official download URL will serve stale artifacts."
-              exit 1
-            fi
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload (workflow_dispatch, non-tag)."
-            exit 0
-          fi
-          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${RUNNER_TEMP}/artifacts"
-          raw="${{ github.event.inputs.version || github.ref_name }}"
-          raw="${raw#FHD/}"
-          raw="${raw#v}"
-          raw="${raw#V}"
-          version="${raw:-10.0.0}"
-          for sku in personal enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
-              --include='*.exe' \
-              --include='*.exe.blockmap' \
-              --include='*.dmg' \
-              --include='*.dmg.blockmap' \
-              --include='latest*.yml' \
-              --include='manifest.json' \
-              --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
-          done
-
   macos:
     runs-on: macos-latest
+    timeout-minutes: 75
     strategy:
       fail-fast: false
       matrix:
@@ -191,7 +112,7 @@ jobs:
           cache: "pip"
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22.12.0"
           cache: "npm"
           cache-dependency-path: |
             FHD/frontend/package-lock.json
@@ -259,87 +180,11 @@ jobs:
             FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
             FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
 
-  deploy-macos:
-    needs: [macos]
-    if: success()
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: xcagi-desktop-macos-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/artifacts
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            FHD/scripts/dev
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install cryptography
-        run: pip install --quiet cryptography
-      - name: Sign update metadata (Ed25519)
-        env:
-          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
-            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
-            exit 1
-          fi
-          ARTIFACTS_DIR="${RUNNER_TEMP}/artifacts"
-          find "$ARTIFACTS_DIR" -name 'latest*.yml' -type f -print0 | while IFS= read -r -d '' f; do
-            echo "Signing: $f"
-            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
-          done
-      - name: Upload macOS installers to update server
-        timeout-minutes: 30
-        working-directory: .
-        env:
-          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload macOS installers. Configure secrets or the official download URL will serve stale artifacts."
-              exit 1
-            fi
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload (workflow_dispatch, non-tag)."
-            exit 0
-          fi
-          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
-          BASE="${RUNNER_TEMP}/artifacts"
-          raw="${{ github.event.inputs.version || github.ref_name }}"
-          raw="${raw#FHD/}"
-          raw="${raw#v}"
-          raw="${raw#V}"
-          version="${raw:-10.0.0}"
-          for sku in personal enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
-              --include='*.exe' \
-              --include='*.exe.blockmap' \
-              --include='*.dmg' \
-              --include='*.dmg.blockmap' \
-              --include='latest*.yml' \
-              --include='manifest.json' \
-              --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
-          done
-
   generate-manifest:
     needs: [windows, macos]
-    if: always() && needs.windows.result == 'success'
+    # Never publish a partial desktop release. The old eager Windows deploy could
+    # replace installers hours before the all-platform manifest was generated.
+    if: always() && needs.windows.result == 'success' && needs.macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -351,6 +196,26 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Sign all update metadata (Ed25519)
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required for release metadata signing."
+            exit 1
+          fi
+          pip install --quiet cryptography
+          count=0
+          while IFS= read -r -d '' f; do
+            echo "Signing: $f"
+            python "${GITHUB_WORKSPACE}/FHD/scripts/dev/sign_update_metadata.py" "$f"
+            count=$((count + 1))
+          done < <(find "${RUNNER_TEMP}/artifacts" -name 'latest*.yml' -type f -print0)
+          if [ "$count" -lt 4 ]; then
+            echo "::error::Expected signed update metadata for personal/enterprise on Windows/macOS; found $count files."
+            exit 1
+          fi
       - name: Reconstruct release directory from artifacts
         run: |
           set -euo pipefail
@@ -393,41 +258,47 @@ jobs:
           path: |
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
-      - name: Push manifest to CVM (both download paths)
+      - name: Publish installers first, then manifests atomically
+        timeout-minutes: 30
         working-directory: .
         env:
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::error::Tag release requires SSH secret to publish manifest.json"
-              exit 1
-            fi
-            echo "::notice::Skipping manifest upload (no SSH secret, non-tag)."
-            exit 0
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY is required to publish a desktop release."
+            exit 1
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           mkdir -p ~/.ssh
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
           version="${raw:-10.0.0}"
-          # Auto-update path: /var/www/update/releases/stable/manifest.json
-          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/update/releases/stable/manifest.json"
-          # Official download path: /var/www/xcagi-v{version}/manifest.json
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}"
-          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/xcagi-v${version}/manifest.json"
-          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/download-release.json" "root@${HOST}:/var/www/xcagi-v${version}/download-release.json"
-          # Also sync /var/www/update/releases/stable/{sku}/ so official download path can serve same physical files
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Invalid release version: $version"
+            exit 1
+          fi
+          # Publish payloads to both URL trees before changing any manifest. rsync
+          # --delay-updates keeps each SKU's visible transition as small as possible.
           for sku in personal enterprise; do
             src_dir="$(find "${RUNNER_TEMP}/artifacts" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
-            if [ -d "$src_dir" ]; then
-              ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}/$sku"
+            if [ ! -d "$src_dir" ]; then
+              echo "::error::Missing reconstructed artifact directory for $sku"
+              exit 1
+            fi
+            if ! find "$src_dir" -maxdepth 1 -type f -name '*.exe' -print -quit | grep -q . || \
+               ! find "$src_dir" -maxdepth 1 -type f -name '*.dmg' -print -quit | grep -q .; then
+              echo "::error::Incomplete $sku payload: both Windows EXE and macOS DMG are required."
+              exit 1
+            fi
+            for dest in "/var/www/update/releases/stable/$sku" "/var/www/xcagi-v${version}/$sku"; do
+              ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '$dest'"
               rsync -avz --timeout=120 \
+                --delay-updates \
                 --include='*/' \
                 --include='*.exe' \
                 --include='*.exe.blockmap' \
@@ -435,10 +306,19 @@ jobs:
                 --include='*.dmg.blockmap' \
                 --include='latest*.yml' \
                 --exclude='*' \
-                -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"
-            fi
+                -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:$dest/"
+            done
           done
-          echo "Manifest and installers pushed to both download paths"
+          # Manifests are the commit point: upload to unique temporary names and
+          # rename only after every installer and platform metadata file is present.
+          run_key="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          for root in "/var/www/update/releases/stable" "/var/www/xcagi-v${version}"; do
+            scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:$root/.manifest.json.$run_key"
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" "mv '$root/.manifest.json.$run_key' '$root/manifest.json'"
+          done
+          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/download-release.json" "root@${HOST}:/var/www/xcagi-v${version}/.download-release.json.$run_key"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mv '/var/www/xcagi-v${version}/.download-release.json.$run_key' '/var/www/xcagi-v${version}/download-release.json'"
+          echo "Installers and manifests published consistently to both download paths"
 
   verify-download:
     needs: [generate-manifest]
@@ -453,7 +333,7 @@ jobs:
       - name: Verify download URLs (HTTP 200 + SHA256 + size)
         run: |
           set -euo pipefail
-          bash FHD/scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+          bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
 
   github-release:
     needs: [windows, macos, verify-download]
