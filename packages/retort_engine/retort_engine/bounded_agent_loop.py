@@ -24,11 +24,14 @@ def run_bounded_agent_loop(
     repeat_limit: int = 3,
     trajectory_dir: str | Path | None = None,
     run_id: str = "",
+    command_runner: Callable[[list[str]], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Execute, audit and persist a bounded agent trajectory.
 
     The loop combines mini-SWE-agent's explicit budgets/trajectory with
     OpenHands' separate goal judge and repetitive-action stuck detection.
+    Optional command_runner lets absorbed paths inject process-group-safe
+    subprocess execution (see process_safety.run_command_with_process_group).
     """
     if not objective.strip():
         raise ValueError("objective must not be empty")
@@ -43,7 +46,10 @@ def run_bounded_agent_loop(
             status = "time_limit"
             break
         action = dict(planner(objective, list(trajectory)))
-        observation = dict(executor(action))
+        if command_runner is not None and isinstance(action.get("command"), list):
+            observation = dict(command_runner(list(action["command"])))
+        else:
+            observation = dict(executor(action))
         event = {"step": step, "action": action, "observation": observation}
         trajectory.append(event)
         stuck_kind = detect_stuck_pattern(trajectory, repeat_limit=repeat_limit)
@@ -67,6 +73,7 @@ def run_bounded_agent_loop(
             "final_score": float(verdict.get("score") or 0.0),
             "trajectory_persisted": False,
             "trajectory_path": "",
+            "command_runner_injected": command_runner is not None,
         },
         "verdict": verdict,
         "trajectory": trajectory,

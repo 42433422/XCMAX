@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -161,18 +160,21 @@ def _crash_isolation_probe(payload: dict[str, Any]) -> dict[str, Any]:
     request = payload.get("crash_isolation_probe")
     if not isinstance(request, dict) or not request.get("enabled"):
         return {"enabled": False, "verified": True}
+    from retort_engine.process_safety import run_command_with_process_group
+
     expected_returncode = int(request.get("expected_returncode") or 73)
     command = [sys.executable, "-c", f"import sys; sys.exit({expected_returncode})"]
-    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=10)
+    completed = run_command_with_process_group(command, timeout_sec=10.0)
     return {
         "enabled": True,
         "mode": "expected_child_process_crash",
         "expected_returncode": expected_returncode,
-        "returncode": int(completed.returncode),
+        "returncode": int(completed["returncode"]),
         "worker_survived": True,
-        "stdout_tail": (completed.stdout or "")[-200:],
-        "stderr_tail": (completed.stderr or "")[-200:],
-        "verified": int(completed.returncode) == expected_returncode,
+        "process_group_killed": bool(completed.get("process_group_killed")),
+        "stdout_tail": str(completed.get("stdout_tail") or "")[-200:],
+        "stderr_tail": str(completed.get("stderr_tail") or "")[-200:],
+        "verified": int(completed["returncode"]) == expected_returncode,
     }
 
 
@@ -180,9 +182,22 @@ def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, 
     request = payload.get("patch_closure")
     if not isinstance(request, dict) or not request.get("enabled"):
         return {}
+    from retort_engine.process_safety import probe_timeout_kills_child
+
     project = _patch_closure_project(payload, request, output_path)
     output = output_path.with_suffix(".patch_closure.json")
-    return run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+    result = run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+    safety = probe_timeout_kills_child(timeout_sec=0.4)
+    if isinstance(result, dict):
+        result = {
+            **result,
+            "process_safety": {
+                "runner": "run_command_with_process_group",
+                "process_group_killed": bool(safety.get("process_group_killed")),
+                "verified": bool(safety.get("verified")),
+            },
+        }
+    return result
 
 
 def _patch_closure_project(payload: dict[str, Any], request: dict[str, Any], output_path: Path) -> Path:

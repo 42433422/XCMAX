@@ -5,19 +5,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from retort_engine.repository_intelligence import compare_repository_gaps, task_targets_from_map, build_ranked_repository_map
-
-
-BEHAVIOR_TARGETS = {
-    "repository_intelligence": "retort_engine/repository_intelligence.py",
-    "bounded_execution": "retort_engine/bounded_agent_loop.py",
-    "trajectory_persistence": "retort_engine/bounded_agent_loop.py",
-    "process_safety": "retort_engine/process_safety.py",
-    "goal_audit": "retort_engine/bounded_agent_loop.py",
-    "stuck_detection": "retort_engine/bounded_agent_loop.py",
-    "reproducible_evaluation": "retort_engine/issue_capability_benchmark.py",
-    "verified_task_synthesis": "retort_engine/issue_capability_benchmark.py",
-}
+from retort_engine.repository_intelligence import build_ranked_repository_map, compare_repository_gaps, task_targets_from_map
 
 
 def synthesize_behavior_absorption(
@@ -28,47 +16,40 @@ def synthesize_behavior_absorption(
     tasks: list[dict[str, Any]],
     run_id: str,
 ) -> dict[str, Any]:
-    """Synthesize minimal behavior patches instead of registry-only absorption.
+    """Synthesize a minimal pr_review ranking behavior patch from external signals.
 
-    Writes a provenance-stamped capability bridge module and a behavior test that
-    prove the absorbed frontier layers are importable and wired for the run.
+    Writes absorbed_review_rank_weights.py (read by review_diff) plus a behavior
+    test. Does not generate absorbed_behavior_bridge.py.
     """
     root = Path(project).expanduser().resolve()
     external = Path(external_path).expanduser().resolve()
     gap = compare_repository_gaps(root, external)
     own_map = build_ranked_repository_map(
         root,
-        focus_terms=("absorb", "agent", "benchmark", "oracle", "trajectory"),
+        focus_terms=("review", "diagnostic", "agent", "benchmark", "absorb"),
         max_files=12,
         max_chars=12_000,
     )
     focus_targets = task_targets_from_map(own_map, limit=3)
-    dimensions = sorted(
-        {
-            str(task.get("dimension") or "")
-            for task in tasks
-            if str(task.get("dimension") or "") in BEHAVIOR_TARGETS
-        }
-    )
-    if not dimensions:
-        dimensions = ["repository_intelligence", "bounded_execution", "reproducible_evaluation"]
-    module_rel = "retort_engine/absorbed_behavior_bridge.py"
-    test_rel = "tests/test_absorbed_behavior_bridge.py"
+    signals = _external_review_signals(external, source)
+    weights = _weights_from_signals(signals, source=source, run_id=run_id)
+    module_rel = "retort_engine/absorbed_review_rank_weights.py"
+    test_rel = "tests/test_absorbed_review_rank_weights.py"
     module_path = root / module_rel
     test_path = root / test_rel
+    module_path.parent.mkdir(parents=True, exist_ok=True)
+    module_path.write_text(_weights_module_content(weights), encoding="utf-8")
+    test_path.parent.mkdir(parents=True, exist_ok=True)
+    test_path.write_text(_weights_test_content(weights), encoding="utf-8")
     payload = {
         "run_id": run_id,
         "source": source,
-        "dimensions": dimensions,
+        "signals": signals,
+        "weights": weights,
         "focus_targets": focus_targets,
         "gap_summary": gap["summary"],
-        "target_files": [BEHAVIOR_TARGETS[name] for name in dimensions if name in BEHAVIOR_TARGETS],
-        "external_top_gaps": gap["gaps"][:5],
+        "target_files": ["retort_engine/pr_review.py", module_rel],
     }
-    module_path.parent.mkdir(parents=True, exist_ok=True)
-    module_path.write_text(_bridge_module_content(payload), encoding="utf-8")
-    test_path.parent.mkdir(parents=True, exist_ok=True)
-    test_path.write_text(_bridge_test_content(payload), encoding="utf-8")
     return {
         "status": "synthesized",
         "behavior_source_files": [module_rel],
@@ -76,64 +57,141 @@ def synthesize_behavior_absorption(
         "changed_files": [module_rel, test_rel],
         "focus_targets": focus_targets,
         "gap": gap,
-        "dimensions": dimensions,
+        "dimensions": ["diff_hunk_review", "review_pipeline"],
         "digest": hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest(),
         "payload": payload,
     }
 
 
-def _bridge_module_content(payload: dict[str, Any]) -> str:
-    blob = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    return f'''"""Behavior absorption bridge synthesized by Retort (not registry-only metadata)."""
+def _external_review_signals(external: Path, source: str) -> dict[str, Any]:
+    text_hits = {"reviewdog": 0, "pr-agent": 0, "qodo": 0, "security": 0, "permission": 0}
+    files_scanned = 0
+    if external.is_dir():
+        for path in sorted(external.rglob("*")):
+            if not path.is_file() or path.suffix.lower() not in {".py", ".md", ".yml", ".yaml", ".json", ".ts", ".js", ".go"}:
+                continue
+            if any(part in {".git", "node_modules", ".venv", "__pycache__"} for part in path.parts):
+                continue
+            files_scanned += 1
+            if files_scanned > 80:
+                break
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore").lower()
+            except OSError:
+                continue
+            for token in text_hits:
+                text_hits[token] += text.count(token)
+    source_lower = source.lower()
+    for token in text_hits:
+        if token in source_lower:
+            text_hits[token] += 3
+    return {"text_hits": text_hits, "files_scanned": files_scanned, "source": source}
+
+
+def _weights_from_signals(signals: dict[str, Any], *, source: str, run_id: str) -> dict[str, Any]:
+    hits = signals.get("text_hits") if isinstance(signals.get("text_hits"), dict) else {}
+    reviewdog = 20 + min(40, int(hits.get("reviewdog") or 0) * 2)
+    pr_agent = 15 + min(35, int(hits.get("pr-agent") or 0) * 2 + int(hits.get("qodo") or 0) * 2)
+    security = 10 + min(20, int(hits.get("security") or 0) + int(hits.get("permission") or 0))
+    return {
+        "schema_version": 1,
+        "source": source,
+        "run_id": run_id,
+        "external_source_boosts": {
+            "reviewdog": reviewdog,
+            "pr-agent": pr_agent,
+            "qodo": pr_agent,
+        },
+        "rule_token_boosts": {
+            "security": security,
+            "permission": security,
+            "token": security,
+            "secret": security,
+        },
+        "capability_boosts": {
+            "external_diagnostic_ingestion": 10 + min(30, reviewdog // 2),
+            "hunk_semantic_review": 0,
+            "cross_language_transfer": 0,
+        },
+    }
+
+
+def _weights_module_content(weights: dict[str, Any]) -> str:
+    blob = json.dumps(weights, ensure_ascii=False, sort_keys=True)
+    return f'''"""Absorbed review ranking weights that change review_diff behavior.
+
+Synthesized by absorption_synthesizer from external review signals. This is a
+behavior module (not a registry-only bridge): pr_review reads these boosts when
+ranking external diagnostics and capabilities.
+"""
 
 from __future__ import annotations
 
 import json
 from typing import Any
 
-from retort_engine.bounded_agent_loop import detect_stuck_pattern, persist_trajectory, run_bounded_agent_loop
-from retort_engine.issue_capability_benchmark import run_heldout_oracle_suite
-from retort_engine.process_safety import run_command_with_process_group
-from retort_engine.repository_intelligence import build_ranked_repository_map, compare_repository_gaps
-
-ABSORBED_BEHAVIOR_BRIDGE = json.loads({json.dumps(blob)})
+ABSORBED_REVIEW_RANK_WEIGHTS: dict[str, Any] = json.loads({json.dumps(blob)})
 
 
-def absorbed_behavior_plan() -> dict[str, Any]:
-    return dict(ABSORBED_BEHAVIOR_BRIDGE)
+def absorbed_rank_weights() -> dict[str, Any]:
+    return dict(ABSORBED_REVIEW_RANK_WEIGHTS)
 
 
-def verify_absorbed_behavior_imports() -> dict[str, Any]:
-    return {{
-        "run_bounded_agent_loop": callable(run_bounded_agent_loop),
-        "persist_trajectory": callable(persist_trajectory),
-        "detect_stuck_pattern": callable(detect_stuck_pattern),
-        "run_command_with_process_group": callable(run_command_with_process_group),
-        "build_ranked_repository_map": callable(build_ranked_repository_map),
-        "compare_repository_gaps": callable(compare_repository_gaps),
-        "run_heldout_oracle_suite": callable(run_heldout_oracle_suite),
-        "dimensions": list(ABSORBED_BEHAVIOR_BRIDGE.get("dimensions") or []),
-        "focus_targets": list(ABSORBED_BEHAVIOR_BRIDGE.get("focus_targets") or []),
-    }}
+def external_source_boost(source: str, rule_id: str = "") -> int:
+    source_lower = source.lower()
+    rule_lower = rule_id.lower()
+    boost = 0
+    for token, value in (ABSORBED_REVIEW_RANK_WEIGHTS.get("external_source_boosts") or {{}}).items():
+        if str(token).lower() in source_lower:
+            boost += int(value)
+    for token, value in (ABSORBED_REVIEW_RANK_WEIGHTS.get("rule_token_boosts") or {{}}).items():
+        if str(token).lower() in rule_lower:
+            boost += int(value)
+    return boost
+
+
+def capability_rank_boost(capability: str) -> int:
+    boosts = ABSORBED_REVIEW_RANK_WEIGHTS.get("capability_boosts") or {{}}
+    return int(boosts.get(str(capability or ""), 0) or 0)
 '''
 
 
-def _bridge_test_content(payload: dict[str, Any]) -> str:
-    dimensions = payload.get("dimensions") or []
-    focus = payload.get("focus_targets") or []
-    return f'''from retort_engine.absorbed_behavior_bridge import absorbed_behavior_plan, verify_absorbed_behavior_imports
+def _weights_test_content(weights: dict[str, Any]) -> str:
+    reviewdog_boost = int((weights.get("external_source_boosts") or {}).get("reviewdog") or 0)
+    return f'''from retort_engine.absorbed_review_rank_weights import capability_rank_boost, external_source_boost, absorbed_rank_weights
+from retort_engine.pr_review import review_diff
 
 
-def test_absorbed_behavior_bridge_exposes_frontier_layers() -> None:
-    plan = absorbed_behavior_plan()
-    imports = verify_absorbed_behavior_imports()
-    assert plan["run_id"]
-    assert plan["source"]
-    assert imports["run_bounded_agent_loop"] is True
-    assert imports["persist_trajectory"] is True
-    assert imports["run_command_with_process_group"] is True
-    assert imports["compare_repository_gaps"] is True
-    assert imports["run_heldout_oracle_suite"] is True
-    assert set(imports["dimensions"]) == set({dimensions!r})
-    assert len(imports["focus_targets"]) == {len(focus)}
+def test_absorbed_review_rank_weights_change_external_diagnostic_ranking() -> None:
+    weights = absorbed_rank_weights()
+    assert weights["run_id"]
+    assert external_source_boost("reviewdog/reviewdog", "reviewdog:github-token-write-scope") >= {reviewdog_boost}
+    assert capability_rank_boost("external_diagnostic_ingestion") >= 10
+
+    diff = """diff --git a/.github/workflows/reviewdog.yml b/.github/workflows/reviewdog.yml
+--- a/.github/workflows/reviewdog.yml
++++ b/.github/workflows/reviewdog.yml
+@@ -0,0 +1,3 @@
++on: pull_request_target
++permissions:
++  contents: write
+"""
+    result = review_diff(
+        diff,
+        max_comments=6,
+        external_diagnostics=[
+            {{
+                "source_project": "reviewdog/reviewdog",
+                "path": ".github/workflows/reviewdog.yml",
+                "line": 3,
+                "rule_id": "reviewdog:github-token-write-scope",
+                "severity": "error",
+                "message": "write scope on pull_request_target",
+            }}
+        ],
+    )
+    external = [row for row in result["comments"] if row.get("capability") == "external_diagnostic_ingestion"]
+    assert external
+    assert external[0]["external_diagnostic_rank_weight"] >= 55 + {reviewdog_boost}
+    assert result["comments"][0]["capability"] == "external_diagnostic_ingestion"
 '''

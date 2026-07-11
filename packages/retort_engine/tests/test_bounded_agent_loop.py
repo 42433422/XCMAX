@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Any
 
 from retort_engine.bounded_agent_loop import detect_stuck_pattern, load_trajectory, run_bounded_agent_loop
 from retort_engine.issue_capability_benchmark import run_heldout_oracle_suite
@@ -63,6 +64,28 @@ def test_detect_alternating_stuck_pattern() -> None:
         {"action": {"command": "b"}, "observation": {"ok": True}},
     ]
     assert detect_stuck_pattern(trajectory, repeat_limit=2) == "alternating_cycle"
+
+
+def test_bounded_agent_loop_accepts_process_safe_command_runner() -> None:
+    calls: list[list[str]] = []
+
+    def runner(command: list[str]) -> dict[str, Any]:
+        calls.append(command)
+        return {"returncode": 0, "stdout_tail": "ok", "process_group_killed": False}
+
+    result = run_bounded_agent_loop(
+        "use safe runner",
+        planner=lambda _objective, _trajectory: {"command": ["echo", "hi"]},
+        executor=lambda _action: {"should_not": "run"},
+        judge=lambda _objective, _trajectory: {"complete": True, "score": 100},
+        max_steps=2,
+        wall_time_limit_sec=2,
+        command_runner=runner,
+    )
+    assert result["status"] == "complete"
+    assert result["summary"]["command_runner_injected"] is True
+    assert calls == [["echo", "hi"]]
+    assert result["trajectory"][0]["observation"]["returncode"] == 0
 
 
 def test_process_safety_timeout_kills_group() -> None:
