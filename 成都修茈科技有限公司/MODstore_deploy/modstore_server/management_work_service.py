@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hmac
+import json
 import logging
 import os
 import signal
@@ -150,12 +150,12 @@ def _serialize_work_item(row: ManagementWorkItem) -> dict[str, Any]:
 def list_management_employees() -> list[dict[str, Any]]:
     """Return the management-side duty roster SSOT, never store employees."""
 
+    from modstore_server.catalog_store import files_dir
     from modstore_server.duty_employee_registry import duty_employee_records
     from modstore_server.duty_roster import (
         all_planned_employee_ids,
         yuangon_area_for_pkg,
     )
-    from modstore_server.catalog_store import files_dir
     from modstore_server.employee_runtime import (
         MANAGEMENT_PRIMARY_WORK_RESERVED_IDS,
         load_employee_pack,

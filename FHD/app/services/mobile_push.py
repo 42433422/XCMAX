@@ -82,6 +82,83 @@ def ensure_mobile_notification_schema(db: Any) -> None:
         from app.db.models.mobile_device import MobileDeviceToken
         from app.db.models.mobile_notification import MobileNotificationOutbox
 
+        schema_sql = {
+            "mobile_device_tokens": {
+                "add_notification_audience": text(
+                    "ALTER TABLE mobile_device_tokens ADD COLUMN "
+                    "notification_audience VARCHAR(32) NOT NULL DEFAULT 'enterprise'"
+                ),
+                "add_tenant_id": text(
+                    "ALTER TABLE mobile_device_tokens ADD COLUMN "
+                    "tenant_id INTEGER NOT NULL DEFAULT 0"
+                ),
+                "backfill_tenant_all": text(
+                    "UPDATE mobile_device_tokens SET tenant_id = COALESCE("
+                    "(SELECT users.tenant_id FROM users "
+                    "WHERE users.id = mobile_device_tokens.user_id), 0) "
+                    "WHERE 1 = 1"
+                ),
+                "backfill_tenant_null": text(
+                    "UPDATE mobile_device_tokens SET tenant_id = COALESCE("
+                    "(SELECT users.tenant_id FROM users "
+                    "WHERE users.id = mobile_device_tokens.user_id), 0) "
+                    "WHERE tenant_id IS NULL"
+                ),
+                "default_tenant_null": text(
+                    "UPDATE mobile_device_tokens SET tenant_id = 0 "
+                    "WHERE tenant_id IS NULL"
+                ),
+                "create_audience_index": text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_mobile_device_tokens_notification_audience "
+                    "ON mobile_device_tokens (notification_audience)"
+                ),
+                "create_tenant_index": text(
+                    "CREATE INDEX IF NOT EXISTS ix_mobile_device_tokens_tenant_id "
+                    "ON mobile_device_tokens (tenant_id)"
+                ),
+            },
+            "mobile_notification_outbox": {
+                "add_notification_audience": text(
+                    "ALTER TABLE mobile_notification_outbox ADD COLUMN "
+                    "notification_audience VARCHAR(32) NOT NULL DEFAULT 'enterprise'"
+                ),
+                "add_tenant_id": text(
+                    "ALTER TABLE mobile_notification_outbox ADD COLUMN "
+                    "tenant_id INTEGER NOT NULL DEFAULT 0"
+                ),
+                "add_event_id": text(
+                    "ALTER TABLE mobile_notification_outbox ADD COLUMN "
+                    "event_id VARCHAR(256)"
+                ),
+                "backfill_tenant_all": text(
+                    "UPDATE mobile_notification_outbox SET tenant_id = COALESCE("
+                    "(SELECT users.tenant_id FROM users "
+                    "WHERE users.id = mobile_notification_outbox.user_id), 0) "
+                    "WHERE 1 = 1"
+                ),
+                "backfill_tenant_null": text(
+                    "UPDATE mobile_notification_outbox SET tenant_id = COALESCE("
+                    "(SELECT users.tenant_id FROM users "
+                    "WHERE users.id = mobile_notification_outbox.user_id), 0) "
+                    "WHERE tenant_id IS NULL"
+                ),
+                "default_tenant_null": text(
+                    "UPDATE mobile_notification_outbox SET tenant_id = 0 "
+                    "WHERE tenant_id IS NULL"
+                ),
+                "create_audience_index": text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_mobile_notification_outbox_notification_audience "
+                    "ON mobile_notification_outbox (notification_audience)"
+                ),
+                "create_tenant_index": text(
+                    "CREATE INDEX IF NOT EXISTS ix_mobile_notification_outbox_tenant_id "
+                    "ON mobile_notification_outbox (tenant_id)"
+                ),
+            },
+        }
+
         # BEGIN IMMEDIATE serializes schema upgrades across desktop processes.
         # Inspect and mutate through the same connection so a caller rollback
         # cannot leave a cached half-upgraded schema behind.
@@ -97,6 +174,7 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                 models = (MobileDeviceToken, MobileNotificationOutbox)
                 for model in models:
                     table = model.__tablename__
+                    statements = schema_sql[table]
                     if not inspector.has_table(table):
                         model.__table__.create(connection, checkfirst=True)
                         continue
@@ -108,64 +186,44 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                         if index.get("name")
                     }
                     if "notification_audience" not in columns:
-                        connection.execute(
-                            text(
-                                f"ALTER TABLE {table} ADD COLUMN notification_audience "
-                                "VARCHAR(32) NOT NULL DEFAULT 'enterprise'"
-                            )
-                        )
+                        connection.execute(statements["add_notification_audience"])
                     tenant_was_missing = "tenant_id" not in columns
                     if tenant_was_missing:
-                        connection.execute(
-                            text(
-                                f"ALTER TABLE {table} ADD COLUMN tenant_id "
-                                "INTEGER NOT NULL DEFAULT 0"
-                            )
-                        )
+                        connection.execute(statements["add_tenant_id"])
                     if (
                         table == MobileNotificationOutbox.__tablename__
                         and "event_id" not in columns
                     ):
-                        connection.execute(
-                            text(f"ALTER TABLE {table} ADD COLUMN event_id VARCHAR(256)")
-                        )
+                        connection.execute(statements["add_event_id"])
                     tenant_is_nullable = any(
-                        column["name"] == "tenant_id" and bool(column.get("nullable", True))
+                        column["name"] == "tenant_id"
+                        and bool(column.get("nullable", True))
                         for column in column_rows
                     )
                     if tenant_was_missing or tenant_is_nullable:
                         if "tenant_id" in user_columns:
-                            predicate = "1 = 1" if tenant_was_missing else "tenant_id IS NULL"
                             connection.execute(
-                                text(
-                                    f"UPDATE {table} SET tenant_id = COALESCE("
-                                    f"(SELECT users.tenant_id FROM users "
-                                    f"WHERE users.id = {table}.user_id), 0) "
-                                    f"WHERE {predicate}"
-                                )
+                                statements[
+                                    (
+                                        "backfill_tenant_all"
+                                        if tenant_was_missing
+                                        else "backfill_tenant_null"
+                                    )
+                                ]
                             )
                         else:
-                            connection.execute(
-                                text(f"UPDATE {table} SET tenant_id = 0 WHERE tenant_id IS NULL")
-                            )
+                            connection.execute(statements["default_tenant_null"])
                     audience_index = f"ix_{table}_notification_audience"
                     if audience_index not in indexes:
-                        connection.execute(
-                            text(
-                                f"CREATE INDEX IF NOT EXISTS {audience_index} "
-                                f"ON {table} (notification_audience)"
-                            )
-                        )
+                        connection.execute(statements["create_audience_index"])
                     tenant_index = f"ix_{table}_tenant_id"
                     if tenant_index not in indexes:
-                        connection.execute(
-                            text(
-                                f"CREATE INDEX IF NOT EXISTS {tenant_index} ON {table} (tenant_id)"
-                            )
-                        )
+                        connection.execute(statements["create_tenant_index"])
                 outbox_indexes = {
                     str(index["name"])
-                    for index in inspector.get_indexes(MobileNotificationOutbox.__tablename__)
+                    for index in inspector.get_indexes(
+                        MobileNotificationOutbox.__tablename__
+                    )
                     if index.get("name")
                 }
                 outbox_uniques = {
@@ -175,7 +233,10 @@ def ensure_mobile_notification_schema(db: Any) -> None:
                     )
                     if constraint.get("name")
                 }
-                if "uq_mobile_outbox_scope_event" not in outbox_indexes | outbox_uniques:
+                if (
+                    "uq_mobile_outbox_scope_event"
+                    not in outbox_indexes | outbox_uniques
+                ):
                     connection.execute(
                         text(
                             "CREATE UNIQUE INDEX IF NOT EXISTS "
@@ -315,7 +376,8 @@ def _enqueue_outbox(
                     db.query(MobileNotificationOutbox.id)
                     .filter(
                         MobileNotificationOutbox.user_id == int(user_id),
-                        MobileNotificationOutbox.notification_audience == normalized_audience,
+                        MobileNotificationOutbox.notification_audience
+                        == normalized_audience,
                         MobileNotificationOutbox.tenant_id == normalized_tenant,
                         MobileNotificationOutbox.event_id == event_id,
                     )
@@ -345,7 +407,8 @@ def _enqueue_outbox(
                         db.query(MobileNotificationOutbox.id)
                         .filter(
                             MobileNotificationOutbox.user_id == int(user_id),
-                            MobileNotificationOutbox.notification_audience == normalized_audience,
+                            MobileNotificationOutbox.notification_audience
+                            == normalized_audience,
                             MobileNotificationOutbox.tenant_id == normalized_tenant,
                             MobileNotificationOutbox.event_id == event_id,
                         )

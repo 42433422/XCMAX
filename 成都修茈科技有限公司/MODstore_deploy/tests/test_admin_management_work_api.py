@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor
 import json
 import threading
 import time
 import types
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -631,6 +631,7 @@ def test_management_work_watchdog_reminds_pending_decision(tmp_path, monkeypatch
 
 def test_management_worker_executes_and_waits_for_acceptance(tmp_path, monkeypatch):
     _reset_db(tmp_path, monkeypatch)
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         claim_work_item,
         create_work_item,
@@ -639,7 +640,6 @@ def test_management_worker_executes_and_waits_for_acceptance(tmp_path, monkeypat
         request_decision,
         resolve_decision,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     calls = []
 
@@ -750,12 +750,12 @@ def test_acceptance_audit_validator_is_fail_closed() -> None:
 
 def test_incomplete_independent_acceptance_blocks_delivery(tmp_path, monkeypatch):
     _reset_db(tmp_path, monkeypatch)
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         create_work_item,
         dispatch_assigned_work_items,
         get_work_item,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     calls = []
 
@@ -799,12 +799,12 @@ def test_incomplete_independent_acceptance_blocks_delivery(tmp_path, monkeypatch
 
 def test_management_worker_persists_rejected_runtime_evidence(tmp_path, monkeypatch):
     _reset_db(tmp_path, monkeypatch)
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         create_work_item,
         dispatch_assigned_work_items,
         get_work_item,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     rejected_runtime = {
         "ok": False,
@@ -1117,13 +1117,13 @@ def test_cancel_and_reassign_preserve_truthful_lifecycle(tmp_path, monkeypatch):
 
 def test_dispatch_late_success_cannot_override_cancel(tmp_path, monkeypatch):
     _reset_db(tmp_path, monkeypatch)
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         cancel_work_item,
         create_work_item,
         dispatch_assigned_work_items,
         get_work_item,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     item = create_work_item(
         created_by_user_id=None,

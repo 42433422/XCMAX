@@ -402,12 +402,12 @@ def test_fact_required_audit_cannot_pass_on_employee_claim_only():
 
 def test_dispatch_blocks_fake_action_claim_before_llm_receipt(tmp_path, monkeypatch):
     _reset_db(tmp_path, monkeypatch)
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         create_work_item,
         dispatch_assigned_work_items,
         get_work_item,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     calls = []
 
@@ -446,12 +446,12 @@ def test_dispatch_delivers_only_after_file_fact_and_receipt(tmp_path, monkeypatc
     workspace.mkdir()
     artifact = workspace / "deployed.json"
     monkeypatch.setenv("MODSTORE_MANAGEMENT_EVIDENCE_ROOTS", str(workspace))
+    import modstore_server.employee_orchestrator as orchestrator
     from modstore_server.management_work_service import (
         create_work_item,
         dispatch_assigned_work_items,
         get_work_item,
     )
-    import modstore_server.employee_orchestrator as orchestrator
 
     def _run(_task, input_data, **kwargs):
         if kwargs["target_employee_id"] == "delivery-receipt-officer":
