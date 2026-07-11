@@ -1941,7 +1941,8 @@ class TestEmployeeAgentBranches:
         ):
             out = agent.run("task", input_data={})
         assert out["success"] is False
-        assert "disk io" in out["error"]
+        assert out["error"] == "员工执行失败，请稍后重试"
+        assert "disk io" not in out["error"]
         assert out["employee_id"] == "emp-1"
         assert "duration_ms" in out
         assert "executed_at" in out
@@ -1955,7 +1956,8 @@ class TestEmployeeAgentBranches:
         ):
             out = agent.run("task", input_data={})
         assert out["success"] is False
-        assert "bad pack" in out["error"]
+        assert out["error"] == "员工执行失败，请稍后重试"
+        assert "bad pack" not in out["error"]
 
     def test_blocked_result_structure(self) -> None:
         """_blocked_result 返回结构正确。"""
