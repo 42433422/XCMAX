@@ -18,7 +18,8 @@ const MARKET = process.env.MOD_PILOT_MARKET_URL || 'http://127.0.0.1:5176';
 /** API 根（本地 Vite 代理用 MARKET；官网用 https://xiu-ci.com） */
 const MARKET_API = process.env.MOD_PILOT_MARKET_API || MARKET;
 const FHD_WEB = process.env.MOD_PILOT_FHD_URL || 'http://127.0.0.1:5001';
-const FHD_API = process.env.MOD_PILOT_FHD_API || '';
+/** 企业登录直打 API，避免 Vite 冷启动时误判 405/403 */
+const FHD_API = process.env.MOD_PILOT_FHD_API || 'http://127.0.0.1:5000';
 const ADMIN_USER = process.env.MOD_PILOT_ADMIN_USER || process.env.MOD_PILOT_USER || 'testuser';
 const ADMIN_PASS = process.env.MOD_PILOT_ADMIN_PASSWORD || process.env.MOD_PILOT_PASSWORD || 'ModPilot2026!';
 const MERCHANT_USER = process.env.MOD_PILOT_MERCHANT_USER || 'modpilot';
@@ -72,58 +73,72 @@ async function marketLogin(page: import('@playwright/test').Page, redirectPath: 
 }
 
 async function openModStore(page: import('@playwright/test').Page) {
-  await page.goto(`${FHD_WEB}/mod-store`, { waitUntil: 'networkidle', timeout: 90_000 });
-  if (await page.locator('.mod-store, .modstore-primary').first().isVisible({ timeout: 8_000 }).catch(() => false)) {
-    return;
-  }
-  await page.goto(`${FHD_WEB}/ai-ecosystem`, { waitUntil: 'networkidle', timeout: 60_000 });
-  const launcher = page.getByRole('button', { name: /MOD 扩展|扩展市场/i }).first();
-  if (await launcher.isVisible({ timeout: 10_000 }).catch(() => false)) {
+  // 默认 tab=host_foundation 可能空目录；证据页直接进「已安装」
+  const storeUrl = `${FHD_WEB}/mod-store?tab=installed`;
+  await page.goto(storeUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+  const store = page.locator('.mod-store.store-page');
+  if (!(await store.isVisible({ timeout: 20_000 }).catch(() => false))) {
+    await page.goto(`${FHD_WEB}/ai-ecosystem`, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    const launcher = page.locator('[data-tour="ecosystem-launcher-modstore"]').first();
+    await expect(launcher).toBeVisible({ timeout: 20_000 });
     await launcher.click();
-    await page.waitForTimeout(2000);
+    await page.waitForURL(/\/mod-store/, { timeout: 30_000 });
+    await page.goto(storeUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   }
+  await expect(page.locator('.mod-store.store-page')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.store-title')).toContainText('AI 员工市场', { timeout: 30_000 });
 }
 
 async function fhdEnterpriseLogin(page: import('@playwright/test').Page, redirectPath = '/mod-store') {
-  const fhdApi = FHD_API || FHD_WEB.replace(/\/$/, '');
-  const res = await fetch(`${fhdApi}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ username: MERCHANT_USER, password: MERCHANT_PASS, account_kind: 'enterprise' }),
-  });
-  expect(res.ok).toBeTruthy();
-  const body = await res.json();
-  expect(body.success).toBeTruthy();
-  const sessionId = String(body.session_id || '');
-  expect(sessionId).toBeTruthy();
-  const marketToken = String(body.market_access_token || '');
-  const webOrigin = new URL(FHD_WEB).origin;
-  await page.context().addCookies([
-    {
-      name: 'session_id',
-      value: sessionId,
-      url: webOrigin,
-      httpOnly: true,
-      secure: webOrigin.startsWith('https'),
-      sameSite: 'Lax',
+  // 走前端同源代理拿 csrf_token + session_id（与 e2e/helpers.loginBrowserSession 一致）
+  const web = FHD_WEB.replace(/\/$/, '');
+  await page.request.get(`${web}/api/health`, { timeout: 15_000 });
+  const pre = await page.request.storageState();
+  const csrf =
+    pre.cookies.find((c) => c.name === 'csrf_token')?.value ||
+    pre.cookies.find((c) => c.name === 'csrf-token')?.value ||
+    '';
+  const resp = await page.request.post(`${web}/api/auth/login`, {
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
     },
-  ]);
-  await page.goto(FHD_WEB, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    data: { username: MERCHANT_USER, password: MERCHANT_PASS, account_kind: 'enterprise' },
+    timeout: 30_000,
+  });
+  const body = await resp.json().catch(() => ({} as Record<string, unknown>));
+  expect(resp.ok(), `FHD login HTTP ${resp.status()} ${JSON.stringify(body).slice(0, 200)}`).toBeTruthy();
+  expect(body.success, String(body.message || body.error_code || 'login failed')).toBeTruthy();
+  await page.context().addCookies((await page.request.storageState()).cookies);
+
+  const marketToken = String(body.market_access_token || '');
+  await page.goto(web, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await page.evaluate((tok) => {
-    localStorage.setItem('xcagi_platform_shell_mode', '1');
+    // 不要强开 platform shell：冷启动 filter 与守卫时序会导致首跳不稳定
+    localStorage.removeItem('xcagi_platform_shell_mode');
     if (tok) {
-      localStorage.setItem('market_access_token', tok);
+      localStorage.setItem('xcagi_market_access_token', tok);
       localStorage.setItem('modstore_token', tok);
     }
   }, marketToken);
+
+  // 等主壳就绪，再进能力库
+  await page
+    .locator('.app-shell.is-ready, [aria-label="品牌与标题"]')
+    .first()
+    .waitFor({ state: 'visible', timeout: 60_000 })
+    .catch(() => undefined);
+
+  const splash = page.locator('[aria-label*="初始化"], [title*="跳过"], button:has-text("跳过")').first();
+  if (await splash.isVisible({ timeout: 3_000 }).catch(() => false)) {
+    await splash.click();
+  }
+
   if (redirectPath.includes('mod-store')) {
     await openModStore(page);
   } else {
-    await page.goto(`${FHD_WEB}${redirectPath}`, { waitUntil: 'networkidle', timeout: 90_000 });
-  }
-  const splash = page.locator('[aria-label*="初始化"], [title*="跳过"]').first();
-  if (await splash.isVisible({ timeout: 8_000 }).catch(() => false)) {
-    await splash.click();
+    await page.goto(`${web}${redirectPath}`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   }
 }
 
@@ -210,7 +225,8 @@ test('03-payment · 真实 checkout + 沙箱 0.01', async ({ page }) => {
 });
 
 test('04-activated · FHD mod-store installed', async ({ page }) => {
-  const loginRes = await fetch(`${FHD_API || FHD_WEB.replace(/\/$/, '')}/api/auth/login`, {
+  // 探针：API 直连可登录再跑 UI（避免冷启动误 skip）
+  const probe = await fetch(`${FHD_API.replace(/\/$/, '')}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({
@@ -219,22 +235,33 @@ test('04-activated · FHD mod-store installed', async ({ page }) => {
       account_kind: 'enterprise',
     }),
   }).catch(() => null);
-  if (!loginRes?.ok) {
-    test.skip(true, 'FHD 企业商家登录不可用，跳过 mod-store 激活截图');
+  if (!probe?.ok) {
+    const detail = probe ? await probe.text().catch(() => '') : 'network';
+    test.skip(true, `FHD 企业商家登录不可用，跳过 mod-store 激活截图 (${detail.slice(0, 120)})`);
   }
+
   await fhdEnterpriseLogin(page, '/mod-store');
-  const storeRoot = page.locator('.mod-store, .modstore-primary, [data-testid="mod-store"]').first();
-  if (!(await storeRoot.isVisible({ timeout: 30_000 }).catch(() => false))) {
-    test.skip(true, 'mod-store 页面未加载（需企业会话 + mod 路由）');
+  await expect(page).toHaveURL(/\/mod-store/, { timeout: 30_000 });
+  const storeRoot = page.locator('.mod-store.store-page');
+  await expect(storeRoot).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.store-title')).toContainText('AI 员工市场');
+
+  // 「已安装」tab 应直接露出本机已装卡；若仍空则切全部并点安装
+  const installed = page.locator('.store-card--installed, .tag-owned').first();
+  if (!(await installed.isVisible({ timeout: 25_000 }).catch(() => false))) {
+    await page.getByRole('button', { name: '全部商品' }).click().catch(() => undefined);
+    page.once('dialog', (d) => d.accept().catch(() => undefined));
+    const installBtn = page.locator('.store-card').getByRole('button', { name: /^安装$/ }).first();
+    if (await installBtn.isVisible({ timeout: 10_000 }).catch(() => false)) {
+      await installBtn.click();
+    } else {
+      await page.locator('[data-tour="store-one-click-install"]').click({ timeout: 10_000 });
+    }
+    await page.goto(`${FHD_WEB}/mod-store?tab=installed`, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('.store-card--installed, .tag-owned').first()).toBeVisible({
+      timeout: 90_000,
+    });
   }
-  await expect(storeRoot).toBeVisible();
-  await expect(page.getByText(/MOD 扩展/)).toBeVisible({ timeout: 15_000 });
-  const installBtn = page.getByRole('button', { name: /安装|Install/i }).first();
-  if (await installBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await installBtn.click();
-    await page.waitForTimeout(3000);
-  }
-  const installed = page.locator('.installed-badge, .mod-card.installed').first();
-  await expect(installed).toBeVisible({ timeout: 60_000 });
+  await expect(page.getByText('已安装').first()).toBeVisible();
   await shot(page, '04-activated.png');
 });
