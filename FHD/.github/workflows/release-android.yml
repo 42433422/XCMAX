@@ -1,3 +1,4 @@
+# CI SSOT: edit this file, then run: python scripts/dev/publish_ci_workflows_to_root.py
 name: Release Enterprise Mobile
 
 on:
@@ -8,10 +9,6 @@ on:
         required: false
         type: string
         default: "10.0.0"
-      upload_crashlytics_mapping:
-        description: Upload ProGuard mapping to Firebase Crashlytics
-        type: boolean
-        default: false
       harmony_artifact:
         description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
         required: false
@@ -31,61 +28,21 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: mobile-android
+        working-directory: mobile-flutter-poc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - uses: android-actions/setup-android@v3
-      - name: Prepare Google Services config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          else
-            cat > app/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "100000000000",
-              "project_id": "xcagi-ci-placeholder",
-              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
       - name: Resolve release version
         id: release_version
         run: |
           raw="${{ github.event.inputs.version || github.ref_name }}"
-          # For manual runs, default to 10.0.0 to match the project anchor unless the
-          # ref itself looks like a version tag.
           if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
             raw="10.0.0"
           fi
@@ -96,44 +53,36 @@ jobs:
             raw="10.0.0"
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
-      - name: Ensure gradlew executable
-        run: chmod +x ./gradlew
-      - name: Configure release signing
+      - name: Flutter pub get + test
+        run: |
+          flutter pub get
+          flutter test
+      - name: Configure release signing (optional)
         id: signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
             echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::ANDROID_KEYSTORE_BASE64 secret 未配置,release APK 将用 debug key 签名(仅适用于测试,不可用于生产分发)"
+            echo "::warning::ANDROID_KEYSTORE_BASE64 未配置；Flutter release 当前使用 debug 签名（仅测试分发）"
           else
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > signing/xcagi-release.jks
-            chmod 600 signing/xcagi-release.jks
+            mkdir -p android/app
+            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/app/xcagi-release.jks
+            chmod 600 android/app/xcagi-release.jks
             echo "configured=true" >> "${GITHUB_OUTPUT}"
-            echo "已配置正式签名 keystore"
           fi
-      - name: Assemble Release (enterprise only)
+      - name: Flutter build apk (release)
         id: assemble
-        env:
-          XCAGI_ANDROID_KEYSTORE: ${{ steps.signing.outputs.configured == 'true' && 'signing/xcagi-release.jks' || '' }}
-          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          XCAGI_REQUIRE_RELEASE_SIGNING: ${{ steps.signing.outputs.configured == 'true' && '1' || '0' }}
         run: |
-          # 治根:stamp 真实递增 versionCode(构建时间戳),让 OTA 自更新能合法触发。
-          # 之前 versionCode 写死 10、永不递增,是「永久发现新版本」假提示的根因。
-          # versionName 不在此覆盖,守 VERSION.md 的 v10 锚点(build.gradle 默认 10.0.0)。
           VCODE=$(date +%s)
           echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
-          ./gradlew assembleEnterpriseRelease \
-            -PandroidVersionCode="$VCODE" \
-            -PuploadCrashlyticsMapping=${{ github.event.inputs.upload_crashlytics_mapping == true && 'true' || 'false' }} \
-            --no-daemon
+          flutter build apk --release \
+            --build-number="$VCODE" \
+            --build-name="${{ steps.release_version.outputs.version }}"
           {
-            echo "### 📱 Android release versionCode = \`$VCODE\`"
+            echo "### 📱 Flutter Android versionCode = \`$VCODE\`"
             echo ""
-            echo "部署时**必须**把服务器 \`.env\` 设为同一个数,否则装机后仍会无限「发现新版本」:"
+            echo "部署时**必须**把服务器 \`.env\` 设为同一个数:"
             echo '```'
             echo "XCAGI_ANDROID_LATEST_VERSION_CODE=$VCODE"
             echo "XCAGI_ANDROID_MIN_VERSION_CODE=10"
@@ -141,17 +90,19 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Stage mobile package distribution
+        working-directory: ${{ github.workspace }}
         run: |
-          bash ../mobile-harmony/scripts/stage-release-packages.sh \
+          bash FHD/mobile-harmony/scripts/stage-release-packages.sh \
             --version "${{ steps.release_version.outputs.version }}" \
             --android-version "${{ steps.release_version.outputs.version }}" \
+            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" \
             --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
       - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4
         with:
           name: xcagi-enterprise-mobile-release-packages
           path: |
-            FHD/mobile-android/app/build/outputs/apk/enterprise/release/*.apk
+            FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
             release/packages-v${{ steps.release_version.outputs.version }}/enterprise/
             release/packages-v${{ steps.release_version.outputs.version }}/企业版/
             release/XCAGI-Enterprise-Mobile-Packages-v${{ steps.release_version.outputs.version }}.zip
