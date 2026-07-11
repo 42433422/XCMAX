@@ -8,7 +8,7 @@ public sealed class UrlPreset
 
 public sealed class AppSettings
 {
-    private static string NormalizeReleaseVersion(string raw)
+    private static string NormalizeReleaseVersion(string? raw)
     {
         var version = raw?.Trim();
         if (string.IsNullOrWhiteSpace(version))
