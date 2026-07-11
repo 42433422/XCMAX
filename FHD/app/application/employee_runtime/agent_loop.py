@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -85,6 +86,8 @@ def run_employee_agent_loop(
     tools: list[dict[str, Any]] | None = None,
     workspace_root: str | None = None,
     max_iterations: int = _DEFAULT_MAX_ITERATIONS,
+    wall_time_limit_sec: float = 300.0,
+    repeat_limit: int = 3,
     gate: GateFn | None = None,
     model: str | None = None,
 ) -> dict[str, Any]:
@@ -107,6 +110,8 @@ def run_employee_agent_loop(
             "output": "",
             "rounds": 0,
             "tool_calls": [],
+            "trajectory": [],
+            "exit_status": "llm_unavailable",
         }
 
     mdl = model or resolve_chat_model()
@@ -118,8 +123,21 @@ def run_employee_agent_loop(
     ]
 
     tool_trace: list[dict[str, Any]] = []
+    trajectory: list[dict[str, Any]] = []
+    action_fingerprints: list[str] = []
+    started = time.monotonic()
     rounds = 0
     for _ in range(max(1, max_iterations)):
+        if time.monotonic() - started >= max(0.001, wall_time_limit_sec):
+            return {
+                "handler": "agent",
+                "ok": False,
+                "output": "",
+                "rounds": rounds,
+                "tool_calls": tool_trace,
+                "trajectory": trajectory,
+                "exit_status": "wall_time_limit",
+            }
         rounds += 1
         try:
             completion = client.chat.completions.create(
@@ -137,6 +155,8 @@ def run_employee_agent_loop(
                 "output": "",
                 "rounds": rounds,
                 "tool_calls": tool_trace,
+                "trajectory": trajectory,
+                "exit_status": "llm_error",
             }
 
         msg = completion.choices[0].message
@@ -148,6 +168,14 @@ def run_employee_agent_loop(
                 "tool_calls": _format_tool_calls(tcs) if tcs else None,
             }
         )
+        trajectory.append(
+            {
+                "round": rounds,
+                "event": "assistant",
+                "content": str(msg.content or "")[:2000],
+                "tool_calls": _format_tool_calls(tcs) if tcs else [],
+            }
+        )
 
         if not tcs:
             text = str(msg.content or "").strip()
@@ -157,6 +185,8 @@ def run_employee_agent_loop(
                 "output": text,
                 "rounds": rounds,
                 "tool_calls": tool_trace,
+                "trajectory": trajectory,
+                "exit_status": "completed",
             }
 
         for tc in tcs:
@@ -164,6 +194,19 @@ def run_employee_agent_loop(
             tool_name = str(getattr(fn, "name", "") or "").strip()
             args = _parse_args(str(getattr(fn, "arguments", "") or ""))
             tc_id = str(getattr(tc, "id", "") or "")
+            fingerprint = json.dumps({"tool": tool_name, "args": args}, ensure_ascii=False, sort_keys=True)
+            action_fingerprints.append(fingerprint)
+            if repeat_limit >= 2 and len(action_fingerprints) >= repeat_limit and len(set(action_fingerprints[-repeat_limit:])) == 1:
+                return {
+                    "handler": "agent",
+                    "ok": False,
+                    "output": "",
+                    "rounds": rounds,
+                    "tool_calls": tool_trace,
+                    "trajectory": trajectory,
+                    "exit_status": "stuck_repeating_action",
+                    "repeat_count": repeat_limit,
+                }
 
             if gate is not None:
                 try:
@@ -173,6 +216,7 @@ def run_employee_agent_loop(
                 if not verdict.get("ok", True):
                     reason = str(verdict.get("reason") or "blocked by employee gate")
                     tool_trace.append({"tool": tool_name, "blocked": True, "reason": reason})
+                    trajectory.append({"round": rounds, "event": "tool", "tool": tool_name, "args": args, "blocked": True, "result": reason})
                     messages.append(
                         {
                             "role": "tool",
@@ -194,6 +238,7 @@ def run_employee_agent_loop(
                     {"success": False, "error": str(exc)[:300]}, ensure_ascii=False
                 )
             tool_trace.append({"tool": tool_name, "args": args})
+            trajectory.append({"round": rounds, "event": "tool", "tool": tool_name, "args": args, "blocked": False, "result": str(result_raw)[:2000]})
             messages.append(
                 {"role": "tool", "tool_call_id": tc_id, "content": str(result_raw)[:8000]}
             )
@@ -205,6 +250,8 @@ def run_employee_agent_loop(
         "rounds": rounds,
         "tool_calls": tool_trace,
         "max_iterations_reached": True,
+        "trajectory": trajectory,
+        "exit_status": "max_iterations",
     }
 
 
