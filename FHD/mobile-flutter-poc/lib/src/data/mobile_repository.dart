@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import '../api/mobile_api.dart';
 import '../api/mobile_models.dart';
@@ -8,24 +9,31 @@ import '../policy/android_runtime_policy.dart';
 import '../policy/avatar_policy.dart';
 import '../policy/pinned_ids.dart';
 import 'ai_employee_profile.dart';
-import 'deployment_modes_ssot.dart';
 import 'duty_roster_ssot.dart';
-import 'employee_ssot_contacts.dart';
+import 'employee_pending_question.dart';
+import '../im/im_websocket_client.dart';
 
 const _badgeInstalledColor = 0xFF3370FF;
 const _xcmaxDefaultWorkspaceRoot = '/Users/a4243342/Desktop/XCMAX';
 
 class MobileRepository {
-  MobileRepository({MobileApiClient? client})
-      : _client = client ?? MobileApiClient();
+  MobileRepository({MobileApiClient? client, ImWebSocketClient? imWebSocket})
+      : _client = client ?? MobileApiClient(),
+        _imWebSocket = imWebSocket ?? ImWebSocketClient();
 
   static const customerServiceRequestType = 'mobile_ai_customer_service';
 
   final MobileApiClient _client;
-
-  Map<String, Object?>? _cachedEmployeeSsotPayload;
+  final ImWebSocketClient _imWebSocket;
+  StreamSubscription<Map<String, Object?>>? _imWebSocketSubscription;
 
   MobileApiClient get client => _client;
+  bool get imWebSocketConnected => _imWebSocket.connected;
+  Stream<Map<String, Object?>> get imWebSocketEvents => _imWebSocket.events;
+
+  /// See [MobileApiClient.preferCloudIfLanUnreachable].
+  Future<bool> preferCloudIfLanUnreachable() =>
+      _client.preferCloudIfLanUnreachable();
 
   Future<MobileMeData> loadMe() async {
     final response = await _client.me();
@@ -122,27 +130,15 @@ class MobileRepository {
 
   Future<List<ModInfo>> loadModInfos({bool adminMode = false}) async {
     if (adminMode) {
-      final ssotPayload = await _loadEmployeeSsotPayload();
       final response = await _client.adminHome();
       if (!response.success) {
-        if (ssotPayload != null &&
-            platformEmployeeContactsFromSsotPayload(ssotPayload).isNotEmpty) {
-          final mods = [adminDutyModFromSsotContacts(ssotPayload)];
-          await _cacheModInfos(mods);
-          return mods;
-        }
         throw MobileRepositoryException(
           response.message.ifEmpty('移动数据加载失败'),
         );
       }
 
       final home = response.data ?? AdminMobileHomeData.empty();
-      final mods = [
-        _normalizeAdminDutyMod(
-          home.toAdminModInfo(),
-          ssotPayload: ssotPayload,
-        ),
-      ];
+      final mods = [_normalizeAdminDutyMod(home.toAdminModInfo())];
       await _cacheModInfos(mods);
       return mods;
     }
@@ -164,22 +160,6 @@ class MobileRepository {
     }
   }
 
-  Future<Map<String, Object?>?> _loadEmployeeSsotPayload({bool refresh = false}) async {
-    if (_cachedEmployeeSsotPayload != null && !refresh) {
-      return _cachedEmployeeSsotPayload;
-    }
-    try {
-      final response = await _client.employeeSsot();
-      if (response.success && response.data != null) {
-        _cachedEmployeeSsotPayload = response.data;
-        return response.data;
-      }
-    } catch (_) {
-      /* fallback to admin home / cached mods */
-    }
-    return _cachedEmployeeSsotPayload;
-  }
-
   Future<List<ModInfo>> _loadCachedModInfos({required bool adminMode}) async {
     final session = await _client.loadSession();
     final mods = session.cachedModInfos
@@ -187,14 +167,7 @@ class MobileRepository {
         .where((mod) => mod.id.trim().isNotEmpty || mod.name.trim().isNotEmpty)
         .toList(growable: false);
     if (adminMode) {
-      return mods
-          .map(
-            (mod) => _normalizeAdminDutyMod(
-              mod,
-              ssotPayload: _cachedEmployeeSsotPayload,
-            ),
-          )
-          .toList(growable: false);
+      return mods.map(_normalizeAdminDutyMod).toList(growable: false);
     }
     return mods;
   }
@@ -202,11 +175,8 @@ class MobileRepository {
   Future<void> _cacheModInfos(List<ModInfo> mods) async {
     if (mods.isEmpty) return;
     try {
-      final session = await _client.loadSession();
-      await _client.sessionStore.save(
-        session.copyWith(
-          cachedModInfos: mods.map(_modInfoToJson).toList(growable: false),
-        ),
+      await _client.cacheModInfos(
+        mods.map(_modInfoToCacheJson).toList(growable: false),
       );
     } catch (_) {
       // Match Android: cache write failure must not block the live UI.
@@ -522,36 +492,48 @@ class MobileRepository {
   }
 
   Future<void> exchangePairingCode(String raw) async {
-    final parsed = parsePairingPayload(raw);
+    final text = raw.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('无法识别配对码');
+    }
+    final parsed = parsePairingPayload(text);
     if (parsed != null && parsed.version >= 3 && parsed.relayId.isNotEmpty) {
       throw const MobileRepositoryException(
-        '云中继绑定已改为账号鉴权，请刷新电脑端内网二维码后绑定',
+        '云中继绑定请先登录账号，登录后将自动完成绑定',
       );
     }
-    final baseUrl = parsed == null
-        ? ''
-        : parsed.apiBaseUrl.isNotEmpty
-            ? parsed.apiBaseUrl
-            : _pairingBaseUrl(parsed.host, parsed.port);
-    final code = parsed?.code.trim() ?? '';
-    final nonce = parsed == null
-        ? raw.trim()
-        : parsed.version >= 2 && code.isEmpty
-            ? parsed.nonce.ifEmpty(parsed.token)
-            : parsed.nonce;
+
+    final code = _pairingExchangeCode(parsed, text);
+    final nonce = _pairingExchangeNonce(parsed, text, code);
+    if (code.isEmpty && nonce.isEmpty) {
+      throw const MobileRepositoryException('无法识别配对码，请刷新电脑端二维码');
+    }
+
+    final baseUrl = await _resolvePairingExchangeBaseUrl(parsed, text);
+    if (baseUrl.isEmpty) {
+      throw const MobileRepositoryException(
+        '未找到电脑，请确认手机与电脑在同一 WiFi，并在管理端刷新设备码后重试',
+      );
+    }
+
+    await _primePairingLanSession(baseUrl);
     final response = await _client.exchangePairing(
       nonce: nonce,
       code: code,
       baseUrl: baseUrl,
     );
     if (!response.success) {
-      throw MobileRepositoryException(response.message.ifEmpty('设备配对失败'));
+      throw MobileRepositoryException('设备配对失败[${response.message}]');
     }
+    final hostWithPort = _hostPortFromApiBaseUrl(
+      _readStringMap(response.data, const ['api_base_url', 'base_url']),
+    ).ifEmpty(parsed?.hostWithPort ?? '');
     await _client.persistPairingSession(
       response.data,
-      hostWithPort: parsed?.hostWithPort ?? '',
+      hostWithPort: hostWithPort,
       clearRelayDesktop: true,
       setupComplete: true,
+      preserveActiveAuth: true,
     );
     final relayId = _relayIdFromBindingData(response.data);
     if (relayId.isNotEmpty) {
@@ -561,6 +543,133 @@ class MobileRepository {
         // Android leaves relay binding cleared when account relay bind fails.
       }
     }
+  }
+
+  Future<void> _primePairingLanSession(String baseUrl) async {
+    final hostWithPort = _hostPortFromApiBaseUrl(baseUrl);
+    if (hostWithPort.isEmpty) return;
+    final session = await _client.loadSession();
+    await _client.saveSession(
+      session.copyWith(
+        fhdHost: hostWithPort,
+        serverMode: 'lan',
+      ),
+    );
+  }
+
+  Future<String> _resolvePairingExchangeBaseUrl(
+    PairingPayload? parsed,
+    String raw,
+  ) async {
+    if (parsed != null) {
+      final fromPayload = parsed.apiBaseUrl.isNotEmpty
+          ? _ensureTrailingSlash(parsed.apiBaseUrl)
+          : _pairingLanBaseUrl(parsed.host, parsed.port);
+      if (fromPayload.isNotEmpty) return fromPayload;
+    }
+
+    final session = await _client.loadSession();
+    final fromSession = _pairingLanBaseUrlFromHostPort(session.fhdHost);
+    if (fromSession.isNotEmpty) return fromSession;
+
+    final shortCode = _pairingExchangeCode(parsed, raw);
+    if (RegExp(r'^\d{6}$').hasMatch(shortCode)) {
+      return _discoverLanBaseUrlForShortCode(shortCode);
+    }
+    if (raw.startsWith('{')) {
+      throw const MobileRepositoryException(
+        '二维码内容无法识别，请在电脑端刷新二维码后重试',
+      );
+    }
+    return '';
+  }
+
+  static const _lanPairingProbeTimeout = Duration(milliseconds: 900);
+
+  Future<String> _discoverLanBaseUrlForShortCode(String code) async {
+    final cleanCode = code.trim();
+    if (!RegExp(r'^\d{6}$').hasMatch(cleanCode)) return '';
+    final session = await _client.loadSession();
+    final candidates = await _lanPairingCandidateBaseUrls(session.fhdHost);
+    for (final baseUrl in candidates) {
+      try {
+        final lookup = await _client
+            .pairingLookup(
+              code: cleanCode,
+              baseUrl: baseUrl,
+            )
+            .timeout(_lanPairingProbeTimeout);
+        if (lookup.success) return baseUrl;
+      } on TimeoutException {
+        // 继续尝试下一个候选
+      } catch (_) {
+        // 继续尝试下一个候选
+      }
+    }
+    return '';
+  }
+
+  Future<List<String>> _lanPairingCandidateBaseUrls(String configuredHost) async {
+    const lanPorts = [5011, 5100, 17500, 5001, 5000];
+    final hostPorts = <String>[];
+    final configured = _normalizePairingHost(configuredHost);
+    if (configured.isNotEmpty) {
+      if (configured.contains(':')) {
+        hostPorts.add(configured);
+      } else {
+        for (final port in lanPorts) {
+          hostPorts.add('$configured:$port');
+        }
+      }
+    }
+
+    try {
+      final ifaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      for (final iface in ifaces) {
+        for (final addr in iface.addresses) {
+          final ip = addr.address;
+          if (ip.startsWith('127.') || ip.startsWith('169.254.')) continue;
+          final parts = ip.split('.');
+          if (parts.length != 4) continue;
+          final prefix = '${parts[0]}.${parts[1]}.${parts[2]}';
+          for (final hostOctet in ['1', '2', '100']) {
+            for (final port in lanPorts) {
+              hostPorts.add('$prefix.$hostOctet:$port');
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // 网络接口枚举失败时忽略，仅依赖已配置 host
+    }
+
+    final seen = <String>{};
+    final bases = <String>[];
+    for (final hostPort in hostPorts) {
+      final base = _pairingLanBaseUrlFromHostPort(hostPort);
+      if (base.isNotEmpty && seen.add(base)) {
+        bases.add(base);
+      }
+    }
+    return bases;
+  }
+
+  String _pairingExchangeCode(PairingPayload? parsed, String raw) {
+    if (parsed != null) return parsed.code.trim();
+    if (RegExp(r'^\d{6}$').hasMatch(raw)) return raw;
+    return '';
+  }
+
+  String _pairingExchangeNonce(PairingPayload? parsed, String raw, String code) {
+    if (parsed != null) {
+      if (parsed.version >= 2 && code.isEmpty) {
+        return parsed.nonce.ifEmpty(parsed.token);
+      }
+      return parsed.nonce;
+    }
+    if (code.isNotEmpty) return '';
+    if (raw.length >= 8) return raw;
+    return '';
   }
 
   Future<void> confirmAuthQr({
@@ -731,20 +840,10 @@ class MobileRepository {
     }
 
     if (tool != null) {
-      final localBaseUrl = await _superEmployeeLanBaseUrl();
-      if (localBaseUrl.isNotEmpty) {
-        try {
-          final reply = await _postSuperEmployeeMessage(
-            tool,
-            text,
-            baseUrl: localBaseUrl,
-          );
-          return _assistantMessage(conversation.id, reply);
-        } catch (_) {
-          // LAN is a speed path. If it is unavailable, keep the cloud path alive.
-        }
-      }
-      final reply = await _postSuperEmployeeMessage(tool, text);
+      final reply = await streamMessage(
+        conversation: conversation,
+        body: text,
+      );
       return _assistantMessage(conversation.id, reply);
     }
 
@@ -774,6 +873,7 @@ class MobileRepository {
     int userId = 0,
     List<ChatMessage> recentMessages = const [],
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     final tool = conversation.type.superTool;
@@ -790,11 +890,21 @@ class MobileRepository {
       );
       final localBaseUrl = await _superEmployeeLanBaseUrl();
       if (localBaseUrl.isNotEmpty) {
+        // 第 1 级：LAN SSE 流式（逐 token 输出，体验最佳）
         try {
-          final reply = await _postSuperEmployeeMessage(
+          final reply = await _client.streamSuperEmployeeMessage(
             tool,
             text,
             baseUrl: localBaseUrl,
+            onToken: (token) {
+              if (isCancelled != null && isCancelled()) return;
+              onToken?.call(token);
+            },
+            onStatus: (status) {
+              if (isCancelled != null && isCancelled()) return;
+              onToken?.call('\n$status\n');
+            },
+            isCancelled: isCancelled,
           );
           _throwIfCancelled(isCancelled);
           await _cacheChatMessage(
@@ -803,19 +913,42 @@ class MobileRepository {
             body: reply,
           );
           return reply;
-        } catch (_) {
+        } catch (sseError) {
           _throwIfCancelled(isCancelled);
+          // 第 2 级：LAN 直答（一次性返回，SSE 不可用时的同城 fallback）
+          try {
+            final reply = await _postSuperEmployeeMessage(
+              tool,
+              text,
+              baseUrl: localBaseUrl,
+            );
+            _throwIfCancelled(isCancelled);
+            await _cacheChatMessage(
+              conversation.id,
+              role: ChatRole.assistant,
+              body: reply,
+            );
+            return reply;
+          } catch (e) {
+            _throwIfCancelled(isCancelled);
+            final sink = onToken;
+            if (sink != null) {
+              sink('〔局域网连接失败，正在切换到云端中继〕\n');
+            }
+          }
         }
       }
       final relayKind = relayKindForConversation(conversation.id);
       final relayId = await _relayIdForSuperEmployeeDispatch();
       if (relayKind != null && relayId.isNotEmpty) {
+        // 第 3 级：relay 中继轮询（跨网络，状态轮询模拟流式）
         final reply = await _streamRelaySuperEmployeeTask(
           relayId: relayId,
           relayKind: relayKind,
           conversationId: conversation.id,
           message: text,
           onToken: onToken,
+          onStatus: onStatus,
           isCancelled: isCancelled,
         );
         _throwIfCancelled(isCancelled);
@@ -892,6 +1025,7 @@ class MobileRepository {
   Future<String?> resumeRelayTask({
     required String conversationId,
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     final taskId = await _inflightRelayTask(conversationId);
@@ -900,12 +1034,19 @@ class MobileRepository {
       return null;
     }
     final kind = relayKindForConversation(conversationId);
+    final toolLabel = toolLabelForRelayKind(kind ?? 'codex.invoke');
+    onStatus?.call(RelayTaskProgress(
+      taskId: taskId,
+      status: 'resuming',
+      toolLabel: toolLabel,
+    ));
     onToken?.call('思考中...');
     final reply = await _pollRelayTask(
       taskId: taskId,
-      toolLabel: toolLabelForRelayKind(kind ?? 'codex.invoke'),
+      toolLabel: toolLabel,
       conversationId: conversationId,
       onToken: onToken,
+      onStatus: onStatus,
       isCancelled: isCancelled,
     );
     _throwIfCancelled(isCancelled);
@@ -946,8 +1087,7 @@ class MobileRepository {
     } else {
       cache[id] = rows;
     }
-    await _client.sessionStore
-        .save(session.copyWith(cachedChatMessages: cache));
+    await _client.saveSession(session.copyWith(cachedChatMessages: cache));
   }
 
   Future<int> _loadCurrentUserId() async {
@@ -967,7 +1107,14 @@ class MobileRepository {
     if (cleanBranch.isEmpty) {
       throw const MobileRepositoryException('缺少分支名');
     }
-    if (!const {'git.merge', 'git.diff', 'git.discard'}.contains(cleanOp)) {
+    if (!const {
+      'git.merge',
+      'git.diff',
+      'git.discard',
+      'git.diff.structured',
+      'git.log',
+      'git.cancel',
+    }.contains(cleanOp)) {
       throw MobileRepositoryException('未知 git 操作：$cleanOp');
     }
 
@@ -1020,6 +1167,193 @@ class MobileRepository {
     );
   }
 
+  /// 结构化 diff：返回 {files, base, branch, total_additions, total_deletions}。
+  Future<Map<String, Object?>> runGitDiffStructured({
+    required String branch,
+  }) async {
+    final relayId = await _relayIdForSuperEmployeeDispatch();
+    if (relayId.isEmpty) {
+      throw const MobileRepositoryException('未绑定电脑工具，无法查看改动');
+    }
+    final created = await _client.relayCreateTask(
+      relayId: relayId,
+      kind: 'git.diff.structured',
+      payload: {
+        'branch': branch.trim(),
+        'workspace_root': _xcmaxDefaultWorkspaceRoot,
+        'context': _superEmployeeRelayContext(),
+      },
+    );
+    if (!created.success) {
+      throw MobileRepositoryException(created.message.ifEmpty('操作创建失败'));
+    }
+    final task = _objectMap(created.data?['task']);
+    final taskId = _stringField(task, 'task_id');
+    if (taskId.isEmpty) {
+      throw const MobileRepositoryException('操作缺少 task_id');
+    }
+    for (var attempt = 0; attempt < 150; attempt += 1) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final status = await _client.relayTaskStatus(taskId);
+      final taskMap = _objectMap(status.data?['task']);
+      final current = taskMap.isNotEmpty
+          ? taskMap
+          : status.data ?? const <String, Object?>{};
+      final currentStatus = _stringField(current, 'status');
+      if (currentStatus == 'done' || currentStatus == 'completed') {
+        final result = _objectMap(current['result']);
+        final structured = _objectMap(result['structured']);
+        if (structured.isNotEmpty) return structured;
+        return {
+          'files': <Map<String, Object?>>[],
+          'base': '',
+          'branch': branch.trim(),
+        };
+      }
+      if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
+        throw MobileRepositoryException(
+          _relayTaskResultText(current).ifEmpty('查看改动失败'),
+        );
+      }
+    }
+    throw const MobileRepositoryException('查看改动超时，请稍后重试');
+  }
+
+  /// 分支 commit 列表：返回 {commits, base, branch}。
+  Future<Map<String, Object?>> runGitLog({
+    required String branch,
+    int limit = 10,
+  }) async {
+    final relayId = await _relayIdForSuperEmployeeDispatch();
+    if (relayId.isEmpty) {
+      throw const MobileRepositoryException('未绑定电脑工具，无法查看提交');
+    }
+    final created = await _client.relayCreateTask(
+      relayId: relayId,
+      kind: 'git.log',
+      payload: {
+        'branch': branch.trim(),
+        'limit': limit,
+        'workspace_root': _xcmaxDefaultWorkspaceRoot,
+        'context': _superEmployeeRelayContext(),
+      },
+    );
+    if (!created.success) {
+      throw MobileRepositoryException(created.message.ifEmpty('操作创建失败'));
+    }
+    final task = _objectMap(created.data?['task']);
+    final taskId = _stringField(task, 'task_id');
+    if (taskId.isEmpty) {
+      throw const MobileRepositoryException('操作缺少 task_id');
+    }
+    for (var attempt = 0; attempt < 150; attempt += 1) {
+      await Future<void>.delayed(const Duration(seconds: 2));
+      final status = await _client.relayTaskStatus(taskId);
+      final taskMap = _objectMap(status.data?['task']);
+      final current = taskMap.isNotEmpty
+          ? taskMap
+          : status.data ?? const <String, Object?>{};
+      final currentStatus = _stringField(current, 'status');
+      if (currentStatus == 'done' || currentStatus == 'completed') {
+        final result = _objectMap(current['result']);
+        final commits = result['commits'];
+        return {
+          'commits': commits is List ? commits : <Map<String, Object?>>[],
+          'base': _stringField(result, 'base'),
+          'branch': _stringField(result, 'branch').ifEmpty(branch.trim()),
+        };
+      }
+      if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
+        throw MobileRepositoryException(
+          _relayTaskResultText(current).ifEmpty('查看提交失败'),
+        );
+      }
+    }
+    throw const MobileRepositoryException('查看提交超时，请稍后重试');
+  }
+
+  /// 取消正在执行的 relay 任务。
+  Future<bool> cancelRelayTask(String taskId) async {
+    if (taskId.trim().isEmpty) return false;
+    final response = await _client.relayCancelTask(taskId.trim());
+    if (!response.success) return false;
+    final task = _objectMap(response.data?['task']);
+    return _stringField(task, 'status') == 'cancelled';
+  }
+
+  /// 从 relay task result 读取工具调用记录（dev-loop 时间线）。
+  Future<List<Map<String, Object?>>> loadToolCalls(String taskId) async {
+    if (taskId.trim().isEmpty) return const <Map<String, Object?>>[];
+    final status = await _client.relayTaskStatus(taskId.trim());
+    final taskMap = _objectMap(status.data?['task']);
+    if (taskMap.isEmpty) return const <Map<String, Object?>>[];
+    final result = _objectMap(taskMap['result']);
+    final codex = _objectMap(result['codex']);
+    final raw = codex['tool_calls'] ?? result['tool_calls'];
+    if (raw is! List) return const <Map<String, Object?>>[];
+    return raw
+        .whereType<Map<String, Object?>>()
+        .map((e) => Map<String, Object?>.from(e))
+        .toList(growable: false);
+  }
+
+  /// 从 assistant 消息正文解析 dev-loop 工具调用记录。
+  /// 与后端 `_extract_tool_calls` 的正则保持一致，避免无 task_id 时无法回顾。
+  List<Map<String, Object?>> parseToolCallsFromBody(
+    String body, {
+    String toolLabel = '超级员工',
+  }) {
+    final text = body.trim();
+    if (text.isEmpty || !text.contains('闭环结果')) {
+      return const <Map<String, Object?>>[];
+    }
+    final calls = <Map<String, Object?>>[];
+    final branchMatch = RegExp(r'分支[：:]\s*(\S+)').firstMatch(text);
+    if (branchMatch != null) {
+      final branch = branchMatch.group(1) ?? '';
+      calls.add({
+        'action': 'create_branch',
+        'icon': 'branch',
+        'label': '创建分支 $branch',
+        'detail': branch,
+      });
+    }
+    final verifyMatch =
+        RegExp(r'验证[：:]\s*(通过|未通过)[（(]([^)）]*)').firstMatch(text);
+    if (verifyMatch != null) {
+      final ok = verifyMatch.group(1) == '通过';
+      final detail = verifyMatch.group(2) ?? '';
+      calls.add({
+        'action': 'verify',
+        'icon': 'check',
+        'label': '验证${ok ? '通过' : '未通过'}',
+        'detail': detail.length > 200 ? detail.substring(0, 200) : detail,
+        'success': ok,
+      });
+    }
+    final pushMatch = RegExp(r'推送[：:]\s*(.+?)(?:\n|$)').firstMatch(text);
+    if (pushMatch != null) {
+      final raw = (pushMatch.group(1) ?? '').trim();
+      final pushText = raw.length > 200 ? raw.substring(0, 200) : raw;
+      calls.add({
+        'action': 'push',
+        'icon': 'upload',
+        'label': '推送分支',
+        'detail': pushText,
+        'success': pushText.contains('成功') || pushText.contains('已推送'),
+      });
+    }
+    if (calls.isNotEmpty) {
+      calls.insert(0, {
+        'action': 'cli_run',
+        'icon': 'terminal',
+        'label': '$toolLabel CLI 执行',
+        'detail': '调用无头 agent 修改代码',
+      });
+    }
+    return calls;
+  }
+
   Future<String> _postSuperEmployeeMessage(
     String tool,
     String text, {
@@ -1038,21 +1372,19 @@ class MobileRepository {
   }
 
   Future<String> _superEmployeeLanBaseUrl() async {
-    if (!DeploymentModesSsot.mobileConnectionPrefersLan('lan_direct')) {
-      return '';
-    }
     final session = await _client.loadSession();
-    final mode = session.serverMode.trim().toLowerCase();
-    final host = session.fhdHost.trim();
-    if (mode == 'lan' && host.isNotEmpty) {
-      return AndroidServerRouter(
-        fhdHost: host,
-        mode: AndroidServerMode.lan,
-      ).fhdBaseUrl();
+    if (session.serverMode.trim().toLowerCase() != 'lan') {
+      return '';
     }
     final localBase = session.localBaseUrl.trim();
     if (localBase.isNotEmpty) return _ensureTrailingSlash(localBase);
-    return '';
+    final host = session.fhdHost.trim();
+    if (host.isEmpty) return '';
+    // 后端 loopback 监听 17500 时手机不可达，需改用 vite proxy 端口 5011。
+    return AndroidServerRouter(
+      fhdHost: host,
+      mode: AndroidServerMode.lan,
+    ).lanReachableBaseUrl();
   }
 
   Future<String> _streamRelaySuperEmployeeTask({
@@ -1061,6 +1393,7 @@ class MobileRepository {
     required String conversationId,
     required String message,
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     final created = await _client.relayCreateTask(
@@ -1081,12 +1414,19 @@ class MobileRepository {
       throw const MobileRepositoryException('中继任务缺少 task_id');
     }
     await _setInflightRelayTask(conversationId, taskId);
+    final toolLabel = toolLabelForRelayKind(relayKind);
+    onStatus?.call(RelayTaskProgress(
+      taskId: taskId,
+      status: 'queued',
+      toolLabel: toolLabel,
+    ));
     onToken?.call('思考中...');
     return _pollRelayTask(
       taskId: taskId,
-      toolLabel: toolLabelForRelayKind(relayKind),
+      toolLabel: toolLabel,
       conversationId: conversationId,
       onToken: onToken,
+      onStatus: onStatus,
       isCancelled: isCancelled,
     );
   }
@@ -1096,6 +1436,7 @@ class MobileRepository {
     required String toolLabel,
     required String conversationId,
     void Function(String token)? onToken,
+    void Function(RelayTaskProgress progress)? onStatus,
     bool Function()? isCancelled,
   }) async {
     var lastStatus = '';
@@ -1111,6 +1452,11 @@ class MobileRepository {
       final currentStatus = _stringField(current, 'status');
       _throwIfCancelled(isCancelled);
       if (currentStatus.isNotEmpty && currentStatus != lastStatus) {
+        onStatus?.call(RelayTaskProgress(
+          taskId: taskId,
+          status: currentStatus,
+          toolLabel: toolLabel,
+        ));
         switch (currentStatus) {
           case 'running':
           case 'assigned':
@@ -1124,10 +1470,20 @@ class MobileRepository {
       }
       if (currentStatus == 'done' || currentStatus == 'completed') {
         await _setInflightRelayTask(conversationId, '');
+        onStatus?.call(RelayTaskProgress(
+          taskId: taskId,
+          status: 'completed',
+          toolLabel: toolLabel,
+        ));
         return _relayTaskResultText(current).ifEmpty('电脑工具已完成任务。');
       }
       if (const {'failed', 'blocked', 'cancelled'}.contains(currentStatus)) {
         await _setInflightRelayTask(conversationId, '');
+        onStatus?.call(RelayTaskProgress(
+          taskId: taskId,
+          status: currentStatus,
+          toolLabel: toolLabel,
+        ));
         throw MobileRepositoryException(
           _relayTaskResultText(current).ifEmpty('电脑工具执行失败'),
         );
@@ -1340,6 +1696,70 @@ class MobileRepository {
     await _client.rejectApproval(id: id, approverId: 0, reason: reason);
   }
 
+  Future<List<EmployeePendingQuestion>> loadEmployeePendingQuestions({
+    int limit = 100,
+    bool includeHistory = false,
+    String? employeeId,
+  }) async {
+    final response = await _client.employeePendingQuestions(
+      limit: limit,
+      includeHistory: includeHistory,
+      employeeId: employeeId,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(
+        response.message.ifEmpty('加载员工提问失败'),
+      );
+    }
+    final data = response.data ?? const <String, Object?>{};
+    final rows = _firstObjectList([data['items']]);
+    return rows.map(EmployeePendingQuestion.fromJson).toList(growable: false);
+  }
+
+  Future<void> answerEmployeePendingQuestion({
+    required int questionId,
+    required String answer,
+  }) async {
+    final text = answer.trim();
+    if (text.isEmpty) {
+      throw const MobileRepositoryException('回答不能为空');
+    }
+    final response = await _client.answerEmployeePendingQuestion(
+      questionId: questionId,
+      answer: text,
+    );
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('回答失败'));
+    }
+  }
+
+  Future<void> connectImWebSocket() async {
+    final session = await _client.loadSession();
+    final sessionId = session.sessionId.trim();
+    if (sessionId.isEmpty) return;
+    final url = await _imWebSocketUrl(sessionId);
+    _imWebSocketSubscription ??= _imWebSocket.events.listen((_) {});
+    _imWebSocket.connect(sessionId: sessionId, url: url);
+  }
+
+  void disconnectImWebSocket() {
+    _imWebSocket.disconnect();
+  }
+
+  Future<String> _imWebSocketUrl(String sessionId) async {
+    final session = await _client.loadSession();
+    final host = session.fhdHost.trim();
+    final mode = session.serverMode.trim().toLowerCase() == 'lan'
+        ? AndroidServerMode.lan
+        : AndroidServerMode.cloud;
+    return AndroidServerRouter(
+      fhdHost: host.isNotEmpty ? host : '127.0.0.1',
+      mode: mode,
+      enterpriseFhdBaseUrlRaw: MobileAndroidBuild.enterpriseFhdBaseUrl,
+      modstoreBaseUrlRaw: MobileAndroidBuild.modstoreBaseUrl,
+    ).fhdImWebSocketUrl(sessionId);
+  }
+
   Future<int> openImDirect(int peerUserId) async {
     if (peerUserId <= 0) {
       throw const MobileRepositoryException('请输入有效用户 ID');
@@ -1495,9 +1915,6 @@ class MobileRepository {
     bool adminMode = true,
     bool enterpriseMode = true,
   }) {
-    final ssotItems = adminMode
-        ? adminDutyConversationItemsFromSsotPayload(_cachedEmployeeSsotPayload)
-        : const <ConversationItem>[];
     return _sortConversationItems([
       ..._fixedConversationItems(
         showCodex: enterpriseMode || adminMode,
@@ -1507,24 +1924,55 @@ class MobileRepository {
         showCustomerService: enterpriseMode && !adminMode,
         states: _emptyConversationStates,
       ),
-      if (adminMode) ...ssotItems,
+      if (adminMode) ...adminDutyRosterConversationItems(),
     ]);
   }
 
   Future<String> _relayIdForSuperEmployeeDispatch() async {
+    final session = await _client.loadSession();
+    final storedRelayId = session.relayDesktopId.trim();
     try {
       final response = await _client.relayDesktops();
-      if (!response.success) return '';
+      if (!response.success) return storedRelayId;
       final rows = _relayDesktopRows(response.data)
           .where(_relayDesktopIsDispatchable)
           .toList(growable: false);
+      // API 正常但账号下尚无 paired 桌面：不要误用 build 注入/历史 relay_id 去排队。
       if (rows.isEmpty) return '';
-      rows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
+
+      // 账号下可能累积大量历史 paired 桌面；只派给近期在线（last_seen≤5min）的执行端，
+      // 避免任务进死队列后误回落云端 CLI。
+      if (storedRelayId.isNotEmpty) {
+        for (final row in rows) {
+          if (_stringField(row, 'relay_id') == storedRelayId &&
+              _relayDesktopIsFresh(row)) {
+            return storedRelayId;
+          }
+        }
+      }
+
+      final freshRows =
+          rows.where(_relayDesktopIsFresh).toList(growable: false);
+      if (freshRows.isEmpty) {
+        throw const MobileRepositoryException(
+          '当前没有在线的电脑执行端。请在本机 Mac 打开 XCAGI 并保持桌面云中继运行后再试。',
+        );
+      }
+
+      freshRows.sort((a, b) => _relayDesktopSortKey(a).compareTo(
             _relayDesktopSortKey(b),
           ));
-      return _stringField(rows.last, 'relay_id');
+      final latest = freshRows.last;
+      final latestRelayId = _stringField(latest, 'relay_id');
+      if (latestRelayId.isEmpty) return '';
+      if (latestRelayId != storedRelayId) {
+        await _client.persistRelayBindingMeta(latestRelayId, latest);
+      }
+      return latestRelayId;
+    } on MobileRepositoryException {
+      rethrow;
     } catch (_) {
-      return '';
+      return storedRelayId;
     }
   }
 
@@ -1547,8 +1995,7 @@ class MobileRepository {
     } else {
       tasks[id] = cleanTaskId;
     }
-    await _client.sessionStore
-        .save(session.copyWith(inflightRelayTasks: tasks));
+    await _client.saveSession(session.copyWith(inflightRelayTasks: tasks));
   }
 
   Future<bool> _clearInflightIfRelayChanged(
@@ -1612,7 +2059,7 @@ class MobileRepository {
       preview: _conversationPreviewForRole(role, text),
       timestampMs: timestampMs,
     ).toJson();
-    await _client.sessionStore.save(
+    await _client.saveSession(
       session.copyWith(
         cachedChatMessages: cache,
         conversationListStates: states,
@@ -1818,7 +2265,8 @@ List<ModInfo> _parseModInfos(Map<String, Object?> body) {
   return rows.map(ModInfo.fromJson).toList(growable: false);
 }
 
-Map<String, Object?> _modInfoToJson(ModInfo mod) {
+/// Session cache only needs list-row fields; avoid bloating xcagi_session.json.
+Map<String, Object?> _modInfoToCacheJson(ModInfo mod) {
   return {
     'id': mod.id,
     'name': mod.name,
@@ -1832,54 +2280,28 @@ Map<String, Object?> _modInfoToJson(ModInfo mod) {
             'id': mod.industry!.id,
             'name': mod.industry!.name,
           },
-    'avatar_url': mod.avatarUrl,
-    'frontend_menu': mod.frontendMenu.map(_modMenuItemToJson).toList(
-          growable: false,
-        ),
-    'workflow_employees':
-        mod.workflowEmployees.map(_workflowEmployeeToJson).toList(
-              growable: false,
-            ),
-  }..removeWhere((_, value) => value == null);
-}
-
-Map<String, Object?> _modMenuItemToJson(ModMenuItem item) {
-  return {
-    'id': item.id,
-    'label': item.label,
-    'icon': item.icon,
-    'path': item.path,
-  };
-}
-
-Map<String, Object?> _workflowEmployeeToJson(WorkflowEmployeeInfo employee) {
-  return {
-    'id': employee.id,
-    'label': employee.label,
-    'panel_title': employee.panelTitle,
-    'panel_summary': employee.panelSummary,
-    'api_base_path': employee.apiBasePath,
-    'phone_channel': employee.phoneChannel,
-    'workflow_placeholder': employee.workflowPlaceholder,
-    'profile_source': employee.profileSource,
-    'market_connected': employee.marketConnected,
-    'market_pkg_id': employee.marketPkgId,
-    'market_name': employee.marketName,
-    'market_description': employee.marketDescription,
-    'market_version': employee.marketVersion,
-    'market_author': employee.marketAuthor,
-    'market_industry': employee.marketIndustry,
-    'market_material_category': employee.marketMaterialCategory,
-    'market_license_scope': employee.marketLicenseScope,
-    'market_security_level': employee.marketSecurityLevel,
-    'market_avatar': employee.marketAvatar,
+    'workflow_employees': mod.workflowEmployees
+        .map(
+          (employee) => {
+            'id': employee.id,
+            'label': employee.label,
+            'panel_title': employee.panelTitle,
+            'panel_summary': employee.panelSummary,
+            'api_base_path': employee.apiBasePath,
+            'phone_channel': employee.phoneChannel,
+            'profile_source': employee.profileSource,
+          },
+        )
+        .toList(growable: false),
   }..removeWhere((_, value) => value == null);
 }
 
 bool _relayDesktopIsDispatchable(Map<String, Object?> row) {
   final relayId = _stringField(row, 'relay_id');
   final status = _stringField(row, 'status').toLowerCase();
-  return relayId.isNotEmpty && status == 'paired' && _relayDesktopIsFresh(row);
+  // 与 Kotlin 一致：账号下 status=paired 即可派工；last_seen 只影响排序，不阻断中继。
+  // 否则桌面轮询稍停就会误走云端 /admin/*-super-employee（服务器 CLI），而非 cursor.invoke 本机执行。
+  return relayId.isNotEmpty && status == 'paired';
 }
 
 bool _relayDesktopIsFresh(Map<String, Object?> row) {
@@ -2265,10 +2687,38 @@ String _firstNonBlank(List<String> values) {
   return '';
 }
 
-String _pairingBaseUrl(String host, int port) {
+String _pairingLanBaseUrl(String host, int port) {
   final hostWithPort = _compactPairingHostPort(host, port);
   if (hostWithPort.isEmpty) return '';
-  return 'http://$hostWithPort/fhd-api';
+  return 'http://$hostWithPort/';
+}
+
+String _pairingLanBaseUrlFromHostPort(String hostWithPort) {
+  final normalized = _normalizePairingHost(hostWithPort);
+  if (normalized.isEmpty) return '';
+  final parts = normalized.split(':');
+  final host = parts.first.trim();
+  if (host.isEmpty) return '';
+  int port = 0;
+  if (parts.length > 1) {
+    port = (int.tryParse(parts.last.trim()) ?? 0).takeIfValidPort();
+  }
+  final cleanPort = port > 0 ? port : MobileAndroidBuild.fhdDefaultPort;
+  return 'http://$host:$cleanPort/';
+}
+
+String _hostPortFromApiBaseUrl(String raw) {
+  final (host, port) = _pairingHostPortFromApiBase(raw);
+  return _compactPairingHostPort(host, port);
+}
+
+String _readStringMap(Map<String, Object?>? data, List<String> keys) {
+  if (data == null || data.isEmpty) return '';
+  for (final key in keys) {
+    final value = data[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty) return value;
+  }
+  return '';
 }
 
 String _compactPairingHostPort(String host, int port) {
@@ -2777,61 +3227,14 @@ String _friendlyTimestampFromMillis(int timestampMs) {
   return '${local.month}/${local.day}';
 }
 
-ModInfo _normalizeAdminDutyMod(
-  ModInfo mod, {
-  Map<String, Object?>? ssotPayload,
-}) {
+ModInfo _normalizeAdminDutyMod(ModInfo mod) {
   if (mod.id != adminDutyModId && mod.id != 'admin-duty') return mod;
 
-  final ssotContacts = platformEmployeeContactsFromSsotPayload(ssotPayload);
   final remoteById = <String, WorkflowEmployeeInfo>{};
   for (final employee in mod.workflowEmployees) {
     final id = employee.id.trim();
     if (id.isEmpty || remoteById.containsKey(id)) continue;
     remoteById[id] = employee;
-  }
-
-  if (ssotContacts.isNotEmpty) {
-    final employees = ssotContacts.map((contact) {
-      final remote = remoteById[contact.employeeId];
-      final base = workflowEmployeeFromSsotContact(contact);
-      if (remote == null) return base;
-      return WorkflowEmployeeInfo(
-        id: base.id,
-        label: base.label.ifEmpty(remote.label),
-        panelTitle: base.panelTitle.ifEmpty(remote.panelTitle),
-        panelSummary: base.panelSummary.ifEmpty(remote.panelSummary),
-        apiBasePath: base.apiBasePath.ifEmpty(remote.apiBasePath),
-        phoneChannel: base.phoneChannel.ifEmpty(remote.phoneChannel),
-        workflowPlaceholder: base.workflowPlaceholder,
-        profileSource: base.profileSource.ifEmpty(remote.profileSource),
-        marketConnected: remote.marketConnected,
-        marketPkgId: remote.marketPkgId,
-        marketName: remote.marketName,
-        marketDescription: remote.marketDescription,
-        marketVersion: remote.marketVersion,
-        marketAuthor: remote.marketAuthor,
-        marketIndustry: remote.marketIndustry,
-        marketMaterialCategory: remote.marketMaterialCategory,
-        marketLicenseScope: remote.marketLicenseScope,
-        marketSecurityLevel: remote.marketSecurityLevel,
-        marketAvatar: remote.marketAvatar,
-      );
-    }).toList(growable: false);
-
-    return ModInfo(
-      id: adminDutyModId,
-      name: mod.name,
-      version: mod.version,
-      description:
-          '${employees.length} 位管理端编制 AI 员工与 ${mod.frontendMenu.length} 个管理功能入口',
-      author: mod.author,
-      primary: mod.primary,
-      industry: mod.industry,
-      avatarUrl: mod.avatarUrl,
-      frontendMenu: mod.frontendMenu,
-      workflowEmployees: employees,
-    );
   }
 
   final employees = adminDutyRosterEmployees.map((fallback) {
@@ -3366,6 +3769,19 @@ class MobileRepositoryException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// Relay 任务进度快照，供 UI 显示长任务状态。
+class RelayTaskProgress {
+  const RelayTaskProgress({
+    required this.taskId,
+    required this.status,
+    required this.toolLabel,
+  });
+
+  final String taskId;
+  final String status;
+  final String toolLabel;
 }
 
 class _MobileRepositoryCancelled implements Exception {

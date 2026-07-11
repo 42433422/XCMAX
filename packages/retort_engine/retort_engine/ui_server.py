@@ -94,6 +94,12 @@ class RetortUIServer:
                         self._json(outer.service.similar_project_loop(payload))
                     elif self.path == "/api/absorption-saturation":
                         self._json(outer.service.absorption_saturation_report(payload))
+                    elif self.path == "/api/self-bootstrap-plan":
+                        self._json(outer.service.self_bootstrap_plan(payload))
+                    elif self.path == "/api/self-depth-report":
+                        self._json(outer.service.self_depth_report(payload))
+                    elif self.path == "/api/external-improvement-gate":
+                        self._json(outer.service.external_improvement_gate(payload))
                     elif self.path == "/api/absorption-lights":
                         self._json(outer.service.absorption_lights(payload))
                     elif self.path == "/api/competitor-runtime-comparison":

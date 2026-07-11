@@ -39,7 +39,9 @@ flutter run
 ## 发版
 
 - **Android APK / iOS IPA**：由 Flutter 工程产出（`flutter build apk` / `flutter build ipa`）。
-- 根仓 CI：`fhd-release-android.yml` / `fhd-release-ios.yml` 在 Flutter 发版链就绪前仍可能指向归档原生目录；切换发版 SSOT 须同 PR 更新 workflow 与 [`VERSION.md`](../../VERSION.md) 锚点说明。
+- 根仓 CI：**主线** `fhd-ci-mobile-flutter.yml` / `fhd-release-android.yml` / `android-build.yml` 已切到 `FHD/mobile-flutter-poc`。
+- 归档：`fhd-ci-mobile-android.yml` 仍监听 `mobile-android/**`，但构建同样走 Flutter（防止旧路径漏测）。
+- 改 workflow 后执行：`python scripts/dev/publish_ci_workflows_to_root.py`。
 
 ## 相关文档
 

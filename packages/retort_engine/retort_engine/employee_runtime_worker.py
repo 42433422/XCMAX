@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,12 +21,16 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     process_boundary = _process_boundary(payload, payload_path, output_path)
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     gates_passed = bool(payload.get("gates_passed"))
+    synthesis = _apply_behavior_synthesis(payload, output_path)
     worker_review = _write_worker_review_artifact(payload, output_path)
     patch_closure = _run_patch_closure(payload, output_path)
     patch_closure_ready = not patch_closure or patch_closure.get("status") == "ready"
+    synthesis_ready = synthesis.get("status") in {"synthesized", "skipped_no_external", "not_requested"}
     task_results = []
     for task in tasks:
-        completed = gates_passed and patch_closure_ready
+        completed = gates_passed and patch_closure_ready and synthesis_ready and (
+            synthesis.get("status") != "failed"
+        )
         task_results.append(
             {
                 "task_id": str(task.get("task_id") or ""),
@@ -50,6 +53,9 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"employee_patch_closure_status={patch_closure.get('status', '') if patch_closure else 'not_requested'}",
                     f"employee_patch_closure_success_case={((patch_closure.get('summary') or {}).get('success_case_verified') if patch_closure else '')}",
                     f"employee_patch_closure_rollback_case={((patch_closure.get('summary') or {}).get('failure_case_rolled_back') if patch_closure else '')}",
+                    f"behavior_synthesis_status={synthesis.get('status')}",
+                    f"behavior_synthesis_files={','.join(str(item) for item in synthesis.get('changed_files') or [])}",
+                    "employee_execution_mode=independent_synthesis_runtime",
                 ],
                 "score_after": {"employee_execution_integration": 95.0 if completed else 70.0, "feedback_loop_closure": 95.0 if completed else 70.0},
             }
@@ -68,6 +74,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
             "process_boundary": process_boundary,
             "worker_review": worker_review,
             "employee_patch_closure": patch_closure,
+            "behavior_synthesis": synthesis,
         },
         "results": task_results,
     }
@@ -86,6 +93,34 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                 )
             )
     return result
+
+
+def _apply_behavior_synthesis(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+    request = payload.get("behavior_synthesis")
+    if request is False:
+        return {"status": "not_requested", "changed_files": []}
+    project = Path(str(payload.get("project") or payload.get("own_project") or "")).expanduser()
+    external = Path(str(payload.get("external_path") or "")).expanduser()
+    if not str(project) or not project.is_dir():
+        project = (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent).resolve()
+    if not external.is_dir():
+        return {"status": "skipped_no_external", "changed_files": []}
+    from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
+
+    try:
+        result = synthesize_behavior_absorption(
+            project,
+            source=str(payload.get("source") or ""),
+            external_path=external,
+            tasks=[item for item in payload.get("tasks") or [] if isinstance(item, dict)],
+            run_id=str(payload.get("run_id") or "employee-runtime"),
+        )
+        artifact = output_path.with_suffix(".behavior_synthesis.json")
+        artifact.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        result["artifact"] = str(artifact)
+        return result
+    except Exception as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
+        return {"status": "failed", "error": str(exc), "changed_files": []}
 
 
 def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: Path) -> dict[str, Any]:
@@ -125,18 +160,21 @@ def _crash_isolation_probe(payload: dict[str, Any]) -> dict[str, Any]:
     request = payload.get("crash_isolation_probe")
     if not isinstance(request, dict) or not request.get("enabled"):
         return {"enabled": False, "verified": True}
+    from retort_engine.process_safety import run_command_with_process_group
+
     expected_returncode = int(request.get("expected_returncode") or 73)
     command = [sys.executable, "-c", f"import sys; sys.exit({expected_returncode})"]
-    completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False, timeout=10)
+    completed = run_command_with_process_group(command, timeout_sec=10.0)
     return {
         "enabled": True,
         "mode": "expected_child_process_crash",
         "expected_returncode": expected_returncode,
-        "returncode": int(completed.returncode),
+        "returncode": int(completed["returncode"]),
         "worker_survived": True,
-        "stdout_tail": (completed.stdout or "")[-200:],
-        "stderr_tail": (completed.stderr or "")[-200:],
-        "verified": int(completed.returncode) == expected_returncode,
+        "process_group_killed": bool(completed.get("process_group_killed")),
+        "stdout_tail": str(completed.get("stdout_tail") or "")[-200:],
+        "stderr_tail": str(completed.get("stderr_tail") or "")[-200:],
+        "verified": int(completed["returncode"]) == expected_returncode,
     }
 
 
@@ -144,9 +182,22 @@ def _run_patch_closure(payload: dict[str, Any], output_path: Path) -> dict[str, 
     request = payload.get("patch_closure")
     if not isinstance(request, dict) or not request.get("enabled"):
         return {}
+    from retort_engine.process_safety import probe_timeout_kills_child
+
     project = _patch_closure_project(payload, request, output_path)
     output = output_path.with_suffix(".patch_closure.json")
-    return run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+    result = run_employee_patch_closure_suite(project, output=output, run_id=str(payload.get("run_id") or "employee-runtime"))
+    safety = probe_timeout_kills_child(timeout_sec=0.4)
+    if isinstance(result, dict):
+        result = {
+            **result,
+            "process_safety": {
+                "runner": "run_command_with_process_group",
+                "process_group_killed": bool(safety.get("process_group_killed")),
+                "verified": bool(safety.get("verified")),
+            },
+        }
+    return result
 
 
 def _patch_closure_project(payload: dict[str, Any], request: dict[str, Any], output_path: Path) -> Path:

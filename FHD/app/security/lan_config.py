@@ -99,6 +99,7 @@ _DEFAULT_BYPASS = (
     "/api/mobile/v1/health",
     "/api/mobile/v1/host/discover-hint",
     "/api/mobile/v1/pairing/issue",
+    "/api/mobile/v1/pairing/lookup",
     "/api/mobile/v1/pairing/exchange",
     "/api/ai/chat/stream",
     # 控制台镜像 / 诊断（CSRF 仍可能约束 POST；此处仅 LAN 许可证门禁放行）

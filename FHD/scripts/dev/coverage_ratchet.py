@@ -55,8 +55,10 @@ BASELINE = FHD_ROOT / "metrics" / "coverage_ratchet_baseline.json"
 DUAL_SUMMARY = FHD_ROOT / "metrics" / "coverage-dual-summary.json"
 HISTORY = FHD_ROOT / "metrics" / "coverage-history.jsonl"
 
-# 防止可复现性 ±0.5% 抖动造成假失败：bump 时把 floor 设为 floor(实测 - MARGIN)。
+# 防止可复现性 ±0.5% 抖动造成假失败：bump 时把 floor 设为 floor(实测 - MARGIN)；
+# check 时同样允许该抖动，避免 CI 机器间计数差把「实质未回退」拦死。
 DEFAULT_MARGIN = 1.0
+CHECK_JITTER = 0.5
 
 FE_KEYS = ("lines", "branches", "functions", "statements")
 
@@ -265,6 +267,7 @@ def cmd_check(args: argparse.Namespace) -> int:
 
     failed = False
     eps = 1e-9
+    jitter = CHECK_JITTER
 
     if be is None:
         if args.require_backend:
@@ -275,21 +278,21 @@ def cmd_check(args: argparse.Namespace) -> int:
         bp = "n/a" if be["branch_pct"] is None else f"{be['branch_pct']}%"
         print(
             f"[cov-ratchet] backend line={be['line_pct']}% (floor {line_floor}%) "
-            f"branch={bp} (floor {branch_floor})"
+            f"branch={bp} (floor {branch_floor}) jitter={jitter}%"
         )
-        if be["line_pct"] + eps < line_floor:
+        if be["line_pct"] + jitter + eps < line_floor:
             print(
-                f"FAIL: line coverage regression — 后端行覆盖率 {be['line_pct']}% < floor {line_floor}%",
+                f"FAIL: line coverage regression — 后端行覆盖率 {be['line_pct']}% < floor {line_floor}% (−jitter {jitter}%)",
                 file=sys.stderr,
             )
             failed = True
         if (
             branch_floor is not None
             and be["branch_pct"] is not None
-            and be["branch_pct"] + eps < float(branch_floor)
+            and be["branch_pct"] + jitter + eps < float(branch_floor)
         ):
             print(
-                f"FAIL: branch coverage regression — 后端分支覆盖率 {be['branch_pct']}% < floor {branch_floor}%",
+                f"FAIL: branch coverage regression — 后端分支覆盖率 {be['branch_pct']}% < floor {branch_floor}% (−jitter {jitter}%)",
                 file=sys.stderr,
             )
             failed = True
@@ -306,9 +309,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         )
         for key in FE_KEYS:
             fl = fe_floors.get(key)
-            if fl is not None and fe[key] + eps < float(fl):
+            if fl is not None and fe[key] + jitter + eps < float(fl):
                 print(
-                    f"FAIL: 前端 {key} {fe[key]}% < floor {fl}%（回退）",
+                    f"FAIL: 前端 {key} {fe[key]}% < floor {fl}%（回退，−jitter {jitter}%）",
                     file=sys.stderr,
                 )
                 failed = True

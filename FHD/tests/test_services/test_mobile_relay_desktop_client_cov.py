@@ -139,7 +139,7 @@ class TestPublicPayloadFromConfig:
         config = {"relay_id": "r1", "pairing_code": "p1", "exp": future_exp}
         result = _public_payload_from_config(config)
         assert result is not None
-        assert "qr_json" in result
+        assert "relay_id" in result
 
     def test_payload_includes_expires_at(self):
         future_exp = int(time.time()) + 9999

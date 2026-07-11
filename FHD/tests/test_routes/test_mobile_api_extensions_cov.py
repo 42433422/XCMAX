@@ -600,7 +600,6 @@ class TestMobilePairingIssue:
             "relay_id": "r1",
             "pairing_code": "CODE99",
             "relay_base_url": "https://relay.example",
-            "qr_json": {"a": 1},
         }
         body = SimpleNamespace(host="192.168.1.1", port=5000)
         request = MagicMock()
@@ -628,7 +627,6 @@ class TestMobilePairingIssue:
             "relay_id": "r2",
             "pairing_code": "",  # empty
             "relay_base_url": "https://relay.example",
-            "qr_json": {},
         }
         body = SimpleNamespace(host="192.168.1.1", port=5000)
         request = MagicMock()
@@ -796,53 +794,6 @@ class TestMobileServiceBridgeRequestRespond:
             result = await m.mobile_service_bridge_request_respond(
                 request_id=1, body=body, user=_user()
             )
-        assert result.status_code == 500
-
-
-# ============================================================
-# mobile_relay_confirm / confirm_code — lines 933-996
-# ============================================================
-
-
-class TestMobileRelayConfirm:
-    @pytest.mark.asyncio
-    async def test_desktop_none_returns_400(self, m):
-        """branch [945,946]: desktop is None → 400."""
-        body = SimpleNamespace(relay_id="r1", code="C1")
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile.return_value = None
-            result = await m.mobile_relay_confirm(body=body, user=_user())
-        assert result.status_code == 400
-
-
-class TestMobileRelayConfirmCode:
-    @pytest.mark.asyncio
-    async def test_desktop_none_returns_400(self, m):
-        """branch [979,980]: desktop is None → 400."""
-        body = SimpleNamespace(code="CODE1")
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile_by_code.return_value = None
-            result = await m.mobile_relay_confirm_code(body=body, user=_user())
-        assert result.status_code == 400
-
-    @pytest.mark.asyncio
-    async def test_recoverable_error(self, m):
-        """branch [979,984]: RECOVERABLE_ERRORS → 500."""
-        body = SimpleNamespace(code="CODE2")
-        err_class = list(m.RECOVERABLE_ERRORS)[0] if m.RECOVERABLE_ERRORS else Exception
-
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile_by_code.side_effect = err_class("fail")
-            result = await m.mobile_relay_confirm_code(body=body, user=_user())
         assert result.status_code == 500
 
 

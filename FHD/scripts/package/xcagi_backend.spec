@@ -11,9 +11,19 @@ ROOT = Path.cwd().resolve()
 
 
 def add_data(relative_path: str):
+    """Bundle data for PyInstaller.
+
+    Files must use the *parent* as dest (often ``.``). Using the filename as
+    dest creates ``_MEIPASS/<name>/<name>`` and breaks frozen lookups such as
+    ``_MEIPASS/alembic.ini``.
+    """
     src = ROOT / relative_path
     if not src.exists():
         return []
+    if src.is_file():
+        parent = str(Path(relative_path).parent).replace("\\", "/")
+        dest = "." if parent in ("", ".") else parent
+        return [(str(src), dest)]
     return [(str(src), relative_path)]
 
 
@@ -69,6 +79,29 @@ for module in [
     "alembic",
 ]:
     hiddenimports.extend(collect_submodules(module))
+
+# v10-A: fast-start bootstrap imports these lazily; collect_submodules can miss them
+# on some Windows trees, causing deliverable-status 404 in frozen desktop builds.
+hiddenimports.extend(
+    [
+        "app.fastapi_routes.platform_shell_routes",
+        "app.mod_sdk.deliverable_status",
+        "app.mod_sdk.desktop_deliverable",
+        "app.mod_sdk.platform_shell",
+        "app.mod_sdk.decoupling_progress",
+        "app.mod_sdk.edition_policy",
+        "app.mod_sdk.edition_bootstrap",
+        "app.mod_sdk.product_skus",
+    ]
+)
+# de-dupe while preserving order
+_seen = set()
+_deduped = []
+for _name in hiddenimports:
+    if _name not in _seen:
+        _seen.add(_name)
+        _deduped.append(_name)
+hiddenimports = _deduped
 
 desktop_excludes = [
     "altair",
@@ -147,7 +180,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=os.environ.get("XCAGI_PYINSTALLER_UPX", "").strip().lower() in {"1", "true", "yes", "on"},
     console=False,
     disable_windowed_traceback=True,
     argv_emulation=False,
@@ -161,7 +194,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=os.environ.get("XCAGI_PYINSTALLER_UPX", "").strip().lower() in {"1", "true", "yes", "on"},
     upx_exclude=[],
     name="xcagi-backend",
 )

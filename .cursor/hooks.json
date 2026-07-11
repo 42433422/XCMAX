@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "stop": [
+      {
+        "command": ".cursor/hooks/clean-workspace-on-stop.sh",
+        "timeout": 60
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": ".cursor/hooks/clean-workspace-on-stop.sh",
+        "timeout": 60
+      }
+    ]
+  }
+}

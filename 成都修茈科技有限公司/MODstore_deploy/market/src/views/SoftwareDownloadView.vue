@@ -136,8 +136,11 @@ import {
   DEFAULT_XCAGI_ANDROID_VERSION,
   DEFAULT_XCAGI_DOWNLOAD_VERSION,
   detectMacDownloadArch,
+  fetchDownloadManifest,
+  findManifestEntry,
   macDownloadArchLabel,
   normalizeXcagiDownloadBase,
+  type XcagiDownloadManifest,
   type XcagiDownloadPlatform,
   type XcagiProductSku,
   xcagiDownloadFileName,
@@ -201,6 +204,10 @@ async function loadReleaseManifest() {
 
 const macArch = detectMacDownloadArch()
 const macArchLabel = computed(() => macDownloadArchLabel(macArch))
+
+// 官方下载清单 manifest.json(CI 自动生成,含 SHA256 + size)。
+// onMounted 异步拉取;失败时 downloadUrl() 降级到 xcagiDownloadUrl() 静态生成。
+const downloadManifest = ref<XcagiDownloadManifest | null>(null)
 
 type PlatformTab = 'desktop' | 'android'
 const platformTab = ref<PlatformTab>('desktop')
@@ -268,6 +275,9 @@ function syncPlatformContext() {
 onMounted(() => {
   syncPlatformContext()
   void loadReleaseManifest()
+  void (async () => {
+    downloadManifest.value = await fetchDownloadManifest()
+  })()
   window.addEventListener('resize', syncPlatformContext)
 })
 
@@ -292,6 +302,10 @@ function downloadUrl(
   platform: XcagiDownloadPlatform,
   arch = macArch,
 ): string | null {
+  // 优先用 manifest.json 中的 URL(CI 自动生成,含 SHA256 校验)
+  const entry = findManifestEntry(downloadManifest.value, sku, platform, arch)
+  if (entry) return entry.url
+  // 降级:静态生成 URL(无 SHA256/size,但 URL 格式与 manifest 一致)
   return xcagiDownloadUrl(
     sku,
     platform,

@@ -66,7 +66,19 @@ const adminModuleAliases = [
 
 function buildDevProxy(apiBase) {
   return {
-    '/api': { target: apiBase, changeOrigin: true },
+    '/api': {
+      target: apiBase,
+      changeOrigin: true,
+      configure: (proxy) => {
+        // changeOrigin 会把 Host 改成后端地址；透传原始 Host 让 pairing 等逻辑拿到手机真实访问端口
+        proxy.on('proxyReq', (proxyReq, req) => {
+          const origHost = req.headers['host'] || ''
+          if (origHost) {
+            proxyReq.setHeader('X-Forwarded-Host', origHost)
+          }
+        })
+      },
+    },
     '/ws': { target: apiBase, changeOrigin: true, ws: true },
     '/health': { target: apiBase, changeOrigin: true },
     '/xcmax-dashboard': { target: apiBase, changeOrigin: true },

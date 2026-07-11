@@ -23,6 +23,10 @@ defaults:
 jobs:
   windows:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sku: [personal, enterprise]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -39,38 +43,59 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Build Windows enterprise installer
+      - name: Build Windows ${{ matrix.sku }} installer
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
-      - name: Verify Windows enterprise installer
+          scripts/package/build-installer.ps1 -Version $v -ProductSku ${{ matrix.sku }} -SkipUiInstaller
+      - name: Verify Windows ${{ matrix.sku }} installer
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku enterprise
+          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku ${{ matrix.sku }}
+      - name: Assert critical resources packaged (${{ matrix.sku }})
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          $sku = "${{ matrix.sku }}"
+          $dir = "release/xcagi-v$v/$sku/win-unpacked/resources"
+          foreach ($p in @(
+            "backend/xcagi-backend.exe",
+            "product-sku.json",
+            "backend/_internal/mods"
+          )) {
+            if (-not (Test-Path "$dir/$p")) {
+              Write-Error "::error::Missing critical resource for ${sku}: $p (expected at $dir/$p)"
+              exit 1
+            }
+            Write-Host "OK $sku resource: $p"
+          }
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-windows
+          name: xcagi-desktop-windows-${{ matrix.sku }}
           path: |
-            FHD/release/xcagi-v*/enterprise/*.exe
-            FHD/release/xcagi-v*/enterprise/*.exe.blockmap
-            FHD/release/xcagi-v*/enterprise/*.zip
-            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
-            FHD/release/xcagi-v*/enterprise/latest*.yml
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.exe
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.exe.blockmap
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
+            FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
 
   deploy-windows:
     needs: [windows]
     if: success()
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-desktop-windows
+          pattern: xcagi-desktop-windows-*
+          merge-multiple: true
           path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
@@ -105,7 +130,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload."
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload Windows installers. Configure secrets or the official download URL will serve stale artifacts."
+              exit 1
+            fi
+            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload (workflow_dispatch, non-tag)."
             exit 0
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
@@ -120,7 +149,7 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-10.0.0}"
-          for sku in enterprise; do
+          for sku in personal enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
@@ -132,19 +161,28 @@ jobs:
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
               --include='latest*.yml' \
+              --include='manifest.json' \
               --exclude='*' \
               -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
   macos:
     runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        sku: [personal, enterprise]
     env:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
       APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+      # Prefer ASC API key notarization. Do NOT set APPLE_ID here without
+      # APPLE_APP_SPECIFIC_PASSWORD — electron-builder will fail mid-sign.
       IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-      APPLE_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_TEAM_ID }}
       XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -158,17 +196,26 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             FHD/desktop/package-lock.json
-      - name: Install macOS signing dependencies
-        run: pip install PyJWT requests cryptography
-      - name: Provision Developer ID certificate
-        run: python scripts/package/provision_mac_developer_id.py
-      - name: Build macOS enterprise installer
+      - name: Import Developer ID certificate (CSC_LINK p12)
         shell: bash
         run: |
           set -euo pipefail
-          CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          chmod +x scripts/package/import_mac_developer_id_p12.sh
+          scripts/package/import_mac_developer_id_p12.sh
+      - name: Build macOS ${{ matrix.sku }} installer
+        shell: bash
+        env:
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CSC_NAME:-}" ]; then
+            CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          fi
+          # electron-builder rejects names that still include the certificate type prefix
+          CSC_NAME="${CSC_NAME#Developer ID Application: }"
+          CSC_NAME="${CSC_NAME#Developer ID Application:}"
           if [ -z "${CSC_NAME}" ]; then
-            echo "::error::Developer ID Application certificate missing after provision step"
+            echo "::error::Developer ID Application certificate missing after CSC_LINK import"
             security find-identity -v -p codesigning || true
             exit 1
           fi
@@ -178,8 +225,8 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          PYTHON=python3 scripts/package/build-installer.sh "$v" enterprise
-      - name: Verify macOS codesign
+          PYTHON=python3 scripts/package/build-installer.sh "$v" ${{ matrix.sku }}
+      - name: Verify macOS codesign (${{ matrix.sku }})
         shell: bash
         run: |
           set -euo pipefail
@@ -187,7 +234,8 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
+          sku="${{ matrix.sku }}"
+          dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
           echo "Verifying ${dmg}"
           codesign -dv --verbose=4 "${dmg}" 2>&1 | tee /tmp/codesign.txt
@@ -203,22 +251,24 @@ jobs:
           hdiutil detach "$(dirname "${app}")" -quiet || true
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-macos
+          name: xcagi-desktop-macos-${{ matrix.sku }}
           path: |
-            FHD/release/xcagi-v*/enterprise/*.dmg
-            FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
-            FHD/release/xcagi-v*/enterprise/*.zip
-            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
-            FHD/release/xcagi-v*/enterprise/latest*.yml
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.dmg
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.dmg.blockmap
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip
+            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
+            FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
 
   deploy-macos:
     needs: [macos]
     if: success()
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: xcagi-desktop-macos
+          pattern: xcagi-desktop-macos-*
+          merge-multiple: true
           path: ${{ runner.temp }}/artifacts
       - uses: actions/checkout@v4
         with:
@@ -251,7 +301,11 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload."
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload macOS installers. Configure secrets or the official download URL will serve stale artifacts."
+              exit 1
+            fi
+            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload (workflow_dispatch, non-tag)."
             exit 0
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
@@ -266,7 +320,7 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-10.0.0}"
-          for sku in enterprise; do
+          for sku in personal enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
             if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
@@ -278,14 +332,133 @@ jobs:
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
               --include='latest*.yml' \
+              --include='manifest.json' \
               --exclude='*' \
               -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
           done
 
-  github-release:
+  generate-manifest:
     needs: [windows, macos]
+    if: always() && needs.windows.result == 'success'
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: xcagi-desktop-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/artifacts
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Reconstruct release directory from artifacts
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          mkdir -p "release/xcagi-v${version}"
+          BASE="${RUNNER_TEMP}/artifacts"
+          for sku in personal enterprise; do
+            src_dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
+            if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
+            if [ -d "$src_dir" ]; then
+              mkdir -p "release/xcagi-v${version}/$sku"
+              cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
+            fi
+          done
+          ls -la "release/xcagi-v${version}"/personal "release/xcagi-v${version}"/enterprise 2>/dev/null || true
+      - name: Generate manifest.json + download-release.json
+        working-directory: FHD
+        run: |
+          set -euo pipefail
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          python scripts/package/generate-download-manifest.py \
+            --version "$version" \
+            --release-dir release \
+            --release-subdir "xcagi-v${version}" \
+            --git-sha "${{ github.sha }}" \
+            --output "${RUNNER_TEMP}/manifest.json" \
+            --download-release-output "${RUNNER_TEMP}/download-release.json"
+      - name: Upload manifest artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-download-manifest
+          path: |
+            ${{ runner.temp }}/manifest.json
+            ${{ runner.temp }}/download-release.json
+      - name: Push manifest to CVM (both download paths)
+        working-directory: .
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::error::Tag release requires SSH secret to publish manifest.json"
+              exit 1
+            fi
+            echo "::notice::Skipping manifest upload (no SSH secret, non-tag)."
+            exit 0
+          fi
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
+          version="${raw:-10.0.0}"
+          # Auto-update path: /var/www/update/releases/stable/manifest.json
+          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/update/releases/stable/manifest.json"
+          # Official download path: /var/www/xcagi-v{version}/manifest.json
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}"
+          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/xcagi-v${version}/manifest.json"
+          scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/download-release.json" "root@${HOST}:/var/www/xcagi-v${version}/download-release.json"
+          # Also sync /var/www/update/releases/stable/{sku}/ so official download path can serve same physical files
+          for sku in personal enterprise; do
+            src_dir="$(find "${RUNNER_TEMP}/artifacts" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
+            if [ -d "$src_dir" ]; then
+              ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}/$sku"
+              rsync -avz --timeout=120 \
+                --include='*/' \
+                --include='*.exe' \
+                --include='*.exe.blockmap' \
+                --include='*.dmg' \
+                --include='*.dmg.blockmap' \
+                --include='latest*.yml' \
+                --exclude='*' \
+                -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"
+            fi
+          done
+          echo "Manifest and installers pushed to both download paths"
+
+  verify-download:
+    needs: [generate-manifest]
+    if: always() && needs.generate-manifest.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcagi-download-manifest
+          path: ${{ runner.temp }}/manifest
+      - name: Verify download URLs (HTTP 200 + SHA256 + size)
+        run: |
+          set -euo pipefail
+          bash FHD/scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+
+  github-release:
+    needs: [windows, macos, verify-download]
+    runs-on: ubuntu-latest
+    if: always() && startsWith(github.ref, 'refs/tags/') && needs.windows.result == 'success' && needs.verify-download.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -300,3 +473,5 @@ jobs:
             artifacts/**/*.zip
             artifacts/**/*.zip.blockmap
             artifacts/**/latest*.yml
+            artifacts/**/manifest.json
+            artifacts/**/download-release.json

@@ -35,8 +35,8 @@ sku_label() { case "$1" in personal) echo Personal ;; enterprise) echo Enterpris
 sku_app_id() { case "$1" in personal) echo com.xcagi.desktop.personal ;; enterprise) echo com.xcagi.desktop.enterprise ;; esac; }
 sku_update_url() {
   case "$1" in
-    personal) echo https://update.xcagi.com/releases/stable/personal/ ;;
-    enterprise) echo https://update.xcagi.com/releases/stable/enterprise/ ;;
+    personal) echo https://xiu-ci.com/releases/stable/personal/ ;;
+    enterprise) echo https://xiu-ci.com/releases/stable/enterprise/ ;;
   esac
 }
 

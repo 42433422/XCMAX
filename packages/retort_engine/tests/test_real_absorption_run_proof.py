@@ -25,6 +25,7 @@ def test_real_absorption_records_per_run_code_graph_proof(tmp_path: Path) -> Non
             "source": "proof-source",
             "tasks": [{"task_id": "retort-absorb-review", "title": "Review pipeline", "dimension": "comparative_analysis_depth", "priority": "P1"}],
             "python": sys.executable,
+            "keep_runtime_residue": True,
         }
     )
 

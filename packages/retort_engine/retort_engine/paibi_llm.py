@@ -11,8 +11,13 @@ from typing import Any
 
 from retort_engine.paibi_prompting import build_retort_paibi_panel_prompt as _prompting_build_retort_paibi_panel_prompt
 from retort_engine.paibi_prompting import build_retort_paibi_prompt as _prompting_build_retort_paibi_prompt
-from retort_engine.paibi_result_parser import extract_last_json_object as _parser_extract_last_json_object
-from retort_engine.paibi_result_parser import normalize_llm_scores as _parser_normalize_llm_scores
+from retort_engine.paibi_status import analyze_task_blockers as _analyze_task_blockers
+from retort_engine.paibi_status import extract_last_json_object as _parser_extract_last_json_object
+from retort_engine.paibi_status import normalize_llm_scores as _parser_normalize_llm_scores
+from retort_engine.paibi_status import parallel_summary as _parallel_summary
+from retort_engine.paibi_status import status_has_stale_dispatch as _status_has_stale_dispatch
+from retort_engine.paibi_status import summarize_task as _summarize_task
+from retort_engine.paibi_status import unblock_tasks_from_blockers as _unblock_tasks_from_blockers
 
 
 DEFAULT_PAIBI_API_URL = "http://127.0.0.1:3001"
@@ -163,11 +168,28 @@ def fetch_paibi_parallel_review_status(task_id: str) -> dict[str, Any]:
     return status
 
 
-def wait_for_paibi_llm_review(task_id: str, *, timeout_sec: float = 90.0, interval_sec: float = 5.0) -> dict[str, Any]:
+def wait_for_paibi_llm_review(
+    task_id: str,
+    *,
+    timeout_sec: float = 90.0,
+    interval_sec: float = 5.0,
+    stale_grace_sec: float | None = None,
+) -> dict[str, Any]:
     deadline = time.monotonic() + max(0.0, timeout_sec)
+    if stale_grace_sec is None:
+        stale_grace_sec = min(max(timeout_sec * 0.3, 10.0), 60.0)
     client = PaibiLLMClient()
     status = _summarize_task(client.fetch_task(task_id))
+    stale_since: float | None = None
     while time.monotonic() < deadline and not status.get("json_result") and status.get("status") not in {"completed", "failed"}:
+        if _status_has_stale_dispatch(status):
+            now = time.monotonic()
+            stale_since = now if stale_since is None else stale_since
+            if now - stale_since >= max(0.0, stale_grace_sec):
+                status["wait_stopped_reason"] = "stale_dispatch"
+                return status
+        else:
+            stale_since = None
         time.sleep(max(0.25, interval_sec))
         status = _summarize_task(client.fetch_task(task_id))
     return status
@@ -470,166 +492,6 @@ def _record_llm_review(root: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
-
-
-def _summarize_task(task_body: dict[str, Any]) -> dict[str, Any]:
-    task = task_body.get("task") if isinstance(task_body.get("task"), dict) else task_body
-    subtasks = task.get("subTasks") or task.get("subtasks") or []
-    normalized_subtasks: list[dict[str, Any]] = []
-    logs: list[str] = []
-    if isinstance(subtasks, list):
-        for subtask in subtasks:
-            if not isinstance(subtask, dict):
-                continue
-            subtask_logs = subtask.get("logs") if isinstance(subtask.get("logs"), list) else []
-            for row in subtask_logs:
-                if isinstance(row, dict) and str(row.get("content") or "").strip():
-                    logs.append(str(row.get("content") or "").strip())
-            normalized_subtasks.append(
-                {
-                    "id": str(subtask.get("id") or ""),
-                    "title": str(subtask.get("title") or ""),
-                    "status": str(subtask.get("status") or ""),
-                    "blocked": bool(subtask.get("blocked")),
-                    "last_error": str(subtask.get("last_error") or subtask.get("lastError") or ""),
-                    "depends_on": [str(item) for item in (subtask.get("depends_on") or subtask.get("dependsOn") or [])],
-                    "progress": subtask.get("progress") or 0,
-                    "device_name": str(subtask.get("device_name") or ""),
-                    "branch_name": str(subtask.get("branch_name") or ""),
-                    "log_count": len(subtask_logs),
-                }
-            )
-    excerpt = "\n".join(logs)[-8000:]
-    json_result = _extract_last_json_object(excerpt)
-    return {
-        "provider": "paibi",
-        "task_id": str(task.get("id") or ""),
-        "status": str(task.get("status") or ""),
-        "subtasks": normalized_subtasks,
-        "logs_excerpt": excerpt,
-        "json_result": json_result,
-        "scores": _normalize_llm_scores(json_result),
-    }
-
-
-def _parallel_summary(status: dict[str, Any]) -> dict[str, Any]:
-    subtasks = status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
-    counts: dict[str, int] = {}
-    devices: set[str] = set()
-    for subtask in subtasks:
-        if not isinstance(subtask, dict):
-            continue
-        sub_status = str(subtask.get("status") or "unknown")
-        counts[sub_status] = counts.get(sub_status, 0) + 1
-        if subtask.get("device_name"):
-            devices.add(str(subtask.get("device_name")))
-    return {"subtask_count": len(subtasks), "status_counts": counts, "device_count": len(devices), "has_blockers": bool(_analyze_task_blockers(status))}
-
-
-def _analyze_task_blockers(status: dict[str, Any]) -> list[dict[str, Any]]:
-    subtasks = status.get("subtasks") if isinstance(status.get("subtasks"), list) else []
-    logs = str(status.get("logs_excerpt") or "")
-    blockers: list[dict[str, Any]] = []
-    pending_without_deps = [
-        subtask
-        for subtask in subtasks
-        if isinstance(subtask, dict) and str(subtask.get("status") or "") == "pending" and not (subtask.get("depends_on") or [])
-    ]
-    if pending_without_deps and ("当前不可用" in logs or "执行器忙" in logs or "busy" in logs.lower()):
-        blockers.append(
-            {
-                "kind": "worker_capacity_limit",
-                "action": "add_worker_or_wait_running_slot",
-                "task_id": status.get("task_id"),
-                "status": status.get("status"),
-                "pending_subtask_count": len(pending_without_deps),
-            }
-        )
-    for subtask in subtasks:
-        if not isinstance(subtask, dict):
-            continue
-        sub_status = str(subtask.get("status") or "")
-        blocked = bool(subtask.get("blocked")) or sub_status in {"failed", "blocked"}
-        if not blocked:
-            continue
-        text = " ".join([sub_status, str(subtask.get("last_error") or ""), logs]).lower()
-        kind = "subtask_blocked"
-        action = "inspect_logs_and_retry"
-        if "git clone --no-hardlinks" in text or "fetch-pack" in text or "tmp_pack" in text:
-            kind = "workspace_clone_race"
-            action = "retry_serial_or_unique_workspace"
-        elif "未在线" in text or "offline" in text:
-            kind = "device_offline"
-            action = "start_or_replace_device"
-        elif "缺少自动改码执行器" in text or "not_installed" in text or "executor" in text:
-            kind = "executor_missing"
-            action = "install_or_select_executor"
-        elif "depends" in text or "前置" in text:
-            kind = "dependency_wait"
-            action = "complete_or_remove_dependency"
-        elif "timeout" in text or "超时" in text:
-            kind = "timeout"
-            action = "split_smaller_or_retry"
-        blockers.append(
-            {
-                "kind": kind,
-                "action": action,
-                "subtask_id": subtask.get("id"),
-                "title": subtask.get("title"),
-                "status": sub_status,
-                "device_name": subtask.get("device_name"),
-                "last_error": subtask.get("last_error"),
-            }
-        )
-    if status.get("status") in {"failed", "blocked"} and not blockers:
-        blockers.append({"kind": "task_blocked", "action": "inspect_task_logs_and_retry", "task_id": status.get("task_id"), "status": status.get("status")})
-    return blockers
-
-
-def _unblock_tasks_from_blockers(blockers: list[dict[str, Any]]) -> list[dict[str, str]]:
-    tasks = []
-    for index, blocker in enumerate(blockers, start=1):
-        kind = str(blocker.get("kind") or "subtask_blocked")
-        subtask = str(blocker.get("subtask_id") or blocker.get("task_id") or "")
-        if kind == "device_offline":
-            title = "恢复或替换离线 Para 工作设备"
-            acceptance = f"子任务 {subtask} 所在设备在线，或任务已迁移到在线 Codex 设备。"
-            owner = "runtime"
-        elif kind == "executor_missing":
-            title = "安装或切换 Codex 执行器"
-            acceptance = f"子任务 {subtask} 的目标设备 executorReady=true，重新派发后进入 running/completed。"
-            owner = "runtime"
-        elif kind == "dependency_wait":
-            title = "解除无效前置依赖"
-            acceptance = f"子任务 {subtask} 的 depends_on 已完成或被移除，调度器可派发。"
-            owner = "scheduler"
-        elif kind == "timeout":
-            title = "拆小并重试超时子任务"
-            acceptance = f"子任务 {subtask} 被拆成更小 panel，并在超时窗口内返回 JSON。"
-            owner = "scheduler"
-        elif kind == "worker_capacity_limit":
-            title = "增加 Para worker 或等待执行槽位"
-            acceptance = "pending 子任务进入 running/completed，或被迁移到其它在线 Codex 设备。"
-            owner = "runtime"
-        elif kind == "workspace_clone_race":
-            title = "串行重试或隔离 Para 工作区"
-            acceptance = f"子任务 {subtask} 不再共享并发 clone 目录，重试后不再出现 tmp_pack/fetch-pack 错误。"
-            owner = "scheduler"
-        else:
-            title = "诊断并重试阻塞子任务"
-            acceptance = f"子任务 {subtask} 的 last_error 已归因，重试后不再处于 failed/blocked。"
-            owner = "runtime"
-        tasks.append(
-            {
-                "title": title,
-                "owner_hint": owner,
-                "acceptance": acceptance,
-                "evidence_required": "Para task status, subtask logs, retry result",
-                "blocker_kind": kind,
-                "task_id": f"para-unblock-{index:02d}",
-            }
-        )
-    return tasks
 
 
 def _extract_last_json_object(text: str) -> dict[str, Any] | None:

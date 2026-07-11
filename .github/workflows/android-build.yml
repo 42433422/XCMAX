@@ -1,15 +1,18 @@
-# T53 — Android assembleDebug 门禁（仓根 workflow，路径 FHD/mobile-android）
+# T53 — Flutter mobile CI（仓根；主线 FHD/mobile-flutter-poc）
+# 归档 Kotlin 目录变更仍触发，但构建走 Flutter。
 name: android-build
 
 on:
   push:
     branches: [main, master]
     paths:
+      - "FHD/mobile-flutter-poc/**"
       - "FHD/mobile-android/**"
       - ".github/workflows/android-build.yml"
   pull_request:
     branches: [main, master]
     paths:
+      - "FHD/mobile-flutter-poc/**"
       - "FHD/mobile-android/**"
   workflow_dispatch:
 
@@ -18,13 +21,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  assemble-debug:
-    name: assembleDebug (personal + enterprise)
+  flutter-test-apk:
+    name: flutter test + apk (debug)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     defaults:
       run:
-        working-directory: FHD/mobile-android
+        working-directory: FHD/mobile-flutter-poc
 
     steps:
       - uses: actions/checkout@v4
@@ -34,52 +37,23 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-      - name: Prepare Google Services config
-        env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.XCAGI_ANDROID_GOOGLE_SERVICES_JSON }}
-        run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
-          else
-            cat > app/google-services.json <<'JSON'
-          {
-            "project_info": {
-              "project_number": "100000000000",
-              "project_id": "xcagi-ci-placeholder",
-              "storage_bucket": "xcagi-ci-placeholder.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000personal",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.personal" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:000000000000000enterprise",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile.enterprise" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              },
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:100000000000:android:0000000000000000",
-                  "android_client_info": { "package_name": "com.xiuci.xcagi.mobile" }
-                },
-                "api_key": [{ "current_key": "ci-placeholder-api-key" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          JSON
-          fi
+      - name: Flutter pub get
+        run: flutter pub get
 
-      - name: Assemble Debug
-        run: ./gradlew assemblePersonalDebug assembleEnterpriseDebug --no-daemon
+      - name: Flutter test
+        run: flutter test
 
-      - name: Lint (personal debug)
-        run: ./gradlew lintPersonalDebug --no-daemon
+      - name: Flutter build apk (debug)
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcagi-flutter-debug-apk
+          path: FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error

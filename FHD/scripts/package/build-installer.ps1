@@ -24,8 +24,8 @@ $skuAppIds = @{
   enterprise = 'com.xcagi.desktop.enterprise'
 }
 $skuUpdateUrls = @{
-  personal   = 'https://update.xcagi.com/releases/stable/personal/'
-  enterprise = 'https://update.xcagi.com/releases/stable/enterprise/'
+  personal   = 'https://xiu-ci.com/releases/stable/personal/'
+  enterprise = 'https://xiu-ci.com/releases/stable/enterprise/'
 }
 
 function Assert-TextFileContains {
@@ -93,6 +93,17 @@ Assert-FileExists $backendExe "Windows backend executable"
 
 $desktopSku = Join-Path $Root "desktop\resources\product-sku.json"
 Write-SkuJson -Path $desktopSku -Sku $ProductSku
+$buildSha = $env:GITHUB_SHA
+if (-not $buildSha) {
+  try {
+    $buildSha = (git -C $Root rev-parse HEAD).Trim()
+  } catch {
+    $buildSha = ''
+  }
+}
+$buildInfoPath = Join-Path $Root "desktop\resources\build-info.json"
+$buildInfo = @{ schema_version = 1; gitSha = $buildSha; version = $Version }
+$buildInfo | ConvertTo-Json -Compress | Set-Content -Path $buildInfoPath -Encoding UTF8
 $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
@@ -198,8 +209,10 @@ if (-not $SkipUiInstaller) {
     Where-Object { $_.Name -like '*安装程序*' } |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
+  $env:XCAGI_BUILD_SHA = $buildSha
   node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $Version win
 } elseif ($nsisExe) {
+  $env:XCAGI_BUILD_SHA = $buildSha
   node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $Version win
 }
 

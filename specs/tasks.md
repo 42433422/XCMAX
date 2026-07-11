@@ -13,12 +13,16 @@
 - [x] PL0: 建立三条主线 + 个人版冻结的产品线 SSOT
 - [x] PL0-1: 产品版本锁死 v10，锚点恒 `10.0.0`
   - 不使用 `v10.1` / `v10.2` / `v10.3` / `v11` 表达路线；改用 v10-A/B/C/D 阶段、channel、git tag、`git_sha`、`sha256` 和 manifest
-- [ ] PL1: 企业桌面 ERP + AI — 固化 v10-A 可交付验收清单
+- [x] PL1: 企业桌面 ERP + AI — 固化 v10-A 可交付验收清单
   - 安装包、首次启动、引导、`deliverable-status`、行业样板流程、日志、升级 / 回滚说明
-- [ ] PL2: AI 员工商店 — 固化 v10-B 桌面端联动闭环
+  - 证据：`FHD/docs/evidence/e2e/v10-a-desktop-acceptance-2026-07-08-final.md`（2026-07-09 双端 A5/A9 PASS）
+  - 备注：Win A7/A10/A12 为 PARTIAL/NOT RUN（不阻塞技术签字）
+- [x] PL2: AI 员工商店 — 固化 v10-B 桌面端联动闭环
   - Catalog、企业授权、下载源、桌面端安装、启用、禁用、回滚
+  - 证据：`FHD/docs/evidence/e2e/v10-b-store-desktop-acceptance-2026-07-11-final.md`（2026-07-11；支付由产品确认历史成功）
 - [ ] PL3: 移动 AI 协同 App — 固化 v10-C 协同闭环
   - 企业登录、扫码连接、AI 对话、通知、审批、任务 / 订单简表
+  - 底稿：`FHD/docs/evidence/e2e/v10-c-mobile-acceptance-2026-07-11.md`（真机 E2E / 正式签名未签，暂不勾选）
 - [x] PL4: 个人版冻结
   - 暂停新增功能；仅允许兼容、归档、未来恢复入口文档维护
 

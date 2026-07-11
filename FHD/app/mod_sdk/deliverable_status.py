@@ -1,9 +1,11 @@
-"""可交付状态聚合：供验收、前端首启引导与技术支持诊断。"""
+"""Deliverable status aggregate for acceptance, onboarding, and support."""
 
 from __future__ import annotations
 
 import os
 from typing import Any
+
+from fastapi import FastAPI
 
 from app.mod_sdk.edition_policy import bundled_mods_dir, resolve_edition
 from app.mod_sdk.platform_shell import (
@@ -41,7 +43,25 @@ def _installed_mod_ids() -> list[str]:
         return []
 
 
-def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict[str, Any]:
+def _mods_routes_loaded(app: FastAPI | None = None) -> bool | None:
+    """Read mod-route mount state from running FastAPI app; None if no app."""
+    if app is not None:
+        return bool(getattr(app.state, "mods_routes_loaded", False))
+    try:
+        from app.fastapi_app.factory import _app_singleton
+
+        if _app_singleton is not None:
+            return bool(getattr(_app_singleton.state, "mods_routes_loaded", False))
+    except RECOVERABLE_ERRORS:
+        pass
+    return None
+
+
+def build_deliverable_status(
+    installed_mod_ids: list[str] | None = None,
+    *,
+    app: FastAPI | None = None,
+) -> dict[str, Any]:
     from app.mod_sdk.host_foundation import (
         host_foundation_bridges_ready,
         host_foundation_employee_present,
@@ -49,7 +69,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
     )
 
     materialize_hint: dict[str, Any] | None = None
-    # 仅真实探测时自动展开；单测传入 installed_mod_ids 或 PYTEST 时不改磁盘。
+    # Auto-expand only on real probe; tests with installed_mod_ids/PYTEST skip disk.
     in_pytest = bool(os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("PYTEST_VERSION"))
     if (
         not in_pytest
@@ -104,7 +124,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
             blockers.append(
                 {
                     "code": "ENTERPRISE_ERP_MISSING",
-                    "message": "企业版 ERP 基准模块未就绪",
+                    "message": "Enterprise ERP baseline mods not ready",
                     "missing_mod_ids": [ERP_DOMAIN_BRIDGE_MOD_ID],
                 }
             )
@@ -114,7 +134,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
             blockers.append(
                 {
                     "code": "SKU_PACK_INCOMPLETE",
-                    "message": f"{product_sku} 版内置 Mod 包未装齐",
+                    "message": f"{product_sku} SKU bundled mod pack incomplete",
                     "missing_mod_ids": missing,
                 }
             )
@@ -122,11 +142,11 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
     elif edition == "generic" and not generic_ready:
         from app.mod_sdk.host_foundation import host_foundation_employee_present
 
-        msg = "通用行业 Mod 包未装齐，请打开扩展市场或执行 bootstrap-edition-pack"
+        msg = "general?? Mod ????,?????????? bootstrap-edition-pack"
         if host_foundation_employee_present():
             msg = (
-                "已安装「宿主基础能力·预装员工」（一个员工包 Mod）；"
-                "请点击「一键装齐」将内部 bridge 展开到本机 mods 目录（对话/审批/客服等路由依赖这些目录）。"
+                "Installed host baseline employee pack; "
+                "click one-click install to expand internal bridges into local mods."
             )
         blockers.append(
             {
@@ -140,7 +160,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
         blockers.append(
             {
                 "code": "MINIMAL_PACK_INCOMPLETE",
-                "message": "空壳宿主 Mod 包未装齐",
+                "message": "Minimal host mod pack incomplete",
                 "missing_mod_ids": missing,
             }
         )
@@ -153,20 +173,13 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
             if not (bundle / mid).is_dir():
                 bundle_missing.append(mid)
 
-    mods_routes = True
-    try:
-        from app.fastapi_app import get_fastapi_app
+    mods_routes = _mods_routes_loaded(app)
 
-        app = get_fastapi_app()
-        mods_routes = bool(getattr(app.state, "mods_routes_loaded", False))
-    except RECOVERABLE_ERRORS:
-        mods_routes = False
-
-    if not mods_routes and expected:
+    if mods_routes is False and expected and installed_mod_ids is None:
         blockers.append(
             {
                 "code": "MOD_ROUTES_NOT_MOUNTED",
-                "message": "Mod HTTP 路由未挂载，请重启应用",
+                "message": "Mod HTTP routes not mounted; restart app",
             }
         )
 
@@ -204,11 +217,11 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
         "product_flow": {
             "recommended_step": product_flow_step,
             "steps": [
-                {"id": "install", "label": "安装宿主"},
-                {"id": "first_launch", "label": "首次启动"},
-                {"id": "host_pack", "label": "宿主包就绪"},
-                {"id": "industry_mod", "label": "行业 MOD（可选）"},
-                {"id": "daily_use", "label": "日常使用"},
+                {"id": "install", "label": "Install host"},
+                {"id": "first_launch", "label": "First launch"},
+                {"id": "host_pack", "label": "Host pack ready"},
+                {"id": "industry_mod", "label": "Industry MOD (optional)"},
+                {"id": "daily_use", "label": "Daily use"},
             ],
             "ui_route": "/onboarding",
         },
@@ -222,7 +235,7 @@ def build_deliverable_status(installed_mod_ids: list[str] | None = None) -> dict
         "missing_mod_ids": missing,
         "bundled_mods_dir": str(bundle) if bundle else None,
         "bundled_mods_missing": bundle_missing,
-        "mods_routes_loaded": mods_routes,
+        "mods_routes_loaded": bool(mods_routes) if mods_routes is not None else False,
         "platform_shell_mode": shell.get("platform_shell_mode"),
         "blockers": blockers,
         "next_actions": _next_actions(edition, blockers, deliverable),

@@ -5,6 +5,7 @@ import '../../data/mobile_repository.dart';
 import '../../data/mobile_repository_scope.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/we_ui.dart';
+import '../approval/approval_screens.dart';
 import '../circle/ai_circle_screen.dart';
 import '../contacts/contacts_screen.dart';
 import '../notifications/notification_list_screen.dart';
@@ -123,6 +124,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       const WeSectionCaption('工具'),
                       WeCellGroup(
                         children: [
+                          WeCell(
+                            title: '审批',
+                            subtitle: '待办审批通过或驳回',
+                            icon: Icons.fact_check,
+                            iconColor: colors.brand,
+                            iconBg: colors.brandContainer,
+                            onTap: _openApprovals,
+                          ),
                           WeCell(
                             title: '扫码绑定',
                             subtitle: '绑定企业端、管理端或电脑端登录',
@@ -270,6 +279,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     Navigator.of(context).push(
       MaterialPageRoute(
           builder: (_) => AiCircleScreen(repository: _repository)),
+    );
+  }
+
+  void _openApprovals() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ApprovalListScreen(repository: _repository),
+      ),
     );
   }
 

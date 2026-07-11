@@ -18,6 +18,7 @@ import '../features/circle/ai_circle_screen.dart';
 import '../features/connect/connect_screen.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../features/contacts/employee_profile_screen.dart';
+import '../features/contacts/employee_questions_screen.dart';
 import '../features/contacts/fixed_partner_profile_screen.dart';
 import '../features/cs/admin_cs_console_screen.dart';
 import '../features/cs/cs_chat_screen.dart';
@@ -36,6 +37,7 @@ import '../features/tools/ocr_screen.dart';
 import '../features/webview/desktop_tool_webview_screen.dart';
 import '../models/conversation.dart';
 import '../platform/android_background_work_scheduler.dart';
+import '../policy/android_error_policy.dart';
 import '../platform/android_deep_link_bridge.dart';
 import '../platform/biometric_gate.dart';
 import '../policy/android_runtime_policy.dart';
@@ -148,19 +150,18 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'XCAGI',
-      navigatorKey: _navigatorKey,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: androidThemeModeFromSession(_session.themeMode),
-      builder: (context, child) => MobileRepositoryScope(
-        repository: widget.repository,
-        child: child ?? const SizedBox.shrink(),
+    return MobileRepositoryScope(
+      repository: widget.repository,
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'XCAGI',
+        navigatorKey: _navigatorKey,
+        scaffoldMessengerKey: _scaffoldMessengerKey,
+        theme: AppTheme.light(),
+        darkTheme: AppTheme.dark(),
+        themeMode: androidThemeModeFromSession(_session.themeMode),
+        home: _buildHome(),
       ),
-      home: _buildHome(),
     );
   }
 
@@ -218,8 +219,18 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
   }
 
   void _handleSessionChanged(MobileSessionData session) {
-    if (!mounted) return;
-    setState(() => _session = session);
+    if (!mounted || _handlingDeepLink) return;
+    final nextRoute = resolveAndroidStartupRoute(
+      session: session,
+      appConfig: _appConfig,
+    );
+    setState(() {
+      _session = session;
+      if (_route != nextRoute) {
+        _route = nextRoute;
+        _autoLoginStarted = false;
+      }
+    });
     unawaited(_reconcileAndroidBackgroundWork(session));
     unawaited(_runBiometricGateIfNeeded(session));
     _tryHandlePendingDeepLink();
@@ -333,14 +344,37 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
     _tryHandlePendingDeepLink();
   }
 
+  bool _canHandleStartupPairingDeepLink() {
+    return switch (_route) {
+      AndroidStartupRoute.auth || AndroidStartupRoute.onboarding => true,
+      _ => false,
+    };
+  }
+
   void _tryHandlePendingDeepLink() {
-    if (_handlingDeepLink ||
-        _pendingDeepLinkRoute == null ||
-        !_session.hasAuth ||
-        _route != AndroidStartupRoute.home) {
+    if (_handlingDeepLink || _pendingDeepLinkRoute == null || !mounted) {
       return;
     }
     final route = _pendingDeepLinkRoute!;
+    final pairingPayload = pairingPayloadFromDeepLinkRoute(route);
+    if (pairingPayload != null &&
+        !_session.setupComplete &&
+        _canHandleStartupPairingDeepLink()) {
+      _handlingDeepLink = true;
+      _pendingDeepLinkRoute = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          _handlingDeepLink = false;
+          _pendingDeepLinkRoute = route;
+          return;
+        }
+        unawaited(_completePairingDeepLink(pairingPayload));
+      });
+      return;
+    }
+    if (!_session.hasAuth || _route != AndroidStartupRoute.home) {
+      return;
+    }
     _pendingDeepLinkRoute = null;
     _handlingDeepLink = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -352,6 +386,34 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
       if (!handled) _pendingDeepLinkRoute = route;
       _handlingDeepLink = false;
       _tryHandlePendingDeepLink();
+    });
+  }
+
+  Future<void> _completePairingDeepLink(String payload) async {
+    try {
+      await widget.repository.exchangePairingCode(payload);
+      if (!mounted) return;
+      await _refreshRouteFromSession();
+      if (!mounted) return;
+      _showAndroidSnackAfterFrame('设备绑定成功');
+    } catch (error) {
+      if (!mounted) return;
+      _showAndroidSnackAfterFrame(
+        androidProductErrorMessage(
+          error is MobileRepositoryException ? error.message : '$error',
+          '设备配对失败，请刷新二维码或输入设备码',
+        ),
+      );
+    } finally {
+      _handlingDeepLink = false;
+      _tryHandlePendingDeepLink();
+    }
+  }
+
+  void _showAndroidSnackAfterFrame(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _showAndroidSnack(message);
     });
   }
 
@@ -532,7 +594,10 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
       case AndroidDeepLinkTarget.employeeQuestions:
         _pushAndroidDeepLinkPage(
           navigator,
-          _EmployeeQuestionsDeepLinkScreen(employeeId: destination.employeeId),
+          EmployeeQuestionsScreen(
+            repository: widget.repository,
+            employeeId: destination.employeeId,
+          ),
         );
         return true;
       case AndroidDeepLinkTarget.settings:
@@ -714,6 +779,8 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
         return FixedPartnerKind.cursor;
       case 'claude':
         return FixedPartnerKind.claude;
+      case 'trae':
+        return FixedPartnerKind.trae;
       case 'assistant':
       default:
         return FixedPartnerKind.assistant;
@@ -813,80 +880,6 @@ class _DeepLinkedAiEmployeeProfileScreen extends StatelessWidget {
           ),
         );
       },
-    );
-  }
-}
-
-class _EmployeeQuestionsDeepLinkScreen extends StatelessWidget {
-  const _EmployeeQuestionsDeepLinkScreen({required this.employeeId});
-
-  final String? employeeId;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = AppTheme.colors(context);
-    final cleanEmployeeId = employeeId?.trim() ?? '';
-    final title = cleanEmployeeId.isEmpty ? '员工任务中心' : '$cleanEmployeeId 的提问';
-    return Scaffold(
-      backgroundColor: colors.page,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            WeTopBar(
-              title: title,
-              showBack: true,
-              onBack: () => Navigator.of(context).maybePop(),
-              actions: [
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.question_answer_outlined),
-                  color: colors.textPrimary,
-                  tooltip: '刷新',
-                ),
-              ],
-            ),
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.question_answer_outlined,
-                        size: 48,
-                        color: colors.textTertiary,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '暂无员工主动提问',
-                        style: TextStyle(
-                          color: colors.textTertiary,
-                          fontSize: 16,
-                          height: 1.38,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '员工遇到需要老板决策的事会主动在这里问你',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: colors.textTertiary,
-                          fontSize: 12,
-                          height: 1.33,
-                          letterSpacing: 0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
