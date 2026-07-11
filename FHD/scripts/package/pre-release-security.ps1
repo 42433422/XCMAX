@@ -24,7 +24,7 @@ function Scan-SecretsInTree {
   $hits = Get-ChildItem -Path $Dir -Recurse -File -ErrorAction SilentlyContinue |
     Where-Object {
       $_.Name -match '\.env$' -and $_.Name -ne '.env.example' -or
-      $_.Name -match 'secret|private_key' -or
+      $_.BaseName -match '(^|[._-])(secret|private[_-]?key)([._-]|$)' -or
       $_.Extension -in @('.pem', '.key')
     } |
     Where-Object {
