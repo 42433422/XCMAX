@@ -32,6 +32,8 @@ StepStatus = Literal["pending", "running", "done", "error", "skipped"]
 PUSH_HOST = os.environ.get("FHD_PUSH_HOST", "119.27.178.147")
 PUSH_USER = os.environ.get("FHD_PUSH_USER", "root")
 CHANNEL_DEFAULT = os.environ.get("FHD_RELEASE_CHANNEL", "stable")
+
+
 def _default_manifest_url(channel: str = CHANNEL_DEFAULT) -> str:
     custom = os.environ.get("XCMAX_UPDATE_MANIFEST_URL", "").strip()
     if custom:
