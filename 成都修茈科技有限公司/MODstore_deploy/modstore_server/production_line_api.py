@@ -149,7 +149,9 @@ async def api_operations_incident(body: Dict[str, Any]):
                 source=str(payload.get("source") or "fhd_production_line_incident")[:64],
                 event_type=event_type,
                 payload=payload,
-                priority=payload.get("priority") if isinstance(payload.get("priority"), int) else None,
+                priority=(
+                    payload.get("priority") if isinstance(payload.get("priority"), int) else None
+                ),
             )
         )
     except Exception:

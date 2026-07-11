@@ -1,6 +1,8 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from retort_engine.self_bootstrap import (
     FRONTIER_SOURCES,
     build_self_bootstrap_plan,
@@ -67,6 +69,7 @@ def test_source_record_requires_exact_reviewed_revision(tmp_path: Path) -> None:
     assert build_self_bootstrap_plan(project)["summary"]["strictly_recorded_source_count"] == 1
 
 
+@pytest.mark.keep_self_depth_gate
 def test_core_absorb_blocks_other_modules_when_self_depth_incomplete(tmp_path: Path) -> None:
     from retort_engine.core import absorb
 

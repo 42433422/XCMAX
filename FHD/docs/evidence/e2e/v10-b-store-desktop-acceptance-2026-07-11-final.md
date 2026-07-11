@@ -36,6 +36,6 @@
 ## 关联提交（节选）
 
 - `aa36b62d7` — 支付履约同步 `user_mods`
-- `ec59a8cc0` — Flutter CI SSOT + 01/02 证据
+- `ec59a8cc0` — Flutter CI 锚点同步 + 01/02 证据
 - `6e9d88b1c` — 04 企业登录证据路径
 - `899ddad00` — 人工付路径 / Flutter 签名接线
