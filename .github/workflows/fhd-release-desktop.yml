@@ -176,9 +176,13 @@ jobs:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
       APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
       IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-      APPLE_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_TEAM_ID }}
       XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+      CSC_LINK: ${{ secrets.CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -192,17 +196,23 @@ jobs:
           cache-dependency-path: |
             FHD/frontend/package-lock.json
             FHD/desktop/package-lock.json
-      - name: Install macOS signing dependencies
-        run: pip install PyJWT requests cryptography
-      - name: Provision Developer ID certificate
-        run: python scripts/package/provision_mac_developer_id.py
-      - name: Build macOS ${{ matrix.sku }} installer
+      - name: Import Developer ID certificate (CSC_LINK p12)
         shell: bash
         run: |
           set -euo pipefail
-          CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          chmod +x scripts/package/import_mac_developer_id_p12.sh
+          scripts/package/import_mac_developer_id_p12.sh
+      - name: Build macOS ${{ matrix.sku }} installer
+        shell: bash
+        env:
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CSC_NAME:-}" ]; then
+            CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
+          fi
           if [ -z "${CSC_NAME}" ]; then
-            echo "::error::Developer ID Application certificate missing after provision step"
+            echo "::error::Developer ID Application certificate missing after CSC_LINK import"
             security find-identity -v -p codesigning || true
             exit 1
           fi
