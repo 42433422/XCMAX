@@ -9,7 +9,20 @@ cd "$FHD_ROOT"
 SKIP_DESKTOP="${RELEASE_VERIFY_SKIP_DESKTOP:-0}"
 SKIP_E2E="${RELEASE_VERIFY_SKIP_E2E:-0}"
 SKIP_PACK="${RELEASE_VERIFY_SKIP_PACK:-0}"
-PYTHON_BIN="${PYTHON:-python3}"
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if [[ -x "$FHD_ROOT/.venv/bin/python" ]]; then
+    PYTHON_BIN="$FHD_ROOT/.venv/bin/python"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
+
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))'; then
+  echo "[release_verify] Python 3.11+ required; got: $($PYTHON_BIN --version 2>&1)" >&2
+  echo "[release_verify] Create FHD/.venv or set PYTHON=/path/to/python3.11." >&2
+  exit 2
+fi
 
 banner() {
   echo ""
