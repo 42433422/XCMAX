@@ -49,10 +49,22 @@ jobs:
         with:
           node-version: "22.12.0"
           cache: "npm"
-          cache-dependency-path: FHD/desktop/package-lock.json
+          cache-dependency-path: |
+            FHD/desktop/package-lock.json
+            FHD/frontend/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Build enterprise Vue renderer
+        working-directory: FHD/frontend
+        env:
+          VITE_XCAGI_PRODUCT_SKU: enterprise
+          VITE_XCAGI_EDITION: full
+        run: |
+          npm ci
+          npm run build:full
+          test -s ../templates/vue-dist/index.html
 
       - name: Install locked backend runtime
         working-directory: FHD
