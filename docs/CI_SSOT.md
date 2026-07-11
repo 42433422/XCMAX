@@ -189,7 +189,7 @@ Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_C
 | `K8S_NAMESPACE` | Var | 部署 namespace（默认 staging=`xcagi-staging`、prod=`default`） | 用默认 |
 | `CODECOV_TOKEN` | Secret | 覆盖率上传 | 步骤 `continue-on-error` |
 | `APPLE_ID` / `APPLE_APP_SPECIFIC_PASSWORD` / `APPLE_TEAM_ID` | Secret | macOS 公证 / 签名 | 出未公证包 |
-| `CSC_LINK` / `CSC_KEY_PASSWORD` | Secret | 桌面代码签名证书（electron-builder） | 出未签名包 |
+| `CSC_LINK` / `CSC_KEY_PASSWORD` | Secret | **macOS Developer ID Application** `.p12`（base64 或路径）+ 导出密码；`fhd-release-desktop` 导入钥匙串签名，**不再**用 API 现场签发（Account Holder 限制） | 缺则 macOS job 失败 |
 | `STAGING_BASE_URL` | Var | 容量 k6 目标（`fhd-capacity-staging-monthly`） | 容量测试跳过 |
 | `STAGING_PROMETHEUS_URL` | Var / Secret | SLO 采集 Prometheus 端点 | SLO 采集降级 |
 | `XCMAX_GIT_BRANCH` / `XCMAX_REMOTE_ROOT` | Var | 企业站 `corp-site-deploy` 同步参数 | 用默认 |
