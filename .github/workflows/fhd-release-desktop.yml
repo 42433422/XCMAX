@@ -14,6 +14,10 @@ on:
         required: true
         type: boolean
         default: false
+      notary_submission_id:
+        description: "Only query an existing Apple notarization submission; skips all builds"
+        required: false
+        default: ""
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -27,6 +31,7 @@ defaults:
 
 jobs:
   windows:
+    if: ${{ inputs.notary_submission_id == '' }}
     runs-on: windows-latest
     env:
       # Windows Authenticode certificate (PFX path/URL/base64 accepted by
@@ -119,8 +124,9 @@ jobs:
             FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
 
   macos:
+    if: ${{ inputs.notary_submission_id == '' }}
     runs-on: macos-latest
-    timeout-minutes: 75
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -134,6 +140,9 @@ jobs:
       IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || secrets.IOS_TEAM_ID }}
       XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+      # Apple processing can exceed 45 minutes during service backlog. Keep a
+      # hard ceiling while allowing the submission to finish on the same runner.
+      XCAGI_NOTARYTOOL_TIMEOUT: "120m"
       CSC_LINK: ${{ secrets.CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
     steps:
@@ -211,6 +220,61 @@ jobs:
             FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip
             FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
             FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
+
+  notary-status:
+    if: ${{ inputs.notary_submission_id != '' }}
+    runs-on: macos-latest
+    timeout-minutes: 10
+    env:
+      APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+      APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 }}
+    steps:
+      - name: Query Apple notarization submission
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${APP_STORE_CONNECT_API_KEY_ID:?APP_STORE_CONNECT_API_KEY_ID is required}"
+          : "${APP_STORE_CONNECT_API_ISSUER_ID:?APP_STORE_CONNECT_API_ISSUER_ID is required}"
+          : "${APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64:?APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64 is required}"
+          submission_id="${{ inputs.notary_submission_id }}"
+          if [[ ! "$submission_id" =~ ^[0-9a-fA-F-]{36}$ ]]; then
+            echo "::error::Invalid notarization submission id: $submission_id"
+            exit 1
+          fi
+          key_dir="$HOME/.appstoreconnect/private_keys"
+          key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+          mkdir -p "$key_dir"
+          python3 - "FHD/$key_path" <<'PY'
+          import base64
+          import os
+          import pathlib
+          import sys
+
+          pathlib.Path(sys.argv[1]).write_bytes(
+              base64.b64decode(os.environ["APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64"], validate=True)
+          )
+          PY
+          chmod 600 "$key_path"
+          result="$(xcrun notarytool info "$submission_id" \
+            --key "$key_path" \
+            --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            --output-format json)"
+          printf '%s\n' "$result"
+          status="$(printf '%s' "$result" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status", "Unknown"))')"
+          echo "### Apple notarization: $status" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" = "Invalid" ]; then
+            xcrun notarytool log "$submission_id" \
+              --key "$key_path" \
+              --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+              --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" || true
+            exit 1
+          fi
+          if [ "$status" != "Accepted" ] && [ "$status" != "In Progress" ]; then
+            echo "::error::Unexpected notarization status: $status"
+            exit 1
+          fi
 
   generate-manifest:
     needs: [windows, macos]
