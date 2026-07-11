@@ -7,6 +7,7 @@ Outputs a manifest with two channels:
 
 Manifest schema (verified by scripts/deploy/verify-download.sh):
 {
+  "schema": "xcagi.download_manifest/v1",
   "version": "10.0.0",
   "git_sha": "...",
   "generated_at": "ISO-8601",
@@ -151,6 +152,7 @@ def main() -> int:
         return 1
 
     manifest = {
+        "schema": "xcagi.download_manifest/v1",
         "version": args.version,
         "git_sha": args.git_sha,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
