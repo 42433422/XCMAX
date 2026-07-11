@@ -28,6 +28,7 @@ def _project(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.keep_self_depth_gate
 def test_self_bootstrap_locks_other_modules_until_sources_and_strict_proof(tmp_path: Path) -> None:
     project = _project(tmp_path)
     report = build_self_depth_report(project)

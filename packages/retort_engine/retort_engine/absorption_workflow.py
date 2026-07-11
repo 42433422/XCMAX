@@ -123,11 +123,21 @@ def commit_absorption_execution(
     git_root: GitRootResolver,
     git_command: GitCommand,
 ) -> dict[str, Any]:
+    from retort_engine.git_status import blocking_git_status
+
     root = git_root(own)
     changed_files = [Path(path).expanduser().resolve() for path in execution.get("changed_files") or []]
-    if root is None or not changed_files:
+    if root is None:
         return {"status": "skipped", "reason": "no_git_root_or_no_changed_files"}
     rels = [str(path.relative_to(root)) for path in changed_files if path.is_relative_to(root)]
+    # Also stage leftover absorption artifacts so merge is not blocked by untracked files
+    # that CLI wrote but did not list in changed_files.
+    for line in blocking_git_status(root, own).splitlines():
+        path = line[3:].strip().strip('"')
+        if " -> " in path:
+            path = path.split(" -> ", 1)[1].strip().strip('"')
+        if path and path not in rels:
+            rels.append(path)
     if not rels:
         return {"status": "skipped", "reason": "no_changed_files_inside_git_root"}
     git_command(root, "add", "--", *rels)

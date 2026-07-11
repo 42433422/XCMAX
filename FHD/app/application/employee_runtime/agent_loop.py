@@ -194,9 +194,15 @@ def run_employee_agent_loop(
             tool_name = str(getattr(fn, "name", "") or "").strip()
             args = _parse_args(str(getattr(fn, "arguments", "") or ""))
             tc_id = str(getattr(tc, "id", "") or "")
-            fingerprint = json.dumps({"tool": tool_name, "args": args}, ensure_ascii=False, sort_keys=True)
+            fingerprint = json.dumps(
+                {"tool": tool_name, "args": args}, ensure_ascii=False, sort_keys=True
+            )
             action_fingerprints.append(fingerprint)
-            if repeat_limit >= 2 and len(action_fingerprints) >= repeat_limit and len(set(action_fingerprints[-repeat_limit:])) == 1:
+            if (
+                repeat_limit >= 2
+                and len(action_fingerprints) >= repeat_limit
+                and len(set(action_fingerprints[-repeat_limit:])) == 1
+            ):
                 return {
                     "handler": "agent",
                     "ok": False,
@@ -216,7 +222,16 @@ def run_employee_agent_loop(
                 if not verdict.get("ok", True):
                     reason = str(verdict.get("reason") or "blocked by employee gate")
                     tool_trace.append({"tool": tool_name, "blocked": True, "reason": reason})
-                    trajectory.append({"round": rounds, "event": "tool", "tool": tool_name, "args": args, "blocked": True, "result": reason})
+                    trajectory.append(
+                        {
+                            "round": rounds,
+                            "event": "tool",
+                            "tool": tool_name,
+                            "args": args,
+                            "blocked": True,
+                            "result": reason,
+                        }
+                    )
                     messages.append(
                         {
                             "role": "tool",
@@ -238,7 +253,16 @@ def run_employee_agent_loop(
                     {"success": False, "error": str(exc)[:300]}, ensure_ascii=False
                 )
             tool_trace.append({"tool": tool_name, "args": args})
-            trajectory.append({"round": rounds, "event": "tool", "tool": tool_name, "args": args, "blocked": False, "result": str(result_raw)[:2000]})
+            trajectory.append(
+                {
+                    "round": rounds,
+                    "event": "tool",
+                    "tool": tool_name,
+                    "args": args,
+                    "blocked": False,
+                    "result": str(result_raw)[:2000],
+                }
+            )
             messages.append(
                 {"role": "tool", "tool_call_id": tc_id, "content": str(result_raw)[:8000]}
             )

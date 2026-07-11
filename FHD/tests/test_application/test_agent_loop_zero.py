@@ -197,7 +197,10 @@ class TestRunEmployeeAgentLoop:
         completion.choices = [MagicMock(message=msg)]
         mock_client.return_value.chat.completions.create.return_value = completion
 
-        with patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": false}'):
+        with patch(
+            "app.application.tools.workflow.execute_workflow_tool",
+            return_value='{"success": false}',
+        ):
             result = run_employee_agent_loop(
                 employee_id="emp1",
                 system_prompt="test",

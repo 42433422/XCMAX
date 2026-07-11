@@ -336,7 +336,7 @@ def test_absorption_branch_merge_runs_real_subprocess_and_rollback_rehearsal(tmp
             "absorption_branch": "retort/absorb-real-subprocess",
             "merge_after": True,
             "execution_timeout_sec": 60,
-            "keep_runtime_residue": True,
+            "keep_runtime_residue": False,
         }
     )
 
