@@ -16,6 +16,11 @@ on:
         required: false
         type: boolean
         default: false
+      validate_only:
+        description: "仅验证未签名打包；强制禁止部署"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -42,18 +47,25 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
+          $validateOnly = '${{ inputs.validate_only }}' -eq 'true'
           New-Item -ItemType Directory -Force -Path upload | Out-Null
           foreach ($sku in @("personal", "enterprise")) {
             Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue
             $env:XCAGI_PRODUCT_SKU = $sku
-            $env:XCAGI_REQUIRE_WINDOWS_SIGNING = "1"
+            $env:XCAGI_REQUIRE_WINDOWS_SIGNING = if ($validateOnly) { "0" } else { "1" }
             if (-not $env:XCAGI_WINDOWS_PUBLISHER_NAME) {
               $env:XCAGI_WINDOWS_PUBLISHER_NAME = "成都修茈科技有限公司"
             }
             npm run dist:win
+            if ($LASTEXITCODE -ne 0) { throw "electron-builder failed for $sku" }
             $exe = Get-ChildItem dist -Filter "*.exe" | Select-Object -First 1
             if (-not $exe) { throw "No installer produced for $sku" }
-            powershell -ExecutionPolicy Bypass -File scripts/verify-windows-signature.ps1 -Path $exe.FullName -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+            if ($validateOnly) {
+              Write-Warning "validate_only: $sku installer is intentionally unsigned and cannot deploy"
+            } else {
+              powershell -ExecutionPolicy Bypass -File scripts/verify-windows-signature.ps1 -Path $exe.FullName -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME
+              if ($LASTEXITCODE -ne 0) { throw "signature verification failed for $sku" }
+            }
             New-Item -ItemType Directory -Force -Path "upload/$sku" | Out-Null
             Copy-Item dist/*.exe,dist/*.blockmap,dist/latest.yml -Destination "upload/$sku" -ErrorAction SilentlyContinue
           }
@@ -80,7 +92,7 @@ jobs:
 
   # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
   deploy:
-    if: ${{ inputs.deploy == true }}
+    if: ${{ inputs.deploy == true && inputs.validate_only != true }}
     needs: windows
     runs-on: ubuntu-latest
     defaults:
