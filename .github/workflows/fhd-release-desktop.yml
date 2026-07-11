@@ -211,6 +211,9 @@ jobs:
           if [ -z "${CSC_NAME:-}" ]; then
             CSC_NAME="$(security find-identity -v -p codesigning | grep 'Developer ID Application' | head -1 | sed -n 's/.*"\(.*\)"/\1/p' || true)"
           fi
+          # electron-builder rejects names that still include the certificate type prefix
+          CSC_NAME="${CSC_NAME#Developer ID Application: }"
+          CSC_NAME="${CSC_NAME#Developer ID Application:}"
           if [ -z "${CSC_NAME}" ]; then
             echo "::error::Developer ID Application certificate missing after CSC_LINK import"
             security find-identity -v -p codesigning || true

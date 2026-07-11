@@ -62,18 +62,23 @@ if [ -z "${IDENTITY}" ]; then
   exit 1
 fi
 
+# electron-builder 要求 CSC_NAME 不要带 "Developer ID Application:" 前缀
+CSC_NAME_VALUE="${IDENTITY#Developer ID Application: }"
+CSC_NAME_VALUE="${CSC_NAME_VALUE#Developer ID Application:}"
+
 # 给后续 step / electron-builder 用文件路径（比重复塞巨大 base64 更稳）
 export CSC_LINK="${P12_PATH}"
 export CSC_KEY_PASSWORD="${CSC_PASS}"
-export CSC_NAME="${IDENTITY}"
+export CSC_NAME="${CSC_NAME_VALUE}"
 
 # 只把路径与身份写入 GITHUB_ENV；密码继续由 workflow secrets 注入后续 step，避免落盘明文。
 if [ -n "${GITHUB_ENV:-}" ]; then
   {
     echo "CSC_LINK=${P12_PATH}"
-    echo "CSC_NAME=${IDENTITY}"
+    echo "CSC_NAME=${CSC_NAME_VALUE}"
   } >> "${GITHUB_ENV}"
 fi
 
 echo "[ok] Imported Developer ID: ${IDENTITY}"
+echo "[ok] CSC_NAME=${CSC_NAME_VALUE}"
 echo "[ok] CSC_LINK=${P12_PATH}"
