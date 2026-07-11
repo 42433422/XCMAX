@@ -76,7 +76,8 @@ def build_ranked_repository_map(
             break
         budget = min(int(row["char_count"]), per_file_budget, max_chars - used_chars)
         if budget <= 0:
-            break
+            selected.append({**row, "included_chars": 0})
+            continue
         selected.append({**row, "included_chars": budget})
         used_chars += budget
     return {

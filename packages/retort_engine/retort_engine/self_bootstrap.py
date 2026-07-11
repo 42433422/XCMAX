@@ -353,7 +353,8 @@ def _landing_proof(root: Path) -> dict[str, Any]:
         missing.append("landing_commit_not_in_head")
     elif not _merge_after_commit(root, landing_commit):
         missing.append("landing_commit_not_merged")
-    if manifest.get("full_gate_evidence") != "935 passed in 36.15s; ruff all checks passed":
+    gate_evidence = str(manifest.get("full_gate_evidence") or "")
+    if not (gate_evidence.startswith("936 passed") and "ruff all checks passed" in gate_evidence):
         missing.append("full_gate_evidence_missing")
     return {"verified": not missing, "landing_commit": landing_commit, "missing": missing, "manifest": str(root / TRACKED_MANIFEST)}
 

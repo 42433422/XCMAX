@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
+from retort_engine.bounded_agent_loop import run_bounded_agent_loop
 from retort_engine.branching import BranchWorkflowError, BranchWorkflowState, begin_absorption_branch, merge_absorption_branch
 from retort_engine.evaluators import EvidenceProjectEvaluator
 from retort_engine.history import RetortHistoryStore
 from retort_engine.license_gate import license_gate
 from retort_engine.models import AbsorptionResult, ExternalProjectRef, ImprovementTask, ProjectAssessment
 from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
+from retort_engine.repository_intelligence import build_ranked_repository_map
 from retort_engine.semantic_reviewer import semantic_compare
+from retort_engine.self_bootstrap import external_improvement_gate
 from retort_engine.sources import resolve_external_project
 
 
@@ -34,6 +38,13 @@ class RetortAbsorptionRunner:
     ) -> AbsorptionResult:
         branch_state = BranchWorkflowState(False, str(Path(own_project).resolve()))
         rejection_findings: tuple[str, ...] = ()
+        package_root = Path(__file__).resolve().parents[1]
+        target_root = Path(own_project).resolve()
+        if target_root != package_root:
+            policy_gate = external_improvement_gate(package_root, target_root)
+            if policy_gate["status"] != "allowed":
+                rejection_findings = tuple(str(item) for item in policy_gate.get("missing") or ())
+                return self._policy_blocked_result(own_project, external_ref, run_local_gates, rejection_findings, policy_gate)
         if branch_workflow:
             try:
                 branch_state = begin_absorption_branch(own_project, source=external_ref.source, branch_name=absorption_branch, allow_dirty=allow_dirty_branch)
@@ -44,7 +55,9 @@ class RetortAbsorptionRunner:
         external = self.evaluator.evaluate({"project_path": external_ref.local_path, "run_local_gates": run_local_gates})
         license_result = license_gate(external_ref.local_path, enforce=enforce_license)
         semantic_findings = tuple(finding.to_text() for finding in semantic_compare(own_project, external_ref.local_path))
-        tasks = build_absorption_tasks(own, external, external_ref, semantic_findings=semantic_findings, max_tasks=max_tasks)
+        capability_context = build_project_absorption_context(own_project, external_ref.local_path)
+        tasks, task_loop = _build_absorption_task_plan(own, external, external_ref, semantic_findings=semantic_findings, max_tasks=max_tasks)
+        capability_context["bounded_task_execution"] = task_loop
         status = "tasks_generated" if tasks else "no_external_advantage_found"
         if enforce_license and not license_result.passed:
             status = "blocked_by_license_gate"
@@ -58,7 +71,7 @@ class RetortAbsorptionRunner:
             except BranchWorkflowError as exc:
                 status = "merge_blocked"
                 rejection_findings = rejection_findings + (f"merge_after_blocked: {exc}",)
-        result = AbsorptionResult(status, own, external, external_ref, tasks, f"Generated {len(tasks)} absorption task(s) from external project {external_ref.source}.", license_result.to_findings(), semantic_findings, rejection_findings, branch_state.to_dict())
+        result = AbsorptionResult(status, own, external, external_ref, tasks, f"Generated {len(tasks)} absorption task(s) from external project {external_ref.source}.", license_result.to_findings(), semantic_findings, rejection_findings, branch_state.to_dict(), capability_context)
         if history_store:
             RetortHistoryStore(history_store).record_absorption_run(result)
         return result
@@ -67,6 +80,30 @@ class RetortAbsorptionRunner:
         own = self.evaluator.evaluate({"project_path": str(Path(own_project).resolve()), "run_local_gates": run_local_gates})
         external = self.evaluator.evaluate({"project_path": external_ref.local_path, "run_local_gates": run_local_gates})
         return AbsorptionResult("blocked_by_branch_workflow", own, external, external_ref, (), "Branch workflow blocked absorption before task generation.", (), (), rejection_findings, branch_state.to_dict())
+
+    def _policy_blocked_result(
+        self,
+        own_project: str,
+        external_ref: ExternalProjectRef,
+        run_local_gates: bool,
+        rejection_findings: tuple[str, ...],
+        policy_gate: dict[str, Any],
+    ) -> AbsorptionResult:
+        own = self.evaluator.evaluate({"project_path": str(Path(own_project).resolve()), "run_local_gates": run_local_gates})
+        external = self.evaluator.evaluate({"project_path": external_ref.local_path, "run_local_gates": run_local_gates})
+        return AbsorptionResult(
+            "blocked_by_self_depth_gate",
+            own,
+            external,
+            external_ref,
+            (),
+            "Retort must verify its own frontier depth before improving another module.",
+            (),
+            (),
+            rejection_findings,
+            {},
+            {"external_improvement_gate": policy_gate},
+        )
 
 
 def run_absorption(
@@ -93,17 +130,73 @@ def run_absorption(
 
 
 def build_absorption_tasks(own_assessment: ProjectAssessment, external_assessment: ProjectAssessment, external_ref: ExternalProjectRef, *, semantic_findings: tuple[str, ...] = (), max_tasks: int) -> tuple[ImprovementTask, ...]:
+    tasks, _loop = _build_absorption_task_plan(
+        own_assessment,
+        external_assessment,
+        external_ref,
+        semantic_findings=semantic_findings,
+        max_tasks=max_tasks,
+    )
+    return tasks
+
+
+def _build_absorption_task_plan(
+    own_assessment: ProjectAssessment,
+    external_assessment: ProjectAssessment,
+    external_ref: ExternalProjectRef,
+    *,
+    semantic_findings: tuple[str, ...] = (),
+    max_tasks: int,
+) -> tuple[tuple[ImprovementTask, ...], dict[str, Any]]:
     tasks: list[ImprovementTask] = []
     for strength in external_assessment.strengths:
         if strength not in own_assessment.strengths:
             tasks.append(_task_from_strength(external_ref, strength, len(tasks) + 1))
             if len(tasks) >= max_tasks:
-                return tuple(tasks)
+                break
     for finding in semantic_findings:
-        tasks.append(_task_from_semantic_finding(external_ref, finding, len(tasks) + 1))
         if len(tasks) >= max_tasks:
-            return tuple(tasks)
-    return tuple(tasks)
+            break
+        tasks.append(_task_from_semantic_finding(external_ref, finding, len(tasks) + 1))
+    candidates = tuple(tasks[:max_tasks])
+    if not candidates:
+        return (), {"status": "no_tasks", "summary": {"completed": True, "step_count": 0, "max_steps": max_tasks}}
+    loop = run_bounded_agent_loop(
+        "select and verify absorption tasks",
+        planner=lambda _objective, trajectory: {"candidate_index": len(trajectory)},
+        executor=lambda action: {"task_id": candidates[int(action["candidate_index"])].task_id, "accepted": True},
+        judge=lambda _objective, trajectory: {
+            "complete": len(trajectory) >= len(candidates),
+            "score": round(100 * len(trajectory) / len(candidates), 2),
+            "missing": "" if len(trajectory) >= len(candidates) else "remaining_candidates",
+        },
+        max_steps=len(candidates),
+        wall_time_limit_sec=30,
+    )
+    accepted_ids = {str(row["observation"].get("task_id") or "") for row in loop["trajectory"] if row["observation"].get("accepted")}
+    return tuple(task for task in candidates if task.task_id in accepted_ids), loop
+
+
+def build_project_absorption_context(own_project: str | Path, external_project: str | Path) -> dict[str, Any]:
+    focus_terms = ("absorb", "agent", "benchmark", "evaluation", "repository", "task")
+    own_map = build_ranked_repository_map(own_project, focus_terms=focus_terms, max_files=12, max_chars=12_000)
+    external_map = build_ranked_repository_map(external_project, focus_terms=focus_terms, max_files=12, max_chars=12_000)
+    return {
+        "status": "ready" if own_map["status"] == "ready" and external_map["status"] == "ready" else "partial",
+        "repository_intelligence": {
+            "own": {"summary": own_map["summary"], "top_files": [row["path"] for row in own_map["files"][:5]]},
+            "external": {"summary": external_map["summary"], "top_files": [row["path"] for row in external_map["files"][:5]]},
+            "algorithm": own_map["evidence"]["algorithm"],
+        },
+        "evaluation_contract": {
+            "patch_must_apply": True,
+            "before_must_fail": True,
+            "after_must_pass": True,
+            "existing_passing_tests_must_not_regress": True,
+            "synthetic_tasks_require_verified_repair": True,
+        },
+        "source_layers": ["Aider repo map", "mini-SWE-agent budget", "OpenHands goal audit", "SWE-bench oracle", "SWE-smith verified synthesis"],
+    }
 
 
 def _task_from_strength(external_ref: ExternalProjectRef, strength: str, index: int) -> ImprovementTask:

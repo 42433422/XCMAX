@@ -2,7 +2,7 @@
   "schema_version": 1,
   "policy": "retort_self_first",
   "landing_commit": "b9c1249e1429b904ebe99120552860f637eef903",
-  "full_gate_evidence": "935 passed in 36.15s; ruff all checks passed",
+  "full_gate_evidence": "936 passed in 59.27s; ruff all checks passed",
   "sources": [
     {
       "status": "recorded",
@@ -16,7 +16,7 @@
       "behavior": {"passed": true},
       "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
       "implementation_hashes": {
-        "retort_engine/repository_intelligence.py": "870f60240e105592cace7c9e35f0bcd692409dc1f610dd83aaaff9caff16d85c",
+        "retort_engine/repository_intelligence.py": "31c2de563f5ce7a9997510f2099bd06c5b7bb4b1ab71d2559e6b1200d5afb264",
         "tests/test_repository_intelligence.py": "10a2fd7d603b25e866541ce2c3c006f48530df33f7ad0d437246c8d9edd84760"
       }
     },
