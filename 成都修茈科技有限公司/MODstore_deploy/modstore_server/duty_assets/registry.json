@@ -1,0 +1,1515 @@
+{
+  "immutable": true,
+  "package_count": 52,
+  "packages": [
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "根据规划蓝图生成员工包产物（manifest、Python 实现、资产文件）；支持 LLM 驱动和资产驱动两种模式",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8753,
+      "id": "artifact-generator",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "产物生成员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "5109be8446ef7ca2c89495ef1e736275bb8b3e084143526606e17adf4ed42709",
+      "stored_filename": "artifact-generator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对员工提交到「待邮件审批」队列的补丁/PR 做自动评审：跑测试 → 静态规则审 → 自动放行低风险 / 升级高风险给 admin；不直接改业务源码、不直接合并到主干。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8938,
+      "id": "change-request-auditor",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "变更评审员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "477ecc92e58dec7d4a5d47a8f4d5991cfc8fddbaf1f4fa3e8bb521571e77dd7c",
+      "stored_filename": "change-request-auditor-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对员工包体进行轻量校验，包括 manifest 合规性、Python 编译检查、包体一致性、独立可执行验证",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8976,
+      "id": "code-validator",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "代码校验员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "d44571b833874b052226dc42995aa7849d090fc50d47498b57a6fd6e2c809f99",
+      "stored_filename": "code-validator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "每日定时：在独立分支上做最小修复（测试失败、日志告警），提交后进入「待邮件审批」队列；不触达用户数据目录与 ORM 模型定义。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8693,
+      "id": "daily-orchestrator",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "每日编排员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "57d6609bab1b4ea962604db2be4a0471c1c505584d9caf9cab21a8b94b11f2af",
+      "stored_filename": "daily-orchestrator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "负责 ORM 模型与 Alembic 迁移、慢查询/索引/复制状态诊断、备份恢复策略与权限审计；唯一拥有 models.py / alembic / migrations 写权限的员工，所有 schema 变更必须由本岗发起或评审。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8846,
+      "id": "dbops-engineer",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "数据库运维工程师",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "0fbe7a337326ef12663509c18d62c971dfeff348e7d42775e1f0f138ff97671b",
+      "stored_filename": "dbops-engineer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O8 里程碑签收与交付确认：对接 OPS_CLOSURE、签收工单、test-qa-runner 门禁与 receipt 工作流。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8901,
+      "id": "delivery-receipt-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "交付签收员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "8520af2d836018827e48bc6c225f820904aa37d1e5473e6c58ff2f15779f720d",
+      "stored_filename": "delivery-receipt-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "编排 xiu-ci.com 全站的构建与发布流程，包含 Docker 镜像、腾讯云 Pages 部署、脚本维护；不写业务逻辑。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9207,
+      "id": "deploy-release-officer",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "发布部署主管",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "1dfd425666fa33dbb69118037ae946ddef79ce4275940a315cdf7a9c44789d6e",
+      "stored_filename": "deploy-release-officer-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 xiu-ci.com 与 MODstore 平台的全部文档资产：README、ESkill.md、docs/ 目录、需求/方案 Markdown，以及 yuangon/ 各员工 README 同步；可调用 py-doc-generator.xcemp 与 project-doc-generator.xcemp 辅助生成文档；不修改源码。员工包专属文档（fhd-employee-composition.md、员工制作增强设计方案.md、employee_publish_wizard.md、0003-artifacts-bundles-employee-packs.md）由 employee-pack-curator 全权负责，本员工不主动修改。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9596,
+      "id": "doc-knowledge-curator",
+      "industry": "quality-and-docs",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "文档知识管理员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "ed975f3a00a8d2af0b87cb2ad31c08ff514f0ed390419b29b8232f9a2d4e64f4",
+      "stored_filename": "doc-knowledge-curator-1.0.3.xcemp",
+      "version": "1.0.3",
+      "yuangon_area": "quality-and-docs"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O-B B3 联合包交付遥测 · 里程碑回写 O-A CRM 快照 · 生态进度事件。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8879,
+      "id": "ecosystem-delivery-reporter",
+      "industry": "partner-ecosystem",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "生态交付回传员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "98d9335b394e98a563a4b805c6cf3ad5e3742c319f523f0f0984e08b97b10409",
+      "stored_filename": "ecosystem-delivery-reporter-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "partner-ecosystem"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O-B B4 投资方/伙伴只读 Portal · 里程碑与风险视图 · 进度只读 API。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8948,
+      "id": "ecosystem-investor-portal-officer",
+      "industry": "partner-ecosystem",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "投资方只读门户员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "47653acb0d2a163dd141d015dcd497db4a949d5442213992a2546d894bc43c27",
+      "stored_filename": "ecosystem-investor-portal-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "partner-ecosystem"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O-B B2 生态联合 SKU · MODstore catalog 扩展 · 伙伴商品挂载与可见性策略。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8911,
+      "id": "ecosystem-joint-catalog-officer",
+      "industry": "partner-ecosystem",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "联合 Catalog 策展员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "27ad2c3d89d2567dc8131799568d22ae01416bd0b0de10bb484d161be8b1e84f",
+      "stored_filename": "ecosystem-joint-catalog-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "partner-ecosystem"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O-B B1 生态伙伴 onboarding · 租户隔离 · 联合 SSO 与伙伴档案建档。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8911,
+      "id": "ecosystem-partner-onboard-officer",
+      "industry": "partner-ecosystem",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "生态伙伴接入员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "7f5845680448bc8dae17cec80a1e3864399625277f0fd25a2308d63ffb86e4c0",
+      "stored_filename": "ecosystem-partner-onboard-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "partner-ecosystem"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "O-B B5 渠道分润 · 联合 GMV 对账 · 与 payment-billing-reconciler 分工（本岗偏伙伴分润）。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9032,
+      "id": "ecosystem-revenue-share-reconciler",
+      "industry": "partner-ecosystem",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "生态分润对账员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "1a349cab7bae491466760c15b9a6d3288d2da7e24a92eeb82fe2002f9483fa07",
+      "stored_filename": "ecosystem-revenue-share-reconciler-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "partner-ecosystem"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "面向内部编制与协作场景：通过结构化提问与表单补全，帮助其他员工（及岗位包）补全元数据、能力说明、\n运行依赖与风险字段；不替代 HR 正式录用流程，不存储敏感个人身份信息于未授权位置。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9369,
+      "id": "employee-interview-assistant",
+      "industry": "quality-and-docs",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "员工信息访谈员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "74817950cd53e00a13ab77759fe8222d3b2c7eefe3d59b3897df716889b4ebf1",
+      "stored_filename": "employee-interview-assistant-1.0.2.xcemp",
+      "version": "1.0.2",
+      "yuangon_area": "quality-and-docs"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "管理 MODstore 员工包的完整生命周期：AI scaffold、Skill 注册、executor 维护、.xcemp 导入导出与 ESkill 演化固化；不得修改支付模块。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9487,
+      "id": "employee-pack-curator",
+      "industry": "modstore-backend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "员工包策展员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "919174a42d8d55de5ac6f6e092d2571ce50ec3a706d4043d0ada39d9d3a03e48",
+      "stored_filename": "employee-pack-curator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "modstore-backend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对候选 employee_pack（.xcemp）做结构化「入职面试」：基于用户粘贴的 manifest 节选、同步测试日志或\n沙盒 JSON，对照职责边界与平台契约给出录用/有条件录用/驳回结论与可执行修改清单。\n不替代渗透测试、法务合规或正式 HR 录用；不编造未出现在输入中的文件路径、接口或密钥。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 10312,
+      "id": "employee-pack-quality-interviewer",
+      "industry": "quality-and-docs",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "员工包质询员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "bb1e0bd5939c3c42f918e04c079eec251abf8bd9cd6b36b17ec8fd87cbd8a5b8",
+      "stored_filename": "employee-pack-quality-interviewer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "quality-and-docs"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "根据结构化需求规划员工包架构，拆分员工职责、脚本工作流与 Skill 组；输出一站式员工蓝图",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8613,
+      "id": "employee-planner",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "规划设计员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "dcfc142dbce9a77ecc6708570f9f5a418986ea3d502fc1899e6a0de1756187ed",
+      "stored_filename": "employee-planner-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "跟踪 O6 企业使用阶段：租户激活、功能采纳、用量遥测与回访触发；与 user-customer-service-officer 分工（本岗偏数据与里程碑，客服偏交互）。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8966,
+      "id": "enterprise-adoption-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "企业使用跟踪员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "afc6dd4a82a6d5d6f8b24f076d10a1d8a257bcdb98e23442e18fab846e89f33e",
+      "stored_filename": "enterprise-adoption-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 FHD 宿主核心 app/ 与 tests/：应用服务、路由、NeuroBus 集成；产出经 CR Git 管线提交 PR，由 FHD test.yml 与 ci-auto-merge 门控。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8713,
+      "id": "fhd-core-maintainer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "FHD 核心应用维护员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "009a41e8bf6b98c6dc749cb670718dd273f10f7859893b486e913f6417a9440a",
+      "stored_filename": "fhd-core-maintainer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护根目录 Flask 应用 app.py 的路由、表单处理、excel-to-ai 动态页与依赖 requirements.txt；对接静态站，不涉及 MODstore 或 Nginx 配置。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8966,
+      "id": "flask-entry-keeper",
+      "industry": "site-and-marketing",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Flask 入口维护员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "df4449554aef14997bf331efdf8b32af7bf450293c3d4af527069b126d97eef0",
+      "stored_filename": "flask-entry-keeper-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "site-and-marketing"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对制作车间产物执行六维质量评估与放行建议",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9229,
+      "id": "hex-quality-assessor",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "六维质检员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "f324a3077aaa5f7c698d5c41594f9e509065de37dfe6fa2495872bc12617239b",
+      "stored_filename": "hex-quality-assessor-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "探测宿主环境连通性，验证 LLM 密钥状态、API 版本兼容性与服务可达性",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8858,
+      "id": "host-checker",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "运维员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "fde94caba6bd6ff2491a9428537ba4e95531b49382b730c377bd993120bac051",
+      "stored_filename": "host-checker-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "把外部输入（admin 自然语言下达、邮件、微信、客服工单、`mianshi/` 候补包、外部 webhook）规整成结构化 task，写入「待派发」队列；本岗只做语义解析与归一化，不直接选员工、不直接改业务代码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8863,
+      "id": "intake-dispatcher",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "需求接入员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "3e559ab4cb872df2c2a3b248d6f8934773d6c3b955d19b2ac60de195e7fba38c",
+      "stored_filename": "intake-dispatcher-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "解析用户自然语言需求，提取结构化意图、领域关键词与建议能力；识别用户身份与权限",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8593,
+      "id": "intent-analyst",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "需求分析员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "e0fde5e8e4d2df67771a12ba1345d8581dee116c02d5dcd8acb37e63bc8286c8",
+      "stored_filename": "intent-analyst-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "P-W MODstore Java 支付面：PaymentController、OrderService、PAYMENT_CONTRACT 与 Python 代理对齐。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8952,
+      "id": "java-payment-bridge-officer",
+      "industry": "modstore-backend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Java 支付桥接员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "042316585d49da045fa5223e445f83d1586c9f1655ce7a9777e3af0ccc2820d9",
+      "stored_filename": "java-payment-bridge-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "modstore-backend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "S-R R3 工作区与 legacy 归档：_archive/、FHD/.archive/、LEGACY_CLEANUP_TRACKING、xcmax-tree 排除项治理。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8890,
+      "id": "legacy-archive-curator",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "工作区归档管理员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "f802d33a76527c6efbe0bfdd5a8578635be1b9aa1f9c281340f21bddc5e2926b",
+      "stored_filename": "legacy-archive-curator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "归并和分析 xiu-ci.com 所有运行日志、测试报告与覆盖率数据；生成告警摘要并推动事故处置；不修改源码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 10097,
+      "id": "log-monitor-incident",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "日志监控与事故响应员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "f80564a6084a44a61ff1edcaf6975d8971daa91caf9e72d8955d51fd5b3513ab",
+      "stored_filename": "log-monitor-incident-1.2.1.xcemp",
+      "version": "1.2.1",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 MODstore 市场前端（非工作台视图）：路由视图、API 对接层、Pinia store、HTTP client；严格遵守 Vue 3 Only，禁止引入 React。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9292,
+      "id": "market-frontend-dev",
+      "industry": "modstore-frontend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "市场前端开发员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "745bbd18bd65e45c650d29537032fdc0a56d445639e9506c46111bedf8e2ff58",
+      "stored_filename": "market-frontend-dev-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "modstore-frontend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 marketing-site/ Nunjucks 模板与构建脚本（build.mjs、package.json）；与根静态站 site-content-editor 分工：本岗只管独立营销站子项目，不碰 MODstore 与市场 Vue 源码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8703,
+      "id": "marketing-site-builder",
+      "industry": "site-and-marketing",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "营销站点构建员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "519417f867bbe1358fba920af9a883751e6895f326a51e911b9a2e330a818f1e",
+      "stored_filename": "marketing-site-builder-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "site-and-marketing"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "为员工包生成配套脚本工作流（小程序），将自然语言需求转化为可执行的脚本逻辑",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8581,
+      "id": "miniapp-builder",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "小程序员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "4095a3f2e47eed3830e38c193431805dc5996f096a42470e5f87b5d916dd6378",
+      "stored_filename": "miniapp-builder-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "P-S Android 渠道构建与发布：ci-mobile-android.yml、release-android.yml、APK/AAB 产出与 smoke。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8935,
+      "id": "mobile-android-release-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Android 发版员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "cae21e2eb89bfbb0a56fbed4f72823e5efc41fff09ba01274d0d41a9920fa31a",
+      "stored_filename": "mobile-android-release-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "P-S iOS 渠道发布（规划中）：TestFlight / App Store 工程、notarize 协同与 release 门禁。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8907,
+      "id": "mobile-ios-release-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "iOS 发版员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "48f14a3f48daf5e49622c512b66ecd679ec305c0050616c00d28e4a70c75fb24",
+      "stored_filename": "mobile-ios-release-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "管理 mods/ 目录中的 Mod 包与 eskill-prototype/ 原型；负责 .xcemp 上架审核流程与 ESkill 标准文档维护；所有上线须经 CI 审批，不直接操作生产 DB。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 10132,
+      "id": "mods-and-eskill-curator",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Mods/ESkill 策展员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "ce48abbc96a5fb78c0ce04d51974c00e620ba12c653a2103887742d59fa4fd0e",
+      "stored_filename": "mods-and-eskill-curator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 MODstore 平台的 Flask 蓝图 API：工作台、市场目录、工作流、LLM 代理与 WebSocket 实时通道；不触碰前端 Vue 文件。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9235,
+      "id": "modstore-backend-api",
+      "industry": "modstore-backend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "MODstore 后端 API 员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "d77033f8686ed4b73f1041597974ebde19b2f130c6804d8b59a1cc48d4e7d631",
+      "stored_filename": "modstore-backend-api-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "modstore-backend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 xiu-ci.com 所有 Nginx 配置文件，包含虚拟主机、TLS、反代规则；不碰任何业务代码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8836,
+      "id": "nginx-config-engineer",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Nginx 配置工程师",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "1c8f358578c0bfa4a245cac76734ad75cb75bda592d48d5e729eea2a8e7f5867",
+      "stored_filename": "nginx-config-engineer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "将员工包登记到 Catalog 目录，执行五维审核，生成 .xcemp 发布包",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8578,
+      "id": "pack-registrar",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "打包登记员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "60cc628208eeb8f723882f6213292248fc296ea5b237f2fac17c9a898ea83dea",
+      "stored_filename": "pack-registrar-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 MODstore 支付与账单模块：支付宝接口、订单管理、LLM 计费与订阅续费；对账只读为主，禁止直接写生产 DB。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9087,
+      "id": "payment-billing-reconciler",
+      "industry": "modstore-backend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "支付账单对账员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "5118333bbdcd51ed9fe2d4d8c8ef04cbd4f4b194bbd9b3391ede7e50472dadff",
+      "stored_filename": "payment-billing-reconciler-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "modstore-backend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "在合并、推送与发布前汇总当前 Git 状态与设备/部署档位；不直接执行生产发布，不修改业务源码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9333,
+      "id": "push-update-context-officer",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "推送更新员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "abd038433cbcf954e17095940b4ea6397aa5742e951353cb210153683f86b2c8",
+      "stored_filename": "push-update-context-officer-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对生成的产物进行服务端校验，包括 manifest 合规性、Python 语法、资产完整性与一致性检查",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8679,
+      "id": "quality-validator",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "质检员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "a3b04ead773e19959fc602473d4b7fb0069dd2ec28e8edbb6b94139da2fd5ba2",
+      "stored_filename": "quality-validator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "周期性清理 workbench_script_runs、上传分片、旋转日志、知识缓存等过期文件，并把每次清理结果写回员工执行流水，作为「定时档案清理」岗位在员工大会上发言。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9070,
+      "id": "retention-officer",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "档案清理员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "c79a5e9c7b1f009a15d7cb7b5664b4a003d98c1e46ba44005fe5413b4117263b",
+      "stored_filename": "retention-officer-1.0.2.xcemp",
+      "version": "1.0.2",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "对员工工作流执行沙箱测试，包括结构校验与 Mock 执行验证",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8850,
+      "id": "sandbox-tester",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "测试员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "5e2f7467d76a9dd0fd30dd6e41d3dfbceff977f4a7dc6c197f640e61c8c0b1b7",
+      "stored_filename": "sandbox-tester-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "将生成的脚本工作流嵌入员工包，更新 manifest 能力声明与目录结构",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8541,
+      "id": "script-binder",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "配置绑定员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "922936fb96fec874e522987a4542a596c6f560480b8a9f49e7faaf78e7f7791c",
+      "stored_filename": "script-binder-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "保护 xiu-ci.com 所有密钥、证书与敏感配置；进行依赖 CVE 扫描、CSP/Headers 审计；发现问题时告警，不自动修改生产配置。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9044,
+      "id": "security-secrets-guard",
+      "industry": "server-and-ops",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "安全密钥守卫",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "cb3ad5d3c2159cec517c7dd0d4d5b80b48ee4f448f144a30eb89c0d12db777b3",
+      "stored_filename": "duty-guard-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "server-and-ops"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "执行员工包独立可执行自检，验证 .xcemp 包在隔离环境下可正常加载与运行",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8859,
+      "id": "self-checker",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "自检员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "3c2e175e76142346a8fcc60db470b017787cf0c884ebd96d045d3001ea389112",
+      "stored_filename": "self-checker-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 xiu-ci.com 的 SEO 资产：sitemap.xml、robots.txt、百度/必应站长校验文件与结构化数据，确保收录与排名质量。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8932,
+      "id": "seo-sitemap-curator",
+      "industry": "site-and-marketing",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "SEO 站点地图管理员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "e35a80d348880653f2447671f204101f9fae02087f382a1685b04cd280be19c6",
+      "stored_filename": "seo-sitemap-curator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "site-and-marketing"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "维护 xiu-ci.com 营销静态页面的内容、文案、图片引用与数据 JSON；不涉及服务器配置或后端逻辑。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9312,
+      "id": "site-content-editor",
+      "industry": "site-and-marketing",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "静态站内容编辑员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "686996fc96ac6baa5be7babbae55c0e35deaff9434545f92dd4cd744485a98f9",
+      "stored_filename": "site-content-editor-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "site-and-marketing"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "把 `intake-dispatcher` 产出的结构化 task 派发给最合适的员工：基于 task.files_hint 与各员工 scope_globs 做匹配，命中多人时按仲裁规则选一人，无人匹配则升级 admin；本岗只做路由决策，不直接改业务代码、不执行任务。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8911,
+      "id": "task-router-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "任务派发员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "5304622ff037588cbde95d72721f3f82fc87b1895b4c3a06f56b046cfdc6916d",
+      "stored_filename": "task-router-officer-1.0.1.xcemp",
+      "version": "1.0.1",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "负责全站测试套件的维护与执行：pytest 单元/集成测试、vitest 前端单测、Playwright E2E 测试、pre-commit hooks、覆盖率门禁、CI 工作流测试步骤、TypeScript 类型检查；输出测试结果并推动覆盖率达标；不修改被测源码。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8551,
+      "id": "test-qa-runner",
+      "industry": "quality-and-docs",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "测试质量运行员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "3c08cef3add1d75a9a4a1305ddfb3ef20b59f513cbba7445bb1012ac598a24f0",
+      "stored_filename": "test-qa-runner-2.0.3.xcemp",
+      "version": "2.0.3",
+      "yuangon_area": "quality-and-docs"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "面向终端用户的客服 AI 员工：绑定微信账号资产，在 Mac 本地协助沟通；首要能力为需求采集（询问客户需求并推送表单链接）。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9149,
+      "id": "user-customer-service-officer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "用户客服员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "0240084dc5e04c077de2a85f863141c44100c35001334d9f23ef7f447c746473",
+      "stored_filename": "user-customer-service-officer-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "全权维护 vibe-coding 平台核心库（代码工厂、工作流工厂、自然语言解析、运行时校验器、Agent 层、安全模块）、配套测试、文档、示例代码；为 employee-pack-curator 提供稳定的 vibe_eskill_adapter 接口。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9634,
+      "id": "vibe-coding-maintainer",
+      "industry": "platform-core",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "Vibe-Coding 维护员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "2b3c857a718fdfbc96c2002eb129b3af9eb3a3bf9c99753c9756f29c0f8d67f7",
+      "stored_filename": "vibe-coding-maintainer-2.0.0.xcemp",
+      "version": "2.0.0",
+      "yuangon_area": "platform-core"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "专注维护 MODstore 工作台（Workbench）的 UX 与交互：画布、右侧边栏、工作台 Shell、AI 草稿审核组件与整体暗色设计系统；严格遵守 Vue 3 Only。",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 9145,
+      "id": "workbench-ux-stylist",
+      "industry": "modstore-frontend",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "工作台 UX 设计员",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "b039c76813a3935692daffef94bbef43a5105f82861aa67e84d5f74ba1d3c8b8",
+      "stored_filename": "workbench-ux-stylist-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "modstore-frontend"
+    },
+    {
+      "artifact": "employee_pack",
+      "commerce": {
+        "mode": "free",
+        "price": 0
+      },
+      "description": "为员工包创建自动化工作流（Skill 组），通过自然语言生成画布节点与连线",
+      "employee_scope": "duty",
+      "employee_source": "duty_roster",
+      "file_size": 8633,
+      "id": "workflow-automator",
+      "industry": "craft-workshop",
+      "is_duty_employee": true,
+      "is_public": false,
+      "is_store_employee": false,
+      "license": {
+        "type": "internal",
+        "verify_url": null
+      },
+      "market_visible": false,
+      "name": "流程自动化员工",
+      "probe_mod_id": "yuangon",
+      "release_channel": "stable",
+      "security_level": "personal",
+      "sha256": "2702700e35186c16ebc2b0e2e8c3a282a8f70d198e83a52a4714732e0839476e",
+      "stored_filename": "workflow-automator-1.0.0.xcemp",
+      "version": "1.0.0",
+      "yuangon_area": "craft-workshop"
+    }
+  ],
+  "schema": 1
+}

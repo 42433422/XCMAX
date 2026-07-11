@@ -26,6 +26,7 @@ enum AndroidDeepLinkTarget {
   approvalDetail,
   aiEmployeeProfile,
   employeeQuestions,
+  managementWork,
   settings,
   about,
   notifications,
@@ -51,6 +52,7 @@ class AndroidDeepLinkDestination {
     this.approvalId,
     this.modId,
     this.employeeId,
+    this.taskId,
     this.conversationId,
     this.partnerKind,
     this.tabIndex,
@@ -142,6 +144,12 @@ class AndroidDeepLinkDestination {
           employeeId: employeeId,
         );
 
+  const AndroidDeepLinkDestination.managementWork(String? taskId)
+      : this._(
+          AndroidDeepLinkTarget.managementWork,
+          taskId: taskId,
+        );
+
   const AndroidDeepLinkDestination.settings()
       : this._(AndroidDeepLinkTarget.settings);
 
@@ -194,6 +202,7 @@ class AndroidDeepLinkDestination {
   final int? approvalId;
   final String? modId;
   final String? employeeId;
+  final String? taskId;
   final String? conversationId;
   final String? partnerKind;
   final int? tabIndex;
@@ -340,6 +349,12 @@ AndroidDeepLinkDestination resolveAndroidDeepLinkDestination(String route) {
   }
   if (first == 'employee_questions_all') {
     return const AndroidDeepLinkDestination.employeeQuestions(null);
+  }
+  if (first == 'management_work') {
+    final taskId = segments.length >= 2 ? segments[1].trim() : '';
+    return AndroidDeepLinkDestination.managementWork(
+      taskId.isEmpty ? null : taskId,
+    );
   }
   if (first == 'ai_chat') {
     return const AndroidDeepLinkDestination.aiChat();

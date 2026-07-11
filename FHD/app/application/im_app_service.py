@@ -381,6 +381,7 @@ class ImApplicationService(ImEmployeeMixin, EmployeePeerMixin):
                             "conversation_id": str(conversation_id),
                             "route": "admin_cs_console",
                         },
+                        audience="management",
                     )
                 except RECOVERABLE_ERRORS:
                     logger.debug("cs inbox push failed", exc_info=True)

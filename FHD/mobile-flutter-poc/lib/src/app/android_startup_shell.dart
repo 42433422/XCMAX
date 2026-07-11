@@ -23,6 +23,7 @@ import '../features/contacts/fixed_partner_profile_screen.dart';
 import '../features/cs/admin_cs_console_screen.dart';
 import '../features/cs/cs_chat_screen.dart';
 import '../features/enterprise/enterprise_module_screen.dart';
+import '../features/employees/management_work_screen.dart';
 import '../features/finance/longtail_screen.dart';
 import '../features/groups/ai_group_screens.dart';
 import '../features/im/im_messenger_screen.dart';
@@ -600,6 +601,15 @@ class _AndroidStartupAppState extends State<AndroidStartupApp> {
           EmployeeQuestionsScreen(
             repository: widget.repository,
             employeeId: destination.employeeId,
+          ),
+        );
+        return true;
+      case AndroidDeepLinkTarget.managementWork:
+        _pushAndroidDeepLinkPage(
+          navigator,
+          ManagementWorkScreen(
+            repository: widget.repository,
+            initialTaskId: destination.taskId,
           ),
         );
         return true;

@@ -689,6 +689,54 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    def _management_work_loop() -> None:
+        try:
+
+            def _run() -> None:
+                from modstore_server.management_work_service import (
+                    dispatch_assigned_work_items,
+                    recover_stale_work_items,
+                )
+
+                recovery = recover_stale_work_items(limit=100)
+                dispatch = dispatch_assigned_work_items(
+                    limit=max(1, min(_env_int("MODSTORE_MANAGEMENT_WORK_BATCH", 3), 20)),
+                    lease_seconds=max(
+                        60,
+                        min(_env_int("MODSTORE_MANAGEMENT_WORK_LEASE_SECONDS", 300), 3600),
+                    ),
+                )
+                logger.info(
+                    "management work loop: recovered=%s blocked=%s processed=%s delivered=%s retrying=%s",
+                    recovery.get("recovered"),
+                    recovery.get("blocked"),
+                    dispatch.get("processed"),
+                    dispatch.get("delivered"),
+                    dispatch.get("retrying"),
+                )
+
+            _run_tracked_scheduler_job("management_work_loop", _run)
+        except Exception:
+            logger.exception("management work loop failed")
+
+    _scheduler.add_job(
+        _management_work_loop,
+        IntervalTrigger(
+            seconds=max(10, _env_int("MODSTORE_MANAGEMENT_WORK_INTERVAL_SECONDS", 15))
+        ),
+        id="management_work_loop",
+        replace_existing=True,
+        coalesce=True,
+        # Each claimed task executes in its own killable child process. Allow
+        # several scheduler instances so one long employee task does not stop
+        # the rest of the management team from taking work; DB CAS keeps every
+        # work item single-owner.
+        max_instances=max(
+            1,
+            min(_env_int("MODSTORE_MANAGEMENT_WORK_MAX_INSTANCES", 3), 8),
+        ),
+    )
+
     def _employee_evolution_scan_loop() -> None:
         try:
 

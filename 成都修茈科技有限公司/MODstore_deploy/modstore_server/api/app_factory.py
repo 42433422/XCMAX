@@ -38,7 +38,7 @@ if _preserved_db_path:
 if os.environ.get("MODSTORE_PYTEST_USE_SQLITE") == "1":
     os.environ.pop("DATABASE_URL", None)
 
-from modstore_server.constants import DEFAULT_API_PORT, DEFAULT_XCAGI_BACKEND_URL
+from modstore_server.constants import DEFAULT_API_PORT, DEFAULT_XCAGI_BACKEND_URL  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +267,7 @@ def _init_background_jobs() -> None:
 
 
 def _register_core_routes(app: FastAPI, cfg: AppConfig) -> None:
-    from modstore_server.api import csp_report, ui_mount
+    from modstore_server.api import csp_report
 
     app.include_router(csp_report.router)
 
@@ -363,6 +363,7 @@ _FULL_OPTIONAL_MODULES = (
     "modstore_server.admin_ops_audit_api",
     "modstore_server.admin_employee_execution_api",
     "modstore_server.admin_employee_autonomy_api",
+    "modstore_server.admin_management_work_api",
     "modstore_server.admin_duty_graph_api",
     "modstore_server.production_line_api",
     "modstore_server.release_train_api",

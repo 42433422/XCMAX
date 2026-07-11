@@ -109,12 +109,15 @@ def issue_pairing_nonce(
     subject_username: str,
     tenant_id: int | None,
     company_brand: str,
+    account_kind: str = "enterprise",
+    token_scope: str = "enterprise_pairing",
 ) -> dict[str, Any]:
     """签发绑定管理端身份的短期、一次性配对载荷。
 
-    ``subject_user_id`` 当前等于签发管理员，但交换后只会获得
-    ``enterprise_pairing`` 受限凭证；签发身份与租户在 nonce 创建时固定，
-    不能由手机交换请求覆盖。
+    ``subject_user_id`` 当前等于签发管理员。默认交换为受限的企业端
+    ``enterprise_pairing`` 凭证；管理端页面可显式签发
+    ``management_pairing``，两种作用域都在 nonce 创建时固定，不能由
+    手机交换请求覆盖。
     """
     issuer_uid = int(issuer_user_id or 0)
     subject_uid = int(subject_user_id or 0)
@@ -124,6 +127,14 @@ def issue_pairing_nonce(
     # signed credential is safer than an absent tenant claim that downstream
     # code could accidentally interpret as unrestricted.
     clean_tenant_id = int(tenant_id) if tenant_id is not None else 0
+    clean_account_kind = str(account_kind or "").strip().lower()
+    clean_token_scope = str(token_scope or "").strip()
+    allowed_pairing_scopes = {
+        ("enterprise", "enterprise_pairing"),
+        ("admin", "management_pairing"),
+    }
+    if (clean_account_kind, clean_token_scope) not in allowed_pairing_scopes:
+        raise ValueError("无效的移动端配对作用域")
     ttl = max(30, min(int(ttl_seconds or 120), 300))
     nonce = secrets.token_urlsafe(16)
     exp = int(time.time()) + ttl
@@ -139,8 +150,8 @@ def issue_pairing_nonce(
         "subject_username": str(subject_username or "").strip()[:128],
         "tenant_id": clean_tenant_id,
         "company_brand": str(company_brand or "").strip()[:256],
-        "account_kind": "enterprise",
-        "token_scope": "enterprise_pairing",
+        "account_kind": clean_account_kind,
+        "token_scope": clean_token_scope,
     }
     with _lock:
         _nonces[nonce] = payload

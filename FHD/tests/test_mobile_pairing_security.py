@@ -62,7 +62,12 @@ def _admin(*, user_id: int = 7, tenant_id: int | None = 11):
     )
 
 
-async def _issue(monkeypatch: pytest.MonkeyPatch, *, tenant_id: int = 11) -> dict:
+async def _issue(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    tenant_id: int = 11,
+    purpose: str = "enterprise",
+) -> dict:
     monkeypatch.setattr(
         mobile_ext,
         "_mobile_session_meta",
@@ -75,7 +80,7 @@ async def _issue(monkeypatch: pytest.MonkeyPatch, *, tenant_id: int = 11) -> dic
     )
     monkeypatch.setattr(mobile_ext, "_register_desktop_relay_for_pairing", lambda *_: None)
     result = await mobile_ext.mobile_pairing_issue(
-        PairingIssueBody(host="192.168.10.2", port=17500),
+        PairingIssueBody(host="192.168.10.2", port=17500, purpose=purpose),
         _request(),
         user=_admin(tenant_id=tenant_id),
     )
@@ -166,6 +171,44 @@ async def test_management_pairing_is_tenant_bound_enterprise_only_and_one_time(
         user=None,
     )
     assert replay.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_explicit_management_pairing_mints_bound_admin_token(monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "management-pairing-test-secret-key-at-least-32-bytes")
+    issued = await _issue(monkeypatch, tenant_id=11, purpose="management")
+    code = str(issued["code"])
+
+    monkeypatch.setattr(
+        mobile_ext,
+        "_pairing_subject_user",
+        lambda record: {
+            "id": int(record["subject_user_id"]),
+            "username": str(record["subject_username"]),
+            "display_name": "管理端手机",
+            "role": "admin",
+            "tier": "admin",
+            "tenant_id": record["tenant_id"],
+            "is_active": True,
+        },
+    )
+    result = await mobile_ext.mobile_pairing_exchange(
+        PairingExchangeBody(code=code),
+        _request(),
+        user=None,
+    )
+    assert isinstance(result, dict)
+    data = result["data"]
+    assert data["account_kind"] == "admin"
+    assert data["token_scope"] == "management_pairing"
+    assert data["user"]["role"] == "admin"
+
+    access = verify_mobile_jwt(data["access_token"])
+    assert access is not None
+    assert access["account_kind"] == "admin"
+    assert access["token_scope"] == "management_pairing"
+    assert access["tenant_id"] == 11
+    assert access["paired_by_user_id"] == 7
 
 
 @pytest.mark.asyncio
@@ -268,6 +311,70 @@ class _FakeUserDb:
 
     def expunge(self, _user):
         return None
+
+
+@pytest.mark.asyncio
+async def test_management_pairing_bearer_rechecks_current_admin_and_tenant(monkeypatch):
+    admin = _admin(user_id=71, tenant_id=11)
+    admin.email = "admin@example.test"
+    admin.wx_avatar_url = None
+    payload = {
+        "typ": "access",
+        "user_id": 71,
+        "session_id": "mobile-management-current-admin",
+        "account_kind": "admin",
+        "username": "admin-71",
+        "token_scope": "management_pairing",
+        "tenant_id": 11,
+        "paired_by_user_id": 71,
+    }
+    current = {"row": admin}
+    monkeypatch.setattr(mobile_api_module, "verify_mobile_jwt", lambda _token: payload)
+    monkeypatch.setattr(
+        mobile_api_module,
+        "user_id_from_mobile_bearer",
+        lambda _authorization: 71,
+    )
+    monkeypatch.setattr("app.db.session.get_db", lambda: _FakeUserDb(current["row"]))
+    request = Request({"type": "http", "headers": []})
+
+    resolved = await get_mobile_user(request, authorization="Bearer management-token")
+    assert resolved is not None
+    assert resolved.id == 71
+    assert resolved.role == "admin"
+    assert resolved.tenant_id == 11
+
+    for invalid_row in (
+        SimpleNamespace(**{**admin.__dict__, "role": "user", "tier": "enterprise"}),
+        SimpleNamespace(**{**admin.__dict__, "is_active": False}),
+        SimpleNamespace(**{**admin.__dict__, "tenant_id": 22}),
+        None,
+    ):
+        current["row"] = invalid_row
+        assert await get_mobile_user(request, authorization="Bearer management-token") is None
+
+
+def test_management_pairing_exchange_rejects_downgraded_or_rebound_subject(monkeypatch):
+    row = _admin(user_id=71, tenant_id=11)
+    row.email = "admin@example.test"
+    row.wx_avatar_url = None
+    current = {"row": row}
+    monkeypatch.setattr("app.db.session.get_db", lambda: _FakeUserDb(current["row"]))
+    record = {
+        "issuer_user_id": 71,
+        "subject_user_id": 71,
+        "subject_username": "admin-71",
+        "account_kind": "admin",
+        "token_scope": "management_pairing",
+        "tenant_id": 11,
+    }
+
+    assert mobile_ext._pairing_subject_user(record)["role"] == "admin"
+    current["row"] = SimpleNamespace(**{**row.__dict__, "role": "user", "tier": "enterprise"})
+    assert mobile_ext._pairing_subject_user(record) is None
+    current["row"] = row
+    assert mobile_ext._pairing_subject_user({**record, "tenant_id": 22}) is None
+    assert mobile_ext._pairing_subject_user({**record, "issuer_user_id": 72}) is None
 
 
 def _http_app() -> FastAPI:

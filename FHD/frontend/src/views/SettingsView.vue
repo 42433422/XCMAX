@@ -710,7 +710,7 @@
             <span class="settings-row__arrow" aria-hidden="true"></span>
           </summary>
           <div class="settings-card__body settings-card__body--nested">
-            <MobilePairingQrCard />
+            <MobilePairingQrCard :allow-management="isAdminConsole" />
           </div>
         </details>
 

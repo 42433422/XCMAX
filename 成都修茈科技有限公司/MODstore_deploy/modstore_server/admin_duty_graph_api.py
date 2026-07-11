@@ -39,6 +39,7 @@ from modstore_server.models import (
     DutyGraphRun,
     DutyGraphRunNode,
     EmployeeExecutionMetric,
+    ManagementWorkItem,
     OpsActionAuditLog,
     User,
     get_session_factory,
@@ -653,6 +654,24 @@ def execute_duty_graph_programmatic(
         return {"ok": False, "error": "input_data 必须是对象"}
     if len(_json_dumps(raw_input)) > _MAX_RUN_INPUT_BYTES:
         return {"ok": False, "error": "input_data 过大"}
+    management_work = (
+        raw_input.get("management_work")
+        if isinstance(raw_input.get("management_work"), dict)
+        else {}
+    )
+    management_task_id = _as_str(management_work.get("task_id"))
+
+    def _management_stop_requested() -> bool:
+        if not management_task_id:
+            return False
+        sf_check = get_session_factory()
+        with sf_check() as check_session:
+            status = (
+                check_session.query(ManagementWorkItem.status)
+                .filter(ManagementWorkItem.task_id == management_task_id)
+                .scalar()
+            )
+        return str(status or "") in {"cancel_requested", "cancelled"}
 
     sf = get_session_factory()
     with sf() as session:
@@ -770,6 +789,21 @@ def execute_duty_graph_programmatic(
                 )
                 if not node:
                     return
+                if _management_stop_requested():
+                    node.status = "skipped"
+                    node.error = "管理任务已请求停止，未启动该后续节点"
+                    node.summary = "management work cancellation requested"
+                    node.completed_at = datetime.now(timezone.utc)
+                    node.result_json = _json_dumps(
+                        {
+                            "task_id": management_task_id,
+                            "cancelled_before_start": True,
+                        }
+                    )
+                    sess2.commit()
+                    with status_lock:
+                        node_status[eid] = "skipped"
+                    return
                 deps_local = _json_loads(node.depends_on_json or "[]", [])
                 with status_lock:
                     blocked = [d for d in deps_local if node_status.get(d) not in ("success",)]
@@ -812,7 +846,43 @@ def execute_duty_graph_programmatic(
                     with status_lock:
                         node_status[eid] = "skipped"
                     return
-                if bool(cap.get("risk", {}).get("high_risk")) and not allow_high_risk_real_run:
+                risk = cap.get("risk") if isinstance(cap.get("risk"), dict) else {}
+                risk_details = (
+                    risk.get("details") if isinstance(risk.get("details"), list) else []
+                )
+                management_work = (
+                    raw_input.get("management_work")
+                    if isinstance(raw_input.get("management_work"), dict)
+                    else {}
+                )
+                operation_context = (
+                    management_work.get("operation_context")
+                    if isinstance(management_work.get("operation_context"), dict)
+                    else {}
+                )
+                safe_management_agent = False
+                if risk_details and all(
+                    isinstance(detail, dict) and detail.get("handler") == "agent"
+                    for detail in risk_details
+                ):
+                    from modstore_server.employee_risk_middleware import (
+                        _verified_management_operation_context,
+                    )
+
+                    safe_management_agent = bool(
+                        operation_context.get("protocol")
+                        == "management-operation-v1"
+                        and operation_context.get("require_registered_side_effects")
+                        is True
+                        and _verified_management_operation_context(
+                            eid, operation_context
+                        )
+                    )
+                if (
+                    bool(risk.get("high_risk"))
+                    and not allow_high_risk_real_run
+                    and not safe_management_agent
+                ):
                     node.status = "skipped"
                     node.error = "高风险动作未确认（allow_high_risk_real_run=false）"
                     node.summary = "confirmation required"
@@ -849,6 +919,15 @@ def execute_duty_graph_programmatic(
                 duration_ms = float(result.get("duration_ms") or 0.0)
                 if duration_ms <= 0:
                     duration_ms = round((time.perf_counter() - t0) * 1000, 3)
+                # execute_task can return a structured failure without raising.
+                # Treating that as success made the parent graph and management
+                # task ledger report false completions.
+                from modstore_server.employee_orchestrator import _evaluate_execution_success
+
+                accepted, rejection_reason = _evaluate_execution_success(result)
+                if not accepted:
+                    status = "failed"
+                    error_text = rejection_reason
             except Exception as exc:  # noqa: BLE001
                 status = "failed"
                 error_text = str(exc)
@@ -912,12 +991,26 @@ def execute_duty_graph_programmatic(
         run_row.success_count = success_count
         run_row.failed_count = failed_count
         run_row.skipped_count = skipped_count
-        run_row.status = "failed" if failed_count > 0 else "completed"
+        pending_count = len([r for r in rows2 if r.status in {"pending", "running"}])
+        if failed_count > 0:
+            run_row.status = "failed"
+        elif pending_count > 0:
+            run_row.status = "running"
+        elif success_count == len(rows2) and rows2:
+            run_row.status = "completed"
+        elif success_count == 0 and skipped_count > 0:
+            run_row.status = "blocked"
+        else:
+            # Some work ran but at least one required node was skipped.  This is
+            # useful progress, not an accepted completion.
+            run_row.status = "partial"
         run_row.error = first_error
-        run_row.completed_at = datetime.now(timezone.utc)
+        if run_row.status != "running":
+            run_row.completed_at = datetime.now(timezone.utc)
         session.commit()
         out = _serialize_run(session, run_id)
-        out["ok"] = True
+        out["ok"] = run_row.status == "completed"
+        out["accepted_completion"] = run_row.status == "completed"
         return out
 
 
@@ -957,7 +1050,11 @@ def create_duty_graph_run(
         allow_high_risk_real_run=allow_high_risk_real_run,
         bench_llm_override=None,
     )
-    if not out.get("ok"):
+    if not out.get("ok") and str(out.get("status") or "") not in {
+        "partial",
+        "blocked",
+        "running",
+    }:
         msg = _as_str(out.get("error")) or "duty graph failed"
         code = 404 if "不存在" in msg else 400
         raise HTTPException(code, msg)

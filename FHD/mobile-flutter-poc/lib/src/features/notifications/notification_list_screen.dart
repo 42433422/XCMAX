@@ -69,7 +69,7 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
                         return _NotificationCell(
                           item: item,
                           isRead: item.read || _readIds.contains(item.id),
-                          onTap: () => setState(() => _readIds.add(item.id)),
+                          onTap: () => _markRead(item),
                         );
                       },
                       itemCount: items.length,
@@ -100,6 +100,20 @@ class _NotificationListScreenState extends State<NotificationListScreen> {
       _future = future;
     });
     await future;
+  }
+
+  void _markRead(_NotificationItem item) {
+    setState(() => _readIds.add(item.id));
+    if (item.notificationId <= 0) return;
+    _repository.acknowledgePendingNotification(item.notificationId).catchError(
+      (_) {
+        if (!mounted) return;
+        setState(() => _readIds.remove(item.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('通知状态同步失败，请稍后重试')),
+        );
+      },
+    );
   }
 }
 
@@ -234,6 +248,7 @@ class _NotificationItem {
     required this.title,
     required this.content,
     required this.dateText,
+    this.notificationId = 0,
     this.read = false,
   });
 
@@ -242,11 +257,13 @@ class _NotificationItem {
   final String title;
   final String content;
   final String dateText;
+  final int notificationId;
   final bool read;
 
   factory _NotificationItem.fromPending(PendingNotification notification) {
     return _NotificationItem(
       id: '${notification.id}',
+      notificationId: notification.id,
       type: _typeFromChannel(notification.channel),
       title: notification.title.ifEmpty('系统通知'),
       content: notification.body,

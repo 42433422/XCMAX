@@ -78,6 +78,12 @@ def _mobile_user_from_jwt_payload(payload: dict[str, Any]) -> Any | None:
     typ = payload.get("typ")
     if typ not in (None, "access"):
         return None
+    token_scope = str(payload.get("token_scope") or "").strip()
+    # Management pairing is a revocable administrator credential.  It must
+    # always be re-bound to the current database row and may never be revived
+    # from JWT claims when the account was disabled, deleted or downgraded.
+    if token_scope == "management_pairing":
+        return None
     uid = int(payload.get("user_id") or 0)
     account_kind = str(payload.get("account_kind") or "").strip().lower()
     session_id = str(payload.get("session_id") or "").strip()
@@ -146,6 +152,61 @@ def _enterprise_pairing_user(user: Any, payload: dict[str, Any]) -> Any | None:
     )
 
 
+def _management_pairing_user(user: Any, payload: dict[str, Any]) -> Any | None:
+    """Re-bind a management JWT to the exact current active administrator.
+
+    Unlike ordinary mobile login JWTs, a management pairing credential grants
+    the platform control plane.  The signed claims prove issuance, but current
+    database state remains authoritative for revocation, role and tenant.
+    """
+
+    if str(payload.get("token_scope") or "").strip() != "management_pairing":
+        return None
+    if str(payload.get("account_kind") or "").strip().lower() not in {
+        "admin",
+        "admin_portal",
+    }:
+        return None
+    uid = int(getattr(user, "id", 0) or 0)
+    try:
+        token_uid = int(payload.get("user_id") or 0)
+        paired_by = int(payload.get("paired_by_user_id") or 0)
+        token_tenant = int(payload["tenant_id"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if uid <= 0 or token_uid != uid or paired_by != uid:
+        return None
+    if not bool(getattr(user, "is_active", False)):
+        return None
+    role = str(getattr(user, "role", "") or "").strip().lower()
+    tier = str(getattr(user, "tier", "") or "").strip().lower()
+    if role not in {"admin", "super_admin", "owner"} and tier != "admin":
+        return None
+    row_tenant = getattr(user, "tenant_id", None)
+    try:
+        if row_tenant is None:
+            if token_tenant != 0:
+                return None
+        elif int(row_tenant) != token_tenant:
+            return None
+    except (TypeError, ValueError):
+        return None
+    username = str(getattr(user, "username", "") or payload.get("username") or "management")
+    return SimpleNamespace(
+        id=uid,
+        username=username,
+        display_name=str(getattr(user, "display_name", "") or username),
+        email=str(getattr(user, "email", "") or ""),
+        role=role or "admin",
+        tier=tier or "admin",
+        is_active=True,
+        wx_avatar_url=getattr(user, "wx_avatar_url", None),
+        tenant_id=token_tenant,
+        token_scope="management_pairing",
+        company_brand=str(payload.get("company_brand") or "").strip(),
+    )
+
+
 def _bind_mobile_user_tenant_to_request(request: Request, user: Any | None) -> None:
     if user is None:
         return
@@ -176,15 +237,20 @@ async def get_mobile_user(
             return fallback_user
         return None
     if uid is not None:
+        token_scope = str((jwt_payload or {}).get("token_scope") or "").strip()
         try:
             with get_db() as db:
                 user = db.query(User).filter(User.id == uid).first()
                 if user and user.is_active:
-                    if str((jwt_payload or {}).get("token_scope") or "").strip() in {
+                    if token_scope in {
                         "enterprise_pairing",
                         "enterprise_relay",
                     }:
                         projected = _enterprise_pairing_user(user, jwt_payload or {})
+                        _bind_mobile_user_tenant_to_request(request, projected)
+                        return projected
+                    if token_scope == "management_pairing":
+                        projected = _management_pairing_user(user, jwt_payload or {})
                         _bind_mobile_user_tenant_to_request(request, projected)
                         return projected
                     jwt_account_kind = (
@@ -212,9 +278,10 @@ async def get_mobile_user(
                     return user
         except RECOVERABLE_ERRORS as exc:
             logger.warning("mobile user db lookup failed, falling back to JWT: %s", exc)
-        if str((jwt_payload or {}).get("token_scope") or "").strip() in {
+        if token_scope in {
             "enterprise_pairing",
             "enterprise_relay",
+            "management_pairing",
         }:
             # Pairing credentials are revocable through their bound DB user and
             # must never fall back to a synthetic/admin principal.
@@ -547,20 +614,29 @@ async def mobile_auth_session_validate(request: Request, user=Depends(get_mobile
     from app.application.session_account_meta import load_session_account_meta
 
     auth_app_service = get_auth_app_service()
-    if session_id.startswith("mobile-relay-"):
+    is_enterprise_pairing = session_id.startswith("mobile-relay-")
+    is_management_pairing = session_id.startswith("mobile-management-")
+    if is_enterprise_pairing or is_management_pairing:
         meta = load_session_account_meta(session_id) or {}
-        relay_data: dict[str, Any] = {
+        jwt_meta = payload or {}
+        pairing_data: dict[str, Any] = {
             "valid": True,
             "session_id": session_id,
             "user": _user_public_dict(user),
-            "session": {"session_id": session_id, "relay": True},
+            "session": {
+                "session_id": session_id,
+                "relay": is_enterprise_pairing,
+                "management_pairing": is_management_pairing,
+            },
             "account_kind": meta.get("account_kind")
-            or (payload or {}).get("account_kind")
-            or "enterprise",
-            "company_brand": meta.get("company_brand"),
+            or jwt_meta.get("account_kind")
+            or ("admin" if is_management_pairing else "enterprise"),
+            "company_brand": meta.get("company_brand") or jwt_meta.get("company_brand"),
+            "token_scope": jwt_meta.get("token_scope"),
+            "tenant_id": jwt_meta.get("tenant_id"),
             "entitled_mod_ids": [],
         }
-        return format_mobile_response(data=relay_data, message="会话有效")
+        return format_mobile_response(data=pairing_data, message="会话有效")
 
     session_info = auth_app_service.session_manager.get_session_info(session_id)
     if not session_info:

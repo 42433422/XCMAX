@@ -2185,10 +2185,11 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
 
+    final notificationRepository = _FakeNotificationRepository();
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: NotificationListScreen(repository: _FakeNotificationRepository()),
+        home: NotificationListScreen(repository: notificationRepository),
       ),
     );
     await tester.pump();
@@ -2201,6 +2202,9 @@ void main() {
     expect(find.text('移动端通知'), findsOneWidget);
     expect(find.text('后台任务已经完成'), findsOneWidget);
     expect(find.byIcon(Icons.info), findsOneWidget);
+    await tester.tap(find.text('移动端通知'));
+    await tester.pump();
+    expect(notificationRepository.acknowledgedIds, [88]);
 
     await tester.pumpWidget(
       MaterialApp(
@@ -6054,6 +6058,7 @@ class _FakeExecutionReviewRepository extends MobileRepository {
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async {
     lastThreadId = threadId;
     return const [
@@ -6825,6 +6830,8 @@ class _FakeCircleRepository extends MobileRepository {
 }
 
 class _FakeNotificationRepository extends MobileRepository {
+  final List<int> acknowledgedIds = [];
+
   @override
   Future<List<PendingNotification>> loadPendingNotifications() async {
     return const [
@@ -6836,6 +6843,11 @@ class _FakeNotificationRepository extends MobileRepository {
         channel: 'system',
       ),
     ];
+  }
+
+  @override
+  Future<void> acknowledgePendingNotification(int notificationId) async {
+    acknowledgedIds.add(notificationId);
   }
 }
 

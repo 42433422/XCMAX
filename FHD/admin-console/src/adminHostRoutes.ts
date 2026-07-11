@@ -4,6 +4,7 @@ import AutomationPolicyView from './views/AutomationPolicyView.vue'
 import DutyTimeArchitectureView from './views/DutyTimeArchitectureView.vue'
 import DutyRosterGraphView from './views/DutyRosterGraphView.vue'
 import ServerFunctionsView from './views/ServerFunctionsView.vue'
+import AdminEmployeeInboxView from './views/AdminEmployeeInboxView.vue'
 
 /** 管理端运维五页（同步 import，避免懒加载期间仍渲染对话页） */
 export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
@@ -12,6 +13,12 @@ export const ADMIN_HOST_ROUTE_RECORDS: RouteRecordRaw[] = [
     name: 'xcmax-admin',
     component: XCmaxAdminView,
     meta: { title: '服务器后台总览', requiresAdminAccount: true, hostAdmin: true },
+  },
+  {
+    path: '/employee-inbox',
+    name: 'employee-inbox',
+    component: AdminEmployeeInboxView,
+    meta: { title: '员工待办与交付', requiresAdminAccount: true, hostAdmin: true },
   },
   {
     path: '/automation-policy',

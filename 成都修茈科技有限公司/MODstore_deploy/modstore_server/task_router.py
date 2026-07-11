@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,6 @@ class SubTask:
 def _load_all_employee_profiles() -> List[Dict[str, Any]]:
     """从 catalog 读取所有已注册员工包的 manifest 摘要（id / name / description / domain / skills）。"""
     try:
-        import io
         import zipfile
 
         from modstore_server.models import CatalogItem, get_session_factory
@@ -103,7 +102,212 @@ def _build_router_prompt(task_description: str, employees: List[Dict[str, Any]])
 注意：
 - 只能使用 employee_id 来自上方列表的员工
 - depends_on 填写前序任务所使用的 employee_id（并行任务填 []）
-- 输出纯 JSON，不加代码块标记"""
+    - 输出纯 JSON，不加代码块标记"""
+
+
+def _load_management_employee_profiles() -> List[Dict[str, Any]]:
+    """只返回编制内且当前有可执行岗位包的管理端员工。
+
+    公开商店 ``CatalogItem`` 不是管理编制 SSOT，不能作为老板任务的
+    自动路由候选。这里同时检查包文件，避免把任务派给“名单上存在、
+    运行时不存在”的岗位。
+    """
+
+    try:
+        from modstore_server.catalog_store import files_dir
+        from modstore_server.duty_employee_registry import duty_employee_records
+        from modstore_server.duty_roster import all_planned_employee_ids
+        from modstore_server.employee_runtime import (
+            MANAGEMENT_PRIMARY_WORK_RESERVED_IDS,
+            load_employee_pack,
+            management_work_runtime_issues,
+        )
+        from modstore_server.models import get_session_factory
+
+        records = duty_employee_records()
+        planned = set(all_planned_employee_ids())
+        package_root = files_dir()
+        profiles: List[Dict[str, Any]] = []
+        sf = get_session_factory()
+        with sf() as session:
+            for employee_id in sorted(planned.intersection(records)):
+                if employee_id in MANAGEMENT_PRIMARY_WORK_RESERVED_IDS:
+                    continue
+                record = records.get(employee_id) or {}
+                stored_filename = str(record.get("stored_filename") or "").strip()
+                if not stored_filename or not (package_root / stored_filename).is_file():
+                    continue
+                try:
+                    loaded_pack = load_employee_pack(session, employee_id)
+                    runtime_issues = management_work_runtime_issues(loaded_pack)
+                except Exception as exc:
+                    logger.warning(
+                        "management router could not validate employee=%s: %s",
+                        employee_id,
+                        exc,
+                    )
+                    continue
+                if runtime_issues:
+                    logger.info(
+                        "management router excluded non-executable employee=%s issues=%s",
+                        employee_id,
+                        "; ".join(runtime_issues[:3]),
+                    )
+                    continue
+                profiles.append(
+                    {
+                        "id": employee_id,
+                        "name": str(record.get("name") or employee_id),
+                        "description": str(record.get("description") or ""),
+                        "domain": str(
+                            record.get("yuangon_area")
+                            or record.get("industry")
+                            or ""
+                        ),
+                        "skills": [
+                            str(value)
+                            for value in (record.get("skills") or [])
+                            if str(value).strip()
+                        ],
+                        "stored_filename": stored_filename,
+                    }
+                )
+        return profiles
+    except Exception:
+        logger.exception("task_router: failed to load management employee profiles")
+        return []
+
+
+def _build_management_owner_prompt(
+    task_description: str,
+    input_data: Dict[str, Any],
+    employees: List[Dict[str, Any]],
+) -> str:
+    candidates = json.dumps(
+        [
+            {
+                "employee_id": row["id"],
+                "name": row.get("name", ""),
+                "domain": row.get("domain", ""),
+                "description": str(row.get("description") or "")[:260],
+                "skills": row.get("skills", []),
+            }
+            for row in employees
+            if row.get("id") != "task-router-officer"
+        ],
+        ensure_ascii=False,
+    )
+    bounded_input = json.dumps(input_data or {}, ensure_ascii=False, default=str)[:8000]
+    return f"""你是 XCAGI 管理端的任务路由员，只选择一名最适合真正执行任务的员工。
+候选集是管理编制的完整白名单，不得输出候选集外的 ID，不得选 task-router-officer 自己执行。
+
+# 管理端可执行员工
+{candidates}
+
+# 老板任务
+{task_description[:12000]}
+
+# 结构化输入
+{bounded_input}
+
+# 输出
+只输出 JSON 数组，且只能有一项：
+[{{"employee_id":"<候选 ID>","reason":"<为什么该岗位最匹配>"}}]
+""".strip()
+
+
+def resolve_management_work_owner(
+    task_description: str,
+    input_data: Dict[str, Any] | None = None,
+    *,
+    llm_provider: str = "auto",
+    llm_model: str = "auto",
+) -> Dict[str, Any]:
+    """为统一管理任务台账选择一名真正执行人。
+
+    先用代码所有权做可重复的确定性匹配；没有文件路径证据时，
+    再让 LLM 从管理编制白名单中单选。任何不合法输出都会回退到
+    安全可执行的 ``intent-analyst`` 并把原因写入路由审计。
+    """
+
+    profiles = _load_management_employee_profiles()
+    by_id = {str(row.get("id") or ""): row for row in profiles}
+    executable_ids = set(by_id)
+    fallback = "intent-analyst"
+    if fallback not in executable_ids:
+        non_router_ids = sorted(executable_ids.difference({"task-router-officer"}))
+        fallback = non_router_ids[0] if non_router_ids else ""
+
+    base: Dict[str, Any] = {
+        "employee_id": fallback,
+        "strategy": "fallback",
+        "reason": "无可用的精确路由证据，交由需求分析员先完成可验收的结构化处理",
+        "candidates": sorted(executable_ids),
+        "candidate_count": len(executable_ids),
+        "fallback_reason": "",
+    }
+    if not fallback:
+        base["fallback_reason"] = "no executable management employee package"
+        return base
+
+    payload = dict(input_data or {})
+    payload.setdefault("description", task_description)
+    try:
+        from modstore_server.code_ownership import extract_incident_paths, resolve_code_owners
+
+        paths = extract_incident_paths(payload)
+        ownership = resolve_code_owners(paths, limit=max(8, len(executable_ids)))
+        valid_owners = [
+            row
+            for row in (ownership.get("owners") or [])
+            if str(row.get("employee_id") or "") in executable_ids
+            and str(row.get("employee_id") or "") != "task-router-officer"
+        ]
+        valid_owners.sort(
+            key=lambda row: (
+                -int(row.get("match_score") or 0),
+                -int(row.get("match_count") or 0),
+                str(row.get("employee_id") or ""),
+            )
+        )
+        if valid_owners:
+            selected = valid_owners[0]
+            employee_id = str(selected.get("employee_id") or "")
+            return {
+                **base,
+                "employee_id": employee_id,
+                "strategy": "code_ownership",
+                "reason": (
+                    f"路径所有权命中 {int(selected.get('match_count') or 0)} 个文件，"
+                    f"匹配分 {int(selected.get('match_score') or 0)}"
+                ),
+                "matched_files": list(selected.get("matched_files") or []),
+                "matched_globs": list(selected.get("matched_globs") or []),
+            }
+    except Exception as exc:
+        logger.warning("management owner code-ownership routing failed: %s", exc)
+
+    prompt = _build_management_owner_prompt(task_description, payload, profiles)
+    raw = _call_llm(prompt, llm_provider=llm_provider, llm_model=llm_model)
+    try:
+        decoded = json.loads(raw)
+        row = decoded[0] if isinstance(decoded, list) and decoded else None
+        if not isinstance(row, dict):
+            raise ValueError("router did not return one object")
+        employee_id = str(row.get("employee_id") or "").strip()
+        if employee_id == "task-router-officer" or employee_id not in executable_ids:
+            raise ValueError(f"router returned non-management employee: {employee_id or 'empty'}")
+        return {
+            **base,
+            "employee_id": employee_id,
+            "strategy": "llm",
+            "reason": str(row.get("reason") or "LLM 从管理编制白名单中选择")[:2000],
+        }
+    except Exception as exc:
+        return {
+            **base,
+            "fallback_reason": str(exc)[:2000],
+        }
 
 
 def decompose_task(
@@ -261,4 +465,9 @@ def route_and_dispatch(
     )
 
 
-__all__ = ["SubTask", "decompose_task", "route_and_dispatch"]
+__all__ = [
+    "SubTask",
+    "decompose_task",
+    "resolve_management_work_owner",
+    "route_and_dispatch",
+]

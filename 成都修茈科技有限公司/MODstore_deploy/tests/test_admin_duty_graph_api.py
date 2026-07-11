@@ -10,6 +10,114 @@ from modstore_server.api.app_factory import create_app, load_default_config
 from modstore_server.api.deps import get_current_user
 
 
+def test_structured_executor_failures_are_not_accepted():
+    from modstore_server.employee_orchestrator import _evaluate_execution_success
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "result": {
+                "outputs": [{"handler": "http_request", "error": "connection refused"}],
+                "verification": {"passed": False, "summary": "接口未通过"},
+            }
+        }
+    )
+    assert ok is False
+    assert "接口未通过" in reason
+
+    ok, reason = _evaluate_execution_success({"result": {"outputs": []}})
+    assert ok is False
+    assert "no handler outputs" in reason
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "cognition_error": "Unsupported model",
+            "result": {
+                "outputs": [
+                    {"handler": "llm_md", "output": ""},
+                    {"handler": "echo", "output": ""},
+                ]
+            },
+        }
+    )
+    assert ok is False
+    assert "cognition_error" in reason
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "result": {
+                "outputs": [
+                    {"handler": "llm_md", "output": ""},
+                    {"handler": "echo", "output": ""},
+                ]
+            }
+        }
+    )
+    assert ok is False
+    assert "no executable evidence" in reason
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "llm_md",
+                        "output": '```json\n{"status":"error","summary":"缺少输入"}\n```',
+                    }
+                ]
+            }
+        }
+    )
+    assert ok is False
+    assert "缺少输入" in reason
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "llm_md",
+                        "output": {
+                            "status": "success",
+                            "acceptance_checklist": [
+                                {
+                                    "criterion": "桌面和手机都收到通知",
+                                    "status": "fail",
+                                    "evidence": "仅桌面已验证",
+                                }
+                            ],
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    assert ok is False
+    assert "桌面和手机都收到通知" in reason
+
+    ok, reason = _evaluate_execution_success(
+        {
+            "result": {
+                "outputs": [
+                    {
+                        "handler": "llm_md",
+                        "output": {
+                            "status": "success",
+                            "acceptance_checklist": [
+                                {
+                                    "criterion": "输出成功标准",
+                                    "status": "pass",
+                                    "evidence": "success_criteria 共3条",
+                                }
+                            ],
+                        },
+                    }
+                ]
+            }
+        }
+    )
+    assert ok is True, reason
+
+
 def _new_client(tmp_path, monkeypatch):
     monkeypatch.setenv("MODSTORE_DB_PATH", str(tmp_path / "admin_duty_graph.sqlite"))
     import modstore_server.models as models
@@ -102,7 +210,15 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         ):
             _ = task, input_data, user_id, bench_llm_override
             self.calls.append(employee_id)
-            return {"duration_ms": 12.3, "llm_tokens": 8, "result": {"employee_id": employee_id}}
+            return {
+                "duration_ms": 12.3,
+                "llm_tokens": 8,
+                "result": {
+                    "employee_id": employee_id,
+                    "outputs": [{"handler": "echo", "ok": True, "output": "done"}],
+                    "verification": {"passed": True, "summary": "verified"},
+                },
+            }
 
     fake_runtime = _FakeRuntime()
     monkeypatch.setattr(duty_api, "get_default_employee_client", lambda: fake_runtime)
@@ -129,7 +245,8 @@ def test_admin_duty_graph_capability_and_run(tmp_path, monkeypatch):
         )
         assert run1.status_code == 200, run1.text
         b1 = run1.json()
-        assert b1["status"] == "completed"
+        assert b1["status"] == "partial"
+        assert b1["accepted_completion"] is False
         node_map1 = {n["employee_id"]: n for n in b1["nodes"]}
         assert node_map1["dep-a"]["status"] == "success"
         assert node_map1["target"]["status"] == "skipped"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -58,6 +59,43 @@ def test_schema_inspection_reuses_session_connection(monkeypatch):
 
     assert inspected == [connection]
     assert len(statements) == 1
+
+
+def test_task_list_summary_is_bounded_and_drops_execution_transcripts():
+    relay = _load_mobile_relay_service_module()
+    huge = "不得进入列表" + ("执行明细" * 100_000)
+    summary = relay._task_list_summary(
+        {
+            "task_id": "task-large",
+            "thread_id": "thread-large",
+            "kind": "codex.invoke",
+            "status": "completed",
+            "payload": {"message": "任务内容" * 500, "context": {"secret": huge}},
+            "result": {
+                "ok": True,
+                "elapsed_seconds": 12.5,
+                "codex": {
+                    "assistant_message": {"body": "最终答复" * 2_000},
+                    "messages": [{"content": huge}],
+                    "tool_calls": [{"arguments": huge}],
+                    "dispatch": {"stdout": huge},
+                    "session": {"branch": "feature/" + ("分支" * 500)},
+                },
+            },
+        }
+    )
+
+    encoded = json.dumps(summary, ensure_ascii=False)
+    assert "messages" not in encoded
+    assert "tool_calls" not in encoded
+    assert "dispatch" not in encoded
+    assert "不得进入列表" not in encoded
+    assert len(summary["payload"]["message"]) <= relay._TASK_SUMMARY_MESSAGE_MAX_CHARS
+    body = summary["result"]["codex"]["assistant_message"]["body"]
+    assert len(body) <= relay._TASK_SUMMARY_RESULT_MAX_CHARS
+    assert len(summary["result"]["session"]["branch"]) <= (relay._TASK_SUMMARY_BRANCH_MAX_CHARS)
+    assert summary["summary_only"] is True
+    assert summary["summary_truncated"] is True
 
 
 def test_mobile_relay_account_auth_binding(monkeypatch, tmp_path):

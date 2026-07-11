@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Body, Depends, Query, Request
 from fastapi.responses import JSONResponse
@@ -37,17 +40,38 @@ def _mobile_uid(user: Any) -> int:
     return 0
 
 
-def _modstore_internal_base() -> str:
-    return (
-        (
-            os.environ.get("XCAGI_MODSTORE_INTERNAL_URL")
-            or os.environ.get("MODSTORE_INTERNAL_BASE_URL")
-            or os.environ.get("MODSTORE_PUBLIC_API_BASE")
-            or "http://127.0.0.1:9999"
-        )
-        .strip()
-        .rstrip("/")
-    )
+def _modstore_internal_candidates() -> list[str]:
+    raw = [
+        os.environ.get("XCAGI_MODSTORE_INTERNAL_URL"),
+        os.environ.get("MODSTORE_INTERNAL_BASE_URL"),
+        os.environ.get("MODSTORE_PLATFORM_URL"),
+        os.environ.get("MODSTORE_LOCAL_BASE_URL"),
+        "http://127.0.0.1:8788",
+        "http://127.0.0.1:8765",
+        "http://127.0.0.1:9999",
+    ]
+    out: list[str] = []
+    for item in raw:
+        value = str(item or "").strip().rstrip("/")
+        if value and _private_internal_url(value) and value not in out:
+            out.append(value)
+    return out
+
+
+def _private_internal_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        hostname = str(parsed.hostname or "").strip().lower()
+        if parsed.scheme not in {"http", "https"} or not hostname:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        if hostname == "localhost":
+            return True
+        address = ip_address(hostname)
+        return bool(address.is_loopback or address.is_private)
+    except ValueError:
+        return False
 
 
 def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> None:
@@ -59,26 +83,111 @@ def _relay_employee_answer(boss_user_id: int, employee_id: str, answer: str) -> 
     try:
         import httpx
 
-        with httpx.Client(timeout=5) as client:
-            client.post(
-                f"{_modstore_internal_base()}/api/admin/employee-autonomy/internal/answer-latest",
-                headers={"X-Internal-Api-Key": key},
-                json={
-                    "user_id": int(boss_user_id),
-                    "employee_id": str(employee_id),
-                    "answer": text,
-                },
-            )
+        payload = {
+            "user_id": int(boss_user_id),
+            "employee_id": str(employee_id),
+            "answer": text,
+        }
+        with httpx.Client(timeout=5, trust_env=False) as client:
+            for base in _modstore_internal_candidates():
+                try:
+                    resp = client.post(
+                        f"{base}/api/admin/employee-autonomy/internal/answer-latest",
+                        headers={"X-Internal-Api-Key": key},
+                        json=payload,
+                    )
+                    if 200 <= resp.status_code < 300:
+                        return
+                except Exception:  # noqa: BLE001 - probe next known local endpoint
+                    continue
     except Exception:  # noqa: BLE001 - 回流失败不影响 IM 主流程
         logger.debug("relay_employee_answer failed", exc_info=True)
 
 
 def _internal_api_key() -> str:
-    return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
-        or ""
-    ).strip()
+    from app.security.local_runtime_secret import local_runtime_secret
+
+    return local_runtime_secret(
+        "MODSTORE_INTERNAL_API_KEY",
+        "XCAGI_MARKET_INTERNAL_API_KEY",
+    )
+
+
+def _resolve_management_owner_principal(
+    requested_user_id: int,
+    recipient_kind: str,
+    recipient_ref: str = "",
+) -> tuple[int, int | None]:
+    """Translate a cross-database owner reference into a local FHD scope.
+
+    MODstore and FHD intentionally keep separate user tables, so a MODstore
+    numeric user id must never be used as an FHD foreign key.  Only the
+    explicit management-owner recipient kind is translated; ordinary IM calls
+    retain their exact local recipient id.
+    """
+    requested = int(requested_user_id or 0)
+    if str(recipient_kind or "").strip() != "management_owner":
+        return requested, None
+    ref = str(recipient_ref or "").strip()
+    parts = ref.split(":")
+    if len(parts) != 5 or parts[0:2] != ["fhd", "user"] or parts[3] != "tenant":
+        return 0, None
+    try:
+        exact_user_id = int(parts[2])
+        bound_tenant_id = int(parts[4])
+    except (TypeError, ValueError):
+        return 0, None
+    if (
+        exact_user_id <= 0
+        or bound_tenant_id < 0
+        or ref != f"fhd:user:{exact_user_id}:tenant:{bound_tenant_id}"
+    ):
+        return 0, None
+    try:
+        from sqlalchemy import or_
+
+        from app.db.models import User
+
+        db = HostSessionLocal()
+        try:
+            current_admin = or_(
+                User.role.in_(("admin", "super_admin", "owner")),
+                User.tier == "admin",
+            )
+            exact = (
+                db.query(User)
+                .filter(
+                    User.id == exact_user_id,
+                    User.is_active.is_(True),
+                    current_admin,
+                )
+                .order_by(User.id.asc())
+                .first()
+            )
+            if exact is not None and int(getattr(exact, "id", 0) or 0) == exact_user_id:
+                tenant = getattr(exact, "tenant_id", None)
+                current_tenant_id = int(tenant) if tenant is not None else 0
+                if current_tenant_id == bound_tenant_id:
+                    return exact_user_id, current_tenant_id
+        finally:
+            db.close()
+    except Exception:  # noqa: BLE001 - internal delivery fails closed below
+        logger.exception("management owner recipient resolution failed")
+    return 0, None
+
+
+def _resolve_management_owner_user_id(
+    requested_user_id: int,
+    recipient_kind: str,
+    recipient_ref: str = "",
+) -> int:
+    """Compatibility wrapper used by non-delivery callers and focused tests."""
+
+    return _resolve_management_owner_principal(
+        requested_user_id,
+        recipient_kind,
+        recipient_ref,
+    )[0]
 
 
 @router.post("/api/internal/im/employee-message")
@@ -92,20 +201,74 @@ async def internal_employee_message(
     """
     expected = _internal_api_key()
     provided = (request.headers.get("X-Internal-Api-Key") or "").strip()
-    if not expected or provided != expected:
+    if not expected or not secrets.compare_digest(provided, expected):
         return JSONResponse({"success": False, "message": "unauthorized"}, status_code=401)
     try:
-        boss_user_id = int(body.get("boss_user_id") or body.get("user_id") or 0)
+        requested_boss_user_id = int(body.get("boss_user_id") or body.get("user_id") or 0)
     except (TypeError, ValueError):
-        boss_user_id = 0
+        requested_boss_user_id = 0
     employee_id = str(body.get("employee_id") or "").strip()
     text = str(body.get("body") or body.get("text") or "").strip()
     display_name = str(body.get("display_name") or "").strip()
+    notification = body.get("notification") if isinstance(body.get("notification"), dict) else {}
+    recipient_kind = str(
+        notification.get("recipient_kind") or body.get("recipient_kind") or ""
+    ).strip()
+    recipient_ref = str(
+        notification.get("recipient_ref") or body.get("recipient_ref") or ""
+    ).strip()
+    boss_user_id, management_tenant_id = _resolve_management_owner_principal(
+        requested_boss_user_id,
+        recipient_kind,
+        recipient_ref,
+    )
     if boss_user_id <= 0 or not employee_id or not text:
         return JSONResponse(
             {"success": False, "message": "boss_user_id/employee_id/body required"},
             status_code=400,
         )
+    if recipient_kind == "management_owner":
+        # Management task content is deliberately not an IM message.  The
+        # issuer's enterprise pairing has the same numeric FHD user id and can
+        # therefore subscribe to the ordinary IM REST/WS surface.  Persist the
+        # event only in the management-audience outbox instead.
+        try:
+            from app.services.mobile_push import notify_user
+
+            push_result = notify_user(
+                int(boss_user_id),
+                title=str(notification.get("title") or display_name or employee_id),
+                body=text,
+                data={
+                    **notification,
+                    "route": str(
+                        notification.get("route")
+                        or f"management_work/{notification.get('task_id') or ''}"
+                    ),
+                    "channel": str(notification.get("channel") or "management_work"),
+                    "recipient_kind": "management_owner",
+                },
+                audience="management",
+                tenant_id=management_tenant_id,
+            )
+        except Exception:  # noqa: BLE001 - report delivery failure to the caller
+            logger.exception("management work outbox delivery failed")
+            return JSONResponse(
+                {"success": False, "message": "management notification delivery failed"},
+                status_code=503,
+            )
+        if not bool(push_result.get("outbox")):
+            return JSONResponse(
+                {"success": False, "message": "management notification outbox unavailable"},
+                status_code=503,
+            )
+        return {
+            "success": True,
+            "delivery_channel": "management_outbox",
+            "mobile_push": push_result,
+            "resolved_boss_user_id": int(boss_user_id),
+            "tenant_id": management_tenant_id,
+        }
     try:
         ensure_im_tables(get_host_engine())
         db = HostSessionLocal()
@@ -140,9 +303,43 @@ async def internal_employee_message(
                     "message": result["message"],
                 },
             )
+            if notification:
+                await im_ws_hub.send_to_user(
+                    int(boss_user_id),
+                    {
+                        "type": "management_work.notification",
+                        **notification,
+                    },
+                )
         except RECOVERABLE_ERRORS:
             logger.debug("internal employee-message ws push skipped", exc_info=True)
-        return {"success": True, **result}
+        push_result: dict[str, bool] = {}
+        if notification:
+            try:
+                from app.services.mobile_push import notify_user
+
+                push_result = notify_user(
+                    int(boss_user_id),
+                    title=str(notification.get("title") or display_name or employee_id),
+                    body=text,
+                    data={
+                        **notification,
+                        "route": str(
+                            notification.get("route")
+                            or f"management_work/{notification.get('task_id') or ''}"
+                        ),
+                        "channel": str(notification.get("channel") or "management_work"),
+                    },
+                    audience="management",
+                )
+            except Exception:  # noqa: BLE001 - IM is already durable; push is best-effort
+                logger.debug("management work mobile push skipped", exc_info=True)
+        return {
+            "success": True,
+            **result,
+            "mobile_push": push_result,
+            "resolved_boss_user_id": int(boss_user_id),
+        }
     except RECOVERABLE_ERRORS:
         logger.exception("internal_employee_message")
         return JSONResponse({"success": False, "message": "服务器内部错误"}, status_code=500)

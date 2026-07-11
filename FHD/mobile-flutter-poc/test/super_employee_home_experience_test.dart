@@ -188,6 +188,7 @@ class _RunStatusRepository extends MobileRepository {
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async {
     runLoads += 1;
     throw error;
@@ -207,6 +208,7 @@ class _ConversationRefreshRepository extends MobileRepository {
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async =>
       const [];
 

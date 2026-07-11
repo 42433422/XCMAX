@@ -25,6 +25,7 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
   List<RelayRunSummary> _runs = const [];
   bool _loading = true;
   String _error = '';
+  String _syncNotice = '';
   final Set<String> _working = {};
 
   @override
@@ -35,15 +36,18 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
 
   Future<void> _load() async {
     if (mounted) setState(() => _loading = true);
+    var cloudSyncFailed = false;
     try {
       final runs = await widget.repository.loadRelayRuns(
         threadId: widget.threadId,
-        limit: 200,
+        limit: 50,
+        onCloudSyncFailed: () => cloudSyncFailed = true,
       );
       if (!mounted) return;
       setState(() {
         _runs = runs;
         _error = '';
+        _syncNotice = cloudSyncFailed ? '云端历史暂未同步' : '';
       });
     } catch (error) {
       if (!mounted) return;
@@ -161,29 +165,65 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
     if (!_loading && _runs.isEmpty) {
       return const Center(child: Text('当前对话还没有执行记录'));
     }
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView.separated(
-        padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
-        itemCount: _runs.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (_, index) => _RunCard(
-          run: _runs[index],
-          busy: _working.contains(_runs[index].taskId),
-          onCancel: () => _cancel(_runs[index]),
-          onRetry: () => _retry(_runs[index]),
-          onBranch: _runs[index].branch.isEmpty
-              ? null
-              : () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => BranchDetailScreen(
-                        branch: _runs[index].branch,
-                        repository: widget.repository,
-                      ),
+    return Column(
+      children: [
+        if (_syncNotice.isNotEmpty)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.fromLTRB(12, 10, 12, 0),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: colors.divider),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.cloud_sync_outlined,
+                  size: 17,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    _syncNotice,
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12,
                     ),
                   ),
+                ),
+              ],
+            ),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
+              itemCount: _runs.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (_, index) => _RunCard(
+                run: _runs[index],
+                busy: _working.contains(_runs[index].taskId),
+                onCancel: () => _cancel(_runs[index]),
+                onRetry: () => _retry(_runs[index]),
+                onBranch: _runs[index].branch.isEmpty
+                    ? null
+                    : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => BranchDetailScreen(
+                              branch: _runs[index].branch,
+                              repository: widget.repository,
+                            ),
+                          ),
+                        ),
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 }

@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint, text
 
 from app.db.base import Base
 from app.utils.time import utc_now_naive
@@ -14,9 +14,33 @@ from app.utils.time import utc_now_naive
 
 class MobileNotificationOutbox(Base):
     __tablename__ = "mobile_notification_outbox"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "notification_audience",
+            "tenant_id",
+            "event_id",
+            name="uq_mobile_outbox_scope_event",
+        ),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, nullable=False, index=True)
+    notification_audience = Column(
+        String(32),
+        nullable=False,
+        default="enterprise",
+        server_default="enterprise",
+        index=True,
+    )
+    tenant_id = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+        index=True,
+    )
+    event_id = Column(String(256), nullable=True)
     title = Column(String(200), nullable=False, default="")
     body = Column(Text, nullable=False, default="")
     route = Column(String(300), nullable=False, default="")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, DateTime, Integer, String, Text, UniqueConstraint, text
 
 from app.db.base import Base
 from app.utils.time import utc_now_naive
@@ -17,6 +17,23 @@ class MobileDeviceToken(Base):
     fcm_token = Column(Text, nullable=False)
     push_provider = Column(String(16), nullable=False, default="fcm")
     push_token = Column(Text, nullable=False, default="")
+    # Authorization boundary derived from the authenticated server principal.
+    # ``product_sku`` is client metadata and must never decide which device may
+    # receive management notifications.
+    notification_audience = Column(
+        String(32),
+        nullable=False,
+        default="enterprise",
+        server_default="enterprise",
+        index=True,
+    )
+    tenant_id = Column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default=text("0"),
+        index=True,
+    )
     product_sku = Column(String(32), nullable=False, default="personal")
     platform = Column(String(32), nullable=False, default="android")
     device_label = Column(String(200), nullable=False, default="")

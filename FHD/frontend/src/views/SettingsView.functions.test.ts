@@ -276,7 +276,10 @@ vi.mock('../../package.json', () => ({
 const globalStubs = {
   RouterLink: { template: '<a><slot /></a>' },
   HostModBridgeView: { template: '<div class="host-mod-bridge-stub" />' },
-  MobilePairingQrCard: { template: '<div class="mobile-pairing-stub" />' },
+  MobilePairingQrCard: {
+    props: ['allowManagement'],
+    template: '<div class="mobile-pairing-stub" :data-allow-management="String(allowManagement)" />',
+  },
 }
 
 const i18nMock = {
@@ -360,6 +363,22 @@ function resetApiMocks() {
 /* ══════════════════════════════════════════════════════════════════
  * memoryV2 工具函数
  * ══════════════════════════════════════════════════════════════════ */
+
+describe('SettingsView mobile pairing visibility', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    localStorage.clear()
+    resetApiMocks()
+    resetStores()
+  })
+
+  it('does not enable management pairing in the enterprise settings shell', async () => {
+    const wrapper = await mountSettings()
+
+    expect(wrapper.find('.mobile-pairing-stub').attributes('data-allow-management')).toBe('false')
+    wrapper.unmount()
+  })
+})
 
 describe('SettingsView functions – memoryV2TypeLabel', () => {
   beforeEach(() => {

@@ -26,6 +26,7 @@ MOBILE_JWT_ALG = "HS256"
 MOBILE_ACCESS_TTL_HOURS = 24
 MOBILE_REFRESH_TTL_HOURS = 168
 MOBILE_RELAY_TOKEN_SCOPES = frozenset({"enterprise_pairing", "enterprise_relay"})
+MOBILE_MANAGEMENT_PAIRING_SCOPE = "management_pairing"
 
 # 未配置 SECRET_KEY 时的进程级随机回退（不可预测），替代旧的硬编码
 # ``xcagi-dev-secret``。生产应显式配置 SECRET_KEY；否则进程重启后历史 token
@@ -113,6 +114,22 @@ def _relay_token_is_current(payload: dict[str, Any]) -> bool:
     and bound to an exact DB user, tenant namespace and issuer.
     """
     session_id = str(payload.get("session_id") or "").strip()
+    if session_id.startswith("mobile-management-"):
+        scope = str(payload.get("token_scope") or "").strip()
+        account_kind = str(payload.get("account_kind") or "").strip().lower()
+        try:
+            user_id = int(payload.get("user_id") or 0)
+            paired_by_user_id = int(payload.get("paired_by_user_id") or 0)
+        except (TypeError, ValueError):
+            return False
+        return (
+            scope == MOBILE_MANAGEMENT_PAIRING_SCOPE
+            and account_kind in {"admin", "admin_portal"}
+            and user_id > 0
+            and paired_by_user_id == user_id
+            and "tenant_id" in payload
+            and bool(str(payload.get("company_brand") or "").strip())
+        )
     if not session_id.startswith("mobile-relay-"):
         return True
     scope = str(payload.get("token_scope") or "").strip()

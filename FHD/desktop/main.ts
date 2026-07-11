@@ -1347,16 +1347,15 @@ function bootstrap(): void {
         return '127.0.0.1'
       }
 
-      ipcMain.handle('xcagi:pairing-qr', async () => {
+      ipcMain.handle('xcagi:pairing-qr', async (_event, rawPurpose: unknown) => {
         const host = getLanIPv4()
         const port = DEFAULT_PORT
-        const nonce = crypto.randomBytes(12).toString('base64url')
-        const exp = Math.floor(Date.now() / 1000) + 300
+        const purpose = normalizePairingPurpose(rawPurpose)
         try {
           const res = await fetch(`http://127.0.0.1:${port}/api/mobile/v1/pairing/issue`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ host, port })
+            body: JSON.stringify({ host, port, purpose })
           })
           if (res.ok) {
             const json = (await res.json()) as { data?: { nonce?: string; exp?: number; host?: string; port?: number } }
@@ -1365,9 +1364,9 @@ function bootstrap(): void {
             }
           }
         } catch {
-          /* backend offline — return local payload */
+          /* backend offline — the renderer will retry through its authenticated API */
         }
-        return JSON.stringify({ host, port, nonce, exp })
+        return ''
       })
 
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
@@ -1460,6 +1459,10 @@ function bootstrap(): void {
       }
     })
   }
+}
+
+export function normalizePairingPurpose(value: unknown): 'enterprise' | 'management' {
+  return value === 'management' ? 'management' : 'enterprise'
 }
 
 // 单测环境设置 XCAGI_DESKTOP_TEST=1 跳过启动逻辑，只测纯函数

@@ -23,6 +23,9 @@ def defer_write_as_change_request(
     scope_globs: Optional[Sequence[str]] = None,
     forbidden_globs: Optional[Sequence[str]] = None,
     approval_required_globs: Optional[Sequence[str]] = None,
+    management_operation_id: str = "",
+    execution_attempt: int = 0,
+    execution_nonce: str = "",
 ) -> int:
     """不落盘，写入 ``EmployeeChangeRequest``；返回记录 id。"""
     resolved = _guard_under_workspace(workspace_root, path)
@@ -30,12 +33,16 @@ def defer_write_as_change_request(
         sg = [str(x).strip() for x in (scope_globs or []) if str(x).strip()]
         fg = [str(x).strip() for x in (forbidden_globs or []) if str(x).strip()]
         if sg or fg:
-            from modstore_server.employee_scope_policy import (
-                relative_path_under_repo,
-                validate_agent_repo_write,
-            )
+            from modstore_server.employee_scope_policy import validate_agent_repo_write
 
-            rel_repo = relative_path_under_repo(Path(resolved))
+            try:
+                rel_repo = str(
+                    Path(resolved)
+                    .resolve()
+                    .relative_to(Path(workspace_root).resolve())
+                ).replace("\\", "/")
+            except ValueError:
+                rel_repo = ""
             if not rel_repo:
                 raise ValueError("无法在仓库根下解析路径（审批暂存仍需 scope 校验）")
             ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
@@ -79,6 +86,21 @@ def defer_write_as_change_request(
 
     sf = get_session_factory()
     with sf() as session:
+        operation = None
+        if management_operation_id:
+            from modstore_server.management_work_operations import (
+                lock_operation_execution_for_update,
+            )
+
+            operation = lock_operation_execution_for_update(
+                session,
+                str(management_operation_id),
+                execution_attempt=int(execution_attempt),
+                execution_nonce=str(execution_nonce),
+            )
+            if str(operation.employee_id or "") != str(source_employee_id or ""):
+                raise ValueError("management operation employee does not match change request")
+
         row = EmployeeChangeRequest(
             source_employee_id=source_employee_id[:128],
             change_kind="code_patch",
@@ -93,6 +115,46 @@ def defer_write_as_change_request(
         session.add(row)
         session.flush()
         cid = int(row.id)
+        if operation is not None:
+            from modstore_server.models import ManagementWorkEvent
+
+            operation.status = "succeeded"
+            operation.external_ref = f"change_request:{cid}"
+            operation.result_json = json.dumps(
+                {
+                    "ok": True,
+                    "deferred": True,
+                    "change_request_id": cid,
+                    "path": path,
+                },
+                ensure_ascii=False,
+            )
+            operation.error = ""
+            operation.lease_expires_at = None
+            # Successful irreversible effects are valid delivery evidence. They
+            # are still treated as non-cancellable by the compensation walker,
+            # but must not look like a failed recovery before delivery.
+            operation.compensation_status = "not_required"
+            operation.completed_at = datetime.now(timezone.utc)
+            operation.updated_at = operation.completed_at
+            session.add(
+                ManagementWorkEvent(
+                    work_item_id=int(operation.work_item_id),
+                    event_type="operation.succeeded",
+                    actor_type="employee",
+                    actor_id=str(source_employee_id or "")[:128],
+                    message="变更申请已幂等提交",
+                    payload_json=json.dumps(
+                        {
+                            "operation_id": operation.operation_id,
+                            "operation_key": operation.operation_key,
+                            "kind": operation.kind,
+                            "external_ref": operation.external_ref,
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+            )
         session.commit()
 
     rel_for_branch = ""
@@ -450,13 +512,19 @@ def apply_employee_change_request(
             except Exception:
                 ag = []
         rel_repo = relative_path_under_repo(Path(resolved))
+        try:
+            rel_scope = str(
+                Path(resolved).resolve().relative_to(Path(ws).resolve())
+            ).replace("\\", "/")
+        except ValueError:
+            rel_scope = ""
         if sg or fg:
-            if not rel_repo:
+            if not rel_scope:
                 row.status = "failed"
-                row.error = "path not under repository root for scope check"
+                row.error = "path not under assigned workspace root for scope check"
                 session.commit()
                 return {"ok": False, "error": row.error}
-            ok_sc, msg_sc = validate_agent_repo_write(rel_repo, sg, fg)
+            ok_sc, msg_sc = validate_agent_repo_write(rel_scope, sg, fg)
             if not ok_sc:
                 row.status = "failed"
                 row.error = msg_sc[:2000]

@@ -1,7 +1,49 @@
 <template>
   <div class="mobile-pairing">
     <p class="mobile-pairing__lead">
-      使用 XCAGI App「探索 → 识别」扫描下方二维码，手机将与本机宿主绑定并互通。
+      <template v-if="allowManagement">
+        选择手机用途后再扫码。两种二维码权限隔离，普通企业配对不会获得管理权限。
+      </template>
+      <template v-else>
+        使用 XCAGI 企业端 App 扫描下方二维码，与本机安全连接。
+      </template>
+    </p>
+
+    <div
+      v-if="allowManagement"
+      class="mobile-pairing__mode"
+      role="tablist"
+      aria-label="手机配对用途"
+    >
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="pairingPurpose === 'enterprise'"
+        :class="{ 'mobile-pairing__mode-button--active': pairingPurpose === 'enterprise' }"
+        :disabled="loading"
+        class="mobile-pairing__mode-button"
+        @click="selectPurpose('enterprise')"
+      >
+        企业端手机
+      </button>
+      <button
+        type="button"
+        role="tab"
+        :aria-selected="pairingPurpose === 'management'"
+        :class="{ 'mobile-pairing__mode-button--active': pairingPurpose === 'management' }"
+        :disabled="loading"
+        class="mobile-pairing__mode-button"
+        @click="selectPurpose('management')"
+      >
+        管理端手机
+      </button>
+    </div>
+    <p
+      v-if="allowManagement && pairingPurpose === 'management'"
+      class="mobile-pairing__management-warning"
+      role="alert"
+    >
+      此二维码可处理员工决策、验收、停止和改派，仅供管理者本人设备使用。
     </p>
 
     <div class="mobile-pairing__panel">
@@ -13,7 +55,7 @@
         <img
           v-else-if="qrDataUrl"
           :src="qrDataUrl"
-          alt="移动端配对二维码"
+          :alt="pairingPurpose === 'management' ? '管理端手机配对二维码' : '企业端手机配对二维码'"
           class="mobile-pairing__qr"
         >
         <div v-else class="mobile-pairing__qr-state mobile-pairing__qr-state--error">
@@ -24,7 +66,9 @@
       <div class="mobile-pairing__meta">
         <!-- 大号设备码展示，优先使用服务器中继码。 -->
         <div v-if="pairingShortCode" class="mobile-pairing__code-block">
-          <span class="mobile-pairing__code-label">设备码</span>
+          <span class="mobile-pairing__code-label">
+            {{ pairingPurpose === 'management' ? '管理码' : '设备码' }}
+          </span>
           <span class="mobile-pairing__code-value">{{ pairingShortCode }}</span>
           <button
             type="button"
@@ -60,7 +104,9 @@
     </div>
 
     <ul class="mobile-pairing__tips">
-      <li>优先通过服务器中继绑定，手机和电脑不在同一局域网也可以连接。</li>
+      <li v-if="pairingPurpose === 'enterprise' && allowManagement">企业端二维码只授予业务与超级员工使用权限，不含管理权限。</li>
+      <li v-else-if="pairingPurpose === 'enterprise'">企业端二维码用于业务与超级员工协作。</li>
+      <li v-else>管理端任务依赖本机真实台账，请保持手机与电脑处于同一可信局域网。</li>
       <li>扫描二维码或输入上方 6 位设备码即可连接。</li>
       <li>登录确认请使用 App 扫描登录页的「App 扫码登录」二维码（非本设备码）。</li>
     </ul>
@@ -79,7 +125,14 @@ import {
   resolvePairingHost,
   resolveReachablePairingPort,
   type PairingPayload,
+  type PairingPurpose,
 } from '@/api/mobilePairing';
+
+const props = withDefaults(defineProps<{
+  allowManagement?: boolean;
+}>(), {
+  allowManagement: false,
+});
 
 const loading = ref(false);
 const qrDataUrl = ref('');
@@ -91,6 +144,7 @@ const pairingShortCode = ref(''); // v2: 6位配对码
 const copied = ref(false); // 复制反馈状态
 const expiresAt = ref(0);
 const nowSec = ref(Math.floor(Date.now() / 1000));
+const pairingPurpose = ref<PairingPurpose>('enterprise');
 
 let countdownTimer: ReturnType<typeof setInterval> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
@@ -124,6 +178,20 @@ function scheduleAutoRefresh() {
   refreshTimer = setTimeout(() => {
     void refreshQr();
   }, ms);
+}
+
+function selectPurpose(purpose: PairingPurpose) {
+  if (purpose === 'management' && !props.allowManagement) return;
+  if (purpose === pairingPurpose.value || loading.value) return;
+  pairingPurpose.value = purpose;
+  qrDataUrl.value = '';
+  pairingShortCode.value = '';
+  expiresAt.value = 0;
+  if (refreshTimer) {
+    clearTimeout(refreshTimer);
+    refreshTimer = null;
+  }
+  void refreshQr();
 }
 
 async function renderPayload(payload: PairingPayload) {
@@ -162,7 +230,7 @@ async function refreshQr() {
   loading.value = true;
   errorMessage.value = '';
   try {
-    const desktopPayload = await loadDesktopPairingPayload();
+    const desktopPayload = await loadDesktopPairingPayload(pairingPurpose.value);
     if (desktopPayload) {
       await renderPayload(desktopPayload);
       return;
@@ -172,7 +240,7 @@ async function refreshQr() {
     const port = resolveReachablePairingPort(Number(hint.api_port || 0));
     const host = resolvePairingHost();
     const payload = applyDevProxyReachablePort(
-      await issueMobilePairing(host, port),
+      await issueMobilePairing(host, port, pairingPurpose.value),
     );
     await renderPayload(payload);
   } catch (error: unknown) {
@@ -207,6 +275,48 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.55;
   color: #475569;
+}
+
+.mobile-pairing__mode {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #e2e8f0;
+}
+
+.mobile-pairing__mode-button {
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mobile-pairing__mode-button--active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+}
+
+.mobile-pairing__mode-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.mobile-pairing__management-warning {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid #fdba74;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .mobile-pairing__panel {

@@ -1,12 +1,26 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyDevProxyReachablePort,
+  buildPairingIssueBody,
   buildPairingQrText,
   resolveReachablePairingPort,
   type PairingPayload,
 } from './mobilePairing';
 
 describe('mobilePairing', () => {
+  it('keeps enterprise pairing low privilege and makes management explicit', () => {
+    expect(buildPairingIssueBody('192.168.1.20', 17500)).toEqual({
+      host: '192.168.1.20',
+      port: 17500,
+      purpose: 'enterprise',
+    });
+    expect(buildPairingIssueBody('192.168.1.20', 17500, 'management')).toEqual({
+      host: '192.168.1.20',
+      port: 17500,
+      purpose: 'management',
+    });
+  });
+
   it('builds v2 QR text with host, port, nonce, and short code', () => {
     const payload: PairingPayload = {
       host: '192.168.1.20',

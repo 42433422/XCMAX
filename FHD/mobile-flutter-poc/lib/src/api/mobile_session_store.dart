@@ -13,9 +13,14 @@ class MobileSessionData {
     this.localAccessToken = '',
     this.localRefreshToken = '',
     this.localSessionId = '',
+    this.localAccountKind = '',
+    this.localTokenScope = '',
+    this.localUserId = 0,
+    this.localTenantId = 0,
     this.username = '',
     this.accountKind = '',
     this.userId = 0,
+    this.tenantId = 0,
     this.marketAccessToken = '',
     this.marketRefreshToken = '',
     this.localAvatarSource = '',
@@ -60,9 +65,14 @@ class MobileSessionData {
   final String localAccessToken;
   final String localRefreshToken;
   final String localSessionId;
+  final String localAccountKind;
+  final String localTokenScope;
+  final int localUserId;
+  final int localTenantId;
   final String username;
   final String accountKind;
   final int userId;
+  final int tenantId;
   final String marketAccessToken;
   final String marketRefreshToken;
   final String localAvatarSource;
@@ -105,6 +115,32 @@ class MobileSessionData {
       localAccessToken.trim().isNotEmpty ||
       marketAccessToken.trim().isNotEmpty;
 
+  bool get hasVerifiedManagementPairing {
+    final kind = localAccountKind.trim().toLowerCase();
+    return localAccessToken.trim().isNotEmpty &&
+        localSessionId.trim().isNotEmpty &&
+        localTokenScope.trim() == 'management_pairing' &&
+        const {'admin', 'admin_portal'}.contains(kind) &&
+        localPairingMatchesActiveIdentity;
+  }
+
+  bool get localPairingMatchesActiveIdentity {
+    final activeKind = accountKind.trim().toLowerCase();
+    final pairedKind = localAccountKind.trim().toLowerCase();
+    final scope = localTokenScope.trim();
+    final kindMatches = switch (scope) {
+      'management_pairing' =>
+        const {'admin', 'admin_portal'}.contains(activeKind) &&
+            const {'admin', 'admin_portal'}.contains(pairedKind),
+      'enterprise_pairing' =>
+        activeKind == 'enterprise' && pairedKind == 'enterprise',
+      _ => false,
+    };
+    if (!kindMatches || userId <= 0 || localUserId <= 0) return false;
+    if (userId != localUserId) return false;
+    return tenantId <= 0 || localTenantId <= 0 || tenantId == localTenantId;
+  }
+
   bool get hasIdentity =>
       username.trim().isNotEmpty ||
       accountKind.trim().isNotEmpty ||
@@ -130,9 +166,14 @@ class MobileSessionData {
       localAccessToken: _readString(json, 'local_access_token'),
       localRefreshToken: _readString(json, 'local_refresh_token'),
       localSessionId: _readString(json, 'local_session_id'),
+      localAccountKind: _readString(json, 'local_account_kind'),
+      localTokenScope: _readString(json, 'local_token_scope'),
+      localUserId: _readInt(json, 'local_user_id'),
+      localTenantId: _readInt(json, 'local_tenant_id'),
       username: _readString(json, 'username'),
       accountKind: _readString(json, 'account_kind'),
       userId: _readInt(json, 'user_id'),
+      tenantId: _readInt(json, 'tenant_id'),
       marketAccessToken: _readString(json, 'market_access_token'),
       marketRefreshToken: _readString(json, 'market_refresh_token'),
       localAvatarSource: _readString(json, 'local_avatar_source'),
@@ -179,9 +220,14 @@ class MobileSessionData {
         'local_access_token': localAccessToken,
         'local_refresh_token': localRefreshToken,
         'local_session_id': localSessionId,
+        'local_account_kind': localAccountKind,
+        'local_token_scope': localTokenScope,
+        'local_user_id': localUserId,
+        'local_tenant_id': localTenantId,
         'username': username,
         'account_kind': accountKind,
         'user_id': userId,
+        'tenant_id': tenantId,
         'market_access_token': marketAccessToken,
         'market_refresh_token': marketRefreshToken,
         'local_avatar_source': localAvatarSource,
@@ -233,9 +279,16 @@ class MobileSessionData {
       localRefreshToken:
           _firstNonBlank(other.localRefreshToken, localRefreshToken),
       localSessionId: _firstNonBlank(other.localSessionId, localSessionId),
+      localAccountKind:
+          _firstNonBlank(other.localAccountKind, localAccountKind),
+      localTokenScope: _firstNonBlank(other.localTokenScope, localTokenScope),
+      localUserId: other.localUserId > 0 ? other.localUserId : localUserId,
+      localTenantId:
+          other.localTenantId > 0 ? other.localTenantId : localTenantId,
       username: _firstNonBlank(other.username, username),
       accountKind: _firstNonBlank(other.accountKind, accountKind),
       userId: other.userId > 0 ? other.userId : userId,
+      tenantId: other.tenantId > 0 ? other.tenantId : tenantId,
       marketAccessToken:
           _firstNonBlank(other.marketAccessToken, marketAccessToken),
       marketRefreshToken:
@@ -305,9 +358,14 @@ class MobileSessionData {
     Object? localAccessToken = _unset,
     Object? localRefreshToken = _unset,
     Object? localSessionId = _unset,
+    Object? localAccountKind = _unset,
+    Object? localTokenScope = _unset,
+    Object? localUserId = _unset,
+    Object? localTenantId = _unset,
     Object? username = _unset,
     Object? accountKind = _unset,
     Object? userId = _unset,
+    Object? tenantId = _unset,
     Object? marketAccessToken = _unset,
     Object? marketRefreshToken = _unset,
     Object? localAvatarSource = _unset,
@@ -360,12 +418,25 @@ class MobileSessionData {
       localSessionId: identical(localSessionId, _unset)
           ? this.localSessionId
           : localSessionId as String,
+      localAccountKind: identical(localAccountKind, _unset)
+          ? this.localAccountKind
+          : localAccountKind as String,
+      localTokenScope: identical(localTokenScope, _unset)
+          ? this.localTokenScope
+          : localTokenScope as String,
+      localUserId: identical(localUserId, _unset)
+          ? this.localUserId
+          : localUserId as int,
+      localTenantId: identical(localTenantId, _unset)
+          ? this.localTenantId
+          : localTenantId as int,
       username:
           identical(username, _unset) ? this.username : username as String,
       accountKind: identical(accountKind, _unset)
           ? this.accountKind
           : accountKind as String,
       userId: identical(userId, _unset) ? this.userId : userId as int,
+      tenantId: identical(tenantId, _unset) ? this.tenantId : tenantId as int,
       marketAccessToken: identical(marketAccessToken, _unset)
           ? this.marketAccessToken
           : marketAccessToken as String,

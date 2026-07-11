@@ -30,7 +30,9 @@ from modstore_server.models import (
     get_session_factory,
 )
 
-router = APIRouter(prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"])
+router = APIRouter(
+    prefix="/api/admin/employee-autonomy", tags=["admin-employee-autonomy"]
+)
 
 _MENTION_RE = re.compile(r"@([a-zA-Z0-9][a-zA-Z0-9_-]{0,127})")
 
@@ -59,9 +61,8 @@ def _extract_mentions_from_text(text: str) -> List[str]:
 
 def _internal_api_key() -> str:
     return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("MODSTORE_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
+        os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
         or ""
     ).strip()
 
@@ -219,7 +220,9 @@ def batch_review_employee_suggestions(
             ok += 1
         else:
             failed += 1
-            errors.append({"id": sid, "error": str(out.get("error") or "unknown")[:300]})
+            errors.append(
+                {"id": sid, "error": str(out.get("error") or "unknown")[:300]}
+            )
     return {
         "ok": True,
         "action": action,
@@ -301,7 +304,9 @@ def list_collab_threads(
     _ = _auth_user
     sf = get_session_factory()
     with sf() as session:
-        q = session.query(EmployeeCollabThread).order_by(EmployeeCollabThread.updated_at.desc())
+        q = session.query(EmployeeCollabThread).order_by(
+            EmployeeCollabThread.updated_at.desc()
+        )
         st = (status or "").strip()
         if st:
             q = q.filter(EmployeeCollabThread.status == st)
@@ -328,7 +333,9 @@ def create_collab_thread_api(
 ) -> Dict[str, Any]:
     _ = _admin_user
     title = str(body.get("title") or "").strip() or "协作线程"
-    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
+    participants = (
+        body.get("participants") if isinstance(body.get("participants"), list) else []
+    )
     created_by = str(body.get("created_by_employee_id") or "admin").strip() or "admin"
     out = create_collab_thread(
         title=title,
@@ -410,7 +417,9 @@ def post_collab_message_api(
 
 @router.get("/questions")
 def list_pending_human_questions(
-    include_history: bool = Query(False, description="true 则包含 answered/expired 历史"),
+    include_history: bool = Query(
+        False, description="true 则包含 answered/expired 历史"
+    ),
     limit: int = Query(50, ge=1, le=200),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
@@ -464,15 +473,9 @@ def internal_answer_latest_question(
     供 FHD 在「老板于员工 IM 聊天页直接回复」时经 ``X-Internal-Api-Key`` 调用，无需 question_id。
     打通 phase-D 双向问答入站半边。POST body: ``{user_id, employee_id, answer}``。
     """
-    import os
-
-    expected = (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
-        or ""
-    ).strip()
+    expected = _internal_api_key()
     provided = (request.headers.get("X-Internal-Api-Key") or "").strip()
-    if not expected or provided != expected:
+    if not expected or not secrets.compare_digest(provided, expected):
         raise HTTPException(401, "unauthorized")
     try:
         user_id = int((body or {}).get("user_id") or 0)
@@ -482,7 +485,9 @@ def internal_answer_latest_question(
     answer = str((body or {}).get("answer") or "").strip()
     if user_id <= 0 or not employee_id or not answer:
         raise HTTPException(400, "user_id/employee_id/answer required")
-    from modstore_server.human_uncertainty_queue import answer_latest_pending_for_employee
+    from modstore_server.human_uncertainty_queue import (
+        answer_latest_pending_for_employee,
+    )
 
     return answer_latest_pending_for_employee(
         user_id=user_id, employee_id=employee_id, answer=answer
@@ -504,7 +509,9 @@ def human_questions_stats(
     sf = get_session_factory()
     with sf() as session:
         rows = (
-            session.query(PendingHumanQuestion.status, func.count(PendingHumanQuestion.id))
+            session.query(
+                PendingHumanQuestion.status, func.count(PendingHumanQuestion.id)
+            )
             .filter(PendingHumanQuestion.user_id == _admin_user.id)
             .group_by(PendingHumanQuestion.status)
             .all()
@@ -527,7 +534,9 @@ def human_questions_stats(
 def get_employee_scorecard_api(
     employee_id: str,
     days: int = Query(7, ge=1, le=90, description="回看多少天"),
-    human_friendly: bool = Query(False, description="true 则返回人话文本，否则返回 JSON"),
+    human_friendly: bool = Query(
+        False, description="true 则返回人话文本，否则返回 JSON"
+    ),
     _admin_user: User = Depends(require_admin),
 ) -> Dict[str, Any]:
     """单个员工的成绩单 — 任务数/成功率/失败原因/处理时长/最近任务。

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -113,6 +114,8 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     assert poll_response.status_code == 200
     assert poll_response.json()["data"]["tasks"][0]["status"] == "running"
 
+    large_trace = "DETAIL_ONLY_MARKER-" + ("x" * 600_000)
+    full_assistant_body = "真实 Codex 已完成并回写" + ("答" * 5_000)
     complete_response = client.post(
         f"/api/mobile/v1/relay/desktop/tasks/{task['task_id']}/complete",
         json={
@@ -121,7 +124,13 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
             "status": "completed",
             "result": {
                 "ok": True,
-                "codex": {"assistant_message": {"body": "真实 Codex 已完成并回写"}},
+                "elapsed_seconds": 3.5,
+                "codex": {
+                    "assistant_message": {"body": full_assistant_body},
+                    "messages": [{"content": large_trace}],
+                    "tool_calls": [{"arguments": large_trace}],
+                    "dispatch": {"stdout": large_trace},
+                },
                 "session": {
                     "session_id": "codex-session-1",
                     "workspace_root": "/workspace/thread-1",
@@ -137,16 +146,47 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     assert status_response.status_code == 200
     final_task = status_response.json()["data"]["task"]
     assert final_task["status"] == "completed"
-    assert final_task["result"]["codex"]["assistant_message"]["body"] == "真实 Codex 已完成并回写"
+    assert final_task["result"]["codex"]["assistant_message"]["body"] == full_assistant_body
+    assert final_task["result"]["codex"]["messages"][0]["content"] == large_trace
+    assert final_task["result"]["codex"]["tool_calls"][0]["arguments"] == large_trace
+    assert final_task["result"]["codex"]["dispatch"]["stdout"] == large_trace
     thread_after = client.get(f"/api/mobile/v1/relay/threads/{thread['thread_id']}").json()["data"][
         "thread"
     ]
     assert thread_after["cli_session_id"] == "codex-session-1"
     assert thread_after["branch"] == "super-employee/codex/thread-1"
-    history = client.get(
+    history_response = client.get(
         "/api/mobile/v1/relay/tasks", params={"thread_id": thread["thread_id"]}
-    ).json()["data"]
+    )
+    assert history_response.status_code == 200
+    assert len(history_response.content) <= relay.MobileRelayService.task_list_max_response_bytes
+    assert history_response.headers["X-XCAGI-Relay-List-Mode"] == "summary"
+    assert "DETAIL_ONLY_MARKER" not in history_response.text
+    history = history_response.json()["data"]
     assert history["count"] == 1
+    assert history["limit"] == relay.MobileRelayService.task_list_default_limit
+    assert history["summary_only"] is True
+    history_task = history["items"][0]
+    assert history_task["summary_only"] is True
+    assert history_task["summary_truncated"] is True
+    assert "messages" not in history_task["result"].get("codex", {})
+    assert "tool_calls" not in history_task["result"].get("codex", {})
+    assert "dispatch" not in history_task["result"].get("codex", {})
+    assert len(history_task["result"]["codex"]["assistant_message"]["body"]) <= (
+        relay.MobileRelayService.task_summary_result_max_chars
+    )
+    assert history_task["result"]["session"]["branch"] == "super-employee/codex/thread-1"
+
+    legacy_page = client.get(
+        "/api/mobile/v1/relay/tasks",
+        params={"thread_id": thread["thread_id"], "limit": 300, "offset": 1},
+    )
+    assert legacy_page.status_code == 200
+    legacy_data = legacy_page.json()["data"]
+    assert legacy_data["requested_limit"] == 300
+    assert legacy_data["limit"] == relay.MobileRelayService.task_list_max_page_limit
+    assert legacy_data["offset"] == 1
+    assert legacy_data["items"] == []
 
     cancel_create = client.post(
         "/api/mobile/v1/relay/tasks",
@@ -196,3 +236,48 @@ def test_mobile_server_desktop_codex_relay_http_round_trip(monkeypatch, tmp_path
     )
     assert late_complete.status_code == 200
     assert late_complete.json()["data"]["task"]["status"] == "cancelled"
+
+
+def test_mobile_relay_summary_page_has_hard_utf8_response_budget():
+    from app.fastapi_routes import mobile_api_extensions as ext
+    from app.services.mobile_relay_service import MobileRelayService
+
+    max_message = "中" * MobileRelayService.task_summary_message_max_chars
+    max_result = "答" * MobileRelayService.task_summary_result_max_chars
+    max_branch = "分" * MobileRelayService.task_summary_branch_max_chars
+    items = [
+        {
+            "task_id": f"task-{index:04d}",
+            "thread_id": f"thread-{index:04d}",
+            "work_item_id": f"work-{index:04d}",
+            "employee_id": "codex-super-employee",
+            "kind": "codex.invoke",
+            "status": "completed",
+            "attempt_no": 1,
+            "created_at": "2026-07-10T00:00:00+00:00",
+            "updated_at": "2026-07-10T00:00:01+00:00",
+            "payload": {"message": max_message},
+            "result": {
+                "codex": {"assistant_message": {"body": max_result}},
+                "session": {"branch": max_branch},
+            },
+            "summary_only": True,
+            "summary_truncated": True,
+        }
+        for index in range(MobileRelayService.task_list_max_page_limit)
+    ]
+
+    response = ext._mobile_relay_task_list_response(
+        items,
+        offset=0,
+        page_limit=MobileRelayService.task_list_max_page_limit,
+        requested_limit=MobileRelayService.task_list_max_requested_limit,
+        has_more=False,
+    )
+    data = json.loads(response.body)["data"]
+
+    assert len(response.body) <= MobileRelayService.task_list_max_response_bytes
+    assert 0 < data["count"] < MobileRelayService.task_list_max_page_limit
+    assert data["truncated_by_size"] is True
+    assert data["has_more"] is True
+    assert data["next_offset"] == data["count"]

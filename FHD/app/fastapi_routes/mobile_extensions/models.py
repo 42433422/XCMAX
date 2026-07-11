@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -28,6 +28,7 @@ class PairingLookupBody(BaseModel):
 class PairingIssueBody(BaseModel):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=5000, ge=1, le=65535)
+    purpose: Literal["enterprise", "management"] = "enterprise"
 
 
 class RelayDesktopRegisterBody(BaseModel):

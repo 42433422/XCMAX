@@ -38,6 +38,8 @@ class XcagiMobileEndpoints {
   static const syncConflicts = '$base/sync/conflicts';
   static const devicesRegister = '$base/devices/register';
   static const notificationsPending = '$base/notifications/pending';
+  static const notificationsAckTemplate =
+      '$base/notifications/{notificationId}/ack';
   static const authQrConfirm = '$base/auth/qr/confirm';
   static const pairingExchange = '$base/pairing/exchange';
   static const pairingLookup = '$base/pairing/lookup';
@@ -148,6 +150,22 @@ class XcagiMobileEndpoints {
       '$base/admin/employee-pending-questions';
   static const adminEmployeePendingQuestionAnswerTemplate =
       '$base/admin/employee-pending-questions/{questionId}/answer';
+  static const adminManagementWork = '$base/admin/employee-work';
+  static const adminManagementWorkSummary = '$base/admin/employee-work/summary';
+  static const adminManagementWorkEmployees =
+      '$base/admin/employee-work/employees';
+  static const adminManagementWorkDetailTemplate =
+      '$base/admin/employee-work/{taskId}';
+  static const adminManagementWorkReviewTemplate =
+      '$base/admin/employee-work/{taskId}/review';
+  static const adminManagementWorkRetryTemplate =
+      '$base/admin/employee-work/{taskId}/retry';
+  static const adminManagementWorkCancelTemplate =
+      '$base/admin/employee-work/{taskId}/cancel';
+  static const adminManagementWorkReassignTemplate =
+      '$base/admin/employee-work/{taskId}/reassign';
+  static const adminManagementDecisionResolveTemplate =
+      '$base/admin/employee-work/decisions/{decisionId}/resolve';
   static const employeeChatStreamTemplate =
       '$base/employees/{employeeId}/chat/stream';
 
@@ -386,6 +404,55 @@ class XcagiMobileEndpoints {
     return adminEmployeePendingQuestionAnswerTemplate.replaceFirst(
       '{questionId}',
       '$questionId',
+    );
+  }
+
+  static String adminManagementWorkDetail(String taskId) {
+    return adminManagementWorkDetailTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String adminManagementWorkReview(String taskId) {
+    return adminManagementWorkReviewTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String adminManagementWorkRetry(String taskId) {
+    return adminManagementWorkRetryTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String adminManagementWorkCancel(String taskId) {
+    return adminManagementWorkCancelTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String adminManagementWorkReassign(String taskId) {
+    return adminManagementWorkReassignTemplate.replaceFirst(
+      '{taskId}',
+      Uri.encodeComponent(taskId),
+    );
+  }
+
+  static String adminManagementDecisionResolve(String decisionId) {
+    return adminManagementDecisionResolveTemplate.replaceFirst(
+      '{decisionId}',
+      Uri.encodeComponent(decisionId),
+    );
+  }
+
+  static String notificationAck(int notificationId) {
+    return notificationsAckTemplate.replaceFirst(
+      '{notificationId}',
+      '$notificationId',
     );
   }
 }
@@ -959,9 +1026,14 @@ class MobileApiClient {
         localAccessToken: '',
         localRefreshToken: '',
         localSessionId: '',
+        localAccountKind: '',
+        localTokenScope: '',
+        localUserId: 0,
+        localTenantId: 0,
         username: '',
         accountKind: '',
         userId: 0,
+        tenantId: 0,
         marketAccessToken: '',
         marketRefreshToken: '',
         relayDesktopId: '',
@@ -1001,20 +1073,62 @@ class MobileApiClient {
     final accessToken = _readString(data, const ['access_token']);
     final marketToken = _readString(data, const ['market_access_token']);
     if (accessToken.isEmpty && marketToken.isEmpty) return;
+    final loginUserId = _readInt(user, const ['id'], 0);
+    final loginTenantId = _readInt(
+      user,
+      const ['tenant_id'],
+      _readInt(data, const ['tenant_id'], 0),
+    );
+    final loginAccountKind =
+        _readString(data, const ['account_kind']).ifEmpty(fallbackAccountKind);
 
     final current = await _sessionStore.load().catchError(
           (_) => MobileSessionData.empty,
         );
-    final next = current.mergePreferNonBlank(
+    final activeSubjectChanged =
+        current.userId > 0 && loginUserId > 0 && current.userId != loginUserId;
+    final activeTenantChanged = current.tenantId > 0 &&
+        loginTenantId > 0 &&
+        current.tenantId != loginTenantId;
+    final pairedSubjectChanged = current.localUserId > 0 &&
+        loginUserId > 0 &&
+        current.localUserId != loginUserId;
+    final pairedTenantChanged = current.localTenantId > 0 &&
+        loginTenantId > 0 &&
+        current.localTenantId != loginTenantId;
+    final projectedIdentity = current.copyWith(
+      accountKind: loginAccountKind,
+      userId: loginUserId > 0 ? loginUserId : current.userId,
+      tenantId: loginTenantId > 0 ? loginTenantId : current.tenantId,
+    );
+    final pairedBindingMismatch = current.localAccessToken.trim().isNotEmpty &&
+        !projectedIdentity.localPairingMatchesActiveIdentity;
+    var base = current;
+    if (activeSubjectChanged || activeTenantChanged) {
+      base = base.copyWith(
+        refreshToken: '',
+        sessionId: '',
+        marketAccessToken: '',
+        marketRefreshToken: '',
+      );
+    }
+    if (activeSubjectChanged ||
+        activeTenantChanged ||
+        pairedSubjectChanged ||
+        pairedTenantChanged ||
+        pairedBindingMismatch) {
+      base = _withoutLocalPairingAndRelay(base);
+    }
+    final next = base.mergePreferNonBlank(
       MobileSessionData(
         accessToken: accessToken,
         refreshToken: _readString(data, const ['refresh_token']),
         sessionId: _readString(data, const ['session_id']),
         username: _readString(user, const ['username', 'name'])
             .ifEmpty(fallbackUsername),
-        accountKind: _readString(data, const ['account_kind'])
-            .ifEmpty(fallbackAccountKind),
-        userId: _readInt(user, const ['id'], 0),
+        accountKind: loginAccountKind,
+        userId: loginUserId,
+        tenantId: loginTenantId,
         marketAccessToken: marketToken,
         marketRefreshToken: _readString(data, const ['market_refresh_token']),
       ),
@@ -1117,7 +1231,15 @@ class MobileApiClient {
       payload,
       const ['session_id', 'session_token'],
     );
+    final localAccountKind = _readString(payload, const ['account_kind']);
+    final localTokenScope = _readString(payload, const ['token_scope']);
     final user = _asObjectMap(payload['user']);
+    final localUserId = _readInt(user, const ['id'], 0);
+    final localTenantId = _readInt(
+      user,
+      const ['tenant_id'],
+      _readInt(payload, const ['tenant_id'], 0),
+    );
     // A desktop pairing token is signed by the desktop backend and is not
     // interchangeable with the cloud account JWT. Keep both credentials so
     // toggling LAN mode never logs the user out of cloud mode (or vice versa).
@@ -1126,6 +1248,10 @@ class MobileApiClient {
         localAccessToken: access,
         localRefreshToken: localRefresh,
         localSessionId: localSession,
+        localAccountKind: localAccountKind,
+        localTokenScope: localTokenScope,
+        localUserId: localUserId,
+        localTenantId: localTenantId,
       );
     }
     if (!preserveActiveAuth && access.isNotEmpty) {
@@ -1149,7 +1275,8 @@ class MobileApiClient {
           current.accountKind,
           'enterprise',
         ]),
-        userId: _readInt(user, const ['id'], current.userId),
+        userId: localUserId > 0 ? localUserId : current.userId,
+        tenantId: localTenantId > 0 ? localTenantId : current.tenantId,
       );
     }
     if (access.isNotEmpty || preserveActiveAuth) {
@@ -1501,6 +1628,133 @@ class MobileApiClient {
     return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
+  Future<MobileEnvelope<Map<String, Object?>>> managementWorkItems({
+    String status = '',
+    String ownerEmployeeId = '',
+    int limit = 100,
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await getJson(
+      XcagiMobileEndpoints.adminManagementWork,
+      query: {
+        'status': status.trim(),
+        'owner_employee_id': ownerEmployeeId.trim(),
+        'limit': '$limit',
+      },
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> managementWorkDetail(
+    String taskId,
+  ) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await getJson(
+      XcagiMobileEndpoints.adminManagementWorkDetail(taskId),
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> managementWorkEmployees() async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await getJson(
+      XcagiMobileEndpoints.adminManagementWorkEmployees,
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> resolveManagementDecision({
+    required String decisionId,
+    required String decision,
+    String note = '',
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await postJson(
+      XcagiMobileEndpoints.adminManagementDecisionResolve(decisionId),
+      {'decision': decision.trim(), 'note': note.trim()},
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> reviewManagementWork({
+    required String taskId,
+    required bool accepted,
+    String feedback = '',
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await postJson(
+      XcagiMobileEndpoints.adminManagementWorkReview(taskId),
+      {'accepted': accepted, 'feedback': feedback.trim()},
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> retryManagementWork({
+    required String taskId,
+    String note = '',
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await postJson(
+      XcagiMobileEndpoints.adminManagementWorkRetry(taskId),
+      {'note': note.trim()},
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> cancelManagementWork({
+    required String taskId,
+    String reason = '',
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await postJson(
+      XcagiMobileEndpoints.adminManagementWorkCancel(taskId),
+      {'reason': reason.trim()},
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> reassignManagementWork({
+    required String taskId,
+    required String newEmployeeId,
+    String reason = '',
+  }) async {
+    final baseUrl = await requireManagementWorkBaseUrl();
+    final json = await postJson(
+      XcagiMobileEndpoints.adminManagementWorkReassign(taskId),
+      {
+        'new_employee_id': newEmployeeId.trim(),
+        'reason': reason.trim(),
+      },
+      baseUrl: baseUrl,
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
+  }
+
+  /// Management employees execute on the paired owner's desktop runtime.
+  /// Prefer that authoritative LAN origin whenever the phone still has a
+  /// paired credential, even if the rest of the app is currently in cloud
+  /// mode.  The public FHD service cannot reach a private desktop ledger.
+  Future<String?> managementWorkPreferredBaseUrl() async {
+    return preferredManagementWorkBaseUrlForSession(await loadSession());
+  }
+
+  Future<String> requireManagementWorkBaseUrl() async {
+    final baseUrl = await managementWorkPreferredBaseUrl();
+    if (baseUrl != null && baseUrl.trim().isNotEmpty) return baseUrl;
+    throw const MobileApiException(
+      statusCode: 428,
+      message: '请先在电脑管理端生成“管理端手机”二维码并重新配对',
+      body: {'code': 'management_pairing_required'},
+    );
+  }
+
   Future<MobileEnvelope<Map<String, Object?>>> login({
     required String username,
     required String password,
@@ -1751,6 +2005,23 @@ class MobileApiClient {
       json,
       (value) => PendingNotificationsData.fromJson(_asObjectMap(value)),
     );
+  }
+
+  Future<MobileEnvelope<Map<String, Object?>>> acknowledgeNotification(
+    int notificationId,
+  ) async {
+    if (notificationId <= 0) {
+      throw const MobileApiException(
+        statusCode: 400,
+        message: '通知编号无效',
+        body: {'code': 'invalid_notification_id'},
+      );
+    }
+    final json = await postJson(
+      XcagiMobileEndpoints.notificationAck(notificationId),
+      const <String, Object?>{},
+    );
+    return MobileEnvelope.fromJson(json, _asObjectMap);
   }
 
   Future<MobileEnvelope<Map<String, Object?>>> exchangePairing({
@@ -2887,11 +3158,7 @@ class MobileApiClient {
               (_) => MobileSessionData.empty,
             );
         await _saveSession(
-          current.copyWith(
-            localAccessToken: '',
-            localRefreshToken: '',
-            localSessionId: '',
-          ),
+          _withoutLocalPairingAndRelay(current),
         );
       }
       return false;
@@ -2949,8 +3216,14 @@ class MobileApiClient {
   Future<Map<String, Object?>> getJson(
     String path, {
     Map<String, String> query = const {},
+    String? baseUrl,
   }) async {
-    return _sendJsonRequest(method: 'GET', path: path, query: query);
+    return _sendJsonRequest(
+      method: 'GET',
+      path: path,
+      query: query,
+      baseUrl: baseUrl,
+    );
   }
 
   Future<Map<String, Object?>> postJson(
@@ -3317,6 +3590,36 @@ Map<String, Object?> _asObjectMap(Object? value) {
   return const <String, Object?>{};
 }
 
+String? preferredManagementWorkBaseUrlForSession(MobileSessionData session) {
+  if (!session.hasVerifiedManagementPairing) return null;
+
+  final host = session.fhdHost.trim();
+  final candidates = <String>[
+    session.localBaseUrl.trim(),
+    if (host.isNotEmpty)
+      AndroidServerRouter(
+        fhdHost: host,
+        mode: AndroidServerMode.lan,
+      ).lanFhdBaseUrl(),
+  ];
+  for (final raw in candidates) {
+    if (raw.isEmpty) continue;
+    final parsed = Uri.tryParse(raw.contains('://') ? raw : 'http://$raw');
+    if (parsed == null || parsed.host.isEmpty) continue;
+    final normalizedHost = parsed.host.toLowerCase();
+    if (normalizedHost == XcagiMobileTopology.productionHost ||
+        normalizedHost == 'localhost' ||
+        normalizedHost == '127.0.0.1' ||
+        normalizedHost == '::1') {
+      continue;
+    }
+    if (!AndroidTransportSecurityPolicy.permits(parsed)) continue;
+    if (!AndroidTransportSecurityPolicy.isPrivateLanHost(parsed.host)) continue;
+    return parsed.replace(path: '/', query: null, fragment: null).toString();
+  }
+  return null;
+}
+
 String _chatResultText(Object? result) {
   if (result == null) return '';
   if (result is String) return result.trim();
@@ -3413,6 +3716,30 @@ String _preferredServerModeAfterLogin(MobileSessionData session) {
     ),
     configuredHost: session.fhdHost,
     currentMode: session.serverMode,
+  );
+}
+
+MobileSessionData _withoutLocalPairingAndRelay(MobileSessionData session) {
+  return session.copyWith(
+    localAccessToken: '',
+    localRefreshToken: '',
+    localSessionId: '',
+    localAccountKind: '',
+    localTokenScope: '',
+    localUserId: 0,
+    localTenantId: 0,
+    fhdHost: '',
+    serverMode: 'cloud',
+    relayDesktopId: '',
+    relayBaseUrl: '',
+    localBaseUrl: '',
+    relaySessionToken: '',
+    relayAccountId: '',
+    relayTenantId: '',
+    relayPairedAt: '',
+    autoLanProbe: false,
+    inflightRelayTasks: const <String, String>{},
+    activeSuperEmployeeThreads: const <String, String>{},
   );
 }
 

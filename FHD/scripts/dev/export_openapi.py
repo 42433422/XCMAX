@@ -19,6 +19,8 @@ import sys
 from pathlib import Path
 
 FHD_ROOT = Path(__file__).resolve().parents[2]
+if str(FHD_ROOT) not in sys.path:
+    sys.path.insert(0, str(FHD_ROOT))
 
 
 def main() -> int:
@@ -33,6 +35,9 @@ def main() -> int:
     # 使用开发配置避免 SECRET_KEY 等生产环境必需变量
     os.environ.setdefault("XCAGI_SKIP_LEGACY_COMPAT_ROUTES", "1")
     os.environ.setdefault("XCAGI_DESKTOP_MODE", "1")
+    # OpenAPI is a release SSOT and must include deferred desktop/business
+    # routes. Fast-start intentionally exposes only the bootstrap surface.
+    os.environ["XCAGI_DESKTOP_FAST_START"] = "0"
 
     # 延迟导入，确保环境变量先生效
     from app.config import DevelopmentConfig

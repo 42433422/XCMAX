@@ -124,6 +124,28 @@ void main() {
     expect(local.resultText, contains('局域网回复'));
   });
 
+  test('cloud run failure keeps local history and reports partial sync',
+      () async {
+    final store = MemoryMobileSessionStore(_lanSession);
+    final api = _LanTaskApi(store, cloudHistoryFailure: true);
+    final repository = MobileRepository(client: api);
+
+    await repository.streamMessage(
+      conversation: _codexConversation,
+      body: '保留的本地执行记录',
+    );
+    var cloudSyncFailed = false;
+
+    final runs = await repository.loadRelayRuns(
+      onCloudSyncFailed: () => cloudSyncFailed = true,
+    );
+
+    expect(runs, hasLength(1));
+    expect(runs.single.source, 'lan');
+    expect(runs.single.message, '保留的本地执行记录');
+    expect(cloudSyncFailed, isTrue);
+  });
+
   test('provider usage failure is recorded once without direct or cloud retry',
       () async {
     final store = MemoryMobileSessionStore(_lanSession);
@@ -280,18 +302,37 @@ void main() {
 
   testWidgets('execution review visibly labels LAN and cloud sources',
       (tester) async {
+    final repository = _ReviewRepository();
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.light(),
-        home: ExecutionReviewScreen(repository: _ReviewRepository()),
+        home: ExecutionReviewScreen(repository: repository),
       ),
     );
     await tester.pumpAndSettle();
 
+    expect(repository.lastLimit, 50);
     expect(find.text('局域网'), findsOneWidget);
     expect(find.text('云中继'), findsOneWidget);
     expect(find.textContaining('本地执行'), findsOneWidget);
     expect(find.textContaining('云端执行'), findsOneWidget);
+  });
+
+  testWidgets('execution review keeps local cards when cloud history fails',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ExecutionReviewScreen(
+          repository: _PartialSyncReviewRepository(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('云端历史暂未同步'), findsOneWidget);
+    expect(find.textContaining('保留的本地执行'), findsOneWidget);
+    expect(find.textContaining('暂时无法连接电脑端'), findsNothing);
   });
 
   testWidgets('execution review turns timeout into a retryable product state',
@@ -361,12 +402,14 @@ class _LanTaskApi extends MobileApiClient {
   _LanTaskApi(
     MobileSessionStore store, {
     this.includeCloudRun = false,
+    this.cloudHistoryFailure = false,
     this.blockStreamUntilCancelled = false,
     this.cancelAck = true,
     this.semanticStreamError = false,
   }) : super(sessionStore: store);
 
   final bool includeCloudRun;
+  final bool cloudHistoryFailure;
   final bool blockStreamUntilCancelled;
   final bool cancelAck;
   final bool semanticStreamError;
@@ -471,6 +514,9 @@ class _LanTaskApi extends MobileApiClient {
     bool activeOnly = false,
     int limit = 100,
   }) async {
+    if (cloudHistoryFailure) {
+      throw TimeoutException('云端执行历史超时');
+    }
     return MobileEnvelope<Map<String, Object?>>(
       success: true,
       message: '',
@@ -532,12 +578,16 @@ class _ReviewRepository extends MobileRepository {
           ),
         );
 
+  int lastLimit = 0;
+
   @override
   Future<List<RelayRunSummary>> loadRelayRuns({
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async {
+    lastLimit = limit;
     return const [
       RelayRunSummary(
         taskId: 'local-review',
@@ -569,6 +619,33 @@ class _ReviewRepository extends MobileRepository {
   }
 }
 
+class _PartialSyncReviewRepository extends _ReviewRepository {
+  @override
+  Future<List<RelayRunSummary>> loadRelayRuns({
+    String threadId = '',
+    bool activeOnly = false,
+    int limit = 100,
+    void Function()? onCloudSyncFailed,
+  }) async {
+    onCloudSyncFailed?.call();
+    return const [
+      RelayRunSummary(
+        taskId: 'local-partial-review',
+        threadId: 'local-thread',
+        workItemId: 'local-work',
+        employeeId: 'codex-super-employee',
+        kind: 'codex.invoke',
+        status: 'completed',
+        attemptNo: 1,
+        createdAt: '2026-07-10T00:00:00Z',
+        updatedAt: '2026-07-10T00:01:00Z',
+        message: '保留的本地执行',
+        source: 'lan',
+      ),
+    ];
+  }
+}
+
 class _TimeoutReviewRepository extends MobileRepository {
   _TimeoutReviewRepository()
       : super(
@@ -584,6 +661,7 @@ class _TimeoutReviewRepository extends MobileRepository {
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async {
     loadCalls += 1;
     throw TimeoutException('Future not completed');
@@ -621,6 +699,7 @@ class _ChatHistoryRepository extends MobileRepository {
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async =>
       const [];
 

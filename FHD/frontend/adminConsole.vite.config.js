@@ -218,6 +218,9 @@ export default defineConfig(() => ({
     format: 'es',
   },
   build: {
+    // 管理端由当前 Electron/WebView 承载；保留现代语法可绕开旧 esbuild 对
+    // destructuring downlevel 的已知限制，并与桌面实际运行目标一致。
+    target: 'esnext',
     outDir: path.resolve(hostRoot, '../templates/admin-vue-dist'),
     emptyOutDir: true,
     assetsDir: 'assets',

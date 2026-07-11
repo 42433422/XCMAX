@@ -1137,7 +1137,7 @@ private fun Map<String, Any?>.readBool(key: String): Boolean =
         }
 }
 
-private object CredentialCipher {
+internal object CredentialCipher {
     private const val KEYSTORE_PROVIDER = "AndroidKeyStore"
     private const val KEY_ALIAS = "xcagi_credential_key"
     private const val TRANSFORMATION = "AES/GCM/NoPadding"

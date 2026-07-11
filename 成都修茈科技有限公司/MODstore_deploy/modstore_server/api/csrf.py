@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import os
+import secrets
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 from xcagi_common.csrf import (
-    MUTATING_HTTP_METHODS,
-    SAFE_HTTP_METHODS,
     csrf_tokens_match,
     generate_csrf_token,
 )
@@ -65,6 +64,23 @@ def _csrf_disabled_for_tests() -> bool:
     )
 
 
+def _valid_internal_api_key(request: Request) -> bool:
+    """Machine-to-machine calls do not use browser cookies.
+
+    The route still performs its own admin-or-internal authorization; this
+    check only prevents the browser CSRF layer from rejecting a valid internal
+    request before that authorization can run.
+    """
+
+    expected = (
+        os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
+        or ""
+    ).strip()
+    provided = (request.headers.get("x-internal-api-key") or "").strip()
+    return bool(expected and provided and secrets.compare_digest(expected, provided))
+
+
 class CSRFMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -76,6 +92,10 @@ class CSRFMiddleware:
 
         request = Request(scope, receive, send)
         if _csrf_disabled_for_tests():
+            await self.app(scope, receive, send)
+            return
+
+        if _valid_internal_api_key(request):
             await self.app(scope, receive, send)
             return
 

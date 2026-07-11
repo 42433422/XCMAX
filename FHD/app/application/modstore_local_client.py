@@ -4,11 +4,34 @@ from __future__ import annotations
 
 import logging
 import os
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+def _is_private_service_url(value: str) -> bool:
+    """Return whether an internal credential may safely be sent to ``value``."""
+
+    try:
+        parsed = urlsplit(str(value or "").strip())
+        hostname = str(parsed.hostname or "").strip().lower()
+        if parsed.scheme not in {"http", "https"} or not hostname:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        if hostname == "localhost":
+            return True
+        address = ip_address(hostname)
+        return bool(address.is_loopback or address.is_private)
+    except ValueError:
+        # A public or unresolved DNS name is not a safe destination for a
+        # machine credential.  Operators must configure a literal private IP
+        # (or localhost) for management/internal traffic.
+        return False
 
 
 def _async_client(*, timeout: float) -> httpx.AsyncClient:
@@ -42,12 +65,33 @@ def modstore_digest_base_url() -> str:
     )
 
 
+def modstore_management_base_url() -> str:
+    """Authoritative local ledger for the platform owner's management employees.
+
+    Do not inherit ``XCAGI_MARKET_BASE_URL``/digest URLs here: packaged desktop
+    environments often point those at the public market, while this ledger and
+    its scheduler deliberately live on the local daily runtime.
+    """
+
+    base = (
+        (os.environ.get("MODSTORE_MANAGEMENT_WORK_BASE_URL") or "http://127.0.0.1:8788")
+        .strip()
+        .rstrip("/")
+    )
+    if not _is_private_service_url(base):
+        raise RuntimeError(
+            "MODSTORE_MANAGEMENT_WORK_BASE_URL must use localhost or a private IP address"
+        )
+    return base
+
+
 def internal_api_key() -> str:
-    return (
-        os.environ.get("MODSTORE_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or ""
-    ).strip()
+    from app.security.local_runtime_secret import local_runtime_secret
+
+    return local_runtime_secret(
+        "MODSTORE_INTERNAL_API_KEY",
+        "XCAGI_MARKET_INTERNAL_API_KEY",
+    )
 
 
 def internal_auth_headers() -> dict[str, str]:
@@ -117,19 +161,31 @@ async def modstore_get(
     timeout: float = 60.0,
     query: str = "",
     base_url: str | None = None,
+    strict_internal_auth: bool = False,
 ) -> dict[str, Any]:
     base = (base_url or modstore_base_url()).strip().rstrip("/")
     url = f"{base}{path}"
     if query:
         url = f"{url}?{query.lstrip('?')}"
     async with _async_client(timeout=timeout) as client:
-        internal_headers = internal_auth_headers() if not authorization else {}
+        if strict_internal_auth and authorization:
+            raise RuntimeError("strict internal MODstore calls do not accept user authorization")
+        private_destination = _is_private_service_url(base)
+        if strict_internal_auth and not private_destination:
+            raise RuntimeError("refusing to send MODstore internal credentials to a public URL")
+        internal_headers = (
+            internal_auth_headers() if not authorization and private_destination else {}
+        )
+        if strict_internal_auth and not internal_headers:
+            raise RuntimeError("MODstore internal API key is not configured")
         if internal_headers:
             resp = await client.get(url, headers=internal_headers)
-            if resp.status_code not in (401, 403):
+            if strict_internal_auth or resp.status_code not in (401, 403):
                 resp.raise_for_status()
                 data = resp.json()
                 return data if isinstance(data, dict) else {"success": True, "data": data}
+        if strict_internal_auth:
+            raise RuntimeError("MODstore strict internal request failed")
         headers = await auth_headers(client, base, authorization)
         resp = await client.get(url, headers=headers)
         if resp.status_code == 401 and prefer_local_modstore() and authorization:
@@ -147,10 +203,29 @@ async def modstore_post(
     authorization: str | None = None,
     timeout: float = 120.0,
     base_url: str | None = None,
+    strict_internal_auth: bool = False,
 ) -> dict[str, Any]:
     base = (base_url or modstore_base_url()).strip().rstrip("/")
     payload = dict(json_body) if isinstance(json_body, dict) else {}
     async with _async_client(timeout=timeout) as client:
+        if strict_internal_auth and authorization:
+            raise RuntimeError("strict internal MODstore calls do not accept user authorization")
+        private_destination = _is_private_service_url(base)
+        if strict_internal_auth and not private_destination:
+            raise RuntimeError("refusing to send MODstore internal credentials to a public URL")
+        internal_headers = (
+            internal_auth_headers() if not authorization and private_destination else {}
+        )
+        if strict_internal_auth and not internal_headers:
+            raise RuntimeError("MODstore internal API key is not configured")
+        if internal_headers:
+            resp = await client.post(f"{base}{path}", headers=internal_headers, json=payload)
+            if strict_internal_auth or resp.status_code not in (401, 403):
+                resp.raise_for_status()
+                data = resp.json()
+                return data if isinstance(data, dict) else {"success": True, "data": data}
+        if strict_internal_auth:
+            raise RuntimeError("MODstore strict internal request failed")
         headers = await auth_headers(client, base, authorization)
         resp = await client.post(f"{base}{path}", headers=headers, json=payload)
         if resp.status_code == 401 and prefer_local_modstore() and authorization:

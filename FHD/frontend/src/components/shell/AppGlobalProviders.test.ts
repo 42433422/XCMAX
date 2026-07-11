@@ -9,6 +9,9 @@ describe('AppGlobalProviders', () => {
       global: {
         stubs: {
           AppDialogHost: { template: '<div class="app-dialog-host-stub" />' },
+          AdminEmployeeWorkNotificationBridge: {
+            template: '<div class="admin-employee-work-notification-bridge-stub" />',
+          },
           GlobalLanGateModal: { template: '<div class="global-lan-gate-modal-stub" />' },
         },
       },

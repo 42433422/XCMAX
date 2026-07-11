@@ -33,9 +33,14 @@ void main() {
         localAccessToken: 'lan-access',
         localRefreshToken: 'lan-refresh',
         localSessionId: 'lan-session',
+        localAccountKind: 'admin',
+        localTokenScope: 'management_pairing',
+        localUserId: 1,
+        localTenantId: 11,
         username: 'admin',
         accountKind: 'admin',
         userId: 1,
+        tenantId: 11,
         marketAccessToken: 'market-access',
         marketRefreshToken: 'market-refresh',
         localAvatarSource: '/data/user/0/app/files/avatar.jpg',
@@ -96,9 +101,14 @@ void main() {
     expect(loaded.localAccessToken, 'lan-access');
     expect(loaded.localRefreshToken, 'lan-refresh');
     expect(loaded.localSessionId, 'lan-session');
+    expect(loaded.localAccountKind, 'admin');
+    expect(loaded.localTokenScope, 'management_pairing');
+    expect(loaded.localUserId, 1);
+    expect(loaded.localTenantId, 11);
     expect(loaded.username, 'admin');
     expect(loaded.accountKind, 'admin');
     expect(loaded.userId, 1);
+    expect(loaded.tenantId, 11);
     expect(loaded.marketAccessToken, 'market-access');
     expect(loaded.marketRefreshToken, 'market-refresh');
     expect(loaded.localAvatarSource, '/data/user/0/app/files/avatar.jpg');
@@ -241,6 +251,7 @@ void main() {
         'market_refresh_token': 'market-refresh-from-login',
         'user': {
           'id': 1,
+          'tenant_id': 11,
           'username': 'admin',
           'display_name': 'Administrator',
         },
@@ -256,10 +267,120 @@ void main() {
     expect(saved.username, 'admin');
     expect(saved.accountKind, 'admin');
     expect(saved.userId, 1);
+    expect(saved.tenantId, 11);
     expect(saved.marketAccessToken, 'market-from-login');
     expect(saved.marketRefreshToken, 'market-refresh-from-login');
     expect(saved.setupComplete, isFalse);
     expect(saved.serverMode, 'cloud');
+  });
+
+  test('new cloud subject clears stale local pairing and relay credentials',
+      () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'old-cloud-access',
+        refreshToken: 'old-cloud-refresh',
+        sessionId: 'old-cloud-session',
+        accountKind: 'admin',
+        userId: 7,
+        tenantId: 11,
+        localAccessToken: 'old-management-access',
+        localRefreshToken: 'old-management-refresh',
+        localSessionId: 'old-management-session',
+        localAccountKind: 'admin',
+        localTokenScope: 'management_pairing',
+        localUserId: 7,
+        localTenantId: 11,
+        fhdHost: '192.168.10.2:17500',
+        serverMode: 'lan',
+        relayDesktopId: 'relay-old',
+        relayBaseUrl: 'https://xiu-ci.com/fhd-api',
+        localBaseUrl: 'http://192.168.10.2:17500/fhd-api',
+        relaySessionToken: 'relay-session-old',
+        relayAccountId: 'account-old',
+        relayTenantId: '11',
+        relayPairedAt: '2026-07-09T00:00:00Z',
+        inflightRelayTasks: {'pinned:codex': 'task-old'},
+        activeSuperEmployeeThreads: {'pinned:codex': 'thread-old'},
+      ),
+    );
+    final client = MobileApiClient(sessionStore: store);
+
+    await client.persistLoginSession(
+      const {
+        'access_token': 'new-cloud-access',
+        'refresh_token': 'new-cloud-refresh',
+        'session_id': 'new-cloud-session',
+        'account_kind': 'enterprise',
+        'user': {
+          'id': 8,
+          'tenant_id': 12,
+          'username': 'new-enterprise-user',
+        },
+      },
+      fallbackUsername: 'new-enterprise-user',
+      fallbackAccountKind: 'enterprise',
+    );
+
+    final saved = await store.load();
+    expect(saved.userId, 8);
+    expect(saved.tenantId, 12);
+    expect(saved.accessToken, 'new-cloud-access');
+    expect(saved.refreshToken, 'new-cloud-refresh');
+    expect(saved.localAccessToken, isEmpty);
+    expect(saved.localRefreshToken, isEmpty);
+    expect(saved.localSessionId, isEmpty);
+    expect(saved.localAccountKind, isEmpty);
+    expect(saved.localTokenScope, isEmpty);
+    expect(saved.localUserId, 0);
+    expect(saved.localTenantId, 0);
+    expect(saved.fhdHost, isEmpty);
+    expect(saved.serverMode, 'cloud');
+    expect(saved.relayDesktopId, isEmpty);
+    expect(saved.relaySessionToken, isEmpty);
+    expect(saved.localBaseUrl, isEmpty);
+    expect(saved.inflightRelayTasks, isEmpty);
+    expect(saved.activeSuperEmployeeThreads, isEmpty);
+  });
+
+  test('account kind mismatch clears pairing instead of elevating', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'admin-cloud-access',
+        accountKind: 'admin',
+        userId: 7,
+        tenantId: 11,
+        localAccessToken: 'management-access',
+        localSessionId: 'management-session',
+        localAccountKind: 'admin',
+        localTokenScope: 'management_pairing',
+        localUserId: 7,
+        localTenantId: 11,
+        localBaseUrl: 'http://192.168.10.2:17500/fhd-api',
+      ),
+    );
+    final client = MobileApiClient(sessionStore: store);
+
+    await client.persistLoginSession(
+      const {
+        'access_token': 'enterprise-cloud-access',
+        'account_kind': 'enterprise',
+        'user': {
+          'id': 7,
+          'tenant_id': 11,
+          'username': 'same-subject-enterprise',
+        },
+      },
+      fallbackUsername: 'same-subject-enterprise',
+      fallbackAccountKind: 'enterprise',
+    );
+
+    final saved = await store.load();
+    expect(saved.localAccessToken, isEmpty);
+    expect(saved.localTokenScope, isEmpty);
+    expect(saved.localPairingMatchesActiveIdentity, isFalse);
+    expect(saved.hasVerifiedManagementPairing, isFalse);
+    expect(preferredManagementWorkBaseUrlForSession(saved), isNull);
   });
 
   test('MobileApiClient login server mode follows Android AuthRoutingPolicy',
@@ -432,9 +553,14 @@ void main() {
         localAccessToken: 'local-access',
         localRefreshToken: 'local-refresh',
         localSessionId: 'local-session',
+        localAccountKind: 'admin',
+        localTokenScope: 'management_pairing',
+        localUserId: 7,
+        localTenantId: 11,
         username: 'admin',
         accountKind: 'admin',
         userId: 7,
+        tenantId: 11,
         marketAccessToken: 'market',
         marketRefreshToken: 'market-refresh',
         fhdHost: '192.168.31.8:5112',
@@ -478,9 +604,12 @@ void main() {
     expect(saved.localAccessToken, '');
     expect(saved.localRefreshToken, '');
     expect(saved.localSessionId, '');
+    expect(saved.localUserId, 0);
+    expect(saved.localTenantId, 0);
     expect(saved.username, '');
     expect(saved.accountKind, '');
     expect(saved.userId, 0);
+    expect(saved.tenantId, 0);
     expect(saved.marketAccessToken, '');
     expect(saved.marketRefreshToken, '');
     expect(saved.fhdHost, '192.168.31.8:5112');
@@ -520,12 +649,13 @@ void main() {
         'refresh_token': 'refresh-from-pair',
         'session_token': 'session-from-pair',
         'account_kind': 'enterprise',
+        'token_scope': 'enterprise_pairing',
         'relay_base_url': 'https://xiu-ci.com/fhd-api',
         'local_base_url': 'http://192.168.31.8:5112/fhd-api',
         'account_id': 'account-1',
-        'tenant_id': 'tenant-1',
+        'tenant_id': 11,
         'paired_at': '2026-07-01T00:00:00Z',
-        'user': {'id': 9, 'username': 'mobile-admin'},
+        'user': {'id': 9, 'tenant_id': 11, 'username': 'mobile-admin'},
       },
       clearRelayDesktop: true,
     );
@@ -535,6 +665,12 @@ void main() {
     expect(saved.localAccessToken, 'access-from-pair');
     expect(saved.localRefreshToken, 'refresh-from-pair');
     expect(saved.localSessionId, 'session-from-pair');
+    expect(saved.localAccountKind, 'enterprise');
+    expect(saved.localTokenScope, 'enterprise_pairing');
+    expect(saved.localUserId, 9);
+    expect(saved.localTenantId, 11);
+    expect(saved.localPairingMatchesActiveIdentity, isTrue);
+    expect(saved.hasVerifiedManagementPairing, isFalse);
     expect(saved.sessionId, 'session-from-pair');
     expect(saved.username, 'mobile-admin');
     expect(saved.accountKind, 'enterprise');
@@ -569,8 +705,9 @@ void main() {
         refreshToken: 'cloud-refresh',
         sessionId: 'cloud-session',
         username: 'cloud-user',
-        accountKind: 'enterprise',
-        userId: 42,
+        accountKind: 'admin_portal',
+        userId: 9,
+        tenantId: 11,
       ),
     );
     final client = MobileApiClient(sessionStore: store);
@@ -581,13 +718,14 @@ void main() {
         'access_token': 'desktop-access',
         'refresh_token': 'desktop-refresh',
         'session_token': 'desktop-session',
-        'account_kind': 'enterprise',
+        'account_kind': 'admin',
+        'token_scope': 'management_pairing',
         'relay_base_url': 'https://xiu-ci.com/fhd-api',
         'local_base_url': 'http://192.168.10.2:5011/fhd-api',
         'account_id': 'account-1',
-        'tenant_id': 'tenant-1',
+        'tenant_id': 11,
         'paired_at': '2026-07-07T00:00:00Z',
-        'user': {'id': 9, 'username': 'desktop-admin'},
+        'user': {'id': 9, 'tenant_id': 11, 'username': 'desktop-admin'},
       },
       hostWithPort: '192.168.10.2:5011',
       clearRelayDesktop: true,
@@ -603,12 +741,17 @@ void main() {
     expect(saved.localAccessToken, 'desktop-access');
     expect(saved.localRefreshToken, 'desktop-refresh');
     expect(saved.localSessionId, 'desktop-session');
+    expect(saved.localAccountKind, 'admin');
+    expect(saved.localTokenScope, 'management_pairing');
+    expect(saved.localUserId, 9);
+    expect(saved.localTenantId, 11);
+    expect(saved.hasVerifiedManagementPairing, isTrue);
     expect(saved.username, 'cloud-user');
-    expect(saved.userId, 42);
+    expect(saved.userId, 9);
     // 桌面端绑定关系仍然建立
     expect(saved.relaySessionToken, 'desktop-session');
     expect(saved.relayAccountId, 'account-1');
-    expect(saved.relayTenantId, 'tenant-1');
+    expect(saved.relayTenantId, '11');
     expect(saved.relayPairedAt, '2026-07-07T00:00:00Z');
     expect(saved.relayBaseUrl, 'https://xiu-ci.com/fhd-api');
     expect(saved.localBaseUrl, 'http://192.168.10.2:5011/fhd-api');

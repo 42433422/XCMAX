@@ -607,3 +607,63 @@ class TestMobileRelaySessionValidate:
         assert body["success"] is True
         assert body["data"]["valid"] is True
         assert body["data"]["session_id"] == "mobile-relay-deadbeef"
+
+    def test_management_pairing_session_validate_without_ephemeral_session_row(
+        self, client, app_with_mobile, monkeypatch
+    ):
+        user = SimpleNamespace(
+            id=71,
+            username="management-owner",
+            display_name="Management Owner",
+            email="",
+            role="admin",
+            is_active=True,
+            wx_avatar_url=None,
+            tenant_id=11,
+        )
+
+        app_with_mobile.dependency_overrides[get_mobile_user] = lambda: user
+        monkeypatch.setattr(
+            "app.fastapi_routes.mobile_api.verify_mobile_jwt",
+            lambda token: {
+                "typ": "access",
+                "session_id": "mobile-management-deadbeef",
+                "account_kind": "admin",
+                "token_scope": "management_pairing",
+                "tenant_id": 11,
+                "company_brand": "tenant-11",
+            },
+        )
+        monkeypatch.setattr(
+            "app.application.session_account_meta.load_session_account_meta",
+            lambda sid: {},
+        )
+
+        class SessionManager:
+            def get_session_info(self, session_id):
+                raise AssertionError("paired management sessions do not use the ephemeral store")
+
+        class AuthApp:
+            session_manager = SessionManager()
+
+        monkeypatch.setattr(
+            "app.application.auth_app_service.get_auth_app_service",
+            lambda: AuthApp(),
+        )
+
+        response = client.get(
+            "/api/mobile/v1/auth/session/validate",
+            headers={"Authorization": "Bearer token"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["valid"] is True
+        assert body["data"]["account_kind"] == "admin"
+        assert body["data"]["token_scope"] == "management_pairing"
+        assert body["data"]["tenant_id"] == 11
+        assert body["data"]["session"] == {
+            "session_id": "mobile-management-deadbeef",
+            "relay": False,
+            "management_pairing": True,
+        }

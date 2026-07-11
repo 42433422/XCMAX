@@ -12,6 +12,8 @@ export interface PairingPayload {
   relay?: Record<string, unknown>;
 }
 
+export type PairingPurpose = 'enterprise' | 'management';
+
 export interface HostDiscoverHint {
   api_port?: number;
   instance_name?: string;
@@ -30,19 +32,33 @@ export async function fetchHostDiscoverHint(): Promise<HostDiscoverHint> {
   return readJson<HostDiscoverHint>(response);
 }
 
-export async function issueMobilePairing(host: string, port: number): Promise<PairingPayload> {
+export function buildPairingIssueBody(
+  host: string,
+  port: number,
+  purpose: PairingPurpose = 'enterprise',
+) {
+  return { host, port, purpose } as const;
+}
+
+export async function issueMobilePairing(
+  host: string,
+  port: number,
+  purpose: PairingPurpose = 'enterprise',
+): Promise<PairingPayload> {
   const response = await apiFetch('/api/mobile/v1/pairing/issue', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ host, port }),
+    body: JSON.stringify(buildPairingIssueBody(host, port, purpose)),
   });
   return readJson<PairingPayload>(response);
 }
 
-export async function loadDesktopPairingPayload(): Promise<PairingPayload | null> {
+export async function loadDesktopPairingPayload(
+  purpose: PairingPurpose = 'enterprise',
+): Promise<PairingPayload | null> {
   const desktop = window.xcagiDesktop;
   if (!desktop?.getPairingQrPayload) return null;
-  const raw = await desktop.getPairingQrPayload();
+  const raw = await desktop.getPairingQrPayload(purpose);
   if (!raw) return null;
   const parsed = JSON.parse(String(raw)) as Partial<PairingPayload>;
   const qrJson = typeof parsed.qr_json === 'object' && parsed.qr_json ? parsed.qr_json as Record<string, unknown> : undefined;

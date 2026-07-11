@@ -42,6 +42,13 @@ EXECUTOR_ACTION_HANDLERS = frozenset(
     }
 )
 
+MANAGEMENT_APPROVAL_REQUIRED_HANDLERS = frozenset(
+    {"shell_exec", "ssh_exec", "vibe_edit", "vibe_heal", "vibe_code", "openapi_tool"}
+)
+MANAGEMENT_PRIMARY_WORK_RESERVED_IDS = frozenset(
+    {"task-router-officer", "delivery-receipt-officer"}
+)
+
 
 def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
     """Validate that a catalog pack has a runnable implementation for its handlers."""
@@ -100,6 +107,36 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
                 )
     except (OSError, zipfile.BadZipFile):
         issues.append("员工包归档损坏或不可读取")
+    return issues
+
+
+def management_work_runtime_issues(
+    pack: Dict[str, Any], *, allow_high_risk_real_run: bool = False
+) -> list[str]:
+    """验证岗位包在当前管理任务执行策略下是否真可领取。
+
+    仅“包存在”不足以进入自动路由；除了通用运行时问题，未获得
+    老板明确授权的 shell/ssh 等处理器也不能被低风险任务静默触发。
+    ``agent`` 只暴露受 scope 约束的只读工具和纳入 management-operation
+    台账的文件/CR 写入，因此可作为管理任务主执行器。
+    """
+
+    issues = list(employee_pack_runtime_issues(pack))
+    manifest = pack.get("manifest") if isinstance(pack.get("manifest"), dict) else {}
+    v2 = (
+        manifest.get("employee_config_v2")
+        if isinstance(manifest.get("employee_config_v2"), dict)
+        else {}
+    )
+    actions = v2.get("actions") if isinstance(v2.get("actions"), dict) else {}
+    handlers = {
+        str(value).strip()
+        for value in (actions.get("handlers") or [])
+        if str(value).strip()
+    }
+    approval_required = sorted(handlers.intersection(MANAGEMENT_APPROVAL_REQUIRED_HANDLERS))
+    if approval_required and not allow_high_risk_real_run:
+        issues.append("需老板明确授权的 handler: " + ", ".join(approval_required))
     return issues
 
 

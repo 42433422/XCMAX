@@ -103,6 +103,14 @@ def register_business_routes(app: FastAPI, registry: RouteRegistry) -> None:
     )
     _mount(
         registry,
+        "xcmax_employee_work",
+        lambda: __import__(
+            "app.fastapi_routes.employee_work_proxy", fromlist=["router"]
+        ).router,
+        priority=10,
+    )
+    _mount(
+        registry,
         "admin_audit",
         lambda: (
             __import__("app.fastapi_routes.domains.admin_audit.routes", fromlist=["router"]).router

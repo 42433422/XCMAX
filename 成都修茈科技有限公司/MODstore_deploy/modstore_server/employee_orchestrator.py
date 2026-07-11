@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import contextvars
+import json
 import logging
-import threading
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
@@ -14,31 +15,142 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _structured_output_failure(output: Any) -> str:
+    payload = output
+    if isinstance(output, str):
+        raw = output.strip()
+        fenced = re.fullmatch(
+            r"```(?:json)?\s*(.*?)\s*```",
+            raw,
+            flags=re.DOTALL | re.IGNORECASE,
+        )
+        if fenced:
+            raw = fenced.group(1).strip()
+        if not raw.startswith("{"):
+            return ""
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return ""
+    if not isinstance(payload, dict):
+        return ""
+    status = str(payload.get("status") or "").strip().lower()
+    if payload.get("ok") is False or payload.get("success") is False:
+        return str(payload.get("error") or payload.get("message") or "ok=false")[:500]
+    if status in {
+        "error",
+        "failed",
+        "failure",
+        "blocked",
+        "rejected",
+        "invalid",
+        "partial",
+        "incomplete",
+        "needs_review",
+        "needs_human",
+    }:
+        message = payload.get("error") or payload.get("message") or payload.get("summary")
+        return str(message or f"status={status}")[:500]
+
+    if payload.get("acceptance_passed") is False:
+        return str(payload.get("acceptance_summary") or "acceptance_passed=false")[:500]
+    for key in ("unmet_acceptance_criteria", "acceptance_failures"):
+        failures = payload.get(key)
+        if isinstance(failures, list) and failures:
+            return f"{key}: {str(failures[0])[:420]}"
+
+    checklist = payload.get("acceptance_checklist")
+    if checklist is not None:
+        if not isinstance(checklist, list) or not checklist:
+            return "acceptance_checklist is empty"
+        passed_values = {"pass", "passed", "ok", "success", "met", "accepted", "true"}
+        for index, item in enumerate(checklist, start=1):
+            if not isinstance(item, dict):
+                return f"acceptance_checklist[{index}] is invalid"
+            raw_status = item.get("status")
+            passed = raw_status is True or str(raw_status or "").strip().lower() in passed_values
+            if not passed:
+                criterion = str(item.get("criterion") or f"item {index}")[:300]
+                return f"acceptance not passed: {criterion}"
+            evidence = item.get("evidence")
+            evidence_present = (
+                bool(evidence)
+                if isinstance(evidence, (dict, list, tuple, set))
+                else bool(str(evidence or "").strip())
+            )
+            if not evidence_present:
+                criterion = str(item.get("criterion") or f"item {index}")[:300]
+                return f"acceptance evidence missing: {criterion}"
+    return ""
+
+
 def _evaluate_execution_success(result: Dict[str, Any]) -> tuple[bool, str]:
     """从 execute_employee_task 返回值判定真实成功与否（非仅「未抛异常」）。"""
     if not isinstance(result, dict):
         return False, "invalid result payload"
     if result.get("blocked_by_risk_gate"):
         return False, "blocked_by_risk_gate"
+    if result.get("handler_failed"):
+        return False, "employee runtime reported handler_failed"
 
     inner = result.get("result") if isinstance(result.get("result"), dict) else {}
+    cognition_error = str(result.get("cognition_error") or "").strip()
+    if cognition_error:
+        return False, f"cognition_error: {cognition_error[:500]}"
+    path_guard = inner.get("path_guard") if isinstance(inner.get("path_guard"), dict) else {}
+    if path_guard.get("checked") and path_guard.get("ok") is False:
+        return False, "blocked_by_path_guard"
+
+    verification = (
+        inner.get("verification") if isinstance(inner.get("verification"), dict) else {}
+    )
+    if verification and verification.get("passed") is False:
+        return False, str(verification.get("summary") or "verification failed")[:500]
+
     outputs = inner.get("outputs") if isinstance(inner.get("outputs"), list) else []
     if not outputs:
-        cog_err = str(result.get("cognition_error") or "").strip()
-        if cog_err:
-            return False, f"cognition_error: {cog_err[:200]}"
-        return True, "no explicit handler outputs"
+        return False, "employee runtime produced no handler outputs"
 
     failed_handlers: list[str] = []
+    evidence_handlers: list[str] = []
     for out in outputs:
         if not isinstance(out, dict):
             continue
-        if out.get("ok") is False:
+        status_code = out.get("status_code")
+        try:
+            http_failed = status_code is not None and int(status_code) >= 400
+        except (TypeError, ValueError):
+            http_failed = False
+        if out.get("ok") is False or bool(str(out.get("error") or "").strip()) or http_failed:
             handler = str(out.get("handler") or "unknown")
             err = str(out.get("error") or out.get("reason") or "")[:120]
             failed_handlers.append(f"{handler}:{err}" if err else handler)
+            continue
+        output = out.get("output")
+        semantic_failure = _structured_output_failure(output)
+        if semantic_failure:
+            failed_handlers.append(f"{out.get('handler') or 'unknown'}:{semantic_failure}")
+            continue
+        output_present = (
+            bool(output)
+            if isinstance(output, (dict, list, tuple, set))
+            else bool(str(output or "").strip())
+        )
+        status = str(out.get("status") or "").strip().lower()
+        return_code = out.get("returncode")
+        explicit_evidence = (
+            output_present
+            or status in {"ok", "success", "passed", "completed"}
+            or (status_code is not None and not http_failed)
+            or return_code == 0
+            or bool(out.get("files_changed") or out.get("artifacts"))
+        )
+        if explicit_evidence:
+            evidence_handlers.append(str(out.get("handler") or "unknown"))
     if failed_handlers:
         return False, "handler_failed: " + "; ".join(failed_handlers[:5])
+    if not evidence_handlers:
+        return False, "handlers returned no executable evidence"
     return True, "handlers_ok"
 
 
@@ -81,8 +193,11 @@ def _resolve_uid(created_by_user_id: int) -> int:
         sf = get_session_factory()
         with sf() as session:
             u = (
-                session.query(User).filter(User.is_admin == True).order_by(User.id.asc()).first()
-            )  # noqa: E712
+                session.query(User)
+                .filter(User.is_admin.is_(True))
+                .order_by(User.id.asc())
+                .first()
+            )
             uid = int(u.id) if u else 0
             if uid <= 0:
                 u2 = session.query(User).order_by(User.id.asc()).first()

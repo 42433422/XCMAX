@@ -495,6 +495,14 @@ class MobileRepository {
     return response.data?.notifications ?? const <PendingNotification>[];
   }
 
+  Future<void> acknowledgePendingNotification(int notificationId) async {
+    if (notificationId <= 0) return;
+    final response = await _client.acknowledgeNotification(notificationId);
+    if (!response.success) {
+      throw MobileRepositoryException(response.message.ifEmpty('通知确认失败'));
+    }
+  }
+
   Future<void> exchangePairingCode(String raw) async {
     final text = raw.trim();
     if (text.isEmpty) {
@@ -3040,6 +3048,7 @@ $cleanTranscript
     String threadId = '',
     bool activeOnly = false,
     int limit = 100,
+    void Function()? onCloudSyncFailed,
   }) async {
     final local = await _loadLocalSuperEmployeeRuns(
       threadId: threadId,
@@ -3061,6 +3070,7 @@ $cleanTranscript
           .toList(growable: false);
     } catch (_) {
       if (local.isEmpty) rethrow;
+      onCloudSyncFailed?.call();
     }
     final merged = <String, RelayRunSummary>{
       for (final run in remote) run.taskId: run,

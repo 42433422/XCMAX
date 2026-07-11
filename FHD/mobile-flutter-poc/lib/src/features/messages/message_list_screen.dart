@@ -18,6 +18,7 @@ import '../cs/admin_cs_console_screen.dart';
 import '../cs/cs_chat_screen.dart';
 import '../discover/discover_screen.dart';
 import '../devtools/execution_review_screen.dart';
+import '../employees/management_work_screen.dart';
 import '../groups/ai_group_screens.dart';
 import '../scan/scan_qr_screen.dart';
 
@@ -374,6 +375,14 @@ class _MessageListScreenState extends State<MessageListScreen> {
           ),
         );
         return;
+      case 'management-work':
+        await Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => ManagementWorkScreen(repository: _repository),
+          ),
+        );
+        await widget.onRefresh?.call();
+        return;
       case 'contacts':
         final callback = widget.onOpenContacts;
         if (callback != null) {
@@ -683,7 +692,12 @@ class _MessageHomeHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              _HeaderPlusMenu(onSelected: onMenuSelected),
+              _HeaderPlusMenu(
+                onSelected: onMenuSelected,
+                showManagementWork: const {'admin', 'admin_portal'}.contains(
+                  account.accountKind.trim().toLowerCase(),
+                ),
+              ),
             ],
           ),
           const SizedBox(
@@ -1092,9 +1106,13 @@ class _GroupTrailing extends StatelessWidget {
 }
 
 class _HeaderPlusMenu extends StatelessWidget {
-  const _HeaderPlusMenu({required this.onSelected});
+  const _HeaderPlusMenu({
+    required this.onSelected,
+    required this.showManagementWork,
+  });
 
   final ValueChanged<String> onSelected;
+  final bool showManagementWork;
 
   @override
   Widget build(BuildContext context) {
@@ -1108,38 +1126,45 @@ class _HeaderPlusMenu extends StatelessWidget {
       position: PopupMenuPosition.under,
       constraints: const BoxConstraints.tightFor(width: 188),
       menuPadding: EdgeInsets.zero,
-      itemBuilder: (context) => const [
-        PopupMenuItem(
+      itemBuilder: (context) => [
+        const PopupMenuItem(
           value: 'group',
           padding: EdgeInsets.zero,
           height: 43,
           child: _PlusMenuRow(Icons.groups, '发起群聊'),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'groups',
           padding: EdgeInsets.zero,
           height: 43,
           child: _PlusMenuRow(Icons.group, '我的群聊'),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'scan',
           padding: EdgeInsets.zero,
           height: 43,
           child: _PlusMenuRow(Icons.qr_code_scanner, '扫一扫'),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'employees',
           padding: EdgeInsets.zero,
           height: 43,
           child: _PlusMenuRow(Icons.smart_toy, 'AI 员工'),
         ),
-        PopupMenuItem(
+        if (showManagementWork)
+          const PopupMenuItem(
+            value: 'management-work',
+            padding: EdgeInsets.zero,
+            height: 43,
+            child: _PlusMenuRow(Icons.assignment_turned_in_outlined, '员工任务中心'),
+          ),
+        const PopupMenuItem(
           value: 'contacts',
           padding: EdgeInsets.zero,
           height: 43,
           child: _PlusMenuRow(Icons.contacts, '通讯录'),
         ),
-        PopupMenuItem(
+        const PopupMenuItem(
           value: 'circle',
           padding: EdgeInsets.zero,
           height: 43,

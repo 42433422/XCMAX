@@ -49,13 +49,18 @@ Available tools (injected via ctx by blueprints.py):
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
 import re
 import subprocess
+import uuid
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional
+
+from modstore_server.management_work_operations import ManagementOperationConflict
 
 logger = logging.getLogger(__name__)
 
@@ -183,13 +188,26 @@ async def tool_write_workspace_file(
     sg = [str(x).strip() for x in (ctx.get("scope_globs") or []) if str(x).strip()]
     fg = [str(x).strip() for x in (ctx.get("forbidden_globs") or []) if str(x).strip()]
     ag = [str(x).strip() for x in (ctx.get("approval_required_globs") or []) if str(x).strip()]
+    management_context = (
+        ctx.get("management_work_operation_context")
+        if isinstance(ctx.get("management_work_operation_context"), dict)
+        else {}
+    )
     if sg or fg:
         from modstore_server.employee_scope_policy import (
             relative_path_under_repo,
             validate_agent_repo_write,
         )
 
-        rel_repo = relative_path_under_repo(Path(resolved))
+        if management_context:
+            try:
+                rel_repo = str(
+                    Path(resolved).resolve().relative_to(Path(workspace_root).resolve())
+                ).replace("\\", "/")
+            except ValueError:
+                rel_repo = ""
+        else:
+            rel_repo = relative_path_under_repo(Path(resolved))
         if not rel_repo:
             return {
                 "ok": False,
@@ -222,8 +240,87 @@ async def tool_write_workspace_file(
 
     emp_id = str(ctx.get("employee_id") or "").strip()
     bypass = bool(ctx.get("bypass_change_request"))
+    will_defer = bool(emp_id and not bypass and emp_id != "daily-orchestrator")
+    operation_context = management_context
+    operation: Dict[str, Any] | None = None
+    operation_attempt = 0
+    operation_nonce = ""
+    compensation: Dict[str, Any] = {}
+    content_sha256 = hashlib.sha256((content or "").encode("utf-8")).hexdigest()
+    if operation_context.get("task_id"):
+        from modstore_server.management_work_operations import (
+            begin_operation,
+            capture_file_compensation,
+        )
+
+        if not will_defer:
+            compensation = capture_file_compensation(Path(resolved))
+            compensation["expected_after_sha256"] = content_sha256
+        reserved = begin_operation(
+            task_id=str(operation_context.get("task_id") or ""),
+            employee_id=emp_id,
+            task_revision=int(operation_context.get("task_revision") or 1),
+            logical_step=str(
+                ctx.get("management_operation_step") or "write_workspace_file"
+            ),
+            kind="change_request.submit" if will_defer else "file.write",
+            target=str(Path(resolved).resolve()),
+            request={
+                "relative_path": path,
+                "content_sha256": content_sha256,
+                "bytes": len((content or "").encode("utf-8")),
+            },
+            reversible=bool(compensation.get("reversible")) if not will_defer else False,
+            compensation=compensation,
+            safe_retry=not will_defer,
+            execution_attempt=(
+                int(operation_context.get("attempt"))
+                if operation_context.get("attempt") is not None
+                else None
+            ),
+        )
+        operation = reserved.get("operation") if isinstance(reserved.get("operation"), dict) else {}
+        operation_attempt = int(
+            reserved.get("execution_attempt") or operation.get("attempt") or 0
+        )
+        operation_nonce = str(reserved.get("execution_nonce") or "")
+        if reserved.get("action") == "replay":
+            replay = reserved.get("result") if isinstance(reserved.get("result"), dict) else {}
+            if (
+                operation.get("kind") == "change_request.submit"
+                and str(operation.get("external_ref") or "").startswith("change_request:")
+            ):
+                try:
+                    replay_change_id = int(
+                        str(operation["external_ref"]).split(":", 1)[1]
+                    )
+                except (TypeError, ValueError, IndexError):
+                    replay_change_id = 0
+                if replay_change_id > 0:
+                    replay = {
+                        **replay,
+                        "management_evidence_claims": [
+                            {
+                                "claim_id": f"change_request_{replay_change_id}",
+                                "kind": "change_request",
+                                "change_request_id": replay_change_id,
+                            }
+                        ],
+                    }
+            return {
+                **replay,
+                "ok": replay.get("ok", True),
+                "replayed": True,
+                "management_operation": operation,
+            }
+        if reserved.get("action") != "execute":
+            return {
+                "ok": False,
+                "error": str(reserved.get("reason") or "副作用结果未知，禁止自动重放")[:400],
+                "management_operation": operation,
+            }
     # 每日编排员写工作区日志/摘要，走直写；其余员工统一进 CR 审批链。
-    if emp_id and not bypass and emp_id != "daily-orchestrator":
+    if will_defer:
         try:
             from modstore_server.employee_change_request_service import (
                 defer_write_as_change_request,
@@ -237,6 +334,11 @@ async def tool_write_workspace_file(
                 scope_globs=sg,
                 forbidden_globs=fg,
                 approval_required_globs=ag,
+                management_operation_id=str(
+                    (operation or {}).get("operation_id") or ""
+                ),
+                execution_attempt=operation_attempt,
+                execution_nonce=operation_nonce,
             )
             return {
                 "ok": True,
@@ -244,20 +346,198 @@ async def tool_write_workspace_file(
                 "change_request_id": cid,
                 "path": path,
                 "message": "变更已提交审批队列，批准后将写入文件",
+                "management_operation": operation,
+                "management_evidence_claims": [
+                    {
+                        "claim_id": f"change_request_{cid}",
+                        "kind": "change_request",
+                        "change_request_id": cid,
+                    }
+                ],
             }
         except Exception as exc:
+            if operation:
+                from modstore_server.management_work_operations import fail_operation
+
+                try:
+                    fail_operation(
+                        str(operation.get("operation_id") or ""),
+                        execution_attempt=operation_attempt,
+                        execution_nonce=operation_nonce,
+                        error=str(exc),
+                        outcome_known_no_effect=True,
+                    )
+                except ManagementOperationConflict:
+                    # Cancellation or a replacement lease already owns the
+                    # operation. Preserve the original CR rejection and leave
+                    # recovery to the authoritative management-work state.
+                    pass
             return {"ok": False, "error": str(exc)[:400]}
 
     try:
         os.makedirs(os.path.dirname(resolved) or ".", exist_ok=True)
-        Path(resolved).write_text(content or "", encoding="utf-8")
-        return {
+        destination = Path(resolved)
+        current_exists = destination.exists()
+        current_is_file = destination.is_file()
+        current_sha256 = (
+            hashlib.sha256(destination.read_bytes()).hexdigest()
+            if current_is_file
+            else ""
+        )
+        if operation:
+            from modstore_server.management_work_operations import (
+                assert_operation_execution_current,
+                fail_operation,
+            )
+
+            assert_operation_execution_current(
+                str(operation.get("operation_id") or ""),
+                execution_attempt=operation_attempt,
+                execution_nonce=operation_nonce,
+            )
+            registered = (
+                operation.get("compensation")
+                if isinstance(operation.get("compensation"), dict)
+                else compensation
+            )
+            before_exists = registered.get("before_exists") is True
+            before_sha256 = str(registered.get("before_sha256") or "")
+            preimage_matches = (
+                (not before_exists and not current_exists)
+                or (
+                    before_exists
+                    and current_is_file
+                    and bool(before_sha256)
+                    and hmac.compare_digest(current_sha256, before_sha256)
+                )
+            )
+            if not preimage_matches:
+                failed = fail_operation(
+                    str(operation.get("operation_id") or ""),
+                    execution_attempt=operation_attempt,
+                    execution_nonce=operation_nonce,
+                    error="file preimage changed before write; refusing to overwrite concurrent update",
+                    outcome_known_no_effect=True,
+                )
+                return {
+                    "ok": False,
+                    "error": "文件在写入前已被其他执行修改，已拒绝覆盖",
+                    "management_operation": failed,
+                }
+        if current_sha256 != content_sha256:
+            temporary = destination.with_name(
+                f".{destination.name}.xcagi-write-{uuid.uuid4().hex}"
+            )
+            try:
+                temporary.write_text(content or "", encoding="utf-8")
+                if operation:
+                    # Recheck both the task lease and the file preimage as close
+                    # as possible to the atomic replace.  A stale worker or a
+                    # concurrent writer must never be allowed to overwrite the
+                    # newer state it did not observe.
+                    assert_operation_execution_current(
+                        str(operation.get("operation_id") or ""),
+                        execution_attempt=operation_attempt,
+                        execution_nonce=operation_nonce,
+                    )
+                    latest_exists = destination.exists()
+                    latest_is_file = destination.is_file()
+                    latest_sha256 = (
+                        hashlib.sha256(destination.read_bytes()).hexdigest()
+                        if latest_is_file
+                        else ""
+                    )
+                    latest_matches = (
+                        (not before_exists and not latest_exists)
+                        or (
+                            before_exists
+                            and latest_is_file
+                            and bool(before_sha256)
+                            and hmac.compare_digest(latest_sha256, before_sha256)
+                        )
+                    )
+                    if not latest_matches:
+                        failed = fail_operation(
+                            str(operation.get("operation_id") or ""),
+                            execution_attempt=operation_attempt,
+                            execution_nonce=operation_nonce,
+                            error=(
+                                "file preimage changed immediately before atomic replace; "
+                                "refusing to overwrite concurrent update"
+                            ),
+                            outcome_known_no_effect=True,
+                        )
+                        return {
+                            "ok": False,
+                            "error": "文件在原子替换前发生并发修改，已拒绝覆盖",
+                            "management_operation": failed,
+                        }
+                os.replace(temporary, destination)
+            finally:
+                try:
+                    if temporary.exists():
+                        temporary.unlink()
+                except OSError:
+                    pass
+        result = {
             "ok": True,
             "path": path,
             "bytes_written": len((content or "").encode("utf-8")),
+            "sha256": content_sha256,
+            "management_evidence_claims": [
+                {
+                    "claim_id": f"file_{hashlib.sha256(path.encode('utf-8')).hexdigest()[:16]}",
+                    "kind": "file",
+                    "workspace_root": workspace_root,
+                    "path": path,
+                    "expected": {
+                        "exists": True,
+                        "min_size": len((content or "").encode("utf-8")),
+                        "sha256": content_sha256,
+                    },
+                }
+            ],
         }
+        if operation:
+            from modstore_server.management_work_operations import complete_operation
+
+            compensation_record = dict(
+                operation.get("compensation")
+                if isinstance(operation.get("compensation"), dict)
+                else compensation
+            )
+            compensation_record["after_sha256"] = content_sha256
+            operation = complete_operation(
+                str(operation.get("operation_id") or ""),
+                execution_attempt=operation_attempt,
+                execution_nonce=operation_nonce,
+                result=result,
+                external_ref=str(destination.resolve()),
+                compensation=compensation_record,
+            )
+            result["management_operation"] = operation
+        return result
     except OSError as exc:
+        if operation:
+            from modstore_server.management_work_operations import fail_operation
+
+            fail_operation(
+                str(operation.get("operation_id") or ""),
+                execution_attempt=operation_attempt,
+                execution_nonce=operation_nonce,
+                error=str(exc),
+                outcome_known_no_effect=True,
+            )
         return {"ok": False, "error": str(exc)[:300]}
+    except ManagementOperationConflict as exc:
+        # The file may already have reached its postimage while cancellation
+        # won the lease race.  Leave the operation running so recovery marks it
+        # uncertain/reconciles it; never claim a known-no-effect failure here.
+        return {
+            "ok": False,
+            "error": str(exc)[:300],
+            "management_operation": operation or {},
+        }
 
 
 async def tool_list_workspace_dir(workspace_root: str, path: str = ".") -> Dict[str, Any]:
@@ -463,6 +743,71 @@ async def tool_analyze_project_summary(workspace_root: str, path: str = ".") -> 
     }
 
 
+def _management_read_scope_error(
+    workspace_root: str,
+    path: str,
+    ctx: Mapping[str, Any],
+    *,
+    allow_scope_ancestor: bool,
+) -> str:
+    operation_context = ctx.get("management_work_operation_context")
+    if not isinstance(operation_context, dict) or not operation_context.get("task_id"):
+        return ""
+    resolved = _guard_path(workspace_root, path)
+    if resolved is None:
+        return "路径越界"
+    candidate = Path(resolved)
+    lowered_parts = {part.lower() for part in candidate.parts}
+    sensitive_name = any(
+        part == ".env"
+        or part.startswith(".env.")
+        or any(marker in part for marker in ("credential", "private_key", "private-key"))
+        for part in lowered_parts
+    )
+    if (
+        sensitive_name
+        or "_local_secrets" in lowered_parts
+        or "secrets" in lowered_parts
+        or candidate.suffix.lower() in {".pem", ".key", ".p12", ".pfx"}
+    ):
+        return "管理员工不得读取密钥或本地机密路径"
+    from modstore_server.integrations.doc_sync_handler import _match_glob
+
+    try:
+        rel = str(
+            candidate.resolve().relative_to(Path(workspace_root).resolve())
+        ).replace("\\", "/")
+    except ValueError:
+        rel = ""
+    if not rel and candidate.resolve() != Path(workspace_root).resolve():
+        return "路径不在服务端授权仓库内"
+    rel = rel.replace("\\", "/").strip("/")
+    if rel == ".":
+        rel = ""
+    forbidden = [
+        str(value).strip()
+        for value in (ctx.get("forbidden_globs") or [])
+        if str(value).strip()
+    ]
+    scope = [
+        str(value).strip()
+        for value in (ctx.get("scope_globs") or [])
+        if str(value).strip()
+    ]
+    if forbidden and _match_glob(rel, forbidden):
+        return "路径命中岗位 forbidden_globs"
+    if not scope or _match_glob(rel, scope):
+        return ""
+    if allow_scope_ancestor:
+        for pattern in scope:
+            prefix = re.split(r"[*?[]", pattern.replace("\\", "/"), maxsplit=1)[
+                0
+            ].rstrip("/")
+            if not rel or prefix == rel or prefix.startswith(f"{rel}/"):
+                return ""
+    return "路径不在岗位 scope_globs 允许范围内"
+
+
 # ── EmployeeAgentRunner ───────────────────────────────────────────────────────
 
 
@@ -584,6 +929,10 @@ class EmployeeAgentRunner:
                 list(tool_input.keys())[:6],
             )
 
+            # Retry identity must not depend on how many reasoning rounds the
+            # model took. kind+target already distinguish separate resources;
+            # a changed request for the same tool/target conflicts fail-closed.
+            self.ctx["management_operation_step"] = f"tool:{tool_name}"
             result = await self._dispatch_tool(tool_name, tool_input)
             tool_calls_log.append({"tool": tool_name, "input": tool_input, "result": result})
 
@@ -626,6 +975,11 @@ class EmployeeAgentRunner:
             wr = self.workspace_root
             if name == "read_workspace_file":
                 path = str(input_data.get("path") or "")
+                scope_error = _management_read_scope_error(
+                    wr, path, self.ctx, allow_scope_ancestor=False
+                )
+                if scope_error:
+                    return {"ok": False, "error": scope_error}
                 return await tool_read_workspace_file(wr, path, self.ctx)
 
             if name == "write_workspace_file":
@@ -635,22 +989,49 @@ class EmployeeAgentRunner:
 
             if name == "list_workspace_dir":
                 path = str(input_data.get("path") or ".")
+                scope_error = _management_read_scope_error(
+                    wr, path, self.ctx, allow_scope_ancestor=True
+                )
+                if scope_error:
+                    return {"ok": False, "error": scope_error}
                 return await tool_list_workspace_dir(wr, path)
 
             if name == "scan_project_tree":
                 path = str(input_data.get("path") or ".")
+                scope_error = _management_read_scope_error(
+                    wr, path, self.ctx, allow_scope_ancestor=False
+                )
+                if scope_error:
+                    return {"ok": False, "error": scope_error}
                 max_files = int(input_data.get("max_files") or 200)
                 return await tool_scan_project_tree(wr, path, max_files=max_files)
 
             if name == "identify_file_types":
                 path = str(input_data.get("path") or ".")
+                scope_error = _management_read_scope_error(
+                    wr, path, self.ctx, allow_scope_ancestor=False
+                )
+                if scope_error:
+                    return {"ok": False, "error": scope_error}
                 return await tool_identify_file_types(wr, path)
 
             if name == "analyze_project_summary":
                 path = str(input_data.get("path") or ".")
+                scope_error = _management_read_scope_error(
+                    wr, path, self.ctx, allow_scope_ancestor=False
+                )
+                if scope_error:
+                    return {"ok": False, "error": scope_error}
                 return await tool_analyze_project_summary(wr, path)
 
             if name == "run_sandboxed_python":
+                if isinstance(
+                    self.ctx.get("management_work_operation_context"), dict
+                ):
+                    return {
+                        "ok": False,
+                        "error": "管理任务禁止未登记副作用的 Python 执行",
+                    }
                 code = str(input_data.get("code") or "")
                 return await tool_run_sandboxed_python(code)
 

@@ -27,6 +27,7 @@ _DOMAIN_REGISTRY: dict[str, list[str]] = {
         "modstore_server.employee_change_request_api",
         "modstore_server.ai_employee_account_api",
         "modstore_server.admin_employee_autonomy_api",
+        "modstore_server.admin_management_work_api",
         "modstore_server.admin_employee_execution_api",
     ],
     "workflow": [

@@ -6,7 +6,9 @@ import json
 import logging
 import os
 from enum import Enum
+from ipaddress import ip_address
 from typing import Any, Dict, Optional
+from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
 
@@ -17,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 def _mirror_notification_email(user_id: int, title: str, content: str) -> None:
     """可选：将站内通知抄送用户邮箱（``MODSTORE_MIRROR_NOTIFICATIONS_EMAIL=1``）。"""
-    if (os.environ.get("MODSTORE_MIRROR_NOTIFICATIONS_EMAIL") or "").strip().lower() not in (
+    if (
+        os.environ.get("MODSTORE_MIRROR_NOTIFICATIONS_EMAIL") or ""
+    ).strip().lower() not in (
         "1",
         "true",
         "yes",
@@ -97,7 +101,9 @@ def create_notification(
             db.close()
 
 
-def notify_payment_success(user_id: int, order_no: str, amount: float, item_name: str) -> None:
+def notify_payment_success(
+    user_id: int, order_no: str, amount: float, item_name: str
+) -> None:
     if not user_id:
         return
     try:
@@ -112,7 +118,9 @@ def notify_payment_success(user_id: int, order_no: str, amount: float, item_name
         logger.warning("notify_payment_success failed: %s", e)
 
 
-def notify_employee_execution_done(user_id: int, employee_id: str, task: str, status: str) -> None:
+def notify_employee_execution_done(
+    user_id: int, employee_id: str, task: str, status: str
+) -> None:
     if not user_id:
         return
     try:
@@ -128,56 +136,110 @@ def notify_employee_execution_done(user_id: int, employee_id: str, task: str, st
         logger.warning("notify_employee_execution_done failed: %s", e)
 
 
-def _fhd_internal_base() -> str:
-    return (
-        (
-            os.environ.get("XCAGI_FHD_INTERNAL_URL")
-            or os.environ.get("FHD_INTERNAL_BASE_URL")
-            or os.environ.get("XCAGI_API_BASE_URL")
-            or "http://127.0.0.1:8765"
-        )
-        .strip()
-        .rstrip("/")
-    )
+def _fhd_internal_candidates() -> list[str]:
+    """Return live FHD candidates in priority order.
+
+    Desktop currently defaults to port 17500.  Older deployments used 5100,
+    5000 or 8765, so employee-to-boss delivery probes them only when no
+    explicit URL succeeds.  This keeps a missing optional env var from making
+    every proactive employee message disappear silently.
+    """
+
+    raw = [
+        os.environ.get("XCAGI_FHD_INTERNAL_URL"),
+        os.environ.get("FHD_INTERNAL_BASE_URL"),
+        os.environ.get("XCAGI_API_BASE_URL"),
+        "http://127.0.0.1:17500",
+        "http://127.0.0.1:5100",
+        "http://127.0.0.1:5000",
+        "http://127.0.0.1:8765",
+    ]
+    out: list[str] = []
+    for item in raw:
+        value = str(item or "").strip().rstrip("/")
+        if value and _private_internal_url(value) and value not in out:
+            out.append(value)
+    return out
+
+
+def _private_internal_url(value: str) -> bool:
+    try:
+        parsed = urlsplit(value)
+        hostname = str(parsed.hostname or "").strip().lower()
+        if parsed.scheme not in {"http", "https"} or not hostname:
+            return False
+        if parsed.username is not None or parsed.password is not None:
+            return False
+        if hostname == "localhost":
+            return True
+        address = ip_address(hostname)
+        return bool(address.is_loopback or address.is_private)
+    except ValueError:
+        return False
 
 
 def _fhd_internal_api_key() -> str:
     return (
-        os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
-        or os.environ.get("XCAGI_CS_INTAKE_LINK_SECRET")
+        os.environ.get("MODSTORE_INTERNAL_API_KEY")
+        or os.environ.get("XCAGI_MARKET_INTERNAL_API_KEY")
         or ""
     ).strip()
 
 
 def employee_message_to_boss(
-    user_id: int, employee_id: str, text: str, *, display_name: str = ""
+    user_id: int,
+    employee_id: str,
+    text: str,
+    *,
+    display_name: str = "",
+    notification: dict | None = None,
 ) -> bool:
     """员工主动给老板发一条 IM 消息（通用出站原语，best-effort）。
 
     这是「员工真正长出嘴」的统一入口：员工在干活过程中可主动汇报进度、提建议、求确认——
     消息作为「该员工发来的 IM」出现在其 1:1 聊天页并实时推送。提问/汇报/建议都复用本函数。
-    需 ``XCAGI_MARKET_INTERNAL_API_KEY``/``XCAGI_CS_INTAKE_LINK_SECRET`` 与 FHD 一致，
+    需 ``MODSTORE_INTERNAL_API_KEY``/``XCAGI_MARKET_INTERNAL_API_KEY`` 与 FHD 一致，
     ``XCAGI_FHD_INTERNAL_URL`` 指向 FHD 内网。返回是否成功投递。
     """
     key = _fhd_internal_api_key()
     body_text = (text or "").strip()
-    if not key or int(user_id or 0) <= 0 or not str(employee_id or "").strip() or not body_text:
+    if (
+        not key
+        or int(user_id or 0) <= 0
+        or not str(employee_id or "").strip()
+        or not body_text
+    ):
         return False
     try:
         import httpx
 
-        with httpx.Client(timeout=5) as client:
-            resp = client.post(
-                f"{_fhd_internal_base()}/api/internal/im/employee-message",
-                headers={"X-Internal-Api-Key": key},
-                json={
-                    "boss_user_id": int(user_id),
-                    "employee_id": str(employee_id),
-                    "body": body_text,
-                    "display_name": str(display_name or employee_id),
-                },
+        payload = {
+            "boss_user_id": int(user_id),
+            "employee_id": str(employee_id),
+            "body": body_text,
+            "display_name": str(display_name or employee_id),
+        }
+        if isinstance(notification, dict) and notification:
+            payload["notification"] = notification
+        last_error = ""
+        with httpx.Client(timeout=5, trust_env=False) as client:
+            for base in _fhd_internal_candidates():
+                try:
+                    resp = client.post(
+                        f"{base}/api/internal/im/employee-message",
+                        headers={"X-Internal-Api-Key": key},
+                        json=payload,
+                    )
+                    if 200 <= resp.status_code < 300:
+                        return True
+                    last_error = f"{base} status={resp.status_code}"
+                except Exception as exc:  # noqa: BLE001 - probe next known local endpoint
+                    last_error = f"{base} {type(exc).__name__}"
+        if last_error:
+            logger.warning(
+                "employee_message_to_boss exhausted candidates: %s", last_error
             )
-            return 200 <= resp.status_code < 300
+        return False
     except Exception as e:  # noqa: BLE001 - 出站 IM 失败不影响主流程
         logger.warning("employee_message_to_boss failed: %s", e)
         return False
@@ -227,7 +289,9 @@ def notify_human_question(
     post_employee_question_to_im(user_id, employee_id, question, task)
 
 
-def notify_quota_warning(user_id: int, quota_type: str, remaining: int, total: int) -> None:
+def notify_quota_warning(
+    user_id: int, quota_type: str, remaining: int, total: int
+) -> None:
     if not user_id or total <= 0:
         return
     usage_pct = (1 - remaining / total) * 100

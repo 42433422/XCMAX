@@ -4,6 +4,7 @@
 # - launchd 直接执行 Library Support wrapper，不再依赖 Desktop 路径/GUI 登录项
 # 用法：bash FHD/scripts/dev/install_modstore_daily_launchd.sh
 set -euo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
@@ -32,6 +33,7 @@ RUNTIME_GIT_MIRROR="${RUNTIME_ROOT}/XCMAX.git"
 RUNTIME_ANDROID_SDK_ROOT="${SUPPORT_DIR}/android-sdk"
 STATE_ROOT="${SUPPORT_DIR}/modstore-daily"
 RUNTIME_DB_PATH="${STATE_ROOT}/modstore.db"
+RUNTIME_CATALOG_ROOT="${STATE_ROOT}/catalog"
 RUNTIME_VAR_ROOT="${STATE_ROOT}/runtime"
 RUNTIME_EVENT_OUTBOX_PATH="${STATE_ROOT}/event_outbox.jsonl"
 RUNTIME_WEBHOOK_EVENTS_DIR="${STATE_ROOT}/webhook_events"
@@ -78,7 +80,7 @@ _env_snapshot_append_file() {
 [[ -f "${PLIST_SRC}" ]] || { log "缺少 ${PLIST_SRC}"; exit 1; }
 [[ -x "${FHD_ROOT}/.venv/bin/python" ]] || { log "缺少 FHD venv"; exit 1; }
 
-mkdir -p "${LOG_DIR}" "${SUPPORT_DIR}" "${HOME}/Library/LaunchAgents" "${STATE_ROOT}" "${RUNTIME_VAR_ROOT}" "${RUNTIME_WEBHOOK_EVENTS_DIR}" "${SURFACE_AUDIT_STATE_ROOT}"
+mkdir -p "${LOG_DIR}" "${SUPPORT_DIR}" "${HOME}/Library/LaunchAgents" "${STATE_ROOT}" "${RUNTIME_CATALOG_ROOT}" "${RUNTIME_VAR_ROOT}" "${RUNTIME_WEBHOOK_EVENTS_DIR}" "${SURFACE_AUDIT_STATE_ROOT}"
 cp "${RUN_SCRIPT}" "${RUNNER_COPY}"
 chmod +x "${RUNNER_COPY}"
 cp "${SCRIPT_DIR}/start_android_emulator.sh" "${ANDROID_START_COPY}"
@@ -87,9 +89,25 @@ MODSTORE_DEPLOY_ROOT="${XCMAX_ROOT}/成都修茈科技有限公司/MODstore_depl
 if [[ ! -d "${MODSTORE_DEPLOY_ROOT}/modstore_server" ]]; then
   MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
 fi
+
+# catalog_data contains mutable market and duty-employee state.  Migrate the
+# legacy runtime copy before the code mirror is refreshed, then seed only files
+# that do not already exist.  It must never be owned by the --delete mirror.
+for legacy_catalog in \
+  "${RUNTIME_DEPLOY_ROOT}/modstore_server/catalog_data" \
+  "${MODSTORE_DEPLOY_ROOT}/modstore_server/catalog_data"
+do
+  if [[ -d "${legacy_catalog}" ]]; then
+    log "迁移持久 Catalog 状态 ← ${legacy_catalog}"
+    rsync -a --ignore-existing "${legacy_catalog}/" "${RUNTIME_CATALOG_ROOT}/"
+  fi
+done
+chmod -R go-rwx "${RUNTIME_CATALOG_ROOT}" 2>/dev/null || true
+
 mkdir -p "${RUNTIME_ROOT}"
 log "同步运行时镜像 → ${RUNTIME_DEPLOY_ROOT}"
 rsync -a --delete \
+  --exclude "modstore_server/catalog_data/" \
   --exclude "market/coverage-current/" \
   --exclude "market/coverage-current/.tmp/" \
   --exclude ".venv/" \
@@ -97,6 +115,15 @@ rsync -a --delete \
   --exclude ".pytest_cache/" \
   --exclude "__pycache__/" \
   "${MODSTORE_DEPLOY_ROOT}/" "${RUNTIME_DEPLOY_ROOT}/"
+
+# A clean checkout intentionally has no ignored catalog_data.  Materialize the
+# immutable duty seed into persistent state and fail the install if its
+# integrity validation fails.
+log "校验并补齐管理端岗位资产"
+MODSTORE_CATALOG_DIR="${RUNTIME_CATALOG_ROOT}" \
+PYTHONPATH="${RUNTIME_DEPLOY_ROOT}" \
+  "${FHD_ROOT}/.venv/bin/python" -c \
+  "from modstore_server.duty_employee_registry import load_duty_registry; load_duty_registry()"
 log "同步共享 packages → ${RUNTIME_PACKAGES_ROOT}"
 mkdir -p "${RUNTIME_PACKAGES_ROOT}"
 rsync -a --delete "${XCMAX_ROOT}/packages/" "${RUNTIME_PACKAGES_ROOT}/"
@@ -161,6 +188,7 @@ if [[ ! -f "${RUNTIME_DB_PATH}" ]]; then
 fi
 chmod 600 "${RUNTIME_DB_PATH}" 2>/dev/null || true
 : > "${ENV_SNAPSHOT}"
+chmod 600 "${ENV_SNAPSHOT}"
 for f in \
   "${MODSTORE_DEPLOY_ROOT}/.env" \
   "${MODSTORE_DEPLOY_ROOT}/.env.production" \
@@ -192,6 +220,7 @@ _env_snapshot_put MODSTORE_IMAP_PASSWORD "${MODSTORE_IMAP_PASSWORD:-${MODSTORE_S
 
 _env_snapshot_put MODSTORE_RUNTIME_STATE_ROOT "${STATE_ROOT}"
 _env_snapshot_put MODSTORE_RUNTIME_DB_PATH "${RUNTIME_DB_PATH}"
+_env_snapshot_put MODSTORE_CATALOG_DIR "${RUNTIME_CATALOG_ROOT}"
 _env_snapshot_put MODSTORE_RUNTIME_DIR "${RUNTIME_VAR_ROOT}"
 _env_snapshot_put MODSTORE_EVENT_OUTBOX_PATH "${RUNTIME_EVENT_OUTBOX_PATH}"
 _env_snapshot_put MODSTORE_WEBHOOK_EVENTS_DIR "${RUNTIME_WEBHOOK_EVENTS_DIR}"
@@ -334,6 +363,7 @@ export MODSTORE_DEPLOY_ROOT="${RUNTIME_DEPLOY_ROOT}"
 export MODSTORE_REPO_ROOT="${RUNTIME_DEPLOY_ROOT}"
 export MODSTORE_SYNC_DEPLOY_BASH="bash ${RUNTIME_DEPLOY_ROOT}/scripts/trigger_server_git_sync.sh"
 export MODSTORE_DB_PATH="${RUNTIME_DB_PATH}"
+export MODSTORE_CATALOG_DIR="${RUNTIME_CATALOG_ROOT}"
 export DATABASE_URL="sqlite:////${RUNTIME_DB_PATH#/}"
 export PYTHONPATH="${RUNTIME_DEPLOY_ROOT}:${RUNTIME_PACKAGES_ROOT}/xcagi_common"
 export MODSTORE_DAILY_DAEMON_LOG_DIR="${LOG_DIR}"

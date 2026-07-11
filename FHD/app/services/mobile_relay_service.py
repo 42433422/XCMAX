@@ -28,6 +28,14 @@ _SUPER_EMPLOYEE_TOOLS: dict[str, str] = {
 }
 _TOOL_EMPLOYEES = {tool: employee for employee, tool in _SUPER_EMPLOYEE_TOOLS.items()}
 _ACTIVE_TASK_STATUSES = {"queued", "running", "assigned", "processing", "in_progress"}
+_TASK_LIST_DEFAULT_LIMIT = 50
+_TASK_LIST_MAX_PAGE_LIMIT = 200
+_TASK_LIST_MAX_REQUESTED_LIMIT = 300
+_TASK_LIST_MAX_RESPONSE_BYTES = 1024 * 1024
+_TASK_SUMMARY_MESSAGE_MAX_CHARS = 320
+_TASK_SUMMARY_RESULT_MAX_CHARS = 1200
+_TASK_SUMMARY_BRANCH_MAX_CHARS = 256
+_TASK_SUMMARY_CODE_MAX_CHARS = 128
 _RELAY_TASK_COLUMN_DDL = {
     (
         "mobile_relay_tasks",
@@ -104,6 +112,7 @@ def _task_list_statement(*, filter_thread: bool, active_only: bool):
               AND t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')
             ORDER BY t.created_at DESC
             LIMIT :limit
+            OFFSET :offset
             """
         )
     if filter_thread:
@@ -116,6 +125,7 @@ def _task_list_statement(*, filter_thread: bool, active_only: bool):
               AND t.thread_id = :thread_id
             ORDER BY t.created_at DESC
             LIMIT :limit
+            OFFSET :offset
             """
         )
     if active_only:
@@ -128,6 +138,7 @@ def _task_list_statement(*, filter_thread: bool, active_only: bool):
               AND t.status IN ('queued', 'running', 'assigned', 'processing', 'in_progress')
             ORDER BY t.created_at DESC
             LIMIT :limit
+            OFFSET :offset
             """
         )
     return text(
@@ -137,6 +148,7 @@ def _task_list_statement(*, filter_thread: bool, active_only: bool):
         WHERE d.mobile_user_id = :user_id AND d.status = 'paired'
         ORDER BY t.created_at DESC
         LIMIT :limit
+        OFFSET :offset
         """
     )
 
@@ -186,6 +198,113 @@ def _row_dict(row: Any) -> dict[str, Any]:
     return data
 
 
+def _bounded_text(value: Any, max_chars: int) -> str:
+    text_value = str(value or "").strip()
+    if not text_value or max_chars <= 0:
+        return ""
+    if len(text_value) <= max_chars:
+        return text_value
+    if max_chars == 1:
+        return "…"
+    return text_value[: max_chars - 1].rstrip() + "…"
+
+
+def _object_value(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _first_text(mapping: dict[str, Any], *keys: str) -> str:
+    for key in keys:
+        value = str(mapping.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _task_list_summary(task: dict[str, Any]) -> dict[str, Any]:
+    """Return the bounded allow-list used by the mobile execution-review list.
+
+    Relay results can contain complete CLI transcripts, dispatch envelopes and
+    tool-call payloads.  Those belong to the task-detail endpoint; returning
+    them for every row made a 200-item phone request several megabytes large.
+    Build the list row from scratch so future result fields cannot accidentally
+    bypass the summary contract.
+    """
+
+    payload = _object_value(task.get("payload"))
+    result = _object_value(task.get("result"))
+    nested = _object_value(result.get("codex"))
+    assistant = _object_value(nested.get("assistant_message"))
+    session = _object_value(result.get("session")) or _object_value(nested.get("session"))
+
+    message = _first_text(payload, "message", "body", "prompt")
+    error = _first_text(result, "error", "error_message")
+    assistant_body = _first_text(assistant, "body")
+    reply = _first_text(result, "reply")
+    result_text = error or assistant_body or reply
+    branch = _first_text(session, "branch")
+
+    result_summary: dict[str, Any] = {}
+    bounded_result = _bounded_text(result_text, _TASK_SUMMARY_RESULT_MAX_CHARS)
+    if error and bounded_result:
+        result_summary["error"] = bounded_result
+    elif assistant_body and bounded_result:
+        result_summary["codex"] = {"assistant_message": {"body": bounded_result}}
+    elif bounded_result:
+        result_summary["reply"] = bounded_result
+
+    error_code = _bounded_text(result.get("error_code"), _TASK_SUMMARY_CODE_MAX_CHARS)
+    if error_code:
+        result_summary["error_code"] = error_code
+    if isinstance(result.get("ok"), bool):
+        result_summary["ok"] = result["ok"]
+    elapsed = result.get("elapsed_seconds")
+    if isinstance(elapsed, (int, float)) and not isinstance(elapsed, bool):
+        result_summary["elapsed_seconds"] = elapsed
+    if branch:
+        result_summary["session"] = {
+            "branch": _bounded_text(branch, _TASK_SUMMARY_BRANCH_MAX_CHARS)
+        }
+
+    summary = {
+        key: task.get(key)
+        for key in (
+            "task_id",
+            "relay_id",
+            "thread_id",
+            "work_item_id",
+            "employee_id",
+            "attempt_no",
+            "kind",
+            "status",
+            "created_by_user_id",
+            "created_at",
+            "updated_at",
+            "claimed_at",
+            "completed_at",
+            "source",
+        )
+        if task.get(key) is not None
+    }
+    summary.update(
+        {
+            "payload": (
+                {"message": _bounded_text(message, _TASK_SUMMARY_MESSAGE_MAX_CHARS)}
+                if message
+                else {}
+            ),
+            "result": result_summary,
+            "summary_only": True,
+            "summary_truncated": (
+                len(message) > _TASK_SUMMARY_MESSAGE_MAX_CHARS
+                or len(result_text) > _TASK_SUMMARY_RESULT_MAX_CHARS
+                or len(branch) > _TASK_SUMMARY_BRANCH_MAX_CHARS
+            ),
+        }
+    )
+    return summary
+
+
 def _public_base_url(raw: str) -> str:
     value = (raw or "").strip()
     if not value:
@@ -197,6 +316,14 @@ def _public_base_url(raw: str) -> str:
 
 class MobileRelayService:
     """Small SQL-backed relay used by phones and desktop runtimes."""
+
+    task_list_default_limit = _TASK_LIST_DEFAULT_LIMIT
+    task_list_max_page_limit = _TASK_LIST_MAX_PAGE_LIMIT
+    task_list_max_requested_limit = _TASK_LIST_MAX_REQUESTED_LIMIT
+    task_list_max_response_bytes = _TASK_LIST_MAX_RESPONSE_BYTES
+    task_summary_message_max_chars = _TASK_SUMMARY_MESSAGE_MAX_CHARS
+    task_summary_result_max_chars = _TASK_SUMMARY_RESULT_MAX_CHARS
+    task_summary_branch_max_chars = _TASK_SUMMARY_BRANCH_MAX_CHARS
 
     def ensure_tables(self, db) -> None:
         db.execute(
@@ -886,10 +1013,12 @@ class MobileRelayService:
         thread_id: str = "",
         active_only: bool = False,
         limit: int = 100,
+        offset: int = 0,
     ) -> list[dict[str, Any]]:
         params: dict[str, Any] = {
             "user_id": int(user_id),
             "limit": max(1, min(300, int(limit))),
+            "offset": max(0, int(offset)),
         }
         if thread_id.strip():
             params["thread_id"] = thread_id.strip()
@@ -907,6 +1036,26 @@ class MobileRelayService:
                 .all()
             )
             return [_row_dict(row) for row in rows]
+
+    def list_task_summaries(
+        self,
+        *,
+        user_id: int,
+        thread_id: str = "",
+        active_only: bool = False,
+        limit: int = _TASK_LIST_DEFAULT_LIMIT,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        return [
+            _task_list_summary(task)
+            for task in self.list_tasks(
+                user_id=user_id,
+                thread_id=thread_id,
+                active_only=active_only,
+                limit=limit,
+                offset=offset,
+            )
+        ]
 
     def retry_task(self, *, user_id: int, task_id: str) -> dict[str, Any] | None:
         previous = self.get_task(user_id=user_id, task_id=task_id)

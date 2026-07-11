@@ -14,9 +14,11 @@ import logging
 import os
 import re
 import subprocess
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -202,12 +204,13 @@ def _ensure_mobile_device_table() -> None:
 
         from app.db.models.mobile_device import MobileDeviceToken
         from app.db.session import get_db
+        from app.services.mobile_push import ensure_mobile_notification_schema
 
         with get_db() as db:
             bind = db.get_bind()
-            insp = inspect(bind)
-            if not insp.has_table(MobileDeviceToken.__tablename__):
+            if not inspect(bind).has_table(MobileDeviceToken.__tablename__):
                 MobileDeviceToken.__table__.create(bind, checkfirst=True)
+            ensure_mobile_notification_schema(db)
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_device_tokens ensure: %s", exc)
 
@@ -218,14 +221,28 @@ def _ensure_outbox_table() -> None:
 
         from app.db.models.mobile_notification import MobileNotificationOutbox
         from app.db.session import get_db
+        from app.services.mobile_push import ensure_mobile_notification_schema
 
         with get_db() as db:
             bind = db.get_bind()
-            insp = inspect(bind)
-            if not insp.has_table(MobileNotificationOutbox.__tablename__):
+            if not inspect(bind).has_table(MobileNotificationOutbox.__tablename__):
                 MobileNotificationOutbox.__table__.create(bind, checkfirst=True)
+            ensure_mobile_notification_schema(db)
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_notification_outbox ensure: %s", exc)
+
+
+def _mobile_notification_scope(user: Any) -> tuple[str, int]:
+    """Return the server-derived notification audience and tenant.
+
+    The authenticated principal has already been projected by ``get_mobile_user``:
+    an enterprise pairing is deliberately downgraded even when the issuer is an
+    administrator.  Client-provided SKU fields are therefore never an authority.
+    """
+
+    from app.services.mobile_push import notification_scope_for_user
+
+    return notification_scope_for_user(user)
 
 
 def _register_desktop_relay_for_pairing(host: str, port: int) -> dict[str, Any] | None:
@@ -357,17 +374,79 @@ def _pairing_issuer_binding(
     }, None
 
 
+def _management_pairing_auth_payload(
+    user_public: dict[str, Any],
+    *,
+    tenant_id: int,
+    company_brand: str,
+    paired_by_user_id: int,
+) -> dict[str, Any]:
+    """Mint a local-only management credential from a bound admin nonce."""
+    from app.security.mobile_jwt import issue_mobile_tokens
+
+    uid = int(user_public.get("id") or 0)
+    if uid <= 0 or uid != int(paired_by_user_id or 0):
+        raise ValueError("management pairing subject mismatch")
+    role = str(user_public.get("role") or "").strip().lower()
+    tier = str(user_public.get("tier") or "").strip().lower()
+    if role not in {"admin", "super_admin", "owner"} and tier != "admin":
+        raise ValueError("management pairing subject is no longer an administrator")
+    try:
+        current_tenant_id = int(user_public.get("tenant_id") or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("management pairing subject tenant is invalid") from exc
+    if current_tenant_id != int(tenant_id):
+        raise ValueError("management pairing subject tenant changed")
+    username = str(
+        user_public.get("username") or user_public.get("display_name") or "management"
+    ).strip()
+    session_id = f"mobile-management-{uuid.uuid4().hex}"
+    token_user = {
+        **user_public,
+        "role": role or "admin",
+        "tier": tier or "admin",
+    }
+    return {
+        "user": token_user,
+        "session_id": session_id,
+        "session_token": session_id,
+        "account_kind": "admin",
+        **issue_mobile_tokens(
+            user_id=uid,
+            session_id=session_id,
+            account_kind="admin",
+            username=username,
+            token_scope="management_pairing",
+            tenant_id=tenant_id,
+            company_brand=company_brand,
+            paired_by_user_id=paired_by_user_id,
+        ),
+        "expires_in": 24 * 3600,
+        "token_scope": "management_pairing",
+        "tenant_id": tenant_id,
+        "company_brand": company_brand,
+        "paired_by_user_id": paired_by_user_id,
+    }
+
+
 def _pairing_record_is_bound(record: dict[str, Any]) -> bool:
     try:
         issuer_uid = int(record.get("issuer_user_id") or 0)
         subject_uid = int(record.get("subject_user_id") or 0)
     except (TypeError, ValueError):
         return False
+    scope_pair = (
+        str(record.get("account_kind") or "").strip().lower(),
+        str(record.get("token_scope") or "").strip(),
+    )
     return (
         issuer_uid > 0
         and subject_uid > 0
-        and str(record.get("account_kind") or "").strip() == "enterprise"
-        and str(record.get("token_scope") or "").strip() == "enterprise_pairing"
+        and scope_pair
+        in {
+            ("enterprise", "enterprise_pairing"),
+            ("admin", "management_pairing"),
+        }
     )
 
 
@@ -418,9 +497,12 @@ def _pairing_subject_user(record: dict[str, Any]) -> dict[str, Any] | None:
 
     try:
         subject_uid = int(record.get("subject_user_id") or 0)
+        issuer_uid = int(record.get("issuer_user_id") or 0)
     except (TypeError, ValueError):
         return None
-    if subject_uid <= 0:
+    token_scope = str(record.get("token_scope") or "").strip()
+    account_kind = str(record.get("account_kind") or "").strip().lower()
+    if subject_uid <= 0 or issuer_uid <= 0 or issuer_uid != subject_uid:
         return None
     try:
         with get_db() as db:
@@ -429,12 +511,40 @@ def _pairing_subject_user(record: dict[str, Any]) -> dict[str, Any] | None:
                 return None
             record_tenant = record.get("tenant_id")
             row_tenant = getattr(row, "tenant_id", None)
-            if row_tenant is not None and record_tenant is not None:
-                if int(row_tenant) != int(record_tenant):
-                    return None
+            try:
+                clean_record_tenant = int(record_tenant) if record_tenant is not None else 0
+                clean_row_tenant = int(row_tenant) if row_tenant is not None else 0
+            except (TypeError, ValueError):
+                return None
+            if clean_row_tenant != clean_record_tenant:
+                return None
             public = _mobile_user_public_dict(row)
     except RECOVERABLE_ERRORS:
         logger.exception("pairing subject lookup failed")
+        return None
+    if token_scope == "management_pairing":
+        if account_kind != "admin":
+            return None
+        role = str(public.get("role") or "").strip().lower()
+        tier = str(public.get("tier") or "").strip().lower()
+        if role not in {"admin", "super_admin", "owner"} and tier != "admin":
+            return None
+        public.update(
+            {
+                "role": role or "admin",
+                "tier": tier or "admin",
+                "tenant_id": clean_record_tenant,
+            }
+        )
+    elif token_scope == "enterprise_pairing" and account_kind == "enterprise":
+        public.update(
+            {
+                "role": "enterprise",
+                "tier": "enterprise",
+                "tenant_id": clean_record_tenant,
+            }
+        )
+    else:
         return None
     public.update(
         {
@@ -442,9 +552,6 @@ def _pairing_subject_user(record: dict[str, Any]) -> dict[str, Any] | None:
             "display_name": str(
                 record.get("subject_username") or public.get("display_name") or "移动企业端"
             ),
-            "role": "enterprise",
-            "tier": "enterprise",
-            "tenant_id": record.get("tenant_id"),
         }
     )
     return public
@@ -1053,6 +1160,7 @@ async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobi
 
     token = (body.push_token or body.fcm_token).strip()
     provider = (body.push_provider or "fcm").strip().lower()[:16]
+    notification_audience, tenant_id = _mobile_notification_scope(user)
     if not token:
         return JSONResponse(
             format_mobile_response(None, "缺少 push_token", success=False, code=400),
@@ -1073,6 +1181,8 @@ async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobi
             row.fcm_token = body.fcm_token.strip()[:512]
             row.push_provider = provider
             row.push_token = token
+            row.notification_audience = notification_audience
+            row.tenant_id = tenant_id
             row.product_sku = (body.product_sku or "personal")[:32]
             row.updated_at = utc_now_naive()
         else:
@@ -1082,6 +1192,8 @@ async def mobile_device_register(body: DeviceRegisterBody, user=Depends(get_mobi
                     fcm_token=body.fcm_token.strip(),
                     push_provider=provider,
                     push_token=token,
+                    notification_audience=notification_audience,
+                    tenant_id=tenant_id,
                     product_sku=(body.product_sku or "personal")[:32],
                     platform=body.platform[:32],
                     device_label=body.device_label[:200],
@@ -1103,11 +1215,16 @@ async def mobile_device_unregister(
     from app.db.models.mobile_device import MobileDeviceToken
     from app.db.session import get_db
 
+    notification_audience, tenant_id = _mobile_notification_scope(user)
+
     with get_db() as db:
-        db.query(MobileDeviceToken).filter(
+        query = db.query(MobileDeviceToken).filter(
             MobileDeviceToken.user_id == user.id,
             MobileDeviceToken.fcm_token == fcm_token.strip(),
-        ).delete()
+            MobileDeviceToken.notification_audience == notification_audience,
+        )
+        query = query.filter(MobileDeviceToken.tenant_id == tenant_id)
+        query.delete()
     return format_mobile_response(data={"unregistered": True})
 
 
@@ -1116,7 +1233,7 @@ async def mobile_notifications_pending(
     limit: int = Query(50, ge=1, le=200),
     user=Depends(get_mobile_user),
 ):
-    """自建推送后台通道:返回未送达的离线通知并标记 delivered（客户端 WorkManager 轮询）。"""
+    """返回未确认的离线通知；只有客户端成功展示后才单独 ACK。"""
     if user is None:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
@@ -1126,21 +1243,17 @@ async def mobile_notifications_pending(
 
     from app.db.models.mobile_notification import MobileNotificationOutbox
     from app.db.session import get_db
-    from app.utils.time import utc_now_naive
 
+    notification_audience, tenant_id = _mobile_notification_scope(user)
     items: list[dict] = []
     with get_db() as db:
-        rows = (
-            db.query(MobileNotificationOutbox)
-            .filter(
-                MobileNotificationOutbox.user_id == user.id,
-                MobileNotificationOutbox.delivered.is_(False),
-            )
-            .order_by(MobileNotificationOutbox.created_at.asc())
-            .limit(limit)
-            .all()
+        query = db.query(MobileNotificationOutbox).filter(
+            MobileNotificationOutbox.user_id == user.id,
+            MobileNotificationOutbox.notification_audience == notification_audience,
+            MobileNotificationOutbox.delivered.is_(False),
         )
-        now = utc_now_naive()
+        query = query.filter(MobileNotificationOutbox.tenant_id == tenant_id)
+        rows = query.order_by(MobileNotificationOutbox.created_at.asc()).limit(limit).all()
         for r in rows:
             try:
                 data = _json.loads(r.data_json or "{}")
@@ -1156,9 +1269,42 @@ async def mobile_notifications_pending(
                     "data": data,
                 }
             )
-            r.delivered = True
-            r.delivered_at = now
     return format_mobile_response(data={"notifications": items})
+
+
+@extension_router.post("/notifications/{notification_id}/ack")
+async def mobile_notification_ack(
+    notification_id: int,
+    user=Depends(get_mobile_user),
+):
+    """客户端成功弹出系统通知后确认送达，避免 GET 即丢消息。"""
+    if user is None:
+        return JSONResponse(
+            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
+        )
+    _ensure_outbox_table()
+    from app.db.models.mobile_notification import MobileNotificationOutbox
+    from app.db.session import get_db
+    from app.utils.time import utc_now_naive
+
+    notification_audience, tenant_id = _mobile_notification_scope(user)
+    with get_db() as db:
+        query = db.query(MobileNotificationOutbox).filter(
+            MobileNotificationOutbox.id == int(notification_id),
+            MobileNotificationOutbox.user_id == user.id,
+            MobileNotificationOutbox.notification_audience == notification_audience,
+        )
+        query = query.filter(MobileNotificationOutbox.tenant_id == tenant_id)
+        row = query.first()
+        if row is None:
+            return JSONResponse(
+                format_mobile_response(None, "通知不存在", success=False, code=404),
+                status_code=404,
+            )
+        if not bool(row.delivered):
+            row.delivered = True
+            row.delivered_at = utc_now_naive()
+    return format_mobile_response(data={"notification_id": notification_id, "acked": True})
 
 
 # ── 配对 ──
@@ -1177,6 +1323,12 @@ async def mobile_pairing_issue(
     host = _pairing_issue_host(body.host or (request.url.hostname or ""))
     api_port = _pairing_issue_port(request, int(body.port))
     port = _pairing_reachable_port(request, api_port)
+    if body.purpose == "management":
+        binding = {
+            **binding,
+            "account_kind": "admin",
+            "token_scope": "management_pairing",
+        }
     payload = issue_pairing_nonce(host, port, **binding)
     data = _enrich_pairing_payload(payload, request)
     relay = _register_desktop_relay_for_pairing(host, port)
@@ -1281,16 +1433,26 @@ async def mobile_pairing_exchange(
     tenant_id = rec.get("tenant_id")
     company_brand = str(rec.get("company_brand") or "").strip()
     issuer_user_id = int(rec.get("issuer_user_id") or 0)
-    data = {
-        **_enrich_pairing_payload(rec),
-        **_relay_mobile_auth_payload(
+    clean_tenant_id = int(tenant_id) if tenant_id is not None else 0
+    if str(rec.get("token_scope") or "").strip() == "management_pairing":
+        auth_payload = _management_pairing_auth_payload(
+            user_public,
+            tenant_id=clean_tenant_id,
+            company_brand=company_brand,
+            paired_by_user_id=issuer_user_id,
+        )
+    else:
+        auth_payload = _relay_mobile_auth_payload(
             user_public,
             account_kind_override="enterprise",
             token_scope="enterprise_pairing",
-            tenant_id=int(tenant_id) if tenant_id is not None else None,
+            tenant_id=clean_tenant_id,
             company_brand=company_brand,
             paired_by_user_id=issuer_user_id,
-        ),
+        )
+    data = {
+        **_enrich_pairing_payload(rec),
+        **auth_payload,
         "hint": "已返回可保存的 api_base_url，手机端可直接绑定该设备。",
     }
     relay = _cached_desktop_relay_for_account_binding()
@@ -1664,11 +1826,57 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
         )
 
 
+def _mobile_relay_task_list_response(
+    items: list[dict[str, Any]],
+    *,
+    offset: int,
+    page_limit: int,
+    requested_limit: int,
+    has_more: bool,
+) -> JSONResponse:
+    """Serialize a bounded summary page, trimming whole rows if necessary."""
+
+    bounded_items = list(items)
+    truncated_by_size = False
+    while True:
+        effective_has_more = has_more or truncated_by_size
+        payload = format_mobile_response(
+            data={
+                "items": bounded_items,
+                "count": len(bounded_items),
+                "offset": offset,
+                "limit": page_limit,
+                "requested_limit": requested_limit,
+                "has_more": effective_has_more,
+                "next_offset": (offset + len(bounded_items) if effective_has_more else None),
+                "summary_only": True,
+                "truncated_by_size": truncated_by_size,
+                "max_response_bytes": MobileRelayService.task_list_max_response_bytes,
+            }
+        )
+        response = JSONResponse(content=payload)
+        if len(response.body) <= MobileRelayService.task_list_max_response_bytes:
+            response.headers["X-XCAGI-Relay-List-Mode"] = "summary"
+            response.headers["X-XCAGI-Relay-List-Max-Bytes"] = str(
+                MobileRelayService.task_list_max_response_bytes
+            )
+            return response
+        if not bounded_items:
+            raise RuntimeError("relay task list envelope exceeds its response budget")
+        bounded_items.pop()
+        truncated_by_size = True
+
+
 @extension_router.get("/relay/tasks")
 async def mobile_relay_tasks(
     thread_id: str = Query(default="", max_length=80),
     active_only: bool = Query(default=False),
-    limit: int = Query(default=100, ge=1, le=300),
+    limit: int = Query(
+        default=MobileRelayService.task_list_default_limit,
+        ge=1,
+        le=MobileRelayService.task_list_max_requested_limit,
+    ),
+    offset: int = Query(default=0, ge=0, le=10_000_000),
     user=Depends(get_mobile_user),
 ):
     uid, _ = _mobile_user_identity(user)
@@ -1676,10 +1884,22 @@ async def mobile_relay_tasks(
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
-    items = MobileRelayService().list_tasks(
-        user_id=uid, thread_id=thread_id, active_only=active_only, limit=limit
+    page_limit = min(limit, MobileRelayService.task_list_max_page_limit)
+    items_with_probe = MobileRelayService().list_task_summaries(
+        user_id=uid,
+        thread_id=thread_id,
+        active_only=active_only,
+        limit=page_limit + 1,
+        offset=offset,
     )
-    return format_mobile_response(data={"items": items, "count": len(items)})
+    has_more = len(items_with_probe) > page_limit
+    return _mobile_relay_task_list_response(
+        items_with_probe[:page_limit],
+        offset=offset,
+        page_limit=page_limit,
+        requested_limit=limit,
+        has_more=has_more,
+    )
 
 
 @extension_router.post("/relay/threads")
@@ -1849,6 +2069,250 @@ async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopComplete
 
 
 # ── 管理端 ──
+
+
+async def _mobile_management_work_get(
+    path: str,
+    *,
+    query: str = "",
+) -> dict[str, Any] | JSONResponse:
+    """Read the single MODstore management-work ledger for the mobile admin."""
+    try:
+        from app.application.modstore_local_client import modstore_get, modstore_management_base_url
+
+        return await modstore_get(
+            path,
+            query=query,
+            timeout=30.0,
+            base_url=modstore_management_base_url(),
+            strict_internal_auth=True,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("mobile management work read failed: %s", exc)
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                f"管理端员工任务服务不可用：{exc}",
+                success=False,
+                code=502,
+            ),
+            status_code=502,
+        )
+
+
+async def _mobile_management_work_post(
+    path: str,
+    body: dict[str, Any],
+    *,
+    user_id: int,
+    tenant_id: int,
+) -> dict[str, Any] | JSONResponse:
+    """Mutate the ledger while recording the authenticated mobile admin."""
+    try:
+        from app.application.modstore_local_client import (
+            modstore_management_base_url,
+            modstore_post,
+        )
+
+        actor_user_id = int(user_id or 0)
+        actor_tenant_id = int(tenant_id or 0)
+        if actor_user_id <= 0:
+            raise ValueError("management actor missing")
+        if actor_tenant_id < 0:
+            raise ValueError("management actor tenant invalid")
+        payload = dict(body or {})
+        payload.pop("user_id", None)
+        payload.pop("created_by_user_id", None)
+        payload.pop("external_actor_ref", None)
+        payload.pop("source_ref", None)
+        payload["external_actor_ref"] = (
+            f"fhd:user:{actor_user_id}:tenant:{actor_tenant_id}"
+        )
+        return await modstore_post(
+            path,
+            json_body=payload,
+            timeout=120.0,
+            base_url=modstore_management_base_url(),
+            strict_internal_auth=True,
+        )
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("mobile management work write failed: %s", exc)
+        return JSONResponse(
+            format_mobile_response(
+                None,
+                f"管理端员工任务服务不可用：{exc}",
+                success=False,
+                code=502,
+            ),
+            status_code=502,
+        )
+
+
+def _mobile_management_work_response(
+    result: dict[str, Any] | JSONResponse,
+) -> dict[str, Any] | JSONResponse:
+    if isinstance(result, JSONResponse):
+        return result
+    return format_mobile_response(data=result)
+
+
+@extension_router.get("/admin/employee-work")
+async def mobile_admin_management_work_list(
+    request: Request,
+    status: str = Query(""),
+    owner_employee_id: str = Query(""),
+    limit: int = Query(100, ge=1, le=500),
+    user=Depends(get_mobile_user),
+):
+    """管理端手机读取与桌面完全相同的员工任务列表。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    query = urlencode(
+        {
+            "status": status,
+            "owner_employee_id": owner_employee_id,
+            "limit": int(limit),
+        }
+    )
+    result = await _mobile_management_work_get(
+        "/api/admin/employee-autonomy/work-items",
+        query=query,
+    )
+    return _mobile_management_work_response(result)
+
+
+@extension_router.get("/admin/employee-work/summary")
+async def mobile_admin_management_work_summary(
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_get("/api/admin/employee-autonomy/work-items/summary")
+    return _mobile_management_work_response(result)
+
+
+@extension_router.get("/admin/employee-work/employees")
+async def mobile_admin_management_work_employees(
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    """改派专用的管理编制名单，不复用企业端员工列表。"""
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_get("/api/admin/employee-autonomy/work-items/employees")
+    return _mobile_management_work_response(result)
+
+
+@extension_router.post("/admin/employee-work/decisions/{decision_id}/resolve")
+async def mobile_admin_management_decision_resolve(
+    decision_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_post(
+        f"/api/admin/employee-autonomy/work-items/decisions/{decision_id}/resolve",
+        body,
+        user_id=_mobile_request_user_id(request, user),
+        tenant_id=int(getattr(user, "tenant_id", None) or 0),
+    )
+    return _mobile_management_work_response(result)
+
+
+@extension_router.get("/admin/employee-work/{task_id}")
+async def mobile_admin_management_work_detail(
+    task_id: str,
+    request: Request,
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_get(f"/api/admin/employee-autonomy/work-items/{task_id}")
+    return _mobile_management_work_response(result)
+
+
+@extension_router.post("/admin/employee-work/{task_id}/review")
+async def mobile_admin_management_work_review(
+    task_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_post(
+        f"/api/admin/employee-autonomy/work-items/{task_id}/review",
+        body,
+        user_id=_mobile_request_user_id(request, user),
+        tenant_id=int(getattr(user, "tenant_id", None) or 0),
+    )
+    return _mobile_management_work_response(result)
+
+
+@extension_router.post("/admin/employee-work/{task_id}/retry")
+async def mobile_admin_management_work_retry(
+    task_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_post(
+        f"/api/admin/employee-autonomy/work-items/{task_id}/retry",
+        body,
+        user_id=_mobile_request_user_id(request, user),
+        tenant_id=int(getattr(user, "tenant_id", None) or 0),
+    )
+    return _mobile_management_work_response(result)
+
+
+@extension_router.post("/admin/employee-work/{task_id}/cancel")
+async def mobile_admin_management_work_cancel(
+    task_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_post(
+        f"/api/admin/employee-autonomy/work-items/{task_id}/cancel",
+        body,
+        user_id=_mobile_request_user_id(request, user),
+        tenant_id=int(getattr(user, "tenant_id", None) or 0),
+    )
+    return _mobile_management_work_response(result)
+
+
+@extension_router.post("/admin/employee-work/{task_id}/reassign")
+async def mobile_admin_management_work_reassign(
+    task_id: str,
+    request: Request,
+    body: dict[str, Any] = Body(default_factory=dict),
+    user=Depends(get_mobile_user),
+):
+    _, err = _require_mobile_admin(request, user)
+    if err is not None:
+        return err
+    result = await _mobile_management_work_post(
+        f"/api/admin/employee-autonomy/work-items/{task_id}/reassign",
+        body,
+        user_id=_mobile_request_user_id(request, user),
+        tenant_id=int(getattr(user, "tenant_id", None) or 0),
+    )
+    return _mobile_management_work_response(result)
 
 
 @extension_router.get("/admin/employees")

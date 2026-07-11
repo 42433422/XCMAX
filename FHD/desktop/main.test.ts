@@ -676,3 +676,14 @@ describe('main — bootstrap not called in test mode', () => {
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalled()
   })
 })
+
+describe('main — mobile pairing purpose isolation', () => {
+  it('requires an explicit management purpose and defaults every other value to enterprise', async () => {
+    const { normalizePairingPurpose } = await import('./main.js')
+
+    expect(normalizePairingPurpose('management')).toBe('management')
+    expect(normalizePairingPurpose('enterprise')).toBe('enterprise')
+    expect(normalizePairingPurpose('admin')).toBe('enterprise')
+    expect(normalizePairingPurpose(undefined)).toBe('enterprise')
+  })
+})

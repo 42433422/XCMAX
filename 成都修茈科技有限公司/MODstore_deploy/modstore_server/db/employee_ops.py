@@ -214,6 +214,209 @@ class OnDemandOrchestrateJob(Base):
     completed_at = Column(DateTime, nullable=True)
 
 
+class ManagementWorkItem(Base):
+    """管理端员工统一任务台账。
+
+    ``completed`` 不属于状态枚举：员工只能交付（``delivered``），最终必须经自动
+    验证或老板验收进入 ``accepted``。这样调度心跳、节点跳过或聊天回复都不会再
+    被误报为任务完成。
+    """
+
+    __tablename__ = "management_work_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(String(64), nullable=False, unique=True, index=True)
+    idempotency_key = Column(String(128), nullable=True, unique=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    source_kind = Column(String(32), default="admin", nullable=False, index=True)
+    source_ref = Column(String(256), default="", index=True)
+    title = Column(String(256), nullable=False)
+    description = Column(Text, default="")
+    owner_employee_id = Column(String(128), nullable=False, index=True)
+    status = Column(String(32), default="assigned", nullable=False, index=True)
+    priority = Column(String(8), default="P1", nullable=False, index=True)
+    risk_level = Column(String(16), default="medium", nullable=False, index=True)
+    acceptance_required = Column(Boolean, default=True, nullable=False)
+    acceptance_criteria_json = Column(Text, default="[]")
+    input_json = Column(Text, default="{}")
+    progress = Column(Integer, default=0, nullable=False)
+    current_stage = Column(String(128), default="")
+    last_update = Column(Text, default="")
+    result_summary = Column(Text, default="")
+    artifacts_json = Column(Text, default="[]")
+    evidence_json = Column(Text, default="[]")
+    error_kind = Column(String(64), default="")
+    error = Column(Text, default="")
+    attempt_count = Column(Integer, default=0, nullable=False)
+    max_attempts = Column(Integer, default=3, nullable=False)
+    lease_token = Column(String(64), default="", index=True)
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    heartbeat_at = Column(DateTime, nullable=True, index=True)
+    next_retry_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    started_at = Column(DateTime, nullable=True)
+    delivered_at = Column(DateTime, nullable=True)
+    accepted_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
+class ManagementWorkEvent(Base):
+    __tablename__ = "management_work_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    work_item_id = Column(
+        Integer, ForeignKey("management_work_items.id"), nullable=False, index=True
+    )
+    event_type = Column(String(64), nullable=False, index=True)
+    actor_type = Column(String(32), default="system", nullable=False)
+    actor_id = Column(String(128), default="")
+    message = Column(Text, default="")
+    payload_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ManagementWorkOperation(Base):
+    """One externally observable operation performed for a management task.
+
+    The unique ``operation_key`` survives task retries.  A succeeded operation
+    is replayed from this ledger instead of being executed twice; an uncertain
+    operation is held for reconciliation or compensation rather than blindly
+    retried.
+    """
+
+    __tablename__ = "management_work_operations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    operation_id = Column(String(64), nullable=False, unique=True, index=True)
+    operation_key = Column(String(128), nullable=False, unique=True, index=True)
+    work_item_id = Column(
+        Integer, ForeignKey("management_work_items.id"), nullable=False, index=True
+    )
+    task_id = Column(String(64), nullable=False, index=True)
+    employee_id = Column(String(128), nullable=False, index=True)
+    task_revision = Column(Integer, default=1, nullable=False)
+    logical_step = Column(String(128), nullable=False, index=True)
+    attempt = Column(Integer, default=1, nullable=False)
+    # SHA-256 binding of the management-work lease token for the execution
+    # attempt that is currently allowed to finish this operation.  Store the
+    # derived nonce instead of the raw lease token so operation receipts never
+    # disclose a credential that can drive the management-work API.
+    execution_nonce = Column(String(64), default="", nullable=False, index=True)
+    kind = Column(String(64), nullable=False, index=True)
+    target = Column(String(512), default="", index=True)
+    request_digest = Column(String(64), nullable=False, index=True)
+    status = Column(String(32), default="running", nullable=False, index=True)
+    reversible = Column(Boolean, default=False, nullable=False)
+    external_ref = Column(String(256), default="", index=True)
+    result_json = Column(Text, default="{}")
+    error = Column(Text, default="")
+    compensation_status = Column(String(32), default="not_required", index=True)
+    compensation_json = Column(Text, default="{}")
+    lease_expires_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    completed_at = Column(DateTime, nullable=True)
+
+
+class ManagementWorkEvidence(Base):
+    """Append-only observation collected outside the executing employee process."""
+
+    __tablename__ = "management_work_evidence"
+    __table_args__ = (
+        UniqueConstraint(
+            "work_item_id",
+            "attempt",
+            "check_id",
+            name="uq_management_evidence_attempt_check",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    evidence_id = Column(String(64), nullable=False, unique=True, index=True)
+    work_item_id = Column(
+        Integer, ForeignKey("management_work_items.id"), nullable=False, index=True
+    )
+    task_id = Column(String(64), nullable=False, index=True)
+    attempt = Column(Integer, nullable=False, index=True)
+    check_id = Column(String(128), nullable=False, index=True)
+    criterion_ids_json = Column(Text, default="[]")
+    kind = Column(String(64), nullable=False, index=True)
+    trust_level = Column(String(32), default="independent_observation", index=True)
+    status = Column(String(24), nullable=False, index=True)
+    source_ref = Column(String(512), default="")
+    observed_at = Column(DateTime, nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    collector_version = Column(String(32), default="v1")
+    payload_json = Column(Text, default="{}")
+    payload_sha256 = Column(String(64), nullable=False, index=True)
+    signature = Column(String(128), default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ManagementWorkVerificationReceipt(Base):
+    """Immutable gate receipt required before a candidate delivery can land."""
+
+    __tablename__ = "management_work_verification_receipts"
+    __table_args__ = (
+        UniqueConstraint(
+            "work_item_id",
+            "attempt",
+            name="uq_management_verification_attempt",
+        ),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    receipt_id = Column(String(64), nullable=False, unique=True, index=True)
+    work_item_id = Column(
+        Integer, ForeignKey("management_work_items.id"), nullable=False, index=True
+    )
+    task_id = Column(String(64), nullable=False, index=True)
+    attempt = Column(Integer, nullable=False, index=True)
+    result_digest = Column(String(64), nullable=False, index=True)
+    fact_bundle_digest = Column(String(64), nullable=False, index=True)
+    fact_required = Column(Boolean, default=False, nullable=False)
+    fact_outcome = Column(String(24), nullable=False, index=True)
+    audit_outcome = Column(String(24), nullable=False, index=True)
+    status = Column(String(24), nullable=False, index=True)
+    verifier_employee_id = Column(String(128), default="delivery-receipt-officer")
+    audit_json = Column(Text, default="{}")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+
+
+class ManagementDecision(Base):
+    __tablename__ = "management_decisions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    decision_id = Column(String(64), nullable=False, unique=True, index=True)
+    work_item_id = Column(
+        Integer, ForeignKey("management_work_items.id"), nullable=False, index=True
+    )
+    requested_by_employee_id = Column(String(128), nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    options_json = Column(Text, default="[]")
+    recommendation = Column(Text, default="")
+    status = Column(String(16), default="pending", nullable=False, index=True)
+    decision = Column(Text, default="")
+    note = Column(Text, default="")
+    requested_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    due_at = Column(DateTime, nullable=True, index=True)
+    last_reminded_at = Column(DateTime, nullable=True, index=True)
+    reminder_count = Column(Integer, default=0, nullable=False)
+    decided_at = Column(DateTime, nullable=True)
+    decided_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+
 class EmployeeChangeRequest(Base):
     __tablename__ = "employee_change_requests"
 

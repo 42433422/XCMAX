@@ -7,7 +7,8 @@ contextBridge.exposeInMainWorld('xcagiDesktop', {
   exportSupportBundle: () => ipcRenderer.invoke('xcagi:export-support-bundle'),
   checkForUpdates: () => ipcRenderer.invoke('xcagi:check-for-updates'),
   installUpdate: () => ipcRenderer.invoke('xcagi:install-update'),
-  getPairingQrPayload: () => ipcRenderer.invoke('xcagi:pairing-qr'),
+  getPairingQrPayload: (purpose: 'enterprise' | 'management' = 'enterprise') =>
+    ipcRenderer.invoke('xcagi:pairing-qr', purpose),
   setBadge: (count: number) => ipcRenderer.invoke('xcagi:set-badge', count),
   showNotification: (title: string, body: string) =>
     ipcRenderer.invoke('xcagi:show-notification', { title, body }),
