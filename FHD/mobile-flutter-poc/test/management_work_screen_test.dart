@@ -154,7 +154,97 @@ void main() {
     expect(find.textContaining('127.0.0.1'), findsNothing);
     expect(find.textContaining('secret-path'), findsNothing);
   });
+
+  testWidgets('attention snackbar does not cover chat after leaving inbox', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 1800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final api = _FakeManagementApi(
+      session: _managementSession,
+      detail: _attentionTask,
+      listItems: [
+        <String, Object?>{
+          ..._attentionTask,
+          'updated_at': '2026-07-10T10:00:00Z',
+        },
+      ],
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Column(
+              children: [
+                const TextField(key: ValueKey('underlying_chat_composer')),
+                TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => ManagementWorkScreen(
+                        repository: MobileRepository(client: api),
+                      ),
+                    ),
+                  ),
+                  child: const Text('打开员工待办'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('打开员工待办'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 40));
+
+    api.listItems = [
+      <String, Object?>{
+        ..._attentionTask,
+        'updated_at': '2026-07-10T10:05:00Z',
+      },
+    ];
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 40));
+
+    expect(find.textContaining('等待老板决策：'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('underlying_chat_composer')),
+      findsOneWidget,
+    );
+    expect(find.textContaining('等待老板决策：'), findsNothing);
+  });
 }
+
+const _attentionTask = <String, Object?>{
+  'task_id': 'mwi_attention',
+  'title': '等待老板决策',
+  'owner_employee_id': 'release-officer',
+  'status': 'waiting_decision',
+  'current_stage': 'waiting_owner_decision',
+  'attempt_count': 1,
+  'max_attempts': 3,
+  'updated_at': '2026-07-10T10:00:00Z',
+  'decisions': [
+    {
+      'decision_id': 'mdc_attention',
+      'question': '是否继续执行？',
+      'status': 'pending',
+      'requested_at': '2026-07-10T10:00:00Z',
+      'due_at': '2026-07-10T11:00:00Z',
+    },
+  ],
+  'events': <Object?>[],
+};
 
 const _managementSession = MobileSessionData(
   accountKind: 'admin',
@@ -379,7 +469,7 @@ class _FakeManagementApi extends MobileApiClient {
   }) : super(sessionStore: MemoryMobileSessionStore(session));
 
   final Map<String, Object?> detail;
-  final List<Map<String, Object?>> listItems;
+  List<Map<String, Object?>> listItems;
   final Object? listError;
   int listCalls = 0;
 

@@ -22,6 +22,7 @@ class ManagementWorkScreen extends StatefulWidget {
 class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
   late final MobileRepository _mobileRepository;
   late final ManagementWorkRepository _repository;
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
   Timer? _pollTimer;
   var _bootstrapEpoch = 0;
   var _refreshEpoch = 0;
@@ -48,6 +49,14 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
   ManagementWorkItem? _detail;
   var _employees = const <ManagementDutyEmployee>[];
   Map<String, String>? _seenAttentionStates;
+
+  void _showSnackBar(SnackBar snackBar) {
+    final messenger = _messengerKey.currentState;
+    if (messenger == null) return;
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(snackBar);
+  }
 
   @override
   void initState() {
@@ -209,7 +218,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
           previous[item.taskId] == _attentionFingerprint(item)) {
         continue;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(
           content: Text('${item.title}：${item.statusLabel}'),
           action: SnackBarAction(
@@ -244,7 +253,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
       });
     } catch (error) {
       if (!mounted || epoch != _detailEpoch || quiet) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(content: Text(managementWorkUserMessage(error))),
       );
     }
@@ -258,7 +267,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
       await _refresh();
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(content: Text(managementWorkUserMessage(error))),
       );
     } finally {
@@ -340,7 +349,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
     final detail = _detail;
     if (detail == null) return;
     if (accepted && !detail.canAcceptDelivery) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         SnackBar(content: Text(detail.acceptanceGateMessage)),
       );
       return;
@@ -377,7 +386,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
     if (feedback == null) return;
     if (!accepted && feedback.trim().isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      _showSnackBar(
         const SnackBar(content: Text('退回返工时请填写需要修改的内容')),
       );
       return;
@@ -445,7 +454,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
         setState(() => _employees = employees);
       } catch (error) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
+        _showSnackBar(
           SnackBar(content: Text(managementWorkUserMessage(error))),
         );
         return;
@@ -526,7 +535,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
   @override
   Widget build(BuildContext context) {
     final colors = AppTheme.colors(context);
-    return Scaffold(
+    final screen = Scaffold(
       backgroundColor: colors.page,
       body: SafeArea(
         bottom: false,
@@ -621,6 +630,7 @@ class _ManagementWorkScreenState extends State<ManagementWorkScreen> {
         ),
       ),
     );
+    return ScaffoldMessenger(key: _messengerKey, child: screen);
   }
 }
 
