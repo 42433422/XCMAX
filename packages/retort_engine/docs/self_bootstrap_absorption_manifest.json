@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "policy": "retort_self_first",
+  "landing_commit": "",
+  "full_gate_evidence": "935 passed in 36.15s; ruff all checks passed",
+  "sources": [
+    {
+      "status": "recorded",
+      "source_id": "aider-repomap",
+      "source_url": "https://github.com/Aider-AI/aider",
+      "source_revision": "5dc9490bb35f9729ef2c95d00a19ccd30c26339c",
+      "source_path": "aider/repomap.py",
+      "license": "Apache-2.0",
+      "layer": "repository_intelligence",
+      "adaptation": "dependency PageRank plus task-focused bounded repository map",
+      "behavior": {"passed": true},
+      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "implementation_hashes": {
+        "retort_engine/repository_intelligence.py": "870f60240e105592cace7c9e35f0bcd692409dc1f610dd83aaaff9caff16d85c",
+        "tests/test_repository_intelligence.py": "10a2fd7d603b25e866541ce2c3c006f48530df33f7ad0d437246c8d9edd84760"
+      }
+    },
+    {
+      "status": "recorded",
+      "source_id": "mini-swe-agent-loop",
+      "source_url": "https://github.com/SWE-agent/mini-swe-agent",
+      "source_revision": "e187bcb2ff5825d85761a6f9c1f98c9fa6cfbc79",
+      "source_path": "src/minisweagent/agents/default.py",
+      "license": "MIT",
+      "layer": "bounded_execution",
+      "adaptation": "step/time limits and serializable action-observation trajectory",
+      "behavior": {"passed": true},
+      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "implementation_hashes": {
+        "retort_engine/bounded_agent_loop.py": "a3ad4ed28f57ecc0062efbc7c22065ff995e0413dfa7bfb40cd529e9f27c9002",
+        "tests/test_bounded_agent_loop.py": "5389a65dcd84000b1082543d47a1344106f81013facaac241bcc608cc625c3b5"
+      }
+    },
+    {
+      "status": "recorded",
+      "source_id": "openhands-goal-runtime",
+      "source_url": "https://github.com/OpenHands/software-agent-sdk",
+      "source_revision": "9028562e2d5eda76de662ec9b7584125760eb83f",
+      "source_path": "openhands-sdk/openhands/sdk/conversation/goal/controller.py",
+      "license": "MIT",
+      "layer": "bounded_execution",
+      "adaptation": "separate completion judge and repetitive-loop stop condition",
+      "behavior": {"passed": true},
+      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "implementation_hashes": {
+        "retort_engine/bounded_agent_loop.py": "a3ad4ed28f57ecc0062efbc7c22065ff995e0413dfa7bfb40cd529e9f27c9002",
+        "tests/test_bounded_agent_loop.py": "5389a65dcd84000b1082543d47a1344106f81013facaac241bcc608cc625c3b5"
+      }
+    },
+    {
+      "status": "recorded",
+      "source_id": "swe-bench-oracle",
+      "source_url": "https://github.com/SWE-bench/SWE-bench",
+      "source_revision": "f7bbbb2ccdf479001d6467c9e34af59e44a840f9",
+      "source_path": "swebench/harness/run_evaluation.py",
+      "license": "MIT",
+      "layer": "reproducible_evaluation",
+      "adaptation": "patch-applied plus fail-to-pass resolution oracle",
+      "behavior": {"passed": true},
+      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "implementation_hashes": {
+        "retort_engine/issue_capability_benchmark.py": "c204d2e4f02af8ef091a822cbbaf896c14bc630d73cb6a90cab42962ec85a5f3",
+        "tests/test_issue_capability_benchmark.py": "1ae7aeaafc59db3b09a21fd55ee537174d989546337648c966bed61427e6230b"
+      }
+    },
+    {
+      "status": "recorded",
+      "source_id": "swe-smith-task-synthesis",
+      "source_url": "https://github.com/SWE-bench/SWE-smith",
+      "source_revision": "9b74ac08118a85c39c356802f7961893af73e07f",
+      "source_path": "swesmith/issue_gen/generate.py",
+      "license": "MIT",
+      "layer": "verified_task_synthesis",
+      "adaptation": "generate replayable issue tasks only from verified repairs",
+      "behavior": {"passed": true},
+      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "implementation_hashes": {
+        "retort_engine/issue_capability_benchmark.py": "c204d2e4f02af8ef091a822cbbaf896c14bc630d73cb6a90cab42962ec85a5f3",
+        "tests/test_issue_capability_benchmark.py": "1ae7aeaafc59db3b09a21fd55ee537174d989546337648c966bed61427e6230b"
+      }
+    }
+  ]
+}
