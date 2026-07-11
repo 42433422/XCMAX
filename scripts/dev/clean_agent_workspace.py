@@ -73,23 +73,40 @@ def _clean_aged_dir(path: Path, max_age: int, removed: list[str]) -> None:
         _rm_tree(item, removed)
 
 
+def _is_git_tracked(path: Path) -> bool:
+    try:
+        import subprocess
+
+        rel = str(path.relative_to(ROOT))
+        proc = subprocess.run(
+            ["git", "-C", str(ROOT), "ls-files", "--error-unmatch", "--", rel],
+            capture_output=True,
+            check=False,
+        )
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+
 def _clean_shallow_caches(removed: list[str]) -> None:
     names = {"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
-    # 仅扫浅层，避免全仓 walk 过慢
+    # 仅扫浅层，避免全仓 walk 过慢；跳过已被 git 跟踪的目录（少数历史误入库 pyc）
     candidates = [ROOT, ROOT / "FHD", ROOT / "packages" / "retort_engine", ROOT / "成都修茈科技有限公司" / "MODstore_deploy"]
     for base in candidates:
         if not base.is_dir():
             continue
         for path in base.rglob("*"):
-            if path.name in names and path.is_dir():
-                # 限制深度：相对 base 不超过 6 层
-                try:
-                    depth = len(path.relative_to(base).parts)
-                except ValueError:
-                    continue
-                if depth > 6:
-                    continue
-                _rm_tree(path, removed)
+            if path.name not in names or not path.is_dir():
+                continue
+            try:
+                depth = len(path.relative_to(base).parts)
+            except ValueError:
+                continue
+            if depth > 6:
+                continue
+            if _is_git_tracked(path) or any(_is_git_tracked(p) for p in path.rglob("*") if p.is_file()):
+                continue
+            _rm_tree(path, removed)
 
 
 def main() -> int:
