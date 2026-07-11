@@ -642,6 +642,8 @@ class MobileApiClient {
       StreamController<MobileSessionData>.broadcast();
   MobileSessionData _lastSession = MobileSessionData.empty;
   Future<bool>? _refreshInFlight;
+  DateTime? _lastLanProbeAt;
+  bool? _lastLanProbeOk;
 
   String get configuredRelayId => _config.relayId.trim();
   String get localAvatarSource => _config.localAvatarSource.trim();
@@ -1086,6 +1088,106 @@ class MobileApiClient {
 
   Future<Map<String, Object?>> rootHealth() {
     return getJson(XcagiMobileEndpoints.rootHealth);
+  }
+
+  /// Align Android `XcagiRepository.preferCloudIfLanUnreachable`:
+  /// when enterprise LAN host is blank/unreachable, flip session to cloud so
+  /// subsequent API calls stop hammering a dead `192.168.x.x`.
+  Future<bool> preferCloudIfLanUnreachable() async {
+    final isEnterprise = AndroidProductSkuConfig.isEnterprise(
+      buildSku: MobileAndroidBuild.productSku,
+    );
+    if (!isEnterprise) return false;
+    final session = await loadSession();
+    if (session.serverMode.trim().toLowerCase() == 'cloud') return false;
+    final host = session.fhdHost.trim();
+    if (host.isEmpty) {
+      await _saveSession(session.copyWith(serverMode: 'cloud'));
+      _lastLanProbeAt = null;
+      _lastLanProbeOk = null;
+      return true;
+    }
+    final now = DateTime.now();
+    if (_lastLanProbeAt != null &&
+        _lastLanProbeOk == true &&
+        now.difference(_lastLanProbeAt!) < const Duration(seconds: 15)) {
+      return false;
+    }
+    final reachable = await probeLanHealth(host);
+    _lastLanProbeAt = now;
+    _lastLanProbeOk = reachable;
+    if (reachable) return false;
+    await _saveSession(session.copyWith(serverMode: 'cloud'));
+    _lastLanProbeAt = null;
+    _lastLanProbeOk = null;
+    return true;
+  }
+
+  /// Probe LAN host `/api/health` with a short timeout (pairing-style).
+  Future<bool> probeLanHealth(String hostWithPort) async {
+    final host = hostWithPort.trim();
+    if (host.isEmpty) return false;
+    final router = AndroidServerRouter(
+      fhdHost: host,
+      mode: AndroidServerMode.lan,
+      isEnterprise: true,
+    );
+    final base = router.lanReachableBaseUrl();
+    try {
+      final request = await _httpClient
+          .openUrl('GET', Uri.parse('${base}api/health'))
+          .timeout(const Duration(milliseconds: 900));
+      request.headers.set(HttpHeaders.acceptHeader, 'application/json');
+      request.headers.set('X-XCAGI-Client', 'android');
+      final response = await request.close().timeout(
+        const Duration(milliseconds: 900),
+      );
+      await response.drain<void>();
+      return response.statusCode >= 200 && response.statusCode < 300;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  AndroidServerRouter serverRouterForSession(MobileSessionData session) {
+    final mode = session.serverMode.trim().toLowerCase() == 'lan'
+        ? AndroidServerMode.lan
+        : AndroidServerMode.cloud;
+    final host = session.fhdHost.trim();
+    return AndroidServerRouter(
+      fhdHost: host.isEmpty ? '127.0.0.1' : host,
+      mode: mode,
+      isEnterprise: AndroidProductSkuConfig.isEnterprise(
+        buildSku: MobileAndroidBuild.productSku,
+      ),
+    );
+  }
+
+  Future<String> resolveSessionBaseUrl() async {
+    final session = await loadSession();
+    final mode = session.serverMode.trim().toLowerCase();
+    final host = session.fhdHost.trim();
+    final configBase = _config.baseUrl.trim();
+    final normalizedConfig =
+        configBase.endsWith('/') ? configBase : '$configBase/';
+
+    if (mode == 'lan') {
+      final local = session.localBaseUrl.trim();
+      if (local.isNotEmpty) {
+        return local.endsWith('/') ? local : '$local/';
+      }
+      if (host.isNotEmpty) {
+        return serverRouterForSession(session).fhdBaseUrl();
+      }
+    }
+
+    // After LAN→cloud flip we still keep fhdHost; route to enterprise cloud base.
+    if (mode == 'cloud' && host.isNotEmpty) {
+      return serverRouterForSession(session).fhdBaseUrl();
+    }
+
+    // Tests / explicit XCAGI_MOBILE_BASE_URL keep configured base.
+    return normalizedConfig;
   }
 
   Future<MobileEnvelope<AdminMobileHomeData>> adminHome() async {
@@ -2437,11 +2539,21 @@ class MobileApiClient {
     bool allowAuthRefresh = true,
   }) async {
     Future<Map<String, Object?>> perform() async {
+      var effectiveBase = baseUrl;
+      if (effectiveBase == null || effectiveBase.trim().isEmpty) {
+        // Skip LAN→cloud flip for the health probe itself to avoid recursion.
+        final isHealthProbe = path == XcagiMobileEndpoints.rootHealth ||
+            path == XcagiMobileEndpoints.health;
+        if (!isHealthProbe) {
+          await preferCloudIfLanUnreachable();
+        }
+        effectiveBase = await resolveSessionBaseUrl();
+      }
       final request = await _open(
         method,
         path,
         query: query,
-        baseUrl: baseUrl,
+        baseUrl: effectiveBase,
         authToken: authToken,
       );
       if (body != null) {

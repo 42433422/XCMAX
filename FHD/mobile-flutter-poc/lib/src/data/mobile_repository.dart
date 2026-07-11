@@ -31,6 +31,10 @@ class MobileRepository {
   bool get imWebSocketConnected => _imWebSocket.connected;
   Stream<Map<String, Object?>> get imWebSocketEvents => _imWebSocket.events;
 
+  /// See [MobileApiClient.preferCloudIfLanUnreachable].
+  Future<bool> preferCloudIfLanUnreachable() =>
+      _client.preferCloudIfLanUnreachable();
+
   Future<MobileMeData> loadMe() async {
     final response = await _client.me();
     if (!response.success) {

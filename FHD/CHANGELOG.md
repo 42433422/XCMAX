@@ -6,6 +6,14 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### v10-B/C 交付推进（2026-07-11 · v10 线内迭代）
+
+- **fix(mobile-flutter)**：落地 `preferCloudIfLanUnreachable` + session LAN/云 base 路由，避免 5G 下死打局域网
+- **fix(mobile-flutter)**：探索 Tab 增加审批入口；通知页去掉假数据 fallback（空态诚实）
+- **fix(backend)**：审批驳回与 AI 工作流驳回均 `notify_mobile_user`，对齐通过路径
+- **fix(modstore)**：商品履约同步写入 `user_mods`（`pkg_id`），打通支付→桌面 entitlement
+- **docs(evidence)**：`v10-bc-delivery-progress-2026-07-11.md`（进行中，非正式签字）
+
 ### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）
 
 - **fix(desktop)**：`deliverable-status` 读取运行中 `request.app`，消除 `MOD_ROUTES_NOT_MOUNTED` 误判（Mac 真机已验）
