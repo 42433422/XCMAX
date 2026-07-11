@@ -40,6 +40,11 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 2
 fi
 
+if ! jq -e '.schema == "xcagi.download_manifest/v1"' "$MANIFEST" >/dev/null; then
+  echo "::error::Unsupported or missing manifest schema (expected xcagi.download_manifest/v1)" >&2
+  exit 2
+fi
+
 # 提取所有 (sku, platform, url, sha256, size, filename) 元组
 # manifest 结构: channels.{channel_name}.{sku}.{platform|.mac[]}.url/sha256/size/filename
 ENTRIES_JSON=$(
@@ -82,9 +87,17 @@ check_magic() {
       fi
       ;;
     *.dmg)
-      # DMG: koly magic (6B6F6C79) at offset 0
-      if [[ "$magic" != "6b6f6c79" ]]; then
-        echo "  ::error::Not a valid DMG (expected koly magic, got ${magic})"
+      # UDIF DMG stores its koly signature at the beginning of the final
+      # 512-byte trailer, not at offset zero.
+      local file_size trailer_magic
+      file_size=$(wc -c < "$file" | tr -d ' ')
+      if [ "$file_size" -lt 512 ]; then
+        echo "  ::error::Not a valid DMG (file is smaller than the 512-byte trailer)"
+        return 1
+      fi
+      trailer_magic=$(dd if="$file" bs=1 skip=$((file_size - 512)) count=4 2>/dev/null | xxd -p)
+      if [[ "$trailer_magic" != "6b6f6c79" ]]; then
+        echo "  ::error::Not a valid DMG (expected koly trailer, got ${trailer_magic})"
         return 1
       fi
       ;;
@@ -122,7 +135,7 @@ check_sku_confusion() {
   return 1
 }
 
-echo "$ENTRIES_JSON" | while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
+while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   [ -z "$sku" ] && continue
   echo ""
   echo "[$channel] $sku/$platform: $filename"
@@ -190,7 +203,7 @@ echo "$ENTRIES_JSON" | while IFS=$'\t' read -r sku platform url sha256 size file
 
   rm -f "$tmp_file"
   PASS_COUNT=$((PASS_COUNT + 1))
-done
+done <<< "$ENTRIES_JSON"
 
 echo ""
 echo "=== Verification summary ==="
