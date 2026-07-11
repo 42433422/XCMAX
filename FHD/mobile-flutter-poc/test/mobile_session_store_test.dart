@@ -897,7 +897,8 @@ void main() {
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
+    // Phone LAN remaps loopback listen port 17500 → vite proxy 5011.
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
   });
 
   test('MobileRepository clears stale inflight relay without paired desktop',

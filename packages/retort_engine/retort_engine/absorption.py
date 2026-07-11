@@ -429,7 +429,6 @@ def _task_from_strength(external_ref: ExternalProjectRef, strength: str, index: 
 
 def _task_from_gap_row(external_ref: ExternalProjectRef, row: dict[str, Any], index: int) -> ImprovementTask:
     paths = [str(item) for item in row.get("target_files") or [] if item]
-    missing = [str(item) for item in row.get("missing_symbols") or []]
     action = str(row.get("action") or f"Inspect {external_ref.local_path}")
     if paths and "target_files=" not in action:
         action = f"{action} target_files={','.join(paths)}"
