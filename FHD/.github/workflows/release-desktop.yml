@@ -223,6 +223,9 @@ jobs:
     if: ${{ inputs.notary_submission_id != '' }}
     runs-on: macos-latest
     timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: .
     env:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
@@ -243,16 +246,11 @@ jobs:
           key_dir="$HOME/.appstoreconnect/private_keys"
           key_path="$key_dir/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
           mkdir -p "$key_dir"
-          python3 - "$key_path" <<'PY'
-          import base64
-          import os
-          import pathlib
-          import sys
-
-          pathlib.Path(sys.argv[1]).write_bytes(
+          KEY_PATH="$key_path" python3 -c '
+          import base64, os, pathlib
+          pathlib.Path(os.environ["KEY_PATH"]).write_bytes(
               base64.b64decode(os.environ["APP_STORE_CONNECT_API_PRIVATE_KEY_BASE64"], validate=True)
-          )
-          PY
+          )'
           chmod 600 "$key_path"
           result="$(xcrun notarytool info "$submission_id" \
             --key "$key_path" \
