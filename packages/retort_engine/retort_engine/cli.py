@@ -48,6 +48,7 @@ from retort_engine.review_adjudication_calibration import build_review_adjudicat
 from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -406,6 +407,16 @@ def main(argv: list[str] | None = None) -> int:
     saturation.add_argument("--project", default=".")
     saturation.add_argument("--recent-limit", type=int, default=3)
     saturation.add_argument("--json", action="store_true")
+    bootstrap_plan = sub.add_parser("self-bootstrap-plan")
+    bootstrap_plan.add_argument("--project", default=".")
+    bootstrap_plan.add_argument("--json", action="store_true")
+    self_depth = sub.add_parser("self-depth-report")
+    self_depth.add_argument("--project", default=".")
+    self_depth.add_argument("--json", action="store_true")
+    external_gate = sub.add_parser("external-improvement-gate")
+    external_gate.add_argument("--project", default=".")
+    external_gate.add_argument("--target", required=True)
+    external_gate.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -1099,6 +1110,27 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Retort absorption saturation status: {result['status']}")
             print(f"Saturated: {result['summary']['saturated']}")
         return 0
+    if args.command == "self-bootstrap-plan":
+        result = build_self_bootstrap_plan(args.project)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort self-bootstrap status: {result['status']}")
+            print(f"Implemented sources: {result['summary']['implemented_source_count']}/{result['summary']['source_count']}")
+            print(f"Strict source records: {result['summary']['strictly_recorded_source_count']}/{result['summary']['source_count']}")
+        return 0
+    if args.command == "self-depth-report":
+        result = build_self_depth_report(args.project)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort self-depth status: {result['status']}")
+            print(f"External improvement allowed: {result['external_improvement_allowed']}")
+        return 0 if result["external_improvement_allowed"] else 1
+    if args.command == "external-improvement-gate":
+        result = external_improvement_gate(args.project, args.target)
+        print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort external improvement gate: {result['status']}")
+        return 0 if result["status"] == "allowed" else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0
