@@ -10,6 +10,7 @@ import '../../platform/android_record_audio_permission.dart';
 import '../../theme/app_theme.dart';
 import 'meeting_minutes_docx.dart';
 import 'meeting_minutes_exporter.dart';
+import 'meeting_minutes_organization_mode.dart';
 
 class MeetingMinutesResult {
   const MeetingMinutesResult({
@@ -119,7 +120,7 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
           listenMode: ListenMode.dictation,
           partialResults: true,
           cancelOnError: false,
-          listenFor: const Duration(minutes: 30),
+          listenFor: const Duration(minutes: 5),
           pauseFor: const Duration(seconds: 4),
         ),
       );
@@ -178,11 +179,9 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
   }
 
   void _appendTranscript(String text) {
-    final clean = text.trim();
-    if (clean.isEmpty) return;
-    final existing = _transcriptController.text.trimRight();
-    if (existing.endsWith(clean)) return;
-    _transcriptController.text = existing.isEmpty ? clean : '$existing\n$clean';
+    final merged = mergeMeetingTranscript(_transcriptController.text, text);
+    if (merged == _transcriptController.text.trimRight()) return;
+    _transcriptController.text = merged;
     _transcriptController.selection = TextSelection.collapsed(
       offset: _transcriptController.text.length,
     );
@@ -190,11 +189,15 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
 
   Future<void> _generateWord() async {
     await _stopRecording();
+    if (!mounted) return;
     final transcript = _transcriptController.text.trim();
     if (transcript.isEmpty) {
       setState(() => _errorText = '请先录音，或在转写框中输入会议内容');
       return;
     }
+    final organizationMode =
+        await showMeetingMinutesOrganizationModePicker(context);
+    if (!mounted || organizationMode == null) return;
     setState(() {
       _generating = true;
       _errorText = '';
@@ -202,14 +205,16 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
     });
     try {
       String organized = '';
-      try {
-        organized = await widget.repository.summarizeMeetingMinutes(
-          title: _titleController.text,
-          participants: _participantsController.text,
-          transcript: transcript,
-        );
-      } catch (_) {
-        // Offline fallback still creates a complete Word file from transcript.
+      if (organizationMode == MeetingMinutesOrganizationMode.smart) {
+        try {
+          organized = await widget.repository.summarizeMeetingMinutes(
+            title: _titleController.text,
+            participants: _participantsController.text,
+            transcript: transcript,
+          );
+        } catch (_) {
+          // Offline fallback still creates a complete Word file from transcript.
+        }
       }
       final outline = MeetingMinutesOutline.fromAssistantText(
         organized,
@@ -275,7 +280,12 @@ class _MeetingMinutesScreenState extends State<MeetingMinutesScreen> {
             ),
             const SizedBox(height: 6),
             Text(
-              '实时转写可随时编辑；原始音频不会保存在手机中。',
+              '选择“小C智能整理”时，转写文本会发送到企业端/服务端并按系统审计策略留痕；本应用不保存原始音频，系统语音识别服务会处理音频。',
+              style: TextStyle(color: colors.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '语音转写为试用能力，系统可能因停顿自动重启；长会建议每 5–10 分钟分段确认。',
               style: TextStyle(color: colors.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 18),
@@ -518,6 +528,22 @@ String _durationText(int seconds) {
   final minutes = seconds ~/ 60;
   final remain = seconds % 60;
   return '${_two(minutes)}:${_two(remain)}';
+}
+
+String mergeMeetingTranscript(String existing, String incoming) {
+  final current = existing.trimRight();
+  final clean = incoming.trim();
+  if (clean.isEmpty) return current;
+  if (current.isEmpty) return clean;
+
+  final lastBreak = current.lastIndexOf('\n');
+  final prefix = lastBreak >= 0 ? current.substring(0, lastBreak + 1) : '';
+  final lastLine = current.substring(lastBreak + 1).trim();
+  if (lastLine == clean || lastLine.startsWith(clean)) return current;
+  if (lastLine.isNotEmpty && clean.startsWith(lastLine)) {
+    return '$prefix$clean';
+  }
+  return '$current\n$clean';
 }
 
 String _two(int value) => value.toString().padLeft(2, '0');

@@ -135,7 +135,12 @@ class ApprovalService:
         """将内存审批请求写入 DB approval_requests 表（幂等）。"""
         import json as _json
 
-        raw_applicant_id = (runtime_context or {}).get("user_id")
+        context = runtime_context or {}
+        raw_applicant_id = (
+            context.get("subject_user_id")
+            if context.get("_server_bound_chat_identity") is True
+            else context.get("user_id")
+        )
         try:
             applicant_id = int(raw_applicant_id)
         except (TypeError, ValueError):

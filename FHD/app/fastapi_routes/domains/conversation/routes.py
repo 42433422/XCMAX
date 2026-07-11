@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 
-from fastapi import APIRouter, Body, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.fastapi_routes.domains.misc.helpers import (
@@ -18,6 +18,33 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["legacy-conversation"], deprecated=True)
+
+
+async def _authenticated_conversation_user(request: Request):
+    """Bind legacy conversation reads/writes to a verified current user."""
+    from app.fastapi_routes.mobile_api import get_mobile_user
+
+    authorization = str(request.headers.get("Authorization") or "").strip() or None
+    user = await get_mobile_user(request, authorization=authorization)
+    try:
+        user_id = int(getattr(user, "id", 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        user_id = 0
+    if user is None or user_id <= 0 or not bool(getattr(user, "is_active", True)):
+        raise HTTPException(status_code=401, detail="conversation authentication required")
+    return user
+
+
+def _require_owned_session(service, session_id: str, user) -> int:
+    try:
+        user_id = int(getattr(user, "id", 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        user_id = 0
+    exists, owner_id = service.get_session_ownership(session_id)
+    if not exists or user_id <= 0 or owner_id != user_id:
+        # Do not reveal whether another user's session exists.
+        raise HTTPException(status_code=404, detail="conversation not found")
+    return user_id
 
 
 def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
@@ -62,13 +89,18 @@ def _trace_ai_message_save(payload: dict, *, body: dict) -> dict:
 
 
 @router.get("/api/conversations/{session_id}")
-def conversations_get(session_id: str, limit: int = Query(default=50)):
+def conversations_get(
+    session_id: str,
+    limit: int = Query(default=50),
+    user=Depends(_authenticated_conversation_user),
+):
     try:
         from app.application.facades.conversation_facade import get_conversation_service
 
         service = get_conversation_service()
+        _require_owned_session(service, session_id, user)
         messages = service.get_session_messages(session_id, limit)
-        sessions = service.get_sessions(user_id=None, limit=1000)
+        sessions = service.get_sessions(user_id=str(user.id), limit=1000)
         session_info = None
         for s in sessions:
             current = _session_to_dict(s)
@@ -83,11 +115,12 @@ def conversations_get(session_id: str, limit: int = Query(default=50)):
 
 
 @router.delete("/api/conversations/{session_id}")
-def conversations_delete(session_id: str):
+def conversations_delete(session_id: str, user=Depends(_authenticated_conversation_user)):
     try:
         from app.application.facades.conversation_facade import get_conversation_service
 
         service = get_conversation_service()
+        _require_owned_session(service, session_id, user)
         success = service.delete_session(session_id)
         return {"success": success}
     except RECOVERABLE_ERRORS as e:
@@ -96,12 +129,17 @@ def conversations_delete(session_id: str):
 
 
 @router.put("/api/conversations/{session_id}/title")
-def conversations_title_put(session_id: str, body: dict = Body(default_factory=dict)):
+def conversations_title_put(
+    session_id: str,
+    body: dict = Body(default_factory=dict),
+    user=Depends(_authenticated_conversation_user),
+):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
 
     service = get_conversation_app_service()
+    _require_owned_session(service, session_id, user)
     data = body or {}
     title = data.get("title", "")
     success = service.update_session_title(session_id, title)
@@ -129,7 +167,10 @@ def ai_analyze_export(export_id: str):
 
 
 @router.post("/api/ai/message/save")
-def ai_message_save(body: dict = Body(default_factory=dict)):
+def ai_message_save(
+    body: dict = Body(default_factory=dict),
+    user=Depends(_authenticated_conversation_user),
+):
     from app.application.facades.conversation_facade import (
         get_conversation_service as get_conversation_app_service,
     )
@@ -138,7 +179,7 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     if not body:
         return JSONResponse({"success": False, "message": "请求数据不能为空"}, status_code=400)
     session_id = body.get("session_id")
-    user_raw = body.get("user_id", "default")
+    user_raw = int(user.id)
     role = body.get("role")
     content = body.get("content")
     intent = body.get("intent", "")
@@ -154,10 +195,17 @@ def ai_message_save(body: dict = Body(default_factory=dict)):
     if not content:
         return JSONResponse({"success": False, "message": "消息内容不能为空"}, status_code=400)
 
-    user_id_str = str(user_raw) if user_raw is not None else "default"
+    exists, owner_id = service.get_session_ownership(str(session_id))
+    if exists and owner_id != int(user.id):
+        raise HTTPException(status_code=404, detail="conversation not found")
+    user_id_str = str(user_raw)
+    trusted_body = dict(body)
+    trusted_body["user_id"] = user_id_str
     try:
         message_id = service.save_message(session_id, user_id_str, role, content, intent, metadata)
-        return _trace_ai_message_save({"success": True, "message_id": message_id}, body=body)
+        return _trace_ai_message_save(
+            {"success": True, "message_id": message_id}, body=trusted_body
+        )
     except RECOVERABLE_ERRORS as e:
-        traced = _trace_ai_message_save({"success": False, "message": str(e)}, body=body)
+        traced = _trace_ai_message_save({"success": False, "message": str(e)}, body=trusted_body)
         return JSONResponse(traced, status_code=500)

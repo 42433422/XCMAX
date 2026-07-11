@@ -1341,11 +1341,18 @@ def _registered_router_employee(
     payload.setdefault("source", "workflow_tool.employee")
     payload.setdefault("user_message", user_message)
 
-    workspace_root = (
-        str(params.get("workspace_root") or runtime_context.get("workspace_root") or "").strip()
-        or None
+    server_bound = runtime_context.get("_server_bound_chat_identity") is True
+    raw_workspace_root = (
+        runtime_context.get("workspace_root")
+        if server_bound
+        else params.get("workspace_root") or runtime_context.get("workspace_root")
     )
-    raw_user_id = params.get("user_id") or runtime_context.get("user_id") or 0
+    workspace_root = str(raw_workspace_root or "").strip() or None
+    raw_user_id = (
+        runtime_context.get("subject_user_id")
+        if server_bound
+        else params.get("user_id") or runtime_context.get("user_id") or 0
+    )
     try:
         numeric_user_id = int(raw_user_id)
     except (TypeError, ValueError):
@@ -1542,32 +1549,43 @@ def _registered_router_dataset_rag(
         return set()
 
     def access_context(_required_permission: str) -> DatasetAccessContext | None:
-        raw_context = params.get("access_context") or runtime_context.get("dataset_access_context")
+        server_bound = runtime_context.get("_server_bound_chat_identity") is True
+        raw_context = (
+            runtime_context.get("dataset_access_context")
+            if server_bound
+            else params.get("access_context") or runtime_context.get("dataset_access_context")
+        )
         context_payload = as_dict(raw_context)
         has_explicit_context = bool(context_payload)
         tenant_id = str(
             context_payload.get("tenant_id")
-            or runtime_context.get("dataset_tenant_id")
-            or runtime_context.get("tenant_id")
-            or runtime_context.get("workspace_id")
+            or (
+                runtime_context.get("dataset_tenant_id")
+                or runtime_context.get("tenant_id")
+                or runtime_context.get("workspace_id")
+            )
             or ""
         ).strip()
         actor_id = str(
             context_payload.get("actor_id")
             or context_payload.get("user_id")
-            or params.get("actor_id")
-            or params.get("user_id")
+            or (None if server_bound else params.get("actor_id") or params.get("user_id"))
             or runtime_context.get("user_id")
             or ""
         ).strip()
         permissions = parse_permissions(context_payload.get("permissions"))
-        permissions.update(parse_permissions(params.get("permissions")))
+        if not server_bound:
+            permissions.update(parse_permissions(params.get("permissions")))
         permissions.update(parse_permissions(runtime_context.get("dataset_permissions")))
-        is_admin = as_bool(
-            params.get("dataset_admin")
-            if "dataset_admin" in params
-            else context_payload.get("is_admin", context_payload.get("admin")),
-            default=False,
+        is_admin = (
+            as_bool(context_payload.get("is_admin", context_payload.get("admin")), default=False)
+            if server_bound
+            else as_bool(
+                params.get("dataset_admin")
+                if "dataset_admin" in params
+                else context_payload.get("is_admin", context_payload.get("admin")),
+                default=False,
+            )
         ) or as_bool(runtime_context.get("dataset_admin"), default=False)
         if not has_explicit_context and not permissions and not is_admin:
             return None
@@ -1709,8 +1727,14 @@ def _registered_router_memory_v2(
     from app.services.user_memory_service import get_user_memory_service
 
     service = get_user_memory_service()
+    server_bound = runtime_context.get("_server_bound_chat_identity") is True
     user_id = str(
-        params.get("user_id") or params.get("userId") or runtime_context.get("user_id") or "default"
+        runtime_context.get("user_id")
+        if server_bound
+        else params.get("user_id")
+        or params.get("userId")
+        or runtime_context.get("user_id")
+        or "default"
     ).strip()
     if not user_id:
         return {"success": False, "message": f"memory_v2.{action} 缺少 user_id 参数"}
@@ -2025,8 +2049,11 @@ def _registered_router_ocr(
             if not image_url:
                 return {"success": False, "message": "缺少 image_url"}
             ocr_type = str(params.get("ocr_type") or "general").strip() or "general"
+            server_bound = runtime_context.get("_server_bound_chat_identity") is True
             user_id = str(
-                params.get("user_id") or runtime_context.get("user_id") or "system"
+                runtime_context.get("subject_user_id")
+                if server_bound
+                else params.get("user_id") or runtime_context.get("user_id") or "system"
             ).strip()
             from app.neuro_bus.domains.ocr_domain import get_ocr_domain
 

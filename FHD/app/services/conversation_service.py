@@ -168,6 +168,22 @@ class ConversationService(NeuroEventPublisherMixin):
                 logger.error("获取会话消息失败: %s", e)
                 raise
 
+    def get_session_ownership(self, session_id: str) -> tuple[bool, int | None]:
+        """Return whether a session exists and its normalized DB owner."""
+        with get_db() as db:
+            try:
+                session = (
+                    db.query(AIConversationSession)
+                    .filter(AIConversationSession.session_id == session_id)
+                    .first()
+                )
+                if session is None:
+                    return False, None
+                return True, self._normalize_user_id(session.user_id)
+            except RECOVERABLE_ERRORS as e:
+                logger.error("获取会话所有者失败: %s", e)
+                raise
+
     def get_sessions(self, user_id: str | None = None, limit: int = 20) -> list[tuple]:
         """
         获取会话列表

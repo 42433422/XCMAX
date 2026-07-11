@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -43,6 +48,248 @@ from app.services.conversation.modstore_adapter import create_modstore_openai_cl
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_SERVER_BOUND_CHAT_IDENTITY = "_server_bound_chat_identity"
+_CHAT_SESSION_FALLBACK_SECRET = secrets.token_bytes(32)
+_AUTHORIZATION_CONTEXT_KEYS = frozenset(
+    {
+        "access_context",
+        "account_kind",
+        "admin",
+        "authorization",
+        "claims",
+        "entitlements",
+        "is_admin",
+        "permission",
+        "permissions",
+        "role",
+        "scopes",
+        "subject_user_id",
+        "tenant",
+        "tenant_id",
+        "tenantid",
+        "tier",
+        "user_id",
+        "userid",
+        "workspace",
+        "workspace_id",
+        "workspace_root",
+    }
+)
+
+
+@dataclass(frozen=True)
+class _AuthenticatedChatPrincipal:
+    """Server-verified identity used to scope chat state and audit records."""
+
+    user_id: str
+    tenant_id: str
+    account_kind: str
+
+    @property
+    def scope(self) -> str:
+        return f"tenant:{self.tenant_id}:account:{self.account_kind}:user:{self.user_id}"
+
+
+def _chat_principal_from_user(
+    user: Any,
+    *,
+    request: Request,
+    account_kind: str = "",
+) -> _AuthenticatedChatPrincipal | None:
+    try:
+        uid = int(getattr(user, "id", 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if uid <= 0 or not bool(getattr(user, "is_active", True)):
+        return None
+
+    raw_tenant = getattr(user, "tenant_id", None)
+    if raw_tenant is None:
+        raw_tenant = getattr(getattr(request, "state", None), "tenant_id", None)
+    try:
+        tenant_id = str(int(raw_tenant)) if raw_tenant is not None else "none"
+    except (TypeError, ValueError):
+        tenant_id = "none"
+
+    kind = (
+        str(
+            account_kind
+            or getattr(user, "tier", None)
+            or getattr(user, "role", None)
+            or "enterprise"
+        )
+        .strip()
+        .lower()
+    )
+    kind = "".join(ch for ch in kind if ch.isalnum() or ch in {"-", "_"})[:32]
+    kind = "admin" if kind in {"admin", "admin_portal", "super_admin", "owner"} else "enterprise"
+    return _AuthenticatedChatPrincipal(
+        user_id=str(uid),
+        tenant_id=tenant_id,
+        account_kind=kind or "enterprise",
+    )
+
+
+async def _resolve_authenticated_chat_principal(
+    request: Request,
+) -> _AuthenticatedChatPrincipal | None:
+    """Resolve a session or mobile-JWT principal without trusting client IDs."""
+
+    headers = getattr(request, "headers", {}) or {}
+    cookies = getattr(request, "cookies", {}) or {}
+    cookie_name = (os.environ.get("SESSION_COOKIE_NAME") or "session_id").strip()
+    cookie_session = cookies.get(cookie_name) if isinstance(cookies, Mapping) else ""
+    supplied_session_credential = bool(
+        str(headers.get("X-Session-ID") or "").strip() or str(cookie_session or "").strip()
+    )
+
+    try:
+        from app.infrastructure.auth.dependencies import resolve_session_user
+
+        session_user = resolve_session_user(request)
+    except RECOVERABLE_ERRORS:
+        logger.debug("chat session identity lookup failed", exc_info=True)
+        session_user = None
+    session_principal = (
+        _chat_principal_from_user(session_user, request=request)
+        if session_user is not None
+        else None
+    )
+
+    authorization = str(headers.get("Authorization") or "").strip()
+    if not authorization:
+        if session_principal is None and supplied_session_credential:
+            raise HTTPException(status_code=401, detail="chat session invalid")
+        return session_principal
+    scheme, separator, token = authorization.partition(" ")
+    token = token.strip()
+    if not separator or scheme.lower() != "bearer" or not token:
+        raise HTTPException(status_code=401, detail="chat access token invalid")
+    normalized_authorization = f"Bearer {token}"
+
+    from app.security.mobile_jwt import verify_mobile_jwt
+
+    payload = verify_mobile_jwt(token)
+    # A Bearer may be a web JWT already accepted by resolve_session_user. Only
+    # enter the mobile path when it verifies with the dedicated mobile issuer.
+    if not payload:
+        if session_principal is not None:
+            return session_principal
+        raise HTTPException(status_code=401, detail="chat access token invalid")
+    if payload.get("typ") != "access":
+        raise HTTPException(status_code=401, detail="mobile chat access token required")
+    try:
+        token_user_id = int(payload.get("user_id") or 0)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="mobile chat identity invalid") from None
+    if token_user_id <= 0:
+        raise HTTPException(status_code=401, detail="mobile chat identity invalid")
+
+    # Reuse the mobile route's current-user projection so pairing scopes are
+    # checked against the current DB row (disabled/revoked accounts fail closed).
+    from app.fastapi_routes.mobile_api import get_mobile_user
+
+    try:
+        mobile_user = await get_mobile_user(request, authorization=normalized_authorization)
+    except RECOVERABLE_ERRORS:
+        logger.debug("chat mobile identity lookup failed", exc_info=True)
+        raise HTTPException(status_code=401, detail="mobile chat identity unavailable") from None
+    try:
+        resolved_user_id = int(getattr(mobile_user, "id", 0) or 0)
+    except (TypeError, ValueError, AttributeError):
+        raise HTTPException(status_code=401, detail="mobile chat identity invalid") from None
+    if resolved_user_id != token_user_id:
+        raise HTTPException(status_code=401, detail="mobile chat identity mismatch")
+    mobile_principal = _chat_principal_from_user(
+        mobile_user,
+        request=request,
+        account_kind=str(payload.get("account_kind") or ""),
+    )
+    if mobile_principal is None:
+        raise HTTPException(status_code=401, detail="mobile chat identity invalid")
+    if session_principal is not None and (
+        session_principal.user_id != mobile_principal.user_id
+        or session_principal.tenant_id != mobile_principal.tenant_id
+        or session_principal.account_kind != mobile_principal.account_kind
+    ):
+        raise HTTPException(status_code=401, detail="chat authentication subjects conflict")
+    return session_principal or mobile_principal
+
+
+def _client_chat_session_id(
+    body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
+) -> str:
+    context = body.context if isinstance(body.context, dict) else {}
+    value = (
+        getattr(body, "session_id", None)
+        or context.get("session_id")
+        or context.get("conversation_id")
+        or ""
+    )
+    return str(value).strip()[:256]
+
+
+def _scoped_chat_session_id(
+    principal: _AuthenticatedChatPrincipal,
+    client_session_id: str,
+) -> str:
+    configured = (os.environ.get("SECRET_KEY") or os.environ.get("XCAGI_SECRET_KEY") or "").strip()
+    key = configured.encode("utf-8") if configured else _CHAT_SESSION_FALLBACK_SECRET
+    payload = f"{principal.scope}\0{client_session_id}".encode()
+    digest = hmac.new(key, payload, hashlib.sha256).hexdigest()[:48]
+    return f"chat_{digest}"
+
+
+async def _bind_chat_request_identity(
+    request: Request,
+    body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
+) -> XcagiCompatChatBody | XcagiCompatChatBatchBody:
+    """Bind authenticated calls to server truth; preserve anonymous desktop compatibility."""
+
+    principal = await _resolve_authenticated_chat_principal(request)
+    # Anonymous/local legacy mode is deliberately separate. Strip the private
+    # server marker even there so a JSON client can never forge it.
+    if principal is None:
+        if isinstance(body.context, dict) and _SERVER_BOUND_CHAT_IDENTITY in body.context:
+            context = dict(body.context)
+            context.pop(_SERVER_BOUND_CHAT_IDENTITY, None)
+            return body.model_copy(update={"context": context})
+        return body
+
+    context: dict[str, Any] = {}
+    for key, value in dict(body.context or {}).items():
+        normalized = str(key).strip().lower().replace("-", "_")
+        if normalized.startswith("dataset_") or normalized in _AUTHORIZATION_CONTEXT_KEYS:
+            continue
+        context[str(key)] = value
+    context["user_id"] = principal.scope
+    context["subject_user_id"] = int(principal.user_id)
+    context["tenant_id"] = int(principal.tenant_id) if principal.tenant_id != "none" else None
+    context["account_kind"] = principal.account_kind
+    context["dataset_access_context"] = {
+        "actor_id": principal.scope,
+        "tenant_id": principal.tenant_id,
+        "permissions": [],
+        "is_admin": principal.account_kind == "admin",
+    }
+    context["dataset_tenant_id"] = principal.tenant_id
+    context["dataset_permissions"] = []
+    context["dataset_admin"] = principal.account_kind == "admin"
+    context[_SERVER_BOUND_CHAT_IDENTITY] = True
+    client_session_id = _client_chat_session_id(body)
+    updates: dict[str, Any] = {
+        # Keep the legacy body owner numeric for DB/approval compatibility.
+        # The scoped identity used by AI/memory lives in runtime context.
+        "user_id": principal.user_id,
+        "context": context,
+    }
+    if client_session_id:
+        bound_session_id = _scoped_chat_session_id(principal, client_session_id)
+        context["session_id"] = bound_session_id
+        context.pop("conversation_id", None)
+        updates["session_id"] = bound_session_id
+    return body.model_copy(update=updates)
 
 
 def _derive_industry_from_session(request: Request) -> str:
@@ -200,7 +447,7 @@ async def _execute_ai_chat_mainline(
 
     payload = await asyncio.to_thread(
         service.process_chat,
-        user_id=str(getattr(body, "user_id", None) or "default"),
+        user_id=str(runtime_context.get("user_id") or getattr(body, "user_id", None) or "default"),
         message=message_text,
         context=dict(runtime_context or {}),
         source=getattr(body, "source", None),
@@ -212,6 +459,7 @@ async def _execute_ai_chat_mainline(
 
 
 async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> dict[str, Any]:
+    body = await _bind_chat_request_identity(request, body)
     m = (body.mode or "").strip().lower()
     if m in ("online", "offline"):
         set_llm_mode(m)
@@ -440,6 +688,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
 async def execute_compat_chat_batch(
     request: Request, body: XcagiCompatChatBatchBody
 ) -> dict[str, Any]:
+    body = await _bind_chat_request_identity(request, body)
     msgs = [str(x).strip() for x in (body.messages or []) if str(x).strip()]
     if not msgs:
         raise HTTPException(status_code=400, detail="messages 须为非空字符串数组")
@@ -729,10 +978,15 @@ def _recent_history(svc, user_id: str) -> list[dict]:
 
 
 def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
-    """统一对话流 user_id 口径，与 butler 路由 (_resolve_user_id_int) 对齐：
-    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'（与 butler 默认 1 同源），
-    使单部署单用户时对话流与 Settings UI 天然指向同一画像（桥接合并 / 目标 5）。
+    """Resolve the already-bound stream identity or anonymous legacy fallback.
+
+    ``compat_chat_stream_async`` first replaces ``body.user_id`` with the
+    authenticated session/mobile-JWT subject. ``X-User-Id`` is therefore only
+    consulted for the explicit unauthenticated desktop compatibility path.
     """
+    context = body.context if isinstance(body.context, dict) else {}
+    if context.get(_SERVER_BOUND_CHAT_IDENTITY) is True and context.get("user_id"):
+        return str(context["user_id"])
     uid = getattr(body, "user_id", None)
     if uid:
         return str(uid)
@@ -748,6 +1002,7 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    body = await _bind_chat_request_identity(request, body)
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

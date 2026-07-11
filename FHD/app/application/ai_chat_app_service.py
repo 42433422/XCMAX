@@ -436,9 +436,18 @@ class AIChatApplicationService:
         )[:12000]
 
         conv = get_conversation_service()
+        persistence_user_id: str | int = user_id
+        if context.get("_server_bound_chat_identity") is True:
+            try:
+                verified_user_id = int(context.get("subject_user_id") or 0)
+            except (TypeError, ValueError):
+                verified_user_id = 0
+            if verified_user_id <= 0:
+                raise ValueError("server-bound chat is missing its verified subject owner")
+            persistence_user_id = verified_user_id
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=str(persistence_user_id),
             role="user",
             content=str(message)[:8000],
             intent=intent or "chat",
@@ -447,7 +456,7 @@ class AIChatApplicationService:
         reply = str(response_data.get("response") or inner.get("text") or "")[:8000]
         conv.save_message(
             session_id=session_id,
-            user_id=user_id,
+            user_id=str(persistence_user_id),
             role="assistant",
             content=reply,
             intent=intent or "assistant_reply",

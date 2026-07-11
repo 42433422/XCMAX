@@ -174,6 +174,11 @@ class XcagiCompatChatBody(BaseModel):
         default=None,
         description="兼容旧客户端字段；当前版本不需要数据库写入授权。",
     )
+    session_id: str | None = Field(
+        default=None,
+        max_length=256,
+        validation_alias=AliasChoices("session_id", "conversation_id", "chat_session_id"),
+    )
     user_id: str | None = None
     source: str | None = None
 
@@ -203,6 +208,11 @@ class XcagiCompatChatBatchBody(BaseModel):
     )
     db_read_token: str | None = Field(default=None)
     db_write_token: str | None = Field(default=None)
+    session_id: str | None = Field(
+        default=None,
+        max_length=256,
+        validation_alias=AliasChoices("session_id", "conversation_id", "chat_session_id"),
+    )
     user_id: str | None = None
     source: str | None = None
 

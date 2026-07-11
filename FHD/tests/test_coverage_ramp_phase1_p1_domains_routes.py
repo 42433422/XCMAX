@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI
@@ -195,6 +195,12 @@ def conversation_client() -> TestClient:
     from app.fastapi_routes.domains.conversation import routes as conv_routes
 
     app = FastAPI()
+    app.dependency_overrides[conv_routes._authenticated_conversation_user] = lambda: (
+        SimpleNamespace(
+            id=7,
+            is_active=True,
+        )
+    )
     app.include_router(conv_routes.router)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -202,6 +208,7 @@ def conversation_client() -> TestClient:
 @patch("app.application.facades.conversation_facade.get_conversation_service")
 def test_conversations_get(mock_get: MagicMock, conversation_client: TestClient) -> None:
     svc = MagicMock()
+    svc.get_session_ownership.return_value = (True, 7)
     svc.get_session_messages.return_value = []
     svc.get_sessions.return_value = []
     mock_get.return_value = svc
@@ -211,6 +218,7 @@ def test_conversations_get(mock_get: MagicMock, conversation_client: TestClient)
 
 @patch("app.application.facades.conversation_facade.get_conversation_service")
 def test_conversations_delete(mock_get: MagicMock, conversation_client: TestClient) -> None:
+    mock_get.return_value.get_session_ownership.return_value = (True, 7)
     mock_get.return_value.delete_session.return_value = True
     r = conversation_client.delete("/api/conversations/s1")
     assert r.status_code == 200
@@ -219,6 +227,7 @@ def test_conversations_delete(mock_get: MagicMock, conversation_client: TestClie
 
 @patch("app.application.facades.conversation_facade.get_conversation_service")
 def test_conversations_title(mock_get: MagicMock, conversation_client: TestClient) -> None:
+    mock_get.return_value.get_session_ownership.return_value = (True, 7)
     mock_get.return_value.update_session_title.return_value = True
     r = conversation_client.put("/api/conversations/s1/title", json={"title": "新标题"})
     assert r.status_code == 200
@@ -231,6 +240,7 @@ def test_ai_message_save_validation(conversation_client: TestClient) -> None:
 
 @patch("app.application.facades.conversation_facade.get_conversation_service")
 def test_ai_message_save_ok(mock_get: MagicMock, conversation_client: TestClient) -> None:
+    mock_get.return_value.get_session_ownership.return_value = (False, None)
     mock_get.return_value.save_message.return_value = 99
     r = conversation_client.post(
         "/api/ai/message/save",
@@ -243,6 +253,7 @@ def test_ai_message_save_ok(mock_get: MagicMock, conversation_client: TestClient
     )
     assert r.status_code == 200
     assert r.json()["message_id"] == 99
+    assert mock_get.return_value.save_message.call_args.args[1] == "7"
 
 
 @patch("app.application.facades.conversation_facade.get_conversation_service")
@@ -250,6 +261,7 @@ def test_ai_message_save_attaches_agent_run(
     mock_get: MagicMock, conversation_client: TestClient
 ) -> None:
     repo = InMemoryAgentRunRepository()
+    mock_get.return_value.get_session_ownership.return_value = (False, None)
     mock_get.return_value.save_message.return_value = 99
     with patch(
         "app.application.agent_orchestrator.chat_trace.get_agent_run_repository",
@@ -272,7 +284,7 @@ def test_ai_message_save_attaches_agent_run(
     assert body["agent_run_id"] == run_id
     run = repo.get(run_id)
     assert run is not None
-    assert run.user_id == "1"
+    assert run.user_id == "7"
     assert run.intent == "conversation_message_save"
     assert run.metadata["channel"] == "ai_message_save"
     assert run.metadata["runtime_context"]["route"] == "/api/ai/message/save"
@@ -284,12 +296,41 @@ def test_ai_message_save_bot_role_normalized(
     conversation_client: TestClient,
 ) -> None:
     with patch("app.application.facades.conversation_facade.get_conversation_service") as mock_get:
+        mock_get.return_value.get_session_ownership.return_value = (False, None)
         mock_get.return_value.save_message.return_value = 1
         r = conversation_client.post(
             "/api/ai/message/save",
             json={"session_id": "s", "role": "bot", "content": "ok"},
         )
     assert r.status_code == 200
+
+
+@patch("app.application.facades.conversation_facade.get_conversation_service")
+def test_conversations_hide_other_user_session(
+    mock_get: MagicMock,
+    conversation_client: TestClient,
+) -> None:
+    mock_get.return_value.get_session_ownership.return_value = (True, 8)
+
+    r = conversation_client.get("/api/conversations/other-user-session")
+
+    assert r.status_code == 404
+
+
+def test_conversations_require_authentication() -> None:
+    from app.fastapi_routes.domains.conversation import routes as conv_routes
+
+    app = FastAPI()
+    app.include_router(conv_routes.router)
+    with patch(
+        "app.fastapi_routes.mobile_api.get_mobile_user",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        with TestClient(app, raise_server_exceptions=False) as client:
+            r = client.get("/api/conversations/s1")
+
+    assert r.status_code == 401
 
 
 # ---------------------------------------------------------------------------
