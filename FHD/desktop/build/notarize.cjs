@@ -41,7 +41,7 @@ exports.default = async function afterSign(context) {
   ).trim()
   const teamId = (process.env.APPLE_TEAM_ID || process.env.IOS_TEAM_ID || '').trim()
 
-  async function withRetry(label, fn, attempts = 4) {
+  async function withRetry(label, fn, attempts = 2) {
     let lastErr
     for (let i = 1; i <= attempts; i++) {
       try {
@@ -58,7 +58,7 @@ exports.default = async function afterSign(context) {
           msg.includes('ENOTFOUND')
         console.warn(`[notarize] ${label} attempt ${i}/${attempts} failed: ${msg}`)
         if (!transient || i === attempts) throw err
-        const waitMs = Math.min(30000, 5000 * i)
+        const waitMs = Math.min(15000, 4000 * i)
         console.warn(`[notarize] retrying in ${waitMs}ms`)
         await new Promise((r) => setTimeout(r, waitMs))
       }
