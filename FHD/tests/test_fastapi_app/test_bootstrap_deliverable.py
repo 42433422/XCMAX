@@ -20,7 +20,7 @@ def fast_start_client(monkeypatch, tmp_path):
 
     import app.security.lan_settings_store as lan_store
 
-    lan_store.load_overrides = lambda: LanSettingsOverride(enabled=False)
+    monkeypatch.setattr(lan_store, "load_overrides", lambda: LanSettingsOverride(enabled=False))
     reset_lan_config_cache()
 
     app = create_fastapi_app()
