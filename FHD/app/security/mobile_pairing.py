@@ -90,13 +90,24 @@ def reset_pairing_failure_limits() -> None:
 
 
 def _gen_short_code() -> str:
-    """生成 6 位数字配对码（100000-999999），避免碰撞。"""
+    """生成未占用的 6 位数字配对码（100000-999999）。
+
+    生产调用必须在 ``_lock`` 内完成生成与写入，避免并发签发在检查后
+    同时占用同一个号码。
+    """
     for _ in range(100):
         code = str(secrets.randbelow(900_000) + 100_000)
         if code not in _short_codes:
             return code
-    # 极低概率：随机数池快耗尽时回退到 token 截取
-    return str(secrets.randbelow(900_000) + 100_000)
+
+    # 随机源重复或号码池接近饱和时，从随机起点确定性扫描剩余空间。
+    # 宁可明确失败，也不能覆盖仍有效的旧配对会话。
+    start = secrets.randbelow(900_000)
+    for offset in range(900_000):
+        code = str(100_000 + ((start + offset) % 900_000))
+        if code not in _short_codes:
+            return code
+    raise RuntimeError("移动端配对码池已耗尽")
 
 
 def issue_pairing_nonce(
@@ -138,12 +149,10 @@ def issue_pairing_nonce(
     ttl = max(30, min(int(ttl_seconds or 120), 300))
     nonce = secrets.token_urlsafe(16)
     exp = int(time.time()) + ttl
-    short_code = _gen_short_code()
     payload = {
         "host": host,
         "port": port,
         "nonce": nonce,
-        "shortCode": short_code,
         "exp": exp,
         "issuer_user_id": issuer_uid,
         "subject_user_id": subject_uid,
@@ -154,6 +163,8 @@ def issue_pairing_nonce(
         "token_scope": clean_token_scope,
     }
     with _lock:
+        short_code = _gen_short_code()
+        payload["shortCode"] = short_code
         _nonces[nonce] = payload
         _short_codes[short_code] = nonce
     return payload

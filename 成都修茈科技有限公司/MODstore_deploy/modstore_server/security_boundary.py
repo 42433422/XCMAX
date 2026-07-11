@@ -42,10 +42,9 @@ def resolve_path_under_root(
         raise UnsafePath("absolute paths are not allowed")
 
     root_real = os.path.realpath(os.path.abspath(os.path.expanduser(os.fspath(root))))
-    root_cmp = os.path.normcase(root_real)
+    root_prefix = root_real if root_real.endswith(os.sep) else root_real + os.sep
     candidate_lexical = os.path.normpath(os.path.join(root_real, raw))
-    lexical_cmp = os.path.normcase(candidate_lexical)
-    if lexical_cmp != root_cmp and not lexical_cmp.startswith(root_cmp + os.sep):
+    if candidate_lexical != root_real and not candidate_lexical.startswith(root_prefix):
         raise UnsafePath("path is outside the assigned root")
 
     if reject_symlinks:
@@ -61,8 +60,7 @@ def resolve_path_under_root(
                 raise UnsafePath("symlink components are not allowed")
 
     candidate_real = os.path.realpath(candidate_lexical)
-    candidate_cmp = os.path.normcase(candidate_real)
-    if candidate_cmp != root_cmp and not candidate_cmp.startswith(root_cmp + os.sep):
+    if candidate_real != root_real and not candidate_real.startswith(root_prefix):
         raise UnsafePath("path is outside the assigned root")
 
     return Path(candidate_real)

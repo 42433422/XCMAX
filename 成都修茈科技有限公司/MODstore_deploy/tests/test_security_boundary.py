@@ -32,6 +32,30 @@ def test_resolve_path_under_root_rejects_absolute_path(tmp_path):
         resolve_path_under_root(tmp_path, str(tmp_path / "result.txt"))
 
 
+def test_resolve_path_under_root_rejects_sibling_prefix_collision(tmp_path):
+    assigned = tmp_path / "assigned"
+    sibling = tmp_path / "assigned-evil"
+    assigned.mkdir()
+    sibling.mkdir()
+
+    with pytest.raises(UnsafePath):
+        resolve_path_under_root(
+            assigned,
+            sibling / "secret.txt",
+            require_relative=False,
+        )
+
+
+def test_resolve_path_under_root_accepts_filesystem_root(tmp_path):
+    resolved = resolve_path_under_root(
+        tmp_path.anchor,
+        tmp_path,
+        require_relative=False,
+    )
+
+    assert resolved == tmp_path.resolve()
+
+
 def test_resolve_path_under_root_rejects_symlink_component(tmp_path):
     outside = tmp_path.parent / f"{tmp_path.name}-outside"
     outside.mkdir()
@@ -43,6 +67,25 @@ def test_resolve_path_under_root_rejects_symlink_component(tmp_path):
 
     with pytest.raises(UnsafePath):
         resolve_path_under_root(tmp_path, "link/secret.txt")
+
+
+def test_resolve_path_under_root_rejects_resolved_symlink_escape(tmp_path):
+    assigned = tmp_path / "assigned"
+    outside = tmp_path / "outside"
+    assigned.mkdir()
+    outside.mkdir()
+    link = assigned / "link"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("symlink creation is unavailable")
+
+    with pytest.raises(UnsafePath):
+        resolve_path_under_root(
+            assigned,
+            "link/secret.txt",
+            reject_symlinks=False,
+        )
 
 
 def test_select_authorized_root_returns_server_owned_path(tmp_path):

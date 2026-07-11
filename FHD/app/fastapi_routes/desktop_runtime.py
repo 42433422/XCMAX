@@ -265,11 +265,21 @@ def install_manifest(path: str, _user=Depends(get_logged_in_user)):
     if not is_desktop_mode():
         raise HTTPException(status_code=409, detail="模型下载仅在桌面模式下可写入 userData")
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
-    data_root = dirs["root"].resolve()
-    raw_path = Path(path)
+    raw_path = os.fspath(path)
     try:
-        manifest_path = (raw_path if raw_path.is_absolute() else data_root / raw_path).resolve()
-        manifest_path.relative_to(data_root)
+        if not raw_path or chr(0) in raw_path:
+            raise ValueError("empty or NUL-containing path")
+        data_root = os.path.realpath(os.path.abspath(os.fspath(dirs["root"])))
+        data_root_prefix = data_root if data_root.endswith(os.sep) else data_root + os.sep
+        candidate_lexical = os.path.normpath(
+            raw_path if os.path.isabs(raw_path) else os.path.join(data_root, raw_path)
+        )
+        if candidate_lexical != data_root and not candidate_lexical.startswith(data_root_prefix):
+            raise ValueError("path escapes desktop data root")
+        candidate_real = os.path.realpath(candidate_lexical)
+        if candidate_real != data_root and not candidate_real.startswith(data_root_prefix):
+            raise ValueError("resolved path escapes desktop data root")
+        manifest_path = Path(candidate_real)
     except (OSError, RuntimeError, ValueError):
         raise HTTPException(
             status_code=400,

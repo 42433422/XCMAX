@@ -221,6 +221,10 @@ class TestDownloadModel:
         inside.write_text("[]", encoding="utf-8")
         outside = tmp_path / "private-models.json"
         outside.write_text("[]", encoding="utf-8")
+        sibling = tmp_path / "desktop-data-evil"
+        sibling.mkdir()
+        sibling_manifest = sibling / "models.json"
+        sibling_manifest.write_text("[]", encoding="utf-8")
         escaped_link = data_root / "escaped.json"
         escaped_link.symlink_to(outside)
         dirs = {"root": data_root}
@@ -241,6 +245,18 @@ class TestDownloadModel:
                 "/api/desktop/models/install-manifest",
                 params={"path": str(escaped_link)},
             )
+            sibling_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": str(sibling_manifest)},
+            )
+            nul_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": "models.json\x00.json"},
+            )
+            root_response = client.post(
+                "/api/desktop/models/install-manifest",
+                params={"path": str(data_root)},
+            )
             inside_response = client.post(
                 "/api/desktop/models/install-manifest",
                 params={"path": str(inside)},
@@ -248,6 +264,9 @@ class TestDownloadModel:
 
         assert outside_response.status_code == 400
         assert symlink_response.status_code == 400
+        assert sibling_response.status_code == 400
+        assert nul_response.status_code == 400
+        assert root_response.status_code == 404
         assert inside_response.status_code == 200
         assert inside_response.json() == {"success": True, "files": []}
         load.assert_called_once_with(inside.resolve())
