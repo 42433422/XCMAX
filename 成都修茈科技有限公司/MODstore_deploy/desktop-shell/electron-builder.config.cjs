@@ -9,21 +9,25 @@ const requiredSigningVars = [
 
 const missingSigningVars = requiredSigningVars.filter((name) => !process.env[name])
 const requireSigning = process.env.XCAGI_REQUIRE_WINDOWS_SIGNING === '1'
+const hasPfxSigning = Boolean(process.env.CSC_LINK && process.env.CSC_KEY_PASSWORD)
+const hasAzureSigning = missingSigningVars.length === 0
 
-if (requireSigning && missingSigningVars.length) {
-  throw new Error(`Windows signing required, but missing: ${missingSigningVars.join(', ')}`)
+if (requireSigning && !hasPfxSigning && !hasAzureSigning) {
+  throw new Error(
+    `Windows signing required. Configure WINDOWS_CSC_LINK + WINDOWS_CSC_KEY_PASSWORD, or Azure Trusted Signing (missing: ${missingSigningVars.join(', ')})`,
+  )
 }
 
 const publisherName = process.env.XCAGI_WINDOWS_PUBLISHER_NAME || '成都修茈科技有限公司'
 
-const azureSignOptions = missingSigningVars.length
-  ? undefined
-  : {
+const azureSignOptions = hasAzureSigning
+  ? {
       endpoint: process.env.AZURE_TRUSTED_SIGNING_ENDPOINT,
       codeSigningAccountName: process.env.AZURE_TRUSTED_SIGNING_ACCOUNT,
       certificateProfileName: process.env.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE,
       publisherName,
     }
+  : undefined
 
 const productSku = process.env.XCAGI_PRODUCT_SKU === 'enterprise' ? 'enterprise' : 'personal'
 const productLabel = productSku === 'enterprise' ? 'Enterprise' : 'Personal'
