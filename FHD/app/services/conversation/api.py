@@ -123,6 +123,7 @@ class ApiMixin(NeuroEventPublisherMixin):
             self._deepseek_async_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                trust_env=False,
             )
         return self._deepseek_async_client
 

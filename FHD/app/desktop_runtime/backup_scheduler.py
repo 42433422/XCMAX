@@ -26,6 +26,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 from .migrate import backup_database
 from .paths import ensure_desktop_dirs, is_desktop_mode
+from .version import resolve_runtime_version
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,7 @@ def _run_once(data_dir: str | os.PathLike[str] | None) -> None:
     backups_dir = dirs["backups"]
 
     if not _has_backup_today(backups_dir):
-        version = os.environ.get("XCAGI_VERSION", "unknown")
+        version = resolve_runtime_version()
         result = backup_database(data_dir, version=version)
         if result is not None:
             logger.info("scheduled backup created: %s", result.name)

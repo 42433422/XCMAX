@@ -89,6 +89,10 @@ $bundledFrontendIndex = Join-Path $Root "dist\xcagi-backend\_internal\templates\
 if (-not (Test-Path $bundledFrontendIndex -PathType Leaf)) {
   throw "PyInstaller output missing desktop frontend: $bundledFrontendIndex"
 }
+$backendBuildInfoPath = Join-Path $Root "dist\xcagi-backend\_internal\build-info.json"
+$backendBuildInfo = @{ schema_version = 2; version = $Version } | ConvertTo-Json -Compress
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText($backendBuildInfoPath, "$backendBuildInfo`n", $utf8NoBom)
 if ($ProductSku) {
   Remove-Item Env:XCAGI_STAGED_MODS_DIR -ErrorAction SilentlyContinue
   Remove-Item Env:XCAGI_STAGED_INDUSTRY_SEEDS_DIR -ErrorAction SilentlyContinue

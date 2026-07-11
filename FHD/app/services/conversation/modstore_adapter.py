@@ -368,6 +368,7 @@ class ModstorePlatformAdapter:
                 timeout=httpx.Timeout(self.timeout, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
                 headers=self._build_headers(),
+                trust_env=False,
             )
         return self._client
 
@@ -594,6 +595,7 @@ class ModstorePlatformAdapter:
             timeout=httpx.Timeout(self.timeout, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             headers=self._build_headers(),
+            trust_env=False,
         ) as client:
             response = client.post(url, json=payload)
             latency_ms = (time.perf_counter() - t0) * 1000.0
@@ -655,6 +657,7 @@ class ModstorePlatformAdapter:
             timeout=httpx.Timeout(self.timeout, connect=10.0),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
             headers=self._build_headers(),
+            trust_env=False,
         ) as client:
             with client.stream("POST", url, json=payload) as response:
                 if response.status_code >= 400:

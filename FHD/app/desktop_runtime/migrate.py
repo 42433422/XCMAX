@@ -15,6 +15,7 @@ from pathlib import Path
 from app.utils.time import utc_now_naive
 
 from .paths import configure_desktop_environment, ensure_desktop_dirs
+from .version import resolve_runtime_version
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,7 @@ _MIN_DISK_FREE_BYTES = 500 * 1024 * 1024  # 500 MB
 
 
 def backup_database(
-    data_dir: str | os.PathLike[str] | None = None, version: str = "unknown"
+    data_dir: str | os.PathLike[str] | None = None, version: str | None = None
 ) -> Path | None:
     """使用 sqlite3.backup() API 做在线热备份，业务在跑也能备份。
 
@@ -33,11 +34,12 @@ def backup_database(
     校验失败删除备份文件并返回 None。
     """
     dirs = ensure_desktop_dirs(data_dir)
+    runtime_version = resolve_runtime_version(version)
     db = dirs["data"] / "xcagi.db"
     if not db.exists():
         return None
     stamp = utc_now_naive().strftime("%Y%m%d%H%M%S")
-    target = dirs["backups"] / f"xcagi-{version}-{stamp}.db"
+    target = dirs["backups"] / f"xcagi-{runtime_version}-{stamp}.db"
     target.parent.mkdir(parents=True, exist_ok=True)
 
     src_conn = None
@@ -276,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--backup", action="store_true")
     parser.add_argument("--upgrade", default="")
     parser.add_argument("--export-config", action="store_true")
-    parser.add_argument("--version", default=os.environ.get("XCAGI_VERSION", "unknown"))
+    parser.add_argument("--version", default=None)
     args = parser.parse_args(argv)
 
     configure_desktop_environment(args.data_dir)

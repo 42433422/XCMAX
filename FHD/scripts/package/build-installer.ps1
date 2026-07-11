@@ -115,6 +115,8 @@ $backendSku = Join-Path $Root "dist\xcagi-backend\_internal\product-sku.json"
 $backendSkuDir = Split-Path $backendSku -Parent
 if (Test-Path $backendSkuDir) {
   Write-SkuJson -Path $backendSku -Sku $ProductSku
+  $backendBuildInfoPath = Join-Path $backendSkuDir "build-info.json"
+  [System.IO.File]::Copy($buildInfoPath, $backendBuildInfoPath, $true)
 }
 
 & "$PSScriptRoot\create-installer-assets.ps1"

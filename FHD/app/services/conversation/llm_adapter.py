@@ -193,6 +193,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             self._client = httpx.AsyncClient(
                 timeout=httpx.Timeout(30.0, connect=10.0),
                 limits=httpx.Limits(max_keepalive_connections=10, max_connections=30),
+                trust_env=False,
             )
         return self._client
 
@@ -202,6 +203,7 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             self._stream_client = httpx.AsyncClient(
                 timeout=httpx.Timeout(connect=15.0, read=300.0, write=60.0, pool=30.0),
                 limits=httpx.Limits(max_keepalive_connections=200, max_connections=1000),
+                trust_env=False,
             )
         return self._stream_client
 
