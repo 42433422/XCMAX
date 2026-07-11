@@ -76,7 +76,10 @@ jobs:
           raw="${raw#V}"
           version="${raw:-10.0.0}"
           case "${{ matrix.workflow }}" in
-            fhd-release-desktop.yml|fhd-release-web.yml)
+            fhd-release-desktop.yml)
+              gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" -f "version=${version}" -f "publish=true"
+              ;;
+            fhd-release-web.yml)
               gh workflow run "${{ matrix.workflow }}" --ref "${{ github.ref_name }}" -f "version=${version}"
               ;;
             *)

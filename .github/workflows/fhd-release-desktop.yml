@@ -9,6 +9,11 @@ on:
         description: "Release version"
         required: true
         default: "10.0.0"
+      publish:
+        description: "Publish verified artifacts to the production download server"
+        required: true
+        type: boolean
+        default: false
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -259,6 +264,7 @@ jobs:
             ${{ runner.temp }}/manifest.json
             ${{ runner.temp }}/download-release.json
       - name: Publish installers first, then manifests atomically
+        if: ${{ inputs.publish }}
         timeout-minutes: 30
         working-directory: .
         env:
@@ -322,7 +328,7 @@ jobs:
 
   verify-download:
     needs: [generate-manifest]
-    if: always() && needs.generate-manifest.result == 'success'
+    if: always() && needs.generate-manifest.result == 'success' && inputs.publish
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
