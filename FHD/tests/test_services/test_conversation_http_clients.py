@@ -115,8 +115,6 @@ def test_modstore_sync_stream_client_ignores_invalid_proxy_environment(
         lambda *_args, **_kwargs: _StreamResponse(),
     )
 
-    chunks = list(
-        adapter.stream_chat_completion_sync([{"role": "user", "content": "hello"}])
-    )
+    chunks = list(adapter.stream_chat_completion_sync([{"role": "user", "content": "hello"}]))
 
     assert chunks == ['{"choices":[{"delta":{"content":"ok"}}]}']

@@ -24,7 +24,9 @@ def test_runtime_version_fallback_tracks_product_version() -> None:
     assert product["project"]["version"] == runtime_version._DEFAULT_PRODUCT_VERSION
 
 
-def test_runtime_version_reads_packaged_build_info_without_environment(tmp_path, monkeypatch) -> None:
+def test_runtime_version_reads_packaged_build_info_without_environment(
+    tmp_path, monkeypatch
+) -> None:
     resources = tmp_path / "resources"
     backend = resources / "backend"
     backend.mkdir(parents=True)
@@ -107,6 +109,8 @@ def test_windows_build_embeds_same_build_identity_in_backend() -> None:
         encoding="utf-8"
     )
 
-    assert 'dist\\xcagi-backend\\_internal\\build-info.json' in backend_script
+    assert "dist\\xcagi-backend\\_internal\\build-info.json" in backend_script
     assert "version = $Version" in backend_script
-    assert "[System.IO.File]::Copy($buildInfoPath, $backendBuildInfoPath, $true)" in installer_script
+    assert (
+        "[System.IO.File]::Copy($buildInfoPath, $backendBuildInfoPath, $true)" in installer_script
+    )
