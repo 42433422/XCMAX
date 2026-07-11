@@ -2205,12 +2205,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('欢迎使用 XCAGI 企业版'), findsOneWidget);
-    expect(
-      find.text('您的企业 AI 助手已就绪。可以随时和小C助理对话，或前往 AI员工 页面查看企业智能伙伴。'),
-      findsOneWidget,
-    );
-    expect(find.text('您的移动端已成功配对企业端，可以开始使用全部功能。'), findsOneWidget);
+    // Honest empty: no demo announcement fallback when API returns nothing.
+    expect(find.text('暂无通知'), findsOneWidget);
+    expect(find.text('欢迎使用 XCAGI 企业版'), findsNothing);
   });
 
   testWidgets('notifications page follows Android dark theme tokens', (
@@ -2322,7 +2319,10 @@ void main() {
     await tester.tap(find.text('输入设备码'));
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('请输入电脑端显示的 6 位设备码'), findsOneWidget);
+    expect(
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
+      findsOneWidget,
+    );
     expect(find.text('连接'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(const ValueKey('we_block_button_连接'))).height,
@@ -2363,7 +2363,7 @@ void main() {
 
     final sheetTitle = tester.widget<Text>(find.text('输入设备码').last);
     final sheetSubtitle = tester.widget<Text>(
-      find.text('请输入电脑端显示的 6 位设备码'),
+      find.text('请确保手机与电脑在同一 WiFi，输入管理端显示的 6 位局域网配对码'),
     );
 
     expect(sheetTitle.style?.color, colors.textPrimary);
@@ -2448,7 +2448,7 @@ void main() {
     expect(find.text('安全'), findsOneWidget);
     expect(find.text('生物识别解锁'), findsOneWidget);
     expect(
-      tester.getSize(find.byKey(const ValueKey('settings_we_switch'))),
+      tester.getSize(find.byKey(const ValueKey('settings_biometric_switch'))),
       const Size(46, 28),
     );
     expect(find.text('外观'), findsOneWidget);
@@ -2498,7 +2498,10 @@ void main() {
       find.byKey(const ValueKey('we_top_bar_surface_设置')),
     );
     final switchWidget = tester.widget<AnimatedContainer>(
-      find.byKey(const ValueKey('settings_we_switch')),
+      find.descendant(
+        of: find.byKey(const ValueKey('settings_biometric_switch')),
+        matching: find.byType(AnimatedContainer),
+      ),
     );
     final switchDecoration = switchWidget.decoration! as BoxDecoration;
     final themeIcon = tester.widget<Icon>(
@@ -2552,7 +2555,7 @@ void main() {
 
     await tester.tap(find.text('浅色'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('settings_we_switch')));
+    await tester.tap(find.byKey(const ValueKey('settings_biometric_switch')));
     await tester.pumpAndSettle();
 
     expect(api.session.themeMode, 'light');
@@ -3461,7 +3464,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('会话 #12'), findsOneWidget);
-    expect(find.text('WebSocket 已连接，消息实时同步'), findsOneWidget);
+    // Initial frame: conversation opened, WS attach in flight.
+    expect(find.text('正在连接 WebSocket…'), findsOneWidget);
     expect(find.text('用户 0'), findsOneWidget);
     expect(find.text('你好'), findsOneWidget);
     expect(find.text('输入消息'), findsOneWidget);
@@ -4612,7 +4616,7 @@ void main() {
           isPinned: true,
         ),
       ),
-      isNull,
+      FixedPartnerKind.trae,
     );
   });
 

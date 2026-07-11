@@ -795,6 +795,10 @@ void main() {
       config: MobileApiConfig(
         baseUrl: 'http://${server.address.address}:${server.port}/',
       ),
+      // Keep session in cloud so preferCloudIfLanUnreachable skips file I/O.
+      sessionStore: MemoryMobileSessionStore(
+        const MobileSessionData(serverMode: 'cloud'),
+      ),
       httpClient: httpClient,
     );
 
