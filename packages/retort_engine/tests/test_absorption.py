@@ -44,13 +44,15 @@ def test_absorption_uses_real_github_url_case_without_network(tmp_path: Path, mo
     create_focused_tool_package(external)
 
     def fake_resolve_external_project(**kwargs) -> ExternalProjectRef:
-        assert kwargs["github_url"] == "https://github.com/openai/codex"
+        assert kwargs["github_url"] == "https://github.com/SWE-agent/mini-swe-agent"
         return ExternalProjectRef(kwargs["github_url"], "github", str(external), "main")
 
     monkeypatch.setattr("retort_engine.absorption.resolve_external_project", fake_resolve_external_project)
-    result = run_absorption(own_project=str(own), github_url="https://github.com/openai/codex", max_tasks=2)
+    result = run_absorption(own_project=str(own), github_url="https://github.com/SWE-agent/mini-swe-agent", max_tasks=2)
     assert result.external_ref.source_type == "github"
     assert result.tasks
+    assert [task.dimension for task in result.tasks] == ["bounded_execution", "trajectory_persistence"]
+    assert all(task.priority == "P0" for task in result.tasks)
 
 
 def test_absorption_writes_employee_queue_and_history(tmp_path: Path) -> None:
