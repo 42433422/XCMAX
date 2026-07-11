@@ -4,8 +4,6 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { notarize } = require('@electron/notarize')
-
 const NOTARYTOOL_TIMEOUT = (
   process.env.XCAGI_NOTARYTOOL_TIMEOUT || '45m'
 ).trim()
@@ -17,6 +15,13 @@ function resolveNotarytoolWrapper() {
   }
   fs.chmodSync(wrapper, 0o755)
   return wrapper
+}
+
+async function notarizeApp(options) {
+  // @electron/notarize 3.x is ESM-only. Keep the import lazy so Windows/Linux
+  // packaging never loads a macOS-only hook dependency, including on Node 22.11.
+  const { notarize } = await import('@electron/notarize')
+  return notarize(options)
 }
 
 function resolveApiKeyPath() {
@@ -83,7 +88,7 @@ exports.default = async function afterSign(context) {
     console.log(`[notarize] notarytool via API key for ${appPath}`)
     console.log(`[notarize] wait timeout: ${NOTARYTOOL_TIMEOUT}`)
     await withRetry('api-key', () =>
-      notarize({
+      notarizeApp({
         tool: 'notarytool',
         appPath,
         notarytoolPath: resolveNotarytoolWrapper(),
@@ -100,7 +105,7 @@ exports.default = async function afterSign(context) {
     console.log(`[notarize] notarytool via Apple ID for ${appPath}`)
     console.log(`[notarize] wait timeout: ${NOTARYTOOL_TIMEOUT}`)
     await withRetry('apple-id', () =>
-      notarize({
+      notarizeApp({
         tool: 'notarytool',
         appPath,
         notarytoolPath: resolveNotarytoolWrapper(),
