@@ -209,6 +209,29 @@ def test_advantage_diff_map_ignores_generated_registry_and_reports() -> None:
     assert rows == [{"signal": "review_pipeline", "weight": 30, "changed_files": [], "has_behavior_diff": False}]
 
 
+def test_bridge_alone_is_not_behavior_source_for_quality_gate() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/absorbed_behavior_bridge.py", "tests/test_absorbed_behavior_bridge.py"],
+        [{"ok": True, "command": ["pytest", "tests/test_absorbed_behavior_bridge.py"], "stdout_tail": "1 passed"}],
+        minimum_behavior_tests=1,
+        ranked_capabilities=[{"signal": "review_pipeline", "weight": 30}],
+    )
+    assert gate["passed"] is False
+    assert gate["progress"]["behavior_source_files"] == []
+    assert "missing_behavior_source_diff" in gate["missing"]
+
+
+def test_absorbed_review_rank_weights_count_as_behavior_for_quality_gate() -> None:
+    gate = absorption_quality_gate(
+        ["retort_engine/absorbed_review_rank_weights.py", "tests/test_absorbed_review_rank_weights.py"],
+        [{"ok": True, "command": ["pytest", "tests/test_absorbed_review_rank_weights.py"], "stdout_tail": "2 passed"}],
+        minimum_behavior_tests=1,
+        ranked_capabilities=[{"signal": "diff_hunk_review", "weight": 40}, {"signal": "review_pipeline", "weight": 30}],
+    )
+    assert gate["progress"]["behavior_source_files"] == ["retort_engine/absorbed_review_rank_weights.py"]
+    assert gate["advantage_diff_map"][0]["has_behavior_diff"] is True
+
+
 @pytest.mark.parametrize(
     ("gates", "expected_observed"),
     [

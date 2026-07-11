@@ -27,6 +27,7 @@ WORKFLOW_RENAMES = {
     "ci-cd.yml": "fhd-ci-cd.yml",
     "release-gate-ci.yml": "fhd-release-gate-ci.yml",
     "ci-mobile-android.yml": "fhd-ci-mobile-android.yml",
+    "ci-mobile-flutter.yml": "fhd-ci-mobile-flutter.yml",
     "release-desktop.yml": "fhd-release-desktop.yml",
     "release-web.yml": "fhd-release-web.yml",
     "release-android.yml": "fhd-release-android.yml",
@@ -108,6 +109,14 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     content = content.replace(
         "working-directory: mobile-android",
         "working-directory: FHD/mobile-android",
+    )
+    content = content.replace(
+        "working-directory: mobile-flutter-poc",
+        "working-directory: FHD/mobile-flutter-poc",
+    )
+    content = content.replace(
+        "path: mobile-flutter-poc/build/",
+        "path: FHD/mobile-flutter-poc/build/",
     )
     content = content.replace(
         "working-directory: mobile-ios",

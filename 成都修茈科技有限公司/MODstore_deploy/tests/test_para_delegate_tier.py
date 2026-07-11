@@ -279,6 +279,7 @@ def _integ_env(monkeypatch):
     monkeypatch.setenv("MODSTORE_PARA_AUTH_TOKEN", "tok")
     monkeypatch.setenv("MODSTORE_PARA_REPO_URL", "https://example.com/repo.git")
     monkeypatch.setenv("MODSTORE_PARA_DISABLE_AUTO_RETRY", "0")  # 跳过 sqlite 写
+    monkeypatch.setenv("MODSTORE_PARA_SKIP_GIT_PREFLIGHT", "1")
     monkeypatch.delenv("MODSTORE_PARA_DELEGATE_WEBHOOK", raising=False)
     monkeypatch.delenv("MODSTORE_PARA_DEVICE_ID", raising=False)
 
@@ -297,6 +298,7 @@ def test_post_para_api_tier_one_discovers_local(monkeypatch):
     # 一级只派一台
     assert len(client.posted_tasks) == 1
     assert client.posted_tasks[0]["device_id"] == "p1"
+    assert client.posted_tasks[0]["max_attempts"] == 3
 
 
 def test_post_para_api_tier_two_fans_out(monkeypatch):

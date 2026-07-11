@@ -7,6 +7,7 @@ from typing import Any
 
 from retort_engine.absorbed_capabilities import ranked_capabilities, review_strategy_for_file
 from retort_engine.absorbed_review_policy import policy_context_rank_weight, policy_context_rank_weights, policy_summary
+from retort_engine.absorbed_review_rank_weights import capability_rank_boost, external_source_boost
 from retort_engine.cross_language_transfer import build_cross_language_transfer
 from retort_engine.diff_hunk_semantics import analyze_hunk_semantics, summarize_hunk_semantics
 from retort_engine.diff_extension_policy import extension_policy_for_path, extension_policy_summary, extension_review_context
@@ -500,6 +501,7 @@ def _external_diagnostic_rank_weight(source: str, rule_id: str) -> int:
         weight += 45
     if any(token in rule_lower for token in ("security", "permission", "token", "secret")):
         weight += 30
+    weight += external_source_boost(source, rule_id)
     return weight
 
 
@@ -745,6 +747,7 @@ def _comment_rank_score(comment: dict[str, Any]) -> int:
         "hunk_semantic_review": 120,
         "intent_alignment": 30,
     }.get(str(comment.get("capability") or ""), 0)
+    capability_weight += capability_rank_boost(str(comment.get("capability") or ""))
     semantic_weight = min(60, int(comment.get("semantic_confidence") or 0) // 2)
     external_weight = min(90, int(comment.get("external_diagnostic_rank_weight") or 0))
     absorbed_context_weight = int(comment.get("absorbed_context_rank_weight") or 0)

@@ -2518,48 +2518,8 @@ class TestMobileRelayBindAccount:
 
 
 # ============================================================
-# mobile_relay_confirm / confirm_code / create_task / task_status / desktop_poll success paths
+# mobile_relay_create_task / task_status / desktop_poll success paths
 # ============================================================
-
-
-class TestMobileRelayConfirmSuccess:
-    @pytest.mark.asyncio
-    async def test_success(self, m):
-        body = SimpleNamespace(relay_id="r1", code="C1")
-        desktop = {"relay_id": "r1", "desktop_id": "d1"}
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile.return_value = desktop
-            result = await m.mobile_relay_confirm(body=body, user=_user())
-        assert result is not None
-
-    @pytest.mark.asyncio
-    async def test_recoverable_error(self, m):
-        err_class = _err_class(m)
-        body = SimpleNamespace(relay_id="r1", code="C1")
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile.side_effect = err_class("fail")
-            result = await m.mobile_relay_confirm(body=body, user=_user())
-        assert result.status_code == 500
-
-
-class TestMobileRelayConfirmCodeSuccess:
-    @pytest.mark.asyncio
-    async def test_success(self, m):
-        body = SimpleNamespace(code="CODE1")
-        desktop = {"relay_id": "r1", "desktop_id": "d1"}
-        with (
-            patch.object(m, "_resolve_mobile_relay_user", return_value={"id": 1, "username": "u"}),
-            patch("app.fastapi_routes.mobile_api_extensions.MobileRelayService") as svc_cls,
-        ):
-            svc_cls.return_value.confirm_mobile_by_code.return_value = desktop
-            result = await m.mobile_relay_confirm_code(body=body, user=_user())
-        assert result is not None
 
 
 class TestMobileRelayCreateTaskSuccess:

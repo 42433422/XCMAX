@@ -17,3 +17,8 @@ include = ["retort_engine*"]
 
 [tool.setuptools.package-data]
 retort_engine = ["frontend/*"]
+
+[tool.pytest.ini_options]
+markers = [
+  "keep_self_depth_gate: do not mock external_improvement_gate (assert real blocked/allowed paths)",
+]

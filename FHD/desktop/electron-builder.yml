@@ -11,6 +11,7 @@ files:
   - package.json
   - resources/icon.ico
   - resources/icon.png
+  - resources/splash.html
 extraResources:
   - from: ../dist/xcagi-backend
     to: backend
@@ -22,9 +23,13 @@ extraResources:
   # 兜底会优雅降级到后端内嵌副本。切勿恢复成单独 frontend extraResource。
   - from: resources/product-sku.json
     to: product-sku.json
+  - from: resources/build-info.json
+    to: build-info.json
+  - from: resources/splash.html
+    to: splash.html
 publish:
   provider: generic
-  url: https://update.xcagi.com/releases/stable/
+  url: https://xiu-ci.com/releases/stable/
 win:
   target:
     - target: nsis

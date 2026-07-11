@@ -464,6 +464,61 @@ void main() {
     expect(saved.androidServerModeLabel, '云端中继 · 电脑工具');
   });
 
+  test(
+      'MobileApiClient persistPairingSession preserves cloud auth when pairing '
+      'against LAN desktop', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'cloud-access',
+        refreshToken: 'cloud-refresh',
+        sessionId: 'cloud-session',
+        username: 'cloud-user',
+        accountKind: 'enterprise',
+        userId: 42,
+      ),
+    );
+    final client = MobileApiClient(sessionStore: store);
+
+    await client.persistPairingSession(
+      const {
+        'api_base_url': 'http://192.168.10.2:5011/fhd-api',
+        'access_token': 'desktop-access',
+        'refresh_token': 'desktop-refresh',
+        'session_token': 'desktop-session',
+        'account_kind': 'enterprise',
+        'relay_base_url': 'https://xiu-ci.com/fhd-api',
+        'local_base_url': 'http://192.168.10.2:5011/fhd-api',
+        'account_id': 'account-1',
+        'tenant_id': 'tenant-1',
+        'paired_at': '2026-07-07T00:00:00Z',
+        'user': {'id': 9, 'username': 'desktop-admin'},
+      },
+      hostWithPort: '192.168.10.2:5011',
+      clearRelayDesktop: true,
+      setupComplete: true,
+      preserveActiveAuth: true,
+    );
+
+    final saved = await store.load();
+    // 云端登录态必须保留，否则后续云端请求会 401 触发退出登录
+    expect(saved.accessToken, 'cloud-access');
+    expect(saved.refreshToken, 'cloud-refresh');
+    expect(saved.sessionId, 'cloud-session');
+    expect(saved.username, 'cloud-user');
+    expect(saved.userId, 42);
+    // 桌面端绑定关系仍然建立
+    expect(saved.relaySessionToken, 'desktop-session');
+    expect(saved.relayAccountId, 'account-1');
+    expect(saved.relayTenantId, 'tenant-1');
+    expect(saved.relayPairedAt, '2026-07-07T00:00:00Z');
+    expect(saved.relayBaseUrl, 'https://xiu-ci.com/fhd-api');
+    expect(saved.localBaseUrl, 'http://192.168.10.2:5011/fhd-api');
+    expect(saved.fhdHost, '192.168.10.2:5011');
+    expect(saved.serverMode, 'lan');
+    expect(saved.setupComplete, isTrue);
+    expect(saved.relayDesktopId, '');
+  });
+
   test('MobileRepository cachedMe restores Android username and local avatar',
       () async {
     final store = MemoryMobileSessionStore(
@@ -713,24 +768,25 @@ void main() {
     expect(api.createdRelayTasks, 0);
   });
 
-  test('MobileRepository ignores stale paired relay desktop', () async {
+  test('MobileRepository skips stale paired relay desktop', () async {
     final store = MemoryMobileSessionStore();
     final api = _StalePairedRelayApi(store);
     final repository = MobileRepository(client: api);
 
-    final reply = await repository.streamMessage(
-      conversation: const ConversationItem(
-        id: 'pinned:trae',
-        type: ConversationType.pinnedTrae,
-        title: '超级员工-Trae',
-        subtitle: '',
-        timestampText: '',
+    await expectLater(
+      repository.streamMessage(
+        conversation: const ConversationItem(
+          id: 'pinned:trae',
+          type: ConversationType.pinnedTrae,
+          title: '超级员工-Trae',
+          subtitle: '',
+          timestampText: '',
+        ),
+        body: '不要再卡旧队列',
       ),
-      body: '不要再卡旧队列',
+      throwsA(isA<MobileRepositoryException>()),
     );
-
-    expect(reply, 'Trae 直连回复');
-    expect(api.postedTools, ['Trae']);
+    expect(api.postedTools, isEmpty);
     expect(api.createdRelayTasks, 0);
   });
 
@@ -758,6 +814,35 @@ void main() {
     final context = api.lastPayload?['context'] as Map<String, Object?>?;
     expect(context?['workspace_root'], '/Users/a4243342/Desktop/XCMAX');
     expect(context?['conversation_id'], 'pinned:trae');
+  });
+
+  test('MobileRepository skips LAN when server mode is cloud', () async {
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        serverMode: 'cloud',
+        fhdHost: '192.168.31.8:17500',
+        localBaseUrl: 'http://192.168.31.8:17500/fhd-api',
+        relayDesktopId: 'fresh-relay',
+      ),
+    );
+    final api = _FreshPairedRelayApi(store);
+    final repository = MobileRepository(client: api);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:cursor',
+        type: ConversationType.pinnedCursor,
+        title: '超级员工-Cursor',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '云端模式应走中继',
+    );
+
+    expect(reply, 'Trae 中继回复');
+    expect(api.createdRelayTasks, 1);
+    expect(api.postedTools, isEmpty);
+    expect(api.lastKind, 'cursor.invoke');
   });
 
   test('MobileRepository prefers LAN direct super employee over fresh relay',
@@ -812,7 +897,8 @@ void main() {
 
     expect(reply, 'Trae 中继回复');
     expect(api.createdRelayTasks, 1);
-    expect(api.postedBaseUrls, ['http://192.168.31.8:17500/']);
+    // Phone LAN remaps loopback listen port 17500 → vite proxy 5011.
+    expect(api.postedBaseUrls, ['http://192.168.31.8:5011/']);
   });
 
   test('MobileRepository clears stale inflight relay without paired desktop',
@@ -869,6 +955,41 @@ void main() {
       (item) => item.id == 'pinned:assistant',
     );
     expect(assistant.subtitle, '普通回复');
+  });
+
+  test('MobileRepository chat cache survives logged-in session snapshot',
+      () async {
+    // Regression: with an authed session loadSession() serves the in-memory
+    // snapshot; caching user + assistant rows back-to-back must not overwrite
+    // each other through a stale snapshot.
+    final store = MemoryMobileSessionStore(
+      const MobileSessionData(
+        accessToken: 'token-abc',
+        username: 'admin',
+        accountKind: 'admin',
+        userId: 1,
+      ),
+    );
+    final client = _PlainChatCacheApi(store);
+    await client.loadSession();
+    final repository = MobileRepository(client: client);
+
+    final reply = await repository.streamMessage(
+      conversation: const ConversationItem(
+        id: 'pinned:assistant',
+        type: ConversationType.pinnedAssistant,
+        title: '小C助理',
+        subtitle: '',
+        timestampText: '',
+      ),
+      body: '你好',
+    );
+
+    expect(reply, '普通回复');
+    final cached = (await store.load()).cachedChatMessages['pinned:assistant'];
+    expect(cached, hasLength(2));
+    expect(cached?[0]['role'], 'user');
+    expect(cached?[1]['role'], 'assistant');
   });
 
   test('MobileRepository routes employee chat to mobile employee SSE',
@@ -1507,7 +1628,7 @@ class _ConfiguredRelayWithoutPairedDesktopApi extends MobileApiClient {
   }
 }
 
-class _StalePairedRelayApi extends _ConfiguredRelayWithoutPairedDesktopApi {
+class _StalePairedRelayApi extends _FreshPairedRelayApi {
   _StalePairedRelayApi(super.store);
 
   @override
@@ -1769,7 +1890,7 @@ class _EmployeeSourceApi extends _EnterpriseModsApi {
   var mobileModsCalls = 0;
 
   @override
-  Future<MobileSessionData> loadSession() async {
+  Future<MobileSessionData> loadSession({bool forceReload = false}) async {
     return MobileSessionData(accountKind: accountKind);
   }
 

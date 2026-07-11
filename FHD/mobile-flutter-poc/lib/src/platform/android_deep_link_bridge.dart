@@ -244,10 +244,34 @@ String? resolveAndroidDeepLinkRoute({
   if (uri.scheme.toLowerCase() == 'xcagi') {
     final host = uri.host;
     final path = uri.path;
-    return _blankToNull(path.isNotEmpty ? '$host$path' : host);
+    final base = path.isNotEmpty ? '$host$path' : host;
+    final query = uri.query.trim();
+    if (base.isEmpty) return null;
+    return query.isEmpty ? base : '$base?$query';
   }
   if ((uri.host).toLowerCase().contains('xiu-ci.com')) {
     return _blankToNull(uri.path) ?? 'chat';
+  }
+  return null;
+}
+
+@visibleForTesting
+String? pairingPayloadFromDeepLinkRoute(String route) {
+  final trimmed = route.trim();
+  if (trimmed.isEmpty) return null;
+  if (RegExp(r'^\d{6}$').hasMatch(trimmed)) return trimmed;
+  final head = trimmed.split('?').first.replaceFirst(RegExp(r'^/+'), '');
+  if (head != 'pairing') return null;
+  final queryStart = trimmed.indexOf('?');
+  if (queryStart < 0) return null;
+  final params = Uri.splitQueryString(trimmed.substring(queryStart + 1));
+  final code = (params['code'] ?? params['shortCode'] ?? params['t'] ?? '')
+      .trim();
+  if (RegExp(r'^\d{6}$').hasMatch(code)) return code;
+  final host = (params['host'] ?? '').trim();
+  final port = int.tryParse(params['port'] ?? '') ?? 0;
+  if (code.isNotEmpty && host.isNotEmpty && port > 0) {
+    return 'xcagi://pairing?${Uri(queryParameters: params).query}';
   }
   return null;
 }

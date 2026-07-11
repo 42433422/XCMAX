@@ -1,10 +1,54 @@
-import { BrowserWindow, app, dialog } from 'electron'
+import { BrowserWindow, app, dialog, net, session } from 'electron'
+import type { Session } from 'electron'
 import { autoUpdater } from 'electron-updater'
+import type { UpdateInfo } from 'electron-updater'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
 let updateDownloaded = false
+let remoteBuildSha = ''
+let rebuildHookInstalled = false
+let updaterNetSession: Session | null = null
+let updaterNetSessionReady: Promise<Session> | null = null
+
+export async function ensureUpdaterNetSession(): Promise<Session> {
+  if (updaterNetSession) {
+    return updaterNetSession
+  }
+  if (!updaterNetSessionReady) {
+    updaterNetSessionReady = (async () => {
+      const updaterSession = session.fromPartition('persist:xcagi-updater', { cache: false })
+      await updaterSession.setProxy({ mode: 'direct' })
+      updaterNetSession = updaterSession
+      const updater = autoUpdater as unknown as { netSession?: Session }
+      updater.netSession = updaterSession
+      return updaterSession
+    })()
+  }
+  return updaterNetSessionReady
+}
+
+export function fetchTextViaSession(targetSession: Session, url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const request = net.request({ method: 'GET', url, session: targetSession })
+    const chunks: Buffer[] = []
+    request.on('response', response => {
+      response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+      response.on('end', () => {
+        const status = response.statusCode || 0
+        if (status < 200 || status >= 300) {
+          reject(new Error(`更新元数据下载失败: ${status} ${response.statusMessage || ''}`.trim()))
+          return
+        }
+        resolve(Buffer.concat(chunks).toString('utf8'))
+      })
+      response.on('error', reject)
+    })
+    request.on('error', reject)
+    request.end()
+  })
+}
 
 function updaterLogPath(): string {
   return path.join(app.getPath('userData'), 'logs', 'updater-events.jsonl')
@@ -28,17 +72,74 @@ export function isUpdateDownloaded(): boolean {
   return updateDownloaded
 }
 
+export function readLocalBuildSha(): string {
+  if (!app.isPackaged) {
+    return String(process.env.XCAGI_BUILD_SHA || '').trim()
+  }
+  const candidates = [
+    path.join(process.resourcesPath, 'build-info.json'),
+    path.join(process.resourcesPath, 'backend', 'build-info.json')
+  ]
+  for (const filePath of candidates) {
+    try {
+      if (!fs.existsSync(filePath)) continue
+      const raw = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { gitSha?: string; buildSha?: string }
+      const sha = String(raw.gitSha || raw.buildSha || '').trim()
+      if (sha) return sha
+    } catch {
+      /* try next */
+    }
+  }
+  return ''
+}
+
+export function parseYamlField(content: string, field: string): string {
+  const prefix = `${field}:`
+  const line = content.split(/\r?\n/).find(entry => entry.startsWith(prefix))
+  return line ? line.slice(prefix.length).trim() : ''
+}
+
+function installSameVersionRebuildHook(): void {
+  if (rebuildHookInstalled) {
+    return
+  }
+  rebuildHookInstalled = true
+  // electron-updater 将 isUpdateAvailable 标为 private；经 unknown 注入同版本 buildSha 比对。
+  const updater = autoUpdater as unknown as {
+    isUpdateAvailable?: (updateInfo: UpdateInfo) => boolean
+  }
+  const original = updater.isUpdateAvailable?.bind(autoUpdater)
+  updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+    if (original?.(updateInfo)) {
+      return true
+    }
+    const remoteSha = String(
+      (updateInfo as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
+    ).trim()
+    const localSha = readLocalBuildSha()
+    return Boolean(remoteSha && localSha && remoteSha !== localSha)
+  }
+}
+
 export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+    void ensureUpdaterNetSession()
+  }
 
   const updateUrl = process.env.XCAGI_UPDATE_URL
   if (updateUrl) {
-    autoUpdater.setFeedURL({
+    // generic 提供方默认拉取 latest.yml；勿设 channel，否则会请求 stable.yml 导致 404。
+    const feed: { provider: 'generic'; url: string; channel?: string } = {
       provider: 'generic',
       url: updateUrl,
-      channel: process.env.XCAGI_UPDATE_CHANNEL || 'stable'
-    })
+    }
+    const channel = String(process.env.XCAGI_UPDATE_CHANNEL || '').trim()
+    if (channel) {
+      feed.channel = channel
+    }
+    autoUpdater.setFeedURL(feed)
   }
 
   const send = (type: string, data?: unknown) => {
@@ -94,23 +195,75 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   })
 
   setTimeout(() => {
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 60_000)
 
   setInterval(() => {
     if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
       return
     }
-    void checkForUpdates().catch(error => send('error', { message: error.message }))
+    void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 6 * 60 * 60 * 1000)
+}
+
+export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
+  const defaultSession = session.defaultSession
+  const previous = await defaultSession.resolveProxy('https://xiu-ci.com')
+  await defaultSession.setProxy({ mode: 'direct' })
+  try {
+    return await checkForUpdates()
+  } finally {
+    if (/^PROXY/i.test(previous) || /^SOCKS/i.test(previous)) {
+      await defaultSession.setProxy({ mode: 'system' })
+    } else {
+      await defaultSession.setProxy({ mode: 'direct' })
+    }
+  }
 }
 
 export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
   }
-  await verifyLatestMetadataSignature()
+  if (process.env.XCAGI_DESKTOP_TEST !== '1') {
+    await ensureUpdaterNetSession()
+  }
+  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
+  const updateUrl = process.env.XCAGI_UPDATE_URL
+  if (publicKeyPem && updateUrl) {
+    const metadataText = await fetchLatestMetadataText()
+    remoteBuildSha = parseYamlField(metadataText, 'buildSha')
+    installSameVersionRebuildHook()
+  }
   return autoUpdater.checkForUpdates()
+}
+
+export async function fetchLatestMetadataText(): Promise<string> {
+  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
+  const updateUrl = process.env.XCAGI_UPDATE_URL
+  if (!publicKeyPem || !updateUrl) {
+    return ''
+  }
+
+  const file = process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
+  const url = `${updateUrl.replace(/\/+$/, '')}/${file}`
+  let content: string
+  if (process.env.XCAGI_DESKTOP_TEST === '1') {
+    const response = await fetch(url)
+    if (!response.ok) {
+      throw new Error(`更新元数据下载失败: ${response.status} ${response.statusText}`)
+    }
+    content = await response.text()
+  } else {
+    const updaterSession = await ensureUpdaterNetSession()
+    content = await fetchTextViaSession(updaterSession, url)
+  }
+  await verifyMetadataSignatureText(content, publicKeyPem)
+  return content
+}
+
+export async function verifyLatestMetadataSignature(): Promise<void> {
+  await fetchLatestMetadataText()
 }
 
 export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
@@ -121,24 +274,6 @@ export async function installUpdate(beforeInstall?: (toVersion: string) => Promi
     await beforeInstall('manual')
   }
   autoUpdater.quitAndInstall(false, true)
-}
-
-export async function verifyLatestMetadataSignature(): Promise<void> {
-  const publicKeyPem = process.env.XCAGI_UPDATE_ED25519_PUBLIC_KEY
-  const updateUrl = process.env.XCAGI_UPDATE_URL
-  if (!publicKeyPem || !updateUrl) {
-    return
-  }
-
-  const file = process.platform === 'darwin' ? 'latest-mac.yml' : 'latest.yml'
-  const url = `${updateUrl.replace(/\/+$/, '')}/${file}`
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`更新元数据下载失败: ${response.status} ${response.statusText}`)
-  }
-
-  const content = await response.text()
-  await verifyMetadataSignatureText(content, publicKeyPem)
 }
 
 /** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */

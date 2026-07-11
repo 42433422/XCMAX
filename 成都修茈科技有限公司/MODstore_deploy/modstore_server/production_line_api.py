@@ -119,6 +119,57 @@ async def api_operations_event(body: Dict[str, Any]):
     return {"ok": True, "received": body.get("step_id"), "routing": routed}
 
 
+@router.post("/incident")
+async def api_operations_incident(body: Dict[str, Any]):
+    """对齐 FHD `/api/admin/production-line/incident`：写入 incident-bus，避免事件只进 outbox。"""
+    from modstore_server.incident_bus import publish_unified_incident
+    from modstore_server.six_line_event_router import handle_operations_line_event
+
+    payload = body if isinstance(body, dict) else {}
+    routed = handle_operations_line_event(payload)
+    event_type = str(
+        payload.get("event_type")
+        or payload.get("type")
+        or payload.get("kind")
+        or "ops.line.incident"
+    ).strip()
+    summary = str(
+        payload.get("summary")
+        or payload.get("title")
+        or payload.get("message")
+        or payload.get("step_id")
+        or event_type
+    )[:1000]
+    published = False
+    try:
+        published = bool(
+            publish_unified_incident(
+                scope=str(payload.get("scope") or "ops")[:64],
+                summary=summary,
+                source=str(payload.get("source") or "fhd_production_line_incident")[:64],
+                event_type=event_type,
+                payload=payload,
+                priority=(
+                    payload.get("priority") if isinstance(payload.get("priority"), int) else None
+                ),
+            )
+        )
+    except Exception:
+        logger.exception("production-line incident publish failed")
+    logger.info(
+        "production-line incident: event_type=%s published=%s routed=%s",
+        event_type,
+        published,
+        routed.get("routed"),
+    )
+    return {
+        "ok": True,
+        "received": payload.get("step_id") or event_type,
+        "published": published,
+        "routing": routed,
+    }
+
+
 @router.get("/event-rail/status")
 async def api_event_rail_status():
     """事件轨状态：路由表条数、digest backlog 积压。"""

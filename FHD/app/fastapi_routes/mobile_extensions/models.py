@@ -37,15 +37,6 @@ class RelayDesktopRegisterBody(BaseModel):
     capabilities: dict[str, Any] = Field(default_factory=dict)
 
 
-class RelayMobileConfirmBody(BaseModel):
-    relay_id: str = Field(..., min_length=8, max_length=80)
-    code: str = Field(..., min_length=4, max_length=16)
-
-
-class RelayMobileConfirmCodeBody(BaseModel):
-    code: str = Field(..., min_length=4, max_length=16)
-
-
 class RelayMobileBindAccountBody(BaseModel):
     relay_id: str = Field(..., min_length=8, max_length=80)
 

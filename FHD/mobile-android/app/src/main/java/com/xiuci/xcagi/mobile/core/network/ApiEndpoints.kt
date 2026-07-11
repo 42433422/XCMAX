@@ -75,11 +75,10 @@ object ApiEndpoints {
 
     // 配对
     const val PAIRING_EXCHANGE = "$BASE/pairing/exchange"
+    const val PAIRING_LOOKUP = "$BASE/pairing/lookup"
     const val PAIRING_ISSUE = "$BASE/pairing/issue"
 
     // 中继
-    const val RELAY_MOBILE_CONFIRM = "$BASE/relay/mobile/confirm"
-    const val RELAY_MOBILE_CONFIRM_CODE = "$BASE/relay/mobile/confirm-code"
     const val RELAY_MOBILE_BIND_ACCOUNT = "$BASE/relay/mobile/bind-account"
     const val RELAY_MOBILE_DESKTOPS = "$BASE/relay/mobile/desktops"
     const val RELAY_TASKS = "$BASE/relay/tasks"

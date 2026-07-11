@@ -20,6 +20,7 @@ def analyze_hunk_semantics(file_path: str, hunk: dict[str, Any], review_context:
     findings.extend(_validation_regression(file_path, added, deleted, context, review_context))
     findings.extend(_test_weakening(file_path, added, deleted, review_context))
     findings.extend(_crash_or_timeout_regression(file_path, added, context, review_context))
+    findings.extend(_absorbed_token_rules(added, review_context))
     return {
         "status": "semantic_findings" if findings else "no_semantic_regression",
         "file": file_path,
@@ -125,6 +126,19 @@ def _test_weakening(file_path: str, added: list[dict[str, Any]], deleted: list[d
             removed_evidence=[item["text"] for item in removed_asserts[:3]],
         )
     ]
+
+
+def _absorbed_token_rules(added: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:
+    from retort_engine.absorbed_hunk_semantic_rules import match_absorbed_hunk_findings
+
+    texts = [str(item.get("text") or "") for item in added]
+    findings = match_absorbed_hunk_findings(texts, review_context=review_context)
+    resolved: list[dict[str, Any]] = []
+    for finding in findings:
+        index = int(finding.get("line") or 0) - 1
+        line = int(added[index]["line"] or 0) if 0 <= index < len(added) else int(added[0]["line"] or 0) if added else 0
+        resolved.append({**finding, "line": line})
+    return resolved
 
 
 def _crash_or_timeout_regression(file_path: str, added: list[dict[str, Any]], context: list[dict[str, Any]], review_context: str) -> list[dict[str, Any]]:

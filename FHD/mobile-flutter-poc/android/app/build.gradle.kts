@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -39,15 +41,70 @@ android {
         versionName = injectedVersionName
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreProps = Properties()
+            // Flutter 惯例 key.properties；与 mobile-android 对齐也认 keystore.properties
+            listOf(
+                rootProject.file("key.properties"),
+                rootProject.file("keystore.properties"),
+                project.file("key.properties"),
+                project.file("keystore.properties"),
+            ).firstOrNull { it.isFile }?.inputStream()?.use { keystoreProps.load(it) }
+
+            fun prop(name: String): String? =
+                System.getenv("XCAGI_ANDROID_${name.uppercase()}")?.takeIf { it.isNotBlank() }
+                    ?: keystoreProps.getProperty(
+                        when (name) {
+                            "KEYSTORE" -> "storeFile"
+                            "KEYSTORE_PASSWORD" -> "storePassword"
+                            "KEY_ALIAS" -> "keyAlias"
+                            "KEY_PASSWORD" -> "keyPassword"
+                            else -> name
+                        },
+                    )?.trim()?.takeIf { it.isNotBlank() }
+
+            val storePath = prop("KEYSTORE")
+            if (!storePath.isNullOrBlank()) {
+                val resolved =
+                    rootProject.file(storePath).takeIf { it.isFile }
+                        ?: project.file(storePath)
+                if (!resolved.isFile) {
+                    throw GradleException("Release keystore not found: ${resolved.absolutePath}")
+                }
+                storeFile = resolved
+                storePassword = prop("KEYSTORE_PASSWORD")
+                keyAlias = prop("KEY_ALIAS")
+                keyPassword = prop("KEY_PASSWORD") ?: prop("KEYSTORE_PASSWORD")
+                if (storePassword.isNullOrBlank() || keyAlias.isNullOrBlank()) {
+                    throw GradleException(
+                        "Release signing incomplete: set storePassword/keyAlias in key.properties " +
+                            "or XCAGI_ANDROID_KEYSTORE* env vars.",
+                    )
+                }
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Keep WorkManager/Room classes used by the Kotlin background
+            // workers; R8 otherwise strips WorkDatabase and the release app
+            // crashes on launch inside androidx.startup.InitializationProvider.
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                "proguard-rules.pro",
             )
+            val releaseSigning = signingConfigs.getByName("release")
+            val requireSigning = System.getenv("XCAGI_REQUIRE_RELEASE_SIGNING") == "1"
+            signingConfig = when {
+                releaseSigning.storeFile != null -> releaseSigning
+                requireSigning -> throw GradleException(
+                    "XCAGI_REQUIRE_RELEASE_SIGNING=1 but no release keystore configured. " +
+                        "Copy android/key.properties.example → key.properties or set XCAGI_ANDROID_KEYSTORE*.",
+                )
+                else -> signingConfigs.getByName("debug")
+            }
         }
     }
 }

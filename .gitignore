@@ -149,3 +149,6 @@ FHD/1",
 !XCAGI-Full-Pipeline.html
 !XCAGI-Five-Line.html
 !XCAGI-Architecture-Map.html
+
+# Local build/install artifacts (never push to GitHub; >100MB)
+.xcmax-artifacts/

@@ -81,8 +81,6 @@ data class ApproveBody(val approver_id: Int, val opinion: String = "")
 data class RejectBody(val approver_id: Int, val reason: String = "")
 data class BridgeRespondBody(val response: String, val responded_by: String? = null, val status: String = "resolved")
 data class PairingExchangeBody(val nonce: String = "", val code: String = "")
-data class RelayConfirmBody(val relay_id: String, val code: String)
-data class RelayConfirmCodeBody(val code: String)
 data class RelayBindAccountBody(val relay_id: String)
 data class RelayTaskCreateBody(
     val relay_id: String,
@@ -324,12 +322,6 @@ interface FhdApi {
 
     @POST(ApiEndpoints.PAIRING_EXCHANGE)
     suspend fun pairingExchange(@Body body: PairingExchangeBody): MobileEnvelope<Map<String, Any?>>
-
-    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM)
-    suspend fun relayConfirm(@Body body: RelayConfirmBody): MobileEnvelope<Map<String, Any?>>
-
-    @POST(ApiEndpoints.RELAY_MOBILE_CONFIRM_CODE)
-    suspend fun relayConfirmCode(@Body body: RelayConfirmCodeBody): MobileEnvelope<Map<String, Any?>>
 
     @POST(ApiEndpoints.RELAY_MOBILE_BIND_ACCOUNT)
     suspend fun relayBindAccount(@Body body: RelayBindAccountBody): MobileEnvelope<Map<String, Any?>>

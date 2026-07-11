@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 tmpdir = tempfile.mkdtemp(prefix="xcagi-mac-smoke-")
 os.environ["LAN_GUARD_ENABLED"] = "0"
 os.environ["XCAGI_DESKTOP_MODE"] = "1"
+os.environ["XCAGI_DESKTOP_FAST_START"] = "0"
 configure_desktop_environment(tmpdir)
 
 import app.security.lan_settings_store as lan_store

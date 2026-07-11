@@ -56,6 +56,7 @@ def desktop_status(request: Request):
     app = request.app
     mods_full = bool(getattr(app.state, "mods_full_load_done", False))
     mods_bg = bool(getattr(app.state, "mods_background_load_scheduled", False))
+    routes_ready = not bool(getattr(app.state, "deferred_routes_pending", False))
     timing: dict = {}
     try:
         from app.fastapi_app.startup_timing import startup_timing_snapshot
@@ -78,7 +79,8 @@ def desktop_status(request: Request):
         "modsRoutesLoaded": bool(getattr(app.state, "mods_routes_loaded", False)),
         "modsFullLoadDone": mods_full,
         "modsBackgroundLoadScheduled": mods_bg,
-        "readyForUi": True,
+        "appRoutesReady": routes_ready,
+        "readyForUi": routes_ready,
         "modsReady": mods_full or not mods_bg,
         "startupTiming": timing,
         "dbRecovery": db_recovery,

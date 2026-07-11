@@ -187,15 +187,51 @@ def recover_if_corrupt(
     return {"action": "corrupt_no_backup", "detail": "no usable backup"}
 
 
+def _alembic_root() -> Path:
+    """Resolve directory containing alembic.ini (PyInstaller _MEIPASS or FHD repo root)."""
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path.cwd()))
+    return Path(__file__).resolve().parents[2]
+
+
+def _run_alembic_cli(*args: str) -> None:
+    root = _alembic_root()
+    ini = root / "alembic.ini"
+    # Older/broken PyInstaller trees nested the file as alembic.ini/alembic.ini.
+    if not ini.is_file() and (root / "alembic.ini" / "alembic.ini").is_file():
+        ini = root / "alembic.ini" / "alembic.ini"
+        root = ini.parent
+    if not ini.is_file():
+        raise FileNotFoundError(f"alembic.ini not found: {ini}")
+    # PyInstaller 入口不支持 ``exe -m alembic``（参数会进 run_fastapi argparse），须走 API。
+    if getattr(sys, "frozen", False):
+        from alembic.config import Config
+
+        from alembic import command
+
+        cfg = Config(str(ini))
+        op = args[0] if args else ""
+        target = args[1] if len(args) > 1 else "head"
+        if op == "upgrade":
+            command.upgrade(cfg, target)
+        elif op == "stamp":
+            command.stamp(cfg, target)
+        else:
+            raise ValueError(f"unsupported alembic op: {args!r}")
+        return
+    cmd = [sys.executable, "-m", "alembic", "-c", str(ini), *args]
+    subprocess.run(cmd, check=True, cwd=str(root))
+
+
 def run_alembic_upgrade(
     data_dir: str | os.PathLike[str] | None = None, version: str = "head"
 ) -> None:
     configure_desktop_environment(data_dir)
     if _should_bootstrap_sqlite(data_dir):
         bootstrap_sqlite_schema(data_dir)
-        subprocess.run([sys.executable, "-m", "alembic", "stamp", "head"], check=True)
+        _run_alembic_cli("stamp", "head")
         return
-    subprocess.run([sys.executable, "-m", "alembic", "upgrade", version], check=True)
+    _run_alembic_cli("upgrade", version)
 
 
 def _should_bootstrap_sqlite(data_dir: str | os.PathLike[str] | None = None) -> bool:

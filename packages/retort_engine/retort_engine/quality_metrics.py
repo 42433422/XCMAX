@@ -13,6 +13,8 @@ GENERATED_ABSORPTION_NAMES = {
     "retort_absorbed_patterns.py",
     "absorbed_capabilities.py",
     "test_absorbed_capabilities.py",
+    "absorbed_behavior_bridge.py",
+    "test_absorbed_behavior_bridge.py",
 }
 BEHAVIOR_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".go"}
 

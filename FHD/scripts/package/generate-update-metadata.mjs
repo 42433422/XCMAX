@@ -16,8 +16,22 @@ const name = path.basename(artifact)
 const isMac = platform === 'mac' || name.endsWith('.dmg')
 const output = isMac ? 'latest-mac.yml' : 'latest.yml'
 
+function resolveBuildSha() {
+  const fromEnv = String(process.env.GITHUB_SHA || process.env.XCAGI_BUILD_SHA || '').trim()
+  if (fromEnv) return fromEnv
+  try {
+    const { execSync } = require('node:child_process')
+    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+  } catch {
+    return ''
+  }
+}
+
+const buildSha = resolveBuildSha()
+
 let body = [
   `version: ${version}`,
+  ...(buildSha ? [`buildSha: ${buildSha}`] : []),
   'files:',
   `  - url: ${name}`,
   `    sha512: ${sha512}`,

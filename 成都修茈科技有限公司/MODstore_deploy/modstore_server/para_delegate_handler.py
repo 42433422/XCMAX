@@ -294,6 +294,9 @@ def _para_db_file() -> Path:
 
 
 def _force_single_device_attempt(req: Dict[str, Any], accepted: Dict[str, Any]) -> Dict[str, Any]:
+    """仅 report_only 强制 max_attempts=1；重负载保留 Para 默认/请求值以便 transient 重试。"""
+    if not bool(req.get("report_only")):
+        return {"ok": True, "enabled": False, "reason": "heavy_workload_keeps_retries"}
     if not _env_bool("MODSTORE_PARA_DISABLE_AUTO_RETRY", "1"):
         return {"ok": True, "enabled": False}
     task_id = str(accepted.get("task_id") or "").strip()
@@ -316,6 +319,52 @@ def _force_single_device_attempt(req: Dict[str, Any], accepted: Dict[str, Any]) 
         return {"ok": True, "enabled": True, "task_id": task_id, "subtask_id": subtask_id}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "enabled": True, "error": str(exc)[:500]}
+
+
+def _resolve_max_attempts(req: Dict[str, Any]) -> int:
+    if bool(req.get("report_only")):
+        return 1
+    raw = req.get("max_attempts")
+    try:
+        value = int(raw) if raw is not None else 3
+    except (TypeError, ValueError):
+        value = 3
+    return max(1, min(5, value))
+
+
+def _git_preflight_branch(repo_url: str, branch: str) -> Dict[str, Any]:
+    """派工前校验远程分支；失败则不创建注定失败的任务。"""
+    url = (repo_url or "").strip()
+    ref = (branch or "main").strip() or "main"
+    if not url:
+        return {"ok": False, "error": "repo_url 为空", "failure_kind": "git_prep"}
+    if url.startswith("file://") or os.environ.get("MODSTORE_PARA_SKIP_GIT_PREFLIGHT") == "1":
+        return {"ok": True, "skipped": True}
+    try:
+        import subprocess
+
+        proc = subprocess.run(
+            ["git", "ls-remote", "--heads", "--exit-code", url, ref],
+            capture_output=True,
+            text=True,
+            timeout=float(os.environ.get("MODSTORE_PARA_GIT_PREFLIGHT_SEC") or "12"),
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            check=False,
+        )
+        if proc.returncode != 0 or not (proc.stdout or "").strip():
+            err = (proc.stderr or proc.stdout or "branch not found").strip()[:500]
+            return {
+                "ok": False,
+                "error": f"Git 预检失败：远程不存在分支 {ref}（{err}）",
+                "failure_kind": "git_prep",
+            }
+        return {"ok": True}
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "ok": False,
+            "error": f"Git 预检异常：{exc}"[:500],
+            "failure_kind": "git_prep",
+        }
 
 
 def _task_result_snapshot(body: Any) -> Dict[str, Any]:
@@ -471,10 +520,13 @@ def _device_tool_entry(item: Dict[str, Any], tool_name: str) -> Optional[Dict[st
 
 
 def _device_eligible(item: Any, tool_name: str) -> bool:
-    """设备能否承接派工：在线 + 目标工具已装且非占用 + 具备能力。与 FHD 同构。"""
+    """设备能否承接派工：在线 + 目标工具已装且非占用（executorReady）。"""
     if not isinstance(item, dict):
         return False
     if str(item.get("status") or "") != "online":
+        return False
+    # 显式 executorReady=false 直接拒绝
+    if item.get("executorReady") is False:
         return False
     tool = _device_tool_entry(item, tool_name)
     if tool and str(tool.get("status") or "") == "not_installed":
@@ -485,8 +537,13 @@ def _device_eligible(item: Any, tool_name: str) -> bool:
         caps = item.get("capabilities") if isinstance(item.get("capabilities"), dict) else {}
         if caps.get(f"{tool_name}_cli") is True:
             return True
+        # 无 tools 列表时，仅当声明的 devTool 匹配才视为就绪（避免盲派到缺 CLI 设备）
         return str(item.get("devTool") or "") == tool_name
     return True
+
+
+def _filter_executor_ready(devices: list, tool_name: str) -> list:
+    return [item for item in devices if _device_eligible(item, tool_name)]
 
 
 def _resolve_tier(req: Dict[str, Any]) -> int:
@@ -654,8 +711,29 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
             queued=False,
         )
 
+    branch = str(req.get("branch") or "main").strip() or "main"
+    report_only = bool(req.get("report_only"))
+    if repo_url and not report_only and not _allow_local_workdir():
+        git_check = _git_preflight_branch(repo_url, branch)
+        if not git_check.get("ok"):
+            return _outbox_response(
+                req,
+                status="blocked_git_preflight",
+                error=str(git_check.get("error") or "git preflight failed"),
+                queued=True,  # transient outbox：仓库/分支恢复后可重放
+            )
+
     base_prompt = _build_para_prompt(req)
     first_payload: Dict[str, Any] = {}
+    max_attempts = _resolve_max_attempts(req)
+    # 低风险自维护/verify 可自动 merge；Incident fix 默认不自动 merge
+    mode = str(req.get("mode") or "").strip().lower()
+    auto_merge = bool(req.get("auto_merge"))
+    if not auto_merge and mode in {"verify", "review", "report"} and report_only is False:
+        auto_merge = _coerce_bool(req.get("auto_merge_on_complete"), False)
+    workspace_path = str(
+        req.get("workspace_path") or os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
+    ).strip()
     try:
         with httpx.Client(timeout=_api_timeout(), trust_env=False) as client:
             token_info = _get_para_token(client, base)
@@ -666,8 +744,8 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                 return _outbox_response(
                     req,
                     status="blocked_no_online_para_device",
-                    error=select_reason or "未发现在线可用 Para 工作设备",
-                    queued=False,
+                    error=select_reason or "未发现在线可用 Para 工作设备（executorReady）",
+                    queued=True,
                 )
 
             total = len(sel_devices)
@@ -681,13 +759,17 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                     "device_id": device_id,
                     "title": str(req.get("title") or "MODstore loop task").strip(),
                     "prompt": _multi_device_prompt(base_prompt, device, index, total),
-                    "branch": str(req.get("branch") or "main").strip() or "main",
+                    "branch": branch,
                     "subtask_title": _para_subtask_title(req, index, total),
-                    "report_only": bool(req.get("report_only")),
-                    "max_attempts": 1,
+                    "report_only": report_only,
+                    "max_attempts": max_attempts,
                 }
                 if repo_url:
                     payload["repo_url"] = repo_url
+                if auto_merge:
+                    payload["auto_merge"] = True
+                if workspace_path:
+                    payload["workspace_path"] = workspace_path
                 if isinstance(req.get("depends_on"), list) and req.get("depends_on"):
                     payload["depends_on"] = req.get("depends_on")
                 if task_id:
@@ -723,6 +805,7 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                             "status": "para_api_rejected_outboxed",
                             "status_code": resp.status_code,
                             "source": "para_api",
+                            "failure_kind": "para_api",
                             "para_tier": tier,
                             "error": str(
                                 (body.get("error") or body.get("detail") or resp.text[:500])
@@ -737,7 +820,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                 accepted = _summarize_para_response(body)
                 if not task_id:
                     task_id = str(accepted.get("task_id") or "").strip()
-                _force_single_device_attempt({**req, "device_id": device_id}, accepted)
+                _force_single_device_attempt(
+                    {**req, "device_id": device_id, "report_only": report_only}, accepted
+                )
                 dispatched.append(
                     {
                         "device_id": device_id,

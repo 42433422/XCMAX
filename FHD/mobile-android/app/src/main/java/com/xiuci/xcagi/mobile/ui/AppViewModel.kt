@@ -1797,7 +1797,7 @@ constructor(
                     if (parsed != null) {
                     if (parsed.version >= 3 && parsed.relayId.isNotBlank()) {
                         Result.failure(
-                                Exception("云中继绑定已改为账号鉴权，请刷新电脑端内网二维码后绑定")
+                                Exception("云中继绑定请先登录账号，登录后将自动完成绑定")
                         )
                     } else if (
                             parsed.token.length == 6 &&
