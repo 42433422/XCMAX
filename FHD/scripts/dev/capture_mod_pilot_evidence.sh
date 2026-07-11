@@ -38,6 +38,15 @@ export PAYMENT_BACKEND="${PAYMENT_BACKEND:-python}"
 # prefer filesystem PEM paths for local pilot.
 unset ALIPAY_APP_PRIVATE_KEY ALIPAY_ALIPAY_PUBLIC_KEY 2>/dev/null || true
 
+# 可选本地密钥（不入库）：沙箱买家 / MANUAL 开关
+_PILOT_ENV="${MOD_PILOT_ENV_FILE:-$HOME/.xcmax/mod-pilot.env}"
+if [[ -f "${_PILOT_ENV}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${_PILOT_ENV}"
+  set +a
+fi
+export MOD_PILOT_MARKET_API="${MOD_PILOT_MARKET_API:-http://127.0.0.1:${MODSTORE_PORT}}"
 
 log() { printf '[capture-mod] %s\n' "$*"; }
 
