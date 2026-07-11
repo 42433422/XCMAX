@@ -164,6 +164,17 @@ def _now_iso() -> str:
 
 def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
+    package_root = Path(__file__).resolve().parents[1]
+    if own != package_root:
+        policy_gate = external_improvement_gate(package_root, own)
+        if policy_gate["status"] != "allowed":
+            return {
+                "status": "blocked_by_self_depth_gate",
+                "summary": "Retort must verify its own frontier depth before improving another module.",
+                "tasks": [],
+                "external_improvement_gate": policy_gate,
+                "execution": {"status": "blocked_by_self_depth_gate"},
+            }
     external = payload.get("external_path") or payload.get("github_url") or payload.get("github") or ""
     external_path = _materialize_external_source(str(external), own, bool(payload.get("refresh")))
     branch_state = {"enabled": bool(payload.get("branch_workflow")), "status": "disabled"}

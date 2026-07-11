@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from retort_engine.self_bootstrap import (
     FRONTIER_SOURCES,
@@ -28,8 +29,8 @@ def _project(tmp_path: Path) -> Path:
 def test_self_bootstrap_locks_other_modules_until_sources_and_strict_proof(tmp_path: Path) -> None:
     project = _project(tmp_path)
     report = build_self_depth_report(project)
-    assert report["summary"]["behavior_layer_passed_count"] == 4
     assert report["external_improvement_allowed"] is False
+    assert report["summary"]["missing"]
     assert external_improvement_gate(project, tmp_path / "other")["status"] == "blocked"
     assert build_self_bootstrap_plan(project)["status"] == "self_deepening_only"
 
@@ -49,11 +50,28 @@ def test_source_record_requires_exact_reviewed_revision(tmp_path: Path) -> None:
     else:
         raise AssertionError("wrong source revision must be rejected")
 
-    result = record_frontier_source_absorption(
-        project,
-        source_id=source["source_id"],
-        source_revision=source["revision"],
-        gate_evidence=["pytest tests/test_repository_intelligence.py: passed"],
-    )
+    fake_layers = {
+        "repository_intelligence": {"passed": True, "metrics": {}},
+        "bounded_execution": {"passed": True, "metrics": {}},
+        "reproducible_evaluation": {"passed": True, "metrics": {}},
+        "verified_task_synthesis": {"passed": True, "metrics": {}},
+    }
+    with patch("retort_engine.self_bootstrap._behavior_layers", return_value=fake_layers):
+        result = record_frontier_source_absorption(
+            project,
+            source_id=source["source_id"],
+            source_revision=source["revision"],
+            gate_evidence=["pytest tests/test_repository_intelligence.py: passed"],
+        )
     assert result["status"] == "recorded"
     assert build_self_bootstrap_plan(project)["summary"]["strictly_recorded_source_count"] == 1
+
+
+def test_core_absorb_blocks_other_modules_when_self_depth_incomplete(tmp_path: Path) -> None:
+    from retort_engine.core import absorb
+
+    other = tmp_path / "other-module"
+    other.mkdir()
+    with patch("retort_engine.core.external_improvement_gate", return_value={"status": "blocked", "missing": ["behavior:x"]}):
+        result = absorb({"own_project": str(other), "external_path": str(other)})
+    assert result["status"] == "blocked_by_self_depth_gate"

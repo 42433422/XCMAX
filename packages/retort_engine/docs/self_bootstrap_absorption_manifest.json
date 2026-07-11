@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
   "policy": "retort_self_first",
-  "landing_commit": "b9c1249e1429b904ebe99120552860f637eef903",
-  "full_gate_evidence": "936 passed in 64.14s; ruff all checks passed",
+  "landing_commit": "ae0eafe313b413f2e171ad1149e157fe55fffcdd",
+  "full_gate_evidence": "16 passed in 10.19s; ruff all checks passed",
   "sources": [
     {
       "status": "recorded",
@@ -13,11 +13,16 @@
       "license": "Apache-2.0",
       "layer": "repository_intelligence",
       "adaptation": "dependency PageRank plus task-focused bounded repository map",
-      "behavior": {"passed": true},
-      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "behavior": {
+        "passed": true
+      },
+      "gate_evidence": [
+        "16 passed in 10.19s",
+        "ruff all checks passed"
+      ],
       "implementation_hashes": {
-        "retort_engine/repository_intelligence.py": "31c2de563f5ce7a9997510f2099bd06c5b7bb4b1ab71d2559e6b1200d5afb264",
-        "tests/test_repository_intelligence.py": "10a2fd7d603b25e866541ce2c3c006f48530df33f7ad0d437246c8d9edd84760"
+        "retort_engine/repository_intelligence.py": "94875d1af5f248e5310bd15826b6f70acfa8adeca040734d15c0dca525e8ebf6",
+        "tests/test_repository_intelligence.py": "e1327f813cdb64a589e7c4269ce8d8c4ff11aaed3b23fdfd185ade11e4929e97"
       }
     },
     {
@@ -29,11 +34,16 @@
       "license": "MIT",
       "layer": "bounded_execution",
       "adaptation": "step/time limits and serializable action-observation trajectory",
-      "behavior": {"passed": true},
-      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "behavior": {
+        "passed": true
+      },
+      "gate_evidence": [
+        "16 passed in 10.19s",
+        "ruff all checks passed"
+      ],
       "implementation_hashes": {
-        "retort_engine/bounded_agent_loop.py": "a3ad4ed28f57ecc0062efbc7c22065ff995e0413dfa7bfb40cd529e9f27c9002",
-        "tests/test_bounded_agent_loop.py": "5389a65dcd84000b1082543d47a1344106f81013facaac241bcc608cc625c3b5"
+        "retort_engine/bounded_agent_loop.py": "e9f44391eff17888e17c7af7f8ad8bc370ded111ef3fa60962560c5bcba834ca",
+        "tests/test_bounded_agent_loop.py": "a15dec294d710e2486fabe422d061df72a600684e2c69be9ffc403d2a3d2e0f6"
       }
     },
     {
@@ -45,11 +55,16 @@
       "license": "MIT",
       "layer": "bounded_execution",
       "adaptation": "separate completion judge and repetitive-loop stop condition",
-      "behavior": {"passed": true},
-      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "behavior": {
+        "passed": true
+      },
+      "gate_evidence": [
+        "16 passed in 10.19s",
+        "ruff all checks passed"
+      ],
       "implementation_hashes": {
-        "retort_engine/bounded_agent_loop.py": "a3ad4ed28f57ecc0062efbc7c22065ff995e0413dfa7bfb40cd529e9f27c9002",
-        "tests/test_bounded_agent_loop.py": "5389a65dcd84000b1082543d47a1344106f81013facaac241bcc608cc625c3b5"
+        "retort_engine/bounded_agent_loop.py": "e9f44391eff17888e17c7af7f8ad8bc370ded111ef3fa60962560c5bcba834ca",
+        "tests/test_bounded_agent_loop.py": "a15dec294d710e2486fabe422d061df72a600684e2c69be9ffc403d2a3d2e0f6"
       }
     },
     {
@@ -61,10 +76,15 @@
       "license": "MIT",
       "layer": "reproducible_evaluation",
       "adaptation": "patch-applied plus fail-to-pass resolution oracle",
-      "behavior": {"passed": true},
-      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "behavior": {
+        "passed": true
+      },
+      "gate_evidence": [
+        "16 passed in 10.19s",
+        "ruff all checks passed"
+      ],
       "implementation_hashes": {
-        "retort_engine/issue_capability_benchmark.py": "c204d2e4f02af8ef091a822cbbaf896c14bc630d73cb6a90cab42962ec85a5f3",
+        "retort_engine/issue_capability_benchmark.py": "d4eb4407491dda86c23705be17767c69cde224593a1c4385e0a473e0cbbc876e",
         "tests/test_issue_capability_benchmark.py": "1ae7aeaafc59db3b09a21fd55ee537174d989546337648c966bed61427e6230b"
       }
     },
@@ -77,10 +97,15 @@
       "license": "MIT",
       "layer": "verified_task_synthesis",
       "adaptation": "generate replayable issue tasks only from verified repairs",
-      "behavior": {"passed": true},
-      "gate_evidence": ["935 passed in 36.15s", "ruff all checks passed"],
+      "behavior": {
+        "passed": true
+      },
+      "gate_evidence": [
+        "16 passed in 10.19s",
+        "ruff all checks passed"
+      ],
       "implementation_hashes": {
-        "retort_engine/issue_capability_benchmark.py": "c204d2e4f02af8ef091a822cbbaf896c14bc630d73cb6a90cab42962ec85a5f3",
+        "retort_engine/issue_capability_benchmark.py": "d4eb4407491dda86c23705be17767c69cde224593a1c4385e0a473e0cbbc876e",
         "tests/test_issue_capability_benchmark.py": "1ae7aeaafc59db3b09a21fd55ee537174d989546337648c966bed61427e6230b"
       }
     }

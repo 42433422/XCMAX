@@ -67,6 +67,16 @@ VISUAL_FRONTEND_PATH_MARKERS = (
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
+    package_root = Path(__file__).resolve().parents[1]
+    if root != package_root:
+        from retort_engine.self_bootstrap import external_improvement_gate
+
+        policy_gate = external_improvement_gate(package_root, root)
+        if policy_gate["status"] != "allowed":
+            return {
+                **_execution_result("blocked_by_self_depth_gate", root, str(payload.get("source") or ""), started, [], [], [], "Retort must deepen itself before improving another module."),
+                "external_improvement_gate": policy_gate,
+            }
     external_path = Path(str(payload.get("external_path") or "")).expanduser().resolve()
     source = str(payload.get("source") or payload.get("github_url") or payload.get("external_path") or "")
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
@@ -77,8 +87,19 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
 
     run_id = _run_id(source)
     external_profile = _external_profile(external_path)
+    from retort_engine.repository_intelligence import compare_repository_gaps
+
+    graph_gap = compare_repository_gaps(root, external_path)
+    external_profile = {**external_profile, "graph_gap": graph_gap, "decision_source": "repository_graph_gap"}
     semantic_review = _semantic_review(root, external_path)
     pre_absorption_focus = build_absorption_focus_map(root, external_path, tasks=tasks, signals=list(external_profile.get("signals") or []))
+    focus_paths = [str(item.get("path") or "") for item in (graph_gap.get("own_top_targets") or [])[:3] if item.get("path")]
+    if focus_paths:
+        pre_absorption_focus = {
+            **pre_absorption_focus,
+            "ranked_focus_files": focus_paths,
+            "graph_gap_targets": graph_gap.get("own_top_targets") or [],
+        }
     absorption_quality_path = _absorption_quality_target(root)
     module_path = _implementation_target(root)
     capability_path = _capability_target(root)
@@ -139,6 +160,33 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         _write_frontend_visual_profile(frontend_app_path, run_id, source, external_path, external_profile)
         frontend_visual_test_path.parent.mkdir(parents=True, exist_ok=True)
         frontend_visual_test_path.write_text(_frontend_visual_test_content(source), encoding="utf-8")
+    from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
+
+    can_synthesize_behavior = (root / "retort_engine" / "bounded_agent_loop.py").is_file() and (
+        root / "retort_engine" / "repository_intelligence.py"
+    ).is_file()
+    behavior_synthesis: dict[str, Any]
+    bridge_module = root / "retort_engine" / "absorbed_behavior_bridge.py"
+    bridge_test = root / "tests" / "test_absorbed_behavior_bridge.py"
+    if can_synthesize_behavior:
+        behavior_synthesis = synthesize_behavior_absorption(
+            root,
+            source=source,
+            external_path=external_path,
+            tasks=tasks,
+            run_id=run_id,
+        )
+        tracked_paths.extend([bridge_module, bridge_test])
+        review_report["behavior_synthesis"] = {
+            "status": behavior_synthesis.get("status"),
+            "dimensions": behavior_synthesis.get("dimensions"),
+            "focus_targets": behavior_synthesis.get("focus_targets"),
+            "digest": behavior_synthesis.get("digest"),
+            "changed_files": behavior_synthesis.get("changed_files"),
+        }
+    else:
+        behavior_synthesis = {"status": "skipped_incomplete_retort_runtime", "changed_files": []}
+        review_report["behavior_synthesis"] = behavior_synthesis
     log_path.parent.mkdir(parents=True, exist_ok=True)
     _append_log(log_path, run_id, source, external_path, tasks, external_profile)
     report_path.write_text(json.dumps(review_report, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
@@ -147,6 +195,13 @@ def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(absorption_quality_path)], root, timeout=60),
         _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(module_path)], root, timeout=60),
     ]
+    if can_synthesize_behavior:
+        gates.extend(
+            [
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(bridge_module)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(bridge_test.relative_to(root)), "-q"], root, timeout=120),
+            ]
+        )
     if writes_capability_model:
         gates.extend(
             [
