@@ -38,6 +38,86 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     assert "PyInstaller output missing desktop frontend" in sh_backend
 
 
+def test_desktop_enterprise_installer_embeds_admin_console() -> None:
+    scripts = REPO_ROOT / "scripts" / "package"
+    ps_backend = (scripts / "build-backend.ps1").read_text(encoding="utf-8")
+    ps_installer = (scripts / "build-installer.ps1").read_text(encoding="utf-8")
+    sh_backend = (scripts / "build-backend.sh").read_text(encoding="utf-8")
+    sh_mac_installer = (scripts / "build-installer.sh").read_text(encoding="utf-8")
+    sh_windows_installer = (scripts / "build-windows-installer.sh").read_text(encoding="utf-8")
+    spec = (scripts / "xcagi_backend.spec").read_text(encoding="utf-8")
+
+    assert "$ProductSku -eq 'enterprise'" in ps_backend
+    assert "npm --prefix $adminConsoleDir run build" in ps_backend
+    assert "Required enterprise admin console missing" in ps_backend
+    assert "PyInstaller output missing enterprise admin console" in ps_backend
+
+    for backend_script in (sh_backend, sh_windows_installer):
+        assert "npm --prefix admin-console run build" in backend_script
+        assert "Required enterprise admin console missing" in backend_script
+        assert "PyInstaller output missing enterprise admin console" in backend_script
+
+    assert 'PRODUCT_SKU == "enterprise"' in spec
+    assert 'data_items.append("templates/admin-vue-dist")' in spec
+    assert "Required enterprise admin console asset missing" in spec
+
+    assert "Packaged enterprise admin console index" in ps_installer
+    assert "backend\\_internal\\templates\\admin-vue-dist\\index.html" in ps_installer
+    assert "Packaged enterprise admin console index" in sh_mac_installer
+    assert "Packaged enterprise admin console index" in sh_windows_installer
+    assert "Contents/Resources/backend/_internal/templates/admin-vue-dist/index.html" in (
+        sh_mac_installer
+    )
+    assert "backend/_internal/templates/admin-vue-dist/index.html" in sh_windows_installer
+
+
+def test_modstore_thin_shell_cannot_publish_over_formal_fhd_installers() -> None:
+    repo_root = REPO_ROOT.parent
+    workflows = (
+        repo_root
+        / "成都修茈科技有限公司"
+        / "MODstore_deploy"
+        / ".github"
+        / "workflows"
+        / "build-desktop.yml",
+        repo_root / ".github" / "workflows" / "modstore-build-desktop.yml",
+    )
+
+    for workflow in workflows:
+        content = workflow.read_text(encoding="utf-8")
+        assert "uses: actions/upload-artifact@v4" in content
+        assert "xcagi-modstore-thin-shell-win" in content
+        assert "deploy:" not in content
+        assert "/var/www/update/releases/stable" not in content
+        assert "SERVER_SSH_KEY" not in content
+        assert "scp " not in content
+
+
+def test_sunbird_release_uses_current_admin_packaging_contract() -> None:
+    workflows = (
+        REPO_ROOT / ".github" / "workflows" / "sunbird-installer.yml",
+        REPO_ROOT.parent / ".github" / "workflows" / "fhd-sunbird-installer.yml",
+    )
+
+    for workflow in workflows:
+        content = workflow.read_text(encoding="utf-8")
+        assert 'default: "main"' in content
+        assert "github.event.inputs.source_ref || 'main'" in content
+        assert "Verify enterprise admin packaging contract" in content
+        assert "test_desktop_packaging_policy.py" in content
+        assert "desktop_enterprise_installer_embeds_admin_console" in content
+
+
+def test_mac_signing_setup_rebuilds_enterprise_backend_and_admin_console() -> None:
+    setup_script = (REPO_ROOT / "scripts" / "package" / "setup-mac-signing.sh").read_text(
+        encoding="utf-8"
+    )
+
+    suggested_command = next(line for line in setup_script.splitlines() if "下一步:" in line)
+    assert "build-installer.sh 10.0.0 enterprise" in suggested_command
+    assert "SKIP_BACKEND=1" not in suggested_command
+
+
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     desktop_main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")
     ps_installer = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(

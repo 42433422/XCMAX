@@ -42,7 +42,11 @@ const electronMocks = vi.hoisted(() => {
     focus: vi.fn(),
     restore: vi.fn(),
     isMinimized: vi.fn(() => false),
+    isMaximized: vi.fn(() => false),
+    isFullScreen: vi.fn(() => false),
+    isDestroyed: vi.fn(() => false),
     getBounds: vi.fn(() => ({ x: 0, y: 0, width: 1280, height: 800 })),
+    setMinimumSize: vi.fn(),
     setBounds: vi.fn(),
     flashFrame: vi.fn(),
     close: vi.fn(),
@@ -71,7 +75,12 @@ const electronMocks = vi.hoisted(() => {
       setProxy: vi.fn(() => Promise.resolve())
     }))
   }
-  const screen = { getDisplayMatching: vi.fn(() => ({ workArea: { x: 0, y: 0, width: 1920, height: 1080 } })) }
+  const defaultDisplay = { workArea: { x: 0, y: 0, width: 1920, height: 1080 } }
+  const screen = {
+    getPrimaryDisplay: vi.fn(() => defaultDisplay),
+    getDisplayMatching: vi.fn(() => defaultDisplay),
+    on: vi.fn()
+  }
   const nativeImage = { createFromPath: vi.fn(() => ({})), createEmpty: vi.fn(() => ({})) }
   return {
     app,
@@ -103,6 +112,91 @@ const updaterMocks = vi.hoisted(() => ({
 
 vi.mock('electron', () => electronMocks)
 vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
+
+describe('main — work-area-aware window geometry', () => {
+  it('centres the default window inside a normal primary work area', async () => {
+    const { calculateInitialWindowLayout } = await import('./main.js')
+
+    expect(calculateInitialWindowLayout({ x: 0, y: 0, width: 1920, height: 1040 })).toEqual({
+      x: 240,
+      y: 60,
+      width: 1440,
+      height: 920,
+      minWidth: 1180,
+      minHeight: 760
+    })
+  })
+
+  it('shrinks the initial size and minimums when the taskbar leaves a small work area', async () => {
+    const { calculateInitialWindowLayout } = await import('./main.js')
+
+    expect(calculateInitialWindowLayout({ x: 100, y: 40, width: 1024, height: 720 })).toEqual({
+      x: 108,
+      y: 48,
+      width: 1008,
+      height: 704,
+      minWidth: 1008,
+      minHeight: 704
+    })
+  })
+
+  it('clamps a window from a removed display into the complete remaining work area', async () => {
+    const { clampWindowBoundsToWorkArea } = await import('./main.js')
+
+    expect(
+      clampWindowBoundsToWorkArea(
+        { x: 2100, y: -120, width: 1440, height: 920 },
+        { x: 0, y: 0, width: 1366, height: 728 }
+      )
+    ).toEqual({ x: 8, y: 8, width: 1350, height: 712 })
+  })
+
+  it('updates the native minimum size before applying corrected bounds', async () => {
+    const bounds = { x: 2100, y: -120, width: 1440, height: 920 }
+    const setMinimumSize = vi.fn()
+    const setBounds = vi.fn()
+    const win = {
+      isMaximized: vi.fn(() => false),
+      isFullScreen: vi.fn(() => false),
+      getBounds: vi.fn(() => bounds),
+      setMinimumSize,
+      setBounds
+    } as unknown as Electron.BrowserWindow
+    electronMocks.screen.getDisplayMatching.mockReturnValueOnce({
+      workArea: { x: 0, y: 0, width: 1366, height: 728 }
+    })
+    const { ensureWindowInWorkArea } = await import('./main.js')
+
+    ensureWindowInWorkArea(win)
+
+    expect(electronMocks.screen.getDisplayMatching).toHaveBeenCalledWith(bounds)
+    expect(setMinimumSize).toHaveBeenCalledWith(1180, 712)
+    expect(setBounds).toHaveBeenCalledWith({ x: 8, y: 8, width: 1350, height: 712 })
+  })
+
+  it.each([
+    ['maximized', true, false],
+    ['full-screen', false, true]
+  ])('does not mutate a %s window during display metric changes', async (_state, maximized, fullScreen) => {
+    const getBounds = vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1040 }))
+    const setMinimumSize = vi.fn()
+    const setBounds = vi.fn()
+    const win = {
+      isMaximized: vi.fn(() => maximized),
+      isFullScreen: vi.fn(() => fullScreen),
+      getBounds,
+      setMinimumSize,
+      setBounds
+    } as unknown as Electron.BrowserWindow
+    const { ensureWindowInWorkArea } = await import('./main.js')
+
+    ensureWindowInWorkArea(win)
+
+    expect(getBounds).not.toHaveBeenCalled()
+    expect(setMinimumSize).not.toHaveBeenCalled()
+    expect(setBounds).not.toHaveBeenCalled()
+  })
+})
 
 describe('main — resolveDesktopUserDataPath', () => {
   it('uses the XCAGI default below appData when no override is configured', async () => {

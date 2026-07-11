@@ -51,7 +51,7 @@ def register_bootstrap_routes(app: FastAPI) -> None:
     _register_platform_shell_bootstrap(app)
 
 
-def register_deferred_routes(app: FastAPI) -> None:
+def register_deferred_routes(app: FastAPI, *, register_spa_fallback: bool = True) -> None:
     """业务/Neuro/LAN/legacy 路由；桌面 fast-start 下在 deferred 任务中注册。"""
     logger.info("Registering deferred FastAPI routes...")
     registry = RouteRegistry()
@@ -83,13 +83,14 @@ def register_deferred_routes(app: FastAPI) -> None:
     else:
         register_legacy_compat_routes(app)
 
-    # Desktop fast-start registers the SPA catch-all before this deferred
-    # phase.  Move it back to the end or every late /api route is present in
-    # OpenAPI yet unreachable at runtime (the fallback returns a misleading
-    # 404 first).
-    from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+    # FastAPI may compile route matching while the desktop server is already
+    # running. Moving an early catch-all in ``app.router.routes`` is therefore
+    # not a reliable repair. Fast-start initially exposes only exact ``/`` and
+    # appends the history fallback here, after every deferred API is mounted.
+    if register_spa_fallback:
+        from app.fastapi_routes.spa_fallback import register_spa_history_fallback
 
-    ensure_spa_fallback_last(app)
+        register_spa_history_fallback(app)
     logger.info("Deferred FastAPI routes registered successfully")
 
 
@@ -97,5 +98,7 @@ def register_all_routes(app: FastAPI) -> None:
     """Register all FastAPI routes in deterministic phase order."""
     logger.info("Registering FastAPI routes...")
     register_bootstrap_routes(app)
-    register_deferred_routes(app)
+    # The non-fast-start factory registers the fallback after static mounts,
+    # preserving the normal all-routes-first ordering.
+    register_deferred_routes(app, register_spa_fallback=False)
     logger.info("FastAPI routes registered successfully")

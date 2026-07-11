@@ -29,6 +29,9 @@ def fast_start_client(monkeypatch, tmp_path):
 
     app = create_fastapi_app()
     assert getattr(app.state, "deferred_routes_pending", False) is True
+    route_paths = [getattr(route, "path", "") for route in app.router.routes]
+    assert "/" in route_paths
+    assert "/{fallback:path}" not in route_paths
     with TestClient(app) as client:
         yield client, app
 

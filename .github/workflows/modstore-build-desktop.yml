@@ -1,9 +1,9 @@
 # CI SSOT: generated from MODstore_deploy/.github/workflows/build-desktop.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-name: Build Desktop (clean v10)
+name: Build MODstore Thin Desktop (artifact only)
 
-# 干净桌面构建链（替代损坏的 FHD 链）：electron-builder 出真 v10 安装包。
-# v10 锁：版本恒 10.0.0；产物名对齐下载 SSOT（XCAGI-Personal-Setup-10.0.0-x64.exe）。
+# MODstore 精简 Web 壳仅用于 CI/诊断 artifact，不包含 FHD 内嵌后端与管理端。
+# 禁止从此 workflow 发布到 XCMAX/FHD 正式 stable 目录；正式桌面发布只走 fhd-release-desktop.yml。
 on:
   workflow_dispatch:
     inputs:
@@ -79,46 +79,9 @@ jobs:
         run: Get-ChildItem -Recurse upload
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-win
+          name: xcagi-modstore-thin-shell-win
           path: |
             成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/*.exe
             成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/latest.yml
             成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/*.blockmap
           if-no-files-found: error
-
-  # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
-  deploy:
-    needs: windows
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: .
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: xcagi-desktop-win
-          path: dist
-      - name: Setup SSH (server deploy key)
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H 119.27.178.147 >> ~/.ssh/known_hosts 2>/dev/null || true
-      - name: Upload v10 installer to server (atomic)
-        run: |
-          set -e
-          ls -la dist/
-          SSH="ssh -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30"
-          for sku in personal enterprise; do
-            src="dist/$sku"
-            test -d "$src" || { echo "missing artifact dir $src"; exit 1; }
-            DEST="/var/www/update/releases/stable/$sku"
-            EXE=$(ls "$src"/*.exe | head -1); BASE=$(basename "$EXE")
-            # 原子上传：先传 .part，校验大小后 mv 到正式名，避免传输中被下载到半截文件
-            scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no -o ServerAliveInterval=30 "$EXE" "root@119.27.178.147:$DEST/$BASE.part"
-            LOCAL_SZ=$(wc -c < "$EXE")
-            $SSH root@119.27.178.147 "REMOTE_SZ=\$(wc -c < '$DEST/$BASE.part'); if [ \"\$REMOTE_SZ\" = '$LOCAL_SZ' ]; then mv -f '$DEST/$BASE.part' '$DEST/$BASE'; echo OK_MOVED $sku/$BASE; else echo SIZE_MISMATCH \$REMOTE_SZ vs $LOCAL_SZ; exit 1; fi"
-            if [ -f "$src/latest.yml" ]; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no "$src/latest.yml" "root@119.27.178.147:$DEST/"; fi
-            if ls "$src"/*.blockmap >/dev/null 2>&1; then scp -i ~/.ssh/id_ci -o StrictHostKeyChecking=no "$src"/*.blockmap "root@119.27.178.147:$DEST/" || true; fi
-            $SSH root@119.27.178.147 "ls -lh $DEST/"
-          done

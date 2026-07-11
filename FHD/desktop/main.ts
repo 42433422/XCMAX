@@ -919,27 +919,100 @@ async function exportSupportBundleInteractive(): Promise<void> {
   }
 }
 
-/** macOS 全屏/恢复后窗口可能只剩顶部一条，拉回工作区。 */
-function ensureMacWindowInWorkArea(win: BrowserWindow): void {
-  if (process.platform !== 'darwin') return
+const DEFAULT_WINDOW_WIDTH = 1440
+const DEFAULT_WINDOW_HEIGHT = 920
+const DEFAULT_WINDOW_MIN_WIDTH = 1180
+const DEFAULT_WINDOW_MIN_HEIGHT = 760
+const WINDOW_WORK_AREA_MARGIN = 8
+
+export type DesktopWindowLayout = Electron.Rectangle & {
+  minWidth: number
+  minHeight: number
+}
+
+function insetWorkArea(workArea: Electron.Rectangle): Electron.Rectangle {
+  const insetX = workArea.width > WINDOW_WORK_AREA_MARGIN * 2 ? WINDOW_WORK_AREA_MARGIN : 0
+  const insetY = workArea.height > WINDOW_WORK_AREA_MARGIN * 2 ? WINDOW_WORK_AREA_MARGIN : 0
+  return {
+    x: workArea.x + insetX,
+    y: workArea.y + insetY,
+    width: Math.max(1, workArea.width - insetX * 2),
+    height: Math.max(1, workArea.height - insetY * 2)
+  }
+}
+
+function minimumWindowSize(workArea: Electron.Rectangle): { width: number; height: number } {
+  const available = insetWorkArea(workArea)
+  return {
+    width: Math.min(DEFAULT_WINDOW_MIN_WIDTH, available.width),
+    height: Math.min(DEFAULT_WINDOW_MIN_HEIGHT, available.height)
+  }
+}
+
+/** Derive a centred initial window that never extends below the OS work area. */
+export function calculateInitialWindowLayout(workArea: Electron.Rectangle): DesktopWindowLayout {
+  const available = insetWorkArea(workArea)
+  const minimum = minimumWindowSize(workArea)
+  const width = Math.min(DEFAULT_WINDOW_WIDTH, available.width)
+  const height = Math.min(DEFAULT_WINDOW_HEIGHT, available.height)
+  return {
+    x: available.x + Math.floor((available.width - width) / 2),
+    y: available.y + Math.floor((available.height - height) / 2),
+    width,
+    height,
+    minWidth: minimum.width,
+    minHeight: minimum.height
+  }
+}
+
+/** Clamp restored/off-screen bounds after taskbar or monitor topology changes. */
+export function clampWindowBoundsToWorkArea(
+  bounds: Electron.Rectangle,
+  workArea: Electron.Rectangle
+): Electron.Rectangle {
+  const available = insetWorkArea(workArea)
+  const minimum = minimumWindowSize(workArea)
+  const width = Math.min(Math.max(bounds.width, minimum.width), available.width)
+  const height = Math.min(Math.max(bounds.height, minimum.height), available.height)
+  const maxX = available.x + available.width - width
+  const maxY = available.y + available.height - height
+  return {
+    x: Math.min(Math.max(bounds.x, available.x), maxX),
+    y: Math.min(Math.max(bounds.y, available.y), maxY),
+    width,
+    height
+  }
+}
+
+/** Keep the whole desktop UI, including the bottom composer, inside the usable display. */
+export function ensureWindowInWorkArea(win: BrowserWindow): void {
+  // Changing native bounds while maximized/full-screen can overwrite the
+  // platform-managed restore geometry or make the window visibly jump when a
+  // taskbar/DPI metric changes. The restore/unmaximize/leave-full-screen hooks
+  // clamp the normal window once the OS returns control of its bounds.
+  if (win.isMaximized() || win.isFullScreen()) return
   const bounds = win.getBounds()
-  const work = screen.getDisplayMatching(bounds).workArea
-  const minW = 1180
-  const minH = 760
-  let { x, y, width, height } = bounds
-  if (width < minW) width = Math.min(minW, work.width)
-  if (height < minH) height = Math.min(minH, work.height)
-  if (y < work.y || height < minH) {
-    y = work.y + 8
-    height = Math.min(Math.max(height, minH), work.height - 16)
+  const workArea = screen.getDisplayMatching(bounds).workArea
+  const minimum = minimumWindowSize(workArea)
+  const next = clampWindowBoundsToWorkArea(bounds, workArea)
+  win.setMinimumSize(minimum.width, minimum.height)
+  if (
+    next.width !== bounds.width ||
+    next.height !== bounds.height ||
+    next.x !== bounds.x ||
+    next.y !== bounds.y
+  ) {
+    win.setBounds(next)
   }
-  if (x + width > work.x + work.width) {
-    x = work.x + Math.max(0, work.width - width)
-  }
-  if (x < work.x) x = work.x
-  if (width !== bounds.width || height !== bounds.height || x !== bounds.x || y !== bounds.y) {
-    win.setBounds({ x, y, width, height })
-  }
+}
+
+function showMainWindow(): void {
+  const win = mainWindow
+  if (!win || win.isDestroyed()) return
+  if (win.isMinimized()) win.restore()
+  ensureWindowInWorkArea(win)
+  win.show()
+  win.focus()
 }
 
 function tagDesktopWebContents(win: BrowserWindow): void {
@@ -1072,11 +1145,14 @@ function stopBackend(): void {
 
 async function createWindow(): Promise<void> {
   const icon = shellIconPath()
+  const initialWindow = calculateInitialWindowLayout(screen.getPrimaryDisplay().workArea)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
-    width: 1440,
-    height: 920,
-    minWidth: 1180,
-    minHeight: 760,
+    x: initialWindow.x,
+    y: initialWindow.y,
+    width: initialWindow.width,
+    height: initialWindow.height,
+    minWidth: initialWindow.minWidth,
+    minHeight: initialWindow.minHeight,
     title: APP_NAME,
     autoHideMenuBar: process.platform !== 'darwin',
     webPreferences: {
@@ -1096,6 +1172,7 @@ async function createWindow(): Promise<void> {
   winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  ensureWindowInWorkArea(mainWindow)
   if (process.platform !== 'darwin') {
     mainWindow.setAutoHideMenuBar(true)
     mainWindow.setMenuBarVisibility(false)
@@ -1104,14 +1181,15 @@ async function createWindow(): Promise<void> {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
-  if (process.platform === 'darwin') {
-    mainWindow.on('leave-full-screen', () => {
-      if (mainWindow) ensureMacWindowInWorkArea(mainWindow)
-    })
-    mainWindow.on('restore', () => {
-      if (mainWindow) ensureMacWindowInWorkArea(mainWindow)
-    })
-  }
+  mainWindow.on('restore', () => {
+    if (mainWindow) ensureWindowInWorkArea(mainWindow)
+  })
+  mainWindow.on('unmaximize', () => {
+    if (mainWindow) ensureWindowInWorkArea(mainWindow)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow) ensureWindowInWorkArea(mainWindow)
+  })
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (!isTrustedDesktopOrigin(url, DEFAULT_PORT) && !url.startsWith('file://') && !url.startsWith('data:')) {
@@ -1152,9 +1230,7 @@ async function createWindow(): Promise<void> {
       extraHeaders: 'Cache-Control: no-cache\r\n'
     })
     tagDesktopWebContents(win)
-    if (process.platform === 'darwin') {
-      ensureMacWindowInWorkArea(win)
-    }
+    ensureWindowInWorkArea(win)
     win.focus()
     return win
   }
@@ -1298,7 +1374,7 @@ function createTray(): void {
   tray.setToolTip(APP_NAME)
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: '显示 XCAGI', click: () => mainWindow?.show() },
+      { label: '显示 XCAGI', click: () => showMainWindow() },
       { label: '打开数据目录', click: () => void shell.openPath(app.getPath('userData')) },
       { label: '导出诊断包…', click: () => void exportSupportBundleInteractive() },
       { label: '检查更新', click: () => void runUpdateCheckWithDirectNet() },
@@ -1314,10 +1390,7 @@ function bootstrap(): void {
     app.quit()
   } else {
     app.on('second-instance', () => {
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore()
-        mainWindow.focus()
-      }
+      showMainWindow()
     })
 
     app.on('before-quit', () => {
@@ -1326,6 +1399,19 @@ function bootstrap(): void {
     })
 
     app.whenReady().then(async () => {
+      screen.on('display-removed', () => {
+        if (mainWindow) ensureWindowInWorkArea(mainWindow)
+      })
+      screen.on('display-metrics-changed', (_event, _display, changedMetrics) => {
+        if (
+          mainWindow &&
+          changedMetrics.some(metric =>
+            metric === 'bounds' || metric === 'workArea' || metric === 'scaleFactor'
+          )
+        ) {
+          ensureWindowInWorkArea(mainWindow)
+        }
+      })
       await applyOtaProxyBypass()
       const sku = readPackagedProductSku()
       if (sku && !process.env.XCAGI_UPDATE_URL) {

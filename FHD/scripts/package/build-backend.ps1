@@ -52,11 +52,21 @@ if (-not $SkipFrontend) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }
   Pop-Location
+
+  if ($ProductSku -eq 'enterprise') {
+    $adminConsoleDir = Join-Path $Root "admin-console"
+    npm --prefix $adminConsoleDir run build
+    if ($LASTEXITCODE -ne 0) { throw "admin-console npm build failed with exit code $LASTEXITCODE" }
+  }
 }
 
 $frontendIndex = Join-Path $Root "templates\vue-dist\index.html"
 if (-not (Test-Path $frontendIndex -PathType Leaf)) {
   throw "Required desktop frontend missing: $frontendIndex"
+}
+$adminFrontendIndex = Join-Path $Root "templates\admin-vue-dist\index.html"
+if ($ProductSku -eq 'enterprise' -and -not (Test-Path $adminFrontendIndex -PathType Leaf)) {
+  throw "Required enterprise admin console missing: $adminFrontendIndex"
 }
 
 python -m pip install --upgrade pip
@@ -88,6 +98,10 @@ if ($LASTEXITCODE -ne 0) { throw "PyInstaller xcagi_backend.spec failed" }
 $bundledFrontendIndex = Join-Path $Root "dist\xcagi-backend\_internal\templates\vue-dist\index.html"
 if (-not (Test-Path $bundledFrontendIndex -PathType Leaf)) {
   throw "PyInstaller output missing desktop frontend: $bundledFrontendIndex"
+}
+$bundledAdminFrontendIndex = Join-Path $Root "dist\xcagi-backend\_internal\templates\admin-vue-dist\index.html"
+if ($ProductSku -eq 'enterprise' -and -not (Test-Path $bundledAdminFrontendIndex -PathType Leaf)) {
+  throw "PyInstaller output missing enterprise admin console: $bundledAdminFrontendIndex"
 }
 $backendBuildInfoPath = Join-Path $Root "dist\xcagi-backend\_internal\build-info.json"
 $backendBuildInfo = @{ schema_version = 2; version = $Version } | ConvertTo-Json -Compress

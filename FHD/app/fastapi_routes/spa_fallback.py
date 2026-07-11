@@ -4,6 +4,8 @@ Phase 2C 从 :mod:`app.fastapi_routes.archive_gap_batch2` 拆分而出。
 
 关键不变量: ``register_spa_history_fallback`` 必须在所有 API 路由注册之后
 调用,以避免 ``GET /{fallback:path}`` 捕获并遮蔽真实 ``/api/...`` 路由。
+桌面 fast-start 阶段只调用 ``register_spa_root``，让 Vue 首页可立即加载；
+history catch-all 要等 deferred API 全部挂载后才首次注册。
 """
 
 from __future__ import annotations
@@ -83,27 +85,48 @@ def _try_serve_vue_dist_root_file(fallback: str) -> FileResponse | None:
     return None
 
 
+def _spa_response(fallback: str) -> FileResponse | JSONResponse:
+    root_file = _try_serve_vue_dist_root_file(fallback)
+    if root_file is not None:
+        return root_file
+    if any(fallback.startswith(p) for p in _EXCLUDED_PREFIXES):
+        return JSONResponse(
+            {"success": False, "message": f"资源不存在：/{fallback}"}, status_code=404
+        )
+    vue_index = os.path.join(_vue_dist_dir(), "index.html")
+    if os.path.exists(vue_index):
+        return FileResponse(vue_index, media_type="text/html")
+    return JSONResponse({"success": False, "message": f"页面不存在：/{fallback}"}, status_code=404)
+
+
+def register_spa_root(app: FastAPI) -> None:
+    """Register only the exact Vue root for the desktop fast-start window."""
+
+    @app.get("/", include_in_schema=False)
+    def vue_spa_root():
+        return _spa_response("")
+
+
 def register_spa_history_fallback(app: FastAPI) -> None:
     """Vue History fallback：必须最后注册，避免吞掉 API。"""
 
+    if any(
+        getattr(route, "path", None) == "/{fallback:path}"
+        for route in getattr(app.router, "routes", ())
+    ):
+        ensure_spa_fallback_last(app)
+        return
+
     @app.get("/{fallback:path}", include_in_schema=False)
     def vue_history_fallback(fallback: str):
-        root_file = _try_serve_vue_dist_root_file(fallback)
-        if root_file is not None:
-            return root_file
-        if any(fallback.startswith(p) for p in _EXCLUDED_PREFIXES):
-            return JSONResponse(
-                {"success": False, "message": f"资源不存在：/{fallback}"}, status_code=404
-            )
-        vue_index = os.path.join(_vue_dist_dir(), "index.html")
-        if os.path.exists(vue_index):
-            return FileResponse(vue_index, media_type="text/html")
-        return JSONResponse(
-            {"success": False, "message": f"页面不存在：/{fallback}"}, status_code=404
-        )
+        return _spa_response(fallback)
 
 
-__all__ = ["register_spa_history_fallback", "ensure_spa_fallback_last"]
+__all__ = [
+    "register_spa_root",
+    "register_spa_history_fallback",
+    "ensure_spa_fallback_last",
+]
 
 
 def ensure_spa_fallback_last(app: FastAPI) -> None:

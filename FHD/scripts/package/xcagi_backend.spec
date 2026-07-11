@@ -8,12 +8,20 @@ import setuptools
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 ROOT = Path.cwd().resolve()
+PRODUCT_SKU = (os.environ.get("XCAGI_PRODUCT_SKU") or "").strip().lower()
 
 FRONTEND_INDEX = ROOT / "templates" / "vue-dist" / "index.html"
 if not FRONTEND_INDEX.is_file():
     raise FileNotFoundError(
         "Required desktop frontend asset missing: templates/vue-dist/index.html. "
         "Run the SKU frontend build before PyInstaller."
+    )
+
+ADMIN_FRONTEND_INDEX = ROOT / "templates" / "admin-vue-dist" / "index.html"
+if PRODUCT_SKU == "enterprise" and not ADMIN_FRONTEND_INDEX.is_file():
+    raise FileNotFoundError(
+        "Required enterprise admin console asset missing: "
+        "templates/admin-vue-dist/index.html. Run the admin-console build before PyInstaller."
     )
 
 
@@ -35,7 +43,7 @@ def add_data(relative_path: str):
 
 
 datas = []
-for item in [
+data_items = [
     "templates/vue-dist",
     "static",
     "resources",
@@ -44,7 +52,10 @@ for item in [
     ".env.example",
     "alembic.ini",
     "scripts/backup",
-]:
+]
+if PRODUCT_SKU == "enterprise":
+    data_items.append("templates/admin-vue-dist")
+for item in data_items:
     datas.extend(add_data(item))
 
 _staged_mods = (os.environ.get("XCAGI_STAGED_MODS_DIR") or "").strip()

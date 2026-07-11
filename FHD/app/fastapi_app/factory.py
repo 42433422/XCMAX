@@ -125,7 +125,9 @@ def create_fastapi_app(
         ),
     )
 
-    if _desktop_fast_start_enabled():
+    desktop_fast_start = _desktop_fast_start_enabled()
+
+    if desktop_fast_start:
         from app.fastapi_routes import register_bootstrap_routes
 
         register_bootstrap_routes(app)
@@ -152,7 +154,7 @@ def create_fastapi_app(
     try:
         from app.fastapi_app.mod_startup import bootstrap_mod_extensions_sync
 
-        if _desktop_fast_start_enabled():
+        if desktop_fast_start:
             app.state.mods_deferred_bootstrap = True
         else:
             bootstrap_mod_extensions_sync(app)
@@ -165,10 +167,17 @@ def create_fastapi_app(
     mount_vue_dist_assets_dir(app)
 
     try:
-        from app.fastapi_routes.spa_fallback import register_spa_history_fallback
+        from app.fastapi_routes.spa_fallback import (
+            register_spa_history_fallback,
+            register_spa_root,
+        )
 
-        register_spa_history_fallback(app)
-        logger.info("Registered Vue history fallback (/{fallback:path}) as the last route")
+        if desktop_fast_start:
+            register_spa_root(app)
+            logger.info("Registered exact Vue root (/) for desktop fast-start")
+        else:
+            register_spa_history_fallback(app)
+            logger.info("Registered Vue history fallback (/{fallback:path}) as the last route")
     except RECOVERABLE_ERRORS as e:
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise

@@ -31,6 +31,7 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
       ;;
     enterprise)
       (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
+      npm --prefix admin-console run build
       ;;
     *)
       (cd frontend && npm run build)
@@ -41,6 +42,11 @@ fi
 FRONTEND_INDEX="${ROOT}/templates/vue-dist/index.html"
 if [[ ! -f "${FRONTEND_INDEX}" ]]; then
   echo "[err] Required desktop frontend missing: ${FRONTEND_INDEX}" >&2
+  exit 1
+fi
+ADMIN_FRONTEND_INDEX="${ROOT}/templates/admin-vue-dist/index.html"
+if [[ "${PRODUCT_SKU}" == "enterprise" && ! -f "${ADMIN_FRONTEND_INDEX}" ]]; then
+  echo "[err] Required enterprise admin console missing: ${ADMIN_FRONTEND_INDEX}" >&2
   exit 1
 fi
 
@@ -67,6 +73,11 @@ printf '%s\n' "${VERSION}" > release/VERSION
 BUNDLED_FRONTEND_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/vue-dist/index.html"
 if [[ ! -f "${BUNDLED_FRONTEND_INDEX}" ]]; then
   echo "[err] PyInstaller output missing desktop frontend: ${BUNDLED_FRONTEND_INDEX}" >&2
+  exit 1
+fi
+BUNDLED_ADMIN_FRONTEND_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/admin-vue-dist/index.html"
+if [[ "${PRODUCT_SKU}" == "enterprise" && ! -f "${BUNDLED_ADMIN_FRONTEND_INDEX}" ]]; then
+  echo "[err] PyInstaller output missing enterprise admin console: ${BUNDLED_ADMIN_FRONTEND_INDEX}" >&2
   exit 1
 fi
 

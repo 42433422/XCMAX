@@ -70,6 +70,17 @@ build_one_sku() {
     "--config.publish.url=$(sku_update_url "$sku")" \
     "--config.extraMetadata.productSku=${sku}")
 
+  if [ "${sku}" = "enterprise" ]; then
+    local packaged_admin_index
+    packaged_admin_index="$(find "${out_dir}" -type f \
+      -path '*/Contents/Resources/backend/_internal/templates/admin-vue-dist/index.html' \
+      -print -quit)"
+    if [ -z "${packaged_admin_index}" ]; then
+      echo "[err] Packaged enterprise admin console index missing under ${out_dir}" >&2
+      exit 1
+    fi
+  fi
+
   local artifact
   artifact="$(find "${out_dir}" -type f \( -name "*.dmg" -o -name "XCAGI-${label}-*.dmg" \) -print 2>/dev/null | sort | tail -n 1 || true)"
   if [ -n "${artifact}" ]; then

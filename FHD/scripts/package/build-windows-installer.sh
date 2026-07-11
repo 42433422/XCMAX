@@ -67,6 +67,18 @@ if [[ "${SKU}" == "personal" ]]; then
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
 else
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
+  npm --prefix admin-console run build
+fi
+
+FRONTEND_INDEX="${ROOT}/templates/vue-dist/index.html"
+if [[ ! -f "${FRONTEND_INDEX}" ]]; then
+  echo "[err] Required desktop frontend missing: ${FRONTEND_INDEX}" >&2
+  exit 1
+fi
+ADMIN_FRONTEND_INDEX="${ROOT}/templates/admin-vue-dist/index.html"
+if [[ "${SKU}" == "enterprise" && ! -f "${ADMIN_FRONTEND_INDEX}" ]]; then
+  echo "[err] Required enterprise admin console missing: ${ADMIN_FRONTEND_INDEX}" >&2
+  exit 1
 fi
 
 "${PYTHON}" scripts/package/generate_mods_index.py
@@ -100,6 +112,16 @@ docker run --rm --platform linux/amd64 \
 BACKEND_EXE="${ROOT}/dist/xcagi-backend/xcagi-backend.exe"
 if [[ ! -f "${BACKEND_EXE}" ]]; then
   echo "[err] Windows backend executable missing: ${BACKEND_EXE}" >&2
+  exit 1
+fi
+BUNDLED_FRONTEND_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/vue-dist/index.html"
+if [[ ! -f "${BUNDLED_FRONTEND_INDEX}" ]]; then
+  echo "[err] PyInstaller output missing desktop frontend: ${BUNDLED_FRONTEND_INDEX}" >&2
+  exit 1
+fi
+BUNDLED_ADMIN_FRONTEND_INDEX="${ROOT}/dist/xcagi-backend/_internal/templates/admin-vue-dist/index.html"
+if [[ "${SKU}" == "enterprise" && ! -f "${BUNDLED_ADMIN_FRONTEND_INDEX}" ]]; then
+  echo "[err] PyInstaller output missing enterprise admin console: ${BUNDLED_ADMIN_FRONTEND_INDEX}" >&2
   exit 1
 fi
 
@@ -157,6 +179,13 @@ for required in \
     exit 1
   fi
 done
+if [[ "${SKU}" == "enterprise" ]]; then
+  PACKAGED_ADMIN_FRONTEND_INDEX="${UNPACKED}/backend/_internal/templates/admin-vue-dist/index.html"
+  if [[ ! -f "${PACKAGED_ADMIN_FRONTEND_INDEX}" ]]; then
+    echo "[err] Packaged enterprise admin console index missing: ${PACKAGED_ADMIN_FRONTEND_INDEX}" >&2
+    exit 1
+  fi
+fi
 
 node scripts/package/generate-update-metadata.mjs "${FINAL}" "${VERSION}" win
 

@@ -191,6 +191,11 @@ $packagedAppAsar = Join-Path $outDir "win-unpacked\resources\app.asar"
 Assert-FileExists $packagedAppAsar "Electron app.asar"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\backend\xcagi-backend.exe") "Packaged backend executable"
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\product-sku.json") "Packaged product-sku.json"
+if ($ProductSku -eq 'enterprise') {
+  Assert-FileExists `
+    (Join-Path $outDir "win-unpacked\resources\backend\_internal\templates\admin-vue-dist\index.html") `
+    "Packaged enterprise admin console index"
+}
 & node (Join-Path $Root "desktop\scripts\verify-packaged-runtime.cjs") $packagedAppAsar
 if ($LASTEXITCODE -ne 0) {
   throw "Electron packaged runtime dependency verification failed"
