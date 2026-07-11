@@ -16,9 +16,16 @@ export function isFullStack(): boolean {
   return process.env.E2E_FULL_STACK === '1';
 }
 
-/** P0 证据截图目录（相对 frontend/） */
+/**
+ * P0 证据截图目录。
+ *
+ * 只有真实全栈验收才默认刷新仓库内的验收证据；本地/CI mock smoke 写入
+ * 已忽略的 Playwright 报告目录，避免一键发布门禁污染候选工作树。
+ */
 export function evidenceDir(): string {
-  return process.env.E2E_EVIDENCE_DIR || path.join(__dirname, '../../docs/evidence/e2e');
+  if (process.env.E2E_EVIDENCE_DIR) return process.env.E2E_EVIDENCE_DIR;
+  if (isFullStack()) return path.join(__dirname, '../../docs/evidence/e2e');
+  return path.join(__dirname, '../playwright-report/evidence');
 }
 
 export async function captureEvidence(page: Page, filename: string): Promise<void> {
