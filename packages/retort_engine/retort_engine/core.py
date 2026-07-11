@@ -748,11 +748,51 @@ def _employee_result_files(root: Path) -> list[Path]:
 
 def _tasks_from_assessment(source: str, external_path: Path | None = None) -> list[dict[str, str]]:
     profile = _external_project_profile(external_path) if external_path else {}
-    tasks = [
-        {"task_id": "retort-absorb-depth", "title": "Absorb stronger implementation depth", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": f"Compare implementation patterns from {source}."},
-        {"task_id": "retort-absorb-ux", "title": "Absorb better user experience", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P1", "why": f"Extract usable UX improvements from {source}."},
-        {"task_id": "retort-absorb-ops", "title": "Absorb better operational gates", "dimension": "operational_readiness", "owner_hint": "deploy-release-officer", "priority": "P2", "why": f"Adapt CI and release checks from {source}."},
-    ]
+    tasks: list[dict[str, str]] = []
+    if external_path and external_path.is_dir():
+        from retort_engine.repository_intelligence import (
+            build_ranked_repository_map,
+            compare_repository_gaps,
+            tasks_from_repository_gaps,
+        )
+        from retort_engine.review_pipeline import build_depth_absorption_workflow, group_review_files
+
+        own_root = Path(__file__).resolve().parents[1]
+        own_map = build_ranked_repository_map(own_root, focus_terms=("absorb", "agent", "review", "oracle"), max_files=12, max_chars=12_000)
+        graph_gap = compare_repository_gaps(own_root, external_path, max_files=12)
+        for row in tasks_from_repository_gaps(graph_gap, own_map, limit=4):
+            tasks.append(
+                {
+                    "task_id": str(row["task_id"]),
+                    "title": str(row["title"]),
+                    "dimension": str(row["dimension"]),
+                    "owner_hint": str(row.get("owner_hint") or "fhd-core-maintainer"),
+                    "priority": str(row.get("priority") or "P0"),
+                    "why": str(row["why"]),
+                    "acceptance": str(row.get("acceptance") or ""),
+                }
+            )
+        depth = build_depth_absorption_workflow(group_review_files(own_root), group_review_files(external_path), tasks)
+        for row in depth.get("employee_tasks") or []:
+            if not isinstance(row, dict):
+                continue
+            tasks.append(
+                {
+                    "task_id": str(row.get("task_id") or ""),
+                    "title": str(row.get("title") or ""),
+                    "dimension": str(row.get("dimension") or "comparative_analysis_depth"),
+                    "owner_hint": str(row.get("owner_hint") or "fhd-core-maintainer"),
+                    "priority": str(row.get("priority") or "P1"),
+                    "why": f"Depth workflow prioritized absorption from {source}.",
+                    "acceptance": str(row.get("acceptance") or ""),
+                }
+            )
+    if not tasks:
+        tasks = [
+            {"task_id": "retort-absorb-depth", "title": "Absorb stronger implementation depth", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": f"Compare implementation patterns from {source}."},
+            {"task_id": "retort-absorb-ux", "title": "Absorb better user experience", "dimension": "product_operability", "owner_hint": "market-frontend-dev", "priority": "P1", "why": f"Extract usable UX improvements from {source}."},
+            {"task_id": "retort-absorb-ops", "title": "Absorb better operational gates", "dimension": "operational_readiness", "owner_hint": "deploy-release-officer", "priority": "P2", "why": f"Adapt CI and release checks from {source}."},
+        ]
     if profile.get("review_pipeline"):
         tasks.append({"task_id": "retort-absorb-review-pipeline", "title": "Adopt deterministic review pipeline stages", "dimension": "comparative_analysis_depth", "owner_hint": "fhd-core-maintainer", "priority": "P1", "why": "External project has explicit review pipeline signals; Retort should turn absorption into staged discovery, localization, reflection, and tasking."})
     if profile.get("file_grouping"):

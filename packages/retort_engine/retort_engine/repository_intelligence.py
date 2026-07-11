@@ -170,7 +170,12 @@ def compare_repository_gaps(
                 "page_rank": row["page_rank"],
                 "focus_hits": row["focus_hits"],
                 "missing_symbols": missing_symbols[:20],
-                "suggested_own_targets": task_targets_from_map(own_map, limit=3),
+                "suggested_own_targets": _suggested_own_targets_for_gap(
+                    own_map,
+                    external_path=str(row["path"]),
+                    missing_symbols=missing_symbols,
+                    limit=3,
+                ),
             }
         )
     gaps.sort(key=lambda item: (-float(item["page_rank"]), -int(item["focus_hits"]), str(item["external_path"])))
@@ -190,6 +195,51 @@ def compare_repository_gaps(
     }
 
 
+def tasks_from_repository_gaps(
+    gap: dict[str, Any],
+    own_map: dict[str, Any] | None = None,
+    *,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Convert repository graph gaps into absorption tasks with target_files."""
+    tasks: list[dict[str, Any]] = []
+    fallback_targets = task_targets_from_map(own_map or {}, limit=3) if own_map else []
+    for index, row in enumerate((gap.get("gaps") or [])[: max(0, limit)], start=1):
+        if not isinstance(row, dict):
+            continue
+        missing = [str(item) for item in row.get("missing_symbols") or []][:12]
+        targets = [item for item in row.get("suggested_own_targets") or [] if isinstance(item, dict)]
+        if not targets:
+            targets = fallback_targets
+        paths = [str(item.get("path") or "") for item in targets if item.get("path")]
+        external_path = str(row.get("external_path") or "")
+        tasks.append(
+            {
+                "task_id": f"retort-gap-{index:02d}",
+                "title": f"Close repository gap from {external_path or 'external module'}",
+                "dimension": "diff_hunk_review" if missing else "comparative_analysis_depth",
+                "why": (
+                    f"External exposes symbols missing locally: {', '.join(missing[:5])}."
+                    if missing
+                    else f"External file {external_path} is a graph-ranked absorption candidate."
+                ),
+                "action": f"Implement missing behavior toward target_files={','.join(paths)}",
+                "acceptance": (
+                    f"Own map covers symbols {', '.join(missing[:3])} or records a justified deferral."
+                    if missing
+                    else f"Gap for {external_path} is closed or deferred with evidence."
+                ),
+                "owner_hint": "fhd-core-maintainer",
+                "priority": "P0" if missing else "P1",
+                "target_files": paths,
+                "missing_symbols": missing,
+                "external_path": external_path,
+                "source": "repository_graph_gap",
+            }
+        )
+    return tasks
+
+
 def task_targets_from_map(repo_map: dict[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
     """Turn a ranked repository map into absorption task target_files/symbols."""
     targets: list[dict[str, Any]] = []
@@ -201,6 +251,40 @@ def task_targets_from_map(repo_map: dict[str, Any], *, limit: int = 5) -> list[d
                 "score": row.get("score"),
                 "page_rank": row.get("page_rank"),
                 "focus_hits": row.get("focus_hits"),
+            }
+        )
+    return targets
+
+
+def _suggested_own_targets_for_gap(
+    own_map: dict[str, Any],
+    *,
+    external_path: str,
+    missing_symbols: list[str],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Pick own targets per gap row (basename/rank), not a repeated whole-map default."""
+    external_name = Path(external_path).name
+    scored: list[tuple[float, dict[str, Any]]] = []
+    for row in own_map.get("files") or []:
+        if not isinstance(row, dict):
+            continue
+        score = float(row.get("page_rank") or 0.0) * 1000.0 + float(row.get("focus_hits") or 0) * 5.0
+        if Path(str(row.get("path") or "")).name == external_name:
+            score += 500.0
+        scored.append((score, row))
+    scored.sort(key=lambda item: (-item[0], str(item[1].get("path") or "")))
+    targets: list[dict[str, Any]] = []
+    for score, row in scored[: max(0, limit)]:
+        targets.append(
+            {
+                "path": row["path"],
+                "symbols": list(row.get("symbols") or [])[:12],
+                "score": round(score, 6),
+                "page_rank": row.get("page_rank"),
+                "focus_hits": row.get("focus_hits"),
+                "matched_for_external": external_path,
+                "missing_symbols": list(missing_symbols)[:8],
             }
         )
     return targets

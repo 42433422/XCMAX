@@ -80,6 +80,8 @@ DEPTH_FEATURE_FILES = {
     "graph_gap_extraction": "retort_engine/repository_intelligence.py",
     "absorption_synthesizer": "retort_engine/absorption_synthesizer.py",
     "pytest_oracle_default": "retort_engine/issue_capability_benchmark.py",
+    "agent_oracle_loop": "retort_engine/agent_oracle_loop.py",
+    "hunk_semantic_rules": "retort_engine/absorbed_hunk_semantic_rules.py",
 }
 
 
@@ -145,6 +147,14 @@ def build_self_depth_report(project: str | Path) -> dict[str, Any]:
         "strict_closed_loop_proof": proof,
         "comparative_benchmark": benchmark,
         "landing_proof": landing,
+        "maturity_snapshot": {
+            "blind_pass_rate_floor": 0.85,
+            "behavior_patches": ["absorbed_review_rank_weights", "absorbed_hunk_semantic_rules"],
+            "gap_driven_tasks": "tasks_from_repository_gaps",
+            "apply_quality_gate": "absorption_quality_gate",
+            "agent_fail_to_pass": "run_agent_oracle_loop",
+            "sealed_blind_in_release": True,
+        },
         "summary": {
             "behavior_layer_count": len(layers),
             "behavior_layer_passed_count": sum(1 for row in layers.values() if row["passed"]),
@@ -227,6 +237,7 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
         and "build_ranked_repository_map" in repo_text
         and "compare_repository_gaps" in repo_text
         and "task_targets_from_map" in repo_text
+        and "tasks_from_repository_gaps" in repo_text
     )
     import tempfile
 
@@ -260,6 +271,9 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
         )
         stuck_ok = error_loop["status"] == "stuck" and bool(detect_stuck_pattern(error_loop["trajectory"], repeat_limit=3))
         process_probe = probe_timeout_kills_child(timeout_sec=0.5)
+        from retort_engine.agent_oracle_loop import run_agent_oracle_loop
+
+        agent_oracle = run_agent_oracle_loop(root, run_id="self-depth-agent-oracle")
         trajectory_file = Path(str(loop["summary"].get("trajectory_path") or ""))
         bounded_ready = (
             loop["status"] == "complete"
@@ -268,6 +282,7 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
             and trajectory_file.is_file()
             and stuck_ok
             and bool(process_probe.get("verified"))
+            and bool(agent_oracle.get("summary", {}).get("completed"))
         )
     oracle = run_heldout_oracle_suite(root)
     evaluation_ready = bool(oracle["summary"]["all_resolved"] and oracle["summary"]["case_count"] >= 2)
@@ -287,6 +302,7 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
                 "complete_loop": loop["summary"],
                 "stuck_loop": error_loop["summary"],
                 "process_safety": process_probe,
+                "agent_oracle_loop": agent_oracle.get("summary") or {},
             },
         },
         "reproducible_evaluation": {
@@ -412,9 +428,11 @@ def _feature_present(root: Path, name: str, rel: str) -> bool:
     markers = {
         "trajectory_persistence": "persist_trajectory",
         "process_safety": "run_command_with_process_group",
-        "graph_gap_extraction": "compare_repository_gaps",
+        "graph_gap_extraction": "tasks_from_repository_gaps",
         "absorption_synthesizer": "synthesize_behavior_absorption",
         "pytest_oracle_default": "run_heldout_oracle_suite",
+        "agent_oracle_loop": "run_agent_oracle_loop",
+        "hunk_semantic_rules": "match_absorbed_hunk_findings",
     }
     return markers[name] in text
 

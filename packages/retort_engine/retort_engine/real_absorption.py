@@ -191,6 +191,8 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     behavior_synthesis: dict[str, Any]
     weights_module = root / "retort_engine" / "absorbed_review_rank_weights.py"
     weights_test = root / "tests" / "test_absorbed_review_rank_weights.py"
+    rules_module = root / "retort_engine" / "absorbed_hunk_semantic_rules.py"
+    rules_test = root / "tests" / "test_absorbed_hunk_semantic_rules.py"
     if can_synthesize_behavior:
         behavior_synthesis = synthesize_behavior_absorption(
             root,
@@ -199,7 +201,7 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
             tasks=tasks,
             run_id=run_id,
         )
-        tracked_paths.extend([weights_module, weights_test])
+        tracked_paths.extend([weights_module, weights_test, rules_module, rules_test])
         review_report["behavior_synthesis"] = {
             "status": behavior_synthesis.get("status"),
             "dimensions": behavior_synthesis.get("dimensions"),
@@ -223,6 +225,8 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
             [
                 _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(weights_module)], root, timeout=60),
                 _run_command([_python(payload), "-m", "pytest", str(weights_test.relative_to(root)), "-q"], root, timeout=120),
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(rules_module)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(rules_test.relative_to(root)), "-q"], root, timeout=120),
             ]
         )
     if writes_capability_model:
@@ -286,16 +290,38 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     )
     changed_files = _changed_files(before, tracked_paths)
     diff_summary = _git_diff_summary(root, changed_files)
+    from retort_engine.absorption_quality import absorption_quality_gate
+
+    ranked = [{"signal": str(item), "weight": 30} for item in (behavior_synthesis.get("dimensions") or ["diff_hunk_review", "review_pipeline"])]
+    quality = absorption_quality_gate(
+        changed_files,
+        gates,
+        minimum_behavior_tests=1 if can_synthesize_behavior else 0,
+        ranked_capabilities=ranked,
+        code_graph_proof=code_graph_proof,
+    )
+    status = "applied" if changed_files else "noop"
+    if can_synthesize_behavior and not quality.get("passed"):
+        status = "blocked_by_absorption_quality_gate"
     result = _execution_result(
-        "applied" if changed_files else "noop",
+        status,
         root,
         source,
         started,
         changed_files,
         gates,
         diff_summary,
-        "CLI absorption applied project-local code and evidence artifacts.",
+        "CLI absorption applied project-local code and evidence artifacts."
+        if status == "applied"
+        else (
+            "Absorption blocked: behavior quality gate failed."
+            if status == "blocked_by_absorption_quality_gate"
+            else "CLI absorption produced no tracked file changes."
+        ),
     )
+    result["absorption_quality_gate"] = quality
+    if status == "blocked_by_absorption_quality_gate":
+        result["gates_passed"] = False
     result["run_id"] = run_id
     result["external_profile"] = external_profile
     result["semantic_review"] = semantic_review
