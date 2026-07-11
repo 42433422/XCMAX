@@ -66,6 +66,7 @@ from retort_engine.project_assessment import Assessment, AssessmentDependencies,
 from retort_engine.project_assessment import assess_project as _project_assess_project
 from retort_engine.project_assessment import project_files as _assessment_project_files
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
+from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -432,6 +433,18 @@ class RetortService:
         return build_absorption_saturation_report(
             str(payload.get("project") or payload.get("project_path") or "."),
             recent_limit=int(payload.get("recent_limit") or 3),
+        )
+
+    def self_bootstrap_plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_bootstrap_plan(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def self_depth_report(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return build_self_depth_report(str(payload.get("project") or payload.get("project_path") or "."))
+
+    def external_improvement_gate(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return external_improvement_gate(
+            str(payload.get("project") or payload.get("project_path") or "."),
+            str(payload.get("target") or ""),
         )
 
     def competitor_runtime_comparison(self, payload: dict[str, Any]) -> dict[str, Any]:
