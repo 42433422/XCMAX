@@ -41,7 +41,12 @@ def write_manifest(tmp_path: Path, url: str, filename: str, content: bytes, sha2
                     "mac" if filename.endswith(".dmg") else "win": (
                         [{"url": url, "sha256": sha256, "size": len(content), "filename": filename}]
                         if filename.endswith(".dmg")
-                        else {"url": url, "sha256": sha256, "size": len(content), "filename": filename}
+                        else {
+                            "url": url,
+                            "sha256": sha256,
+                            "size": len(content),
+                            "filename": filename,
+                        }
                     )
                 },
             }
