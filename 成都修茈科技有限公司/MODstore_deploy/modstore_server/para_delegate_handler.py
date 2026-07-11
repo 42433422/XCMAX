@@ -366,6 +366,7 @@ def _git_preflight_branch(repo_url: str, branch: str) -> Dict[str, Any]:
             "failure_kind": "git_prep",
         }
 
+
 def _task_result_snapshot(body: Any) -> Dict[str, Any]:
     if not isinstance(body, dict):
         return {"raw": str(body)[:1000]}
@@ -543,6 +544,7 @@ def _device_eligible(item: Any, tool_name: str) -> bool:
 
 def _filter_executor_ready(devices: list, tool_name: str) -> list:
     return [item for item in devices if _device_eligible(item, tool_name)]
+
 
 def _resolve_tier(req: Dict[str, Any]) -> int:
     """一级(1) / 二级(2)。默认一级，按需升二级。读 req.raw_input + 任务文本。"""
@@ -729,7 +731,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
     auto_merge = bool(req.get("auto_merge"))
     if not auto_merge and mode in {"verify", "review", "report"} and report_only is False:
         auto_merge = _coerce_bool(req.get("auto_merge_on_complete"), False)
-    workspace_path = str(req.get("workspace_path") or os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or "").strip()
+    workspace_path = str(
+        req.get("workspace_path") or os.environ.get("MODSTORE_PARA_WORKSPACE_PATH") or ""
+    ).strip()
     try:
         with httpx.Client(timeout=_api_timeout(), trust_env=False) as client:
             token_info = _get_para_token(client, base)
@@ -816,7 +820,9 @@ def _post_para_api(req: Dict[str, Any]) -> Dict[str, Any]:
                 accepted = _summarize_para_response(body)
                 if not task_id:
                     task_id = str(accepted.get("task_id") or "").strip()
-                _force_single_device_attempt({**req, "device_id": device_id, "report_only": report_only}, accepted)
+                _force_single_device_attempt(
+                    {**req, "device_id": device_id, "report_only": report_only}, accepted
+                )
                 dispatched.append(
                     {
                         "device_id": device_id,

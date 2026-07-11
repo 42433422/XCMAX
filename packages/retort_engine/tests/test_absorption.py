@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from retort_engine.absorption import run_absorption
 from retort_engine.models import ExternalProjectRef
 from retort_engine.sources import parse_github_url, resolve_external_project
@@ -68,6 +70,7 @@ def test_absorption_writes_employee_queue_and_history(tmp_path: Path) -> None:
     assert history_path.is_file()
 
 
+@pytest.mark.keep_self_depth_gate
 def test_absorption_blocks_other_modules_when_retort_self_depth_is_not_verified(tmp_path: Path, monkeypatch) -> None:
     own = tmp_path / "own"
     external = tmp_path / "external"
