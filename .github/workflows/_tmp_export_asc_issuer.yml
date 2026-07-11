@@ -1,0 +1,31 @@
+name: tmp-export-asc-issuer
+on:
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Encrypt issuer for local recovery
+        env:
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          WRAP_PASS: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_STORE_CONNECT_API_ISSUER_ID:-}" ]; then
+            echo "::error::APP_STORE_CONNECT_API_ISSUER_ID secret empty"
+            exit 1
+          fi
+          # wrap with CSC_KEY_PASSWORD (already on machine as ~/.config/xcagi/csc_key_password.txt)
+          printf '%s' "$APP_STORE_CONNECT_API_ISSUER_ID" | openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -pass "env:WRAP_PASS" -out issuer.enc
+          printf '%s' "${APP_STORE_CONNECT_API_KEY_ID:-}" > key_id.txt
+          echo "issuer_len=${#APP_STORE_CONNECT_API_ISSUER_ID}"
+          echo "key_id_len=${#APP_STORE_CONNECT_API_KEY_ID}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: asc-issuer-enc
+          path: |
+            issuer.enc
+            key_id.txt
+          retention-days: 1
