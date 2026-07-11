@@ -17,7 +17,12 @@ import fs from 'node:fs'
 import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
-import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
+import {
+  configureUpdater,
+  ensureUpdaterNetSession,
+  installUpdate,
+  runUpdateCheckWithDirectNet
+} from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 
 const APP_NAME = 'XCAGI'
@@ -522,7 +527,8 @@ export const waitForBackendHealth = waitForBackendPing
 /** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
 export async function waitForBackendApplicationReady(
   port: number,
-  timeoutMs = packagedBackendHealthTimeoutMs()
+  timeoutMs = packagedBackendHealthTimeoutMs(),
+  requireExplicitUiReady = false
 ): Promise<void> {
   await waitForBackendPing(port, timeoutMs)
   const started = Date.now()
@@ -538,7 +544,7 @@ export async function waitForBackendApplicationReady(
           readyForUi?: boolean
         }
         const routesReady = body.appRoutesReady ?? body.readyForUi
-        if (routesReady !== false) {
+        if (requireExplicitUiReady ? routesReady === true : routesReady !== false) {
           return
         }
       }
@@ -546,6 +552,11 @@ export async function waitForBackendApplicationReady(
       /* routes still registering */
     }
     await new Promise(resolve => setTimeout(resolve, 150))
+  }
+  if (requireExplicitUiReady) {
+    throw new Error(
+      `后端 /api/desktop/status 未在 ${timeoutMs}ms 内明确返回 readyForUi=true（端口 ${port}）。`
+    )
   }
   console.warn('[xcagi-desktop] appRoutesReady 未在时限内为 true，仍加载主应用')
 }
@@ -942,6 +953,57 @@ function tagDesktopWebContents(win: BrowserWindow): void {
     .catch(() => { })
 }
 
+export type DesktopRendererSmokeEvidence = {
+  url: string
+  vueActive: boolean
+  rootChildCount: number
+}
+
+/**
+ * CI-only renderer probe. Backend readiness is established before this runs;
+ * this second handshake proves that the real Vue application mounted in the
+ * Electron renderer instead of leaving the splash screen or an error page up.
+ */
+export async function waitForDesktopRendererReady(
+  win: BrowserWindow,
+  timeoutMs = 20_000,
+  pollIntervalMs = 200
+): Promise<DesktopRendererSmokeEvidence> {
+  const started = Date.now()
+  let lastError = ''
+
+  do {
+    if (win.isDestroyed()) {
+      throw new Error('Electron renderer window was destroyed before becoming ready')
+    }
+    try {
+      const evidence = (await win.webContents.executeJavaScript(`(() => {
+        const root = document.querySelector('#app')
+        return {
+          url: window.location.href,
+          vueActive: window.__VUE_APP_ACTIVE__ === true,
+          rootChildCount: root ? root.childElementCount : 0
+        }
+      })()`)) as DesktopRendererSmokeEvidence
+      if (
+        evidence.vueActive &&
+        evidence.rootChildCount > 0 &&
+        isTrustedDesktopOrigin(evidence.url, DEFAULT_PORT)
+      ) {
+        return evidence
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
+
+    if (Date.now() - started >= timeoutMs) break
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, pollIntervalMs)))
+  } while (Date.now() - started <= timeoutMs)
+
+  const detail = lastError ? ` Last probe error: ${lastError}` : ''
+  throw new Error(`Electron renderer did not become ready within ${timeoutMs}ms.${detail}`)
+}
+
 export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?: number): boolean {
   if (!rawUrl) return false
   try {
@@ -1081,20 +1143,20 @@ async function createWindow(): Promise<void> {
       .catch(() => undefined)
   }
 
-  const loadMainApplication = async (): Promise<void> => {
-    if (!mainWindow) return
-    try {
-      await mainWindow.loadURL(desktopInitialUrl(), {
-        extraHeaders: 'Cache-Control: no-cache\r\n'
-      })
-      tagDesktopWebContents(mainWindow)
-      if (process.platform === 'darwin') {
-        ensureMacWindowInWorkArea(mainWindow)
-      }
-      mainWindow.focus()
-    } catch (error) {
-      console.error('[xcagi-desktop] load main application failed', error)
+  const loadMainApplication = async (): Promise<BrowserWindow> => {
+    const win = mainWindow
+    if (!win) {
+      throw new Error('Electron main window closed before the application loaded')
     }
+    await win.loadURL(desktopInitialUrl(), {
+      extraHeaders: 'Cache-Control: no-cache\r\n'
+    })
+    tagDesktopWebContents(win)
+    if (process.platform === 'darwin') {
+      ensureMacWindowInWorkArea(win)
+    }
+    win.focus()
+    return win
   }
 
   const splashStarted = Date.now()
@@ -1109,14 +1171,40 @@ async function createWindow(): Promise<void> {
     }
   }, 1000)
 
-  void waitForBackendApplicationReady(DEFAULT_PORT)
-    .then(() => {
+  const desktopSmokeEnabled = process.env.XCAGI_DESKTOP_SMOKE === '1'
+  void waitForBackendApplicationReady(
+    DEFAULT_PORT,
+    packagedBackendHealthTimeoutMs(),
+    desktopSmokeEnabled
+  )
+    .then(async () => {
       updateSplashStatus('正在加载应用…')
-      return loadMainApplication()
+      const win = await loadMainApplication()
+      if (!desktopSmokeEnabled) {
+        return
+      }
+      // A healthy renderer is not enough for a releasable desktop shell: prove
+      // that electron-updater can configure its getter-owned session as well.
+      await ensureUpdaterNetSession()
+      const renderer = await waitForDesktopRendererReady(win)
+      console.info(
+        '[xcagi-desktop] smoke-ready',
+        JSON.stringify({
+          backendReady: true,
+          rendererReady: true,
+          ...renderer
+        })
+      )
+      app.quit()
     })
     .catch(error => {
-      console.error('[xcagi-desktop] backend readiness wait failed', error)
+      console.error('[xcagi-desktop] application readiness failed', error)
       updateSplashStatus('启动失败，请查看日志')
+      if (desktopSmokeEnabled) {
+        stopBackend()
+        app.exit(1)
+        return
+      }
       void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
     })
     .finally(() => clearInterval(splashTicker))

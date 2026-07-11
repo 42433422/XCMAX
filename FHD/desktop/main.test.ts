@@ -120,6 +120,107 @@ describe('main — resolveDesktopUserDataPath', () => {
   })
 })
 
+describe('main — waitForDesktopRendererReady', () => {
+  it('returns evidence only after the trusted Vue renderer is mounted', async () => {
+    const executeJavaScript = vi
+      .fn()
+      .mockResolvedValueOnce({
+        url: 'http://127.0.0.1:17500/',
+        vueActive: true,
+        rootChildCount: 0
+      })
+      .mockResolvedValueOnce({
+        url: 'http://127.0.0.1:17500/',
+        vueActive: true,
+        rootChildCount: 2
+      })
+    const win = {
+      isDestroyed: vi.fn(() => false),
+      webContents: { executeJavaScript }
+    } as unknown as Electron.BrowserWindow
+    const { waitForDesktopRendererReady } = await import('./main.js')
+
+    await expect(waitForDesktopRendererReady(win, 100, 0)).resolves.toEqual({
+      url: 'http://127.0.0.1:17500/',
+      vueActive: true,
+      rootChildCount: 2
+    })
+    expect(executeJavaScript).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects an unmounted renderer instead of treating process survival as success', async () => {
+    const win = {
+      isDestroyed: vi.fn(() => false),
+      webContents: {
+        executeJavaScript: vi.fn().mockResolvedValue({
+          url: 'http://127.0.0.1:17500/',
+          vueActive: false,
+          rootChildCount: 0
+        })
+      }
+    } as unknown as Electron.BrowserWindow
+    const { waitForDesktopRendererReady } = await import('./main.js')
+
+    await expect(waitForDesktopRendererReady(win, 0, 0)).rejects.toThrow(
+      'Electron renderer did not become ready within 0ms'
+    )
+  })
+})
+
+describe('main — strict backend application readiness', () => {
+  it('requires an explicit readyForUi signal for the desktop smoke handshake', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: vi.fn(() => 'uvicorn') }
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: vi.fn(async () => ({ readyForUi: true }))
+      } as unknown as Response)
+    const { waitForBackendApplicationReady } = await import('./main.js')
+
+    try {
+      await expect(waitForBackendApplicationReady(17500, 100, true)).resolves.toBeUndefined()
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        1,
+        'http://127.0.0.1:17500/api/ping',
+        expect.any(Object)
+      )
+      expect(fetchSpy).toHaveBeenNthCalledWith(
+        2,
+        'http://127.0.0.1:17500/api/desktop/status',
+        expect.any(Object)
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('rejects a responsive backend that never becomes ready for UI', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: vi.fn(() => 'uvicorn') }
+      } as unknown as Response)
+      .mockResolvedValue({
+        ok: true,
+        json: vi.fn(async () => ({ readyForUi: false }))
+      } as unknown as Response)
+    const { waitForBackendApplicationReady } = await import('./main.js')
+
+    try {
+      await expect(waitForBackendApplicationReady(17500, 1, true)).rejects.toThrow(
+        '/api/desktop/status'
+      )
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+})
+
 describe('main — resolveDefaultDesktopPort', () => {
   beforeEach(() => {
     delete process.env.XCAGI_DESKTOP_PORT

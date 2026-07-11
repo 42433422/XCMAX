@@ -18,13 +18,18 @@ export async function ensureUpdaterNetSession(): Promise<Session> {
   }
   if (!updaterNetSessionReady) {
     updaterNetSessionReady = (async () => {
-      const updaterSession = session.fromPartition('persist:xcagi-updater', { cache: false })
+      // electron-updater owns this partition and exposes it through a getter-only
+      // property. Reuse that session so metadata and installer downloads share the
+      // same direct-proxy policy; assigning netSession throws in electron-updater 6.8.
+      const updaterSession = autoUpdater.netSession
       await updaterSession.setProxy({ mode: 'direct' })
       updaterNetSession = updaterSession
-      const updater = autoUpdater as unknown as { netSession?: Session }
-      updater.netSession = updaterSession
       return updaterSession
-    })()
+    })().catch(error => {
+      // Allow a later manual/periodic update check to retry transient session setup.
+      updaterNetSessionReady = null
+      throw error
+    })
   }
   return updaterNetSessionReady
 }
@@ -182,7 +187,11 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
-    void ensureUpdaterNetSession()
+    void ensureUpdaterNetSession().catch(error => {
+      appendUpdaterEvent('session_init_failed', {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    })
   }
 
   const updateUrl = process.env.XCAGI_UPDATE_URL

@@ -1,4 +1,4 @@
-# T47 — macOS Electron 壳冒烟（不打出完整安装包，验证 tsc + electron 可启动）
+# T47 — macOS Electron 启动冒烟（不打完整安装包，验证后端就绪 + Vue renderer 挂载）
 # full_build 手动触发时产 arm64+x64 双架构 dmg，并跑可交付冒烟
 name: desktop-macos-smoke
 
@@ -12,6 +12,7 @@ on:
     branches: [main, master]
     paths:
       - "FHD/desktop/**"
+      - ".github/workflows/desktop-macos-smoke.yml"
   workflow_dispatch:
     inputs:
       full_build:
@@ -26,15 +27,22 @@ concurrency:
 
 jobs:
   electron-smoke:
-    name: Electron build + launch (macOS)
+    name: Electron backend + renderer readiness (macOS)
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: FHD/desktop
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: FHD/deploy/requirements-server-api.lock.txt
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -46,21 +54,58 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install locked backend runtime
+        working-directory: FHD
+        run: python -m pip install --disable-pip-version-check -r deploy/requirements-server-api.lock.txt
+
       - name: TypeScript build
         run: npm run build
 
       - name: Electron smoke (headless CI)
         env:
           ELECTRON_DISABLE_SECURITY_WARNINGS: "true"
+          XCAGI_DESKTOP_SMOKE: "1"
+          XCAGI_DATA_DIR: ${{ runner.temp }}/xcagi-smoke-data
         run: |
-          npx electron --version
-          # 无显示器环境：短时启动后退出；0=正常退出, 124=GNU timeout, 142=perl alarm(SIGALRM)
-          perl -e 'alarm 25; exec @ARGV' npx electron . --no-sandbox || code=$?
-          if [ "${code:-0}" -eq 0 ] || [ "${code:-0}" -eq 124 ] || [ "${code:-0}" -eq 142 ]; then
-            echo "[smoke] electron . exited (code=${code:-0}) — OK for CI"
-            exit 0
+          LOG_PATH="${RUNNER_TEMP}/xcagi-electron-smoke.log"
+          ELECTRON_BIN="$(node -p "require('electron')")"
+          export PYTHON="$(command -v python)"
+          export NODE_OPTIONS="${NODE_OPTIONS:+${NODE_OPTIONS} }--unhandled-rejections=strict"
+
+          "${ELECTRON_BIN}" --version
+          set +e
+          perl -e 'alarm 180; exec @ARGV' "${ELECTRON_BIN}" . --no-sandbox 2>&1 | tee "${LOG_PATH}"
+          pipeline_codes=("${PIPESTATUS[@]}")
+          set -e
+          electron_code="${pipeline_codes[0]}"
+          tee_code="${pipeline_codes[1]}"
+
+          if [ "${tee_code}" -ne 0 ]; then
+            echo "::error::Failed to capture Electron smoke log (tee exit ${tee_code})."
+            exit "${tee_code}"
           fi
-          exit "${code}"
+          if [ "${electron_code}" -ne 0 ]; then
+            echo "::error::Electron smoke did not exit cleanly (exit ${electron_code}); timeout codes are failures."
+            exit "${electron_code}"
+          fi
+          if ! grep -Fq '[xcagi-desktop] smoke-ready {"backendReady":true,"rendererReady":true' "${LOG_PATH}"; then
+            echo "::error::Electron exited 0 without the backend+renderer readiness marker."
+            exit 1
+          fi
+          if grep -Eq 'UnhandledPromiseRejection|\[unhandledrejection\]|ModuleNotFoundError|application readiness failed|backend process exited|启动失败' "${LOG_PATH}"; then
+            echo "::error::Fatal startup diagnostics were present despite the readiness marker."
+            exit 1
+          fi
+          echo "[smoke] backend and Vue renderer ready; Electron exited cleanly."
+
+      - name: Upload Electron smoke log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-macos-smoke-log
+          path: ${{ runner.temp }}/xcagi-electron-smoke.log
+          if-no-files-found: warn
+          retention-days: 14
 
   # 手动触发 full_build 时：双架构矩阵各出 personal SKU dmg + 可交付冒烟
   macos-deliverable-build:
