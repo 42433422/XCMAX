@@ -24,11 +24,42 @@ const ADMIN_USER = process.env.MOD_PILOT_ADMIN_USER || process.env.MOD_PILOT_USE
 const ADMIN_PASS = process.env.MOD_PILOT_ADMIN_PASSWORD || process.env.MOD_PILOT_PASSWORD || 'ModPilot2026!';
 const MERCHANT_USER = process.env.MOD_PILOT_MERCHANT_USER || 'modpilot';
 const MERCHANT_PASS = process.env.MOD_PILOT_MERCHANT_PASSWORD || 'ModPilot2026!';
+
+/** 从 ~/.xcmax/mod-pilot.env 注入买家等密钥（不入库） */
+function loadPilotEnvFile(): void {
+  const candidates = [
+    process.env.MOD_PILOT_ENV_FILE,
+    path.join(process.env.HOME || '', '.xcmax/mod-pilot.env'),
+    path.resolve(__dirname, '../../../.xcmax/mod-pilot.env'),
+  ].filter(Boolean) as string[];
+  for (const file of candidates) {
+    if (!fs.existsSync(file)) continue;
+    for (const raw of fs.readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#') || !line.includes('=')) continue;
+      const i = line.indexOf('=');
+      const key = line.slice(0, i).trim();
+      let val = line.slice(i + 1).trim();
+      if (
+        (val.startsWith('"') && val.endsWith('"')) ||
+        (val.startsWith("'") && val.endsWith("'"))
+      ) {
+        val = val.slice(1, -1);
+      }
+      if (key && process.env[key] === undefined) process.env[key] = val;
+    }
+    break;
+  }
+}
+loadPilotEnvFile();
+
 const SANDBOX_BUYER = process.env.MOD_PILOT_ALIPAY_BUYER || '';
 const SANDBOX_BUYER_PASS = process.env.MOD_PILOT_ALIPAY_BUYER_PASS || '';
+/** 无买家账号时：打开支付宝页后由人工扫码/登录付 0.01，脚本只轮询 paid */
+const MANUAL_PAY = process.env.MOD_PILOT_ALIPAY_MANUAL === '1';
 
 test.describe.configure({ mode: 'serial' });
-test.setTimeout(300_000);
+test.setTimeout(MANUAL_PAY ? 600_000 : 300_000);
 
 test.beforeAll(async () => {
   fs.mkdirSync(EVIDENCE, { recursive: true });
@@ -205,8 +236,8 @@ function parseOrderIdFromAlipayUrl(url: string): string {
 
 test('03-payment · 真实 checkout + 沙箱 0.01', async ({ page }) => {
   test.skip(
-    !SANDBOX_BUYER || !SANDBOX_BUYER_PASS,
-    '需配置 MOD_PILOT_ALIPAY_BUYER / MOD_PILOT_ALIPAY_BUYER_PASS 才能完成沙箱付款'
+    !(SANDBOX_BUYER && SANDBOX_BUYER_PASS) && !MANUAL_PAY,
+    '需 MOD_PILOT_ALIPAY_BUYER/PASS，或 MOD_PILOT_ALIPAY_MANUAL=1 人工付 0.01（可写 ~/.xcmax/mod-pilot.env）'
   );
   const token = await marketLogin(page, '/recharge', MERCHANT_USER, MERCHANT_PASS);
   await page.locator('input.custom-input, input[type="number"]').first().fill('0.01');
@@ -215,8 +246,17 @@ test('03-payment · 真实 checkout + 沙箱 0.01', async ({ page }) => {
   await page.waitForURL(/alipaydev|alipay\.com|gateway\.do/i, { timeout: 90_000 });
   const orderId = parseOrderIdFromAlipayUrl(page.url());
   expect(orderId).toMatch(/^MOD/);
-  await trySandboxPay(page);
-  await waitOrderPaid(token, orderId);
+  if (SANDBOX_BUYER && SANDBOX_BUYER_PASS) {
+    await trySandboxPay(page);
+  } else {
+    // 人工模式：保留支付宝页，等沙箱买家扫码/登录完成付款
+    // eslint-disable-next-line no-console
+    console.log(
+      `[mod-pilot] 请在打开的支付宝沙箱页完成 0.01 元付款（order=${orderId}），脚本最长等 8 分钟…`,
+    );
+    await shot(page, '03-payment-checkout-open.png');
+  }
+  await waitOrderPaid(token, orderId, MANUAL_PAY ? 480_000 : 180_000);
   await marketLogin(page, '/wallet', MERCHANT_USER, MERCHANT_PASS);
   await expect(page.getByText('当前余额')).toBeVisible({ timeout: 30_000 });
   const text = await page.locator('body').innerText();

@@ -48,11 +48,18 @@ if ! curl -sf "http://127.0.0.1:${MODSTORE_PORT}/api/health" >/dev/null 2>&1; th
   log "启动 MODstore uvicorn :${MODSTORE_PORT} …"
   (
     cd "${MODSTORE_DEPLOY_ROOT}"
-    PY="${FHD_ROOT}/.venv/bin/python"
-    [[ -x "${PY}" ]] || PY="$(command -v python3)"
+    # Prefer deploy-local venv (has xcagi_common); fall back to FHD/.venv
+    if [[ -x "${MODSTORE_DEPLOY_ROOT}/.venv/bin/python" ]]; then
+      PY="${MODSTORE_DEPLOY_ROOT}/.venv/bin/python"
+    elif [[ -x "${FHD_ROOT}/.venv/bin/python" ]]; then
+      PY="${FHD_ROOT}/.venv/bin/python"
+    else
+      PY="$(command -v python3)"
+    fi
+    _COMPANY_PKGS="$(cd "${MODSTORE_DEPLOY_ROOT}/.." && pwd)/packages"
     export MODSTORE_API_PORT MODSTORE_EMAIL_DEBUG PAYMENT_SECRET_KEY PAYMENT_BACKEND
     export ALIPAY_APP_PRIVATE_KEY_PATH ALIPAY_ALIPAY_PUBLIC_KEY_PATH ALIPAY_NOTIFY_URL
-    export PYTHONPATH="${MODSTORE_DEPLOY_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+    export PYTHONPATH="${MODSTORE_DEPLOY_ROOT}${_COMPANY_PKGS:+:${_COMPANY_PKGS}}${PYTHONPATH:+:${PYTHONPATH}}"
     exec "${PY}" -m uvicorn modstore_server.app:app --host 127.0.0.1 --port "${MODSTORE_PORT}"
   ) &
   for _ in $(seq 1 40); do
