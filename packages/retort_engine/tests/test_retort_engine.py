@@ -284,7 +284,7 @@ def test_absorption_executes_cli_and_writes_project_code(tmp_path: Path) -> None
     queue_path = own / ".retort" / "employee_queue.jsonl"
     history_path = own / ".retort" / "retort_history.sqlite"
 
-    result = absorb({"own_project": str(own), "external_path": str(external), "employee_queue": str(queue_path), "history_store": str(history_path), "execution_timeout_sec": 30})
+    result = absorb({"own_project": str(own), "external_path": str(external), "employee_queue": str(queue_path), "history_store": str(history_path), "execution_timeout_sec": 30, "keep_runtime_residue": True})
 
     execution = result["execution"]
     assert result["status"] == "absorption_execution_applied"
@@ -336,6 +336,7 @@ def test_absorption_branch_merge_runs_real_subprocess_and_rollback_rehearsal(tmp
             "absorption_branch": "retort/absorb-real-subprocess",
             "merge_after": True,
             "execution_timeout_sec": 60,
+            "keep_runtime_residue": True,
         }
     )
 
@@ -891,6 +892,7 @@ def test_real_absorption_writes_behavior_module_tests_and_runtime_mode(tmp_path:
             "employee_queue": str(queue),
             "history_store": str(history),
             "python": sys.executable,
+            "keep_runtime_residue": True,
         }
     )
 
@@ -949,6 +951,7 @@ def test_real_absorption_defaults_feedback_loop_to_project_retort_paths(tmp_path
                 }
             ],
             "python": sys.executable,
+            "keep_runtime_residue": True,
         }
     )
 

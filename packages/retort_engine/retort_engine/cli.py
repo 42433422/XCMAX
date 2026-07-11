@@ -49,6 +49,7 @@ from retort_engine.review_family_behavior_replay import build_review_family_beha
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
 from retort_engine.self_bootstrap import build_self_bootstrap_plan, build_self_depth_report, external_improvement_gate
+from retort_engine.workspace_hygiene import clean_workspace
 from retort_engine.similar_project_loop import build_absorption_saturation_report, build_similar_project_radar, run_similar_project_loop
 from retort_engine.task_prioritization import build_task_prioritization_report
 from retort_engine.task_dispatch_plan import build_task_dispatch_plan
@@ -88,6 +89,7 @@ def main(argv: list[str] | None = None) -> int:
     absorb_cmd.add_argument("--use-llm", action="store_true")
     absorb_cmd.add_argument("--no-execute-absorption", action="store_true")
     absorb_cmd.add_argument("--execution-timeout-sec", type=int, default=1800)
+    absorb_cmd.add_argument("--keep-runtime-residue", action="store_true")
     absorb_cmd.add_argument("--json", action="store_true")
     apply_absorb = sub.add_parser("apply-absorption")
     apply_absorb.add_argument("--payload-file", required=True)
@@ -417,6 +419,10 @@ def main(argv: list[str] | None = None) -> int:
     external_gate.add_argument("--project", default=".")
     external_gate.add_argument("--target", required=True)
     external_gate.add_argument("--json", action="store_true")
+    clean_workspace_cmd = sub.add_parser("clean-workspace")
+    clean_workspace_cmd.add_argument("--project", default=".")
+    clean_workspace_cmd.add_argument("--drop-durable-state", action="store_true")
+    clean_workspace_cmd.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -435,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
             print(_format_scores("Final scores", result["final_assessment"]["scores"]))
         return 0 if result["status"] == "converged" else 1
     if args.command == "absorb":
-        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec})
+        result = absorb({"own_project": args.own_project, "github_url": args.github, "external_path": args.external_path, "employee_queue": args.employee_queue, "history_store": args.history_store, "run_local_gates": args.run_local_gates, "branch_workflow": args.branch_workflow, "absorption_branch": args.absorption_branch, "merge_after": args.merge_after, "allow_dirty_branch": args.allow_dirty_branch, "refresh": args.refresh, "use_llm": args.use_llm, "execute_absorption": not args.no_execute_absorption, "execution_timeout_sec": args.execution_timeout_sec, "keep_runtime_residue": args.keep_runtime_residue})
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort absorption status: {result['status']}")
         return 0
     if args.command == "apply-absorption":
@@ -1131,6 +1137,15 @@ def main(argv: list[str] | None = None) -> int:
         result = external_improvement_gate(args.project, args.target)
         print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else f"Retort external improvement gate: {result['status']}")
         return 0 if result["status"] == "allowed" else 1
+    if args.command == "clean-workspace":
+        result = clean_workspace(args.project, keep_durable_state=not args.drop_durable_state)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort workspace cleanup: {result['status']}")
+            print(f"Removed: {result['summary']['removed_count']}")
+            print(f"Residue bytes: {result['summary']['residue_bytes']}")
+        return 0 if result["summary"]["clean"] else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0

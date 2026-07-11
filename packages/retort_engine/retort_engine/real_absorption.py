@@ -65,6 +65,29 @@ VISUAL_FRONTEND_PATH_MARKERS = (
 
 
 def apply_real_absorption(payload: dict[str, Any]) -> dict[str, Any]:
+    root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
+    keep_residue = bool(payload.get("keep_runtime_residue"))
+    result: dict[str, Any] | None = None
+    try:
+        result = _apply_real_absorption_unguarded(payload)
+        return result
+    finally:
+        if keep_residue:
+            if isinstance(result, dict):
+                result["workspace_closure"] = {"status": "skipped_keep_runtime_residue", "summary": {"closed": False}}
+        else:
+            from retort_engine.workspace_hygiene import close_run_workspace
+
+            closure = close_run_workspace(root, run_id=str((result or {}).get("run_id") or ""))
+            if isinstance(result, dict):
+                result["workspace_closure"] = closure
+                result["employee_results_path"] = ""
+                result["run_record_path"] = ""
+                if not closure["summary"]["closed"] and result.get("status") in {"applied", "noop"}:
+                    result["status"] = "applied_but_workspace_dirty"
+
+
+def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     started = time.monotonic()
     root = Path(str(payload.get("own_project") or payload.get("project") or ".")).expanduser().resolve()
     package_root = Path(__file__).resolve().parents[1]

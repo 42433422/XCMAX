@@ -228,43 +228,47 @@ def _behavior_layers(root: Path) -> dict[str, dict[str, Any]]:
         and "compare_repository_gaps" in repo_text
         and "task_targets_from_map" in repo_text
     )
-    trajectory_dir = root / ".retort" / "trajectories"
-    planned_actions = iter(({"command": "inspect"}, {"command": "verify"}))
-    loop = run_bounded_agent_loop(
-        "prove bounded completion with persistence",
-        planner=lambda _objective, _trajectory: next(planned_actions),
-        executor=lambda action: {"ok": True, "command": action["command"]},
-        judge=lambda _objective, trajectory: {
-            "complete": len(trajectory) >= 2,
-            "score": 100.0 if len(trajectory) >= 2 else 50.0,
-            "missing": "" if len(trajectory) >= 2 else "verification",
-        },
-        max_steps=3,
-        wall_time_limit_sec=5,
-        trajectory_dir=trajectory_dir,
-        run_id="self-depth-complete",
-    )
-    error_loop = run_bounded_agent_loop(
-        "detect repeated errors",
-        planner=lambda _objective, trajectory: {"command": f"retry-{len(trajectory) % 2}"},
-        executor=lambda action: {"ok": False, "returncode": 1, "error": "same boom", "output": "error"},
-        judge=lambda _objective, _trajectory: {"complete": False, "score": 0},
-        max_steps=6,
-        wall_time_limit_sec=5,
-        repeat_limit=3,
-        trajectory_dir=trajectory_dir,
-        run_id="self-depth-error",
-    )
-    stuck_ok = error_loop["status"] == "stuck" and bool(detect_stuck_pattern(error_loop["trajectory"], repeat_limit=3))
-    process_probe = probe_timeout_kills_child(timeout_sec=0.5)
-    bounded_ready = (
-        loop["status"] == "complete"
-        and loop["summary"]["step_count"] == 2
-        and loop["summary"].get("trajectory_persisted") is True
-        and Path(str(loop["summary"].get("trajectory_path") or "")).is_file()
-        and stuck_ok
-        and bool(process_probe.get("verified"))
-    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="retort-self-depth-") as tmp:
+        trajectory_dir = Path(tmp)
+        planned_actions = iter(({"command": "inspect"}, {"command": "verify"}))
+        loop = run_bounded_agent_loop(
+            "prove bounded completion with persistence",
+            planner=lambda _objective, _trajectory: next(planned_actions),
+            executor=lambda action: {"ok": True, "command": action["command"]},
+            judge=lambda _objective, trajectory: {
+                "complete": len(trajectory) >= 2,
+                "score": 100.0 if len(trajectory) >= 2 else 50.0,
+                "missing": "" if len(trajectory) >= 2 else "verification",
+            },
+            max_steps=3,
+            wall_time_limit_sec=5,
+            trajectory_dir=trajectory_dir,
+            run_id="self-depth-complete",
+        )
+        error_loop = run_bounded_agent_loop(
+            "detect repeated errors",
+            planner=lambda _objective, trajectory: {"command": f"retry-{len(trajectory) % 2}"},
+            executor=lambda action: {"ok": False, "returncode": 1, "error": "same boom", "output": "error"},
+            judge=lambda _objective, _trajectory: {"complete": False, "score": 0},
+            max_steps=6,
+            wall_time_limit_sec=5,
+            repeat_limit=3,
+            trajectory_dir=trajectory_dir,
+            run_id="self-depth-error",
+        )
+        stuck_ok = error_loop["status"] == "stuck" and bool(detect_stuck_pattern(error_loop["trajectory"], repeat_limit=3))
+        process_probe = probe_timeout_kills_child(timeout_sec=0.5)
+        trajectory_file = Path(str(loop["summary"].get("trajectory_path") or ""))
+        bounded_ready = (
+            loop["status"] == "complete"
+            and loop["summary"]["step_count"] == 2
+            and loop["summary"].get("trajectory_persisted") is True
+            and trajectory_file.is_file()
+            and stuck_ok
+            and bool(process_probe.get("verified"))
+        )
     oracle = run_heldout_oracle_suite(root)
     evaluation_ready = bool(oracle["summary"]["all_resolved"] and oracle["summary"]["case_count"] >= 2)
     synthesis_ready = bool(
