@@ -91,6 +91,8 @@ def grant_admin() -> None:
 
 
 def sync_fhd_local_user() -> None:
+    import time
+
     body = json.dumps(
         {
             "username": MERCHANT_USER,
@@ -98,21 +100,32 @@ def sync_fhd_local_user() -> None:
             "account_kind": "enterprise",
         }
     ).encode()
-    req = urllib.request.Request(
-        f"{FHD_API}/api/auth/login",
-        data=body,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode())
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode(errors="replace")[:300]
-        raise SystemExit(f"FHD 企业登录失败 ({exc.code}): {detail}") from exc
-    if not data.get("success"):
-        raise SystemExit(f"FHD 企业登录失败: {data.get('message') or data}")
-    log(f"FHD 本地账号已 JIT 同步: {MERCHANT_USER}")
+    last_err = ""
+    for attempt in range(1, 13):
+        req = urllib.request.Request(
+            f"{FHD_API.rstrip('/')}/api/auth/login",
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            if data.get("success"):
+                log(f"FHD 本地账号已 JIT 同步: {MERCHANT_USER}")
+                return
+            last_err = str(data.get("message") or data)
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode(errors="replace")[:300]
+            last_err = f"HTTP {exc.code}: {detail}"
+            # 冷启动偶发 405/403/502，重试
+            if exc.code not in {403, 405, 502, 503, 504} and attempt >= 3:
+                raise SystemExit(f"FHD 企业登录失败 ({exc.code}): {detail}") from exc
+        except urllib.error.URLError as exc:
+            last_err = str(exc.reason or exc)
+        log(f"FHD 登录未就绪 (attempt {attempt}/12): {last_err[:160]}")
+        time.sleep(2.5)
+    raise SystemExit(f"FHD 企业登录失败: {last_err}")
 
 
 def main() -> int:
