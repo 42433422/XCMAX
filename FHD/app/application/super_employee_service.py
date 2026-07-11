@@ -674,6 +674,7 @@ class SuperEmployeeService:
         if not text:
             yield {"type": "error", "message": "message 不能为空"}
             return
+        self._last_cli_failure = {}
         if self._cancel_requested():
             yield self._cancelled_stream_event()
             return
@@ -716,6 +717,14 @@ class SuperEmployeeService:
             yield {"type": "status", "text": f"{self._p.display_tool} 正在续接当前对话…"}
             try:
                 body = await asyncio.to_thread(self._run_conversation_turn, cli_path, text, ctx)
+                cli_failure = dict(self._last_cli_failure)
+                if cli_failure:
+                    yield {
+                        "type": "error",
+                        "message": cli_failure.get("message") or body,
+                        "error_code": cli_failure.get("error_code", "cli_failed"),
+                    }
+                    return
                 for chunk in _chunk_text(body):
                     if self._cancel_requested():
                         raise SuperEmployeeExecutionCancelled("LAN task cancelled")
@@ -747,6 +756,14 @@ class SuperEmployeeService:
                 body = await asyncio.to_thread(
                     self._run_dev_task_loop, cli_path, text, base_cwd, ctx
                 )
+                cli_failure = dict(self._last_cli_failure)
+                if cli_failure:
+                    yield {
+                        "type": "error",
+                        "message": cli_failure.get("message") or body,
+                        "error_code": cli_failure.get("error_code", "cli_failed"),
+                    }
+                    return
                 yield {"type": "status", "text": "开发任务完成，正在整理回复…"}
                 for chunk in _chunk_text(body):
                     if self._cancel_requested():
@@ -886,6 +903,7 @@ class SuperEmployeeService:
             last_activity = time.monotonic()
             stream_json = self._p.cli_stream_json
             text_parts: list[str] = []
+            semantic_failure: tuple[str, str] | None = None
 
             async def _read_stderr() -> str:
                 if proc.stderr is None:
@@ -939,8 +957,23 @@ class SuperEmployeeService:
                     if not line:
                         continue
                     if stream_json and line.startswith("{"):
-                        token = self._parse_stream_json_line(line)
+                        event_failure = self._stream_json_failure(line)
+                        if event_failure is not None:
+                            semantic_failure = event_failure
+                            continue
+                        token, event_type = self._parse_stream_json_event(line)
                         if token:
+                            current_text = "".join(text_parts).strip()
+                            if (
+                                event_type == "result"
+                                and current_text
+                                and token.strip() == current_text
+                            ):
+                                # Claude/Cursor emit the same final answer once as
+                                # assistant content and again as the result event.
+                                # Drop only that final replay; identical live delta
+                                # tokens remain valid and are never collapsed.
+                                continue
                             text_parts.append(token)
                             yield {"type": "token", "text": token}
                     # 非 stream-json 的 stdout 行不 yield（codex 的 stdout 是日志，不是回复）
@@ -956,19 +989,37 @@ class SuperEmployeeService:
             # stream-json：text_parts 已收集
             if stream_json:
                 body = "".join(text_parts).strip()
-                if body:
-                    yield {"type": "done", "text": body}
+                if semantic_failure is not None:
+                    message, error_code = semantic_failure
+                    yield {
+                        "type": "error",
+                        "message": message,
+                        "error_code": error_code,
+                    }
                     return
-                # 没拿到文本 → 尝试 stderr
+                stderr = await _read_stderr()
                 if returncode != 0:
-                    stderr = await _read_stderr()
                     logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
-                    message = self._cli_failure_message(returncode, "", stderr)
+                    message = self._cli_failure_message(returncode, body, stderr)
                     yield {
                         "type": "error",
                         "message": message,
                         "error_code": self._last_cli_failure.get("error_code", "cli_failed"),
                     }
+                    return
+                # 少数旧版 CLI 只把错误写成普通文本且仍以 code 0 退出。
+                text_failure = self._semantic_cli_failure(f"{stderr}\n{body}")
+                if text_failure is not None:
+                    message, error_code = text_failure
+                    yield {
+                        "type": "error",
+                        "message": message,
+                        "error_code": error_code,
+                    }
+                    return
+                if body:
+                    self._last_cli_failure = {}
+                    yield {"type": "done", "text": body}
                     return
                 yield {"type": "done", "text": ""}
                 return
@@ -991,39 +1042,97 @@ class SuperEmployeeService:
                 return
             yield {"type": "done", "text": ""}
 
-    def _parse_stream_json_line(self, line: str) -> str:
-        """解析单行 stream-json 事件，返回文本 token（无文本则空串）。"""
+    def _parse_stream_json_event(self, line: str) -> tuple[str, str]:
+        """解析单行 stream-json，返回 ``(文本, 事件类型)``。"""
         try:
             ev = json.loads(line)
         except json.JSONDecodeError:
-            return ""
+            return "", ""
         if not isinstance(ev, dict):
-            return ""
+            return "", ""
         # Claude Code 事件格式
-        ev_type = ev.get("type")
+        ev_type = str(ev.get("type") or "")
         if ev_type == "assistant":
             msg = ev.get("message") if isinstance(ev.get("message"), dict) else {}
             for blk in msg.get("content") or []:
                 if isinstance(blk, dict) and blk.get("type") == "text":
                     t = str(blk.get("text") or "")
                     if t:
-                        return t
+                        return t, ev_type
         elif ev_type == "result":
             r = ev.get("result")
             if isinstance(r, str) and r.strip():
-                return r
+                return r, ev_type
         # Cursor / Trae 事件格式（stream-json，含 content 数组）
         elif ev_type == "content_block_delta":
             delta = ev.get("delta") if isinstance(ev.get("delta"), dict) else {}
             t = str(delta.get("text") or "")
             if t:
-                return t
+                return t, ev_type
         elif ev_type == "message_delta":
             # 部分工具在 message_delta 里带 text
             t = str(ev.get("text") or "")
             if t:
-                return t
-        return ""
+                return t, ev_type
+        return "", ev_type
+
+    def _parse_stream_json_line(self, line: str) -> str:
+        """兼容旧调用：解析单行 stream-json 并只返回文本。"""
+        return self._parse_stream_json_event(line)[0]
+
+    def _stream_json_failure(self, out: str) -> tuple[str, str] | None:
+        """Read authoritative error flags from CLI JSON events.
+
+        Claude can emit ``subtype=success`` together with ``is_error=true`` and
+        an HTTP error status.  The explicit error fields win over the subtype
+        and over any result text so mobile never turns a provider failure into a
+        successful answer.
+        """
+
+        failure_parts: list[str] = []
+        found_failure = False
+        for line in str(out or "").splitlines():
+            value = line.strip()
+            if not value.startswith("{"):
+                continue
+            try:
+                event = json.loads(value)
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            event_type = str(event.get("type") or "").strip().lower()
+            raw_error = event.get("error")
+            raw_status = event.get("api_error_status") or event.get("status_code")
+            try:
+                error_status = int(raw_status or 0)
+            except (TypeError, ValueError):
+                error_status = 0
+            is_error = event.get("is_error") is True or str(event.get("is_error")).lower() == "true"
+            if not (
+                is_error
+                or bool(raw_error)
+                or error_status >= 400
+                or event_type in {"error", "failed", "failure"}
+            ):
+                continue
+            found_failure = True
+            for candidate in (raw_error, event.get("result"), event.get("message")):
+                if isinstance(candidate, str) and candidate.strip():
+                    failure_parts.append(candidate.strip())
+                elif isinstance(candidate, dict):
+                    failure_parts.append(json.dumps(candidate, ensure_ascii=False))
+            message = event.get("message") if isinstance(event.get("message"), dict) else {}
+            for block in message.get("content") or []:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text = str(block.get("text") or "").strip()
+                    if text:
+                        failure_parts.append(text)
+        if not found_failure:
+            return None
+        detail = "\n".join(dict.fromkeys(failure_parts))
+        message = self._cli_failure_message(1, detail, "")
+        return message, self._last_cli_failure.get("error_code", "cli_failed")
 
     def _build_dispatch_request(
         self,
@@ -2041,7 +2150,9 @@ class SuperEmployeeService:
             )
         except (OSError, subprocess.SubprocessError):
             logger.exception("%s conversation CLI failed", self._p.display_tool)
-            return f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
+            message = f"{self._p.display_tool} CLI 暂时不可用，请稍后重试"
+            self._last_cli_failure = {"error_code": "cli_unavailable", "message": message}
+            return message
         if killed == "cancelled":
             raise SuperEmployeeExecutionCancelled("relay task cancelled")
         body, new_sid = self._parse_stream_json_full(stdout)
@@ -2063,27 +2174,66 @@ class SuperEmployeeService:
                 except (OSError, subprocess.SubprocessError):
                     pass
         if killed.startswith("idle"):
-            return f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
+            message = f"{self._p.display_tool} 静默 {idle_timeout:g} 秒判定卡住已结束，请重试。"
+            self._last_cli_failure = {"error_code": "cli_idle_timeout", "message": message}
+            return message
         if killed.startswith("hardcap"):
-            return f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
-        new_sid = new_sid or (initial_session_id if self._p.tool_name == "trae" else "")
-        if new_sid and new_sid != session_id:
-            rec["session_id"] = new_sid
-            self._session_set(key, rec)
-        self._last_session_runtime = {
-            "session_id": new_sid or session_id,
-            "workspace_root": cwd,
-            "branch": branch,
-            "thread_id": str(context.get("thread_id") or context.get("conversation_id") or ""),
-            "tool": self._p.tool_name,
-        }
-        if body:
-            self._last_cli_failure = {}
-            return body
+            message = f"{self._p.display_tool} 运行超过上限 {hard_cap:g} 秒已停止，请把任务拆小。"
+            self._last_cli_failure = {"error_code": "cli_hard_timeout", "message": message}
+            return message
+        structured_failure = self._stream_json_failure(stdout) if self._p.cli_stream_json else None
+        if structured_failure is not None:
+            return structured_failure[0]
         if returncode != 0:
             logger.warning("%s conversation returned code %s", self._p.display_tool, returncode)
             return self._cli_failure_message(returncode, stdout, stderr)
+        if body:
+            semantic_failure = self._semantic_cli_failure(body)
+            if semantic_failure is not None:
+                return semantic_failure[0]
+            # Native session ids are committed only after every success check.
+            # A provider error can still carry a session_id; persisting it would
+            # poison the next mobile resume attempt.
+            new_sid = new_sid or (initial_session_id if self._p.tool_name == "trae" else "")
+            if new_sid and new_sid != session_id:
+                rec["session_id"] = new_sid
+                self._session_set(key, rec)
+            self._last_session_runtime = {
+                "session_id": new_sid or session_id,
+                "workspace_root": cwd,
+                "branch": branch,
+                "thread_id": str(context.get("thread_id") or context.get("conversation_id") or ""),
+                "tool": self._p.tool_name,
+            }
+            self._last_cli_failure = {}
+            return body
         return ""
+
+    def _semantic_cli_failure(self, text: str) -> tuple[str, str] | None:
+        """Recognize provider failures that some CLIs emit as successful result text."""
+
+        lowered = str(text or "").strip().lower()
+        if not lowered:
+            return None
+        marker_groups = (
+            ("you've hit your usage limit",),
+            ("insufficient_quota",),
+            ("failed to authenticate",),
+            ("authentication_failed",),
+            ("not authenticated",),
+            ("request timed out",),
+            ("stream disconnected",),
+            ("connection timed out",),
+            ("failed to connect",),
+            ("request not allowed",),
+            ("oauth_org_not_allowed",),
+            ("organization has disabled", "use an anthropic api key instead"),
+            ("requires a newer version of codex",),
+        )
+        if not any(all(marker in lowered for marker in group) for group in marker_groups):
+            return None
+        message = self._cli_failure_message(1, text, "")
+        return message, self._last_cli_failure.get("error_code", "cli_failed")
 
     def _cli_failure_message(self, returncode: int, stdout: str, stderr: str) -> str:
         """Turn provider/CLI stderr into a safe, actionable product error."""
@@ -2111,6 +2261,19 @@ class SuperEmployeeService:
                 f"{self._p.display_tool} 当前用量已耗尽{retry_hint}，"
                 f"或前往 {self._p.display_tool} 用量设置补充额度。"
             )
+        elif (
+            "oauth_org_not_allowed" in lowered
+            or "organization has disabled" in lowered
+            or "use an anthropic api key instead" in lowered
+        ):
+            error_code = "organization_access_disabled"
+            message = (
+                f"{self._p.display_tool} 的组织已禁用 CLI 订阅访问，"
+                "请让组织管理员启用，或在电脑端配置 API Key 后重试。"
+            )
+        elif "requires a newer version of codex" in lowered:
+            error_code = "cli_upgrade_required"
+            message = "Codex CLI 版本过旧，请在电脑端升级到最新版后重试。"
         elif any(
             marker in lowered
             for marker in (
@@ -2189,12 +2352,18 @@ class SuperEmployeeService:
             # stream-json(claude)：从事件流解析最终回复。
             if self._p.cli_stream_json:
                 body = self._parse_claude_stream_json(stdout)
-                if body:
-                    self._last_cli_failure = {}
-                    return body
+                structured_failure = self._stream_json_failure(stdout)
+                if structured_failure is not None:
+                    return structured_failure[0]
                 if returncode != 0:
                     logger.warning("%s CLI returned code %s", self._p.display_tool, returncode)
                     return self._cli_failure_message(returncode, stdout, stderr)
+                if body:
+                    semantic_failure = self._semantic_cli_failure(body)
+                    if semantic_failure is not None:
+                        return semantic_failure[0]
+                    self._last_cli_failure = {}
+                    return body
                 return ""
             # 非 stream(codex)：先读 last-message 文件，再退 stdout。
             if self._p.cli_reads_output_file and output_path.exists():
