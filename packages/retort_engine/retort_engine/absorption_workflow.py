@@ -40,6 +40,7 @@ def run_real_absorption_cli(
         "employee_queue": str(payload.get("employee_queue") or ""),
         "history_store": str(payload.get("history_store") or ""),
         "python": resolve_python(),
+        "keep_runtime_residue": bool(payload.get("keep_runtime_residue")),
     }
     request_path.write_text(json.dumps(request_payload, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
     cmd = [resolve_python(), "-m", "retort_engine.cli", "apply-absorption", "--payload-file", str(request_path), "--json"]

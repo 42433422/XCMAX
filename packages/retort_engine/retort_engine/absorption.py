@@ -37,6 +37,47 @@ class RetortAbsorptionRunner:
         merge_after: bool = False,
         allow_dirty_branch: bool = False,
     ) -> AbsorptionResult:
+        target_root = Path(own_project).resolve()
+        result: AbsorptionResult | None = None
+        try:
+            result = self._run_unguarded(
+                own_project=own_project,
+                external_ref=external_ref,
+                run_local_gates=run_local_gates,
+                min_delta=min_delta,
+                max_tasks=max_tasks,
+                employee_queue_path=employee_queue_path,
+                history_store=history_store,
+                enforce_license=enforce_license,
+                branch_workflow=branch_workflow,
+                absorption_branch=absorption_branch,
+                merge_after=merge_after,
+                allow_dirty_branch=allow_dirty_branch,
+            )
+            return result
+        finally:
+            from retort_engine.workspace_hygiene import close_run_workspace
+
+            closure = close_run_workspace(target_root)
+            if result is not None and isinstance(result.capability_context, dict):
+                result.capability_context["workspace_closure"] = closure
+
+    def _run_unguarded(
+        self,
+        *,
+        own_project: str,
+        external_ref: ExternalProjectRef,
+        run_local_gates: bool = False,
+        min_delta: float = 3.0,
+        max_tasks: int = 12,
+        employee_queue_path: str = "",
+        history_store: str = "",
+        enforce_license: bool = False,
+        branch_workflow: bool = False,
+        absorption_branch: str = "",
+        merge_after: bool = False,
+        allow_dirty_branch: bool = False,
+    ) -> AbsorptionResult:
         branch_state = BranchWorkflowState(False, str(Path(own_project).resolve()))
         rejection_findings: tuple[str, ...] = ()
         package_root = Path(__file__).resolve().parents[1]
@@ -207,24 +248,29 @@ def _build_absorption_task_plan(
             "target_files": focus_paths,
         }
 
-    loop = run_bounded_agent_loop(
-        "plan synthesize and oracle-verify absorption tasks",
-        planner=lambda _objective, trajectory: {"candidate_index": len(trajectory), "phase": "synthesize"},
-        executor=_executor,
-        judge=lambda _objective, trajectory: {
-            "complete": len(trajectory) >= len(candidates),
-            "score": round(100 * len(trajectory) / len(candidates), 2),
-            "missing": "" if len(trajectory) >= len(candidates) else "remaining_candidates",
-            "oracle_resolved_count": oracle["summary"]["resolved_count"],
-        },
-        max_steps=len(candidates),
-        wall_time_limit_sec=60,
-        trajectory_dir=Path(__file__).resolve().parents[1] / ".retort" / "trajectories",
-        run_id="absorption-task-routing",
-    )
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="retort-absorb-loop-") as tmp:
+        loop = run_bounded_agent_loop(
+            "plan synthesize and oracle-verify absorption tasks",
+            planner=lambda _objective, trajectory: {"candidate_index": len(trajectory), "phase": "synthesize"},
+            executor=_executor,
+            judge=lambda _objective, trajectory: {
+                "complete": len(trajectory) >= len(candidates),
+                "score": round(100 * len(trajectory) / len(candidates), 2),
+                "missing": "" if len(trajectory) >= len(candidates) else "remaining_candidates",
+                "oracle_resolved_count": oracle["summary"]["resolved_count"],
+            },
+            max_steps=len(candidates),
+            wall_time_limit_sec=60,
+            trajectory_dir=tmp,
+            run_id="absorption-task-routing",
+        )
     accepted_ids = {str(row["observation"].get("task_id") or "") for row in loop["trajectory"] if row["observation"].get("accepted")}
     loop["focus_targets"] = focus_targets
     loop["oracle_summary"] = oracle["summary"]
+    loop["summary"]["trajectory_persisted"] = False
+    loop["summary"]["trajectory_path"] = ""
     return tuple(task for task in candidates if task.task_id in accepted_ids), loop
 
 def _frontier_capability_tasks(external_ref: ExternalProjectRef) -> tuple[ImprovementTask, ...]:

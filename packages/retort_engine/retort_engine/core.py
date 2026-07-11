@@ -164,6 +164,24 @@ def _now_iso() -> str:
 
 def absorb(payload: dict[str, Any]) -> dict[str, Any]:
     own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
+    keep_residue = bool(payload.get("keep_runtime_residue"))
+    result: dict[str, Any] | None = None
+    try:
+        result = _absorb_unguarded(payload)
+        return result
+    finally:
+        if not keep_residue:
+            from retort_engine.workspace_hygiene import close_run_workspace
+
+            closure = close_run_workspace(own, run_id=str(((result or {}).get("execution") or {}).get("run_id") or ""))
+            if isinstance(result, dict):
+                result["workspace_closure"] = closure
+                if not closure["summary"]["closed"] and result.get("status") not in {"blocked_by_self_depth_gate", "blocked_by_branch_workflow"}:
+                    result["status"] = f"{result.get('status')}_workspace_dirty"
+
+
+def _absorb_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
+    own = Path(payload.get("own_project") or payload.get("project") or ".").expanduser().resolve()
     package_root = Path(__file__).resolve().parents[1]
     if own != package_root:
         policy_gate = external_improvement_gate(package_root, own)
