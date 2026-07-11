@@ -188,7 +188,9 @@ class TestInvokeDirect:
         )
         with patch.object(svc, "_cli_path", return_value=str(cli)):
             # 非 FAQ/问候：chat 模式应落到 CLI 直答。
-            result = svc.invoke(user_id=1, message="请解释一下这个函数做什么", context={"mode": "chat"})
+            result = svc.invoke(
+                user_id=1, message="请解释一下这个函数做什么", context={"mode": "chat"}
+            )
         assert result["dispatch"]["status"] == "completed"
         assert result["dispatch"]["dispatcher"] == "codex_cli"
 

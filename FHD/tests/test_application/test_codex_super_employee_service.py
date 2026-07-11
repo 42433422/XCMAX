@@ -85,7 +85,10 @@ def test_codex_super_employee_answers_identity_without_dispatch(tmp_path: Path, 
     assert result["dispatch"]["dispatcher"] == "codex_direct"
     assert result["assistant_message"]["role"] == "assistant"
     assert result["assistant_message"]["kind"] == CODEX_DIRECT_MESSAGE_KIND
-    assert "Codex" in result["assistant_message"]["body"] or "真实接入" in result["assistant_message"]["body"]
+    assert (
+        "Codex" in result["assistant_message"]["body"]
+        or "真实接入" in result["assistant_message"]["body"]
+    )
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
     assert not list((tmp_path / "codex_super_employee" / "outbox").glob("*.json"))
     # 身份问答走本地直答，不进入 CLI。
