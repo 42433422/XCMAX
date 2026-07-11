@@ -137,11 +137,40 @@ async def tool_read_workspace_file(
 
             full = resolve_path_under_root(str(rr), path)
             root = resolve_path_under_root(str(rr), ".")
-            norm = str(full.relative_to(root)).replace("\\", "/")
+            configured_root_real = os.path.realpath(
+                os.path.abspath(os.path.expanduser(os.fspath(rr)))
+            )
+            configured_root_prefix = (
+                configured_root_real
+                if configured_root_real.endswith(os.sep)
+                else configured_root_real + os.sep
+            )
+            root_lexical = os.path.normpath(os.fspath(root))
+            if root_lexical != configured_root_real and not root_lexical.startswith(
+                configured_root_prefix
+            ):
+                raise UnsafePath("ops root is outside the configured repository")
+            root_real = os.path.realpath(root_lexical)
+            if root_real != configured_root_real and not root_real.startswith(
+                configured_root_prefix
+            ):
+                raise UnsafePath("ops root is outside the configured repository")
+            root_path = Path(root_real)
+
+            root_prefix = root_real if root_real.endswith(os.sep) else root_real + os.sep
+            full_lexical = os.path.normpath(os.fspath(full))
+            if full_lexical != root_real and not full_lexical.startswith(root_prefix):
+                raise UnsafePath("ops path is outside the configured repository")
+            full_real = os.path.realpath(full_lexical)
+            if full_real != root_real and not full_real.startswith(root_prefix):
+                raise UnsafePath("ops path is outside the configured repository")
+            full_path = Path(full_real)
+
+            norm = str(full_path.relative_to(root_path)).replace("\\", "/")
             if ops_path_allowed(norm):
-                if full.is_file():
+                if full_path.is_file():
                     try:
-                        content = full.read_text(encoding="utf-8", errors="replace")
+                        content = full_path.read_text(encoding="utf-8", errors="replace")
                         truncated = len(content) > 8000
                         return {
                             "ok": True,
@@ -159,10 +188,23 @@ async def tool_read_workspace_file(
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
-    if not os.path.isfile(resolved):
+    workspace_real = os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.fspath(workspace_root)))
+    )
+    workspace_prefix = (
+        workspace_real if workspace_real.endswith(os.sep) else workspace_real + os.sep
+    )
+    resolved_lexical = os.path.normpath(os.fspath(resolved))
+    if resolved_lexical != workspace_real and not resolved_lexical.startswith(workspace_prefix):
+        return {"ok": False, "error": f"路径越界：{path!r}"}
+    resolved_real = os.path.realpath(resolved_lexical)
+    if resolved_real != workspace_real and not resolved_real.startswith(workspace_prefix):
+        return {"ok": False, "error": f"路径越界：{path!r}"}
+    resolved_path = Path(resolved_real)
+    if not resolved_path.is_file():
         return {"ok": False, "error": f"文件不存在：{path!r}"}
     try:
-        content = Path(resolved).read_text(encoding="utf-8", errors="replace")
+        content = resolved_path.read_text(encoding="utf-8", errors="replace")
         truncated = len(content) > 8000
         return {
             "ok": True,
@@ -185,6 +227,19 @@ async def tool_write_workspace_file(
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return {"ok": False, "error": f"路径越界：{path!r}"}
+    workspace_real = os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.fspath(workspace_root)))
+    )
+    workspace_prefix = (
+        workspace_real if workspace_real.endswith(os.sep) else workspace_real + os.sep
+    )
+    resolved_lexical = os.path.normpath(os.fspath(resolved))
+    if resolved_lexical != workspace_real and not resolved_lexical.startswith(workspace_prefix):
+        return {"ok": False, "error": f"路径越界：{path!r}"}
+    resolved_real = os.path.realpath(resolved_lexical)
+    if resolved_real != workspace_real and not resolved_real.startswith(workspace_prefix):
+        return {"ok": False, "error": f"路径越界：{path!r}"}
+    resolved = resolved_real
 
     sg = [str(x).strip() for x in (ctx.get("scope_globs") or []) if str(x).strip()]
     fg = [str(x).strip() for x in (ctx.get("forbidden_globs") or []) if str(x).strip()]
@@ -202,9 +257,7 @@ async def tool_write_workspace_file(
 
         if management_context:
             try:
-                rel_repo = str(
-                    Path(resolved).resolve().relative_to(Path(workspace_root).resolve())
-                ).replace("\\", "/")
+                rel_repo = str(Path(resolved).relative_to(Path(workspace_real))).replace("\\", "/")
             except ValueError:
                 rel_repo = ""
         else:
@@ -257,7 +310,7 @@ async def tool_write_workspace_file(
         if not will_defer:
             compensation = capture_file_compensation(
                 Path(resolved),
-                workspace_root=workspace_root,
+                workspace_root=workspace_real,
             )
             compensation["expected_after_sha256"] = content_sha256
         reserved = begin_operation(
@@ -266,7 +319,7 @@ async def tool_write_workspace_file(
             task_revision=int(operation_context.get("task_revision") or 1),
             logical_step=str(ctx.get("management_operation_step") or "write_workspace_file"),
             kind="change_request.submit" if will_defer else "file.write",
-            target=str(Path(resolved).resolve()),
+            target=resolved,
             request={
                 "relative_path": path,
                 "content_sha256": content_sha256,
@@ -325,7 +378,7 @@ async def tool_write_workspace_file(
 
             cid = defer_write_as_change_request(
                 emp_id,
-                workspace_root,
+                workspace_real,
                 path,
                 content,
                 scope_globs=sg,
@@ -473,7 +526,7 @@ async def tool_write_workspace_file(
                 {
                     "claim_id": f"file_{hashlib.sha256(path.encode('utf-8')).hexdigest()[:16]}",
                     "kind": "file",
-                    "workspace_root": workspace_root,
+                    "workspace_root": workspace_real,
                     "path": path,
                     "expected": {
                         "exists": True,
@@ -497,7 +550,7 @@ async def tool_write_workspace_file(
                 execution_attempt=operation_attempt,
                 execution_nonce=operation_nonce,
                 result=result,
-                external_ref=str(destination.resolve()),
+                external_ref=str(destination),
                 compensation=compensation_record,
             )
             result["management_operation"] = operation
@@ -741,7 +794,20 @@ def _management_read_scope_error(
     resolved = _guard_path(workspace_root, path)
     if resolved is None:
         return "路径越界"
-    candidate = Path(resolved)
+    workspace_real = os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.fspath(workspace_root)))
+    )
+    workspace_prefix = (
+        workspace_real if workspace_real.endswith(os.sep) else workspace_real + os.sep
+    )
+    candidate_lexical = os.path.normpath(os.fspath(resolved))
+    if candidate_lexical != workspace_real and not candidate_lexical.startswith(workspace_prefix):
+        return "路径越界"
+    candidate_real = os.path.realpath(candidate_lexical)
+    if candidate_real != workspace_real and not candidate_real.startswith(workspace_prefix):
+        return "路径越界"
+    workspace_path = Path(workspace_real)
+    candidate = Path(candidate_real)
     lowered_parts = {part.lower() for part in candidate.parts}
     sensitive_name = any(
         part == ".env"
@@ -759,12 +825,10 @@ def _management_read_scope_error(
     from modstore_server.integrations.doc_sync_handler import _match_glob
 
     try:
-        rel = str(candidate.resolve().relative_to(Path(workspace_root).resolve())).replace(
-            "\\", "/"
-        )
+        rel = str(candidate.relative_to(workspace_path)).replace("\\", "/")
     except ValueError:
         rel = ""
-    if not rel and candidate.resolve() != Path(workspace_root).resolve():
+    if not rel and candidate != workspace_path:
         return "路径不在服务端授权仓库内"
     rel = rel.replace("\\", "/").strip("/")
     if rel == ".":

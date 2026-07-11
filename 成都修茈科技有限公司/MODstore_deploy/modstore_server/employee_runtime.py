@@ -6,6 +6,7 @@ import json
 import os
 import re
 import zipfile
+from pathlib import Path
 from typing import Any, Dict, Optional
 
 from modstore_server.catalog_store import employee_pack_records_from_store, files_dir
@@ -73,8 +74,24 @@ def employee_pack_runtime_issues(pack: Dict[str, Any]) -> list[str]:
     if not stored:
         issues.append("员工包缺少 stored_filename")
         return issues
+    archive_root = files_dir()
     try:
-        archive = resolve_path_under_root(files_dir(), stored)
+        archive = resolve_path_under_root(archive_root, stored)
+        archive_root_real = os.path.realpath(
+            os.path.abspath(os.path.expanduser(os.fspath(archive_root)))
+        )
+        archive_root_prefix = (
+            archive_root_real if archive_root_real.endswith(os.sep) else archive_root_real + os.sep
+        )
+        archive_lexical = os.path.normpath(os.fspath(archive))
+        if archive_lexical != archive_root_real and not archive_lexical.startswith(
+            archive_root_prefix
+        ):
+            raise UnsafePath("employee archive is outside the catalog root")
+        archive_real = os.path.realpath(archive_lexical)
+        if archive_real != archive_root_real and not archive_real.startswith(archive_root_prefix):
+            raise UnsafePath("employee archive is outside the catalog root")
+        archive = Path(archive_real)
     except (OSError, UnsafePath, ValueError):
         issues.append("员工包 stored_filename 越过受控归档目录")
         return issues

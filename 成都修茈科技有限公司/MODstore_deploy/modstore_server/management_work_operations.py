@@ -24,7 +24,7 @@ from modstore_server.models import (
     get_engine,
     get_session_factory,
 )
-from modstore_server.security_boundary import resolve_path_under_root
+from modstore_server.security_boundary import UnsafePath, resolve_path_under_root
 
 
 class ManagementOperationConflict(RuntimeError):
@@ -715,8 +715,21 @@ def list_task_operations(task_id: str) -> list[dict[str, Any]]:
 
 def _sha256_file(path: Path, *, workspace_root: str | Path) -> str:
     resolved = resolve_path_under_root(workspace_root, path, require_relative=False)
+    workspace_real = os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.fspath(workspace_root)))
+    )
+    workspace_prefix = (
+        workspace_real if workspace_real.endswith(os.sep) else workspace_real + os.sep
+    )
+    resolved_lexical = os.path.normpath(os.fspath(resolved))
+    if resolved_lexical != workspace_real and not resolved_lexical.startswith(workspace_prefix):
+        raise UnsafePath("file is outside the management workspace")
+    resolved_real = os.path.realpath(resolved_lexical)
+    if resolved_real != workspace_real and not resolved_real.startswith(workspace_prefix):
+        raise UnsafePath("file is outside the management workspace")
+    resolved_path = Path(resolved_real)
     digest = hashlib.sha256()
-    with resolved.open("rb") as handle:
+    with resolved_path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -731,12 +744,34 @@ def capture_file_compensation(
     """Capture a bounded preimage for safe compare-and-restore compensation."""
 
     root = resolve_path_under_root(workspace_root, ".", reject_symlinks=False)
-    resolved = resolve_path_under_root(root, path, require_relative=False)
+    workspace_real = os.path.realpath(
+        os.path.abspath(os.path.expanduser(os.fspath(workspace_root)))
+    )
+    workspace_prefix = (
+        workspace_real if workspace_real.endswith(os.sep) else workspace_real + os.sep
+    )
+    root_lexical = os.path.normpath(os.fspath(root))
+    if root_lexical != workspace_real and not root_lexical.startswith(workspace_prefix):
+        raise UnsafePath("management root is outside the assigned workspace")
+    root_real = os.path.realpath(root_lexical)
+    if root_real != workspace_real and not root_real.startswith(workspace_prefix):
+        raise UnsafePath("management root is outside the assigned workspace")
+    root_path = Path(root_real)
+
+    resolved = resolve_path_under_root(root_path, path, require_relative=False)
+    root_prefix = root_real if root_real.endswith(os.sep) else root_real + os.sep
+    resolved_lexical = os.path.normpath(os.fspath(resolved))
+    if resolved_lexical != root_real and not resolved_lexical.startswith(root_prefix):
+        raise UnsafePath("compensation target is outside the management root")
+    resolved_real = os.path.realpath(resolved_lexical)
+    if resolved_real != root_real and not resolved_real.startswith(root_prefix):
+        raise UnsafePath("compensation target is outside the management root")
+    resolved = Path(resolved_real)
     if not resolved.exists():
         return {
             "kind": "file_restore",
             "path": str(resolved),
-            "workspace_root": str(root),
+            "workspace_root": str(root_path),
             "before_exists": False,
             "reversible": True,
         }
@@ -744,7 +779,7 @@ def capture_file_compensation(
         return {
             "kind": "file_restore",
             "path": str(resolved),
-            "workspace_root": str(root),
+            "workspace_root": str(root_path),
             "before_exists": True,
             "reversible": False,
             "reason": "target is not a regular file",
@@ -753,10 +788,10 @@ def capture_file_compensation(
     payload: dict[str, Any] = {
         "kind": "file_restore",
         "path": str(resolved),
-        "workspace_root": str(root),
+        "workspace_root": str(root_path),
         "before_exists": True,
         "before_size": int(size),
-        "before_sha256": _sha256_file(resolved, workspace_root=root),
+        "before_sha256": _sha256_file(resolved, workspace_root=root_path),
     }
     if size <= max(0, int(max_bytes)):
         payload["before_content_b64"] = base64.b64encode(resolved.read_bytes()).decode("ascii")

@@ -52,8 +52,14 @@ def resolve_path_under_root(
         cursor = Path(root_real)
         for component in relative.parts:
             cursor = cursor / component
+            cursor_lexical = os.path.normpath(os.fspath(cursor))
+            if cursor_lexical != root_real and not cursor_lexical.startswith(root_prefix):
+                raise UnsafePath("path is outside the assigned root")
+            cursor_real = os.path.realpath(cursor_lexical)
+            if cursor_real != root_real and not cursor_real.startswith(root_prefix):
+                raise UnsafePath("path is outside the assigned root")
             try:
-                mode = cursor.lstat().st_mode
+                mode = os.lstat(cursor_lexical).st_mode
             except FileNotFoundError:
                 break
             if stat.S_ISLNK(mode):
