@@ -41,28 +41,57 @@ exports.default = async function afterSign(context) {
   ).trim()
   const teamId = (process.env.APPLE_TEAM_ID || process.env.IOS_TEAM_ID || '').trim()
 
+  async function withRetry(label, fn, attempts = 4) {
+    let lastErr
+    for (let i = 1; i <= attempts; i++) {
+      try {
+        return await fn()
+      } catch (err) {
+        lastErr = err
+        const msg = String(err && err.message ? err.message : err)
+        const transient =
+          msg.includes('Internet connection appears to be offline') ||
+          msg.includes('NSURLErrorDomain Code=-1009') ||
+          msg.includes('No network route') ||
+          msg.includes('ECONNRESET') ||
+          msg.includes('ETIMEDOUT') ||
+          msg.includes('ENOTFOUND')
+        console.warn(`[notarize] ${label} attempt ${i}/${attempts} failed: ${msg}`)
+        if (!transient || i === attempts) throw err
+        const waitMs = Math.min(30000, 5000 * i)
+        console.warn(`[notarize] retrying in ${waitMs}ms`)
+        await new Promise((r) => setTimeout(r, waitMs))
+      }
+    }
+    throw lastErr
+  }
+
   if (apiKeyPath && apiKeyId && apiIssuer) {
     console.log(`[notarize] notarytool via API key for ${appPath}`)
-    await notarize({
-      tool: 'notarytool',
-      appPath,
-      appleApiKey: apiKeyPath,
-      appleApiKeyId: apiKeyId,
-      appleApiIssuer: apiIssuer,
-    })
+    await withRetry('api-key', () =>
+      notarize({
+        tool: 'notarytool',
+        appPath,
+        appleApiKey: apiKeyPath,
+        appleApiKeyId: apiKeyId,
+        appleApiIssuer: apiIssuer,
+      }),
+    )
     console.log('[notarize] done (API key)')
     return
   }
 
   if (appleId && appleIdPassword && teamId) {
     console.log(`[notarize] notarytool via Apple ID for ${appPath}`)
-    await notarize({
-      tool: 'notarytool',
-      appPath,
-      appleId,
-      appleIdPassword,
-      teamId,
-    })
+    await withRetry('apple-id', () =>
+      notarize({
+        tool: 'notarytool',
+        appPath,
+        appleId,
+        appleIdPassword,
+        teamId,
+      }),
+    )
     console.log('[notarize] done (Apple ID)')
     return
   }
