@@ -1,56 +1,48 @@
-# T53 — Flutter mobile CI（仓根；主线 FHD/mobile-flutter-poc）
-# 归档 Kotlin 目录变更仍触发，但构建走 Flutter。
-name: android-build
+# CI SSOT: generated from FHD/.github/workflows/ci-mobile-flutter.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+name: ci-mobile-flutter
 
 on:
   push:
-    branches: [main, master]
     paths:
       - "FHD/mobile-flutter-poc/**"
-      - "FHD/mobile-android/**"
-      - ".github/workflows/android-build.yml"
+      - ".github/workflows/ci-mobile-flutter.yml"
   pull_request:
-    branches: [main, master]
     paths:
       - "FHD/mobile-flutter-poc/**"
-      - "FHD/mobile-android/**"
-  workflow_dispatch:
+      - ".github/workflows/ci-mobile-flutter.yml"
 
 concurrency:
-  group: android-build-${{ github.ref }}
+  group: ci-mobile-flutter-${{ github.ref }}
   cancel-in-progress: true
 
+
+defaults:
+  run:
+    working-directory: FHD
+
 jobs:
-  flutter-test-apk:
-    name: flutter test + apk (debug)
+  test-and-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     defaults:
       run:
         working-directory: FHD/mobile-flutter-poc
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
       - name: Flutter pub get
         run: flutter pub get
-
       - name: Flutter test
         run: flutter test
-
       - name: Flutter build apk (debug)
         run: flutter build apk --debug
-
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

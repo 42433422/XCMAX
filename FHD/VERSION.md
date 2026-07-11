@@ -37,7 +37,7 @@
 | **Windows 桌面** | 签约级 | 主交付面 |
 | **macOS 桌面** | 签约级 | arm64 + x64 dmg |
 | **Web / 后端** | 签约级 | FastAPI + Vue SPA |
-| **Android** | **签约级** | Kotlin Compose 双 SKU；登录（密码/OTP/扫码）· SSE 对话 · 4 Tab · 工作台 WebView |
+| **Android** | **签约级** | Flutter 主线（`mobile-flutter-poc`）；登录（密码/OTP/扫码）· SSE 对话 · 4 Tab · 审批/通知；原生 `mobile-android` 已归档 |
 
 声称 vs 实测差距见 [`docs/CLAIMED_VS_ACTUAL.md`](docs/CLAIMED_VS_ACTUAL.md)。
 

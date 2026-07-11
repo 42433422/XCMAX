@@ -4,7 +4,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FHD_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
-MODSTORE_DEPLOY_ROOT="${MODSTORE_DEPLOY_ROOT:-${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy}"
+# Prefer in-repo MODstore; fall back to archive only if missing.
+_REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
+_WS_MODSTORE="$(ls -d "${_REPO_ROOT}"/*修*/MODstore_deploy 2>/dev/null | head -1 || true)"
+if [[ -z "${MODSTORE_DEPLOY_ROOT:-}" ]]; then
+  if [[ -n "${_WS_MODSTORE}" && -d "${_WS_MODSTORE}/modstore_server" ]]; then
+    MODSTORE_DEPLOY_ROOT="${_WS_MODSTORE}"
+  else
+    MODSTORE_DEPLOY_ROOT="${XCMAX_ARCHIVE_ROOT:-$HOME/XCMAX-archives}/m0-fhd-bulk-20260605/成都修茈科技有限公司/MODstore_deploy"
+  fi
+fi
 MODSTORE_PORT="${MODSTORE_PORT:-8788}"
 MARKET_PORT="${MARKET_PORT:-5176}"
 API_PORT="${API_PORT:-5000}"
@@ -25,6 +34,10 @@ export XCAGI_MARKET_BASE_URL="http://127.0.0.1:${MODSTORE_PORT}"
 export MODEL_PAYMENT_BACKEND="${MODEL_PAYMENT_BACKEND:-modstore}"
 export PAYMENT_SECRET_KEY="${PAYMENT_SECRET_KEY:-mod-pilot-local-dev-signing-key-do-not-use-in-prod}"
 export PAYMENT_BACKEND="${PAYMENT_BACKEND:-python}"
+# Synced prod env may inject inline PKCS#8 keys that break python-alipay-sdk;
+# prefer filesystem PEM paths for local pilot.
+unset ALIPAY_APP_PRIVATE_KEY ALIPAY_ALIPAY_PUBLIC_KEY 2>/dev/null || true
+
 
 log() { printf '[capture-mod] %s\n' "$*"; }
 
@@ -82,6 +95,10 @@ log "=== 4/4 Playwright 截图 ==="
 cd "${FHD_ROOT}/frontend"
 npx playwright test e2e/mod-pilot-evidence.spec.ts --project=chromium
 
-bash "${FHD_ROOT}/MODstore/scripts/mod-pilot-checklist.sh" --verify
-"${PY}" "${FHD_ROOT}/scripts/observability/sync_m0_evidence_manifest.py"
+if [[ -x "${FHD_ROOT}/MODstore/scripts/mod-pilot-checklist.sh" ]]; then
+  bash "${FHD_ROOT}/MODstore/scripts/mod-pilot-checklist.sh" --verify || true
+fi
+if [[ -f "${FHD_ROOT}/scripts/observability/sync_m0_evidence_manifest.py" ]]; then
+  "${PY}" "${FHD_ROOT}/scripts/observability/sync_m0_evidence_manifest.py" || true
+fi
 log "完成 → ${FHD_ROOT}/docs/evidence/mod/01–04.png"

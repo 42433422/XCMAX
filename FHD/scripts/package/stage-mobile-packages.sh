@@ -61,6 +61,7 @@ ANDROID_VERSION="$(normalize_version "$ANDROID_VERSION")"
 FHD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 ANDROID_ROOT="${FHD_ROOT}/mobile-android"
+FLUTTER_ROOT="${FHD_ROOT}/mobile-flutter-poc"
 OUT_ROOT="${REPO_ROOT}/release/packages-v${VERSION}"
 PERSONAL_DIR="${OUT_ROOT}/personal"
 ENTERPRISE_DIR="${OUT_ROOT}/enterprise"
@@ -137,7 +138,10 @@ copy_apk() {
   local out_dir="$3"
 
   local src
+  # Flutter mainline first (enterprise-only applicationId); archive Kotlin as fallback.
   src="$(printf '%s\n' \
+    "${FLUTTER_ROOT}/build/app/outputs/flutter-apk/app-release.apk" \
+    "${FLUTTER_ROOT}/build/app/outputs/apk/release/app-release.apk" \
     "${ANDROID_ROOT}/app/build/outputs/apk/${sku}/release/app-${sku}-release.apk" \
     "${ANDROID_ROOT}/app/build/outputs/apk/${sku}/debug/app-${sku}-debug.apk")"
 

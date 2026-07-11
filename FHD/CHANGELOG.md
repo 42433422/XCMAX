@@ -12,6 +12,8 @@
 - **fix(mobile-flutter)**：探索 Tab 增加审批入口；通知页去掉假数据 fallback（空态诚实）
 - **fix(backend)**：审批驳回与 AI 工作流驳回均 `notify_mobile_user`，对齐通过路径
 - **fix(modstore)**：商品履约同步写入 `user_mods`（`pkg_id`），打通支付→桌面 entitlement
+- **ci(mobile)**：发版/门禁切到 `mobile-flutter-poc`（`ci-mobile-flutter` / `fhd-release-android` / `android-build`）；归档 Kotlin CI 改为走 Flutter
+- **docs(evidence)**：Mod 试点 `01`/`02` 截图已刷新；`03`/`04` 仍阻塞（沙箱买家 / FHD 企业登录）
 - **docs(evidence)**：`v10-bc-delivery-progress-2026-07-11.md`（进行中，非正式签字）
 
 ### v10-A 真机验收修复（2026-07-09 · v10 线内迭代）

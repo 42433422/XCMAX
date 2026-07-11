@@ -101,6 +101,8 @@ resolve_apk() {
       return 0
     fi
   done <<EOF
+${FHD_ROOT}/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk
+${FHD_ROOT}/mobile-flutter-poc/build/app/outputs/apk/release/app-release.apk
 ${FHD_ROOT}/mobile-android/app/build/outputs/apk/enterprise/release/app-enterprise-release.apk
 ${FHD_ROOT}/mobile-android/app/build/outputs/apk/enterprise/debug/app-enterprise-debug.apk
 EOF

@@ -12,9 +12,9 @@
 | v10-C | 通知页去掉 API 空/失败时的假数据 fallback | **代码落地** |
 | v10-C | 审批驳回触发 `notify_mobile_user`（与通过路径对齐） | **代码落地** |
 | v10-B | 支付履约写 `user_mods`（`pkg_id` → entitlement 桌面可见） | **代码落地** |
-| v10-C | Flutter 发版 CI 切离 `mobile-android` | **未做** |
+| v10-C | Flutter 发版 CI 切离 `mobile-android` | **已切**（`fhd-ci-mobile-flutter` / `fhd-release-android` / `android-build`） |
 | v10-C | 真机 E2E 证据（登录/扫码/5G/审批闭环） | **未做** |
-| v10-B | Mod pilot 四图 + `v10-b-*-acceptance` 签字 | **未做** |
+| v10-B | Mod pilot 四图 + `v10-b-*-acceptance` 签字 | **部分**：01/02 已刷新；03 需沙箱买家；04 FHD 企业登录 403 |
 
 ## 下一步（最短）
 
