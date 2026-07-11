@@ -20,9 +20,10 @@
 - [x] PL2: AI 员工商店 — 固化 v10-B 桌面端联动闭环
   - Catalog、企业授权、下载源、桌面端安装、启用、禁用、回滚
   - 证据：`FHD/docs/evidence/e2e/v10-b-store-desktop-acceptance-2026-07-11-final.md`（2026-07-11；支付由产品确认历史成功）
-- [ ] PL3: 移动 AI 协同 App — 固化 v10-C 协同闭环
+- [x] PL3: 移动 AI 协同 App — 固化 v10-C 协同闭环
   - 企业登录、扫码连接、AI 对话、通知、审批、任务 / 订单简表
-  - 底稿：`FHD/docs/evidence/e2e/v10-c-mobile-acceptance-2026-07-11.md`（真机 E2E / 正式签名未签，暂不勾选）
+  - 证据：`FHD/docs/evidence/e2e/v10-c-mobile-acceptance-2026-07-11-final.md`（小米真机 adb；登录/四 Tab/审批中心/NR_SA；CN=XCAGI 非 debug）
+  - 备注：真实 QR 绑定成功录屏、审批写操作、本机 Flutter SDK 构建为产品补测，不挡技术签
 - [x] PL4: 个人版冻结
   - 暂停新增功能；仅允许兼容、归档、未来恢复入口文档维护
 
