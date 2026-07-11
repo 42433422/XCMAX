@@ -223,6 +223,11 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
+          # branch dispatch leaves ref_name=main → npm "Invalid version: main"
+          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-].*)?$ ]]; then
+            echo "::warning::non-semver version '$v'; using 10.0.0"
+            v="10.0.0"
+          fi
           PYTHON=python3 scripts/package/build-installer.sh "$v" ${{ matrix.sku }}
       - name: Verify macOS codesign (${{ matrix.sku }})
         shell: bash
@@ -232,6 +237,9 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
+          if [[ ! "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-].*)?$ ]]; then
+            v="10.0.0"
+          fi
           sku="${{ matrix.sku }}"
           dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
           test -n "${dmg}"

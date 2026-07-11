@@ -1,6 +1,6 @@
 # v10 全量闭环修复记录（2026-07-11）
 
-> 分支：`fix/v10-full-closure-loop` · 锚点 10.0.0
+> 分支：`fix/v10-full-closure-loop` · 锚点 10.0.0 · PR [#147](https://github.com/42433422/XCMAX/pull/147)
 
 ## 代码修复（Win deliverable 404 根因）
 
@@ -28,13 +28,32 @@
 | 审批写状态 | PASS | DB 闭环：id=1 approved / id=2 rejected；`15-mobile-approval-final.json` |
 | NR_SA + Wi‑Fi | PASS | 前序真机证据 |
 
-## Win32
+## Win32 热修验证（2026-07-11 晚 · DevFleet）
 
-- 复现：openapi 有 `/api/platform-shell/deliverable-status`，GET 被 SPA 404
-- 临时验证：尝试 patch `app.asar` 将 `XCAGI_DESKTOP_FAST_START` 置 `0` 后重启（需看本轮探针）
-- 长久：合并本分支后重新打包 Windows backend / 全量 installer
+设备：`5fdd29c4-9140-48fa-a28b-ab5db375201f`（Win32）
 
-## 仍非本轮代码能独解
+1. `git checkout` → `0a7caa66` / `fix/v10-full-closure-loop`
+2. `win_v10a_hotfix_deploy.ps1` 重建并部署 `Local\\Programs\\XCAGI\\resources\\backend`
+3. 探针：
 
-- macOS Developer ID / 公证 / `latest-mac.yml` Ed25519
-- 商店上架正式 keystore（机上已是公司证书，本机构建机仍无 Flutter SDK）
+| URL | 结果 |
+|-----|------|
+| `GET /api/health` | **200** `healthy` `10.0.0` |
+| `GET /api/platform-shell/deliverable-status` | **200** `deliverable=true` `mods_routes=true` `blockers=0` |
+| `GET /api/mods` | **200** JSON 列表（非 SPA 404） |
+
+说明：脚本尾部 `migrate-only` 因 PowerShell 把 INFO 日志当 NativeCommandError 退出码 1，**不影响** deliverable 闭环（已单独复验 200）。
+
+## 发布面
+
+| 项 | 状态 |
+|----|------|
+| CDN `latest-mac.yml` Ed25519 | **PASS**（公钥验签 OK，`xiu-ci.com/.../enterprise/latest-mac.yml`） |
+| 本机 `/Applications/XCAGI.app` | adhoc（非正式公证安装包；需 Developer ID 重打） |
+| macOS CI Release Desktop | 曾因 `npm Invalid version: main` 失败；已在 `build-installer.sh` / workflow 加 semver 兜底 `10.0.0` |
+| ASC Issuer ID（本机 notarytool） | **缺**（Team API Key 需 Issuer UUID；Secrets 在 GH，本机 `mac-signing.env` 未填） |
+
+## 下一步（运维）
+
+1. 合并 PR #147 → 用 `version=10.0.0` 重跑 `Release Desktop`
+2. 本机公证：把 `APP_STORE_CONNECT_API_ISSUER_ID` 写入 `FHD/scripts/package/mac-signing.env` 后跑 `setup-mac-signing.sh` + `build-installer.sh 10.0.0 enterprise`
