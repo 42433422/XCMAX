@@ -56,7 +56,14 @@ class RetortAbsorptionRunner:
         license_result = license_gate(external_ref.local_path, enforce=enforce_license)
         semantic_findings = tuple(finding.to_text() for finding in semantic_compare(own_project, external_ref.local_path))
         capability_context = build_project_absorption_context(own_project, external_ref.local_path)
-        tasks, task_loop = _build_absorption_task_plan(own, external, external_ref, semantic_findings=semantic_findings, max_tasks=max_tasks)
+        tasks, task_loop = _build_absorption_task_plan(
+            own,
+            external,
+            external_ref,
+            semantic_findings=semantic_findings,
+            frontier_tasks=_frontier_capability_tasks(external_ref),
+            max_tasks=max_tasks,
+        )
         capability_context["bounded_task_execution"] = task_loop
         status = "tasks_generated" if tasks else "no_external_advantage_found"
         if enforce_license and not license_result.passed:
@@ -146,14 +153,15 @@ def _build_absorption_task_plan(
     external_ref: ExternalProjectRef,
     *,
     semantic_findings: tuple[str, ...] = (),
+    frontier_tasks: tuple[ImprovementTask, ...] = (),
     max_tasks: int,
 ) -> tuple[tuple[ImprovementTask, ...], dict[str, Any]]:
-    tasks: list[ImprovementTask] = []
+    tasks: list[ImprovementTask] = list(frontier_tasks[:max_tasks])
     for strength in external_assessment.strengths:
+        if len(tasks) >= max_tasks:
+            break
         if strength not in own_assessment.strengths:
             tasks.append(_task_from_strength(external_ref, strength, len(tasks) + 1))
-            if len(tasks) >= max_tasks:
-                break
     for finding in semantic_findings:
         if len(tasks) >= max_tasks:
             break
@@ -175,6 +183,95 @@ def _build_absorption_task_plan(
     )
     accepted_ids = {str(row["observation"].get("task_id") or "") for row in loop["trajectory"] if row["observation"].get("accepted")}
     return tuple(task for task in candidates if task.task_id in accepted_ids), loop
+
+
+def _frontier_capability_tasks(external_ref: ExternalProjectRef) -> tuple[ImprovementTask, ...]:
+    source = external_ref.source.lower().rstrip("/").removesuffix(".git")
+    specs: list[tuple[str, str, str, str, str]] = []
+    if source.endswith("/aider-ai/aider"):
+        specs = [
+            (
+                "repository_intelligence",
+                "Adopt dependency-ranked repository context",
+                "Rank symbols and files by dependency PageRank plus task mentions before expensive reasoning.",
+                "Add a bounded repository map to the target agent context path.",
+                "A behavior test proves dependency hubs outrank unrelated keyword-heavy files under a fixed context budget.",
+            )
+        ]
+    elif source.endswith("/swe-agent/mini-swe-agent"):
+        specs = [
+            (
+                "bounded_execution",
+                "Add explicit step, time, and error budgets to agent execution",
+                "mini-SWE-agent stops on step, cost, wall-time, and repeated format failures instead of relying on prompts.",
+                "Wire hard limits into the target employee or coding-agent loop and expose the exit reason.",
+                "Tests prove each limit terminates deterministically and returns a machine-readable exit status.",
+            ),
+            (
+                "trajectory_persistence",
+                "Persist replayable action-observation trajectories",
+                "mini-SWE-agent serializes model calls, environment configuration, actions, observations, exit status, and submission.",
+                "Store a versioned trajectory for every target-module agent run.",
+                "A failed run can be replayed from one artifact with task, actions, observations, budgets, and terminal status intact.",
+            ),
+            (
+                "process_safety",
+                "Kill the full command process group on timeout",
+                "mini-SWE-agent prevents orphan child processes when an environment command times out.",
+                "Apply process-group timeout cleanup to target-module command execution.",
+                "A test launches a child process, triggers timeout, and proves both parent and child are terminated.",
+            ),
+        ]
+    elif source.endswith("/openhands/software-agent-sdk"):
+        specs = [
+            (
+                "goal_audit",
+                "Separate goal completion judgment from agent execution",
+                "OpenHands uses a transport-independent goal controller that returns complete, capped, or follow-up decisions.",
+                "Add an independent post-run judge to the target workflow.",
+                "The workflow cannot claim completion without a verdict and reports capped work separately from success.",
+            ),
+            (
+                "stuck_detection",
+                "Detect repeated action, error, monologue, and alternating loops",
+                "OpenHands audits a bounded recent event window for several unproductive loop shapes.",
+                "Add event-based stuck detection before the target agent spends another model turn.",
+                "Behavior tests cover repeated action-observation, repeated errors, and alternating cycles without false positives after user input.",
+            ),
+        ]
+    elif source.endswith("/swe-bench/swe-bench"):
+        specs = [
+            (
+                "reproducible_evaluation",
+                "Gate patches with fail-to-pass and regression oracles",
+                "SWE-bench resolves an issue only when the patch applies, failing tests pass, and existing passing tests do not regress.",
+                "Run target-module patches in an isolated reproducible environment with before/after test evidence.",
+                "The report rejects empty, unapplied, already-passing, off-target, and regressing patches.",
+            )
+        ]
+    elif source.endswith("/swe-bench/swe-smith"):
+        specs = [
+            (
+                "verified_task_synthesis",
+                "Generate new repair tasks only from verified defects",
+                "SWE-smith derives issue tasks from concrete test/patch evidence and validates them before dataset use.",
+                "Feed the target improvement queue only with reproducible fail-to-pass records.",
+                "Every synthesized task contains a failing test, failing output, reference patch, and verified passing result after repair.",
+            )
+        ]
+    return tuple(
+        ImprovementTask(
+            f"retort-frontier-{dimension}-{index:02d}",
+            title,
+            dimension,
+            why,
+            action,
+            acceptance,
+            "fhd-core-maintainer",
+            "P0",
+        )
+        for index, (dimension, title, why, action, acceptance) in enumerate(specs, start=1)
+    )
 
 
 def build_project_absorption_context(own_project: str | Path, external_project: str | Path) -> dict[str, Any]:
