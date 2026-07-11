@@ -27,7 +27,7 @@ ABSORBED_REVIEW_RANK_WEIGHTS: dict[str, Any] = {
     },
     "capability_boosts": {
         "external_diagnostic_ingestion": 10,
-        "hunk_semantic_review": 0,
+        "hunk_semantic_review": 15,
         "cross_language_transfer": 0,
     },
 }
