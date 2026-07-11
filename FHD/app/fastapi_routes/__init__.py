@@ -54,6 +54,9 @@ def register_bootstrap_routes(app: FastAPI) -> None:
 def register_deferred_routes(app: FastAPI) -> None:
     """业务/Neuro/LAN/legacy 路由；桌面 fast-start 下在 deferred 任务中注册。"""
     logger.info("Registering deferred FastAPI routes...")
+    # 若 bootstrap 阶段 platform-shell 因 frozen 导入失败未挂上，这里再补一次；
+    # 随后 deferred_startup 会把 SPA catch-all 挪到路由表末尾，避免 GET 被吞。
+    _register_platform_shell_bootstrap(app)
     registry = RouteRegistry()
 
     register_business_routes(app, registry)

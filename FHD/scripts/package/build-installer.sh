@@ -4,8 +4,14 @@ set -euo pipefail
 
 VERSION="${1:-10.0.0}"
 SKU="${2:-}"
+VERSION="${VERSION#FHD/}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
+# workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
+if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-].*)?$ ]]; then
+  echo "[warn] invalid VERSION='${VERSION}', falling back to 10.0.0" >&2
+  VERSION="10.0.0"
+fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 

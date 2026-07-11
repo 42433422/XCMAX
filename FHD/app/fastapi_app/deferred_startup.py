@@ -18,6 +18,16 @@ def _desktop_fast_start_enabled() -> bool:
     return raw not in {"0", "false", "off", "no"}
 
 
+def _ensure_spa_fallback_after_deferred(app: FastAPI) -> None:
+    """deferred / Mod 路由若追加在 SPA catch-all 之后，GET /api/* 会被吞成 404。"""
+    try:
+        from app.fastapi_routes.spa_fallback import ensure_spa_fallback_last
+
+        ensure_spa_fallback_last(app)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("SPA fallback reorder after deferred routes skipped: %s", exc)
+
+
 async def _deferred_route_registration(app: FastAPI) -> None:
     if not getattr(app.state, "deferred_routes_pending", False):
         return
@@ -25,6 +35,7 @@ async def _deferred_route_registration(app: FastAPI) -> None:
     from app.fastapi_routes import register_deferred_routes
 
     await asyncio.to_thread(register_deferred_routes, app)
+    await asyncio.to_thread(_ensure_spa_fallback_after_deferred, app)
     app.state.deferred_routes_pending = False
     mark_startup("routes_ready")
 
@@ -49,6 +60,8 @@ async def _deferred_heavy_startup(app: FastAPI) -> None:
         _deferred_route_registration(app),
         _deferred_mod_bootstrap(app),
     )
+    # Mod 后台挂载也可能再追加路由；再顶一次 SPA 到末尾。
+    await asyncio.to_thread(_ensure_spa_fallback_after_deferred, app)
     try:
         from app.mod_sdk.desktop_deliverable import ensure_deliverable_runtime
 
