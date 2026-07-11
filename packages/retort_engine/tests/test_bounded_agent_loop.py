@@ -1,4 +1,9 @@
-from retort_engine.bounded_agent_loop import run_bounded_agent_loop
+from pathlib import Path
+
+from retort_engine.bounded_agent_loop import detect_stuck_pattern, load_trajectory, run_bounded_agent_loop
+from retort_engine.issue_capability_benchmark import run_heldout_oracle_suite
+from retort_engine.process_safety import probe_timeout_kills_child
+from retort_engine.repository_intelligence import compare_repository_gaps
 
 
 def test_bounded_agent_loop_separates_execution_and_goal_judgment() -> None:
@@ -29,3 +34,58 @@ def test_bounded_agent_loop_stops_repeating_action_observation_cycle() -> None:
     )
     assert result["status"] == "stuck"
     assert result["summary"]["step_count"] == 3
+
+
+def test_bounded_agent_loop_persists_trajectory(tmp_path: Path) -> None:
+    actions = iter(({"command": "a"}, {"command": "b"}))
+    result = run_bounded_agent_loop(
+        "persist",
+        planner=lambda _objective, _trajectory: next(actions),
+        executor=lambda action: {"ok": True, "command": action["command"]},
+        judge=lambda _objective, trajectory: {"complete": len(trajectory) >= 2, "score": 100},
+        max_steps=3,
+        wall_time_limit_sec=2,
+        trajectory_dir=tmp_path,
+        run_id="persist-test",
+    )
+    path = Path(result["summary"]["trajectory_path"])
+    assert path.is_file()
+    loaded = load_trajectory(path)
+    assert loaded["status"] == "complete"
+    assert len(loaded["trajectory"]) == 2
+
+
+def test_detect_alternating_stuck_pattern() -> None:
+    trajectory = [
+        {"action": {"command": "a"}, "observation": {"ok": True}},
+        {"action": {"command": "b"}, "observation": {"ok": True}},
+        {"action": {"command": "a"}, "observation": {"ok": True}},
+        {"action": {"command": "b"}, "observation": {"ok": True}},
+    ]
+    assert detect_stuck_pattern(trajectory, repeat_limit=2) == "alternating_cycle"
+
+
+def test_process_safety_timeout_kills_group() -> None:
+    probe = probe_timeout_kills_child(timeout_sec=0.4)
+    assert probe["verified"] is True
+
+
+def test_heldout_oracle_suite_resolves_real_pytest_cases() -> None:
+    root = Path(__file__).resolve().parents[1]
+    result = run_heldout_oracle_suite(root)
+    assert result["summary"]["all_resolved"] is True
+    assert result["summary"]["verified_task_count"] >= 2
+
+
+def test_compare_repository_gaps_emits_targets(tmp_path: Path) -> None:
+    own = tmp_path / "own"
+    external = tmp_path / "external"
+    (own / "pkg").mkdir(parents=True)
+    (external / "pkg").mkdir(parents=True)
+    (own / "pkg" / "core.py").write_text("def absorb():\n    return 1\n", encoding="utf-8")
+    (own / "pkg" / "helper.py").write_text("from pkg.core import absorb\n", encoding="utf-8")
+    (external / "pkg" / "core.py").write_text("def absorb():\n    return 1\n\ndef rank_files():\n    return []\n", encoding="utf-8")
+    (external / "pkg" / "helper.py").write_text("from pkg.core import absorb, rank_files\n", encoding="utf-8")
+    gap = compare_repository_gaps(own, external, focus_terms=("absorb",), max_files=8)
+    assert gap["summary"]["decision_source"] == "repository_graph_gap"
+    assert gap["own_top_targets"]

@@ -22,12 +22,16 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
     process_boundary = _process_boundary(payload, payload_path, output_path)
     tasks = [item for item in payload.get("tasks") or [] if isinstance(item, dict)]
     gates_passed = bool(payload.get("gates_passed"))
+    synthesis = _apply_behavior_synthesis(payload, output_path)
     worker_review = _write_worker_review_artifact(payload, output_path)
     patch_closure = _run_patch_closure(payload, output_path)
     patch_closure_ready = not patch_closure or patch_closure.get("status") == "ready"
+    synthesis_ready = synthesis.get("status") in {"synthesized", "skipped_no_external", "not_requested"}
     task_results = []
     for task in tasks:
-        completed = gates_passed and patch_closure_ready
+        completed = gates_passed and patch_closure_ready and synthesis_ready and (
+            synthesis.get("status") != "failed"
+        )
         task_results.append(
             {
                 "task_id": str(task.get("task_id") or ""),
@@ -50,6 +54,9 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                     f"employee_patch_closure_status={patch_closure.get('status', '') if patch_closure else 'not_requested'}",
                     f"employee_patch_closure_success_case={((patch_closure.get('summary') or {}).get('success_case_verified') if patch_closure else '')}",
                     f"employee_patch_closure_rollback_case={((patch_closure.get('summary') or {}).get('failure_case_rolled_back') if patch_closure else '')}",
+                    f"behavior_synthesis_status={synthesis.get('status')}",
+                    f"behavior_synthesis_files={','.join(str(item) for item in synthesis.get('changed_files') or [])}",
+                    "employee_execution_mode=independent_synthesis_runtime",
                 ],
                 "score_after": {"employee_execution_integration": 95.0 if completed else 70.0, "feedback_loop_closure": 95.0 if completed else 70.0},
             }
@@ -68,6 +75,7 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
             "process_boundary": process_boundary,
             "worker_review": worker_review,
             "employee_patch_closure": patch_closure,
+            "behavior_synthesis": synthesis,
         },
         "results": task_results,
     }
@@ -86,6 +94,34 @@ def write_employee_runtime_results(payload_file: str | Path) -> dict[str, Any]:
                 )
             )
     return result
+
+
+def _apply_behavior_synthesis(payload: dict[str, Any], output_path: Path) -> dict[str, Any]:
+    request = payload.get("behavior_synthesis")
+    if request is False:
+        return {"status": "not_requested", "changed_files": []}
+    project = Path(str(payload.get("project") or payload.get("own_project") or "")).expanduser()
+    external = Path(str(payload.get("external_path") or "")).expanduser()
+    if not str(project) or not project.is_dir():
+        project = (output_path.parents[2] if len(output_path.parents) > 2 else output_path.parent).resolve()
+    if not external.is_dir():
+        return {"status": "skipped_no_external", "changed_files": []}
+    from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
+
+    try:
+        result = synthesize_behavior_absorption(
+            project,
+            source=str(payload.get("source") or ""),
+            external_path=external,
+            tasks=[item for item in payload.get("tasks") or [] if isinstance(item, dict)],
+            run_id=str(payload.get("run_id") or "employee-runtime"),
+        )
+        artifact = output_path.with_suffix(".behavior_synthesis.json")
+        artifact.write_text(json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+        result["artifact"] = str(artifact)
+        return result
+    except Exception as exc:  # noqa: BLE001 - worker must report failure without crashing the parent
+        return {"status": "failed", "error": str(exc), "changed_files": []}
 
 
 def _process_boundary(payload: dict[str, Any], payload_path: Path, output_path: Path) -> dict[str, Any]:

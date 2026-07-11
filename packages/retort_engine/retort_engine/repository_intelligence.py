@@ -144,6 +144,68 @@ def _resolve_module(imported: str, index: dict[str, str]) -> str:
     return ""
 
 
+def compare_repository_gaps(
+    own_project: str | Path,
+    external_project: str | Path,
+    *,
+    focus_terms: Sequence[str] = ("absorb", "agent", "benchmark", "evaluation", "repository", "task"),
+    max_files: int = 16,
+) -> dict[str, Any]:
+    """Compare own vs external repository maps and emit symbol/file gaps for absorption."""
+    own_map = build_ranked_repository_map(own_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000)
+    external_map = build_ranked_repository_map(external_project, focus_terms=focus_terms, max_files=max_files, max_chars=16_000)
+    own_symbols = {
+        symbol
+        for row in own_map.get("files") or []
+        for symbol in row.get("symbols") or []
+    }
+    gaps: list[dict[str, Any]] = []
+    for row in external_map.get("files") or []:
+        missing_symbols = [symbol for symbol in row.get("symbols") or [] if symbol not in own_symbols]
+        if not missing_symbols and row["path"] in {item["path"] for item in own_map.get("files") or []}:
+            continue
+        gaps.append(
+            {
+                "external_path": row["path"],
+                "page_rank": row["page_rank"],
+                "focus_hits": row["focus_hits"],
+                "missing_symbols": missing_symbols[:20],
+                "suggested_own_targets": task_targets_from_map(own_map, limit=3),
+            }
+        )
+    gaps.sort(key=lambda item: (-float(item["page_rank"]), -int(item["focus_hits"]), str(item["external_path"])))
+    return {
+        "status": "ready" if own_map["status"] == "ready" and external_map["status"] == "ready" else "partial",
+        "summary": {
+            "gap_count": len(gaps),
+            "own_selected_file_count": own_map["summary"]["selected_file_count"],
+            "external_selected_file_count": external_map["summary"]["selected_file_count"],
+            "decision_source": "repository_graph_gap",
+            "marker_scan_is_auxiliary": True,
+        },
+        "gaps": gaps,
+        "own_top_targets": task_targets_from_map(own_map, limit=5),
+        "own_map_summary": own_map["summary"],
+        "external_map_summary": external_map["summary"],
+    }
+
+
+def task_targets_from_map(repo_map: dict[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
+    """Turn a ranked repository map into absorption task target_files/symbols."""
+    targets: list[dict[str, Any]] = []
+    for row in (repo_map.get("files") or [])[: max(0, limit)]:
+        targets.append(
+            {
+                "path": row["path"],
+                "symbols": list(row.get("symbols") or [])[:12],
+                "score": row.get("score"),
+                "page_rank": row.get("page_rank"),
+                "focus_hits": row.get("focus_hits"),
+            }
+        )
+    return targets
+
+
 def _page_rank(edges: dict[str, set[str]], *, damping: float = 0.85, rounds: int = 30) -> dict[str, float]:
     nodes = sorted(edges)
     if not nodes:

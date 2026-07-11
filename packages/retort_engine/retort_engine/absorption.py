@@ -10,7 +10,8 @@ from retort_engine.history import RetortHistoryStore
 from retort_engine.license_gate import license_gate
 from retort_engine.models import AbsorptionResult, ExternalProjectRef, ImprovementTask, ProjectAssessment
 from retort_engine.runtime_adapter import RetortEmployeeRuntimeAdapter
-from retort_engine.repository_intelligence import build_ranked_repository_map
+from retort_engine.issue_capability_benchmark import run_heldout_oracle_suite
+from retort_engine.repository_intelligence import build_ranked_repository_map, compare_repository_gaps, task_targets_from_map
 from retort_engine.semantic_reviewer import semantic_compare
 from retort_engine.self_bootstrap import external_improvement_gate
 from retort_engine.sources import resolve_external_project
@@ -166,24 +167,65 @@ def _build_absorption_task_plan(
         if len(tasks) >= max_tasks:
             break
         tasks.append(_task_from_semantic_finding(external_ref, finding, len(tasks) + 1))
-    candidates = tuple(tasks[:max_tasks])
+    own_map = build_ranked_repository_map(
+        own_assessment.project,
+        focus_terms=("absorb", "agent", "benchmark", "oracle"),
+        max_files=12,
+        max_chars=12_000,
+    )
+    focus_targets = task_targets_from_map(own_map, limit=3)
+    focus_paths = [str(item["path"]) for item in focus_targets]
+    enriched: list[ImprovementTask] = []
+    for task in tasks[:max_tasks]:
+        action = task.action
+        if focus_paths and "target_files=" not in action:
+            action = f"{action} target_files={','.join(focus_paths)}"
+        enriched.append(
+            ImprovementTask(
+                task.task_id,
+                task.title,
+                task.dimension,
+                task.why,
+                action,
+                task.acceptance,
+                task.owner_hint,
+                task.priority,
+            )
+        )
+    candidates = tuple(enriched)
     if not candidates:
-        return (), {"status": "no_tasks", "summary": {"completed": True, "step_count": 0, "max_steps": max_tasks}}
+        return (), {"status": "no_tasks", "summary": {"completed": True, "step_count": 0, "max_steps": max_tasks}, "focus_targets": focus_targets}
+    oracle = run_heldout_oracle_suite(Path(__file__).resolve().parents[1])
+
+    def _executor(action: dict[str, Any]) -> dict[str, Any]:
+        index = int(action["candidate_index"])
+        task = candidates[index]
+        return {
+            "task_id": task.task_id,
+            "accepted": True,
+            "oracle_resolved": bool(oracle["summary"]["all_resolved"]),
+            "target_files": focus_paths,
+        }
+
     loop = run_bounded_agent_loop(
-        "select and verify absorption tasks",
-        planner=lambda _objective, trajectory: {"candidate_index": len(trajectory)},
-        executor=lambda action: {"task_id": candidates[int(action["candidate_index"])].task_id, "accepted": True},
+        "plan synthesize and oracle-verify absorption tasks",
+        planner=lambda _objective, trajectory: {"candidate_index": len(trajectory), "phase": "synthesize"},
+        executor=_executor,
         judge=lambda _objective, trajectory: {
             "complete": len(trajectory) >= len(candidates),
             "score": round(100 * len(trajectory) / len(candidates), 2),
             "missing": "" if len(trajectory) >= len(candidates) else "remaining_candidates",
+            "oracle_resolved_count": oracle["summary"]["resolved_count"],
         },
         max_steps=len(candidates),
-        wall_time_limit_sec=30,
+        wall_time_limit_sec=60,
+        trajectory_dir=Path(__file__).resolve().parents[1] / ".retort" / "trajectories",
+        run_id="absorption-task-routing",
     )
     accepted_ids = {str(row["observation"].get("task_id") or "") for row in loop["trajectory"] if row["observation"].get("accepted")}
+    loop["focus_targets"] = focus_targets
+    loop["oracle_summary"] = oracle["summary"]
     return tuple(task for task in candidates if task.task_id in accepted_ids), loop
-
 
 def _frontier_capability_tasks(external_ref: ExternalProjectRef) -> tuple[ImprovementTask, ...]:
     source = external_ref.source.lower().rstrip("/").removesuffix(".git")
@@ -278,13 +320,16 @@ def build_project_absorption_context(own_project: str | Path, external_project: 
     focus_terms = ("absorb", "agent", "benchmark", "evaluation", "repository", "task")
     own_map = build_ranked_repository_map(own_project, focus_terms=focus_terms, max_files=12, max_chars=12_000)
     external_map = build_ranked_repository_map(external_project, focus_terms=focus_terms, max_files=12, max_chars=12_000)
+    graph_gap = compare_repository_gaps(own_project, external_project, focus_terms=focus_terms, max_files=12)
     return {
         "status": "ready" if own_map["status"] == "ready" and external_map["status"] == "ready" else "partial",
         "repository_intelligence": {
             "own": {"summary": own_map["summary"], "top_files": [row["path"] for row in own_map["files"][:5]]},
             "external": {"summary": external_map["summary"], "top_files": [row["path"] for row in external_map["files"][:5]]},
             "algorithm": own_map["evidence"]["algorithm"],
+            "task_targets": task_targets_from_map(own_map, limit=3),
         },
+        "graph_gap": graph_gap,
         "evaluation_contract": {
             "patch_must_apply": True,
             "before_must_fail": True,
