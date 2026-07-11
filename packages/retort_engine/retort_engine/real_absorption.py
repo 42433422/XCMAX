@@ -185,12 +185,12 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
         frontend_visual_test_path.write_text(_frontend_visual_test_content(source), encoding="utf-8")
     from retort_engine.absorption_synthesizer import synthesize_behavior_absorption
 
-    can_synthesize_behavior = (root / "retort_engine" / "bounded_agent_loop.py").is_file() and (
-        root / "retort_engine" / "repository_intelligence.py"
-    ).is_file()
+    can_synthesize_behavior = (root / "retort_engine").is_dir() and (
+        (root / "retort_engine" / "pr_review.py").is_file() or (root / "retort_engine" / "repository_intelligence.py").is_file()
+    )
     behavior_synthesis: dict[str, Any]
-    bridge_module = root / "retort_engine" / "absorbed_behavior_bridge.py"
-    bridge_test = root / "tests" / "test_absorbed_behavior_bridge.py"
+    weights_module = root / "retort_engine" / "absorbed_review_rank_weights.py"
+    weights_test = root / "tests" / "test_absorbed_review_rank_weights.py"
     if can_synthesize_behavior:
         behavior_synthesis = synthesize_behavior_absorption(
             root,
@@ -199,7 +199,7 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
             tasks=tasks,
             run_id=run_id,
         )
-        tracked_paths.extend([bridge_module, bridge_test])
+        tracked_paths.extend([weights_module, weights_test])
         review_report["behavior_synthesis"] = {
             "status": behavior_synthesis.get("status"),
             "dimensions": behavior_synthesis.get("dimensions"),
@@ -221,8 +221,8 @@ def _apply_real_absorption_unguarded(payload: dict[str, Any]) -> dict[str, Any]:
     if can_synthesize_behavior:
         gates.extend(
             [
-                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(bridge_module)], root, timeout=60),
-                _run_command([_python(payload), "-m", "pytest", str(bridge_test.relative_to(root)), "-q"], root, timeout=120),
+                _run_command([_python(payload), "-c", "import ast,pathlib,sys; ast.parse(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8'))", str(weights_module)], root, timeout=60),
+                _run_command([_python(payload), "-m", "pytest", str(weights_test.relative_to(root)), "-q"], root, timeout=120),
             ]
         )
     if writes_capability_model:

@@ -13,11 +13,13 @@ GENERATED_ABSORPTION_NAMES = {
     "test_absorbed_capabilities.py",
     "retort_absorption_log.md",
     "retort_external_review_report.json",
+    "absorbed_behavior_bridge.py",
+    "test_absorbed_behavior_bridge.py",
 }
 SIGNAL_BEHAVIOR_HINTS = {
-    "review_pipeline": ("pr_review", "review_pipeline", "employee_runtime_worker", "pr_dry_run", "pr_publish"),
+    "review_pipeline": ("pr_review", "review_pipeline", "employee_runtime_worker", "pr_dry_run", "pr_publish", "absorbed_review_rank_weights"),
     "file_grouping": ("pr_review", "review_context", "file_grouping", "context_group", "review_context_bias"),
-    "diff_hunk_review": ("pr_review", "diff_hunk", "hunk", "review_diff"),
+    "diff_hunk_review": ("pr_review", "diff_hunk", "hunk", "review_diff", "absorbed_review_rank_weights"),
     "benchmarking": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
     "benchmark_eval": ("benchmark", "quality_benchmark", "eval", "precision", "swe_bench", "issue_patch", "oracle"),
     "codebase_graph": ("codebase_graph", "graph", "dependency", "hotspot", "architecture"),

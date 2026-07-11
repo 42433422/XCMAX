@@ -45,6 +45,7 @@ from retort_engine.operator_journey_replay import build_operator_journey_replay
 from retort_engine.paibi_cli_cross_adjudication import build_paibi_cli_cross_adjudication
 from retort_engine.quality_gate_bundle import run_quality_gate_bundle
 from retort_engine.review_adjudication_calibration import build_review_adjudication_calibration
+from retort_engine.review_blind_acceptance import build_review_blind_acceptance
 from retort_engine.review_family_behavior_replay import build_review_family_behavior_replay
 from retort_engine.review_pipeline import build_diff_pipeline_replay
 from retort_engine.review_quality_benchmark import build_review_quality_benchmark
@@ -423,6 +424,10 @@ def main(argv: list[str] | None = None) -> int:
     clean_workspace_cmd.add_argument("--project", default=".")
     clean_workspace_cmd.add_argument("--drop-durable-state", action="store_true")
     clean_workspace_cmd.add_argument("--json", action="store_true")
+    review_blind = sub.add_parser("review-blind-acceptance")
+    review_blind.add_argument("--project", default=".")
+    review_blind.add_argument("--output", default="")
+    review_blind.add_argument("--json", action="store_true")
     ui = sub.add_parser("ui")
     ui.add_argument("--host", default="127.0.0.1")
     ui.add_argument("--port", type=int, default=8790)
@@ -1146,6 +1151,14 @@ def main(argv: list[str] | None = None) -> int:
             print(f"Removed: {result['summary']['removed_count']}")
             print(f"Residue bytes: {result['summary']['residue_bytes']}")
         return 0 if result["summary"]["clean"] else 1
+    if args.command == "review-blind-acceptance":
+        result = build_review_blind_acceptance(args.project, output=args.output)
+        if args.json:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+        else:
+            print(f"Retort review blind acceptance: {result['status']}")
+            print(f"Pass rate: {result['summary']['pass_rate']} (floor {result['summary']['pass_rate_floor']})")
+        return 0 if result["status"] == "ready" else 1
     if args.command == "ui":
         run_ui_server(args.host, args.port)
         return 0
