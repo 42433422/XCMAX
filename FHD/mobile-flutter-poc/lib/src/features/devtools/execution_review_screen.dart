@@ -66,7 +66,7 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
+          SnackBar(content: Text('停止失败：${_reviewErrorMessage(error)}')),
         );
       }
     } finally {
@@ -82,7 +82,7 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.toString())),
+          SnackBar(content: Text('重试失败：${_reviewErrorMessage(error)}')),
         );
       }
     } finally {
@@ -121,9 +121,40 @@ class _ExecutionReviewScreenState extends State<ExecutionReviewScreen> {
   Widget _body(XcagiThemeColors colors) {
     if (_error.isNotEmpty && _runs.isEmpty) {
       return Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Text(_error, textAlign: TextAlign.center),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.cloud_off_outlined,
+                size: 52,
+                color: colors.textSecondary,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                '暂时无法加载执行记录',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                _error,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: colors.textSecondary,
+                  fontSize: 14,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('重新加载'),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -334,10 +365,33 @@ Color _statusColor(String status, XcagiThemeColors colors) {
 }
 
 String _reviewErrorMessage(Object error) {
-  final message = error.toString();
-  if (message.contains('404') && message.contains('/relay/tasks')) {
+  final message = error.toString().trim();
+  final normalized = message.toLowerCase();
+  if (normalized.contains('404') && normalized.contains('/relay/tasks')) {
     return '当前服务端尚未升级“执行回顾”接口。请更新并重启电脑端/服务端后刷新；'
         '已有任务不会因此丢失。';
   }
-  return message;
+  if (const [
+    'timeoutexception',
+    'timed out',
+    'timeout',
+    'future not completed',
+  ].any(normalized.contains)) {
+    return '连接电脑端超时。请确认手机与电脑在同一网络，电脑端服务保持运行，然后重试。';
+  }
+  if (const [
+    'socketexception',
+    'clientexception',
+    'failed host lookup',
+    'connection refused',
+    'connection reset',
+    'network is unreachable',
+  ].any(normalized.contains)) {
+    return '暂时无法连接电脑端。请检查局域网和电脑端服务，然后重试。';
+  }
+  if (const ['401', '403', 'unauthorized', 'forbidden']
+      .any(normalized.contains)) {
+    return '登录或配对状态已失效，请重新连接电脑端后再试。';
+  }
+  return '执行记录暂时加载失败，请稍后重试。';
 }

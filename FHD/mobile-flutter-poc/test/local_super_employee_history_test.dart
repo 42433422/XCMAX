@@ -294,6 +294,27 @@ void main() {
     expect(find.textContaining('云端执行'), findsOneWidget);
   });
 
+  testWidgets('execution review turns timeout into a retryable product state',
+      (tester) async {
+    final repository = _TimeoutReviewRepository();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: ExecutionReviewScreen(repository: repository),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('暂时无法加载执行记录'), findsOneWidget);
+    expect(find.textContaining('连接电脑端超时'), findsOneWidget);
+    expect(find.textContaining('TimeoutException'), findsNothing);
+    expect(find.text('重新加载'), findsOneWidget);
+
+    await tester.tap(find.text('重新加载'));
+    await tester.pumpAndSettle();
+    expect(repository.loadCalls, 2);
+  });
+
   testWidgets('chat history labels sources and exposes archive action',
       (tester) async {
     final repository = _ChatHistoryRepository();
@@ -545,6 +566,27 @@ class _ReviewRepository extends MobileRepository {
         source: 'cloud',
       ),
     ];
+  }
+}
+
+class _TimeoutReviewRepository extends MobileRepository {
+  _TimeoutReviewRepository()
+      : super(
+          client: MobileApiClient(
+            sessionStore: MemoryMobileSessionStore(_lanSession),
+          ),
+        );
+
+  int loadCalls = 0;
+
+  @override
+  Future<List<RelayRunSummary>> loadRelayRuns({
+    String threadId = '',
+    bool activeOnly = false,
+    int limit = 100,
+  }) async {
+    loadCalls += 1;
+    throw TimeoutException('Future not completed');
   }
 }
 
