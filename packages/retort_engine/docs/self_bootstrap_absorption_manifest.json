@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "policy": "retort_self_first",
-  "landing_commit": "",
+  "landing_commit": "b9c1249e1429b904ebe99120552860f637eef903",
   "full_gate_evidence": "935 passed in 36.15s; ruff all checks passed",
   "sources": [
     {
