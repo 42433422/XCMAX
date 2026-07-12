@@ -7,3 +7,6 @@ frames/
 frames-*/
 parts/
 _preview/
+_fix_unpack/
+pw-shots2/*.png
+!pw-shots2/thumbs/
