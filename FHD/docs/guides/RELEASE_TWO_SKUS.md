@@ -1,115 +1,85 @@
-# XCAGI 1.0.0.0 双 SKU 发版指南
+# XCAGI 1.0.0.0 企业版稳定发版指南
 
-> 对外产品版本固定为 `1.0.0.0`，Electron 工具链版本映射为 `1.0.0`。macOS 与 Windows 共用同一套 SKU 资源契约，但最终安装包必须按平台分别产出。
+> 产品线 SSOT 为 [`specs/product-lines-3-plus-2.md`](../../../specs/product-lines-3-plus-2.md)：当前稳定发布 SKU 只有 `enterprise`。`personal` 已冻结，不进入版本目标、销售口径、构建矩阵、上传目录、下载清单或验收门禁。历史文件名保留，是为了兼容旧链接与未来恢复入口。
+
+对外产品版本固定为 `1.0.0.0`，Electron 工具链版本映射为 `1.0.0`。
 
 ## 1. 发版前安全自检
 
 ```powershell
 cd e:\XCMAX\FHD
-powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps1 -Phase pre -Version 1.0.0.0
+powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps1 `
+  -Phase pre -Version 1.0.0.0 -ProductSku enterprise
 ```
 
-## 2. 构建两个安装包
+## 2. 构建企业版安装包
 
-Windows 正式包必须包含 `win-unpacked/resources/backend/xcagi-backend.exe`。不要用 `build-windows-electron-only.sh` 作为发布链路；该脚本默认已禁止，避免生成安装后无法启动后端的空壳包。
+Windows 正式包必须包含 `win-unpacked/resources/backend/xcagi-backend.exe`：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
+powershell -ExecutionPolicy Bypass -File scripts/package/build-installer.ps1 `
+  -Version 1.0.0.0 -ProductSku enterprise -SkipUiInstaller
 ```
 
-macOS/Linux 上交叉构建 Windows 包时使用 Docker/Wine 链路：
-
-```bash
-bash scripts/package/build-windows-installer.sh 1.0.0.0 enterprise
-```
-
-macOS 安装包使用：
+macOS 安装包：
 
 ```bash
 bash scripts/package/build-installer.sh 1.0.0.0 enterprise
 ```
 
-可选：构建时为 `latest.yml` 增加 Ed25519 签名：
-
-```powershell
-$env:XCAGI_UPDATE_ED25519_PRIVATE_KEY = "<PEM 私钥，勿提交 git>"
-```
+发布元数据必须使用 CI 中的 `XCAGI_UPDATE_ED25519_PRIVATE_KEY` 签名；私钥不得写入仓库。
 
 ## 3. 构建后验收
 
 ```powershell
 $v = "1.0.0.0"
-foreach ($sku in @("personal","enterprise")) {
-  powershell -File scripts/package/verify-bundled-mods.ps1 -ProductSku $sku `
-    -UnpackedDir "release/xcagi-v$v/$sku/win-unpacked/resources/backend/_internal/mods"
-}
-powershell -File scripts/package/pre-release-security.ps1 -Phase post -Version $v
+powershell -File scripts/package/verify-bundled-mods.ps1 `
+  -ProductSku enterprise `
+  -UnpackedDir "release/xcagi-v$v/enterprise/win-unpacked/resources/backend/_internal/mods"
+powershell -File scripts/package/pre-release-security.ps1 `
+  -Phase post -Version $v -ProductSku enterprise
 ```
 
 post 验收会硬性检查 Windows 后端 exe、`product-sku.json`、staged mods 和 enterprise `industry-seeds/`，任何缺项都不得发布。
 
-## 4. 上传到 update.xcagi.com（rsync）
+## 4. 上传与目录约束
 
-设置环境变量（当前 PowerShell 会话或 CI secret）：
-
-| 变量 | 示例 |
-|------|------|
-| `XCAGI_UPDATE_SSH_HOST` | `119.27.178.147` |
-| `XCAGI_UPDATE_SSH_USER` | `root` |
-| `XCAGI_UPDATE_SSH_PATH` | `/var/www/update` |
-| `XCAGI_UPDATE_SSH_KEY` | `C:\Users\you\.ssh\id_ed25519` |
+手工上传只允许指定企业版：
 
 ```powershell
-powershell -File scripts/package/upload-release-skus.ps1 -Version 1.0.0.0
-# 试跑: -DryRun
+powershell -File scripts/package/upload-release-skus.ps1 `
+  -Version 1.0.0.0 -ProductSku enterprise
 ```
 
-远端目录结构：
+正式目录只写入：
 
 ```text
-/var/www/update/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe
-/var/www/update/personal/latest.yml
-/var/www/update/xcagi-v1.0.0.0/enterprise/...
+/var/www/update/releases/stable/enterprise/
+/var/www/xcagi-v1.0.0.0/enterprise/
 ```
 
-**勿上传**无 `-ProductSku` 的 legacy `XCAGI-Setup-*.exe` 到 `personal/`，以免 ERP 源码重新暴露。
+禁止把新制品写入 `/personal/`。个人版历史文件可以为兼容旧客户端保留，但不得出现在新的 `manifest.json` 或 `download-release.json` 中。
 
-## 5. MODstore 官网下载
+## 5. 官网下载
 
-在服务器 `MODstore_deploy/.env.production`：
+官网运行时读取：
 
-```env
-VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.0
-VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.0
+```text
+https://xiu-ci.com/download-release.json
+https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json
 ```
 
-重建并部署 market 前端后，下载页两卡（个人版 / 企业版）指向上述 URL。
+`release_ready=true` 只在企业版 Windows 与 macOS 制品都完成上传、HTTP 200、大小、SHA256 和安装包 magic 校验后生成。下载页只展示企业版入口。
 
 ## 6. 发版后抽检
 
-- 两个 URL 可 HTTP 下载，体积合理
-- 安装 personal：无法启用 ERP Mod
-- 安装 enterprise：ERP 菜单可用
-- 各 SKU 自动更新仅拉各自 `latest.yml`
+- Windows 企业版 URL 可下载，SHA256 与 manifest 一致
+- macOS 企业版 URL 可下载，SHA256 与 manifest 一致，Developer ID 签名有效
+- 企业版安装后 ERP 菜单、AI 员工与行业 Mod 可用
+- 自动更新只读取 `/releases/stable/enterprise/latest*.yml`
+- manifest 中 `active_skus=["enterprise"]`，且不存在 `personal` 下载项
+- 官网根 `download-release.json` 仅在以上检查全部通过后原子切换
 
-## 7. Android 双 App
+## 7. 个人版冻结边界
 
-```bat
-cd mobile-android
-gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
-```
-
-个人版与企业版可同时安装（不同 `applicationId`）。
-
-## 8. 本地分发目录（Windows + Android 放一起）
-
-```powershell
-powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 1.0.0.0
-```
-
-产出：`release/packages-v1.0.0.0/` 下两个文件夹，各含 **1 个 Windows exe + 1 个 Android apk**：
-
-| 文件夹 | Windows | Android |
-|--------|---------|---------|
-| `personal`（可重命名为 `个人版`） | `XCAGI-Personal-Windows-{ver}-x64.exe` | `XCAGI-Personal-Android-{ver}.apk` |
-| `enterprise`（可重命名为 `企业版`） | `XCAGI-Enterprise-Windows-{ver}-x64.exe` | `XCAGI-Enterprise-Android-{ver}.apk` |
+允许保留个人版构建代码、旧测试和历史下载文件，用于兼容与未来恢复；默认 CI、正式发布、官网和销售资料不得调用这些入口。恢复个人版必须先修改产品线 SSOT 并重新评审发布门禁。

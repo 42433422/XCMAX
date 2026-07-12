@@ -6,7 +6,8 @@
 #   2. Content-Length 与 manifest 中的 size 一致
 #   3. SHA256 与 manifest 中的 sha256 一致
 #   4. 文件 magic 是有效安装包(PE MZ / DMG koly / APK PK)
-#   5. personal/enterprise SKU 文件名未混淆
+#   5. 企业版 SKU 文件名未混淆
+#   6. 发布清单只包含 active enterprise，不包含 frozen personal
 #
 # 用法:
 #   bash scripts/deploy/verify-download.sh manifest.json
@@ -37,6 +38,21 @@ fi
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "::error::jq is required but not installed" >&2
+  exit 2
+fi
+
+# Product-line SSOT guard: personal is frozen and must never be exposed by the
+# current stable manifest, even if compatible personal build code still exists.
+if ! jq -e '
+  .release_ready == true
+  and .active_skus == ["enterprise"]
+  and (.frozen_skus | index("personal") != null)
+  and .primary_sku == "enterprise"
+  and all(.channels[]; has("personal") | not)
+  and (.channels.official_download.enterprise.win.url | type == "string")
+  and (.channels.official_download.enterprise.mac | length > 0)
+' "$MANIFEST" >/dev/null; then
+  echo "::error::Manifest violates enterprise-only stable release policy" >&2
   exit 2
 fi
 
@@ -82,7 +98,8 @@ check_magic() {
       fi
       ;;
     *.dmg)
-      # DMG: koly magic (6B6F6C79) at offset 0
+      # UDIF DMG stores its koly signature at the start of the final 512-byte trailer.
+      magic=$(tail -c 512 "$file" | head -c 4 | xxd -p 2>/dev/null || true)
       if [[ "$magic" != "6b6f6c79" ]]; then
         echo "  ::error::Not a valid DMG (expected koly magic, got ${magic})"
         return 1
@@ -122,7 +139,7 @@ check_sku_confusion() {
   return 1
 }
 
-echo "$ENTRIES_JSON" | while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
+while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   [ -z "$sku" ] && continue
   echo ""
   echo "[$channel] $sku/$platform: $filename"
@@ -190,7 +207,7 @@ echo "$ENTRIES_JSON" | while IFS=$'\t' read -r sku platform url sha256 size file
 
   rm -f "$tmp_file"
   PASS_COUNT=$((PASS_COUNT + 1))
-done
+done <<< "$ENTRIES_JSON"
 
 echo ""
 echo "=== Verification summary ==="
