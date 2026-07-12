@@ -134,7 +134,7 @@ def _run_business_event_agent(
 ) -> Any:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.tools import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("business_event") or {}).get("actions") or {}).get(action)

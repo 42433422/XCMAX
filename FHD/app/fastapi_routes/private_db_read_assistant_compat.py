@@ -53,7 +53,7 @@ def build_private_db_assistant_router() -> APIRouter:
 
     @router.get("/status")
     def private_db_status():
-        from app.services.wechat_decrypt_autoconfig import get_wechat_decrypt_status
+        from app.application.wechat_decrypt_app_service import get_wechat_decrypt_status
 
         decrypt = get_wechat_decrypt_status()
         return {
@@ -98,7 +98,9 @@ def build_private_db_assistant_router() -> APIRouter:
 
     @router.post("/wechat/auto_configure")
     def private_db_wechat_auto_configure(body: dict = Body(default_factory=dict)):
-        from app.services.wechat_decrypt_http import wechat_decrypt_auto_configure_response
+        from app.application.wechat_decrypt_app_service import (
+            wechat_decrypt_auto_configure_response,
+        )
 
         return wechat_decrypt_auto_configure_response(body)
 
@@ -122,7 +124,7 @@ def build_private_db_assistant_router() -> APIRouter:
 
         if refresh_type == "messages":
             try:
-                from app.services.wechat_group_customer_bridge import sync_group_messages
+                from app.application.wechat_decrypt_app_service import sync_group_messages
 
                 payload = sync_group_messages()
                 code = 200 if payload.get("success") else 500
