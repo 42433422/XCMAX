@@ -169,15 +169,16 @@ async def _save_workspace_upload(file: UploadFile, *, subdir: str) -> dict[str, 
     return {"file_path": rel, "filename": name, "workspace_root": str(workspace_root)}
 
 
-@router.post("/workspace-read-files")
+@router.post("/workspace-read-files", response_model=dict[str, object])
 async def platform_shell_workspace_read_files(body: WorkspaceReadFilesBody):
+    """Read approved output files located under the selected workspace."""
     from app.application.office_parse_app_service import read_workspace_output_files
 
     files = read_workspace_output_files(body.workspace_root, body.file_paths or [])
     return {"success": True, "data": {"files": files}}
 
 
-@router.post("/office/confirm")
+@router.post("/office/confirm", response_model=dict[str, object])
 async def platform_shell_office_confirm(body: OfficeConfirmBody, request: Request):
     """Office confirm ingest: knowledge / business intent."""
     from fastapi import HTTPException
@@ -228,8 +229,9 @@ class OnboardingSeedBody(BaseModel):
     industry_id: str = "general"
 
 
-@router.post("/onboarding/seed-demo")
+@router.post("/onboarding/seed-demo", response_model=dict[str, object])
 async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request: Request):
+    """Create tenant-scoped demonstration data for the selected onboarding industry."""
     from app.application.onboarding_seed_app_service import seed_onboarding_demo_data
     from app.infrastructure.auth.dependencies import resolve_session_user
 
@@ -254,8 +256,9 @@ async def platform_shell_onboarding_seed_demo(body: OnboardingSeedBody, request:
     return {"success": True, "data": data}
 
 
-@router.get("/auth/permission-matrix")
+@router.get("/auth/permission-matrix", response_model=dict[str, object])
 async def platform_shell_permission_matrix(request: Request):
+    """Resolve the signed-in account's effective platform-shell permissions."""
     from app.application.auth_permission_resolver import resolve_permissions
     from app.application.session_account_meta import enrich_session_meta_with_tenant
     from app.infrastructure.auth.dependencies import resolve_session_user, session_id_from_request

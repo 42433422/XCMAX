@@ -503,7 +503,7 @@ def aiopen_manifest() -> dict[str, Any]:
     return {
         "name": AIOPEN_PRODUCT_NAME,
         "tagline": AIOPEN_PRODUCT_TAGLINE,
-        "version": "10.0.0",
+        "version": "1.0.0.0",
         "protocol": {
             "guide": "/api/aiopen/guide",
             "mcp": "/api/aiopen/mcp",
@@ -545,7 +545,7 @@ def build_aiopen_guide(base_url: str) -> dict[str, Any]:
 ## 产品
 
 - 名称：**{AIOPEN_PRODUCT_NAME}** — {AIOPEN_PRODUCT_TAGLINE}
-- 版本：10.0.0（v10 线内迭代）
+- 版本：1.0.0.0（稳定版）
 
 ## 前置条件（请提醒用户）
 

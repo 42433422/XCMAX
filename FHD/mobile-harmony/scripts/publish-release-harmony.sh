@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="10.0.0"
-TAG="FHD/v10.0.0"
+VERSION="1.0.0.0"
+TAG="FHD/v1.0.0.0"
 REPO="${GITHUB_REPOSITORY:-42433422/XCMAX}"
 HARMONY_ARTIFACT=""
 APK_PATH=""
@@ -11,7 +11,7 @@ DRY_RUN=0
 
 usage() {
   cat <<'USAGE'
-Usage: publish-release-harmony.sh [--version <10.0.0>] [--tag <FHD/v10.0.0>] \
+Usage: publish-release-harmony.sh [--version <1.0.0.0>] [--tag <FHD/v1.0.0.0>] \
   [--repo <owner/name>] [--harmony-artifact <path>] [--apk-path <path>] [--skip-build] [--dry-run]
 
 Build or publish a real XCAGI Enterprise HarmonyOS artifact to the GitHub release.
@@ -81,7 +81,7 @@ MODULE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FHD_ROOT="$(cd "${MODULE_ROOT}/.." && pwd)"
 REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
 VERSION="$(normalize_version "$VERSION")"
-[[ -n "$VERSION" ]] || VERSION="10.0.0"
+[[ -n "$VERSION" ]] || VERSION="1.0.0.0"
 [[ -n "$TAG" ]] || TAG="FHD/v${VERSION}"
 
 if ! command -v gh >/dev/null 2>&1; then

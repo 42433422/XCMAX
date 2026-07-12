@@ -6696,7 +6696,7 @@ describe('coverage ramp workspace utility helpers', () => {
     expect(history.makeButlerDownloadId('job 1', 'a/b.docx', 9)).toContain('_')
 
     const xcagi = await import('./utils/xcagiDownloadLinks')
-    expect(xcagi.normalizeXcagiDownloadBase(undefined)).toContain('xcagi-v10.0.0')
+    expect(xcagi.normalizeXcagiDownloadBase(undefined)).toContain('xcagi-v1.0.0.0')
     expect(xcagi.normalizeXcagiDownloadBase('https://cdn.example.com/')).toBe('https://cdn.example.com')
     expect(xcagi.xcagiDownloadFileName('personal', 'win')).toContain('Personal-Setup')
     expect(xcagi.xcagiDownloadFileName('enterprise', 'android', '10.0.0', '11.0.0')).toContain('Android-11.0.0')

@@ -6,7 +6,10 @@ on:
       version:
         description: "Release version"
         required: true
-        default: "10.0.0"
+        default: "1.0.0.0"
+        type: choice
+        options:
+          - "1.0.0.0"
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -88,7 +91,6 @@ jobs:
     needs: [windows]
     if: success()
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -128,12 +130,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload Windows installers. Configure secrets or the official download URL will serve stale artifacts."
-              exit 1
-            fi
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping desktop upload (workflow_dispatch, non-tag)."
-            exit 0
+            echo "::error::Stable release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY to upload Windows installers."
+            exit 1
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           mkdir -p ~/.ssh
@@ -146,11 +144,14 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-10.0.0}"
+          version="${raw:-1.0.0.0}"
           for sku in personal enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
+            if [ ! -d "$dir" ]; then
+              echo "::error::Missing Windows release directory for $sku"
+              exit 1
+            fi
             dest="/var/www/update/releases/stable/$sku"
             timeout 1800 rsync -avz --timeout=120 \
               --include='*/' \
@@ -261,7 +262,6 @@ jobs:
     needs: [macos]
     if: success()
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -299,12 +299,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
-            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-              echo "::error::Tag release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY secret to upload macOS installers. Configure secrets or the official download URL will serve stale artifacts."
-              exit 1
-            fi
-            echo "::notice::No SERVER_SSH_KEY / FHD_PUSH_SSH_KEY secret — skipping macOS upload (workflow_dispatch, non-tag)."
-            exit 0
+            echo "::error::Stable release requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY to upload macOS installers."
+            exit 1
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           mkdir -p ~/.ssh
@@ -317,11 +313,14 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-10.0.0}"
+          version="${raw:-1.0.0.0}"
           for sku in personal enterprise; do
             dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
             if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then echo "[skip] no $sku dir"; continue; fi
+            if [ ! -d "$dir" ]; then
+              echo "::error::Missing macOS release directory for $sku"
+              exit 1
+            fi
             dest="/var/www/update/releases/stable/$sku"
             timeout 1800 rsync -avz --timeout=120 \
               --include='*/' \
@@ -336,8 +335,13 @@ jobs:
           done
 
   generate-manifest:
-    needs: [windows, macos]
-    if: always() && needs.windows.result == 'success'
+    needs: [windows, macos, deploy-windows, deploy-macos]
+    if: >-
+      always() &&
+      needs.windows.result == 'success' &&
+      needs.macos.result == 'success' &&
+      needs.deploy-windows.result == 'success' &&
+      needs.deploy-macos.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -356,7 +360,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-10.0.0}"
+          version="${raw:-1.0.0.0}"
           mkdir -p "release/xcagi-v${version}"
           BASE="${RUNNER_TEMP}/artifacts"
           for sku in personal enterprise; do
@@ -376,7 +380,7 @@ jobs:
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
-          version="${raw:-10.0.0}"
+          version="${raw:-1.0.0.0}"
           python scripts/package/generate-download-manifest.py \
             --version "$version" \
             --release-dir release \
@@ -413,7 +417,7 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
           raw="${{ github.event.inputs.version || github.ref_name }}"
           raw="${raw#FHD/}"; raw="${raw#v}"; raw="${raw#V}"
-          version="${raw:-10.0.0}"
+          version="${raw:-1.0.0.0}"
           # Auto-update path: /var/www/update/releases/stable/manifest.json
           scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/update/releases/stable/manifest.json"
           # Official download path: /var/www/xcagi-v{version}/manifest.json
@@ -456,7 +460,12 @@ jobs:
   github-release:
     needs: [windows, macos, verify-download]
     runs-on: ubuntu-latest
-    if: always() && startsWith(github.ref, 'refs/tags/') && needs.windows.result == 'success' && needs.verify-download.result == 'success'
+    if: >-
+      always() &&
+      startsWith(github.ref, 'refs/tags/') &&
+      needs.windows.result == 'success' &&
+      needs.macos.result == 'success' &&
+      needs.verify-download.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:

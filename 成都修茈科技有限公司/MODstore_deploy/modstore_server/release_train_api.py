@@ -4,7 +4,7 @@
 - ``GET  /api/admin/release-train/history``    —— 历史快照列表（容灾/回滚选择/可视化）
 - ``POST /api/admin/release-train/rollback``   —— 回退到上一/指定版本/步数（回修）
 
-回滚是 v10 线内日更四段迭代的纠错动作，不触碰营销锚点（10.0.0），不改 VERSION.md 等。
+回滚只处理内部构建列车，不触碰对外稳定产品版本 ``1.0.0.0``，也不改 ``FHD/VERSION.md``。
 """
 
 from __future__ import annotations

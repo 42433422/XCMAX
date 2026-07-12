@@ -26,9 +26,9 @@ gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
 ```powershell
 cd ..
 powershell -File scripts/package/new-android-release-keystore.ps1
-powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 10.0.0 -AndroidVersion 10.0.0
+powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 1.0.0.0 -AndroidVersion 1.0.0.0
 ```
 
 详见 `signing/README.md` 与 `keystore.properties.example`。
 
-产出：`release/packages-v10.0.0/personal|enterprise/` 下的 Windows 安装包与 Android APK。
+产出：`release/packages-v1.0.0.0/personal|enterprise/` 下的 Windows 安装包与 Android APK。

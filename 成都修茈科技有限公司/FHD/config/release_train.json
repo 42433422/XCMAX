@@ -1,10 +1,14 @@
 {
   "epoch": "1.0.0.0",
+  "product_version": "1.0.0.0",
   "current": "1.0.0.0",
-  "started_at": "2026-06-30",
+  "started_at": "2026-07-12",
   "day_index": 0,
   "last_bump_at": null,
   "last_bump_day": null,
   "last_installer_push_at": null,
-  "last_major_push_at": null
+  "last_major_push_at": null,
+  "backup_guard": null,
+  "reset_at": "2026-07-12T08:05:13Z",
+  "reset_reason": "stable-1.0.0.0-ssot"
 }

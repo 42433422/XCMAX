@@ -41,13 +41,13 @@ npm config set @ohos:registry https://repo.harmonyos.com/npm/
 构建：
 
 ```bash
-bash FHD/mobile-harmony/scripts/build-hap.sh --version 10.0.0 --mode release
+bash FHD/mobile-harmony/scripts/build-hap.sh --version 1.0.0.0 --mode release
 ```
 
 输出：
 
 ```text
-FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-10.0.0.hap
+FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-1.0.0.0.hap
 ```
 
 诊断当前机器是否具备构建条件：
@@ -60,28 +60,28 @@ bash FHD/mobile-harmony/scripts/doctor.sh
 
 ```bash
 HARMONY_BUILD_COMMAND='hvigor assembleHap --mode release -p product=default' \
-  bash FHD/mobile-harmony/scripts/build-hap.sh --version 10.0.0
+  bash FHD/mobile-harmony/scripts/build-hap.sh --version 1.0.0.0
 ```
 
 ## 发布要求
 
 `stage-release-packages.sh` 默认要求必须存在鸿蒙 `.hap/.hsp`，否则退出失败。临时只验证 Android 分发目录时才允许显式使用 `--allow-missing-harmony`。
 
-真实发布到 `FHD/v10.0.0`：
+真实发布到 `FHD/v1.0.0.0`：
 
 ```bash
 bash FHD/mobile-harmony/scripts/publish-release-harmony.sh \
-  --version 10.0.0 \
-  --tag FHD/v10.0.0 \
-  --harmony-artifact FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-10.0.0.hap
+  --version 1.0.0.0 \
+  --tag FHD/v1.0.0.0 \
+  --harmony-artifact FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-1.0.0.0.hap
 ```
 
 只验证打包，不上传：
 
 ```bash
 bash FHD/mobile-harmony/scripts/publish-release-harmony.sh \
-  --version 10.0.0 \
-  --tag FHD/v10.0.0 \
-  --harmony-artifact FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-10.0.0.hap \
+  --version 1.0.0.0 \
+  --tag FHD/v1.0.0.0 \
+  --harmony-artifact FHD/mobile-harmony/artifacts/XCAGI-Enterprise-Harmony-1.0.0.0.hap \
   --dry-run
 ```

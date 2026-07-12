@@ -1,0 +1,2 @@
+Processing: /Volumes/XCAGI 10.0.0-arm64/XCAGI.app
+The validate action worked!

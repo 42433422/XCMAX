@@ -1,0 +1,4 @@
+artifacts/
+retest/*.dmg
+retest/install-root/
+XCAGI-*.dmg

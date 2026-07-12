@@ -3,10 +3,9 @@ export type XcagiDownloadPlatform = 'win' | 'mac' | 'android'
 /** macOS 安装包 CPU 架构（与 COS 文件名 *-mac-{arch}.dmg 一致） */
 export type XcagiMacArch = 'x64' | 'arm64'
 
-// 全产品线 v10 锁：官网下载/安装包锚点与 VERSION.md 一致，恒 10.0.0（见 FHD/VERSION.md L41/L45）。
-// 不在此写死历史版本（8.1.0 等）；如需按 release_train 覆盖，用构建期 VITE_XCAGI_DOWNLOAD_VERSION。
-export const DEFAULT_XCAGI_DOWNLOAD_VERSION = '10.0.0'
-export const DEFAULT_XCAGI_ANDROID_VERSION = '10.0.0'
+// 对外稳定产品版本与 VERSION.md 一致；工具链内部三段版本不用于官网下载文件名。
+export const DEFAULT_XCAGI_DOWNLOAD_VERSION = '1.0.0.0'
+export const DEFAULT_XCAGI_ANDROID_VERSION = '1.0.0.0'
 
 // 官方下载清单 manifest.json URL（CI 自动生成，含 SHA256 + size）
 // 失败时降级到 normalizeXcagiDownloadBase + xcagiDownloadUrl 静态生成
@@ -38,6 +37,7 @@ export interface XcagiDownloadManifestChannel {
 export interface XcagiDownloadManifest {
   schema: string
   version: string
+  release_ready?: boolean
   generated_at: string
   git_sha: string
   channels: {
@@ -169,8 +169,7 @@ export function xcagiDownloadFileName(
 ): string {
   const label = sku === 'personal' ? 'Personal' : 'Enterprise'
   if (platform === 'android') return `XCAGI-${label}-Android-${androidVersion}.apk`
-  // macOS artifacts live under SKU-specific directories, so the file name itself is SKU-neutral.
-  if (platform === 'mac') return `XCAGI-${version}-mac-${macArch}.dmg`
+  if (platform === 'mac') return `XCAGI-${label}-${version}-mac-${macArch}.dmg`
   return `XCAGI-${label}-Setup-${version}-x64.exe`
 }
 

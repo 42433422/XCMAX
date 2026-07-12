@@ -88,8 +88,9 @@ def desktop_status(request: Request):
     }
 
 
-@router.get("/deployment")
+@router.get("/deployment", response_model=dict[str, object])
 def desktop_deployment_status():
+    """Return the active desktop deployment, database, and migration plan."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()
@@ -141,8 +142,9 @@ def desktop_deployment_status():
     }
 
 
-@router.put("/deployment")
+@router.put("/deployment", response_model=dict[str, object])
 def update_desktop_deployment_settings(request: DeploymentSettingsUpdate):
+    """Persist a desktop deployment mode and report any required restart or sync."""
     dirs = ensure_desktop_dirs(os.environ.get("XCAGI_DATA_DIR"))
     catalog = load_deployment_catalog()
     database_storage_catalog = load_database_storage_catalog()

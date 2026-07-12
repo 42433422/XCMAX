@@ -1,5 +1,5 @@
 param(
-  [string]$Version = "10.0.0",
+  [string]$Version = "1.0.0.0",
   [switch]$SkipBackend,
   [Parameter(Mandatory = $true)]
   [ValidateSet('personal', 'enterprise')]
@@ -14,6 +14,10 @@ $ErrorActionPreference = "Stop"
 $Root = Resolve-Path (Join-Path $PSScriptRoot "..\..")
 Set-Location $Root
 $Version = $Version.TrimStart("v", "V")
+if ($Version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
+  throw "Invalid stable product version '$Version'; expected x.y.z or x.y.z.w"
+}
+$ToolchainVersion = (($Version -split '\.')[0..2] -join '.')
 
 $skuLabels = @{
   personal   = 'Personal'
@@ -129,10 +133,10 @@ Assert-TextFileContains `
     "backendHealthMs",
     "180_000"
   )
-npm version $Version --no-git-tag-version --allow-same-version
+npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
-$ebArtifact = "XCAGI-$label-Setup-`${version}-`${arch}.`${ext}"
+$ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
 npx electron-builder --win nsis zip --x64 --publish never `
   "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
   "--config.appId=$ebAppId" `
@@ -210,10 +214,12 @@ if (-not $SkipUiInstaller) {
     Remove-Item -Force -ErrorAction SilentlyContinue
 
   $env:XCAGI_BUILD_SHA = $buildSha
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $Version win
+  $env:XCAGI_PRODUCT_VERSION = $Version
+  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $finalSetupPath $ToolchainVersion win
 } elseif ($nsisExe) {
   $env:XCAGI_BUILD_SHA = $buildSha
-  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $Version win
+  $env:XCAGI_PRODUCT_VERSION = $Version
+  node (Join-Path $Root "scripts\package\generate-update-metadata.mjs") $nsisExe.FullName $ToolchainVersion win
 }
 
 $dlProj = Join-Path $Root "tools\XcagiDownloader\XcagiDownloader.csproj"

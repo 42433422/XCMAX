@@ -12,7 +12,7 @@ interface AboutInfoItem {
 @Component
 export struct AboutPage {
   @State appName: string = 'XCAGI 企业版';
-  @State appVersion: string = 'v10.0.0';
+  @State appVersion: string = 'v1.0.0.0';
   @State buildNumber: string = '20260620';
   @State companyName: string = '成都修茈科技有限公司';
   @State officialUrl: string = 'https://xiu-ci.com';
