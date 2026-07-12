@@ -31,6 +31,13 @@ if [ "${1:-}" = "--skip-sha256" ]; then
   SKIP_SHA256=1
 fi
 
+CURL_RETRY_ARGS=(
+  --retry 3
+  --retry-all-errors
+  --retry-delay 2
+  --connect-timeout 15
+)
+
 if [ ! -f "$MANIFEST" ]; then
   echo "::error::manifest not found: $MANIFEST" >&2
   exit 2
@@ -147,7 +154,10 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   echo "  Expected: size=$size sha256=$sha256"
 
   # 1. HTTP HEAD check
-  http_code=$(curl -sIL -o /dev/null -w '%{http_code}' --max-time 30 "$url" || echo "000")
+  if ! http_code=$(curl -sSIL -o /dev/null -w '%{http_code}' \
+    "${CURL_RETRY_ARGS[@]}" --max-time 30 "$url"); then
+    http_code="000"
+  fi
   if [ "$http_code" != "200" ]; then
     echo "  ::error::HTTP $http_code (expected 200)"
     FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -156,7 +166,8 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   echo "  OK HTTP 200"
 
   # 2. Content-Length check (HEAD may not always return it, so tolerate absence)
-  content_length=$(curl -sIL --max-time 30 "$url" | grep -i '^content-length:' | tail -1 | tr -d '\r' | awk '{print $2}')
+  headers=$(curl -sSIL "${CURL_RETRY_ARGS[@]}" --max-time 30 "$url" || true)
+  content_length=$(printf '%s\n' "$headers" | grep -i '^content-length:' | tail -1 | tr -d '\r' | awk '{print $2}')
   if [ -n "$content_length" ] && [ "$content_length" != "$size" ]; then
     echo "  ::error::Content-Length mismatch: got $content_length, expected $size"
     FAIL_COUNT=$((FAIL_COUNT + 1))
@@ -180,7 +191,7 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
 
   tmp_file=$(mktemp)
   trap 'rm -f "$tmp_file"' EXIT
-  if ! curl -sL --max-time 600 -o "$tmp_file" "$url"; then
+  if ! curl -fsSL "${CURL_RETRY_ARGS[@]}" --max-time 600 -o "$tmp_file" "$url"; then
     echo "  ::error::Download failed"
     FAIL_COUNT=$((FAIL_COUNT + 1))
     rm -f "$tmp_file"
