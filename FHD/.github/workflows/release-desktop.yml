@@ -24,10 +24,6 @@ defaults:
 jobs:
   windows:
     runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        sku: [personal, enterprise]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,27 +40,27 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
-      - name: Build Windows ${{ matrix.sku }} installer
+      - name: Build Windows enterprise installer
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/build-installer.ps1 -Version $v -ProductSku ${{ matrix.sku }} -SkipUiInstaller
-      - name: Verify Windows ${{ matrix.sku }} installer
+          scripts/package/build-installer.ps1 -Version $v -ProductSku enterprise -SkipUiInstaller
+      - name: Verify Windows enterprise installer
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku ${{ matrix.sku }}
-      - name: Assert critical resources packaged (${{ matrix.sku }})
+          scripts/package/pre-release-security.ps1 -Phase post -Version $v -ProductSku enterprise
+      - name: Assert critical resources packaged (enterprise)
         shell: pwsh
         run: |
           $raw = "${{ github.event.inputs.version || github.ref_name }}"
           $raw = $raw -replace '^FHD/', ''
           $v = $raw.TrimStart('v','V')
-          $sku = "${{ matrix.sku }}"
+          $sku = "enterprise"
           $dir = "release/xcagi-v$v/$sku/win-unpacked/resources"
           foreach ($p in @(
             "backend/xcagi-backend.exe",
@@ -79,13 +75,13 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-windows-${{ matrix.sku }}
+          name: xcagi-desktop-windows-enterprise
           path: |
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.exe
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.exe.blockmap
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
-            FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
+            FHD/release/xcagi-v*/enterprise/*.exe
+            FHD/release/xcagi-v*/enterprise/*.exe.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
 
   deploy-windows:
     needs: [windows]
@@ -145,32 +141,28 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-1.0.0.0}"
-          for sku in personal enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then
-              echo "::error::Missing Windows release directory for $sku"
-              exit 1
-            fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
-              --include='*.exe' \
-              --include='*.exe.blockmap' \
-              --include='*.dmg' \
-              --include='*.dmg.blockmap' \
-              --include='latest*.yml' \
-              --include='manifest.json' \
-              --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
-          done
+          # Personal is frozen by specs/product-lines-3-plus-2.md and must not be published.
+          sku=enterprise
+          dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
+          if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
+          if [ ! -d "$dir" ]; then
+            echo "::error::Missing Windows release directory for $sku"
+            exit 1
+          fi
+          dest="/var/www/update/releases/stable/$sku"
+          timeout 1800 rsync -avz --timeout=120 \
+            --include='*/' \
+            --include='*.exe' \
+            --include='*.exe.blockmap' \
+            --include='*.dmg' \
+            --include='*.dmg.blockmap' \
+            --include='latest*.yml' \
+            --include='manifest.json' \
+            --exclude='*' \
+            -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
 
   macos:
     runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        sku: [personal, enterprise]
     env:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
@@ -201,7 +193,7 @@ jobs:
           set -euo pipefail
           chmod +x scripts/package/import_mac_developer_id_p12.sh
           scripts/package/import_mac_developer_id_p12.sh
-      - name: Build macOS ${{ matrix.sku }} installer
+      - name: Build macOS enterprise installer
         shell: bash
         env:
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -224,8 +216,8 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          PYTHON=python3 scripts/package/build-installer.sh "$v" ${{ matrix.sku }}
-      - name: Verify macOS codesign (${{ matrix.sku }})
+          PYTHON=python3 scripts/package/build-installer.sh "$v" enterprise
+      - name: Verify macOS codesign (enterprise)
         shell: bash
         run: |
           set -euo pipefail
@@ -233,7 +225,7 @@ jobs:
           v="${v#FHD/}"
           v="${v#v}"
           v="${v#V}"
-          sku="${{ matrix.sku }}"
+          sku="enterprise"
           dmg="$(find "release/xcagi-v${v}/${sku}" -name '*.dmg' -print -quit)"
           test -n "${dmg}"
           echo "Verifying ${dmg}"
@@ -250,13 +242,13 @@ jobs:
           hdiutil detach "$(dirname "${app}")" -quiet || true
       - uses: actions/upload-artifact@v4
         with:
-          name: xcagi-desktop-macos-${{ matrix.sku }}
+          name: xcagi-desktop-macos-enterprise
           path: |
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.dmg
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.dmg.blockmap
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip
-            FHD/release/xcagi-v*/${{ matrix.sku }}/*.zip.blockmap
-            FHD/release/xcagi-v*/${{ matrix.sku }}/latest*.yml
+            FHD/release/xcagi-v*/enterprise/*.dmg
+            FHD/release/xcagi-v*/enterprise/*.dmg.blockmap
+            FHD/release/xcagi-v*/enterprise/*.zip
+            FHD/release/xcagi-v*/enterprise/*.zip.blockmap
+            FHD/release/xcagi-v*/enterprise/latest*.yml
 
   deploy-macos:
     needs: [macos]
@@ -314,25 +306,25 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-1.0.0.0}"
-          for sku in personal enterprise; do
-            dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
-            if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
-            if [ ! -d "$dir" ]; then
-              echo "::error::Missing macOS release directory for $sku"
-              exit 1
-            fi
-            dest="/var/www/update/releases/stable/$sku"
-            timeout 1800 rsync -avz --timeout=120 \
-              --include='*/' \
-              --include='*.exe' \
-              --include='*.exe.blockmap' \
-              --include='*.dmg' \
-              --include='*.dmg.blockmap' \
-              --include='latest*.yml' \
-              --include='manifest.json' \
-              --exclude='*' \
-              -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
-          done
+          # Personal is frozen by specs/product-lines-3-plus-2.md and must not be published.
+          sku=enterprise
+          dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit)"
+          if [ ! -d "$dir" ]; then dir="${BASE}/$sku"; fi
+          if [ ! -d "$dir" ]; then
+            echo "::error::Missing macOS release directory for $sku"
+            exit 1
+          fi
+          dest="/var/www/update/releases/stable/$sku"
+          timeout 1800 rsync -avz --timeout=120 \
+            --include='*/' \
+            --include='*.exe' \
+            --include='*.exe.blockmap' \
+            --include='*.dmg' \
+            --include='*.dmg.blockmap' \
+            --include='latest*.yml' \
+            --include='manifest.json' \
+            --exclude='*' \
+            -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
 
   generate-manifest:
     needs: [windows, macos, deploy-windows, deploy-macos]
@@ -363,15 +355,14 @@ jobs:
           version="${raw:-1.0.0.0}"
           mkdir -p "release/xcagi-v${version}"
           BASE="${RUNNER_TEMP}/artifacts"
-          for sku in personal enterprise; do
-            src_dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
-            if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
-            if [ -d "$src_dir" ]; then
-              mkdir -p "release/xcagi-v${version}/$sku"
-              cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
-            fi
-          done
-          ls -la "release/xcagi-v${version}"/personal "release/xcagi-v${version}"/enterprise 2>/dev/null || true
+          sku=enterprise
+          src_dir="$(find "$BASE" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
+          if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
+          if [ -d "$src_dir" ]; then
+            mkdir -p "release/xcagi-v${version}/$sku"
+            cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
+          fi
+          ls -la "release/xcagi-v${version}/enterprise"
       - name: Generate manifest.json + download-release.json
         working-directory: FHD
         run: |
@@ -425,21 +416,20 @@ jobs:
           scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/manifest.json" "root@${HOST}:/var/www/xcagi-v${version}/manifest.json"
           scp "${SSH_OPTS[@]}" "${RUNNER_TEMP}/download-release.json" "root@${HOST}:/var/www/xcagi-v${version}/download-release.json"
           # Also sync /var/www/update/releases/stable/{sku}/ so official download path can serve same physical files
-          for sku in personal enterprise; do
-            src_dir="$(find "${RUNNER_TEMP}/artifacts" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
-            if [ -d "$src_dir" ]; then
-              ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}/$sku"
-              rsync -avz --timeout=120 \
-                --include='*/' \
-                --include='*.exe' \
-                --include='*.exe.blockmap' \
-                --include='*.dmg' \
-                --include='*.dmg.blockmap' \
-                --include='latest*.yml' \
-                --exclude='*' \
-                -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"
-            fi
-          done
+          sku=enterprise
+          src_dir="$(find "${RUNNER_TEMP}/artifacts" -type d -path "*/xcagi-v${version}/$sku" -print -quit || true)"
+          if [ -d "$src_dir" ]; then
+            ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p /var/www/xcagi-v${version}/$sku"
+            rsync -avz --timeout=120 \
+              --include='*/' \
+              --include='*.exe' \
+              --include='*.exe.blockmap' \
+              --include='*.dmg' \
+              --include='*.dmg.blockmap' \
+              --include='latest*.yml' \
+              --exclude='*' \
+              -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"
+          fi
           echo "Manifest and installers pushed to both download paths"
 
   verify-download:
