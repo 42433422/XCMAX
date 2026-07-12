@@ -14,9 +14,11 @@ import {
 import { fetchProductSku } from '@/utils/productSku';
 import { useAccountProfileStore } from '@/stores/accountProfile';
 import {
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
   isAdminConsoleSpa,
   resolveAdminConsoleLoginUrl,
 } from '@/utils/adminConsoleUrl';
+import { isDesktopShell } from '@/utils/desktopShell';
 import { ADMIN_OPERATOR_HOME_ROUTE } from '@/constants/adminOperatorNav';
 import type { AccountKind } from '@/api/auth';
 import { loadLoginPreferences, saveLoginPreferences } from '@/utils/loginPreferences';
@@ -33,6 +35,8 @@ const accountKind = ref<AccountKind>(isAdminConsoleSpa() ? 'admin' : 'enterprise
 const password = ref('');
 const showPassword = ref(false);
 const loading = ref(false);
+/** 桌面壳：隐藏「管理员登录」入口（管理端仅网页 SSOT） */
+const showAdminEntry = computed(() => !isAdminConsoleSpa() && !isDesktopShell());
 const errorMessage = ref('');
 const altLoginHint = ref('');
 const oidcEnabled = ref(false);
@@ -172,6 +176,10 @@ onMounted(async () => {
     errorMessage.value = String(route.query.oidc_message || t('login.errSsoFailed'));
     return;
   }
+  const gateError = route.query.error;
+  if (typeof gateError === 'string' && gateError.trim()) {
+    errorMessage.value = gateError.trim();
+  }
   await tryAutoLogin();
 });
 
@@ -191,6 +199,16 @@ async function completeLoginSuccess(raw: Record<string, unknown>) {
   clearHostPackSkippedSession();
   await applyMarketTokensAfterFhdLogin(raw);
   accountProfileStore.applyFromLoginPayload(raw);
+  // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）
+  if (isDesktopShell() && accountProfileStore.isAdminAccount) {
+    try {
+      await authApi.logout().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   const loginUser =
     raw?.data && typeof raw.data === 'object' && !Array.isArray(raw.data)
       ? (raw.data as Record<string, unknown>)
@@ -335,6 +353,11 @@ function selectEnterpriseLogin() {
 }
 
 function selectAdminLogin() {
+  // 桌面端禁止进管理端（防御：入口已隐藏，仍拦截直调）
+  if (isDesktopShell()) {
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   const url = resolveAdminConsoleLoginUrl(redirectPath.value);
   window.location.href = url;
 }
@@ -590,7 +613,7 @@ async function submitLogin() {
           <router-link :to="loginHelpRoute">{{ $t('login.help') }}</router-link>
         </footer>
 
-        <div v-if="!isAdminConsoleSpa()" class="login-admin-entry">
+        <div v-if="showAdminEntry" class="login-admin-entry">
           <button
             type="button"
             class="login-admin-link"

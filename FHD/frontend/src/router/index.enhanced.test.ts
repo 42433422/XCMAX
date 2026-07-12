@@ -121,10 +121,17 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE: '桌面端不支持管理员账号登录，请使用网页版管理端',
 }))
 
 vi.mock('@/utils/desktopShell', () => ({
   isDesktopShell: mockIsDesktopShell,
+}))
+
+vi.mock('@/api/auth', () => ({
+  authApi: {
+    logout: vi.fn().mockResolvedValue({ success: true }),
+  },
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -344,13 +351,14 @@ describe('router/index enhanced', () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockAccountProfileStore.isAdminAccount = true
+    mockIsDesktopShell.mockReturnValue(false)
     await router.push('/settings')
     // Admin account should be redirected to admin console
     // The guard calls window.location.href which we can't easily test
     // but we can verify the navigation was aborted
   })
 
-  it('redirects desktop shell admin account to admin console like browser', async () => {
+  it('blocks desktop shell admin account from admin console (web-only SSOT)', async () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockIsDesktopShell.mockReturnValue(true)
@@ -359,7 +367,8 @@ describe('router/index enhanced', () => {
     mockResolveAdminConsoleHomeUrl.mockReturnValue('/admin/xcmax-admin')
     await router.push('/login')
     await router.push('/settings')
-    expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
+    expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
+    expect(router.currentRoute.value.name).toBe('login')
   })
 
   // ── product onboarding ──────────────────────────────────

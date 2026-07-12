@@ -64,10 +64,11 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
-    assert "isDesktopShell" not in router
-    # 管理员统一进 /admin（网页与桌面同构），不再对桌面壳放行企业页
+    assert "isDesktopShell" in router
+    # 网页 admin → /admin；桌面壳 admin → 拒入（管理端仅网页 SSOT）
     assert "resolveAdminConsoleHomeUrl()" in router
     assert "profile.isAdminAccount" in router
+    assert "DESKTOP_ADMIN_FORBIDDEN_MESSAGE" in router
     assert "next({ name: 'chat', replace: true });" not in router
     assert "console=False" in spec
 
