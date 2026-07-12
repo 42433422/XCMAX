@@ -6,6 +6,12 @@
 
 ## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
 
+### macOS 公证 CDN 闭环（2026-07-12 · v10 线内迭代）
+
+- **release(desktop)**：`main` Release Desktop 产出 Developer ID + 公证 staple 的 mac personal/enterprise 安装包（buildSha `3f00c87b`）
+- **release(cdn)**：本机 rsync 上架 `xiu-ci.com/releases/stable/{enterprise,personal}/`（DMG/ZIP/blockmap/`latest-mac.yml` + Ed25519）
+- **docs(evidence)**：公网下载/SHA512/Ed25519/Gatekeeper 复测 PASS — `mac-notarize-cdn-closure-2026-07-12.md`
+
 ### v10-B/C 交付推进（2026-07-11 · v10 线内迭代）
 
 - **fix(mobile-flutter)**：落地 `preferCloudIfLanUnreachable` + session LAN/云 base 路由，避免 5G 下死打局域网

@@ -4,7 +4,9 @@
 
 当前代码的自动化测试闸门、full-stack P0、真实桌面后端、企业版 macOS 本地打包产物、以及干净用户目录 packaged app 启动均已通过。
 
-正式对外上线口径：暂不通过。阻塞项是 macOS 发布面仍缺 Developer ID 签名/公证，且新生成的 `latest-mac.yml` 没有 Ed25519 二次签名；线上 `stable/enterprise/latest-mac.yml` 当前同样缺该签名。Windows 线上包本轮复核通过。
+正式对外上线口径（2026-07-01）：暂不通过。阻塞项是 macOS 发布面仍缺 Developer ID 签名/公证，且新生成的 `latest-mac.yml` 没有 Ed25519 二次签名；线上 `stable/enterprise/latest-mac.yml` 当前同样缺该签名。Windows 线上包本轮复核通过。
+
+> **2026-07-12 更新**：上述 macOS 阻塞项已闭环（Developer ID + 公证 staple + CDN 上架 + 公网下载/Ed25519/Gatekeeper 复测 PASS）。见 [`mac-notarize-cdn-closure-2026-07-12.md`](./mac-notarize-cdn-closure-2026-07-12.md)。
 
 边界：本轮未上传新 macOS 包到公网，因为缺签名 metadata 会让打包版更新检查失败，直接同步会扩大线上风险。若上线门槛要求 0 warning，还需要继续清理 pytest 中既有 warning。
 
