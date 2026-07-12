@@ -15,6 +15,11 @@
 
 ## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
 
+### W-02 Win11 真机走查续修（2026-07-12 · v10 线内迭代）
+
+- **ops(devfleet)**：解除 Win Agent `running_task` 幽灵占用（超时命令终态后无法 cancel）；重新拉起 XCAGI，`/api/health` + 演示账号 API 登录 PASS
+- **docs(evidence)**：walk4 截图与 Electron GDI；内容签字仍 FAIL（表单登录未通、ERP 主区空白壳、Electron 为 ADMIN 运维面）— `w02-win11-para-acceptance-2026-07-12.md`
+
 ### macOS 公证 CDN 闭环（2026-07-12 · v10 线内迭代）
 
 - **release(desktop)**：`main` Release Desktop 产出 Developer ID + 公证 staple 的 mac personal/enterprise 安装包（buildSha `3f00c87b`）

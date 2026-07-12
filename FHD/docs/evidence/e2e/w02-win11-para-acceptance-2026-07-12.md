@@ -36,6 +36,35 @@ Windows App/RDP 因 Home 版不可用；下一步须在 ToDesk 里**人工登录
 
 **录屏内容签字：仍 FAIL。** 方法诚实边界：API cookie ≠ 表单走查；空白壳 ≠ ERP UI。
 
+## 修复轮（Para 解锁 + walk4 · 2026-07-12 续）
+
+### 阻塞解除
+
+Win DevFleet Agent 内存锁 `running_task` 被超时命令 `28bb234f`（start_be.bat）占了 **~75min**（API 侧已 `failed`，取消接口因终态直接 return 不发 `cancel_command`）。  
+操作：DB 临时改回 `running` → MCP cancel → Agent 释放锁。之后远程命令恢复。
+
+| 项 | 结果 |
+|----|------|
+| 启 `XCAGI.exe` | **PASS**（`UP i=1`） |
+| `/api/health` · `/health` | **PASS**（v10.0.0 / ok） |
+| API 登录 `xcagi-enterprise-demo` | **PASS** |
+
+### Playwright walk4（`pw-shots4/`）
+
+| 项 | 结果 |
+|----|------|
+| 登录页 UI | **PASS**（OCR：企业账号登录 / 账号密码） |
+| 表单提交登录 | **FAIL**（停在「正在登录…」） |
+| API cookie 进壳 | **PASS**（侧栏：智能对话 / 员工工作台 / 系统设置 / 涂料行业包） |
+| `/settings|/orders|/materials|…` | title 变对，但 **08–13 同 SHA** `e3a319ee0eac`，主区仍空白壳 |
+| 方法 | `method=api-cookie-fallback`（表单未离开 `/login`） |
+
+### Electron GDI（`electron-shots/`）
+
+抓到本机窗「智能对话 - XCAGI」：实为 **ADMIN 运维对话**（运维总览 / 自动化方针），**不是**企业 ERP 订单/物料页。与 Edge 企业壳是两条表面。
+
+**录屏/走查内容签字：仍 FAIL**（缺订单/物料/设置业务主区像素；表单登录未通）。
+
 ## 录屏版本史
 
 | 版本 | 结论 |
@@ -44,3 +73,4 @@ Windows App/RDP 因 Home 版不可用；下一步须在 ToDesk 里**人工登录
 | v3 | 运动门禁 PASS（MoveWindow，非走查） |
 | v4 | 运动门禁数字 PASS；**内容复核 FAIL** |
 | walk2 修复轮 | API 能登；主区空白壳；**仍 FAIL** |
+| walk4 + Para 解锁 | 后端/健康/壳侧栏 PASS；ERP 主区仍空白；Electron=ADMIN 运维；**仍 FAIL** |
