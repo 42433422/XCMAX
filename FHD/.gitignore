@@ -237,9 +237,10 @@ custom_mode_test.html
 # ============================================================================
 # Large local data / release builds
 # ============================================================================
-release/**
-!release/
-!release/VERSION
+release/
+!/release/
+/release/*
+!/release/VERSION
 update-server/
 424/
 # Sunbird custom installer seed (tracked)
