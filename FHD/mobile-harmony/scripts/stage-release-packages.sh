@@ -7,19 +7,21 @@ HARMONY_ARTIFACT=""
 APK_PATH=""
 SKIP_ZIP=0
 ALLOW_MISSING_HARMONY=0
+ANDROID_ONLY=0
 
 usage() {
   cat <<'USAGE'
 Usage: stage-release-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] \
-  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--allow-missing-harmony]
+  [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--android-only] \
+  [--allow-missing-harmony]
 
 生成鸿蒙企业版发布目录（企业版-only）：
   - release/packages-v${VERSION}/enterprise/
   - release/packages-v${VERSION}/企业版/
   - release/XCAGI-Enterprise-Mobile-Packages-v${VERSION}.zip（可选）
 
-默认必须提供企业版鸿蒙 .hap/.hsp。只有临时验证 Android 分发目录时，才显式传
---allow-missing-harmony。
+默认必须提供企业版鸿蒙 .hap/.hsp。正式 Android-only 发布显式传 --android-only；
+只有临时验证 Android 分发目录时才传 --allow-missing-harmony。
 USAGE
   exit 1
 }
@@ -51,6 +53,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --allow-missing-harmony)
       ALLOW_MISSING_HARMONY=1
+      shift
+      ;;
+    --android-only)
+      ANDROID_ONLY=1
       shift
       ;;
     *)
@@ -171,7 +177,7 @@ emit_readme() {
   cat <<EOF_README > "${dir}/README.txt"
 XCAGI 企业版 (Enterprise) v${VERSION}
 
-  本目录仅含企业版 Android APK 与鸿蒙安装包，不含个人版。
+  本目录包含企业版 Android APK；联合发布时同时包含鸿蒙安装包，不含个人版。
   Android: XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk
   鸿蒙（企业版）: $(basename "$harmony_file")
   包名: com.xiuci.xcagi.mobile.enterprise
@@ -225,7 +231,10 @@ if [[ -n "${HARMONY_SRC}" && -f "${HARMONY_SRC}" ]]; then
   cp -f "${HARMONY_SRC}" "${ENTERPRISE_DIR_ZH}/${HARMONY_TARGET}"
   log_info "已纳入鸿蒙包（企业版）：${HARMONY_TARGET}"
 else
-  if [[ "${ALLOW_MISSING_HARMONY}" -eq 1 ]]; then
+  if [[ "${ANDROID_ONLY}" -eq 1 ]]; then
+    HARMONY_TARGET="未纳入（Android-only 发布）"
+    log_info "按 --android-only 生成正式 Android-only 发布包"
+  elif [[ "${ALLOW_MISSING_HARMONY}" -eq 1 ]]; then
     HARMONY_TARGET="未提供（仅用于临时 Android 分发验证）"
     log_info "未检测到鸿蒙包，按 --allow-missing-harmony 跳过"
   else
@@ -237,7 +246,8 @@ Provide one of:
   - FHD_HARMONY_HAP_PATH=<path-to-hap-or-hsp>
   - a .hap/.hsp under ${MODULE_ROOT}/artifacts
 
-Use --allow-missing-harmony only for temporary Android-only packaging checks.
+Use --android-only for an intentional Android-only release, or
+--allow-missing-harmony only for temporary packaging checks.
 EOF_ERROR
     exit 1
   fi
