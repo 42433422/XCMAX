@@ -9,7 +9,7 @@ on:
         description: Release version
         required: false
         type: string
-        default: "10.0.0"
+        default: "1.0.0.0"
       build_number:
         description: iOS build number. Empty uses run number.
         required: false
@@ -75,13 +75,14 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           if [[ -z "${raw}" || "${raw}" == "main" || "${raw}" == "master" ]]; then
-            raw="10.0.0"
+            raw="1.0.0.0"
           fi
           build="${{ github.event.inputs.build_number || '' }}"
           if [[ -z "${build}" ]]; then
             build="${{ github.run_number }}"
           fi
-          echo "marketing_version=${raw}" >> "${GITHUB_OUTPUT}"
+          echo "product_version=${raw}" >> "${GITHUB_OUTPUT}"
+          echo "marketing_version=$(printf '%s' "${raw}" | cut -d. -f1-3)" >> "${GITHUB_OUTPUT}"
           echo "build_number=${build}" >> "${GITHUB_OUTPUT}"
 
       - name: Build iOS simulator target(s)
@@ -163,6 +164,6 @@ jobs:
         if: ${{ github.event.inputs.export_ipa == 'true' && always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: xcagi-ios-${{ github.event.inputs.scheme }}-${{ steps.version.outputs.marketing_version }}
+          name: xcagi-ios-${{ github.event.inputs.scheme }}-${{ steps.version.outputs.product_version }}
           path: FHD/mobile-ios/build/export/${{ github.event.inputs.scheme }}/*.ipa
           if-no-files-found: error

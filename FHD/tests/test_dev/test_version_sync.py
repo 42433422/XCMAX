@@ -40,6 +40,15 @@ class TestReplaceVersionInText:
         assert changed is False
         assert new_text == text
 
+
+class TestVersionMapping:
+    def test_four_part_product_version_maps_to_three_part_toolchain_version(self):
+        assert version_sync._derive_toolchain_version("1.0.0.0") == "1.0.0"
+
+    def test_invalid_product_version_is_rejected(self):
+        with pytest.raises(ValueError):
+            version_sync._derive_toolchain_version("stable")
+
     def test_preserves_surrounding_text(self):
         """保留前后缀（如 version="..." 的引号和等号）。"""
         text = 'FastAPI(version="9.9.9")\n'
@@ -67,10 +76,11 @@ class TestSyncDryRun:
         anchor_file.write_text('version = "9.9.9"\n', encoding="utf-8")
 
         # monkeypatch ANCHORS 和 REPO_ROOT 指向 tmp_path
-        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=False)
         # dry-run 且有改动 → exit 1
@@ -83,10 +93,11 @@ class TestSyncDryRun:
         anchor_file = tmp_path / "pyproject.toml"
         anchor_file.write_text('version = "10.0.0"\n', encoding="utf-8")
 
-        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=False)
         assert code == 0
@@ -100,10 +111,11 @@ class TestSyncApply:
         anchor_file = tmp_path / "pyproject.toml"
         anchor_file.write_text('version = "9.9.9"\n', encoding="utf-8")
 
-        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=True)
         assert code == 0
@@ -115,10 +127,11 @@ class TestSyncApply:
         original = 'version = "9.9.9"\npython_version = "3.11"\n'
         anchor_file.write_text(original, encoding="utf-8")
 
-        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=True)
         assert code == 0
@@ -128,10 +141,11 @@ class TestSyncApply:
 
     def test_apply_missing_file_returns_3(self, tmp_path, monkeypatch):
         """锚点文件不存在时返回 3（EXEC 错误）。"""
-        fake_anchors = [("nonexistent.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("nonexistent.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=True)
         assert code == 3
@@ -141,10 +155,11 @@ class TestSyncApply:
         anchor_file = tmp_path / "pyproject.toml"
         anchor_file.write_text('version = "10.0.0"\n', encoding="utf-8")
 
-        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"')]
+        fake_anchors = [("pyproject.toml", r'version\s*=\s*"([\d.]+)"', "product")]
         monkeypatch.setattr(version_sync, "ANCHORS", fake_anchors)
         monkeypatch.setattr(version_sync, "REPO_ROOT", tmp_path)
         monkeypatch.setattr(version_sync, "_canonical_version", lambda: "10.0.0")
+        monkeypatch.setattr(version_sync, "_toolchain_version", lambda: "10.0.0")
 
         code = version_sync.sync(apply=True)
         assert code == 0
@@ -154,14 +169,15 @@ class TestAnchorsConsistency:
     """version_sync 与 verify_version_anchors 共享 ANCHORS 的一致性。"""
 
     def test_anchors_is_list_of_tuples(self):
-        """ANCHORS 格式正确：(rel_path, pattern)。"""
+        """ANCHORS 格式正确：(rel_path, pattern, version_kind)。"""
         assert isinstance(ANCHORS, list)
         assert len(ANCHORS) >= 8  # 至少 8 个锚点
         for item in ANCHORS:
             assert isinstance(item, tuple)
-            assert len(item) == 2
+            assert len(item) == 3
             assert isinstance(item[0], str)
             assert isinstance(item[1], str)
+            assert item[2] in {"product", "toolchain"}
 
     def test_version_sync_imports_same_anchors(self):
         """version_sync 复用的 ANCHORS 与 verify_version_anchors 是同一对象。"""

@@ -30,7 +30,7 @@ describe('useWorkflowEmployeeRegistrySync', () => {
   it('syncRegistry does not throw when underlying sync fails', async () => {
     syncEnterpriseWorkflowRegistryMock.mockRejectedValueOnce(new Error('net'))
     const sync = useWorkflowEmployeeRegistrySync()
-    await expect(sync.syncRegistry()).rejects.toThrow('net')
+    await expect(sync.syncRegistry()).resolves.toBeUndefined()
   })
 
   it('syncRegistry resolves when sync succeeds', async () => {

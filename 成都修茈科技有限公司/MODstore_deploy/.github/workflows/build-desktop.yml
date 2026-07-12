@@ -1,14 +1,13 @@
-name: Build Desktop (clean v10)
+name: Build Desktop (stable 1.0)
 
-# 干净桌面构建链（替代损坏的 FHD 链）：electron-builder 出真 v10 安装包。
-# v10 锁：版本恒 10.0.0；产物名对齐下载 SSOT（XCAGI-Personal-Setup-10.0.0-x64.exe）。
+# 干净桌面构建链：对外产品版本 1.0.0.0，Electron 包版本 1.0.0。
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (v10 锁，恒 10.0.0)"
+        description: "Stable product version (SSOT: 1.0.0.0)"
         required: false
-        default: "10.0.0"
+        default: "1.0.0.0"
 
 permissions:
   contents: read
@@ -66,7 +65,7 @@ jobs:
             成都修茈科技有限公司/MODstore_deploy/desktop-shell/upload/**/*.blockmap
           if-no-files-found: error
 
-  # 部署到服务器（v10 安装包 → nginx /xcagi-v10.0.0/personal/ 实际目录）
+  # 部署稳定版安装包到自动更新目录。
   deploy:
     needs: windows
     runs-on: ubuntu-latest
@@ -84,7 +83,7 @@ jobs:
           printf '%s\n' "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
           ssh-keyscan -H 119.27.178.147 >> ~/.ssh/known_hosts 2>/dev/null || true
-      - name: Upload v10 installer to server (atomic)
+      - name: Upload stable installer to server (atomic)
         run: |
           set -e
           ls -la dist/

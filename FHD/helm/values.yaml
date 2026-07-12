@@ -78,7 +78,7 @@ configMap:
   FHD_ENV: production
   XCAGI_DEBUG: "0"
   XCAGI_DESKTOP_MODE: "0"
-  XCAGI_VERSION: "10.0.0"
+  XCAGI_VERSION: "1.0.0.0"
   LOG_LEVEL: INFO
   WORKSPACE_ROOT: /app
   PYTHONPATH: /app

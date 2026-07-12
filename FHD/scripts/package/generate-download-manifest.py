@@ -7,7 +7,7 @@ Outputs a manifest with two channels:
 
 Manifest schema (verified by scripts/deploy/verify-download.sh):
 {
-  "version": "10.0.0",
+  "version": "1.0.0.0",
   "git_sha": "...",
   "generated_at": "ISO-8601",
   "channels": {
@@ -19,7 +19,7 @@ Manifest schema (verified by scripts/deploy/verify-download.sh):
       "enterprise": { ... }
     },
     "official_download": {
-      "base_url": "https://xiu-ci.com/xcagi-v10.0.0",
+      "base_url": "https://xiu-ci.com/xcagi-v1.0.0.0",
       ...
     }
   }
@@ -125,7 +125,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
     parser.add_argument("--release-dir", required=True, help="Root containing <release-subdir>/<sku>/")
-    parser.add_argument("--release-subdir", required=True, help="Subdirectory name like xcagi-v10.0.0")
+    parser.add_argument("--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0")
     parser.add_argument("--git-sha", required=True)
     parser.add_argument("--output", required=True, help="manifest.json output path")
     parser.add_argument(
@@ -150,13 +150,23 @@ def main() -> int:
         print(f"[error] release root not found: {release_root}", file=sys.stderr)
         return 1
 
+    auto_update = build_channel(args.auto_update_base, release_root)
+    official_download = build_channel(official_base, release_root)
+    release_ready = all(
+        official_download.get(sku, {}).get("win")
+        and official_download.get(sku, {}).get("mac")
+        for sku in ("personal", "enterprise")
+    )
+
     manifest = {
+        "schema": "xcagi.download_manifest/v1",
         "version": args.version,
+        "release_ready": release_ready,
         "git_sha": args.git_sha,
         "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "channels": {
-            "auto_update": build_channel(args.auto_update_base, release_root),
-            "official_download": build_channel(official_base, release_root),
+            "auto_update": auto_update,
+            "official_download": official_download,
         },
     }
 
@@ -166,8 +176,10 @@ def main() -> int:
     print(f"[ok] wrote {output_path} ({output_path.stat().st_size} bytes)")
 
     download_release = {
+        "schema": "xcagi.download_release.public/v1",
         "version_lock": args.version,
         "download_version": args.version,
+        "release_ready": release_ready,
         "git_sha": args.git_sha,
         "generated_at": manifest["generated_at"],
         "win_installer_mb": win_installer_mb(release_root),

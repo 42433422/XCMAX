@@ -8,7 +8,7 @@ on:
         description: Release version (manual dispatch only)
         required: false
         type: string
-        default: "10.0.0"
+        default: "1.0.0.0"
       harmony_artifact:
         description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
         required: false
@@ -44,15 +44,16 @@ jobs:
         run: |
           raw="${{ github.event.inputs.version || github.ref_name }}"
           if [[ "${raw}" == "main" || "${raw}" == "master" || "${raw}" == "feature"* || -z "${raw}" ]]; then
-            raw="10.0.0"
+            raw="1.0.0.0"
           fi
           raw="${raw#FHD/}"
           raw="${raw#v}"
           raw="${raw#V}"
           if [[ -z "${raw}" ]]; then
-            raw="10.0.0"
+            raw="1.0.0.0"
           fi
           echo "version=${raw}" >> "${GITHUB_OUTPUT}"
+          echo "toolchain_version=$(printf '%s' "${raw}" | cut -d. -f1-3)" >> "${GITHUB_OUTPUT}"
       - name: Flutter pub get + test
         run: |
           flutter pub get
@@ -73,12 +74,14 @@ jobs:
           fi
       - name: Flutter build apk (release)
         id: assemble
+        env:
+          XCAGI_ANDROID_VERSION_NAME: ${{ steps.release_version.outputs.version }}
         run: |
           VCODE=$(date +%s)
           echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
           flutter build apk --release \
             --build-number="$VCODE" \
-            --build-name="${{ steps.release_version.outputs.version }}"
+            --build-name="${{ steps.release_version.outputs.toolchain_version }}"
           {
             echo "### 📱 Flutter Android versionCode = \`$VCODE\`"
             echo ""

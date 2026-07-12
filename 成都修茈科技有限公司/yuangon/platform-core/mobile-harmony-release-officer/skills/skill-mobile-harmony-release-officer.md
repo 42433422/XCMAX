@@ -12,7 +12,7 @@
 4. 执行一条龙：
 
 ```bash
-bash FHD/mobile-harmony/scripts/release-harmony.sh --version 10.0.0
+bash FHD/mobile-harmony/scripts/release-harmony.sh --version 1.0.0.0
 ```
 
 5. 步骤详解：

@@ -1,12 +1,12 @@
 {
   "id": "wechat-contacts-ai-employee",
   "name": "微信触点 AI 员工",
-  "version": "10.0.0",
+  "version": "1.0.0.0",
   "author": "成都修茈科技有限公司",
   "description": "将宿主「微信联系人」作为独立扩展上架：侧栏提供入口，manifest 声明 workflow_employees「微信触点管家」（占位型，与宿主页联动）。复制到 XCAGI/FHD 的 mods/ 后重启后端即可加载；MODstore 上架可走工作台员工/Mod 导出与目录同步流程。",
   "primary": false,
   "dependencies": {
-    "xcagi": ">=10.0.0"
+    "xcagi": ">=1.0.0.0"
   },
   "backend": {
     "entry": "blueprints",

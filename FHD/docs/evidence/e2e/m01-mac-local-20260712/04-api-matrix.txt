@@ -1,0 +1,10 @@
+200 /api/mods
+{"success":true,"data":[{"id":"xcagi-erp-domain-bridge","name":"XCAGI 通用业务领域门面 Mod","version":"10.0.0","author":"成都修茈科技有限公司","description":"通用业务 API 门面 
+200 /api/platform-shell/deliverable-status
+{"success":true,"data":{"schema_version":1,"deliverable":true,"host_foundation_employee_installed":true,"host_foundation_bridges_ready":true,"host_foundation_materialize":null,"product_flow":{"recomme
+200 /api/auth/me
+{"success":false,"error":{"code":"UNAUTHORIZED","message":"请先登录"},"valid":false}
+200 /api/orders?limit=1
+{"success":true,"data":[],"count":0}
+200 /api/materials?limit=1
+{"success":true,"data":[],"total":0,"page":1,"per_page":20,"count":0}

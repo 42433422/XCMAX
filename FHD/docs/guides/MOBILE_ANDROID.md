@@ -38,7 +38,7 @@ gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
 ```powershell
 cd FHD
 python scripts/package/generate-android-icons.py
-powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
+powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 1.0.0.0
 ```
 
 产出：`release/packages-v8.0.0/personal/` 与 `enterprise/`（或已重命名为 `个人版` / `企业版`）。
@@ -110,7 +110,7 @@ powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
 ```powershell
 cd FHD
 powershell -File scripts/package/new-android-release-keystore.ps1
-powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 10.0.0 -AndroidVersion 1.3.0
+powershell -File scripts/package/build-android-release-signed.ps1 -Stage -Version 1.0.0.0 -AndroidVersion 1.3.0
 ```
 
 - 密钥库默认路径：`mobile-android/signing/xcagi-release.jks`

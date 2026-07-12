@@ -34,10 +34,10 @@
 | FHD 全产品线 tag 编排 | [`fhd-release-orchestrator.yml`](../.github/workflows/fhd-release-orchestrator.yml) |
 | FHD K8s 部署 | [`fhd-deploy.yml`](../.github/workflows/fhd-deploy.yml) |
 
-## 发布 tag 约定（v10 线内）
+## 稳定版发布 tag 约定
 
-- **产品版本锚点**：锁死 v10，恒 `10.0.0`（见 `FHD/VERSION.md`），**不因功能发版 bump 主版本**；路线阶段使用 v10-A/B/C/D，不使用 `v10.1`、`v10.2`、`v10.3` 或 `v11` 作为承诺。
-- **Git tag（发版触发）**：`FHD/v10.0.0` 或 `FHD/v10.*`；**制品身份**用 tarball 内 `git_sha` + `sha256`，非 tag 名。
+- **产品版本锚点**：产品 `1.0.0.0`，工具链 `1.0.0`（见 `FHD/VERSION.md`）。
+- **Git tag（发版触发）**：`FHD/v1.0.0.0`；制品身份同时记录 `git_sha` + `sha256`。
 - **串联（单一编排入口）**：`FHD/v*` tag 仅触发两个 workflow —— `fhd-ci-cd.yml`（测试+镜像+CVM）与 `fhd-release-orchestrator.yml`。后者先跑 `verify-version-anchors`，再 **dispatch** `fhd-deploy.yml`（K8s，`-rc`→staging / 否则 production）与客户端 `fhd-release-desktop/web/android.yml`。这些被编排的 workflow **已移除自身 `FHD/v*` tag 触发**，避免 tag 推送时双重运行。详见 [FHD/docs/deploy/RELEASE_CHECKLIST.md](FHD/docs/deploy/RELEASE_CHECKLIST.md)。
 
 ## 多环境 channel（stable / staging）
@@ -117,7 +117,7 @@ bash /opt/fhd-staging/scripts/deploy/fhd-auto-update.sh
 - `fhd-ci-cd.yml` job `gitops-image-bump`（**opt-in**：仓库变量 `GITOPS_BUMP_ENABLE=1`）：main push 构建成功后，把 staging overlay 的 `newTag` 写为 `sha-<gitsha>`、`[skip ci]` 提交回 main（`GITHUB_TOKEN` 推送不触发递归 CI），ArgoCD 自动 sync。
 - main 受保护无法直推时：保持开关关闭，改用 **ArgoCD Image Updater** 或经 orchestrator 晋级。
 - 生产晋级：`bash FHD/scripts/gitops/bump_image.sh production <sha-tag> --commit`（人工 / orchestrator）。
-- 制品身份恒 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁 `10.0.0`）。
+- 制品身份使用 `git_sha` + `sha256` + cosign digest，稳定产品版本保持 `1.0.0.0`。
 
 ## 渐进式交付（Phase 3 · Argo Rollouts + SLO 分析门）
 
@@ -169,7 +169,7 @@ Overlay：`FHD/k8s/overlays/preview/`（1 副本、资源收紧）。需 `KUBE_C
 |------|------|
 | `run_modstore_daily_local.sh` | export `MODSTORE_POST_MERGE_GITOPS_SCRIPT` → `post_merge_promote.sh` |
 | `FHD/scripts/gitops/post_merge_promote.sh` | 等 `fhd-ci-cd` 绿 → `bump_image.sh staging`；**SLO 熔断**（`MODSTORE_SLO_HALT_AUTO_MERGE`）时 exit 1 |
-| `FHD/config/release_train.json` | MODstore **日更节奏** SSOT（`+0.0.0.1` epoch）；**≠** 产品 v10 锚点 `10.0.0` |
+| `FHD/config/release_train.json` | MODstore 内部构建列车 SSOT；`product_version` 必须与产品 SSOT `1.0.0.0` 一致 |
 | `GITOPS_BUMP_ENABLE=1` | CI 自动回写 staging tag（与 post_merge **双轨**，二选一或并存） |
 
 闭环：auto-PR → merge main → CI 签名 → GitOps bump → ArgoCD sync → Rollouts 金丝雀 → SLO 分析 → DORA 事件 → 次日 digest。
@@ -235,7 +235,7 @@ FHD_RELEASE_TARBALL=/opt/fhd-full/.deploy-last.tar.gz bash /opt/fhd-full/scripts
 
 ## FHD 生产服务器部署 runbook（compose 镜像 · Phase 2）
 
-**原则**：与 tarball **双模共存**；manifest `deploy_mode` 决定 cron 路由（默认 `tarball`，切换前勿改）。镜像身份用 **digest 钉扎**，不用产品版本号 bump（v10 锁 `10.0.0`）。
+**原则**：与 tarball **双模共存**；manifest `deploy_mode` 决定 cron 路由。镜像身份用 digest 钉扎，产品版本保持 `1.0.0.0`。
 
 | 步骤 | 命令 / 说明 |
 |------|-------------|
@@ -315,7 +315,7 @@ bash /opt/fhd-full/scripts/deploy/fhd-apply-release-compose.sh
 
 - 身份正则：`^https://github.com/<org>/<repo>/.github/workflows/.+@refs/(heads/main|tags/FHD/v.+)$`
 - **Break-glass**：设仓库变量 `COSIGN_VERIFY_DISABLE=1` 临时跳过验证（仅紧急；恢复后清除）。
-- 制品身份仍为 `git_sha` + `sha256` + cosign digest，**不 bump 版本**（v10 锁）。
+- 制品身份仍为 `git_sha` + `sha256` + cosign digest，产品版本保持 `1.0.0.0`。
 
 ## Codecov（FHD 后端）
 

@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
-# macOS：按 SKU 输出到 release/xcagi-v{version}/{personal|enterprise}/
+# macOS：产品版本用于发布路径/制品名，三段工具链版本用于 npm/Electron。
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 SKU="${2:-}"
 VERSION="${VERSION#FHD/}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
 # workflow_dispatch on branch can leave ref_name=main; never feed that to npm version
-if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.+-].*)?$ ]]; then
-  echo "[warn] invalid VERSION='${VERSION}', falling back to 10.0.0" >&2
-  VERSION="10.0.0"
+if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "[warn] invalid VERSION='${VERSION}', falling back to 1.0.0.0" >&2
+  VERSION="1.0.0.0"
 fi
+TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "${ROOT}"
 
@@ -68,10 +69,12 @@ build_one_sku() {
   python3 scripts/package/generate-desktop-resources.py
 
   (cd desktop && [ -d node_modules ] || npm install)
-  (cd desktop && npm version "${VERSION}" --no-git-tag-version --allow-same-version)
+  (cd desktop && npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --allow-same-version)
   (cd desktop && npm run build)
+  local artifact_name="XCAGI-${label}-${VERSION}-mac-\${arch}.\${ext}"
   (cd desktop && npx electron-builder --mac dmg zip --publish never \
     "--config.directories.output=../release/xcagi-v${VERSION}/${sku}" \
+    "--config.artifactName=${artifact_name}" \
     "--config.appId=$(sku_app_id "$sku")" \
     "--config.publish.url=$(sku_update_url "$sku")" \
     "--config.extraMetadata.productSku=${sku}")
@@ -79,7 +82,8 @@ build_one_sku() {
   local artifact
   artifact="$(find "${out_dir}" -type f \( -name "*.dmg" -o -name "XCAGI-${label}-*.dmg" \) -print 2>/dev/null | sort | tail -n 1 || true)"
   if [ -n "${artifact}" ]; then
-    node scripts/package/generate-update-metadata.mjs "${artifact}" "${VERSION}" mac
+    XCAGI_PRODUCT_VERSION="${VERSION}" \
+      node scripts/package/generate-update-metadata.mjs "${artifact}" "${TOOLCHAIN_VERSION}" mac
   fi
   echo "Done: ${out_dir}/"
 }

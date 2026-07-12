@@ -72,7 +72,7 @@ Result: not build-ready.
 Install DevEco Studio / HarmonyOS command-line tools, then expose ohpm, hvigor
 and hdc on PATH. After that run:
 
-  bash FHD/mobile-harmony/scripts/build-hap.sh --version 10.0.0 --mode release
+  bash FHD/mobile-harmony/scripts/build-hap.sh --version 1.0.0.0 --mode release
 EOF
   exit 1
 fi

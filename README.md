@@ -6,7 +6,7 @@
 >
 > **产品线 SSOT**：当前按 **三条主线 + 个人版冻结** 推进，详见 [`specs/product-lines-3-plus-2.md`](specs/product-lines-3-plus-2.md)。
 >
-> **版本锁定**：产品大版本锁死 **v10**，全产品线版本锚点恒为 **`10.0.0`**。阶段推进使用 v10-A/B/C/D、channel、Git tag、`git_sha`、`sha256` 和 manifest，不使用 `v10.1`、`v10.2`、`v10.3` 或 `v11` 作为路线承诺。
+> **稳定版本**：全产品线对外统一为 **`1.0.0.0`**；npm/Electron、Flutter pub 和 Apple 市场版本按工具链约束映射为 **`1.0.0`**。构建差异使用 channel、Git tag、`git_sha`、`sha256`、构建号和 manifest 标识。
 
 ## 项目状态表（三条主线 + 冻结线）
 
@@ -91,7 +91,7 @@ Monorepo 根目录 **无** 独立 `uv.lock`；Python 开发请以 **`FHD/`** 为
 ## 文档真相源
 
 - **日常入口（18 份可直接执行）**：[`FHD/docs/START_HERE.md`](FHD/docs/START_HERE.md) · 公开站 <https://docs.xiu-ci.com/>
-- **产品版本（唯一数字来源）**：[`FHD/VERSION.md`](FHD/VERSION.md) — v10 锁定、锚点恒 `10.0.0`；README / CHANGELOG 与之冲突时以 VERSION 为准
+- **产品版本（唯一数字来源）**：[`FHD/VERSION.md`](FHD/VERSION.md) — 稳定产品版本 `1.0.0.0`、工具链映射 `1.0.0`；README / CHANGELOG 与之冲突时以 VERSION 为准
 - 发布叙事：[`FHD/CHANGELOG.md`](FHD/CHANGELOG.md)
 - 全文分层索引：[`FHD/docs/DOCUMENTATION_MAP.md`](FHD/docs/DOCUMENTATION_MAP.md)
 - 工作区分析 JSON：由 `scripts/build-xcmax-tree-data.py` 写入 `.cache/xcmax/`（勿提交根目录 `xcmax-*.json`）

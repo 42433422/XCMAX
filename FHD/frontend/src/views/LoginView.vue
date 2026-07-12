@@ -144,14 +144,22 @@ async function tryAutoLogin() {
   await submitLogin();
 }
 
+let loginViewActive = true;
+
 onMounted(async () => {
   applySavedLoginPreferences();
-  productSku.value = await fetchProductSku();
-  document.title = loginPageTitle(productSku.value);
+  const sku = await fetchProductSku();
+  if (!loginViewActive) return;
+  productSku.value = sku;
+  if (typeof document !== 'undefined') {
+    document.title = loginPageTitle(productSku.value);
+  }
   try {
     const st = await authApi.getOidcStatus();
+    if (!loginViewActive) return;
     oidcEnabled.value = Boolean(st?.data?.enabled);
   } catch {
+    if (!loginViewActive) return;
     oidcEnabled.value = false;
   }
   const oidcOk = route.query.oidc;
@@ -168,6 +176,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  loginViewActive = false;
   stopQrPoll();
 });
 

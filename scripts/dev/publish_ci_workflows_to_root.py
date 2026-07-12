@@ -81,6 +81,10 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
 
     def repl_path(m: re.Match[str]) -> str:
         raw = m.group(1)
+        # Quoted list items are not always paths. Keep workflow-dispatch version
+        # choices intact instead of rewriting `1.0.0.0` as `FHD/1.0.0.0`.
+        if re.fullmatch(r"\d+(?:\.\d+){2,3}", raw):
+            return f'- "{raw}"'
         if raw.startswith(("FHD/", ".github/", "scripts/", "_archive/")):
             return f'- "{raw}"'
         if raw.startswith("成都"):
