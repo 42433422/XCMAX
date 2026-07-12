@@ -13,6 +13,11 @@ on:
         description: Enterprise HarmonyOS .hap/.hsp path. If empty, scan mobile-harmony/artifacts then mobile-harmony; packaging fails if none is found.
         required: false
         type: string
+      android_only:
+        description: Build a signed Android-only package without requiring a HarmonyOS artifact.
+        required: true
+        default: false
+        type: boolean
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml (gated on
   # verify-version-anchors, then dispatches this workflow) — avoids the double-run.
 
@@ -58,24 +63,38 @@ jobs:
         run: |
           flutter pub get
           flutter test
-      - name: Configure release signing (optional)
+      - name: Configure release signing (required)
         id: signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          if [[ -z "${ANDROID_KEYSTORE_BASE64}" ]]; then
-            echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "::warning::ANDROID_KEYSTORE_BASE64 未配置；Flutter release 当前使用 debug 签名（仅测试分发）"
-          else
-            mkdir -p android/app
-            echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/app/xcagi-release.jks
-            chmod 600 android/app/xcagi-release.jks
-            echo "configured=true" >> "${GITHUB_OUTPUT}"
-          fi
+          set -euo pipefail
+          for required in \
+            ANDROID_KEYSTORE_BASE64 \
+            ANDROID_KEYSTORE_PASSWORD \
+            ANDROID_KEY_ALIAS \
+            ANDROID_KEY_PASSWORD; do
+            if [[ -z "${!required:-}" ]]; then
+              echo "::error::${required} is required for a stable Android release"
+              exit 1
+            fi
+          done
+          mkdir -p android/app
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 -d > android/app/xcagi-release.jks
+          chmod 600 android/app/xcagi-release.jks
+          echo "configured=true" >> "${GITHUB_OUTPUT}"
       - name: Flutter build apk (release)
         id: assemble
         env:
           XCAGI_ANDROID_VERSION_NAME: ${{ steps.release_version.outputs.version }}
+          XCAGI_ANDROID_KEYSTORE: app/xcagi-release.jks
+          XCAGI_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          XCAGI_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          XCAGI_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          XCAGI_REQUIRE_RELEASE_SIGNING: "1"
         run: |
           VCODE=$(date +%s)
           echo "android_version_code=$VCODE" >> "$GITHUB_OUTPUT"
@@ -92,14 +111,39 @@ jobs:
             echo "XCAGI_ANDROID_LATEST_VERSION_NAME=${{ steps.release_version.outputs.version }}"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify Android release signature and version
+        env:
+          EXPECTED_VERSION: ${{ steps.release_version.outputs.version }}
+        run: |
+          set -euo pipefail
+          apk="build/app/outputs/flutter-apk/app-release.apk"
+          test -f "${apk}"
+          build_tools="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d -print | sort -V | tail -1)"
+          test -x "${build_tools}/apksigner"
+          test -x "${build_tools}/aapt"
+          "${build_tools}/apksigner" verify --verbose --print-certs "${apk}" | tee "${RUNNER_TEMP}/apksigner.txt"
+          if grep -qi 'Android Debug' "${RUNNER_TEMP}/apksigner.txt"; then
+            echo "::error::Stable Android APK is signed with the debug certificate"
+            exit 1
+          fi
+          badging="$("${build_tools}/aapt" dump badging "${apk}" | head -1)"
+          printf '%s\n' "${badging}"
+          grep -Fq "package: name='com.xiuci.xcagi.mobile.enterprise'" <<< "${badging}"
+          grep -Fq "versionName='${EXPECTED_VERSION}'" <<< "${badging}"
       - name: Stage mobile package distribution
         working-directory: ${{ github.workspace }}
         run: |
-          bash FHD/mobile-harmony/scripts/stage-release-packages.sh \
-            --version "${{ steps.release_version.outputs.version }}" \
-            --android-version "${{ steps.release_version.outputs.version }}" \
-            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk" \
+          set -euo pipefail
+          args=(
+            --version "${{ steps.release_version.outputs.version }}"
+            --android-version "${{ steps.release_version.outputs.version }}"
+            --apk-path "${{ github.workspace }}/FHD/mobile-flutter-poc/build/app/outputs/flutter-apk/app-release.apk"
             --harmony-artifact "${{ github.event.inputs.harmony_artifact || '' }}"
+          )
+          if [[ "${{ inputs.android_only }}" == "true" ]]; then
+            args+=(--android-only)
+          fi
+          bash FHD/mobile-harmony/scripts/stage-release-packages.sh "${args[@]}"
       - name: Upload mobile package artifacts
         uses: actions/upload-artifact@v4
         with:
