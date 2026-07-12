@@ -12,6 +12,11 @@ on:
         type: choice
         options:
           - "1.0.0.0"
+      verify_only:
+        description: "Verify already-published public artifacts without rebuilding or uploading"
+        required: true
+        default: false
+        type: boolean
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
@@ -25,6 +30,7 @@ defaults:
 
 jobs:
   windows:
+    if: ${{ inputs.verify_only != true }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +93,7 @@ jobs:
 
   deploy-windows:
     needs: [windows]
-    if: success()
+    if: ${{ inputs.verify_only != true && success() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -164,6 +170,7 @@ jobs:
             -e "ssh ${SSH_OPTS[*]}" "$dir/" "root@${HOST}:$dest/"
 
   macos:
+    if: ${{ inputs.verify_only != true }}
     runs-on: macos-latest
     env:
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
@@ -254,7 +261,7 @@ jobs:
 
   deploy-macos:
     needs: [macos]
-    if: success()
+    if: ${{ inputs.verify_only != true && success() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -332,6 +339,7 @@ jobs:
     needs: [windows, macos, deploy-windows, deploy-macos]
     if: >-
       always() &&
+      inputs.verify_only != true &&
       needs.windows.result == 'success' &&
       needs.macos.result == 'success' &&
       needs.deploy-windows.result == 'success' &&
@@ -436,14 +444,31 @@ jobs:
 
   verify-download:
     needs: [generate-manifest]
-    if: always() && needs.generate-manifest.result == 'success'
+    if: >-
+      always() &&
+      (inputs.verify_only == true || needs.generate-manifest.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
+        if: ${{ inputs.verify_only != true }}
         with:
           name: xcagi-download-manifest
           path: ${{ runner.temp }}/manifest
+      - name: Fetch published manifest (verify-only)
+        if: ${{ inputs.verify_only == true }}
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          mkdir -p "${RUNNER_TEMP}/manifest"
+          curl -fsSL \
+            --retry 3 \
+            --retry-all-errors \
+            --retry-delay 2 \
+            --connect-timeout 15 \
+            --max-time 60 \
+            "https://xiu-ci.com/xcagi-v${version}/manifest.json" \
+            -o "${RUNNER_TEMP}/manifest/manifest.json"
       - name: Verify download URLs (HTTP 200 + SHA256 + size)
         run: |
           set -euo pipefail

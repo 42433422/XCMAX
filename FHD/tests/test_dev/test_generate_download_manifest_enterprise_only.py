@@ -85,6 +85,9 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
         'bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"' in workflow
     )
     assert "bash FHD/scripts/deploy/verify-download.sh" not in workflow
+    assert "verify_only:" in workflow
+    assert "inputs.verify_only == true || needs.generate-manifest.result == 'success'" in workflow
+    assert '"https://xiu-ci.com/xcagi-v${version}/manifest.json"' in workflow
 
 
 def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path: Path) -> None:
