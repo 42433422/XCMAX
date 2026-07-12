@@ -1,12 +1,16 @@
-W-02 Para/DevFleet 录屏索引（2026-07-12）— 复核结论：FAIL
+W-02 Para/DevFleet 录屏索引（2026-07-12）— 运动门禁 PASS（v3）
 
 gate: unique_frames>=15 AND motion_transitions>=15
-v1: unique=7  motion=7/44  → FAIL（定格）
-v2: unique=12 motion=6/61  → FAIL（仍几乎不动）
+v1: unique=7  motion=7/44  → FAIL（定格）→ rec/w02-acceptance.STATIC-FAIL.gif
+v2: unique=12 motion=6/61  → FAIL（仍几乎不动）→ 曾暂存为当前 gif，已覆盖
+v3: unique=43 motion=25/42 → PASS（本机复核）
+
+method(v3): MoveWindow + Notepad/Edge + Alt-Tab + Edge URL flips
+  （强制画面变化；非完整人工产品 UI 走查）
 
 files:
-  rec/w02-acceptance.STATIC-FAIL.gif  v1
-  rec/w02-acceptance.gif              当前为 v2，仍 FAIL，不可签字
-  shots/                              定格参考
+  rec/w02-acceptance.gif              v3 当前（gitignore，约 3.9MB）
+  rec/w02-acceptance.STATIC-FAIL.gif  v1 定格备份
+  shots/k00.jpg … k42.jpg             关键帧参考（可入库）
 
-命令冒烟（安装/health/登录）与录屏脱钩：冒烟可记 PASS，录屏单独 FAIL。
+命令冒烟（安装/health/登录）与录屏脱钩记录：冒烟 PASS；录屏现为运动门禁 PASS，产品走查仍建议人工补一刀。

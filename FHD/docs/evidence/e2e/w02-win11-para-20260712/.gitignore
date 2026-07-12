@@ -4,3 +4,6 @@
 *.gif
 rec/
 frames/
+frames-*/
+parts/
+_preview/
