@@ -55,11 +55,7 @@ if [[ "${SKU}" == "personal" ]]; then
 else
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
 fi
-(cd admin-console && npm run build)
-if [[ ! -f "${ROOT}/templates/admin-vue-dist/index.html" ]]; then
-  echo "[err] Missing templates/admin-vue-dist/index.html after admin-console build" >&2
-  exit 1
-fi
+# 桌面包不构建 admin-console（管理端仅网页 SSOT）
 
 printf '{"sku":"%s","schema_version":1}\n' "${SKU}" > desktop/resources/product-sku.json
 "${PYTHON}" scripts/package/generate-desktop-resources.py

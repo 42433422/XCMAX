@@ -63,6 +63,15 @@ async def lifespan(app: FastAPI):
 
     mark_startup("lifespan_db_done")
 
+    try:
+        from app.application.desktop_admin_gate import purge_admin_sessions_on_desktop
+
+        purged = await asyncio.to_thread(purge_admin_sessions_on_desktop)
+        if purged:
+            logger.info("desktop admin gate: startup purged %s admin session(s)", purged)
+    except RECOVERABLE_ERRORS as exc:
+        logger.warning("desktop admin session purge skipped: %s", exc)
+
     fast_start = _desktop_fast_start_enabled()
 
     if fast_start:

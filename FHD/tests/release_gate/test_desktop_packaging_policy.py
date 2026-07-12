@@ -18,6 +18,7 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
     sh_backend = (scripts / "build-backend.sh").read_text(encoding="utf-8")
     sh_windows = (scripts / "build-windows-installer.sh").read_text(encoding="utf-8")
     sh_thin = (scripts / "build-windows-electron-only.sh").read_text(encoding="utf-8")
+    spec = (scripts / "xcagi_backend.spec").read_text(encoding="utf-8")
 
     assert "personal = 'minimal'" in ps_backend
     assert "enterprise = 'full'" in ps_backend
@@ -29,15 +30,15 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
-        assert "admin-console && npm run build" in script or '(cd admin-console && npm run build)' in script
+        # 桌面包不得构建 admin-console
+        assert "admin-console && npm run build" not in script
+        assert "(cd admin-console && npm run build)" not in script
 
-    assert 'templates/admin-vue-dist' in (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
-        encoding="utf-8"
-    )
-    sync = (scripts / "sync-desktop-frontend.ps1").read_text(encoding="utf-8")
-    assert "admin-vue-dist" in sync
-    assert "admin-console" in sync
-
+    assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
+    assert "Push-Location (Join-Path $Root \"admin-console\")" not in ps_backend
+    assert "templates/admin-vue-dist" not in spec
+    assert "admin-console" not in ps_sync
+    assert "does not include admin-vue-dist" in ps_sync
 
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     desktop_main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")

@@ -36,12 +36,7 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
       (cd frontend && npm run build)
       ;;
   esac
-  # 管理端 /admin（与企业壳同包；SSOT：桌面允许 admin 进独立运维台）
-  (cd admin-console && npm run build)
-  if [[ ! -f "${ROOT}/templates/admin-vue-dist/index.html" ]]; then
-    echo "[err] Missing templates/admin-vue-dist/index.html after admin-console build" >&2
-    exit 1
-  fi
+  # 桌面包不构建 admin-console（管理端仅网页；进程级 is_desktop_mode 禁 /admin）
 fi
 
 PYTHON="${PYTHON:-python3}"

@@ -8,6 +8,14 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from app.application.desktop_admin_gate import (
+    DESKTOP_ADMIN_FORBIDDEN_CODE,
+    DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+    delete_session_quiet,
+    forbidden_payload,
+    is_admin_account_kind,
+    is_desktop_runtime as _gate_is_desktop_runtime,
+)
 from app.application.session_account_meta import (
     AccountKind,
     company_brand_from_user_blob,
@@ -19,17 +27,9 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
-DESKTOP_ADMIN_FORBIDDEN_MESSAGE = "桌面端不支持管理员账号登录，请使用网页版管理端"
-DESKTOP_ADMIN_FORBIDDEN_CODE = "ADMIN_DESKTOP_FORBIDDEN"
-
 
 def _is_desktop_runtime() -> bool:
-    try:
-        from app.utils.deployment import is_desktop_mode
-
-        return bool(is_desktop_mode())
-    except RECOVERABLE_ERRORS:
-        return False
+    return _gate_is_desktop_runtime()
 
 
 def _reject_admin_on_desktop(
@@ -38,26 +38,12 @@ def _reject_admin_on_desktop(
     account_kind: str | None,
 ) -> dict[str, Any] | None:
     """桌面嵌入式后端禁止管理员会话（管理端仅网页 SSOT）。"""
-    if str(account_kind or "").strip().lower() != "admin":
+    if not is_admin_account_kind(account_kind):
         return None
     if not _is_desktop_runtime():
         return None
-    sid = str(session_id or "").strip()
-    if sid:
-        try:
-            from app.infrastructure.session import get_session_manager
-
-            get_session_manager().delete_session(sid)
-        except RECOVERABLE_ERRORS as exc:
-            logger.warning("desktop admin reject: delete_session failed: %s", exc)
-    return {
-        "success": False,
-        "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
-        "error": {
-            "code": DESKTOP_ADMIN_FORBIDDEN_CODE,
-            "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
-        },
-    }
+    delete_session_quiet(session_id)
+    return forbidden_payload()
 
 
 def _login_client_http_status(upstream_status: int) -> int:

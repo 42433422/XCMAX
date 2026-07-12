@@ -62,17 +62,12 @@ export XCAGI_STAGED_MODS_DIR="${ROOT}/build/staged-mods-${SKU}"
 export XCAGI_MODS_ROOT="${XCAGI_STAGED_MODS_DIR}"
 export XCAGI_STAGED_INDUSTRY_SEEDS_DIR="${ROOT}/build/staged-industry-seeds-${SKU}"
 
-# 前端 + 管理端 /admin
+# 前端（桌面包不含 admin-console / admin-vue-dist）
 (cd frontend && [ -d node_modules ] || npm install)
 if [[ "${SKU}" == "personal" ]]; then
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)
 else
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full)
-fi
-(cd admin-console && npm run build)
-if [[ ! -f "${ROOT}/templates/admin-vue-dist/index.html" ]]; then
-  echo "[err] Missing templates/admin-vue-dist/index.html after admin-console build" >&2
-  exit 1
 fi
 
 "${PYTHON}" scripts/package/generate_mods_index.py
