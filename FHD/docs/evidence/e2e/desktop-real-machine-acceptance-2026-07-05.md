@@ -29,10 +29,11 @@
 |------|------|---------|------|----------|----------|----------|------|
 | M-01 | macOS | 26.3 (25D125) | arm64 | Mac16,10 | Agent（本机冒烟） | 2026-07-12 | ✅ 技术冒烟 PASS（长跑/回滚/语音 PARTIAL·SKIP） |
 | M-02 | macOS | 13.x | x64 | （填写） | （填写） | （填写） | ⏳ |
-| W-01 | Win10 | 22H2 | x64 | （填写） | （填写） | （填写） | ⏳ |
-| W-02 | Win11 | 23H2 | x64 | （填写） | （填写） | （填写） | ⏳ |
+| W-01 | Win10 | 22H2 | x64 | （填写） | （填写） | （填写） | ⏳ 无独立 Win10 机；DevFleet 仅 Win11 |
+| W-02 | Win11 | 26200 | x64 | ROG Zephyrus G16 | Agent（DevFleet/Para） | 2026-07-12 | ✅ 技术冒烟 PASS（CDN 安装+health+登录） |
 
-> M-01 证据：[`m01-mac-local-acceptance-2026-07-12.md`](./m01-mac-local-acceptance-2026-07-12.md)（CDN 公证包安装 · Gatekeeper · health 10s · enterprise 登录 · Ed25519）。
+> M-01：[`m01-mac-local-acceptance-2026-07-12.md`](./m01-mac-local-acceptance-2026-07-12.md)  
+> W-02：[`w02-win11-para-acceptance-2026-07-12.md`](./w02-win11-para-acceptance-2026-07-12.md)
 
 > 至少 3 台：macOS 1 + Win10 1 + Win11 1。建议多备 1 台 macOS x64 覆盖旧机型。
 
