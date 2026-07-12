@@ -88,8 +88,14 @@ def resolve_permissions(
     shell = str(meta.get("client_shell") or meta.get("shell") or "").strip().lower()
     if kind == "personal" and shell in {"desktop", "mobile", "android"}:
         personal_blocked_shell = True
-    if kind == "admin" and shell in {"desktop"}:
-        admin_blocked_shell = True
+    # 桌面进程整机禁 admin（不依赖未接线的 client_shell=desktop）
+    if kind == "admin":
+        try:
+            from app.application.desktop_admin_gate import is_desktop_runtime
+
+            admin_blocked_shell = bool(is_desktop_runtime())
+        except Exception:  # noqa: BLE001
+            admin_blocked_shell = shell in {"desktop"}
 
     return {
         "account_kind": kind,

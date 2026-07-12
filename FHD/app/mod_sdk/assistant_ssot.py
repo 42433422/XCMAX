@@ -137,7 +137,7 @@ _FALLBACK_DOC: dict[str, Any] = {
     "surfaces": {
         "desktop": {
             "enterprise": ["platform", "super", "dedicated_cs"],
-            "admin": ["platform", "super"],
+            "admin": [],
         },
         "mobile": {
             "enterprise": ["assistant", "dedicated_cs", "platform", "super"],

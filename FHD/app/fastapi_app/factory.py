@@ -114,6 +114,10 @@ def create_fastapi_app(
     app.add_middleware(GlobalRateLimitMiddleware)
     app.add_middleware(AuthRateLimitMiddleware)
 
+    from app.middleware.desktop_admin_gate import DesktopAdminForbiddenMiddleware
+
+    app.add_middleware(DesktopAdminForbiddenMiddleware)
+
     logging.basicConfig(
         level=getattr(config_object, "LOG_LEVEL", "INFO"),
         format=getattr(

@@ -102,7 +102,8 @@ def test_surface_composition_matrix():
         "platform",
         "dedicated_cs",
     ]
-    assert assistant_ssot.surface_composition("desktop", "admin") == ["platform", "super"]
+    # 桌面禁止 admin 面（管理端仅网页）
+    assert assistant_ssot.surface_composition("desktop", "admin") == []
     assert assistant_ssot.surface_composition("mobile", "enterprise") == [
         "assistant",
         "dedicated_cs",
@@ -126,7 +127,7 @@ def test_dedicated_cs_enterprise_only_invariant():
 def test_xiaoc_desktop_is_floating_not_in_message_list():
     """小C是电脑端悬浮助手,不进消息页列表;但进手机端联系人。"""
     assert "assistant" not in assistant_ssot.surface_composition("desktop", "enterprise")
-    assert "assistant" not in assistant_ssot.surface_composition("desktop", "admin")
+    assert assistant_ssot.surface_composition("desktop", "admin") == []
     assert "assistant" in assistant_ssot.surface_composition("mobile", "enterprise")
     assert "assistant" in assistant_ssot.surface_composition("mobile", "admin")
 

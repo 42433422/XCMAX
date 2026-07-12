@@ -88,6 +88,22 @@ def register_spa_history_fallback(app: FastAPI) -> None:
 
     @app.get("/{fallback:path}", include_in_schema=False)
     def vue_history_fallback(fallback: str):
+        # 桌面进程：/admin* 不得回落企业 index.html（管理端仅网页）
+        if fallback == "admin" or fallback.startswith("admin/"):
+            try:
+                from app.utils.deployment import is_desktop_mode
+
+                if is_desktop_mode():
+                    return JSONResponse(
+                        {
+                            "success": False,
+                            "message": "桌面端不提供管理端，请使用网页版管理端",
+                            "error": {"code": "ADMIN_DESKTOP_FORBIDDEN"},
+                        },
+                        status_code=404,
+                    )
+            except RECOVERABLE_ERRORS:
+                pass
         root_file = _try_serve_vue_dist_root_file(fallback)
         if root_file is not None:
             return root_file

@@ -661,6 +661,35 @@ router.beforeEach(async (to, _from, next) => {
   //   }
   // }
 
+  // SSOT：桌面壳禁止 admin（须早于 requiresAdminAccount / 管理端客服侧，避免企业构建内 /admin/entitlements 可达）
+  if (!to.meta?.publicAccess && isDesktopShell() && !isAdminConsoleSpa()) {
+    try {
+      const { useAccountProfileStore } = await import('@/stores/accountProfile');
+      const profile = useAccountProfileStore();
+      if (!profile.loaded) {
+        await profile.refreshFromServer();
+      }
+      if (profile.isAdminAccount && to.name !== 'login') {
+        try {
+          const { authApi } = await import('@/api/auth');
+          await authApi.logout().catch(() => undefined);
+        } catch {
+          /* ignore */
+        }
+        next({
+          name: 'login',
+          query: {
+            redirect: '/',
+            error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+          },
+        });
+        return;
+      }
+    } catch {
+      /* ignore — 后续企业会话校验会兜底 */
+    }
+  }
+
   const customerServiceSide = to.meta?.customerServiceSide as string | undefined;
   if (customerServiceSide === 'enterprise' || customerServiceSide === 'admin') {
     try {
@@ -719,7 +748,7 @@ router.beforeEach(async (to, _from, next) => {
             await profile.refreshFromServer();
           }
           if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
-            // SSOT：管理端仅网页。桌面壳拒入 /admin，清会话回登录。
+            // 非桌面：网页企业壳把 admin 会话导向独立管理端；桌面已在上方拒入
             if (isDesktopShell()) {
               try {
                 const { authApi } = await import('@/api/auth');
@@ -736,7 +765,18 @@ router.beforeEach(async (to, _from, next) => {
               });
               return;
             }
-            window.location.href = resolveAdminConsoleHomeUrl();
+            const adminHome = resolveAdminConsoleHomeUrl();
+            if (!adminHome) {
+              next({
+                name: 'login',
+                query: {
+                  redirect: '/',
+                  error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+                },
+              });
+              return;
+            }
+            window.location.href = adminHome;
             next(false);
             return;
           }

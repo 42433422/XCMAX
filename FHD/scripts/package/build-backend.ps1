@@ -52,14 +52,7 @@ if (-not $SkipFrontend) {
     Remove-Item Env:VITE_XCAGI_PRODUCT_SKU -ErrorAction SilentlyContinue
   }
   Pop-Location
-  # 管理端 /admin（与企业壳同包；SSOT：桌面允许 admin 进独立运维台）
-  Push-Location (Join-Path $Root "admin-console")
-  npm run build
-  if ($LASTEXITCODE -ne 0) { throw "admin-console npm run build failed" }
-  Pop-Location
-  if (-not (Test-Path (Join-Path $Root "templates\admin-vue-dist\index.html"))) {
-    throw "Missing templates/admin-vue-dist/index.html after admin-console build"
-  }
+  # 桌面包不构建 admin-console（管理端仅网页 SSOT）
 }
 
 python -m pip install --upgrade pip

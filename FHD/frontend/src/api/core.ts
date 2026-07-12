@@ -2,6 +2,7 @@ import { notifyDbReadTokenRequiredAfter403, notifyDbWriteTokenRequiredAfter403 }
 import { getApiBase } from '@/utils/apiBase';
 import { readCsrfTokenFromCookie, shouldAttachCsrfHeader } from '@/utils/csrfCookie';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+import { clientShellRequestHeaders } from '@/utils/clientShell';
 
 /**
  * 后端 LanLicenseGuard 返回 401 + error=license_* 时派发；
@@ -116,6 +117,7 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
   const baseHeaders = skipDefaultJsonHeader ? {} : defaultHeaders;
   config.headers = {
     ...baseHeaders,
+    ...clientShellRequestHeaders(),
     ...(requestOptions.headers || {})
   };
 

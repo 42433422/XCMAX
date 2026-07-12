@@ -225,7 +225,7 @@ Persona 由六层合成，后层只能收窄或特化，不能突破前层权限
 |------|----------|--------------|----------|
 | 个人网站助手 | personal + web | 个人 AI 助手 | 解释产品、管理个人消费/VIP、不能进入企业数据 |
 | 企业行业助手 | enterprise + 行业 + web/desktop/mobile | 涂料企业助手、考勤移动助手 | 围绕行业对象执行查询、开单、审批、导入导出 |
-| 企业管理助手 | enterprise_owner/admin + web/desktop | 企业管理助手 | 管成员、RBAC、行业授权、账单、配置 |
+| 企业管理助手 | enterprise_owner + web/desktop；admin 仅 web | 企业管理助手 | 管成员、RBAC、行业授权、账单、配置 |
 | 企业操作助手 | enterprise_operator + 行业 | 业务操作助手 | 做日常业务，不改权限和套餐 |
 | 平台运维助手 | admin + 管理端 | 平台运维助手 | 管平台、审核企业、发布软件、排障和代管 |
 | 代管助手 | admin impersonation + enterprise tenant | 代管排障助手 | 临时进入企业上下文，所有动作必须审计 |

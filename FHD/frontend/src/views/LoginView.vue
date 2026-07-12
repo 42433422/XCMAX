@@ -359,6 +359,10 @@ function selectAdminLogin() {
     return;
   }
   const url = resolveAdminConsoleLoginUrl(redirectPath.value);
+  if (!url) {
+    errorMessage.value = DESKTOP_ADMIN_FORBIDDEN_MESSAGE;
+    return;
+  }
   window.location.href = url;
 }
 
