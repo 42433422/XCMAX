@@ -11,7 +11,7 @@ on:
         default: "1.0.0.0"
         type: choice
         options:
-          - "FHD/1.0.0.0"
+          - "1.0.0.0"
   # Tag (FHD/v*) entry is centralized in fhd-release-orchestrator.yml, which gates on
   # verify-version-anchors and then dispatches this workflow. Removing the direct tag
   # trigger here eliminates the double-run on tag push.
