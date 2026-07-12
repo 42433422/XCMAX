@@ -11,6 +11,8 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-download-manifest.py"
 VERIFY_SCRIPT = FHD_ROOT / "scripts" / "deploy" / "verify-download.sh"
+RELEASE_WORKFLOW = FHD_ROOT / ".github" / "workflows" / "release-desktop.yml"
+FINALIZE_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh"
 
 
 def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[dict, dict]:
@@ -77,6 +79,35 @@ def test_release_is_not_ready_without_enterprise_windows_and_macos(tmp_path: Pat
     assert public_release["release_ready"] is False
 
 
+def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+
+    assert (
+        'bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"' in workflow
+    )
+    assert "bash FHD/scripts/deploy/verify-download.sh" not in workflow
+    assert "verify_only:" in workflow
+    assert "inputs.verify_only == true || needs.generate-manifest.result == 'success'" in workflow
+    assert '"https://xiu-ci.com/xcagi-v${version}/manifest.json"' in workflow
+
+
+def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+    finalize_script = FINALIZE_MACOS_DMG.read_text()
+
+    assert "scripts/package/finalize-macos-dmg.sh" in workflow
+    assert 'xcrun stapler validate "${dmg}"' in workflow
+    assert 'spctl -a -vv -t open --context context:primary-signature "${dmg}"' in workflow
+    assert 'xcrun stapler validate "${app}"' in workflow
+    assert 'spctl -a -vv -t exec "${app}"' in workflow
+    assert "spctl assess may require stapled notarization ticket" not in workflow
+
+    assert 'xcrun notarytool submit "${DMG_PATH}"' in finalize_script
+    assert 'xcrun stapler staple "${DMG_PATH}"' in finalize_script
+    assert "executeAppBuilderAsJson" in finalize_script
+    assert "generate-update-metadata.mjs" in finalize_script
+
+
 def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path: Path) -> None:
     web_root = tmp_path / "web"
     enterprise = web_root / "enterprise"
@@ -102,6 +133,7 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
             "filename": path.name,
         }
 
+    enterprise_entries = {"win": entry(exe), "mac": [entry(dmg)]}
     manifest = {
         "schema": "xcagi.download_manifest/v1",
         "version": "1.0.0.0",
@@ -112,10 +144,14 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
         "git_sha": "abc123",
         "generated_at": "2026-07-12T00:00:00Z",
         "channels": {
+            "auto_update": {
+                "base_url": base_url,
+                "enterprise": enterprise_entries,
+            },
             "official_download": {
                 "base_url": base_url,
-                "enterprise": {"win": entry(exe), "mac": [entry(dmg)]},
-            }
+                "enterprise": enterprise_entries,
+            },
         },
     }
     manifest_path = tmp_path / "verify-manifest.json"
@@ -128,6 +164,8 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
             text=True,
         )
         assert passed.returncode == 0, passed.stdout + passed.stderr
+        assert passed.stdout.count("REUSE SHA256 already verified") == 2
+        assert "PASS: 4" in passed.stdout
 
         manifest["channels"]["official_download"]["enterprise"]["win"]["sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest))
