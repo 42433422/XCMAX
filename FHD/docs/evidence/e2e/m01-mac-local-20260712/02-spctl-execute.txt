@@ -1,0 +1,3 @@
+/Applications/XCAGI.app: accepted
+source=Notarized Developer ID
+origin=Developer ID Application: jialong Li (G26WSH472M)
