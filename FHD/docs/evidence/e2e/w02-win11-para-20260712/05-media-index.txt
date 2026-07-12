@@ -1,19 +1,12 @@
-W-02 Para/DevFleet 录屏索引（2026-07-12）
+W-02 Para/DevFleet 录屏索引（2026-07-12）— 复核结论：FAIL
 
-primary:
-  rec/w02-acceptance.gif   ~1.2MB · 45帧 · 0.5s/帧 · 960x600 · XCAGI「智能对话」窗口置前
-  shots/f001.jpg f015.jpg f030.jpg f045.jpg
+gate: unique_frames>=15 AND motion_transitions>=15
+v1: unique=7  motion=7/44  → FAIL（定格）
+v2: unique=12 motion=6/61  → FAIL（仍几乎不动）
 
-also:
-  rec/w02-acceptance.mp4 / .mov  （imageio 合成，体积偏小，以 GIF 为准）
-  rec/w02-v2-frames.zip          源帧包（gitignore）
+files:
+  rec/w02-acceptance.STATIC-FAIL.gif  v1
+  rec/w02-acceptance.gif              当前为 v2，仍 FAIL，不可签字
+  shots/                              定格参考
 
-capture:
-  device 5fdd29c4-… Win11 26200 ROG
-  method GDI CopyFromScreen @1fps ×45s after SetForegroundWindow(XCAGI)
-  window title: 智能对话 - XCAGI
-  health during rec: {"success":true,"data":{"status":"ok",...}}
-  upload: https://litter.catbox.moe/rokm50.zip (72h)
-
-note:
-  首轮 60s 录屏多为静态桌面（窗口未置前），已弃用；以 v2 为准。
+命令冒烟（安装/health/登录）与录屏脱钩：冒烟可记 PASS，录屏单独 FAIL。
