@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="10.0.0"
+VERSION="1.0.0.0"
 INPUT_HAP=""
 OUTPUT_HAP=""
 BUNDLE_NAME="com.xiuci.xcagi.mobile.enterprise"
@@ -10,7 +10,7 @@ TOOLCHAIN_LIB=""
 
 usage() {
   cat <<'USAGE'
-Usage: sign-openharmony-debug-hap.sh [--version <10.0.0>] [--input <entry-default-unsigned.hap>] [--output <XCAGI-Enterprise-Harmony-10.0.0.hap>]
+Usage: sign-openharmony-debug-hap.sh [--version <1.0.0.0>] [--input <entry-default-unsigned.hap>] [--output <XCAGI-Enterprise-Harmony-1.0.0.0.hap>]
 
 Sign the locally built XCAGI Enterprise HarmonyOS HAP with the OpenHarmony debug
 certificate bundled in the HarmonyOS command-line tools, then verify the signed
@@ -97,7 +97,7 @@ find_latest_unsigned_hap() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VERSION="$(normalize_version "$VERSION")"
-[[ -n "$VERSION" ]] || VERSION="10.0.0"
+[[ -n "$VERSION" ]] || VERSION="1.0.0.0"
 [[ -n "$INPUT_HAP" ]] || INPUT_HAP="$(find_latest_unsigned_hap)"
 [[ -n "$OUTPUT_HAP" ]] || OUTPUT_HAP="${MODULE_ROOT}/artifacts/XCAGI-Enterprise-Harmony-${VERSION}.hap"
 [[ -n "$TOOLCHAIN_LIB" ]] || TOOLCHAIN_LIB="$(find_default_toolchain_lib || true)"
@@ -149,7 +149,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 const profile = JSON.parse(fs.readFileSync(process.env.PROFILE_TEMPLATE, 'utf8'));
-const version = process.env.VERSION || '10.0.0';
+const version = process.env.VERSION || '1.0.0.0';
 const versionCode = version.split('.').reduce((acc, part) => {
   const value = Number.parseInt(part, 10);
   return acc * 100 + (Number.isFinite(value) ? value : 0);

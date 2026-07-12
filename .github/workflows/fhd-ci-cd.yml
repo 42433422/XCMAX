@@ -322,7 +322,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Verify v10 version anchors
+      - name: Verify stable version anchors
         run: python scripts/dev/verify_version_anchors.py
 
       - name: Pack FHD server release tarball

@@ -7,12 +7,12 @@ on:
         description: Release version
         required: false
         type: string
-        default: "10.0.0"
+        default: "1.0.0.0"
       tag:
         description: GitHub release tag
         required: false
         type: string
-        default: "FHD/v10.0.0"
+        default: "FHD/v1.0.0.0"
       runner_label:
         description: Runner label with DevEco/HarmonyOS SDK, or ubuntu-latest when using a checked-in artifact path
         required: false
@@ -51,7 +51,7 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           if [[ -z "${raw}" || "${raw}" == "main" || "${raw}" == "master" ]]; then
-            raw="10.0.0"
+            raw="1.0.0.0"
           fi
           tag="${{ github.event.inputs.tag || '' }}"
           if [[ -z "${tag}" ]]; then

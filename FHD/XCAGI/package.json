@@ -1,6 +1,6 @@
 {
   "name": "xcagi-frontend",
-  "version": "10.0.0",
+  "version": "1.0.0",
   "description": "XCAGI 前端测试配置",
   "scripts": {
     "test": "jest",

@@ -19,7 +19,7 @@ def _normalize_dependencies(raw: Any) -> dict[str, str]:
     """Coerce a manifest ``dependencies`` field into ``{dep_id: version_spec}``.
 
     The canonical schema is a mapping of dependency id -> version spec, e.g.
-    ``{"xcagi": ">=10.0.0"}``. For backward compatibility some manifests declare
+    ``{"xcagi": ">=1.0.0.0"}``. For backward compatibility some manifests declare
     dependencies as a bare list of ids (``["other_mod"]``); those are treated as
     ``{id: "*"}`` (any version). Any other shape is ignored (empty dict) so that
     ``validate_dependencies`` never raises ``AttributeError`` at load time and
@@ -185,7 +185,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
         if dep_id == "xcagi":
             if not _check_xcagi_version(version_spec):
                 logger.warning(
-                    "Mod %s requires xcagi %s but host version is 10.0.0",
+                    "Mod %s requires xcagi %s but host version is 1.0.0.0",
                     metadata.id,
                     version_spec,
                 )
@@ -204,7 +204,7 @@ def validate_dependencies(metadata: ModMetadata, loaded_mods: list[str]) -> bool
 def _check_xcagi_version(version_spec: str) -> bool:
     import re
 
-    current_version = "10.0.0"
+    current_version = "1.0.0.0"
 
     match = re.match(r">=([\d.]+)", version_spec)
     if match:

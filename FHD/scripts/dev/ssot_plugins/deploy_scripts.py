@@ -3,7 +3,7 @@
 检查规则：
 1. .sh 文件必须有 shebang（#!/bin/bash 或 #!/usr/bin/env bash）—— lib/ 目录除外（库文件被 source）
 2. .sh 文件应有 set -euo pipefail（或至少 set -e）—— lib/ 目录除外
-3. 不应硬编码版本号（10.0.0 出现在 .sh 中视为可疑）—— 仅警告，不阻断
+3. 不应硬编码产品版本号（四段 x.y.z.w 出现在 .sh 中视为可疑）—— 仅警告，不阻断
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ if str(_FHD_ROOT) not in sys.path:
 from scripts.dev.ssot_plugins.base import ROOT  # noqa: E402
 
 DEPLOY_ROOT = ROOT / "scripts" / "deploy"
-HARDCODED_VERSION_RE = re.compile(r"\b10\.0\.0\b")
+HARDCODED_VERSION_RE = re.compile(r"\b\d+\.\d+\.\d+\.\d+\b")
 
 
 def _is_lib_file(rel: Path) -> bool:
@@ -60,7 +60,7 @@ def check_drift() -> int:
         # 规则 3：硬编码版本号（仅警告）
         for i, line in enumerate(lines, 1):
             if HARDCODED_VERSION_RE.search(line) and not line.strip().startswith("#"):
-                warnings.append(f"{rel}:L{i}: 硬编码版本号 10.0.0")
+                warnings.append(f"{rel}:L{i}: 硬编码四段产品版本号")
 
     if warnings:
         print(f"deploy-scripts: {len(warnings)} 条警告（硬编码版本号，可能是版本检查脚本）", flush=True)

@@ -291,11 +291,11 @@ class TestValidateDependencies:
         assert "depends on other which is not loaded" in caplog.text
 
     def test_xcagi_version_satisfied(self) -> None:
-        m = self._m({"xcagi": ">=10.0.0"})
+        m = self._m({"xcagi": ">=1.0.0.0"})
         assert validate_dependencies(m, []) is True
 
     def test_xcagi_version_unsatisfied(self, caplog) -> None:
-        # current_version constant in module is "10.0.0"
+        # current_version constant in module is "1.0.0.0"
         m = self._m({"xcagi": ">=99.0.0"})
         with caplog.at_level(logging.WARNING, logger="app.infrastructure.mods.manifest"):
             ok = validate_dependencies(m, [])

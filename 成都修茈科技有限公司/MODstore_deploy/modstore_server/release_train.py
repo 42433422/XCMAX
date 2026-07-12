@@ -1,4 +1,4 @@
-"""四段 release_train SSOT：日更 +0.0.0.1，与营销版号（v10.0）并行。"""
+"""内部构建 release_train SSOT；对外稳定产品版本始终由 FHD/VERSION.md 管理。"""
 
 from __future__ import annotations
 
@@ -131,6 +131,7 @@ def ssot_path() -> Path:
 def default_state() -> Dict[str, Any]:
     return {
         "epoch": "1.0.0.0",
+        "product_version": "1.0.0.0",
         "current": "1.0.0.0",
         "started_at": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
         "day_index": 0,
@@ -216,6 +217,7 @@ def snapshot_public(state: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     day_index = int(st.get("day_index") or 0)
     return {
         "epoch": str(st.get("epoch") or "1.0.0.0"),
+        "product_version": str(st.get("product_version") or "1.0.0.0"),
         "current": current,
         "started_at": st.get("started_at"),
         "day_index": day_index,

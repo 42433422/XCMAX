@@ -1944,7 +1944,7 @@ const currentIndustry = ref(DEFAULT_INDUSTRY_ID);
 const currentIndustryUnit = ref('天');
 const sidebarThemePreset = ref('office-default');
 
-const appVersionLabel = computed(() => String(packageJson.version || '10.0.0'));
+const appVersionLabel = computed(() => String(packageJson.version || '1.0.0'));
 const isDesktopShell = computed(() => Boolean(window.xcagiDesktop));
 
 const accountCustomModIds = new Set<string>(ACCOUNT_CUSTOM_MOD_IDS);

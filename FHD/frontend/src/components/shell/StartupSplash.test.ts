@@ -16,7 +16,7 @@ describe('StartupSplash', () => {
       },
     })
     expect(wrapper.text()).toContain('Demo Mod')
-    expect(wrapper.text()).toContain('v10.0.0')
+    expect(wrapper.text()).toContain('v1.0.0')
     expect(wrapper.find('.startup-progress-fill').attributes('style')).toContain('42%')
   })
 

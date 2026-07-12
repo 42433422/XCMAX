@@ -33,7 +33,7 @@
 
 ```powershell
 cd <repo-root>
-powershell -File scripts/package/build-all-skus.ps1 -Version 10.0.0
+powershell -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
 ```
 
 ```text

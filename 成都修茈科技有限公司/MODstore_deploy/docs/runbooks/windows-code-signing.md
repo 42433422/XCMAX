@@ -44,7 +44,7 @@ npm run dist:win
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/verify-windows-signature.ps1 `
-  -Path dist/XCAGI-Personal-Setup-10.0.0-x64.exe
+  -Path dist/XCAGI-Personal-Setup-1.0.0.0-x64.exe
 ```
 
 验签必须显示 `Status=Valid`，签名主体必须包含 `XCAGI_WINDOWS_PUBLISHER_NAME`。
@@ -65,6 +65,6 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-windows-signature.ps1 `
 上传后至少检查：
 
 ```bash
-curl -I https://xiu-ci.com/xcagi-v10.0.0/personal/XCAGI-Personal-Setup-10.0.0-x64.exe
-curl -r 0-0 -I https://xiu-ci.com/xcagi-v10.0.0/personal/XCAGI-Personal-Setup-10.0.0-x64.exe
+curl -I https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe
+curl -r 0-0 -I https://xiu-ci.com/xcagi-v1.0.0.0/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe
 ```

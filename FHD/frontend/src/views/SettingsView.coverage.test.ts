@@ -237,7 +237,7 @@ vi.mock('@/api', () => ({
 }))
 
 vi.mock('../../package.json', () => ({
-  default: { version: '10.0.0' },
+  default: { version: '1.0.0' },
 }))
 
 /* ── global stubs ── */

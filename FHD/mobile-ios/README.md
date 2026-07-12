@@ -56,7 +56,7 @@ bash scripts/ci-build-ios.sh
 cd FHD/mobile-ios
 IOS_TEAM_ID=ABCDE12345 \
 IOS_SCHEME=XCAGIMobile \
-IOS_MARKETING_VERSION=10.0.0 \
+IOS_MARKETING_VERSION=1.0.0 \
 IOS_BUILD_NUMBER=1 \
 bash scripts/archive-ios.sh --export
 ```
