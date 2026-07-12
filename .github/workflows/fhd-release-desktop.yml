@@ -226,6 +226,19 @@ jobs:
           v="${v#v}"
           v="${v#V}"
           PYTHON=python3 scripts/package/build-installer.sh "$v" enterprise
+      - name: Notarize and staple macOS enterprise DMG
+        shell: bash
+        run: |
+          set -euo pipefail
+          v="${{ github.event.inputs.version || github.ref_name }}"
+          v="${v#FHD/}"
+          v="${v#v}"
+          v="${v#V}"
+          toolchain_version="$(printf '%s' "${v}" | cut -d. -f1-3)"
+          dmg="$(find "release/xcagi-v${v}/enterprise" -name '*.dmg' -print -quit)"
+          test -n "${dmg}"
+          chmod +x scripts/package/finalize-macos-dmg.sh
+          scripts/package/finalize-macos-dmg.sh "${dmg}" "${v}" "${toolchain_version}"
       - name: Verify macOS codesign (enterprise)
         shell: bash
         run: |
@@ -243,12 +256,23 @@ jobs:
             echo "::error::DMG is still adhoc-signed"
             exit 1
           fi
-          hdiutil attach -nobrowse -quiet "${dmg}"
-          app="$(find /Volumes -maxdepth 2 -name 'XCAGI.app' -print -quit)"
+          codesign --verify --verbose=2 "${dmg}"
+          xcrun stapler validate "${dmg}"
+          spctl -a -vv -t open --context context:primary-signature "${dmg}"
+          mount_dir="$(mktemp -d)"
+          cleanup_mount() {
+            hdiutil detach "${mount_dir}" -quiet || true
+            rmdir "${mount_dir}" 2>/dev/null || true
+          }
+          trap cleanup_mount EXIT
+          hdiutil attach -nobrowse -readonly -quiet -mountpoint "${mount_dir}" "${dmg}"
+          app="$(find "${mount_dir}" -maxdepth 2 -name 'XCAGI.app' -print -quit)"
           test -n "${app}"
           codesign --verify --deep --strict --verbose=2 "${app}"
-          spctl -a -vv --type install "${app}" || echo "::warning::spctl assess may require stapled notarization ticket"
-          hdiutil detach "$(dirname "${app}")" -quiet || true
+          xcrun stapler validate "${app}"
+          spctl -a -vv -t exec "${app}"
+          cleanup_mount
+          trap - EXIT
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-macos-enterprise
