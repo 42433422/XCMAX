@@ -81,7 +81,9 @@ def test_release_is_not_ready_without_enterprise_windows_and_macos(tmp_path: Pat
 def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     workflow = RELEASE_WORKFLOW.read_text()
 
-    assert 'bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"' in workflow
+    assert (
+        'bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"' in workflow
+    )
     assert "bash FHD/scripts/deploy/verify-download.sh" not in workflow
 
 
