@@ -29,6 +29,14 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
             "VITE_XCAGI_PRODUCT_SKU=enterprise VITE_XCAGI_EDITION=full npm run build:full"
         ) in script
         assert "VITE_XCAGI_PRODUCT_SKU=enterprise npm run build" not in script
+        assert "admin-console && npm run build" in script or '(cd admin-console && npm run build)' in script
+
+    assert 'templates/admin-vue-dist' in (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
+        encoding="utf-8"
+    )
+    sync = (scripts / "sync-desktop-frontend.ps1").read_text(encoding="utf-8")
+    assert "admin-vue-dist" in sync
+    assert "admin-console" in sync
 
 
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
@@ -56,7 +64,9 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert '"backendHealthMs"' in sh_installer
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in smoke
     assert "[string]$BaseUrl = 'http://127.0.0.1:17500'" in acceptance
-    assert "!isDesktopShell()" in router
+    assert "isDesktopShell" not in router
+    # 管理员统一进 /admin（网页与桌面同构），不再对桌面壳放行企业页
+    assert "resolveAdminConsoleHomeUrl()" in router
     assert "profile.isAdminAccount" in router
     assert "next({ name: 'chat', replace: true });" not in router
     assert "console=False" in spec

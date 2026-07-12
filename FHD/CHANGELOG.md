@@ -15,6 +15,12 @@
 
 ## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
 
+### 桌面管理端 SSOT（2026-07-12 · v10 线内迭代）
+
+- **fix(desktop)**：安装包漏打 `admin-vue-dist`，`/admin` 回落企业 SPA，导致桌面无法进管理端；打包脚本/spec/同步脚本纳入 admin 构建
+- **fix(frontend)**：桌面壳管理员与网页同构跳转 `/admin`（去掉桌面例外）
+- **docs**：`account_system_ssot.md` 写明桌面必须内置独立运维台
+
 ### W-02 Win11 真机走查续修（2026-07-12 · v10 线内迭代）
 
 - **ops(devfleet)**：解除 Win Agent `running_task` 幽灵占用（超时命令终态后无法 cancel）；重新拉起 XCAGI，`/api/health` + 演示账号 API 登录 PASS
