@@ -43,7 +43,7 @@ from app.exceptions import (
     ValidationError,
 )
 from app.infrastructure.auth.dependencies import get_current_user
-from app.services.feature_flag import FeatureFlagName, is_enabled
+from app.application.feature_flag_app import FeatureFlagName, is_enabled
 from app.utils.audit_logger import audit_log as log_audit_event
 
 logger = logging.getLogger(__name__)
