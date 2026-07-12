@@ -90,6 +90,7 @@ echo "=== Verifying $ENTRY_COUNT download entries from $MANIFEST ==="
 
 FAIL_COUNT=0
 PASS_COUNT=0
+VERIFIED_SHA_LIST="|"
 
 check_magic() {
   local file="$1"
@@ -189,6 +190,16 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
     continue
   fi
 
+  # auto_update and official_download intentionally expose the same immutable
+  # artifact under two URLs. HEAD/size/SKU are checked for every URL above;
+  # download the full bytes only once per unique SHA256 to avoid duplicate
+  # cross-region transfers during the release gate.
+  if [[ "$VERIFIED_SHA_LIST" == *"|${sha256}|"* ]]; then
+    echo "  REUSE SHA256 already verified for this immutable artifact"
+    PASS_COUNT=$((PASS_COUNT + 1))
+    continue
+  fi
+
   tmp_file=$(mktemp)
   trap 'rm -f "$tmp_file"' EXIT
   if ! curl -fsSL "${CURL_RETRY_ARGS[@]}" --max-time 600 -o "$tmp_file" "$url"; then
@@ -217,6 +228,7 @@ while IFS=$'\t' read -r sku platform url sha256 size filename channel; do
   echo "  OK SHA256=$actual_sha"
 
   rm -f "$tmp_file"
+  VERIFIED_SHA_LIST="${VERIFIED_SHA_LIST}${sha256}|"
   PASS_COUNT=$((PASS_COUNT + 1))
 done <<< "$ENTRIES_JSON"
 

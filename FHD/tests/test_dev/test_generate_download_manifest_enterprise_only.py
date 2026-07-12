@@ -112,6 +112,7 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
             "filename": path.name,
         }
 
+    enterprise_entries = {"win": entry(exe), "mac": [entry(dmg)]}
     manifest = {
         "schema": "xcagi.download_manifest/v1",
         "version": "1.0.0.0",
@@ -122,10 +123,14 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
         "git_sha": "abc123",
         "generated_at": "2026-07-12T00:00:00Z",
         "channels": {
+            "auto_update": {
+                "base_url": base_url,
+                "enterprise": enterprise_entries,
+            },
             "official_download": {
                 "base_url": base_url,
-                "enterprise": {"win": entry(exe), "mac": [entry(dmg)]},
-            }
+                "enterprise": enterprise_entries,
+            },
         },
     }
     manifest_path = tmp_path / "verify-manifest.json"
@@ -138,6 +143,8 @@ def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path
             text=True,
         )
         assert passed.returncode == 0, passed.stdout + passed.stderr
+        assert passed.stdout.count("REUSE SHA256 already verified") == 2
+        assert "PASS: 4" in passed.stdout
 
         manifest["channels"]["official_download"]["enterprise"]["win"]["sha256"] = "0" * 64
         manifest_path.write_text(json.dumps(manifest))
