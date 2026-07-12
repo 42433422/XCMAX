@@ -84,9 +84,12 @@ def resolve_permissions(
                 route_reason = "employee_invoke_denied"
 
     personal_blocked_shell = False
+    admin_blocked_shell = False
     shell = str(meta.get("client_shell") or meta.get("shell") or "").strip().lower()
     if kind == "personal" and shell in {"desktop", "mobile", "android"}:
         personal_blocked_shell = True
+    if kind == "admin" and shell in {"desktop"}:
+        admin_blocked_shell = True
 
     return {
         "account_kind": kind,
@@ -99,7 +102,8 @@ def resolve_permissions(
         "route_allowed": route_allowed,
         "route_reason": route_reason,
         "personal_shell_blocked": personal_blocked_shell,
-        "allowed": route_allowed and mod_allowed and not personal_blocked_shell,
+        "admin_shell_blocked": admin_blocked_shell,
+        "allowed": route_allowed and mod_allowed and not personal_blocked_shell and not admin_blocked_shell,
     }
 
 
@@ -111,6 +115,8 @@ def require_allowed(**kwargs: Any) -> None:
         reason = (
             decision.get("route_reason")
             or decision.get("mod_reason")
-            or ("personal_shell_blocked" if decision.get("personal_shell_blocked") else "forbidden")
+            or ("personal_shell_blocked" if decision.get("personal_shell_blocked") else None)
+            or ("admin_shell_blocked" if decision.get("admin_shell_blocked") else None)
+            or "forbidden"
         )
         raise HTTPException(status_code=403, detail=str(reason))

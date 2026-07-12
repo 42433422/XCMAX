@@ -151,10 +151,17 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE: '桌面端不支持管理员账号登录，请使用网页版管理端',
 }))
 
 vi.mock('@/utils/desktopShell', () => ({
   isDesktopShell: mockIsDesktopShell,
+}))
+
+vi.mock('@/api/auth', () => ({
+  authApi: {
+    logout: vi.fn().mockResolvedValue({ success: true }),
+  },
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -818,21 +825,20 @@ describe('router/index 覆盖率补齐', () => {
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockAccountProfileStore.loaded = true
       mockAccountProfileStore.isAdminAccount = true
-      // window.location.href 赋值 + next(false)
-      // 导航被中止
+      mockIsDesktopShell.mockReturnValue(false)
       await router.push('/settings')
-      // 由于 next(false)，当前路由不变（或保持上一个）
       expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
     })
 
-    it('desktop shell 内 enterprise admin 同样跳转独立运维台 /admin', async () => {
+    it('desktop shell 内 admin 拒入 /admin 并回登录页', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockIsDesktopShell.mockReturnValue(true)
       mockAccountProfileStore.loaded = true
       mockAccountProfileStore.isAdminAccount = true
       await router.push('/settings')
-      expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
+      expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
+      expect(router.currentRoute.value.name).toBe('login')
     })
 
     it('enterprise + 有效 session + profile 未加载时调用 refresh', async () => {

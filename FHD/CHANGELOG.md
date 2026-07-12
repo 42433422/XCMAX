@@ -15,11 +15,11 @@
 
 ## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
 
-### 桌面管理端 SSOT（2026-07-12 · v10 线内迭代）
+### 桌面禁止管理员登录（2026-07-12 · v10 线内迭代）
 
-- **fix(desktop)**：安装包漏打 `admin-vue-dist`，`/admin` 回落企业 SPA，导致桌面无法进管理端；打包脚本/spec/同步脚本纳入 admin 构建
-- **fix(frontend)**：桌面壳管理员与网页同构跳转 `/admin`（去掉桌面例外）
-- **docs**：`account_system_ssot.md` 写明桌面必须内置独立运维台
+- **ssot(account)**：纠正 `account_system_ssot` — **管理端仅网页**；桌面只允许 enterprise（废止「桌面同构进 `/admin`」）
+- **fix(desktop/auth)**：登录页隐藏管理员入口；路由遇 admin 拒入并退登；桌面模式不挂载 `/admin`；`enterprise_login_flow` 拒绝 admin 会话
+- **test**：router / packaging policy / `test_desktop_admin_forbidden` 对齐新 SSOT
 
 ### W-02 Win11 真机走查续修（2026-07-12 · v10 线内迭代）
 

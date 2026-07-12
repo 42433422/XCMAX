@@ -25,9 +25,11 @@ import { fetchProductSku, isEnterpriseEdition } from '@/utils/productSku';
 import { validateEnterpriseSessionCached } from '@/utils/authSessionCache';
 import { useModsStore } from '@/stores/mods';
 import {
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
   isAdminConsoleSpa,
   resolveAdminConsoleHomeUrl,
 } from '@/utils/adminConsoleUrl';
+import { isDesktopShell } from '@/utils/desktopShell';
 import { ADMIN_HOST_ROUTE_RECORDS } from '@admin-console-inject/adminHostRoutes';
 import {
   ADMIN_OPERATOR_BLOCKED_ROUTE_NAMES,
@@ -717,7 +719,23 @@ router.beforeEach(async (to, _from, next) => {
             await profile.refreshFromServer();
           }
           if (!isAdminConsoleSpa() && profile.isAdminAccount && to.name !== 'login') {
-            // 网页与桌面同构：管理员进入独立运维台 /admin（需打包 admin-vue-dist）
+            // SSOT：管理端仅网页。桌面壳拒入 /admin，清会话回登录。
+            if (isDesktopShell()) {
+              try {
+                const { authApi } = await import('@/api/auth');
+                await authApi.logout().catch(() => undefined);
+              } catch {
+                /* ignore */
+              }
+              next({
+                name: 'login',
+                query: {
+                  redirect: '/',
+                  error: DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+                },
+              });
+              return;
+            }
             window.location.href = resolveAdminConsoleHomeUrl();
             next(false);
             return;

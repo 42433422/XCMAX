@@ -19,6 +19,46 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
 
+DESKTOP_ADMIN_FORBIDDEN_MESSAGE = "桌面端不支持管理员账号登录，请使用网页版管理端"
+DESKTOP_ADMIN_FORBIDDEN_CODE = "ADMIN_DESKTOP_FORBIDDEN"
+
+
+def _is_desktop_runtime() -> bool:
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        return bool(is_desktop_mode())
+    except RECOVERABLE_ERRORS:
+        return False
+
+
+def _reject_admin_on_desktop(
+    *,
+    session_id: str | None,
+    account_kind: str | None,
+) -> dict[str, Any] | None:
+    """桌面嵌入式后端禁止管理员会话（管理端仅网页 SSOT）。"""
+    if str(account_kind or "").strip().lower() != "admin":
+        return None
+    if not _is_desktop_runtime():
+        return None
+    sid = str(session_id or "").strip()
+    if sid:
+        try:
+            from app.infrastructure.session import get_session_manager
+
+            get_session_manager().delete_session(sid)
+        except RECOVERABLE_ERRORS as exc:
+            logger.warning("desktop admin reject: delete_session failed: %s", exc)
+    return {
+        "success": False,
+        "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+        "error": {
+            "code": DESKTOP_ADMIN_FORBIDDEN_CODE,
+            "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+        },
+    }
+
 
 def _login_client_http_status(upstream_status: int) -> int:
     """凭证/业务拒绝用 200，避免前端 fetch 在控制台刷 401/403；仅 5xx 保留 HTTP 错误态。"""
@@ -406,6 +446,12 @@ async def finalize_enterprise_login(
         except RECOVERABLE_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
+    denied = _reject_admin_on_desktop(
+        session_id=str(session_id) if session_id else None,
+        account_kind=str(result.get("account_kind") or account_kind or ""),
+    )
+    if denied is not None:
+        return denied
     return result
 
 
@@ -424,6 +470,17 @@ async def run_market_first_login(
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     from app.application.session_account_meta import persist_session_account_meta
+
+    # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
+    if str(account_kind).strip().lower() == "admin" and _is_desktop_runtime():
+        return {
+            "success": False,
+            "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+            "error": {
+                "code": DESKTOP_ADMIN_FORBIDDEN_CODE,
+                "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+            },
+        }, None
 
     login_username = username
     if sku == "enterprise":
@@ -487,6 +544,12 @@ async def run_market_first_login(
                             or "市场不可达，已使用本地管理员会话"
                         ),
                     }
+                    denied = _reject_admin_on_desktop(
+                        session_id=str(session_id) if session_id else None,
+                        account_kind="admin",
+                    )
+                    if denied is not None:
+                        return denied, None
                     return local_admin, None
             return None, market_auth_error_response(market_result or {})
         kind_err = validate_account_kind_for_market(

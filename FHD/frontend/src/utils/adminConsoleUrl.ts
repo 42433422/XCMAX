@@ -35,3 +35,7 @@ export function resolveAdminConsoleLoginUrl(redirectPath?: string): string {
 export function resolveAdminConsoleHomeUrl(): string {
   return `${adminConsoleBasePath()}/xcmax-admin`;
 }
+
+/** 桌面壳禁止进管理端时的对外提示（与 SSOT：管理端仅网页） */
+export const DESKTOP_ADMIN_FORBIDDEN_MESSAGE =
+  '桌面端不支持管理员账号登录，请使用网页版管理端';
