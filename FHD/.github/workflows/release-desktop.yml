@@ -445,7 +445,8 @@ jobs:
       - name: Verify download URLs (HTTP 200 + SHA256 + size)
         run: |
           set -euo pipefail
-          bash FHD/scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+          # Workflow-level defaults already set working-directory to FHD.
+          bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
 
   github-release:
     needs: [windows, macos, verify-download]

@@ -11,6 +11,7 @@ from pathlib import Path
 FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-download-manifest.py"
 VERIFY_SCRIPT = FHD_ROOT / "scripts" / "deploy" / "verify-download.sh"
+RELEASE_WORKFLOW = FHD_ROOT / ".github" / "workflows" / "release-desktop.yml"
 
 
 def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[dict, dict]:
@@ -75,6 +76,13 @@ def test_release_is_not_ready_without_enterprise_windows_and_macos(tmp_path: Pat
 
     assert manifest["release_ready"] is False
     assert public_release["release_ready"] is False
+
+
+def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+
+    assert 'bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"' in workflow
+    assert "bash FHD/scripts/deploy/verify-download.sh" not in workflow
 
 
 def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path: Path) -> None:
