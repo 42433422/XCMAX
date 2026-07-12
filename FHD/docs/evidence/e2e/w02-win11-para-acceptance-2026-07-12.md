@@ -4,7 +4,10 @@
 > **设备**：`5fdd29c4-9140-48fa-a28b-ab5db375201f` · Win32 · ROG Zephyrus G16  
 > **OS**：Windows 11 · Build **26200** · AMD64 · 15.6GB RAM  
 > **包**：CDN `XCAGI-Enterprise-Setup-10.0.0-x64.exe` · size **213823976** · `buildSha=3f00c87b…`  
-> **安装目录**：`%LOCALAPPDATA%\\Programs\\XCAGI\\`
+> **安装目录**：`%LOCALAPPDATA%\\Programs\\XCAGI\\`  
+> **证据根**：`FHD/docs/evidence/e2e/w02-win11-para-20260712/`  
+> **录屏**：`rec/w02-acceptance.gif`（约 45s / 1.2MB，GDI 1fps 合成；不入库）  
+> **截图**：`shots/f001/f015/f030/f045.jpg`
 
 ## 网络备注
 
@@ -29,7 +32,7 @@
 
 ## 结论
 
-**W-02（Win11 26200）可通过 Para/DevFleet 跑真机冒烟：CDN 下载 → 静默安装 → 启动/登录/ERP PASS。**  
+**W-02（Win11 26200）可通过 Para/DevFleet 跑真机冒烟：CDN 下载 → 静默安装 → 启动/登录/ERP PASS；已补 GDI 录屏（XCAGI 智能对话窗口置前）。**  
 DevFleet 仅 1 台 Windows，**无独立 Win10** → W-01 仍空。
 
 ## 命令 ID（Para 日志）
@@ -37,3 +40,8 @@ DevFleet 仅 1 台 Windows，**无独立 Win10** → W-01 仍空。
 - `773fb627-…` 机器画像  
 - `d64494b9-…` 已装包启动冒烟  
 - `4329b721-…` CDN `--ssl-no-revoke` 下载 + 静默安装 + 复验 health  
+- `16853a60-…` / `ac7db585-…` GDI 桌面帧录屏（v2 置前 XCAGI）
+
+## 媒体索引
+
+见 `w02-win11-para-20260712/05-media-index.txt`。大文件（`.gif` / `.mp4` / `.zip`）已 gitignore，不提交仓库。
