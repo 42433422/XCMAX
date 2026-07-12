@@ -30,6 +30,9 @@ def add_data(relative_path: str):
 datas = []
 for item in [
     "templates/vue-dist",
+    # 管理端独立 SPA（/admin）；缺省时 mount_admin_console_static 跳过，
+    # 桌面「管理员登录」会回落到企业 SPA，与 account_system_ssot 冲突。
+    "templates/admin-vue-dist",
     "static",
     "resources",
     "config",

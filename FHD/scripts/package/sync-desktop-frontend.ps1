@@ -1,4 +1,4 @@
-# 将最新 frontend 构建产物同步到本机已安装的 XCAGI（与网页端 dev 对齐请先 npm run build）
+# 将最新 frontend + admin-console 构建产物同步到本机已安装的 XCAGI
 # Edition: generic = 默认通用壳（ADCDFG）；full = 完整 ERP
 param(
   [switch]$AlsoWinUnpacked,
@@ -13,6 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $Src = Join-Path $Root 'templates\vue-dist'
+$AdminSrc = Join-Path $Root 'templates\admin-vue-dist'
 
 $skuEditionMap = @{
   personal   = 'minimal'
@@ -43,8 +44,18 @@ if ($Build -or -not (Test-Path (Join-Path $Src 'index.html'))) {
   Pop-Location
 }
 
+if ($Build -or -not (Test-Path (Join-Path $AdminSrc 'index.html'))) {
+  Push-Location (Join-Path $Root 'admin-console')
+  npm run build
+  if ($LASTEXITCODE -ne 0) { throw "admin-console npm run build failed" }
+  Pop-Location
+}
+
 if (-not (Test-Path (Join-Path $Src 'index.html'))) {
   throw "Missing vue-dist at $Src — run with -Build or build frontend first."
+}
+if (-not (Test-Path (Join-Path $AdminSrc 'index.html'))) {
+  throw "Missing admin-vue-dist at $AdminSrc — run with -Build or build admin-console first."
 }
 
 $hash = 'unknown'
@@ -55,6 +66,9 @@ $targets = @(
   (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\resources\backend\_internal\templates\vue-dist'),
   (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\resources\frontend')
 )
+$adminTargets = @(
+  (Join-Path $env:LOCALAPPDATA 'Programs\XCAGI\resources\backend\_internal\templates\admin-vue-dist')
+)
 if ($AlsoWinUnpacked) {
   $ver = $Version.TrimStart('v', 'V')
   $unpacked = Join-Path $Root "release\xcagi-v$ver\$ProductSku\win-unpacked\resources"
@@ -63,18 +77,31 @@ if ($AlsoWinUnpacked) {
       (Join-Path $unpacked 'backend\_internal\templates\vue-dist'),
       (Join-Path $unpacked 'frontend')
     )
+    $adminTargets += @(
+      (Join-Path $unpacked 'backend\_internal\templates\admin-vue-dist')
+    )
   } else {
     Write-Warning "win-unpacked not found: $unpacked (build with -ProductSku $ProductSku first)"
   }
 }
 
-foreach ($dst in $targets) {
-  $parent = Split-Path $dst
-  if (-not (Test-Path $parent)) { continue }
-  if (Test-Path $dst) { Remove-Item $dst -Recurse -Force }
+function Sync-Robocopy([string]$from, [string]$to) {
+  $parent = Split-Path $to
+  if (-not (Test-Path $parent)) { return $false }
+  if (Test-Path $to) { Remove-Item $to -Recurse -Force }
   New-Item -ItemType Directory -Force -Path $parent | Out-Null
-  robocopy $Src $dst /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
-  if ($LASTEXITCODE -ge 8) { throw "robocopy failed: $dst (exit $LASTEXITCODE)" }
+  robocopy $from $to /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw "robocopy failed: $to (exit $LASTEXITCODE)" }
+  return $true
+}
+
+$synced = 0
+foreach ($dst in $targets) {
+  if (Sync-Robocopy $Src $dst) { $synced++ }
+}
+$adminSynced = 0
+foreach ($dst in $adminTargets) {
+  if (Sync-Robocopy $AdminSrc $dst) { $adminSynced++ }
 }
 
 $cacheRoot = Join-Path $env:APPDATA 'xcagi-desktop'
@@ -86,6 +113,7 @@ foreach ($sub in @('Cache', 'Code Cache', 'GPUCache')) {
   }
 }
 
-Write-Host "Synced vue-dist (edition=$Edition, index-$hash.js) -> $($targets.Count) path(s)."
+Write-Host "Synced vue-dist (edition=$Edition, index-$hash.js) -> $synced path(s)."
+Write-Host "Synced admin-vue-dist -> $adminSynced path(s)."
 Write-Host 'Restart XCAGI from Start Menu.'
 Write-Host 'If menu still shows 产品管理/出货记录: Settings -> switch industry to 考勤 (saved profile may be 涂料).'

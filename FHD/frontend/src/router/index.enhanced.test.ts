@@ -350,15 +350,16 @@ describe('router/index enhanced', () => {
     // but we can verify the navigation was aborted
   })
 
-  it('allows desktop shell admin account to use enterprise pages', async () => {
+  it('redirects desktop shell admin account to admin console like browser', async () => {
     mockIsEnterpriseEdition.mockReturnValue(true)
     mockValidateEnterpriseSession.mockResolvedValue(true)
     mockIsDesktopShell.mockReturnValue(true)
     mockAccountProfileStore.loaded = true
     mockAccountProfileStore.isAdminAccount = true
+    mockResolveAdminConsoleHomeUrl.mockReturnValue('/admin/xcmax-admin')
+    await router.push('/login')
     await router.push('/settings')
-    expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
-    expect(router.currentRoute.value.name).toBe('settings')
+    expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
   })
 
   // ── product onboarding ──────────────────────────────────
