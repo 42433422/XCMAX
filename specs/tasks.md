@@ -11,7 +11,7 @@
 > 产品线 SSOT：[`product-lines-3-plus-2.md`](product-lines-3-plus-2.md)。所有新增任务必须归入 AI 员工商店、企业桌面 ERP + AI、移动 AI 协同 App 三条主线之一；个人版保持冻结。
 
 - [x] PL0: 建立三条主线 + 个人版冻结的产品线 SSOT
-- [x] PL0-1: 产品版本锁死 v10，锚点恒 `10.0.0`
+- [x] PL0-1: 稳定产品版本统一为 `1.0.0.0`，工具链映射为 `1.0.0`
   - 不使用 `v10.1` / `v10.2` / `v10.3` / `v11` 表达路线；改用 v10-A/B/C/D 阶段、channel、git tag、`git_sha`、`sha256` 和 manifest
 - [x] PL1: 企业桌面 ERP + AI — 固化 v10-A 可交付验收清单
   - 安装包、首次启动、引导、`deliverable-status`、行业样板流程、日志、升级 / 回滚说明

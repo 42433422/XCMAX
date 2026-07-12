@@ -9,7 +9,7 @@ metadata:
   labels:
     app: xcagi
     component: fhd-api
-    version: "10.0.0"
+    version: "1.0.0.0"
 spec:
   replicas: 2
   strategy:
@@ -26,7 +26,7 @@ spec:
       labels:
         app: xcagi
         component: fhd-api
-        version: "10.0.0"
+        version: "1.0.0.0"
     spec:
       securityContext:
         runAsNonRoot: true

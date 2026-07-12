@@ -1,10 +1,11 @@
 {
   "schema": "xcagi.download_release.public/v1",
-  "version_lock": "v10",
-  "download_version": "10.0.0",
-  "android_version": "10.0.0",
+  "version_lock": "1.0.0.0",
+  "download_version": "1.0.0.0",
+  "android_version": "1.0.0.0",
+  "release_ready": false,
   "win_installer_mb": 213,
   "cos_base_url": "https://xiu-ci.com",
-  "release_root": "https://xiu-ci.com/xcagi-v10.0.0",
+  "release_root": "https://xiu-ci.com/xcagi-v1.0.0.0",
   "generated_at": "2026-07-05T15:19:17.000000+00:00"
 }

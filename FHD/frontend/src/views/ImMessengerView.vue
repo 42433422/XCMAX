@@ -1875,12 +1875,13 @@ onMounted(async () => {
     applyReadState(conversation_id, user_id, last_message_id);
   });
   connectWs();
-  await Promise.all([loadContacts(), loadConversations(), loadDutyEmployees()]);
-  if (isAdminCustomerServiceConsole.value && !activeConversationId.value) {
+  const initialLoads = [loadContacts(), loadConversations(), loadDutyEmployees()];
+  if (isAdminCustomerServiceConsole.value) {
     closeOverlappingAssistantFloat();
     activeSystemEntry.value = CODEX_SUPER_EMPLOYEE_ENTRY;
-    await loadCodexConversation();
+    initialLoads.push(loadCodexConversation());
   }
+  await Promise.all(initialLoads);
 });
 
 onUnmounted(() => {

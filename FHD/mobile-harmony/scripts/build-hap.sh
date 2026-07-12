@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="10.0.0"
+VERSION="1.0.0.0"
 MODE="release"
 OUTPUT_DIR=""
 RUN_OHPM_INSTALL="${HARMONY_RUN_OHPM_INSTALL:-0}"
 
 usage() {
   cat <<'USAGE'
-Usage: build-hap.sh [--version <10.0.0>] [--mode <release|debug>] [--output-dir <dir>] [--with-ohpm-install]
+Usage: build-hap.sh [--version <1.0.0.0>] [--mode <release|debug>] [--output-dir <dir>] [--with-ohpm-install]
 
 Build the XCAGI Enterprise HarmonyOS HAP from the ArkTS project.
 
@@ -104,7 +104,7 @@ find_hap() {
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODULE_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 VERSION="$(normalize_version "$VERSION")"
-[[ -n "$VERSION" ]] || VERSION="10.0.0"
+[[ -n "$VERSION" ]] || VERSION="1.0.0.0"
 [[ -n "$OUTPUT_DIR" ]] || OUTPUT_DIR="${MODULE_ROOT}/artifacts"
 
 case "$MODE" in

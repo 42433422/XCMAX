@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="10.0.0"
-ANDROID_VERSION="10.0.0"
+VERSION="1.0.0.0"
+ANDROID_VERSION="1.0.0.0"
 HARMONY_ARTIFACT=""
 APK_PATH=""
 SKIP_ZIP=0
@@ -10,7 +10,7 @@ ALLOW_MISSING_HARMONY=0
 
 usage() {
   cat <<'USAGE'
-Usage: stage-release-packages.sh [--version <10.0.0>] [--android-version <10.0.0>] \
+Usage: stage-release-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] \
   [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--allow-missing-harmony]
 
 生成鸿蒙企业版发布目录（企业版-only）：
@@ -83,8 +83,8 @@ resolve_root() {
 resolve_version() {
   VERSION="$(normalize_version "$VERSION")"
   ANDROID_VERSION="$(normalize_version "$ANDROID_VERSION")"
-  [[ -n "$VERSION" ]] || VERSION="10.0.0"
-  [[ -n "$ANDROID_VERSION" ]] || ANDROID_VERSION="10.0.0"
+  [[ -n "$VERSION" ]] || VERSION="1.0.0.0"
+  [[ -n "$ANDROID_VERSION" ]] || ANDROID_VERSION="1.0.0.0"
 }
 
 resolve_apk() {

@@ -3,10 +3,11 @@
 # 等价于 build-installer.ps1 -SkipUiInstaller（跳过 WPF 外壳，保留 NSIS + 内嵌后端）。
 set -euo pipefail
 
-VERSION="${1:-10.0.0}"
+VERSION="${1:-1.0.0.0}"
 SKU="${2:-enterprise}"
 VERSION="${VERSION#v}"
 VERSION="${VERSION#V}"
+TOOLCHAIN_VERSION="$(printf '%s' "${VERSION}" | cut -d. -f1-3)"
 
 case "${SKU}" in
   personal | enterprise) ;;
@@ -117,10 +118,10 @@ for marker in "packagedBackendCandidates" "electron-backend.log" "backend', '_in
     exit 1
   fi
 done
-npm version "${VERSION}" --no-git-tag-version --prefix desktop
+npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --prefix desktop --allow-same-version
 APP_ID="$(sku_app_id "${SKU}")"
 PUBLISH_URL="$(sku_update_url "${SKU}")"
-ARTIFACT="XCAGI-${LABEL}-Setup-\${version}-\${arch}.\${ext}"
+ARTIFACT="XCAGI-${LABEL}-Setup-${VERSION}-\${arch}.\${ext}"
 
 (
   cd desktop
@@ -158,6 +159,7 @@ for required in \
   fi
 done
 
-node scripts/package/generate-update-metadata.mjs "${FINAL}" "${VERSION}" win
+XCAGI_PRODUCT_VERSION="${VERSION}" \
+  node scripts/package/generate-update-metadata.mjs "${FINAL}" "${TOOLCHAIN_VERSION}" win
 
 echo "[ok] Windows installer: ${FINAL}"

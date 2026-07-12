@@ -4,7 +4,16 @@
 
 ---
 
-## Unreleased（v10 线内迭代 · 技术债路线图 2026-06-07）
+## 1.0.0.0（2026-07-12）— 稳定上线版本基线
+
+- **版本 SSOT**：对外产品版本统一为 `1.0.0.0`；npm/Electron、Flutter pub 与 Apple 市场版本映射为合法三段版本 `1.0.0`。
+- **发布链**：Windows/macOS/Android/Harmony/Web 工作流、打包脚本、发布目录和下载清单统一使用 `xcagi-v1.0.0.0`。
+- **自动更新**：Electron `latest*.yml` 保持 SemVer `1.0.0`，同时写入 `productVersion: 1.0.0.0`；制品文件名使用四段产品版本。
+- **Mod 兼容**：宿主与内置 Mod 的版本/依赖基线统一为 `1.0.0.0`，避免历史 `>=10.0.0` 阻断加载。
+- **下载清单**：manifest 补齐 `xcagi.download_manifest/v1` schema，官网 fallback、nginx 路径和双 SKU 文件名同步到稳定版本。
+- **发布纪律**：历史 `10.0.0` 制品与证据保留为历史事实；新的稳定制品必须重新构建、签名、公证、上传并通过端到端验收。
+
+## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
 
 ### macOS 公证 CDN 闭环（2026-07-12 · v10 线内迭代）
 

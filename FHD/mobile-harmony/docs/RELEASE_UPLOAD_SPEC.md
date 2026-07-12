@@ -5,7 +5,7 @@
 ## 一、产物来源（企业版-only）
 
 - 产物来源脚本：`mobile-harmony/scripts/stage-release-packages.sh`
-- 目标版本：`v10.0.0`（可通过参数 `--version` 覆盖）
+- 目标版本：`v1.0.0.0`（可通过参数 `--version` 覆盖）
 
 ## 二、必须上传到 Release 的文件
 
@@ -40,7 +40,7 @@
 
 ## 四、验收点
 
-- 运行 `bash FHD/mobile-harmony/scripts/stage-release-packages.sh --version 10.0.0 --android-version 10.0.0 --harmony-artifact <hap-or-hsp>`
-- 检查 `release/packages-v10.0.0/enterprise` 中不出现 `personal` 目录（脚本会主动清理旧目录）
-- 检查 `release/packages-v10.0.0/enterprise/XCAGI-Enterprise-Harmony-10.0.0.<hap|hsp>` 存在
+- 运行 `bash FHD/mobile-harmony/scripts/stage-release-packages.sh --version 1.0.0.0 --android-version 1.0.0.0 --harmony-artifact <hap-or-hsp>`
+- 检查 `release/packages-v1.0.0.0/enterprise` 中不出现 `personal` 目录（脚本会主动清理旧目录）
+- 检查 `release/packages-v1.0.0.0/enterprise/XCAGI-Enterprise-Harmony-1.0.0.0.<hap|hsp>` 存在
 - 检查 zip 内文件清单包含企业版目录且不包含个人版目录

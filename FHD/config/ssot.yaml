@@ -49,9 +49,29 @@ domains:
       - FHD/frontend/package.json#version
       - FHD/desktop/package.json#version
       - FHD/package.json#version
+      - FHD/XCAGI/package.json#version
+      - FHD/admin-console/package.json#version
+      - FHD/sunbird-console/package.json#version
+      - FHD/mobile-harmony/oh-package.json5#version
+      - FHD/mobile-harmony/entry/oh-package.json5#version
       - FHD/app/fastapi_app/factory.py#FastAPI(version=)
       - FHD/app/infrastructure/mods/manifest.py#current_version
       - FHD/mobile-android/app/build.gradle.kts#versionName
+      - FHD/mobile-flutter-poc/android/app/build.gradle.kts#versionName
+      - FHD/mobile-flutter-poc/pubspec.yaml#version
+      - FHD/mobile-flutter-poc/ios/Flutter/Version.xcconfig#FLUTTER_BUILD_NAME
+      - FHD/desktop/resources/build-info.json#version
+      - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart#versionName
+      - FHD/mobile-harmony/AppScope/app.json5#versionName
+      - FHD/config/download_release.json#marketing_version
+      - FHD/config/release_train.json#product_version
+      - 成都修茈科技有限公司/FHD/config/release_train.json#product_version
+      - FHD/contracts/openapi.json#info.version
+      - FHD/setup.iss#MyAppVersion
+      - FHD/tools/XcagiDownloader/Models/AppSettings.cs#fallback-version
+      - FHD/scripts/package/build-installer.sh#default-version
+      - FHD/scripts/package/build-installer.ps1#default-version
+      - FHD/release/VERSION
     mode: sync+verify
     check: python scripts/dev/verify_version_anchors.py
     # --apply 真写；ssot sync version 默认 dry-run，--apply 透传给脚本

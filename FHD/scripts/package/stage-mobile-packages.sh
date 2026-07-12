@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="10.0.0"
-ANDROID_VERSION="10.0.0"
+VERSION="1.0.0.0"
+ANDROID_VERSION="1.0.0.0"
 HARMONY_ARTIFACT=""
 
 usage() {
   cat <<'USAGE'
-Usage: stage-mobile-packages.sh [--version <10.0.0>] [--android-version <10.0.0>] [--harmony-artifact <path>]
+Usage: stage-mobile-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0.0>] [--harmony-artifact <path>]
 
 Build and stage mobile distribution folders:
   - release/packages-v${VERSION}/personal

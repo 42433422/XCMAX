@@ -203,7 +203,7 @@ mods/<mod_id>/
   "author": "ACME",
   "description": "示例能力：回显 hello",
   "primary": false,
-  "dependencies": { "xcagi": ">=10.0.0" },
+  "dependencies": { "xcagi": ">=1.0.0.0" },
   "backend": { "entry": "blueprints", "init": "mod_init" },
   "frontend": {
     "routes": "frontend/routes",
@@ -682,7 +682,7 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 ### 13.1 宿主版本
 
 ```jsonc
-"dependencies": { "xcagi": ">=10.0.0" }
+"dependencies": { "xcagi": ">=1.0.0.0" }
 ```
 
 当前仅支持 `>=<version>` 形式。由 `app.infrastructure.mods.manifest._check_xcagi_version` 校验；宿主常量 `current_version` 编码在 manifest.py 中。升级 XCAGI 时请同步该常量。
@@ -691,7 +691,7 @@ Workflow Employee 是**前端工作流面板**生成控制卡的元数据。每�
 
 ```jsonc
 "dependencies": {
-  "xcagi":           ">=10.0.0",
+  "xcagi":           ">=1.0.0.0",
   "common-kit-mod":  ">=1.2.0"
 }
 ```

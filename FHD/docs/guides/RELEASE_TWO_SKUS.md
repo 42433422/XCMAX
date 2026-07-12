@@ -1,12 +1,12 @@
-# XCAGI 双 SKU 发版指南（v10 锁定）
+# XCAGI 1.0.0.0 双 SKU 发版指南
 
-> 版本锚点固定为 `10.0.0`。macOS 与 Windows 共用同一套 SKU 资源契约（`product-sku.json`、staged `mods/`、enterprise `industry-seeds/`、统一 Electron 后端启动协议），但最终安装包必须按平台分别产出，不能共用同一个后端二进制。
+> 对外产品版本固定为 `1.0.0.0`，Electron 工具链版本映射为 `1.0.0`。macOS 与 Windows 共用同一套 SKU 资源契约，但最终安装包必须按平台分别产出。
 
 ## 1. 发版前安全自检
 
 ```powershell
 cd e:\XCMAX\FHD
-powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps1 -Phase pre -Version 10.0.0
+powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps1 -Phase pre -Version 1.0.0.0
 ```
 
 ## 2. 构建两个安装包
@@ -14,19 +14,19 @@ powershell -ExecutionPolicy Bypass -File scripts/package/pre-release-security.ps
 Windows 正式包必须包含 `win-unpacked/resources/backend/xcagi-backend.exe`。不要用 `build-windows-electron-only.sh` 作为发布链路；该脚本默认已禁止，避免生成安装后无法启动后端的空壳包。
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/package/build-all-skus.ps1 -Version 10.0.0
+powershell -ExecutionPolicy Bypass -File scripts/package/build-all-skus.ps1 -Version 1.0.0.0
 ```
 
 macOS/Linux 上交叉构建 Windows 包时使用 Docker/Wine 链路：
 
 ```bash
-bash scripts/package/build-windows-installer.sh 10.0.0 enterprise
+bash scripts/package/build-windows-installer.sh 1.0.0.0 enterprise
 ```
 
 macOS 安装包使用：
 
 ```bash
-bash scripts/package/build-installer.sh 10.0.0 enterprise
+bash scripts/package/build-installer.sh 1.0.0.0 enterprise
 ```
 
 可选：构建时为 `latest.yml` 增加 Ed25519 签名：
@@ -38,7 +38,7 @@ $env:XCAGI_UPDATE_ED25519_PRIVATE_KEY = "<PEM 私钥，勿提交 git>"
 ## 3. 构建后验收
 
 ```powershell
-$v = "10.0.0"
+$v = "1.0.0.0"
 foreach ($sku in @("personal","enterprise")) {
   powershell -File scripts/package/verify-bundled-mods.ps1 -ProductSku $sku `
     -UnpackedDir "release/xcagi-v$v/$sku/win-unpacked/resources/backend/_internal/mods"
@@ -60,16 +60,16 @@ post 验收会硬性检查 Windows 后端 exe、`product-sku.json`、staged mods
 | `XCAGI_UPDATE_SSH_KEY` | `C:\Users\you\.ssh\id_ed25519` |
 
 ```powershell
-powershell -File scripts/package/upload-release-skus.ps1 -Version 10.0.0
+powershell -File scripts/package/upload-release-skus.ps1 -Version 1.0.0.0
 # 试跑: -DryRun
 ```
 
 远端目录结构：
 
 ```text
-/var/www/update/personal/XCAGI-Personal-Setup-10.0.0-x64.exe
+/var/www/update/personal/XCAGI-Personal-Setup-1.0.0.0-x64.exe
 /var/www/update/personal/latest.yml
-/var/www/update/xcagi-v10.0.0/enterprise/...
+/var/www/update/xcagi-v1.0.0.0/enterprise/...
 ```
 
 **勿上传**无 `-ProductSku` 的 legacy `XCAGI-Setup-*.exe` 到 `personal/`，以免 ERP 源码重新暴露。
@@ -79,8 +79,8 @@ powershell -File scripts/package/upload-release-skus.ps1 -Version 10.0.0
 在服务器 `MODstore_deploy/.env.production`：
 
 ```env
-VITE_XCAGI_DOWNLOAD_VERSION=10.0.0
-VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v10.0.0
+VITE_XCAGI_DOWNLOAD_VERSION=1.0.0.0
+VITE_XCAGI_DOWNLOAD_BASE_URL=https://xiu-ci.com/xcagi-v1.0.0.0
 ```
 
 重建并部署 market 前端后，下载页两卡（个人版 / 企业版）指向上述 URL。
@@ -104,10 +104,10 @@ gradlew.bat assemblePersonalDebug assembleEnterpriseDebug
 ## 8. 本地分发目录（Windows + Android 放一起）
 
 ```powershell
-powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
+powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 1.0.0.0
 ```
 
-产出：`release/packages-v10.0.0/` 下两个文件夹，各含 **1 个 Windows exe + 1 个 Android apk**：
+产出：`release/packages-v1.0.0.0/` 下两个文件夹，各含 **1 个 Windows exe + 1 个 Android apk**：
 
 | 文件夹 | Windows | Android |
 |--------|---------|---------|

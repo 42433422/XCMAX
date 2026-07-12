@@ -169,6 +169,7 @@ let sidebarHoverTimer = null
 let sidebarViewportMedia = null
 const showMobileBottomNav = ref(false)
 let mobileBottomNavMedia = null
+let layoutActive = true
 
 const clientModeTiersUiEnabled = isClientModeTiersUiEnabled()
 const isSandboxMode = new URLSearchParams(window.location.search).has('sandbox')
@@ -490,6 +491,7 @@ onMounted(async () => {
       // 行业信息加载失败时，顶部标题保持默认文案
     }
   }
+  if (!layoutActive || typeof window === 'undefined') return
   sidebarViewportMedia = window.matchMedia?.(SIDEBAR_DISABLE_MQ) ?? null
   if (sidebarViewportMedia) {
     onViewportChange(sidebarViewportMedia)
@@ -514,23 +516,26 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
+  layoutActive = false
   stopSidebarResize()
   clearSidebarHoverTimer()
   clearSidebarCollapseTimer()
   ACTIVITY_EVENTS.forEach((eventName) => {
     window.removeEventListener(eventName, handleGlobalActivity)
   })
-  if (!sidebarViewportMedia) return
-  if (typeof sidebarViewportMedia.removeEventListener === 'function') {
-    sidebarViewportMedia.removeEventListener('change', onViewportChange)
-  } else if (typeof sidebarViewportMedia.removeListener === 'function') {
-    sidebarViewportMedia.removeListener(onViewportChange)
+  if (sidebarViewportMedia) {
+    if (typeof sidebarViewportMedia.removeEventListener === 'function') {
+      sidebarViewportMedia.removeEventListener('change', onViewportChange)
+    } else if (typeof sidebarViewportMedia.removeListener === 'function') {
+      sidebarViewportMedia.removeListener(onViewportChange)
+    }
   }
-  if (!mobileBottomNavMedia) return
-  if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
-    mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
-  } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
-    mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+  if (mobileBottomNavMedia) {
+    if (typeof mobileBottomNavMedia.removeEventListener === 'function') {
+      mobileBottomNavMedia.removeEventListener('change', onMobileNavViewportChange)
+    } else if (typeof mobileBottomNavMedia.removeListener === 'function') {
+      mobileBottomNavMedia.removeListener(onMobileNavViewportChange)
+    }
   }
 })
 </script>

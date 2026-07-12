@@ -1,11 +1,11 @@
 """官网下载版本 SSOT 读写 + installer 日推送回写。
 
 单一真相源：``FHD/config/download_release.json``（可用 ``MODSTORE_DOWNLOAD_RELEASE_JSON`` 覆盖）。
-- 全产品线 v10 锁：marketing/download/android 锚点恒 ``10.0.0``（见 ``FHD/VERSION.md``）。
+- 稳定产品版本、下载版本和 Android versionName 统一为 ``1.0.0.0``（见 ``FHD/VERSION.md``）。
 - installer/major 日：P5 构建 → P6 推 COS → 调用 :func:`record_installer_push` 回写 ``last_push``，
   并刷新 market SPA 运行时读取的公开清单 ``market/public/download-release.json``（下载页 fetch 后无需重建即生效）。
 
-本模块只动「下载版本元数据」，不改任何营销版本号（仍 10.0.0），不违反 v10 锁。
+本模块只动下载版本元数据，不擅自改变 ``FHD/VERSION.md`` 的稳定版本。
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ _PUBLIC_KEYS = (
     "version_lock",
     "download_version",
     "android_version",
+    "release_ready",
     "win_installer_mb",
     "cos_base_url",
 )
@@ -63,13 +64,14 @@ def load_release(*, path: Optional[Path] = None) -> Dict[str, Any]:
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
-        # 兜底：与 SSOT 默认一致（v10 锁）
+        # 兜底：与稳定版本 SSOT 默认一致
         return {
             "schema": "xcagi.download_release/v1",
-            "version_lock": "v10",
-            "marketing_version": "10.0.0",
-            "download_version": "10.0.0",
-            "android_version": "10.0.0",
+            "version_lock": "1.0.0.0",
+            "marketing_version": "1.0.0.0",
+            "download_version": "1.0.0.0",
+            "android_version": "1.0.0.0",
+            "release_ready": False,
             "win_installer_mb": 212,
             "cos_base_url": "https://dl.xiu-ci.com",
             "last_push": {},
@@ -86,13 +88,14 @@ def save_release(rel: Dict[str, Any], *, path: Optional[Path] = None) -> Path:
 def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """市场 SPA 运行时读取的公开子集（/download-release.json）。"""
     r = rel or load_release()
-    dv = str(r.get("download_version") or "10.0.0")
+    dv = str(r.get("download_version") or "1.0.0.0")
     base = str(r.get("cos_base_url") or "https://dl.xiu-ci.com").rstrip("/")
     out: Dict[str, Any] = {
         "schema": "xcagi.download_release.public/v1",
-        "version_lock": str(r.get("version_lock") or "v10"),
+        "version_lock": str(r.get("version_lock") or "1.0.0.0"),
         "download_version": dv,
         "android_version": str(r.get("android_version") or dv),
+        "release_ready": bool(r.get("release_ready")),
         "win_installer_mb": r.get("win_installer_mb") or 212,
         "cos_base_url": base,
         "release_root": f"{base}/xcagi-v{dv}",
@@ -148,7 +151,7 @@ def record_installer_push(
 ) -> Dict[str, Any]:
     """installer/major 日推送后回写 SSOT ``last_push`` 并刷新公开清单。
 
-    不改 download_version（v10 锁 10.0.0）；只记录「这次 installer 日确实推过」+ 刷新站点清单。
+    不改 download_version；只记录 installer 推送事实并刷新站点清单。
     """
     rel = load_release(path=path)
     rel["last_push"] = {
@@ -159,6 +162,8 @@ def record_installer_push(
         "cos_uploaded": bool(cos_uploaded),
         "by": str(actor or ""),
     }
+    if cos_uploaded:
+        rel["release_ready"] = True
     saved = save_release(rel, path=path)
     written = write_public_manifests(rel)
     logger.info(

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify FHD v10 version anchors match VERSION.md (read-only; no bump)."""
+"""Verify product/toolchain version anchors match VERSION.md (read-only)."""
 
 from __future__ import annotations
 
@@ -9,16 +9,39 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-ANCHORS: list[tuple[str, str]] = [
-    ("pyproject.toml", r'version\s*=\s*"([\d.]+)"'),
-    ("XCAGI/pyproject.toml", r'version\s*=\s*"([\d.]+)"'),
-    ("frontend/package.json", r'"version"\s*:\s*"([\d.]+)"'),
-    ("desktop/package.json", r'"version"\s*:\s*"([\d.]+)"'),
-    ("package.json", r'"version"\s*:\s*"([\d.]+)"'),
-    ("app/fastapi_app/factory.py", r'version="([\d.]+)"'),
-    ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"'),
-    # versionName 可由 CI 注入(-PandroidVersionName)以 stamp 发版名;v10 锚点体现在 fallback 默认值。
-    ("mobile-android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"'),
+PRODUCT_VERSION = "product"
+TOOLCHAIN_VERSION = "toolchain"
+
+# (相对路径, 捕获版本号的正则, VERSION.md 中对应的版本口径)
+ANCHORS: list[tuple[str, str, str]] = [
+    ("pyproject.toml", r'version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("XCAGI/pyproject.toml", r'version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("frontend/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("desktop/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("XCAGI/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("admin-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("sunbird-console/package.json", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("mobile-harmony/oh-package.json5", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("mobile-harmony/entry/oh-package.json5", r'"version"\s*:\s*"([\d.]+)"', TOOLCHAIN_VERSION),
+    ("app/fastapi_app/factory.py", r'version="([\d.]+)"', PRODUCT_VERSION),
+    ("app/infrastructure/mods/manifest.py", r'current_version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("mobile-android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("mobile-flutter-poc/android/app/build.gradle.kts", r'injectedVersionName[\s\S]*?\?:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("mobile-flutter-poc/pubspec.yaml", r'(?m)^version:\s*([\d.]+)\+\d+', TOOLCHAIN_VERSION),
+    ("mobile-flutter-poc/ios/Flutter/Version.xcconfig", r'(?m)^FLUTTER_BUILD_NAME=([\d.]+)', TOOLCHAIN_VERSION),
+    ("desktop/resources/build-info.json", r'"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("mobile-flutter-poc/lib/src/api/mobile_api.dart", r"versionName\s*=\s*'([\d.]+)'", PRODUCT_VERSION),
+    ("mobile-harmony/AppScope/app.json5", r'"versionName"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("config/download_release.json", r'"marketing_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("config/release_train.json", r'"product_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("../成都修茈科技有限公司/FHD/config/release_train.json", r'"product_version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("contracts/openapi.json", r'"info"[\s\S]*?"version"\s*:\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("setup.iss", r'#define\s+MyAppVersion\s+"([\d.]+)"', PRODUCT_VERSION),
+    ("tools/XcagiDownloader/Models/AppSettings.cs", r'return\s+"([\d.]+)";', PRODUCT_VERSION),
+    ("scripts/package/build-installer.sh", r'VERSION="\$\{1:-([\d.]+)\}"', PRODUCT_VERSION),
+    ("scripts/package/build-installer.ps1", r'\[string\]\$Version\s*=\s*"([\d.]+)"', PRODUCT_VERSION),
+    ("release/VERSION", r'(?m)^([\d.]+)$', PRODUCT_VERSION),
 ]
 
 
@@ -27,17 +50,36 @@ def _canonical_version() -> str:
     if not version_md.is_file():
         raise FileNotFoundError(f"missing {version_md}")
     for line in version_md.read_text(encoding="utf-8").splitlines():
-        if "**XCAGI 总版本**" in line:
+        if "**XCAGI 稳定产品版本**" in line:
             match = re.search(r"`([\d.]+)`", line)
             if match:
                 return match.group(1)
-    raise ValueError("could not parse canonical version from VERSION.md")
+    raise ValueError("could not parse stable product version from VERSION.md")
+
+
+def _toolchain_version() -> str:
+    version_md = REPO_ROOT / "VERSION.md"
+    if not version_md.is_file():
+        raise FileNotFoundError(f"missing {version_md}")
+    for line in version_md.read_text(encoding="utf-8").splitlines():
+        if "**工具链兼容版本**" in line:
+            match = re.search(r"`([\d.]+)`", line)
+            if match:
+                return match.group(1)
+    raise ValueError("could not parse toolchain version from VERSION.md")
+
+
+def _expected_versions() -> dict[str, str]:
+    return {
+        PRODUCT_VERSION: _canonical_version(),
+        TOOLCHAIN_VERSION: _toolchain_version(),
+    }
 
 
 def verify() -> list[str]:
-    expected = _canonical_version()
+    expected_versions = _expected_versions()
     errors: list[str] = []
-    for rel_path, pattern in ANCHORS:
+    for rel_path, pattern, version_kind in ANCHORS:
         full_path = REPO_ROOT / rel_path
         if not full_path.is_file():
             errors.append(f"{rel_path}: file not found")
@@ -47,8 +89,9 @@ def verify() -> list[str]:
             errors.append(f"{rel_path}: version pattern not found")
             continue
         found = match.group(1)
+        expected = expected_versions[version_kind]
         if found != expected:
-            errors.append(f"{rel_path}: expected {expected}, found {found}")
+            errors.append(f"{rel_path}: expected {version_kind} version {expected}, found {found}")
     return errors
 
 
@@ -59,7 +102,11 @@ def main() -> int:
         for err in errors:
             print(f"  - {err}", file=sys.stderr)
         return 1
-    print(f"OK: all anchors match {_canonical_version()}")
+    versions = _expected_versions()
+    print(
+        "OK: all anchors match "
+        f"product={versions[PRODUCT_VERSION]}, toolchain={versions[TOOLCHAIN_VERSION]}"
+    )
     return 0
 
 

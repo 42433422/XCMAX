@@ -28,9 +28,11 @@ function resolveBuildSha() {
 }
 
 const buildSha = resolveBuildSha()
+const productVersion = String(process.env.XCAGI_PRODUCT_VERSION || version).trim()
 
 let body = [
   `version: ${version}`,
+  ...(productVersion !== version ? [`productVersion: ${productVersion}`] : []),
   ...(buildSha ? [`buildSha: ${buildSha}`] : []),
   'files:',
   `  - url: ${name}`,

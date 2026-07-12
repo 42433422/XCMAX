@@ -3,11 +3,11 @@
   Stage Windows installer + Android APK into per-SKU folders (personal / enterprise).
 
 .EXAMPLE
-  powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 10.0.0
+  powershell -File scripts/package/stage-sku-download-folders.ps1 -Version 1.0.0.0
 #>
 param(
-  [string]$Version = '10.0.0',
-  [string]$AndroidVersion = '1.3.0',
+  [string]$Version = '1.0.0.0',
+  [string]$AndroidVersion = '1.0.0.0',
   [switch]$BuildAndroidRelease
 )
 
