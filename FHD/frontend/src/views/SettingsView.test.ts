@@ -47,6 +47,7 @@ describe('SettingsView.vue', () => {
       },
     })
     expect(wrapper.exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('renders settings shell text', async () => {
@@ -60,5 +61,6 @@ describe('SettingsView.vue', () => {
       },
     })
     expect(wrapper.text().length).toBeGreaterThan(10)
+    wrapper.unmount()
   })
 })
