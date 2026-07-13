@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 全量 Playwright e2e：编排 FastAPI :5000 + Vite :5001，跑 P0 套件（14 用例）。
+# 全量 Playwright e2e：编排 FastAPI + Vite，并运行真实 P0 套件。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -38,16 +38,39 @@ E2E_LOG_DIR="${E2E_LOG_DIR:-${FRONTEND}/test-results}"
 BACKEND_LOG="${E2E_DATA_DIR}/e2e-backend.log"
 mkdir -p "${E2E_LOG_DIR}"
 
+terminate_process() {
+  local pid="$1"
+  local label="$2"
+
+  [[ -n "${pid}" ]] || return 0
+  if ! kill -0 "${pid}" 2>/dev/null; then
+    wait "${pid}" 2>/dev/null || true
+    return 0
+  fi
+
+  # npm/uvicorn can keep children alive after the parent receives TERM.  Ask
+  # direct children to stop too, then bound the wait so a successful P0 run
+  # cannot consume the remainder of the GitHub Actions job timeout in cleanup.
+  pkill -TERM -P "${pid}" 2>/dev/null || true
+  kill -TERM "${pid}" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      wait "${pid}" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  log "${label} 未在 5 秒内退出，强制回收 pid=${pid}"
+  pkill -KILL -P "${pid}" 2>/dev/null || true
+  kill -KILL "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
+}
+
 cleanup() {
   local code=$?
-  if [[ -n "${FRONTEND_PID}" ]] && kill -0 "${FRONTEND_PID}" 2>/dev/null; then
-    kill "${FRONTEND_PID}" 2>/dev/null || true
-    wait "${FRONTEND_PID}" 2>/dev/null || true
-  fi
-  if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
-    kill "${BACKEND_PID}" 2>/dev/null || true
-    wait "${BACKEND_PID}" 2>/dev/null || true
-  fi
+  terminate_process "${FRONTEND_PID}" "Vite"
+  terminate_process "${BACKEND_PID}" "FastAPI"
   if [[ "${code}" -ne 0 && -f "${BACKEND_LOG}" ]]; then
     cp "${BACKEND_LOG}" "${E2E_LOG_DIR}/e2e-backend.log" 2>/dev/null || true
     log "后端失败日志尾部（完整日志：${BACKEND_LOG}）"
