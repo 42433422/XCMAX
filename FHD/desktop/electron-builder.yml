@@ -83,7 +83,7 @@ mac:
   # Data files are sealed by their containing bundle signature and must not
   # receive standalone code signatures (which also multiplies TSA requests).
   signIgnore:
-    - "\\.(pak|json|jsonl|gz|png|jpe?g|gif|webp|svg|ico|icns|txt|md|html?|css|m?js|cjs|map|py|pyc|pyo|ya?ml|toml|ini|cfg|csv|tsv|xml|plist|woff2?|ttf|otf|pdf|docx?|xlsx?|pptx?|db|sqlite|db-shm|db-wal)$"
+    - "\\.(asar|pak|json|jsonl|gz|zip|tar|dat|bin|wasm|onnx|pt|exe|png|jpe?g|gif|webp|svg|ico|icns|txt|strings|md|html?|css|m?js|cjs|map|py|pyc|pyo|ya?ml|toml|ini|cfg|csv|tsv|xml|plist|nib|car|woff2?|ttf|otf|eot|wav|mp3|m4a|aac|ogg|flac|mp4|mov|webm|pdf|docx?|xlsx?|pptx?|db|sqlite|db-shm|db-wal)$"
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

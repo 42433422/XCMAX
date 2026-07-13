@@ -24,7 +24,34 @@ defaults:
     working-directory: FHD
 
 jobs:
+  release-policy:
+    name: Release lifecycle and security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: FHD/desktop/package-lock.json
+      - name: Install release test dependency
+        run: python -m pip install --quiet pytest
+      - name: Verify update and lifecycle policy
+        run: >-
+          python -m pytest -q
+          tests/release_gate/test_desktop_update_feed_policy.py
+          tests/release_gate/test_desktop_lifecycle_policy.py
+      - name: Run desktop unit tests
+        run: npm --prefix desktop ci && npm --prefix desktop test
+      - name: Run fail-closed Electron security scanner
+        run: bash desktop/scripts/security-scan.sh --gate-severity high
+
   windows:
+    needs: [release-policy]
     runs-on: windows-latest
     strategy:
       fail-fast: false
@@ -161,6 +188,8 @@ jobs:
               --include='*.exe.blockmap' \
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
+              --include='*.zip' \
+              --include='*.zip.blockmap' \
               --include='latest*.yml' \
               --include='manifest.json' \
               --exclude='*' \
@@ -168,6 +197,7 @@ jobs:
           done
 
   macos:
+    needs: [release-policy]
     runs-on: macos-latest
     strategy:
       fail-fast: false
@@ -330,6 +360,8 @@ jobs:
               --include='*.exe.blockmap' \
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
+              --include='*.zip' \
+              --include='*.zip.blockmap' \
               --include='latest*.yml' \
               --include='manifest.json' \
               --exclude='*' \
@@ -370,7 +402,7 @@ jobs:
             if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
             if [ -d "$src_dir" ]; then
               mkdir -p "release/xcagi-v${version}/$sku"
-              cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
+              cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/*.zip "$src_dir"/*.zip.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
             fi
           done
           ls -la "release/xcagi-v${version}"/personal "release/xcagi-v${version}"/enterprise 2>/dev/null || true
@@ -437,6 +469,8 @@ jobs:
                 --include='*.exe.blockmap' \
                 --include='*.dmg' \
                 --include='*.dmg.blockmap' \
+                --include='*.zip' \
+                --include='*.zip.blockmap' \
                 --include='latest*.yml' \
                 --exclude='*' \
                 -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"

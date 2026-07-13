@@ -45,6 +45,12 @@ else
   PYTHON="${PYTHON:-python3}"
 fi
 
+# uv-managed virtual environments may intentionally omit pip.  PyInstaller's
+# editable dependency install still uses pip, so bootstrap it deterministically
+# instead of failing after the (expensive) frontend build has completed.
+if ! "${PYTHON}" -m pip --version >/dev/null 2>&1; then
+  "${PYTHON}" -m ensurepip --upgrade
+fi
 "${PYTHON}" -m pip install --upgrade pip
 "${PYTHON}" -m pip install -e ".[server-api]"
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs

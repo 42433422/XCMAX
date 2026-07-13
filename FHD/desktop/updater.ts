@@ -18,11 +18,12 @@ export async function ensureUpdaterNetSession(): Promise<Session> {
   }
   if (!updaterNetSessionReady) {
     updaterNetSessionReady = (async () => {
-      const updaterSession = session.fromPartition('persist:xcagi-updater', { cache: false })
+      // electron-updater 6.x exposes the exact Session used by its HTTP executor
+      // through a read-only getter. Configure that Session in place; assigning to
+      // `autoUpdater.netSession` crashes packaged apps because the property has no setter.
+      const updaterSession = autoUpdater.netSession
       await updaterSession.setProxy({ mode: 'direct' })
       updaterNetSession = updaterSession
-      const updater = autoUpdater as unknown as { netSession?: Session }
-      updater.netSession = updaterSession
       return updaterSession
     })()
   }

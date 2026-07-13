@@ -62,8 +62,10 @@ for sku in "${skus[@]}"; do
   for pattern in \
     "XCAGI-*-Setup-${VERSION}-x64.exe" \
     "XCAGI-*-Setup-${VERSION}-x64.exe.blockmap" \
-    "XCAGI-${VERSION}-mac-*.dmg" \
-    "XCAGI-${VERSION}-mac-*.zip" \
+    "XCAGI-*-${VERSION}-mac-*.dmg" \
+    "XCAGI-*-${VERSION}-mac-*.dmg.blockmap" \
+    "XCAGI-*-${VERSION}-mac-*.zip" \
+    "XCAGI-*-${VERSION}-mac-*.zip.blockmap" \
     "XCAGI-*-Android-${VERSION}.apk" \
     "latest.yml" \
     "latest-mac.yml"; do
