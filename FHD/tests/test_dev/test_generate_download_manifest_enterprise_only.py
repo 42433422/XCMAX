@@ -97,6 +97,12 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     assert "verify_only:" in workflow
     assert "inputs.verify_only == true || needs.generate-manifest.result == 'success'" in workflow
     assert '"https://xiu-ci.com/xcagi-v${version}/manifest.json"' in workflow
+    assert "Sign reconstructed update metadata" in workflow
+    assert 'python scripts/dev/sign_update_metadata.py "$metadata"' in workflow
+    assert "Verify public update metadata parity and signed identity" in workflow
+    assert 'cmp -s "$stable" "$official"' in workflow
+    assert "^signature: ed25519:" in workflow
+    assert 'grep -Fxq "buildSha: ${expected_sha}"' in workflow
     assert "Publish verified website download pointer" in workflow
     assert '.active_skus == ["enterprise"]' in workflow
     assert 'root_target="/root/成都修茈科技有限公司/download-release.json"' in workflow
