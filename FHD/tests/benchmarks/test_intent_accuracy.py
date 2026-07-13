@@ -45,9 +45,12 @@ def _match_case(result: dict, case: dict, text: str) -> bool:
     return True
 
 
-@pytest.fixture(scope="module")
-def golden_cases():
-    os.environ.setdefault("XCAGI_SKIP_INTENT_LLM", "1")
+@pytest.fixture
+def golden_cases(monkeypatch: pytest.MonkeyPatch):
+    # Keep the benchmark's rule-only mode local to this test. Leaving the
+    # process environment mutated made later async recognizer tests silently
+    # take the rule-only branch during a full-suite run.
+    monkeypatch.setenv("XCAGI_SKIP_INTENT_LLM", "1")
     return _load_golden()
 
 

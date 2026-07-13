@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createPinia, setActivePinia } from 'pinia'
-import { defineComponent, h, nextTick } from 'vue'
+import { defineComponent, h } from 'vue'
 import TopAssistantFloat from './TopAssistantFloat.vue'
 
 // ===== Mock 模块 =====
@@ -23,6 +23,8 @@ const ExcelPreviewStub = defineComponent({
 const mockApiPost = vi.fn(async () => ({ success: true, data: {} }))
 const mockApiGet = vi.fn(async () => ({ success: true, data: {} }))
 const mockApiDelete = vi.fn(async () => ({ success: true, data: {} }))
+const mockTestIntent = vi.fn(async () => ({ success: true, data: {} }))
+const mockApiFetch = vi.fn((input: string, init?: RequestInit) => globalThis.fetch(input, init))
 
 vi.mock('@/api', () => {
   class ApiError extends Error {
@@ -42,6 +44,16 @@ vi.mock('@/api', () => {
     ApiError,
   }
 })
+
+vi.mock('@/api/chat', () => ({
+  chatApi: {
+    testIntent: (...args: unknown[]) => mockTestIntent(...(args as [])),
+  },
+}))
+
+vi.mock('@/utils/apiBase', () => ({
+  apiFetch: (...args: unknown[]) => mockApiFetch(...(args as [string, RequestInit?])),
+}))
 
 const mockSearchProducts = vi.fn(async (keyword = '') => ({
   success: true,
@@ -212,10 +224,6 @@ async function mountComponent(options: Record<string, unknown> = {}) {
   })
   await flushPromises()
   return { wrapper, router }
-}
-
-function dispatchWindowEvent(name: string, detail: Record<string, unknown> = {}) {
-  window.dispatchEvent(new CustomEvent(name, { detail }))
 }
 
 // ===== 测试 =====
@@ -1726,7 +1734,7 @@ describe('TopAssistantFloat functions – runWechatMessageAiPipeline', () => {
 
   it('pro 模式调用 intent API', async () => {
     localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({
+    mockTestIntent.mockResolvedValueOnce({
       success: true,
       data: {
         primary_intent: 'shipment',
@@ -1734,20 +1742,22 @@ describe('TopAssistantFloat functions – runWechatMessageAiPipeline', () => {
         intent_hints: ['hint1', 'hint2'],
         confidence: 0.9,
       },
-    })))
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     await vm.runWechatMessageAiPipeline(
       { contact_name: '联系人', contact_id: 'c1' },
       { text: '帮我发货' }
     )
-    expect(vi.mocked(globalThis.fetch)).toHaveBeenCalled()
+    expect(mockTestIntent).toHaveBeenCalledWith({ message: '帮我发货' })
     wrapper.unmount()
   })
 
   it('pro 模式 API 失败时回退本地规则', async () => {
     localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse({ success: false })))
+    mockTestIntent.mockResolvedValueOnce({ success: false, data: {} })
+    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     await vm.runWechatMessageAiPipeline(
@@ -1758,9 +1768,10 @@ describe('TopAssistantFloat functions – runWechatMessageAiPipeline', () => {
     wrapper.unmount()
   })
 
-  it('pro 模式 fetch 抛异常时回退本地规则', async () => {
+  it('pro 模式 intent API 抛异常时回退本地规则', async () => {
     localStorage.setItem('xcagi_pro_intent_experience', '1')
-    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network') }))
+    mockTestIntent.mockRejectedValueOnce(new Error('network'))
+    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
     const { wrapper } = await mountComponent()
     const vm = wrapper.vm as any
     await vm.runWechatMessageAiPipeline(
@@ -1768,6 +1779,51 @@ describe('TopAssistantFloat functions – runWechatMessageAiPipeline', () => {
       { text: '帮我发货' }
     )
     expect(mockInferWechatCustomerIntent).toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('intent API 返回 403 时明确通知用户并回退本地规则', async () => {
+    localStorage.setItem('xcagi_pro_intent_experience', '1')
+    const { ApiError } = await import('@/api')
+    mockTestIntent.mockRejectedValueOnce(new ApiError('CSRF token missing', 403, { detail: 'CSRF token missing' }))
+    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    const { wrapper } = await mountComponent()
+    const vm = wrapper.vm as any
+
+    await vm.runWechatMessageAiPipeline(
+      { contact_name: '联系人', contact_id: 'c1' },
+      { text: '帮我发货' }
+    )
+
+    expect(vm.popupNotice?.title).toBe('微信消息意图识别未授权')
+    expect(vm.popupNotice?.description).toContain('403')
+    expect(mockInferWechatCustomerIntent).toHaveBeenCalledWith('帮我发货')
+    wrapper.unmount()
+  })
+
+  it('发货预览使用 apiFetch，403 时明确通知用户', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => makeFetchResponse()))
+    mockShouldTryWechatShipmentPreview.mockReturnValueOnce(true)
+    mockApiFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ detail: 'CSRF token missing' }),
+    } as Response)
+    const { wrapper } = await mountComponent()
+    const vm = wrapper.vm as any
+    vm.toggleWorkflowEmployee('wechat_msg')
+
+    await vm.runWechatMessageAiPipeline(
+      { contact_name: '联系人', contact_id: 'c1' },
+      { text: '帮我发货' }
+    )
+
+    expect(mockApiFetch).toHaveBeenCalledWith(
+      '/api/tools/execute',
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(vm.popupNotice?.title).toBe('微信发货预览未授权')
+    expect(vm.popupNotice?.description).toContain('403')
     wrapper.unmount()
   })
 })

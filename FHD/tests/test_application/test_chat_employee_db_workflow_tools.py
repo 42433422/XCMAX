@@ -878,8 +878,8 @@ def test_chat_formats_recovery_hint_for_non_retryable_failure():
 
     result = service._format_workflow_run_response(plan, run_result)
 
-    assert "未自动重试" in result["response"]
-    assert "恢复建议" in result["response"]
+    assert "未自动重试" not in result["response"]
+    assert "建议：请核对数据库状态后手动重试。" in result["response"]
     node_result = result["data"]["data"]["node_results"][0]
     assert node_result["retryable"] is False
     assert node_result["recovery_hint"] == "请核对数据库状态后手动重试。"

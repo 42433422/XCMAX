@@ -67,4 +67,16 @@ describe('ChatOfficeDockingReview', () => {
     expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.office-docking-review__head').text()).toContain('待确认 0 个')
   })
+
+  it('shows approval-pending work as non-retryable and not completed', () => {
+    const wrapper = mount(ChatOfficeDockingReview, {
+      props: {
+        items: [wordItem({ commitStatus: 'approval_pending' })],
+        processing: false,
+      },
+    })
+    expect(wrapper.get('.office-docking-review__status').text()).toBe('待确认/审批')
+    expect(wrapper.get('button.btn-primary').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('.office-docking-review__head').text()).toContain('待确认 0 个')
+  })
 })

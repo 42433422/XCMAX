@@ -40,9 +40,38 @@ vi.mock('@/utils/apiBase', () => ({
   DEFAULT_MOD_API_TIMEOUT_MS: 90_000,
 }))
 
+const { settingsI18nT, settingsI18nTe } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const zh = require('../i18n/locales/zh-CN/settings.json') as Record<string, unknown>
+  function lookup(path: string): unknown {
+    const parts = path.split('.')
+    let cur: unknown = zh
+    for (const part of parts) {
+      if (!cur || typeof cur !== 'object') return path
+      cur = (cur as Record<string, unknown>)[part]
+    }
+    return cur === undefined ? path : cur
+  }
+  function t(key: string, params?: Record<string, unknown>) {
+    const raw = lookup(key)
+    let text = typeof raw === 'string' ? raw : key
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        text = text.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+      }
+    }
+    return text
+  }
+  function te(key: string) {
+    return typeof lookup(key) === 'string'
+  }
+  return { settingsI18nT: t, settingsI18nTe: te }
+})
+
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
-    t: (k: string) => k,
+    t: settingsI18nT,
+    te: settingsI18nTe,
     locale: ref('zh-CN'),
   }),
 }))
@@ -482,7 +511,7 @@ describe('SettingsView – profileBrandTitle 计算属性', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.profileBrandTitle).toBe('settings.notLoggedIn')
+    expect(vm.profileBrandTitle).toBe('未登录')
     wrapper.unmount()
   })
 
@@ -514,7 +543,7 @@ describe('SettingsView – profileSubline 计算属性', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.profileSubline).toBe('settings.loginSyncHint')
+    expect(vm.profileSubline).toBe('登录后同步修茈市场')
     wrapper.unmount()
   })
 
@@ -708,7 +737,7 @@ describe('SettingsView – profileFormDirty 与 profileHomeSummary', () => {
     await nextTick()
     await nextTick()
     const vm = wrapper.vm as any
-    expect(vm.profileHomeSummary).toBe('settings.profileHomeSummary')
+    expect(vm.profileHomeSummary).toBe('头像与资料')
     wrapper.unmount()
   })
 
@@ -1659,7 +1688,7 @@ describe('SettingsView – onCheckForUpdates', () => {
     const vm = wrapper.vm as any
     await vm.onCheckForUpdates()
     expect(vm.aboutUpdateError).toBe(true)
-    expect(vm.aboutUpdateMessage).toBe('settings.updateUnavailable')
+    expect(vm.aboutUpdateMessage).toBe('当前环境不支持自动更新')
     wrapper.unmount()
   })
 
@@ -1672,7 +1701,7 @@ describe('SettingsView – onCheckForUpdates', () => {
     const vm = wrapper.vm as any
     await vm.onCheckForUpdates()
     expect(checkSpy).toHaveBeenCalled()
-    expect(vm.aboutUpdateMessage).toBe('settings.updateCheckStarted')
+    expect(vm.aboutUpdateMessage).toBe('已开始检查更新，如有新版本将提示下载。')
     expect(vm.aboutUpdateError).toBe(false)
     wrapper.unmount()
     delete (window as any).xcagiDesktop

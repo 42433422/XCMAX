@@ -124,7 +124,7 @@ test.describe('P0 critical paths', () => {
         quantity_kg: 10,
         status: 'pending',
       };
-      await page.route('**/api/orders', (route) => {
+      await page.route(/\/api\/(?:mod\/[^/]+\/)?orders(?:\?.*)?$/, (route) => {
         if (route.request().method() === 'POST') {
           return route.fulfill({
             status: 201,
@@ -138,7 +138,7 @@ test.describe('P0 critical paths', () => {
           body: JSON.stringify({ success: true, data: [mockOrder], count: 1 }),
         });
       });
-      await page.route('**/api/orders/1001', async (route) => {
+      await page.route(/\/api\/(?:mod\/[^/]+\/)?orders\/1001(?:\?.*)?$/, async (route) => {
         if (route.request().method() === 'PATCH') {
           Object.assign(mockOrder, JSON.parse(route.request().postData() || '{}'));
         }
@@ -148,13 +148,18 @@ test.describe('P0 critical paths', () => {
           body: JSON.stringify({ success: true, data: mockOrder }),
         });
       });
-      await page.route('**/api/orders/export**', (route) =>
+      await page.route(/\/api\/(?:mod\/[^/]+\/)?orders\/export(?:\?.*)?$/, (route) =>
         route.fulfill({
           status: 200,
           contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           body: 'mock-xlsx',
         })
       );
+
+      // Browser-side relative fetches need a document origin. This test starts
+      // from about:blank, so establish the configured Playwright base URL
+      // before exercising the mocked data loop.
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     }
 
     const createResp = await fetchJson('/api/orders', {

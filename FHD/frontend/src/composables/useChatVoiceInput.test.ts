@@ -48,6 +48,75 @@ describe('useChatVoiceInput', () => {
     expect(api.voiceButtonText.value).toContain('按住说话')
   })
 
+  it.each([
+    ['mouseup', false],
+    ['touchcancel', true],
+  ] as const)(
+    '%s before microphone permission resolves cancels the pending start',
+    async (_eventName, cancel) => {
+      let resolvePermission!: (stream: MediaStream) => void
+      const permission = new Promise<MediaStream>((resolve) => {
+        resolvePermission = resolve
+      })
+      const stopTrack = vi.fn()
+      const stream = {
+        getTracks: () => [{ stop: stopTrack }],
+      } as unknown as MediaStream
+      const recorderConstructor = vi.fn()
+
+      Object.defineProperty(navigator, 'mediaDevices', {
+        configurable: true,
+        value: { getUserMedia: vi.fn(() => permission) },
+      })
+      Object.defineProperty(window, 'MediaRecorder', {
+        configurable: true,
+        value: class {
+          static isTypeSupported = vi.fn(() => true)
+          constructor() {
+            recorderConstructor()
+          }
+        },
+      })
+
+      const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
+      const startPromise = api.startVoiceRecording()
+      api.stopVoiceRecording(cancel)
+      resolvePermission(stream)
+      await startPromise
+
+      expect(stopTrack).toHaveBeenCalledOnce()
+      expect(recorderConstructor).not.toHaveBeenCalled()
+      expect(api.voiceButtonText.value).toBe('按住说话')
+      expect(api.voiceButtonIcon.value).toBe('fa-microphone')
+    },
+  )
+
+  it('permission rejection after release stays cancelled instead of showing a stale error', async () => {
+    let rejectPermission!: (reason: unknown) => void
+    const permission = new Promise<MediaStream>((_resolve, reject) => {
+      rejectPermission = reject
+    })
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: { getUserMedia: vi.fn(() => permission) },
+    })
+    Object.defineProperty(window, 'MediaRecorder', {
+      configurable: true,
+      value: class {
+        static isTypeSupported = vi.fn(() => true)
+      },
+    })
+
+    const api = useChatVoiceInput({ messageInput: ref(''), isLoading: ref(false) })
+    const startPromise = api.startVoiceRecording()
+    api.stopVoiceRecording(false)
+    rejectPermission({ name: 'NotAllowedError' })
+    await startPromise
+
+    expect(api.voiceButtonText.value).toBe('按住说话')
+    expect(api.voiceFeedbackText.value).toBe('')
+  })
+
   it('submits recorded audio through apiFetch so CSRF headers are attached', async () => {
     vi.useFakeTimers()
     try {

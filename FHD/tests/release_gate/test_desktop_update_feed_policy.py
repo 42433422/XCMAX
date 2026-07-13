@@ -63,9 +63,7 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     uploader = (REPO_ROOT / "scripts" / "deploy" / "upload-desktop-skus.sh").read_text(
         encoding="utf-8"
     )
-    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(
-        encoding="utf-8"
-    )
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
 
     assert workflow.count("--include='*.zip'") >= 3
     assert workflow.count("--include='*.zip.blockmap'") >= 3
@@ -74,5 +72,5 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert '"XCAGI-*-${VERSION}-mac-*.zip.blockmap"' in uploader
     assert "Node.js 20+ is required" in scanner
     assert "synthetic green report" in scanner
-    assert "electronegativity.csv\" -r -v false || true" not in scanner
-    assert "electronegativity.sarif\" -r -v false || true" not in scanner
+    assert 'electronegativity.csv" -r -v false || true' not in scanner
+    assert 'electronegativity.sarif" -r -v false || true' not in scanner

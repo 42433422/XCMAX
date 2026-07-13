@@ -119,9 +119,18 @@ def test_get_database_url_uses_database_url_env():
                 assert db_mod._get_database_url() == "sqlite:///env.db"
 
 
-def test_create_engine_sqlite_desktop_uses_static_pool():
+def test_create_engine_sqlite_desktop_file_uses_null_pool():
     with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
         engine = db_mod._create_engine_for_url("sqlite:///desk.db")
+        try:
+            assert "NullPool" in type(engine.pool).__name__
+        finally:
+            engine.dispose()
+
+
+def test_create_engine_sqlite_desktop_memory_uses_static_pool():
+    with patch.dict("os.environ", {"XCAGI_DESKTOP_MODE": "true"}, clear=False):
+        engine = db_mod._create_engine_for_url("sqlite:///:memory:")
         try:
             assert "StaticPool" in type(engine.pool).__name__
         finally:

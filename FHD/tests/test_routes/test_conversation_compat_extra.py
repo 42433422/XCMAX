@@ -289,3 +289,59 @@ class TestConversationsGet:
         data = resp.json()
         assert data["success"] is True
         assert data["messages"] == []
+
+    def test_durable_fallback_and_single_session_mutations(self):
+        app = FastAPI()
+        app.include_router(router, prefix="/api")
+        client = TestClient(app)
+        service = MagicMock()
+        service.get_session_messages.return_value = [
+            (1, "session-contract-db", "default", "user", "你好", "chat", "", "2026-07-13"),
+            (
+                2,
+                "session-contract-db",
+                "default",
+                "assistant",
+                "你好，我在。",
+                "assistant_reply",
+                "",
+                "2026-07-13",
+            ),
+        ]
+        service.get_sessions.return_value = [
+            (1, "session-contract-db", None, "真实会话", "", 2, "2026-07-13", "2026-07-13"),
+            (1, "session-contract-db", None, "真实会话", "", 2, "2026-07-13", "2026-07-13"),
+        ]
+        service.update_session_title.return_value = True
+        service.delete_session.return_value = True
+        service.delete_sessions.return_value = 1
+
+        with patch(
+            "app.application.facades.conversation_facade.get_conversation_service",
+            return_value=service,
+        ):
+            listed = client.get("/api/conversations/sessions")
+            loaded = client.get("/api/conversations/session-contract-db")
+            renamed = client.put(
+                "/api/conversations/session-contract-db/title",
+                json={"title": "用户改名"},
+            )
+            deleted = client.delete("/api/conversations/session-contract-db")
+            cleared = client.post(
+                "/api/conversations/sessions/clear",
+                json={"user_id": "default"},
+            )
+
+        assert listed.status_code == 200
+        assert [row["session_id"] for row in listed.json()["sessions"]] == ["session-contract-db"]
+        assert loaded.status_code == 200
+        assert len(loaded.json()["messages"]) == 2
+        assert renamed.status_code == 200
+        assert renamed.json() == {"success": True, "title": "用户改名"}
+        assert deleted.status_code == 200
+        assert deleted.json() == {"success": True}
+        assert cleared.status_code == 200
+        assert cleared.json()["deleted"] == 1
+        service.update_session_title.assert_called_once_with("session-contract-db", "用户改名")
+        service.delete_session.assert_called_once_with("session-contract-db")
+        service.delete_sessions.assert_called_once_with("default")

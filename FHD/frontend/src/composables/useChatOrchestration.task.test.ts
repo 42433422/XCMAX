@@ -141,6 +141,10 @@ vi.mock('./useChatExcelContext', () => ({
     excelSheetOptions: ref([]),
     injectExcelContextPayload: vi.fn((p: unknown) => p),
     consumeMultimodalIntoPlannerContext: vi.fn(),
+    acknowledgeMultimodalRequest: vi.fn(),
+    activateSessionContext: vi.fn(),
+    clearSessionContext: vi.fn(),
+    clearAllSessionContexts: vi.fn(),
     onMultimodalFileChange: vi.fn(),
   }),
 }))

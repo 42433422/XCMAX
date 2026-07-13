@@ -123,6 +123,9 @@ function makeDeps(overrides: DepsOverrides = {}) {
   const persistTaskPanelStateForSession = vi.fn()
   const applyPersistedTaskPanelStateForSession = vi.fn()
   const clearPersistedTaskPanelState = vi.fn()
+  const activateSessionContext = vi.fn()
+  const clearSessionContext = vi.fn()
+  const clearAllSessionContexts = vi.fn()
   const generateSessionId = vi.fn(() => 'generated-new-sid')
   const normalizeServerContentToHtml = vi.fn(
     (raw: unknown) => `<p>${String(raw ?? '')}</p>`,
@@ -144,6 +147,9 @@ function makeDeps(overrides: DepsOverrides = {}) {
       persistTaskPanelStateForSession,
       applyPersistedTaskPanelStateForSession,
       clearPersistedTaskPanelState,
+      activateSessionContext,
+      clearSessionContext,
+      clearAllSessionContexts,
       generateSessionId,
       normalizeServerContentToHtml,
     },
@@ -164,6 +170,9 @@ function makeDeps(overrides: DepsOverrides = {}) {
       persistTaskPanelStateForSession,
       applyPersistedTaskPanelStateForSession,
       clearPersistedTaskPanelState,
+      activateSessionContext,
+      clearSessionContext,
+      clearAllSessionContexts,
       generateSessionId,
       normalizeServerContentToHtml,
     },
@@ -354,10 +363,51 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(refs.sessionId.value).toBe('new-sid')
       expect(writeAiSessionIdToStorageMock).toHaveBeenCalledWith('new-sid')
       expect(mocks.applyPersistedTaskPanelStateForSession).toHaveBeenCalledWith('new-sid')
+      expect(mocks.activateSessionContext).toHaveBeenCalledWith('new-sid')
       expect(mocks.persistTaskPanelStateForSession).toHaveBeenCalledWith('old-sid')
       expect(mocks.loadMessages).toHaveBeenCalled()
       // showHistory should be closed after successful load
       expect(showHistory.value).toBe(false)
+    })
+
+    it('merges local approval and download sidecars into the durable server transcript', async () => {
+      localStorage.setItem(
+        'xcagi_chat_messages_sidecar-sid',
+        JSON.stringify([{
+          role: 'ai',
+          content: 'approval response',
+          time: '10:00',
+          approvalCard: {
+            kind: 'workflow_approval',
+            plan_id: 'plan-history',
+            status: 'pending',
+          },
+          downloadUrl: '/api/files/history.xlsx',
+          todoSteps: ['确认写入'],
+          nodeResults: [{
+            node_id: 'node-history',
+            tool_id: 'excel.import',
+            action: 'commit',
+            success: false,
+          }],
+        }]),
+      )
+      chatApiMock.getConversation.mockResolvedValue({
+        success: true,
+        messages: [{ role: 'assistant', content: 'approval response' }],
+      })
+      const { deps, mocks } = makeDeps()
+      const { loadSession } = useChatSessionHistory(deps)
+
+      await loadSession('sidecar-sid')
+
+      const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
+      expect(loaded[0]).toMatchObject({
+        downloadUrl: '/api/files/history.xlsx',
+        todoSteps: ['确认写入'],
+        approvalCard: { plan_id: 'plan-history', status: 'pending' },
+      })
+      expect(loaded[0].nodeResults?.[0].node_id).toBe('node-history')
     })
 
     it('normalizes role to ai when not user/task', async () => {
@@ -479,6 +529,7 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(refs.sessionId.value).toBe('original-sid')
       expect(writeAiSessionIdToStorageMock).toHaveBeenCalledWith('original-sid')
       expect(deps.applyPersistedTaskPanelStateForSession).toHaveBeenCalledWith('original-sid')
+      expect(deps.activateSessionContext).toHaveBeenLastCalledWith('original-sid')
     })
 
     it('rolls back when API throws and no local fallback', async () => {
@@ -529,6 +580,23 @@ describe('useChatSessionHistory — coverage ramp', () => {
       await loadSession('bad-sid')
       expect(historyLoading.value).toBe(false)
     })
+
+    it('discards a late history response after the user starts a new conversation', async () => {
+      let resolveConversation!: (value: { success: true; messages: Array<{ role: string; content: string }> }) => void
+      chatApiMock.getConversation.mockReturnValueOnce(new Promise((resolve) => {
+        resolveConversation = resolve
+      }))
+      const { deps, refs, mocks } = makeDeps({ sessionId: 'original-sid' })
+      const api = useChatSessionHistory(deps)
+      const pending = api.loadSession('history-sid')
+
+      api.newConversation()
+      resolveConversation({ success: true, messages: [{ role: 'ai', content: 'late reply' }] })
+      await pending
+
+      expect(refs.sessionId.value).toBe('generated-new-sid')
+      expect(mocks.loadMessages).not.toHaveBeenCalled()
+    })
   })
 
   // -----------------------------------------------------------------------
@@ -572,6 +640,69 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(historyError.value).toBe('')
       expect(historySessions.value).toEqual([])
       expect(localStorage.getItem('xcagi_chat_messages_s1')).toBeNull()
+    })
+
+    it('keeps local-only history and active state when the server clear fails', async () => {
+      localStorage.setItem(
+        'xcagi_chat_messages_local-only',
+        JSON.stringify([{ role: 'user', content: 'must survive' }]),
+      )
+      chatApiMock.clearConversations.mockRejectedValue(new Error('offline'))
+      const { deps, refs, mocks } = makeDeps({
+        sessionId: 'local-only',
+        taskList: [{
+          id: 'task-1', type: 'manual', title: '待办', source: 'manual', status: 'running',
+          startedAt: 1, updatedAt: 1,
+        }],
+        lastExcelAnalysisContext: { file_path: '/keep.xlsx' },
+      })
+      const api = useChatSessionHistory(deps)
+
+      await api.clearHistorySessions()
+
+      expect(localStorage.getItem('xcagi_chat_messages_local-only')).toContain('must survive')
+      expect(refs.sessionId.value).toBe('local-only')
+      expect(refs.taskList.value).toHaveLength(1)
+      expect(refs.lastExcelAnalysisContext.value).toEqual({ file_path: '/keep.xlsx' })
+      expect(mocks.clearMessages).not.toHaveBeenCalled()
+      expect(mocks.clearAllSessionContexts).not.toHaveBeenCalled()
+    })
+
+    it('starts a new empty session after server clear so the old conversation cannot revive', async () => {
+      localStorage.setItem(
+        'xcagi_chat_messages_old-sid',
+        JSON.stringify([{ role: 'user', content: 'old message' }]),
+      )
+      sessionStorage.setItem('xcagi_chat_task_panel_old-sid', JSON.stringify({ taskList: [{ id: 'old' }] }))
+      chatApiMock.clearConversations.mockResolvedValue({ success: true, deleted: 1 })
+      const { deps, refs, mocks } = makeDeps({
+        sessionId: 'old-sid',
+        taskList: [{
+          id: 'task-1', type: 'manual', title: '旧任务', source: 'manual', status: 'running',
+          startedAt: 1, updatedAt: 1,
+        }],
+        activeTaskId: 'task-1',
+        currentTask: { type: 'shipment_generate' } as ShipmentTask,
+        lastExcelAnalysisContext: { file_path: '/old.xlsx' },
+        linkedExcelSheet: { sheet_name: 'Sheet1', sheet_index: 1 },
+        linkedExcelAllSheets: true,
+      })
+      const api = useChatSessionHistory(deps)
+
+      await api.clearHistorySessions()
+
+      expect(refs.sessionId.value).toBe('generated-new-sid')
+      expect(refs.taskList.value).toEqual([])
+      expect(refs.activeTaskId.value).toBe('')
+      expect(refs.currentTask.value).toBeNull()
+      expect(refs.lastExcelAnalysisContext.value).toBeNull()
+      expect(refs.linkedExcelSheet.value).toBeNull()
+      expect(refs.linkedExcelAllSheets.value).toBe(false)
+      expect(mocks.clearAllSessionContexts).toHaveBeenCalledOnce()
+      expect(mocks.clearSessionContext).toHaveBeenCalledWith('generated-new-sid', true)
+      expect(mocks.clearMessages).toHaveBeenCalledOnce()
+      expect(sessionStorage.getItem('xcagi_chat_task_panel_old-sid')).toBeNull()
+      expect(localStorage.getItem('xcagi_chat_messages_old-sid')).toBeNull()
     })
 
     it('shows error when server returns success=false', async () => {
@@ -670,6 +801,17 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(mocks.clearPersistedTaskPanelState).toHaveBeenCalledWith('generated-new-sid')
       expect(mocks.persistTaskPanelStateForSession).toHaveBeenCalledWith('old-sid')
       expect(mocks.persistTaskPanelStateForSession).toHaveBeenCalledWith('generated-new-sid')
+      expect(mocks.clearSessionContext).toHaveBeenCalledWith('generated-new-sid', true)
+    })
+
+    it('preserves the previous session Excel cache for later history restore', () => {
+      sessionStorage.setItem('xcagi_excel_analysis_ctx_old-sid', JSON.stringify({ file_path: '/old.xlsx' }))
+      const { deps } = makeDeps({ sessionId: 'old-sid' })
+      const { newConversation } = useChatSessionHistory(deps)
+
+      newConversation()
+
+      expect(sessionStorage.getItem('xcagi_excel_analysis_ctx_old-sid')).toContain('/old.xlsx')
     })
 
     it('uses "default" when previous sessionId is empty', () => {

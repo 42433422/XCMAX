@@ -136,6 +136,8 @@ def business_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
         ("研发部今天谁出勤", "attendance_read"),
         ("1001号员工叫什么名字？", "personnel_read"),
         ("李四是哪个部门？", "personnel_read"),
+        ("导出全部员工名单", "personnel_export"),
+        ("下载人员列表", "personnel_export"),
         ("帮李四登记2026年7月14日上午事假半天，主管已经审批通过。", "leave_write"),
         ("李四明天休假半天", "leave_write"),
         ("李四明天不休假了", "leave_write"),
@@ -176,9 +178,7 @@ def test_natural_employee_lookup_uses_real_personnel_store(business_db: tuple[Pa
 def test_personal_late_query_is_grounded_in_imported_record(
     business_db: tuple[Path, Path],
 ) -> None:
-    result = safety.try_handle_business_chat_action(
-        "我2026年7月13日有没有迟到？", user_id="u-1001"
-    )
+    result = safety.try_handle_business_chat_action("我2026年7月13日有没有迟到？", user_id="u-1001")
     assert result is not None
     assert "有迟到标记" in result["response"]
     assert "08:03:00" in result["response"]
@@ -327,6 +327,33 @@ def test_export_creates_verified_downloadable_xlsx(business_db: tuple[Path, Path
         wb.close()
 
 
+def test_personnel_export_creates_verified_downloadable_xlsx(
+    business_db: tuple[Path, Path],
+) -> None:
+    result = safety.try_handle_business_chat_action("导出全部员工名单")
+    assert result is not None
+    receipt = result["execution_receipt"]
+    assert receipt["operation"] == "personnel_export"
+    assert receipt["status"] == "completed"
+    assert receipt["verified"] is True
+    assert receipt["affected_rows"] == 1
+    artifact = receipt["artifacts"][0]
+    exported = Path(artifact["path"])
+    assert exported.is_file()
+    assert artifact["download_url"].startswith(
+        "/api/mod/taiyangniao-pro/attendance/download?relpath="
+    )
+    wb = openpyxl.load_workbook(exported, read_only=True, data_only=True)
+    try:
+        assert wb.active.title == "人员名单"
+        assert wb.active.max_row == 2
+        assert wb.active["A1"].value == "姓名"
+        assert wb.active["A2"].value == "李四"
+        assert wb.active["B2"].value == "1001"
+    finally:
+        wb.close()
+
+
 class _NoPrinterService:
     def get_printers(self) -> dict[str, Any]:
         return {"success": True, "count": 0, "printers": []}
@@ -388,9 +415,7 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message="我2026年7月13日有没有迟到？", user_id="u-1001"
-    )
+    body = chat_helpers.XcagiCompatChatBody(message="我2026年7月13日有没有迟到？", user_id="u-1001")
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(request, body, ai_tier="P0"))
     events = [
         json.loads(line.removeprefix("data: "))
@@ -412,16 +437,12 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
     monkeypatch.setattr(
         planner_compat,
         "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("legacy chat must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
     )
     monkeypatch.setattr(
         planner_compat,
         "_execute_ai_chat_mainline",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("AI mainline must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI mainline must not run")),
     )
     request = Request(
         {
@@ -432,9 +453,7 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message="1001号员工叫什么名字？", user_id="u-1001"
-    )
+    body = chat_helpers.XcagiCompatChatBody(message="1001号员工叫什么名字？", user_id="u-1001")
     result = await planner_compat.execute_compat_chat(request, body)
     assert result["business_receipt"]["operation"] == "personnel_read"
     assert result["business_receipt"]["verified"] is True
@@ -450,9 +469,7 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
     monkeypatch.setattr(
         planner_compat,
         "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("legacy chat must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
     )
     request = Request(
         {

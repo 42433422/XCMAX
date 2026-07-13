@@ -114,3 +114,29 @@ def test_deactivate_other_open_industry_mods(tmp_path, monkeypatch):
     assert other in unloaded
     assert not (mods_root / other).exists()
     assert any(r.get("mod_id") == other for r in rows)
+
+
+def test_deactivate_never_removes_bundled_seed_root(tmp_path, monkeypatch):
+    keep = "coating-industry"
+    other = "attendance-industry"
+    mods_root = tmp_path / "bundled-mods"
+    (mods_root / other).mkdir(parents=True)
+    (mods_root / other / "manifest.json").write_text("{}", encoding="utf-8")
+    root = str(mods_root)
+
+    class FakeMM:
+        mods_root = root
+
+        def unload_mod(self, mod_id: str) -> bool:
+            return True
+
+    monkeypatch.setattr(
+        "app.infrastructure.mods.mod_manager.get_mod_manager",
+        lambda: FakeMM(),
+    )
+    monkeypatch.setattr("app.mod_sdk.industry_seed._is_bundled_mods_root", lambda _path: True)
+
+    rows = deactivate_other_open_industry_mods(keep, remove_files=True)
+
+    assert (mods_root / other / "manifest.json").is_file()
+    assert any(row == {"mod_id": other, "unloaded": True, "removed_files": False} for row in rows)

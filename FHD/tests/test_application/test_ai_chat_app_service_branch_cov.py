@@ -873,8 +873,13 @@ class TestFormatAgentRunResponse:
             plan, agent_run, thinking_steps="thinking", user_message="hello"
         )
         assert result["success"] is True
-        assert "thinking" in result["response"]
-        assert "TODO" in result["response"]
+        assert "任务已完成" in result["response"]
+        assert "thinking" not in result["response"]
+        assert "TODO" not in result["response"]
+        assert "计划ID" not in result["response"]
+        assert "RunID" not in result["response"]
+        assert result["data"]["data"]["thinking_steps"] == "thinking"
+        assert result["data"]["data"]["todo"] == ["step1", "step2"]
         assert result["data"]["action"] == "workflow_done"
 
     def test_failed_status(self):
@@ -893,7 +898,10 @@ class TestFormatAgentRunResponse:
             steps=[_make_step(status="failed", error="boom")],
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "boom" in result["response"]
+        assert result["success"] is False
+        assert "任务未完成" in result["response"]
+        assert "boom" not in result["response"]
+        assert result["data"]["data"]["node_results"][0]["message"] == "boom"
 
     def test_step_not_completed_no_error(self):
         svc = _make_svc()
@@ -903,7 +911,8 @@ class TestFormatAgentRunResponse:
             steps=[_make_step(status="pending", error="")],
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "未完成" in result["response"]
+        assert result["success"] is False
+        assert "任务未完成" in result["response"]
 
     def test_with_artifacts(self):
         svc = _make_svc()
@@ -915,7 +924,8 @@ class TestFormatAgentRunResponse:
             artifacts=[artifact],
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "Artifacts" in result["response"]
+        assert "Artifacts" not in result["response"]
+        assert result["data"]["data"]["artifact_count"] == 1
 
     def test_with_tool_call_count(self):
         svc = _make_svc()
@@ -925,8 +935,10 @@ class TestFormatAgentRunResponse:
             metadata={"cost_units_total": 5, "tool_call_count": 3},
         )
         result = svc._format_agent_run_response(plan, agent_run)
-        assert "工具调用" in result["response"]
-        assert "成本单位" in result["response"]
+        assert "工具调用" not in result["response"]
+        assert "成本单位" not in result["response"]
+        assert result["data"]["data"]["tool_call_count"] == 3
+        assert result["data"]["data"]["cost_units_total"] == 5
 
     def test_products_query_auto_action(self):
         svc = _make_svc()

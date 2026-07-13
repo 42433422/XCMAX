@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { setActivePinia, createPinia } from 'pinia'
+import { apiFetch } from '@/utils/apiBase'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
 
 const enabledState = ref<Record<string, boolean>>({})
@@ -61,6 +62,10 @@ vi.mock('@/workflow/coreWorkflowPrefs', () => ({
   formatWorkflowClock: (n: number) => String(n),
 }))
 
+vi.mock('@/utils/apiBase', () => ({
+  apiFetch: vi.fn(),
+}))
+
 function makeDeps() {
   return {
     taskList: ref([]),
@@ -80,6 +85,7 @@ function makeDeps() {
 
 describe('useChatWorkflowPanel', () => {
   beforeEach(() => {
+    vi.clearAllMocks()
     setActivePinia(createPinia())
     enabledState.value = {}
     localStorage.clear()
@@ -134,5 +140,46 @@ describe('useChatWorkflowPanel', () => {
     const panel = useChatWorkflowPanel(deps)
     panel.syncWorkflowEmployeePanelTasks({})
     expect(deps.upsertTask).not.toHaveBeenCalled()
+  })
+
+  it('starts phone-agent through apiFetch so mutation requests receive CSRF handling', async () => {
+    const workflowEmployees = await import('@/utils/modWorkflowEmployees')
+    vi.mocked(workflowEmployees.buildModWorkflowPanelMeta).mockReturnValue({
+      phone: { employeeId: 'phone', label: '电话员工', title: '电话员工', summary: '待命' },
+    } as never)
+    vi.mocked(workflowEmployees.findWorkflowEmployeeEntry).mockReturnValue({
+      id: 'phone',
+      modId: 'phone-mod',
+    } as never)
+    vi.mocked(workflowEmployees.resolvePhoneAgentApiBase).mockReturnValue('/api/mod/phone/phone-agent')
+    vi.mocked(workflowEmployees.listPhoneAgentEmployeeIds).mockReturnValue(['phone'] as never)
+    vi.mocked(workflowEmployees.resolvePhoneChannelForEmployee).mockReturnValue('wechat')
+    enabledState.value = { phone: true }
+
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ success: true }),
+    } as Response)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, data: { running: true } }),
+    } as Response)
+
+    const panel = useChatWorkflowPanel(makeDeps())
+    panel.mountWorkflowPanel()
+    await vi.waitFor(() => {
+      expect(apiFetch).toHaveBeenCalledWith('/api/mod/phone/phone-agent/start?channel=wechat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: 'wechat' }),
+      })
+    })
+    await vi.waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith('/api/mod/phone/phone-agent/status?channel=wechat')
+    })
+    panel.unmountWorkflowPanel()
+    fetchSpy.mockRestore()
   })
 })

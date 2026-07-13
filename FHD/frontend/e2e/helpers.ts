@@ -47,6 +47,12 @@ const E2E_SESSION_PAYLOAD = {
 
 /** 绕过 App.vue 启动鉴权 + 企业版路由守卫，使主壳可测。 */
 export async function installE2eShellMocks(page: Page): Promise<void> {
+  // Keep mock-mode navigation on the host routes. A first visit to `/` can
+  // otherwise auto-enable platform-shell mode from the installed test packs,
+  // so a later `/orders` navigation is redirected before the host view mounts.
+  await page.addInitScript(() => {
+    window.localStorage.setItem('xcagi_platform_shell_mode', '0');
+  });
   await page.route('**/api/runtime/product-sku**', async (route) => {
     await route.fulfill({
       status: 200,

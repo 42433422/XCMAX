@@ -832,7 +832,9 @@ class TestFormatWorkflowRunResponse:
         mock_result.message = ""
         result = service._format_workflow_run_response(mock_plan, mock_result, "thinking", "msg")
         assert result["success"] is True
-        assert "步骤1" in result["response"]
+        assert "任务已完成" in result["response"]
+        assert "步骤1" not in result["response"]
+        assert result["data"]["data"]["todo"] == ["步骤1"]
 
     def test_failed_node(self):
         service = _make_service()
@@ -852,7 +854,9 @@ class TestFormatWorkflowRunResponse:
         mock_result.message = "failed"
         result = service._format_workflow_run_response(mock_plan, mock_result, "", "msg")
         assert result["success"] is False
-        assert "失败" in result["response"]
+        assert "任务未完成" in result["response"]
+        assert "db error" not in result["response"]
+        assert result["data"]["data"]["node_results"][0]["message"] == "db error"
 
     def test_products_query_with_rows(self):
         service = _make_service()

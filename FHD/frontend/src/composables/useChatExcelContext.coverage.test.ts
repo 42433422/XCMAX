@@ -27,6 +27,7 @@ const mockResolveLinkedSheetGridPreview = vi.fn()
 const mockFilesToMultimodalRows = vi.fn()
 
 vi.mock('./useChatPersistence', () => ({
+  EXCEL_ANALYSIS_STORAGE_PREFIX: 'xcagi_excel_analysis_ctx_',
   readPersistedExcelAnalysisContext: (...args: unknown[]) =>
     mockReadPersistedExcelAnalysisContext(...args),
   persistExcelAnalysisContext: (...args: unknown[]) =>
@@ -295,17 +296,19 @@ describe('useChatExcelContext — coverage ramp', () => {
       expect(parts).toEqual([])
     })
 
-    it('有附件时注入并清空暂存', () => {
+    it('有附件时注入请求快照，成功确认前保留暂存', () => {
       const ctx = useChatExcelContext(makeDeps())
       const rows = [makeRow('a.png'), makeRow('b.pdf', 'pdf')]
       ctx.multimodalStaging.value = [...rows]
       const payload: Record<string, unknown> = {}
       const parts: string[] = []
-      ctx.consumeMultimodalIntoPlannerContext(payload, parts)
+      const snapshot = ctx.consumeMultimodalIntoPlannerContext(payload, parts)
       expect(payload.multimodal_attachments).toHaveLength(2)
       // 应该是浅拷贝
       expect(payload.multimodal_attachments).not.toBe(rows)
       expect(parts).toContain('多模态附件 2 个')
+      expect(ctx.multimodalStaging.value).toEqual(rows)
+      ctx.acknowledgeMultimodalRequest(snapshot)
       expect(ctx.multimodalStaging.value).toEqual([])
     })
   })
@@ -424,6 +427,26 @@ describe('useChatExcelContext — coverage ramp', () => {
 
       expect(ctx.multimodalStaging.value[0]?.filename).toBe('live.png')
       expect(inputValue).toBe('')
+    })
+
+    it('异步转换期间切换会话时仍把附件留在原会话', async () => {
+      const deps = makeDeps({ sessionId: 'session-a' })
+      const ctx = useChatExcelContext(deps)
+      const row = makeRow('slow.png')
+      let resolveConversion!: (value: { ok: true; rows: Array<typeof row> }) => void
+      mockFilesToMultimodalRows.mockReturnValueOnce(new Promise((resolve) => {
+        resolveConversion = resolve
+      }))
+
+      const pending = ctx.onMultimodalFileChange(makeFileInputEvent([{ name: 'slow.png' }]))
+      deps.sessionId.value = 'session-b'
+      resolveConversion({ ok: true, rows: [row] })
+      await pending
+
+      expect(ctx.multimodalStaging.value).toEqual([])
+      deps.sessionId.value = 'session-a'
+      expect(ctx.multimodalStaging.value).toEqual([row])
+      expect(deps.addAndSaveMessage).not.toHaveBeenCalled()
     })
   })
 
@@ -590,6 +613,10 @@ describe('useChatExcelContext — coverage ramp', () => {
       expect(ctx).toHaveProperty('resolveExcelAnalysisContextForRequest')
       expect(ctx).toHaveProperty('injectExcelContextPayload')
       expect(ctx).toHaveProperty('consumeMultimodalIntoPlannerContext')
+      expect(ctx).toHaveProperty('acknowledgeMultimodalRequest')
+      expect(ctx).toHaveProperty('activateSessionContext')
+      expect(ctx).toHaveProperty('clearSessionContext')
+      expect(ctx).toHaveProperty('clearAllSessionContexts')
       expect(ctx).toHaveProperty('onMultimodalFileChange')
       expect(ctx).toHaveProperty('bindExcelSheetToChat')
       expect(ctx).toHaveProperty('bindAllExcelSheetsToChat')

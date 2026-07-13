@@ -22,6 +22,7 @@ const isProModeRef = ref(false)
 const messagesRef = ref<any[]>([])
 const currentTaskRef = ref<any>(null)
 const showHistoryRef = ref(false)
+const isStreamingReplyRef = ref(false)
 
 function resetMockRefs() {
   isLoadingRef.value = false
@@ -29,6 +30,7 @@ function resetMockRefs() {
   messagesRef.value = []
   currentTaskRef.value = null
   showHistoryRef.value = false
+  isStreamingReplyRef.value = false
 }
 
 const mockChatViewApi = {
@@ -36,7 +38,7 @@ const mockChatViewApi = {
   currentTask: currentTaskRef,
   orderNumberFetching: { value: false },
   isLoading: isLoadingRef,
-  isStreamingReply: { value: false },
+  isStreamingReply: isStreamingReplyRef,
   isExecuting: { value: false },
   latestAssistantPush: { value: null },
   proRuntimeTask: { value: null },
@@ -60,6 +62,7 @@ const mockChatViewApi = {
   taskTableItems: { value: [] },
   taskOrderNumber: { value: '' },
   sendMessage: mockChatSendMessage,
+  stopStreamingReply: vi.fn(),
   confirmTask: vi.fn(),
   refetchTaskOrderNumber: vi.fn(),
   setCustomOrderNumber: vi.fn(),

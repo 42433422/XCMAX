@@ -1317,9 +1317,11 @@ class TestFormatWorkflowRunResponseBranchCov:
         result = svc._format_workflow_run_response(
             plan, run_result, thinking_steps="thinking...", user_message="msg"
         )
-        assert "thinking..." in result["response"]
-        assert "TODO:" in result["response"]
-        assert "step1" in result["response"]
+        assert "thinking..." not in result["response"]
+        assert "TODO:" not in result["response"]
+        assert "计划ID" not in result["response"]
+        assert result["data"]["data"]["thinking_steps"] == "thinking..."
+        assert result["data"]["data"]["todo"] == ["step1", "step2"]
 
     def test_failed_node_with_retryable_and_retries(self):
         svc = _make_svc()
@@ -1333,7 +1335,8 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(success=False, node_results=[node_result])
 
         result = svc._format_workflow_run_response(plan, run_result)
-        assert "已自动重试: 3 次" in result["response"]
+        assert "已自动重试" not in result["response"]
+        assert result["data"]["data"]["node_results"][0]["retries"] == 3
 
     def test_failed_node_not_retryable(self):
         svc = _make_svc()
@@ -1347,7 +1350,8 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(success=False, node_results=[node_result])
 
         result = svc._format_workflow_run_response(plan, run_result)
-        assert "未自动重试" in result["response"]
+        assert "未自动重试" not in result["response"]
+        assert result["data"]["data"]["node_results"][0]["retryable"] is False
 
     def test_failed_node_with_recovery_hint(self):
         svc = _make_svc()
@@ -1361,7 +1365,7 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(success=False, node_results=[node_result])
 
         result = svc._format_workflow_run_response(plan, run_result)
-        assert "恢复建议: try again later" in result["response"]
+        assert "建议：try again later" in result["response"]
 
     def test_failed_node_non_string_recovery_hint(self):
         svc = _make_svc()
@@ -1376,6 +1380,25 @@ class TestFormatWorkflowRunResponseBranchCov:
         result = svc._format_workflow_run_response(plan, run_result)
         # Should not crash, hint should be empty
         assert "恢复建议" not in result["response"]
+
+    def test_internal_schema_error_is_not_exposed_in_chat_text(self):
+        svc = _make_svc()
+        plan = _make_plan()
+        node_result = _make_node_result(
+            success=False,
+            error="工具输出 字段 data 类型错误，应为 array",
+        )
+        run_result = _make_run_result(success=False, node_results=[node_result])
+
+        result = svc._format_workflow_run_response(plan, run_result)
+
+        assert "数据格式不符合预期" in result["response"]
+        assert "字段 data" not in result["response"]
+        assert "计划ID" not in result["response"]
+        assert (
+            result["data"]["data"]["node_results"][0]["message"]
+            == "工具输出 字段 data 类型错误，应为 array"
+        )
 
     def test_failed_node_retries_invalid_value(self):
         svc = _make_svc()
@@ -1398,7 +1421,8 @@ class TestFormatWorkflowRunResponseBranchCov:
         run_result = _make_run_result(success=True, message="custom message", node_results=[])
 
         result = svc._format_workflow_run_response(plan, run_result)
-        assert "说明: custom message" in result["response"]
+        assert result["response"] == "任务已完成。"
+        assert "custom message" not in result["response"]
 
     def test_products_query_success_with_rows(self):
         svc = _make_svc()

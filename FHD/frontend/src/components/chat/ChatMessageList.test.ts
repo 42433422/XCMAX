@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatMessageList from './ChatMessageList.vue'
 
@@ -52,5 +52,62 @@ describe('ChatMessageList', () => {
     expect(wrapper.get('.context-summary').text()).toContain('已关联上下文')
     expect(wrapper.get('.thinking-panel').text()).toContain('internal chain')
     expect(wrapper.get('.trace-panel').text()).toContain('internal_node')
+  })
+
+  it('renders an older collapsed AI message as a preview and emits expand', async () => {
+    const getCollapsedPreview = vi.fn(() => '这是折叠后的预览')
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [
+          { role: 'ai' as const, content: '旧的完整回复内容', time: '07:20' },
+          { role: 'ai' as const, content: '最新回复', time: '07:25' },
+        ],
+        isLoading: false,
+        isStreamingReply: false,
+        loadingProgressText: '',
+        messageHeights: new Map<number, number>([[0, 420]]),
+        latestAiMessageIndex: 1,
+        playingMsgIdx: -1,
+        isMessageCollapsed: (_msg, idx) => idx === 0,
+        getCollapsedPreview,
+        canSpeakMessage: () => false,
+      },
+    })
+
+    const oldMessage = wrapper.findAll('.message')[0]
+    expect(oldMessage.get('.msg-fold__text').text()).toBe('这是折叠后的预览')
+    expect(oldMessage.find('.message-html').exists()).toBe(false)
+    expect(oldMessage.attributes('style')).toContain('min-height: auto')
+    expect(getCollapsedPreview).toHaveBeenCalledWith('旧的完整回复内容')
+
+    await oldMessage.get('.msg-fold__action').trigger('click')
+    expect(wrapper.emitted('expand-message')).toEqual([[0]])
+  })
+
+  it('lets an expanded older AI message collapse again but keeps the latest reply open', async () => {
+    const wrapper = mount(ChatMessageList, {
+      props: {
+        messages: [
+          { role: 'ai' as const, content: '旧回复', time: '07:20' },
+          { role: 'ai' as const, content: '最新回复', time: '07:25' },
+        ],
+        isLoading: false,
+        isStreamingReply: false,
+        loadingProgressText: '',
+        messageHeights: new Map<number, number>(),
+        latestAiMessageIndex: 1,
+        playingMsgIdx: -1,
+        isMessageCollapsed: () => false,
+        getCollapsedPreview: (content) => content,
+        canSpeakMessage: () => false,
+      },
+    })
+
+    const messages = wrapper.findAll('.message')
+    expect(messages[0].find('.msg-fold__action--collapse').exists()).toBe(true)
+    expect(messages[1].find('.msg-fold__action--collapse').exists()).toBe(false)
+
+    await messages[0].get('.msg-fold__action--collapse').trigger('click')
+    expect(wrapper.emitted('collapse-message')).toEqual([[0]])
   })
 })

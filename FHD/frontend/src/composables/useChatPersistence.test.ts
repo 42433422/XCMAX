@@ -171,6 +171,8 @@ describe('useChatPersistence', () => {
     it('returns null for non-product queries', () => {
       expect(extractLikelyProductQueryKeyword('出货单')).toBeNull()
       expect(extractLikelyProductQueryKeyword('打印标签')).toBeNull()
+      expect(extractLikelyProductQueryKeyword('查询工号1001的员工信息') ?? '').toBe('')
+      expect(extractLikelyProductQueryKeyword('查询考勤部门人员') ?? '').toBe('')
     })
 
     it('extracts keyword from 查询 pattern', () => {
