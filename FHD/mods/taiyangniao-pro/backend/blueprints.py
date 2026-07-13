@@ -686,12 +686,6 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         units = _distinct_customer_purchase_units()
         return {"success": True, "data": units}
 
-    @router.get("/shipment/shipment-records/units")
-    @router.get("/shipment/shipment-records/units/")
-    async def shipment_record_units_compat():
-        units = _distinct_customer_purchase_units()
-        return {"success": True, "data": units, "units": units}
-
     @router.get("/customers/{customer_id}", response_model=None)
     async def customers_get(customer_id: int):
         import sqlite3
