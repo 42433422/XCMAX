@@ -39,7 +39,11 @@ if [ "${SKIP_FRONTEND:-0}" != "1" ]; then
   # 桌面包不构建 admin-console（管理端仅网页；进程级 is_desktop_mode 禁 /admin）
 fi
 
-PYTHON="${PYTHON:-python3}"
+if [ -z "${PYTHON:-}" ] && [ -x "${ROOT}/.venv/bin/python" ]; then
+  PYTHON="${ROOT}/.venv/bin/python"
+else
+  PYTHON="${PYTHON:-python3}"
+fi
 
 "${PYTHON}" -m pip install --upgrade pip
 "${PYTHON}" -m pip install -e ".[server-api]"

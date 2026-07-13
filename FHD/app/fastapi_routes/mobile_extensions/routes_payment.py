@@ -233,6 +233,7 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
         _market_base_url,
         _proxy_json,
         latest_session_market_token,
+        resolve_valid_market_access_token,
         session_market_token,
     )
     from app.security.mobile_jwt import verify_mobile_jwt
@@ -254,6 +255,9 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
     if not market_token:
         # 多用户环境按 user_id 过滤，防止串号（fallback 仅用于单用户桌面模式）
         market_token = latest_session_market_token(user_id=getattr(user, "id", None))
+    if sid and market_token:
+        # 余额属于长会话高频读路径；访问令牌过期时用持久化 refresh_token 自动续期。
+        market_token = await resolve_valid_market_access_token(sid)
     if not market_token:
         return format_mobile_response(
             data={
@@ -344,4 +348,3 @@ async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user))
             "market_base_url": _market_base_url(),
         }
     )
-

@@ -140,7 +140,7 @@ async def _market_admin_proxy(
                 )
     try:
         from app.fastapi_routes.market_account import (
-            _authorization_from_request,
+            _authorization_from_request_resolved,
             _error_message,
             _proxy_json,
         )
@@ -151,7 +151,7 @@ async def _market_admin_proxy(
         )
 
     body_for_auth = json_body if isinstance(json_body, dict) else {}
-    authorization = _authorization_from_request(request, body_for_auth)
+    authorization = await _authorization_from_request_resolved(request, body_for_auth)
     if not authorization:
         return JSONResponse(
             {
@@ -515,15 +515,6 @@ CORE_MODULES = [
         "module_id": "other-tools",
         "display_name": "员工工作流",
         "route": "/other-tools",
-        "source": "core",
-        "sync_scope": "none",
-        "active": True,
-        "version": "1.0",
-    },
-    {
-        "module_id": "enterprise-customer-service",
-        "display_name": "外部客服",
-        "route": "/enterprise-customer-service",
         "source": "core",
         "sync_scope": "none",
         "active": True,

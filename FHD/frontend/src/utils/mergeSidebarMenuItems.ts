@@ -37,11 +37,57 @@ function hostSlotForModItem(item: ResolvedSidebarMenuItem): string {
   return ''
 }
 
-function isInternalCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolean {
+function isRetiredCustomerServiceMenuItem(item: ResolvedSidebarMenuItem): boolean {
   const key = normalizeModSidebarNavKey(String(item.key || '').trim())
-  if (key === 'internal-customer-service' || key === 'mod-internal-customer-service') return true
+  if (
+    key === 'enterprise-customer-service' ||
+    key === 'internal-customer-service' ||
+    key === 'mod-enterprise-customer-service' ||
+    key === 'mod-internal-customer-service'
+  ) return true
   const path = String(item.path || '').trim()
-  return path.split('?')[0].split('#')[0].includes('/internal-customer-service')
+  const pathOnly = path.split('?')[0].split('#')[0]
+  return pathOnly.includes('/enterprise-customer-service') || pathOnly.includes('/internal-customer-service')
+}
+
+function isRetiredWechatContactsMenuItem(item: ResolvedSidebarMenuItem): boolean {
+  const key = normalizeModSidebarNavKey(String(item.key || '').trim())
+  if (
+    key === 'wechat-contacts' ||
+    key === 'mod-erp-wechat-contacts' ||
+    key === 'wechat-contacts-ai-employee-entry'
+  ) return true
+  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
+  return path === '/wechat-contacts' || path.endsWith('/wechat-contacts')
+}
+
+function isRetiredMaterialsListMenuItem(item: ResolvedSidebarMenuItem): boolean {
+  const key = normalizeModSidebarNavKey(String(item.key || '').trim())
+  if (key === 'materials-list' || key === 'mod-erp-materials-list') return true
+  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
+  return path === '/materials-list' || path.endsWith('/materials-list')
+}
+
+/**
+ * These capabilities remain available from their canonical surfaces:
+ * model service lives in Settings, while business docking is launched from Chat.
+ * Keep stale Mod/runtime menu rows from recreating duplicate primary navigation.
+ */
+function isConsolidatedCapabilityMenuItem(item: ResolvedSidebarMenuItem): boolean {
+  const key = normalizeModSidebarNavKey(String(item.key || '').trim())
+  if (
+    key === 'model-payment' ||
+    key === 'mod-model-payment' ||
+    key === 'business-docking' ||
+    key === 'mod-erp-business-docking'
+  ) return true
+  const path = String(item.path || '').trim().split('?')[0].split('#')[0]
+  return (
+    path === '/model-payment' ||
+    path.endsWith('/model-payment') ||
+    path === '/business-docking' ||
+    path.endsWith('/business-docking')
+  )
 }
 
 const hostKeysFromPath = new Set([
@@ -90,7 +136,12 @@ export function mergeSidebarMenuItems(
   const push = (item: ResolvedSidebarMenuItem) => {
     const key = String(item.key || '').trim()
     if (!key || seen.has(key)) return
-    if (isInternalCustomerServiceMenuItem(item)) return
+    if (
+      isRetiredCustomerServiceMenuItem(item) ||
+      isRetiredWechatContactsMenuItem(item) ||
+      isRetiredMaterialsListMenuItem(item) ||
+      isConsolidatedCapabilityMenuItem(item)
+    ) return
 
     const modId = String(item.modId || '').trim()
     const navKey = normalizeModSidebarNavKey(key)
