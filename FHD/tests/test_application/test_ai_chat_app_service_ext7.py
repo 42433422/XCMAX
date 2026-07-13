@@ -370,6 +370,10 @@ class TestCustomerHintFromPreviewGrid:
 
 
 class TestDefaultPurchaseUnitForImport:
+    @pytest.fixture(autouse=True)
+    def _trusted_test_workspace(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_request_context_hint_takes_priority(self):
         result = AIChatApplicationService._default_purchase_unit_for_import(
             {},
@@ -630,6 +634,10 @@ class TestResolveSheetName:
 
 
 class TestTryStructuredReloadRecords:
+    @pytest.fixture(autouse=True)
+    def _trusted_test_workspace(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_no_file_path_returns_none(self):
         result = AIChatApplicationService._try_structured_reload_records({}, {})
         assert result is None
