@@ -412,13 +412,14 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length);
   });
 
-  it('returns only the active mod when activeModId is set and found', () => {
+  it('returns active mod plus same-line account custom overlay when activeModId is set', () => {
     const store = useModsStore();
     store.mods = sampleMods as never[];
     store.setActiveModId('attendance-industry');
     const ui = store.modsForUi;
-    expect(ui).toHaveLength(1);
-    expect(ui[0].id).toBe('attendance-industry');
+    const ids = ui.map((m) => m.id);
+    expect(ids[0]).toBe('attendance-industry');
+    expect(ids).toContain('taiyangniao-pro');
   });
 
   it('returns all mods when activeModId is set but not found in mods list', () => {
@@ -428,14 +429,15 @@ describe('mods store – modsForUi', () => {
     expect(store.modsForUi).toHaveLength(sampleMods.length);
   });
 
-  it('returns attendance stub when activeModId is CLIENT_PRIMARY_ERP_MOD_ID and not in list', () => {
+  it('returns attendance stub plus same-line account custom when active ERP id missing from list', () => {
     const store = useModsStore();
     const modsNoAttendance = sampleMods.filter((m) => m.id !== 'attendance-industry');
     store.mods = modsNoAttendance as never[];
     store.setActiveModId('attendance-industry');
     const ui = store.modsForUi;
-    expect(ui).toHaveLength(1);
-    expect(ui[0].id).toBe('attendance-industry');
+    const ids = ui.map((m) => m.id);
+    expect(ids[0]).toBe('attendance-industry');
+    expect(ids).toContain('taiyangniao-pro');
   });
 });
 
