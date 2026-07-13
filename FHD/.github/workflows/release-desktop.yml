@@ -267,6 +267,28 @@ jobs:
           app="$(find "${mount_dir}" -maxdepth 2 -name 'XCAGI.app' -print -quit)"
           test -n "${app}"
           codesign --verify --deep --strict --verbose=2 "${app}"
+          build_info="${app}/Contents/Resources/build-info.json"
+          test -f "${build_info}"
+          BUILD_INFO_PATH="${build_info}" \
+            EXPECTED_BUILD_SHA="${GITHUB_SHA}" \
+            EXPECTED_PRODUCT_VERSION="${v}" \
+            python3 <<'PY'
+          import json
+          import os
+
+          path = os.environ["BUILD_INFO_PATH"]
+          expected_sha = os.environ["EXPECTED_BUILD_SHA"]
+          expected_version = os.environ["EXPECTED_PRODUCT_VERSION"]
+          with open(path, encoding="utf-8") as handle:
+              data = json.load(handle)
+          assert data.get("gitSha") == expected_sha, (
+              f"packaged gitSha mismatch: {data.get('gitSha')!r} != {expected_sha!r}"
+          )
+          assert data.get("version") == expected_version, (
+              f"packaged version mismatch: {data.get('version')!r} != {expected_version!r}"
+          )
+          print(f"Verified packaged identity: {expected_version} @ {expected_sha}")
+          PY
           xcrun stapler validate "${app}"
           spctl -a -vv -t exec "${app}"
           cleanup_mount
