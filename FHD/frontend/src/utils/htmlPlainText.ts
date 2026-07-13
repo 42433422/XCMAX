@@ -1,3 +1,5 @@
+import DOMPurify from 'dompurify'
+
 const OMITTED_TEXT_TAGS = new Set([
   'SCRIPT',
   'STYLE',
@@ -34,17 +36,21 @@ function decodeCommonEntities(value: string): string {
 /**
  * Convert HTML-like chat content to inert plain text.
  *
- * DOMParser keeps markup inert and avoids regex-based tag sanitization, which
- * is unsafe for malformed or nested markup. The scanner is only a non-DOM
- * fallback for tests/SSR and never returns markup as executable HTML.
+ * DOMPurify returns an already-sanitized fragment and avoids regex-based tag
+ * sanitization or reparsing untrusted text as HTML. The scanner is only a
+ * non-DOM fallback for tests/SSR and never returns executable markup.
  */
 export function plainTextFromHtml(raw: unknown): string {
   const source = String(raw || '')
   if (!source) return ''
 
-  if (typeof DOMParser !== 'undefined') {
-    const document = new DOMParser().parseFromString(source, 'text/html')
-    return collectVisibleText(document.body).replace(/\u00a0/g, ' ')
+  if (typeof document !== 'undefined') {
+    const fragment = DOMPurify.sanitize(source, {
+      ALLOWED_TAGS: ['br'],
+      ALLOWED_ATTR: [],
+      RETURN_DOM_FRAGMENT: true,
+    })
+    return collectVisibleText(fragment).replace(/\u00a0/g, ' ')
   }
 
   let result = ''

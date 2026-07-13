@@ -14,8 +14,8 @@ describe('plainTextFromHtml', () => {
     expect(plainTextFromHtml('safe<script>alert(1)</script><style>bad{}</style>end')).toBe('safeend')
   })
 
-  it('uses an inert scanner when DOMParser is unavailable', () => {
-    vi.stubGlobal('DOMParser', undefined)
+  it('uses an inert scanner when the DOM is unavailable', () => {
+    vi.stubGlobal('document', undefined)
     expect(plainTextFromHtml('safe<br>text<script>alert(1)</script>')).toBe(
       'safe\ntextalert(1)',
     )
