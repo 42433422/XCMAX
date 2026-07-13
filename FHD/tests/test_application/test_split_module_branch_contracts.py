@@ -231,7 +231,7 @@ def test_split_export_and_print_failure_receipts(
         lambda *_args: (_ for _ in ()).throw(OSError("disk full")),
     )
     export_result = actions._handle_attendance_export("本月", intent_export, actor=_ACTOR)
-    assert export_result["execution_receipt"]["reason"].startswith("attendance_export_failed:")
+    assert export_result["execution_receipt"]["reason"] == "attendance_export_failed"
 
     monkeypatch.setattr(
         actions,
@@ -239,7 +239,7 @@ def test_split_export_and_print_failure_receipts(
         lambda: (_ for _ in ()).throw(OSError("printer offline")),
     )
     print_result = actions._handle_attendance_print("本月", intent_print, actor=_ACTOR)
-    assert print_result["execution_receipt"]["reason"].startswith("printer_status_failed:")
+    assert print_result["execution_receipt"]["reason"] == "printer_status_failed"
 
 
 @pytest.mark.parametrize(

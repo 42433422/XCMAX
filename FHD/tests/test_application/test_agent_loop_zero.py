@@ -272,4 +272,5 @@ class TestRunEmployeeAgentLoop:
             tools=[],
         )
         assert result["ok"] is False
-        assert "network down" in result["error"]
+        assert result["error"] == "LLM call failed"
+        assert "network down" not in result["error"]

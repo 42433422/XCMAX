@@ -175,7 +175,8 @@ class TestRunEmployeeAgentLoop:
             task="do something",
         )
         assert result["ok"] is False
-        assert "timeout" in result["error"]
+        assert result["error"] == "LLM call failed"
+        assert "timeout" not in result["error"]
 
     @patch("app.application.tools.workflow.execute_workflow_tool", return_value='{"success": true}')
     @patch("app.infrastructure.llm.client.resolve_chat_model", return_value="gpt-4")

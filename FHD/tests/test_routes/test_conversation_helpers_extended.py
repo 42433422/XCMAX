@@ -232,7 +232,8 @@ class TestXcagiChatHttpExcEdgeCases:
         exc = helpers._xcagi_chat_http_exc(TimeoutError("custom timeout msg"))
         assert isinstance(exc, HTTPException)
         assert exc.status_code == 504
-        assert "custom timeout msg" in exc.detail
+        assert exc.detail == "大模型响应超时，请稍后重试。"
+        assert "custom timeout msg" not in exc.detail
 
     def test_timeout_with_empty_message(self):
         """TimeoutError with empty message should use default."""

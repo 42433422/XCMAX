@@ -12,7 +12,7 @@ import sys
 import tempfile
 import time
 import zipfile
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -132,8 +132,7 @@ def _all_mods_roots(primary: str) -> list[str]:
 
 
 def _backend_path_for_mod(mod_path: str) -> str:
-    backend = existing_dir_under(Path(mod_path), "backend")
-    return str(backend) if backend is not None else ""
+    return os.path.join(mod_path, "backend")
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
@@ -141,13 +140,22 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
     stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
     """
-    backend_path = _backend_path_for_mod(mod_path)
-    safe_stem = os.path.basename(str(stem or "").strip())
-    if not backend_path or not safe_stem.isidentifier() or safe_stem != stem:
+    backend_dir = existing_dir_under(Path(mod_path), "backend")
+    backend_path = str(backend_dir) if backend_dir is not None else ""
+    raw_stem = str(stem or "").strip().replace("\\", "/")
+    stem_parts = PurePath(raw_stem).parts
+    if (
+        not stem_parts
+        or any(not part.isidentifier() for part in stem_parts)
+        or "/".join(stem_parts) != raw_stem
+    ):
         raise FileNotFoundError(f"Mod {mod_id} backend module is invalid")
-    path = existing_file_under(Path(backend_path), f"{safe_stem}.py")
+    if not backend_path:
+        raise FileNotFoundError(f"Mod {mod_id} backend file missing")
+    path = existing_file_under(Path(backend_path), f"{'/'.join(stem_parts)}.py")
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
+    safe_stem = "_".join(stem_parts)
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
@@ -603,10 +611,11 @@ class ModManager:
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
-        backend_path = _backend_path_for_mod(mod_path)
-        if not backend_path:
+        backend_dir = existing_dir_under(Path(mod_path), "backend")
+        if backend_dir is None:
             logger.debug("No backend directory for mod: %s", mod_id)
             return
+        backend_path = str(backend_dir)
 
         if backend_path not in sys.path:
             sys.path.insert(0, backend_path)

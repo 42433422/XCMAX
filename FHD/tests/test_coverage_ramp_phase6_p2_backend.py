@@ -1048,7 +1048,8 @@ def test_intent_predict_recoverable_error_returns_500(
     ):
         r = ai_intent_client.post("/api/intent/predict", json={"text": "hi"})
     assert r.status_code == 500
-    assert "model down" in r.json()["error"]
+    assert r.json()["error"] == "intent prediction failed"
+    assert "model down" not in r.json()["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -1089,7 +1090,8 @@ def test_intent_predict_batch_recoverable_error_returns_500(
     ):
         r = ai_intent_client.post("/api/intent/predict_batch", json={"texts": ["a"]})
     assert r.status_code == 500
-    assert "batch failed" in r.json()["error"]
+    assert r.json()["error"] == "intent batch prediction failed"
+    assert "batch failed" not in r.json()["error"]
 
 
 if __name__ == "__main__":  # pragma: no cover
