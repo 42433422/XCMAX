@@ -417,6 +417,26 @@ jobs:
             cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
           fi
           ls -la "release/xcagi-v${version}/enterprise"
+      - name: Install metadata signing dependency
+        run: python -m pip install --quiet cryptography
+      - name: Sign reconstructed update metadata
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY is required before publishing reconstructed update metadata."
+            exit 1
+          fi
+          raw="${{ github.event.inputs.version || github.ref_name }}"
+          raw="${raw#FHD/}"
+          raw="${raw#v}"
+          raw="${raw#V}"
+          version="${raw:-1.0.0.0}"
+          for metadata in "release/xcagi-v${version}/enterprise"/latest*.yml; do
+            test -f "$metadata"
+            python scripts/dev/sign_update_metadata.py "$metadata"
+          done
       - name: Generate manifest.json + download-release.json
         working-directory: FHD
         run: |
@@ -522,6 +542,32 @@ jobs:
           set -euo pipefail
           # Workflow-level defaults already set working-directory to FHD.
           bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+      - name: Verify public update metadata parity and signed identity
+        run: |
+          set -euo pipefail
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          expected_version="$(jq -er '.version' "$manifest")"
+          expected_sha="$(jq -er '.git_sha' "$manifest")"
+          tmpdir="$(mktemp -d)"
+          trap 'rm -rf "$tmpdir"' EXIT
+          for metadata in latest.yml latest-mac.yml; do
+            stable="$tmpdir/stable-$metadata"
+            official="$tmpdir/official-$metadata"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/releases/stable/enterprise/$metadata" -o "$stable"
+            curl -fsSL --retry 3 --retry-all-errors --connect-timeout 15 --max-time 60 \
+              "https://xiu-ci.com/xcagi-v${expected_version}/enterprise/$metadata" -o "$official"
+            cmp -s "$stable" "$official" || {
+              echo "::error::$metadata differs between stable and official download paths."
+              exit 1
+            }
+            grep -Eq '^signature: ed25519:[A-Za-z0-9+/=]+$' "$official" || {
+              echo "::error::$metadata is missing its Ed25519 signature."
+              exit 1
+            }
+            grep -Fxq "productVersion: ${expected_version}" "$official"
+            grep -Fxq "buildSha: ${expected_sha}" "$official"
+          done
       - name: Publish verified website download pointer
         if: ${{ inputs.verify_only != true }}
         env:
