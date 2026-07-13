@@ -694,3 +694,38 @@ body[data-sidebar-theme^="dark-"] .sidebar-mod-chip {
   background: rgba(139, 92, 246, 0.22);
   border-color: rgba(167, 139, 250, 0.45);
 }
+
+/*
+ * Desktop performance guard: the main shell used several full-height backdrop
+ * blurs at the same time. On macOS every scroll/hover then made WindowServer
+ * recompose large translucent regions. Keep the same light-office appearance
+ * with nearly opaque surfaces, while reserving blur for short-lived modals and
+ * the explicitly selected professional visual mode.
+ */
+html.xcagi-electron body:not(.pro-mode-active) {
+  --app-surface: rgba(255, 255, 255, 0.96);
+  --app-surface-muted: rgba(248, 250, 252, 0.96);
+}
+
+html.xcagi-electron body:not(.pro-mode-active) .sidebar,
+html.xcagi-electron body:not(.pro-mode-active) .top-bar,
+html.xcagi-electron body:not(.pro-mode-active) .card,
+html.xcagi-electron body:not(.pro-mode-active) .search-box,
+html.xcagi-electron body:not(.pro-mode-active) .input-area,
+html.xcagi-electron body:not(.pro-mode-active) .right-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html.xcagi-electron body:not(.pro-mode-active) .sidebar {
+  background: rgba(248, 250, 252, 0.98);
+}
+
+html.xcagi-electron body:not(.pro-mode-active) .top-bar,
+html.xcagi-electron body:not(.pro-mode-active) .input-area {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+html.xcagi-electron body:not(.pro-mode-active) .right-panel {
+  background: rgba(255, 255, 255, 0.96);
+}

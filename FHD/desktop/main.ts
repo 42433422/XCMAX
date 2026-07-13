@@ -19,6 +19,7 @@ import { networkInterfaces } from 'node:os'
 import path from 'node:path'
 import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
+import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 
 const APP_NAME = 'XCAGI'
 
@@ -334,6 +335,8 @@ let backendProcess: ChildProcessWithoutNullStreams | null = null
 let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
 let restartCount = 0
+let backendShutdownComplete = false
+let backendShutdownPromise: Promise<void> | null = null
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -969,23 +972,24 @@ function configureDesktopMediaPermissions(): void {
   })
 }
 
-function stopBackend(): void {
+async function stopBackend(): Promise<void> {
   const child = backendProcess
   backendProcess = null
-  if (!child || child.killed) {
+  if (!child) {
     return
   }
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
+  let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
-    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, error => {
-      if (error && !child.killed) {
-        child.kill()
-      }
+    const exited = waitForChildExit(child, 2500)
+    await new Promise<void>(resolve => {
+      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
     })
+    result = (await exited) ? 'killed' : 'kill-timeout'
   } else {
-    child.kill('SIGTERM')
+    result = await terminateChildProcess(child)
   }
-  backendLogStream?.end(`[${new Date().toISOString()}] backend log closed\n`)
+  backendLogStream?.end(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
   backendLogStream = null
 }
 
@@ -1211,7 +1215,21 @@ function bootstrap(): void {
 
     app.on('before-quit', () => {
       app.isQuitting = true
-      stopBackend()
+    })
+
+    // will-quit runs after BrowserWindows have closed, so renderer keep-alive
+    // connections no longer prevent the backend from shutting down gracefully.
+    app.on('will-quit', event => {
+      if (backendShutdownComplete) {
+        return
+      }
+      event.preventDefault()
+      if (!backendShutdownPromise) {
+        backendShutdownPromise = stopBackend().finally(() => {
+          backendShutdownComplete = true
+          app.quit()
+        })
+      }
     })
 
     app.whenReady().then(async () => {
