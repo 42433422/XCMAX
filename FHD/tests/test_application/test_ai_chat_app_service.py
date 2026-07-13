@@ -2,6 +2,7 @@
 AI 聊天应用服务测试
 """
 
+import inspect
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
@@ -13,6 +14,31 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 class TestAIChatApplicationService:
     """测试 AI 聊天应用服务"""
+
+    def test_multimodal_handler_is_a_bound_instance_method(self):
+        """回归：普通聊天探测多模态时必须自动绑定 ``self``。"""
+        from app.application.ai_chat_app_service import AIChatApplicationService
+
+        raw_descriptor = inspect.getattr_static(
+            AIChatApplicationService,
+            "_try_handle_multimodal_chat",
+        )
+        assert not isinstance(raw_descriptor, staticmethod)
+
+        # 该探测在初始化任何重量级依赖前即可验证；空上下文应直接返回 None，
+        # 不能因 descriptor 未绑定而抛出 ``missing ... self``。
+        service = object.__new__(AIChatApplicationService)
+        bound_handler = service._try_handle_multimodal_chat
+        assert inspect.ismethod(bound_handler)
+        assert (
+            bound_handler(
+                user_id="test_user",
+                message="普通聊天",
+                source="desktop",
+                context={},
+            )
+            is None
+        )
 
     def test_process_chat_empty_message(self):
         """测试空消息处理"""

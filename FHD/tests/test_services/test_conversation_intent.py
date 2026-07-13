@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
+import threading
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services.conversation.intent import IntentMixin
+
+
+def _recognizer_result(primary_intent: str = "products") -> SimpleNamespace:
+    return SimpleNamespace(
+        primary_intent=primary_intent,
+        tool_key=primary_intent,
+        intent_hints=[],
+        is_negated=False,
+        is_greeting=False,
+        is_goodbye=False,
+        is_help=False,
+        is_confirmation=False,
+        is_negation_intent=False,
+        is_likely_unclear=False,
+        slots={},
+        all_matched_tools=[],
+    )
+
 
 # ========================= _is_pro_source ================================
 
@@ -296,3 +317,60 @@ class TestResolveAiMode:
         m.user_preference_service.get_preference.side_effect = RuntimeError("db error")
         result = m._resolve_ai_mode("user1")
         assert result == "online"
+
+
+class TestAsyncIntentRecognizerThreadBoundary:
+    @pytest.mark.asyncio
+    async def test_unified_recognizer_does_not_start_a_loop_inside_running_loop(self):
+        m = IntentMixin()
+        m.user_preference_service = MagicMock()
+        m.user_preference_service.get_preference.return_value = "online"
+        m.intent_service = MagicMock(return_value={})
+        m.online_intent_service = object()
+        m._neuro_stack_enabled = MagicMock(return_value=False)
+        main_thread = threading.get_ident()
+        worker_threads: list[int] = []
+
+        def recognize(*_args, **_kwargs):
+            worker_threads.append(threading.get_ident())
+            # This mirrors the legacy DeepSeek adapter. It raises
+            # ``Cannot run the event loop while another loop is running`` when
+            # invoked directly from this async test's event-loop thread.
+            return asyncio.run(asyncio.sleep(0, result=_recognizer_result()))
+
+        m.unified_recognizer = SimpleNamespace(recognize=recognize)
+        with patch("app.neuro_bus.application_neuro_bridge.neuro_notify_intent_resolved"):
+            result = await m._recognize_intent("查询产品", source="pro", user_id="u1")
+
+        assert result["primary_intent"] == "products"
+        assert worker_threads and worker_threads[0] != main_thread
+
+    @pytest.mark.asyncio
+    async def test_neuro_unified_bridge_uses_the_same_thread_boundary(self):
+        m = IntentMixin()
+        m.user_preference_service = MagicMock()
+        m.user_preference_service.get_preference.return_value = "online"
+        m.intent_service = MagicMock(return_value={})
+        m.online_intent_service = object()
+        m._neuro_stack_enabled = MagicMock(return_value=True)
+        main_thread = threading.get_ident()
+        worker_threads: list[int] = []
+
+        def recognize(*_args, **_kwargs):
+            worker_threads.append(threading.get_ident())
+            result = asyncio.run(asyncio.sleep(0, result=_recognizer_result("shipment")))
+            return SimpleNamespace(recognizer_result=result, reflex_used=False)
+
+        recognizer = SimpleNamespace(recognize=recognize)
+        with (
+            patch(
+                "app.neuro_bus.integrations.intent_integration.get_neuro_intent_recognizer",
+                return_value=recognizer,
+            ),
+            patch("app.neuro_bus.application_neuro_bridge.neuro_notify_intent_resolved"),
+        ):
+            result = await m._recognize_intent("生成发货单", source="pro", user_id="u1")
+
+        assert result["primary_intent"] == "shipment"
+        assert result["intent_source"] == "neuro_unified"
+        assert worker_threads and worker_threads[0] != main_thread

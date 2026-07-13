@@ -27,6 +27,11 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
+from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+from app.application.workflow.multimodal_user_content import (
+    EmptyMultimodalResponseError,
+    UnsupportedMultimodalModelError,
+)
 from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
@@ -35,7 +40,6 @@ from app.domain.context.session_context import (
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
-from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -158,6 +162,10 @@ class XcagiCompatChatBody(BaseModel):
             "neuro_ddd_context",
         ),
     )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
+    )
     system_prompt: str | None = Field(
         default=None,
         validation_alias=AliasChoices("system_prompt", "system", "instructions"),
@@ -192,6 +200,10 @@ class XcagiCompatChatBatchBody(BaseModel):
             "neuro_context",
             "neuro_ddd_context",
         ),
+    )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
     )
     system_prompt: str | None = Field(
         default=None,
@@ -236,6 +248,10 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         return HTTPException(status_code=503, detail=f"无法连接大模型服务: {exc}")
     if isinstance(exc, APIError):
         return HTTPException(status_code=502, detail=f"大模型接口错误: {exc}")
+    if isinstance(exc, UnsupportedMultimodalModelError):
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, EmptyMultimodalResponseError):
+        return HTTPException(status_code=502, detail=str(exc))
     if isinstance(exc, RuntimeError):
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, ValueError):
@@ -634,6 +650,24 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         set_llm_mode(m)
     runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
     runtime_context = runtime_context_with_tier(runtime_context, ai_tier)
+    # Keep stream and JSON chat on the same verified business-action policy.
+    # This branch intentionally runs before creating a legacy AgentRun: a
+    # blocked/no-data action must not surface as a 100%-completed planner task.
+    from app.application.chat_business_safety import try_handle_business_chat_action
+
+    business_payload = try_handle_business_chat_action(
+        body.message,
+        runtime_context=runtime_context,
+        user_id=body.user_id,
+        request=request,
+    )
+    if business_payload is not None:
+        response_text = str(
+            business_payload.get("response") or business_payload.get("message") or ""
+        )
+        yield _sse_event_line({"type": "token", "text": response_text})
+        yield _sse_event_line({"type": "done", "result": business_payload})
+        return
     ok_read, read_req = _ensure_chat_db_read_authorized(
         request,
         message=body.message,
@@ -769,12 +803,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             return
         merged = "".join(reply_parts)
         if not merged.strip():
-            market = (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "修茈市场"
-            ).rstrip("/")
-            msg = f"修茈平台未返回内容，请确认已登录且 {market} 可访问。"
+            msg = (
+                "模型服务已完成请求，但没有返回可显示的正文。"
+                "若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
+            )
             if pre_run is not None:
                 payload = {
                     "success": False,

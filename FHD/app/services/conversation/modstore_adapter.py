@@ -26,9 +26,12 @@
     adapter = create_modstore_adapter_from_env()
 """
 
+import hashlib
 import json
 import logging
 import os
+import re
+import threading
 import time
 from collections.abc import Iterator
 from types import SimpleNamespace
@@ -36,9 +39,55 @@ from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
+from app.application.workflow.multimodal_user_content import (
+    messages_have_image_parts,
+    replace_image_parts_with_ocr_text,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_VISION_HINT_RE = re.compile(
+    r"vision|vl-|vlm|deepseek-vl|qwen-vl|llava|omni|gpt-4o|gpt-4\.1|"
+    r"gpt-4-turbo|gemini-1\.5|gemini-2|claude-3|claude-sonnet|claude-opus|多模态",
+    re.IGNORECASE,
+)
+_CATALOG_CACHE_TTL_SECONDS = 300.0
+_CATALOG_CACHE: dict[tuple[str, str], tuple[float, dict[str, Any]]] = {}
+_CATALOG_CACHE_LOCK = threading.Lock()
+
+
+def _catalog_model_vision_support(
+    catalog: dict[str, Any], provider: str, model: str
+) -> bool | None:
+    payload = catalog.get("data") if isinstance(catalog.get("data"), dict) else catalog
+    providers = payload.get("providers") if isinstance(payload, dict) else None
+    if not isinstance(providers, list):
+        return True if _VISION_HINT_RE.search(model or "") else None
+    for block in providers:
+        if not isinstance(block, dict) or str(block.get("provider") or "").lower() != provider:
+            continue
+        detailed = block.get("models_detailed")
+        if not isinstance(detailed, list):
+            break
+        for row in detailed:
+            if not isinstance(row, dict) or str(row.get("id") or "") != model:
+                continue
+            capability = row.get("capability")
+            effective = (
+                str(capability.get("effective_category") or "").lower()
+                if isinstance(capability, dict)
+                else ""
+            )
+            category = str(row.get("category") or effective).lower()
+            if category == "vlm" or effective == "vlm":
+                return True
+            if _VISION_HINT_RE.search(model or ""):
+                return True
+            if category or effective:
+                return False
+            return None
+    return True if _VISION_HINT_RE.search(model or "") else None
 
 
 def _strip_bearer_prefix(value: str) -> str:
@@ -127,6 +176,7 @@ class ModstorePlatformAdapter:
         default_provider: str = "xiaomi",
         default_model: str = "mimo-v2.5-pro",
         timeout: float = 60.0,
+        close_after_call: bool = False,
     ):
         """
         初始化平台代理适配器
@@ -141,6 +191,8 @@ class ModstorePlatformAdapter:
             default_provider: 默认供应商 (环境变量: LLM_PROVIDER)
             default_model: 默认模型 (环境变量: LLM_MODEL)
             timeout: 请求超时时间(秒)
+            close_after_call: 每次异步补全后关闭客户端。请求级适配器应开启，
+                              避免客户端跨越其创建事件循环的生命周期。
         """
         self.platform_url = (
             platform_url or os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
@@ -155,6 +207,7 @@ class ModstorePlatformAdapter:
         self.default_provider = os.environ.get("LLM_PROVIDER", default_provider).lower()
         self.default_model = os.environ.get("LLM_MODEL", default_model)
         self.timeout = timeout
+        self.close_after_call = bool(close_after_call)
 
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -262,7 +315,10 @@ class ModstorePlatformAdapter:
                 if not auth_token:
                     # 多用户环境按 user_id 过滤，防止 fallback 串号
                     fallback_user_id = _user_id_from_session(effective_session_id)
-                    if effective_session_id or fallback_user_id is not None:
+                    # An arbitrary/stale session id must never unlock the global
+                    # "latest token" fallback.  Only a session that resolves to
+                    # a concrete local user may reuse that user's latest token.
+                    if fallback_user_id is not None:
                         latest_token = latest_session_market_token(user_id=fallback_user_id)
                         if latest_token:
                             auth_token = latest_token
@@ -397,9 +453,96 @@ class ModstorePlatformAdapter:
                 effective_model = right.strip()
         return effective_provider, effective_model
 
+    def _catalog_cache_key(self) -> tuple[str, str]:
+        token_fingerprint = hashlib.sha256((self.auth_token or "").encode("utf-8")).hexdigest()[:16]
+        return self.platform_url, token_fingerprint
+
+    def _cached_catalog(self) -> dict[str, Any] | None:
+        key = self._catalog_cache_key()
+        now = time.monotonic()
+        with _CATALOG_CACHE_LOCK:
+            cached = _CATALOG_CACHE.get(key)
+            if cached and cached[0] > now:
+                return cached[1]
+            if cached:
+                _CATALOG_CACHE.pop(key, None)
+        return None
+
+    def _remember_catalog(self, catalog: dict[str, Any]) -> None:
+        with _CATALOG_CACHE_LOCK:
+            _CATALOG_CACHE[self._catalog_cache_key()] = (
+                time.monotonic() + _CATALOG_CACHE_TTL_SECONDS,
+                catalog,
+            )
+
+    def _model_vision_support_sync(self, provider: str, model: str) -> bool | None:
+        catalog = self._cached_catalog()
+        if catalog is None:
+            try:
+                with httpx.Client(
+                    timeout=httpx.Timeout(min(self.timeout, 15.0), connect=5.0),
+                    headers=self._build_headers(),
+                ) as client:
+                    response = client.get(f"{self.platform_url}/api/llm/catalog")
+                    response.raise_for_status()
+                    raw = response.json()
+                if isinstance(raw, dict):
+                    catalog = raw
+                    self._remember_catalog(raw)
+            except RECOVERABLE_ERRORS as exc:
+                logger.info("[Modstore] 无法读取模型目录，图片请求将尝试本地 OCR: %s", exc)
+        return _catalog_model_vision_support(catalog or {}, provider, model)
+
+    async def _model_vision_support(self, provider: str, model: str) -> bool | None:
+        catalog = self._cached_catalog()
+        if catalog is None:
+            try:
+                client = await self._get_client()
+                response = await client.get(f"{self.platform_url}/api/llm/catalog")
+                response.raise_for_status()
+                raw = response.json()
+                if isinstance(raw, dict):
+                    catalog = raw
+                    self._remember_catalog(raw)
+            except RECOVERABLE_ERRORS as exc:
+                logger.info("[Modstore] 无法读取模型目录，图片请求将尝试本地 OCR: %s", exc)
+        return _catalog_model_vision_support(catalog or {}, provider, model)
+
+    def _prepare_messages_sync(
+        self, messages: List[Dict[str, Any]], provider: str, model: str
+    ) -> List[Dict[str, Any]]:
+        if not messages_have_image_parts(messages):
+            return messages
+        support = self._model_vision_support_sync(provider, model)
+        if support is True:
+            return messages
+        return replace_image_parts_with_ocr_text(
+            messages,
+            model_label=f"{provider}/{model}",
+            model_confirmed_text_only=support is False,
+        )
+
+    async def _prepare_messages(
+        self, messages: List[Dict[str, Any]], provider: str, model: str
+    ) -> List[Dict[str, Any]]:
+        if not messages_have_image_parts(messages):
+            return messages
+        support = await self._model_vision_support(provider, model)
+        if support is True:
+            return messages
+        # OCR engines are CPU-bound and may initialize native libraries.
+        import asyncio
+
+        return await asyncio.to_thread(
+            replace_image_parts_with_ocr_text,
+            messages,
+            model_label=f"{provider}/{model}",
+            model_confirmed_text_only=support is False,
+        )
+
     async def chat_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
         provider: str = None,
@@ -428,6 +571,7 @@ class ModstorePlatformAdapter:
             raise ValueError("修茈市场平台URL未配置 (MODSTORE_PLATFORM_URL)")
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
+        messages = await self._prepare_messages(messages, effective_provider, effective_model)
 
         url = f"{self.platform_url}/api/llm/chat"
 
@@ -504,10 +648,16 @@ class ModstorePlatformAdapter:
         except RECOVERABLE_ERRORS as e:
             logger.error("[Modstore] 调用异常: %s", e, exc_info=True)
             raise
+        finally:
+            if self.close_after_call:
+                try:
+                    await self.close()
+                except RECOVERABLE_ERRORS:
+                    logger.debug("关闭请求级 Modstore 客户端失败", exc_info=True)
 
     async def stream_chat_completion(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         temperature: float = 0.7,
         max_tokens: int = 2000,
         provider: str = None,
@@ -524,6 +674,7 @@ class ModstorePlatformAdapter:
             raise ValueError("修茈市场平台URL未配置")
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
+        messages = await self._prepare_messages(messages, effective_provider, effective_model)
 
         url = f"{self.platform_url}/api/llm/chat/stream"
 
@@ -542,12 +693,19 @@ class ModstorePlatformAdapter:
 
         logger.info("[Modstream] 启动流式请求: %s/%s", effective_provider, effective_model)
 
-        client = await self._get_client()
-        async with client.stream("POST", url, json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    yield line[6:]
+        try:
+            client = await self._get_client()
+            async with client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        yield line[6:]
+        finally:
+            if self.close_after_call:
+                try:
+                    await self.close()
+                except RECOVERABLE_ERRORS:
+                    logger.debug("关闭请求级 Modstore 流式客户端失败", exc_info=True)
 
     def chat_completion_sync(
         self,
@@ -577,6 +735,7 @@ class ModstorePlatformAdapter:
             pass
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
+        messages = self._prepare_messages_sync(messages, effective_provider, effective_model)
         url = f"{self.platform_url}/api/llm/chat"
         payload: Dict[str, Any] = {
             "provider": effective_provider,
@@ -637,6 +796,7 @@ class ModstorePlatformAdapter:
             raise ValueError("修茈市场平台URL未配置")
 
         effective_provider, effective_model = self._resolve_provider_model(provider, model)
+        messages = self._prepare_messages_sync(messages, effective_provider, effective_model)
         url = f"{self.platform_url}/api/llm/chat/stream"
         payload: Dict[str, Any] = {
             "provider": effective_provider,

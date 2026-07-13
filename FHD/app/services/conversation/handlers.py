@@ -332,7 +332,10 @@ class HandlersMixin:
 
         if export_hit or export_with_context:
             return {
-                "text": "已开始导出购买单位列表为 XLSX，下载将自动开始。",
+                "text": (
+                    "已为你打开购买单位 XLSX 导出入口，请点击下载。"
+                    "只有浏览器实际收到文件后才算导出完成。"
+                ),
                 "action": "auto_action",
                 "data": {"type": "export_customers_xlsx"},
             }
