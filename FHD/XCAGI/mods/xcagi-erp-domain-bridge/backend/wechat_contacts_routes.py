@@ -8,6 +8,41 @@ from fastapi import APIRouter, Body, Query
 from app.mod_sdk.erp_wechat_contacts_facade import tag_legacy_response
 
 
+def _to_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:
+    """Adapt the legacy desktop feed into the shape consumed by the chat assistant."""
+    items = raw.get("items") if isinstance(raw, dict) else []
+    if not isinstance(items, list):
+        items = []
+    feed: list[dict] = []
+    for index, item in enumerate(items[:per_contact]):
+        if not isinstance(item, dict):
+            continue
+        contact_id = str(item.get("username") or item.get("contact_id") or index + 1)
+        summary = str(item.get("summary") or "").strip()
+        message = {
+            "role": "contact",
+            "text": summary,
+            "timestamp": item.get("timestamp") or 0,
+            "msg_type": str(item.get("msg_type") or "text"),
+        }
+        feed.append(
+            {
+                "contact_id": contact_id,
+                "contact_name": str(item.get("display_name") or contact_id),
+                "unread_count": int(item.get("unread_count") or 0),
+                "messages": [message] if summary else [],
+            }
+        )
+    error = str(raw.get("error") or "").strip() if isinstance(raw, dict) else ""
+    return {
+        "success": True,
+        "feed": feed,
+        "items": items[:per_contact],
+        "per_contact": per_contact,
+        "unavailable_reason": error or None,
+    }
+
+
 def mount_wechat_contacts_routes(router: APIRouter) -> None:
     @router.get("/wechat_contacts")
     def mod_wechat_contacts_list(
@@ -27,6 +62,17 @@ def mount_wechat_contacts_routes(router: APIRouter) -> None:
         from app.fastapi_routes.domains.wechat.compat_routes import wechat_contacts_search_compat
 
         return tag_legacy_response(wechat_contacts_search_compat(q=q))
+
+    @router.get("/wechat_contacts/work_mode_feed")
+    def mod_wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)):
+        from app.fastapi_routes.domains.wechat.compat_routes import wechat_work_mode_feed
+
+        return tag_legacy_response(
+            _to_work_mode_feed_payload(
+                wechat_work_mode_feed(per_contact=per_contact),
+                per_contact=per_contact,
+            )
+        )
 
     @router.get("/wechat_contacts/ensure_contact_cache")
     def mod_wechat_ensure_cache_get():

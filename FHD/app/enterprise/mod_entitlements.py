@@ -11,6 +11,8 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import os
+import time
 from typing import Any
 
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
@@ -26,6 +28,15 @@ _cached_market_username: str = ""
 _cached_entitled_client_mod_ids: set[str] | None = None
 _cached_account_kind: str = "enterprise"
 _cached_market_is_admin: bool = False
+_entitlement_sync_at_by_session: dict[str, float] = {}
+_reloaded_entitlement_ids_by_session: dict[str, frozenset[str]] = {}
+
+
+def _entitlement_sync_ttl_seconds() -> float:
+    try:
+        return max(0.0, float(os.getenv("XCAGI_ENTITLEMENT_SYNC_TTL_SECONDS", "300")))
+    except ValueError:
+        return 300.0
 
 
 def is_client_mod_id(mod_id: str) -> bool:
@@ -60,6 +71,8 @@ def clear_session_entitlements() -> None:
     _cached_entitled_client_mod_ids = None
     _cached_account_kind = "enterprise"
     _cached_market_is_admin = False
+    _entitlement_sync_at_by_session.clear()
+    _reloaded_entitlement_ids_by_session.clear()
 
 
 def set_session_entitlements(
@@ -388,13 +401,22 @@ def _augment_entitled_for_username(username: str, current: set[str] | None) -> s
     return augment_entitled_client_mod_ids_for_username(username, current)
 
 
-async def sync_entitlements_for_session(session_id: str) -> set[str]:
+async def sync_entitlements_for_session(session_id: str, *, force: bool = False) -> set[str]:
     """企业版：优先用修茈市场 token 刷新 user_mods 权益；失败则回退 session 行缓存。"""
     if not enterprise_mod_filter_active():
         return set()
     sid = (session_id or "").strip()
     if not sid:
         return set()
+    cached_now = get_cached_entitled_client_mod_ids()
+    last_sync = _entitlement_sync_at_by_session.get(sid, 0.0)
+    if (
+        not force
+        and cached_now is not None
+        and last_sync > 0
+        and time.monotonic() - last_sync < _entitlement_sync_ttl_seconds()
+    ):
+        return set(cached_now)
     try:
         from app.fastapi_routes.market_account import resolve_valid_market_access_token
 
@@ -415,7 +437,11 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
                 market_is_admin=_cached_market_is_admin,
             )
             persist_entitlements_to_session_row(sid, client_ids)
-            await reload_enterprise_mods_after_login()
+            entitlement_fingerprint = frozenset(client_ids)
+            if _reloaded_entitlement_ids_by_session.get(sid) != entitlement_fingerprint:
+                await reload_enterprise_mods_after_login()
+                _reloaded_entitlement_ids_by_session[sid] = entitlement_fingerprint
+            _entitlement_sync_at_by_session[sid] = time.monotonic()
             return client_ids
         restore_entitlements_from_session_row(sid)
         cached = _augment_entitled_for_username(
@@ -429,6 +455,7 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
                 account_kind=_cached_account_kind,
                 market_is_admin=_cached_market_is_admin,
             )
+        _entitlement_sync_at_by_session[sid] = time.monotonic()
         return cached
     except RECOVERABLE_ERRORS:
         logger.exception("sync_entitlements_for_session failed")
@@ -437,6 +464,7 @@ async def sync_entitlements_for_session(session_id: str) -> set[str]:
         cached = _augment_entitled_for_username(
             local_username, get_cached_entitled_client_mod_ids() or set()
         )
+        _entitlement_sync_at_by_session[sid] = time.monotonic()
         return cached
 
 

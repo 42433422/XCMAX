@@ -276,4 +276,11 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
+    # PyInstaller replaces freeze_support() so frozen worker/resource-tracker
+    # invocations are dispatched before our argparse sees their private flags.
+    # Without this, faster-whisper can still return text while leaking a dead
+    # multiprocessing resource tracker after every cold model load.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()

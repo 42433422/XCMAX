@@ -227,7 +227,7 @@ def _run_memory_v2_agent(
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.tools import get_workflow_tool_registry
+    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     user_id = _memory_v2_user_id_from_request(request, data)
@@ -273,10 +273,11 @@ def _run_memory_v2_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "memory-v2-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:

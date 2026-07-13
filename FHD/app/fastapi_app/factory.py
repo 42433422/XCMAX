@@ -50,6 +50,7 @@ def create_fastapi_app(
     enable_cors: bool = True,
     enable_docs: bool = True,
 ) -> FastAPI:
+    global _app_singleton
     if config_object is None:
         config_object = get_config("default")
 
@@ -173,6 +174,11 @@ def create_fastapi_app(
         logger.exception("Failed to register SPA history fallback: %s", e)
         raise
 
+    # ``create_fastapi_app`` is also called directly by the desktop runner.  Keep
+    # that serving instance as the process singleton so later login/entitlement
+    # callbacks mount dynamic MOD routes on the app that is actually listening.
+    # Previously ``get_fastapi_app()`` created a second, invisible FastAPI app.
+    _app_singleton = app
     return app
 
 

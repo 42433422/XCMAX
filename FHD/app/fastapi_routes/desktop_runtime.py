@@ -28,6 +28,7 @@ from app.desktop_runtime import (
 from app.desktop_runtime.model_downloader import ModelAsset, download_model, load_manifest
 from app.desktop_runtime.support_bundle import build_support_bundle_zip
 from app.infrastructure.auth.dependencies import get_logged_in_user
+from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 router = APIRouter(prefix="/api/desktop", tags=["desktop-runtime"])
@@ -66,6 +67,7 @@ def desktop_status(request: Request):
         timing = {}
     db_recovery = _resolve_db_recovery_status()
     last_backup = _resolve_last_backup(dirs)
+    runtime = runtime_integrity_snapshot(app)
     return {
         "desktopMode": is_desktop_mode(),
         "dataDir": str(dirs["root"]),
@@ -81,6 +83,10 @@ def desktop_status(request: Request):
         "modsBackgroundLoadScheduled": mods_bg,
         "appRoutesReady": routes_ready,
         "readyForUi": routes_ready,
+        "runtimeStatus": runtime["status"],
+        "degraded": runtime["status"] != "healthy",
+        "degradedReasons": runtime["degraded_reasons"],
+        "runtimeIntegrity": runtime,
         "modsReady": mods_full or not mods_bg,
         "startupTiming": timing,
         "dbRecovery": db_recovery,

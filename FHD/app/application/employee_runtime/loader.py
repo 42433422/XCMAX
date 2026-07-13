@@ -47,6 +47,32 @@ def _employees_root() -> Path:
     return Path(get_employee_registry()._root())
 
 
+def _employee_roots() -> list[Path]:
+    """Return writable employee packs first, then read-only bundled packs.
+
+    Packaged desktop builds intentionally keep the marketplace install root in
+    ``userData/mods`` while shipping a small, SKU-approved employee subset in
+    ``_MEIPASS/mods/_employees``.  The writable root must win when a user has
+    installed an override, but a missing user copy must not hide the bundled
+    employee from the runtime.
+    """
+
+    roots = [_employees_root()]
+    try:
+        from app.mod_sdk.edition_policy import bundled_mods_dir
+
+        bundled = bundled_mods_dir()
+        if bundled is not None:
+            candidate = Path(bundled) / "_employees"
+            if candidate.is_dir() and all(
+                candidate.resolve() != root.resolve() for root in roots
+            ):
+                roots.append(candidate)
+    except RECOVERABLE_ERRORS:
+        logger.debug("resolve bundled employee root failed", exc_info=True)
+    return roots
+
+
 def candidate_pack_ids(pack_id: str) -> list[str]:
     raw = str(pack_id or "").strip()
     if not raw:
@@ -59,11 +85,11 @@ def candidate_pack_ids(pack_id: str) -> list[str]:
 
 
 def resolve_pack_dir(pack_id: str) -> Path | None:
-    root = _employees_root()
-    for cid in candidate_pack_ids(pack_id):
-        pdir = root / cid
-        if (pdir / "manifest.json").is_file():
-            return pdir
+    for root in _employee_roots():
+        for cid in candidate_pack_ids(pack_id):
+            pdir = root / cid
+            if (pdir / "manifest.json").is_file():
+                return pdir
     return None
 
 

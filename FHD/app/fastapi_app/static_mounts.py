@@ -32,6 +32,14 @@ def resolve_xcmax_dashboard_dir() -> str | None:
 
 def mount_xcmax_dashboard_static(app: FastAPI) -> None:
     """挂载 /xcmax-dashboard -> 仓根全景 HTML/JS/CSS（AutomationPolicy iframe）。"""
+    try:
+        from app.utils.deployment import is_desktop_mode
+
+        if is_desktop_mode():
+            logger.info("桌面模式跳过 /xcmax-dashboard 挂载（运维面仅网页）")
+            return
+    except RECOVERABLE_ERRORS as exc:
+        logger.debug("desktop mode probe for xcmax dashboard skipped: %s", exc)
     directory = resolve_xcmax_dashboard_dir()
     if not directory:
         logger.warning("xcmax-dashboard 目录未找到，跳过挂载（需 XCAGI-Full-Pipeline.html 于仓根）")

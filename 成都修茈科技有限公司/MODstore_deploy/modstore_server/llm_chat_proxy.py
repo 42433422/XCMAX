@@ -20,6 +20,10 @@ _MODEL_ALIASES: dict[tuple[str, str], str] = {
     ("xiaomi", "MiMo-7B-RL-Think"): "mimo-v2.5-pro",
     # 部分区域网关不报 flash；统一映射到 pro（与 services.llm 基准默认一致）
     ("xiaomi", "mimo-v2-flash"): "mimo-v2.5-pro",
+    # 2026-06-30 下线的 V2 系列（官方替换表：platform.xiaomimimo.com/docs/.../deprecate）
+    ("xiaomi", "mimo-v2-pro"): "mimo-v2.5-pro",
+    ("xiaomi", "mimo-v2-omni"): "mimo-v2.5",
+    ("xiaomi", "mimo-v2-tts"): "mimo-v2.5-tts",
 }
 
 # 禁止使用进程级单例 AsyncClient：会在 ``asyncio.run()`` / 线程池等多事件循环场景下
