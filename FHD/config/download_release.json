@@ -1,12 +1,20 @@
 {
   "schema": "xcagi.download_release/v1",
-  "_doc": "官网下载版本 SSOT。稳定产品版本、下载目录和 Android versionName 统一为 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。last_push 仅记录历史推送，新制品通过门禁并上传后再回写。",
+  "_doc": "官网下载版本 SSOT。当前只发布 enterprise；personal 已冻结，仅保留历史兼容入口。稳定产品版本、下载目录和 Android versionName 统一为 1.0.0.0；npm/Electron/Apple 工具链内部映射为 1.0.0。",
   "version_lock": "1.0.0.0",
   "marketing_version": "1.0.0.0",
   "download_version": "1.0.0.0",
   "android_version": "1.0.0.0",
-  "release_ready": false,
-  "win_installer_mb": 213,
+  "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
+  "release_ready": true,
+  "active_skus": [
+    "enterprise"
+  ],
+  "frozen_skus": [
+    "personal"
+  ],
+  "primary_sku": "enterprise",
+  "win_installer_mb": 204,
   "cos_base_url": "https://xiu-ci.com",
   "_cos_base_note": "下载主机：xiu-ci.com（nginx 别名 /xcagi-v{version}/ → /var/www/update/releases/stable/，本机直供）；dl.xiu-ci.com(COS) 当前为空，待 CI 上传后可切回。",
   "release_root_template": "{cos_base_url}/xcagi-v{download_version}",
@@ -15,12 +23,6 @@
     "android": "stable"
   },
   "artifacts": {
-    "personal": {
-      "win": "XCAGI-Personal-Setup-1.0.0.0-x64.exe",
-      "mac_arm64": "XCAGI-Personal-1.0.0.0-mac-arm64.dmg",
-      "mac_x64": "XCAGI-Personal-1.0.0.0-mac-x64.dmg",
-      "android": "XCAGI-Personal-Android-1.0.0.0.apk"
-    },
     "enterprise": {
       "win": "XCAGI-Enterprise-Setup-1.0.0.0-x64.exe",
       "mac_arm64": "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg",
@@ -33,11 +35,11 @@
     "mac": "latest-mac.yml"
   },
   "last_push": {
-    "at": "2026-07-09T00:07:49.969633+00:00",
-    "release_train": "1.0.2.0",
-    "release_kind": "installer",
-    "git_sha": null,
-    "cos_uploaded": false,
-    "by": "installer-employee-chain"
+    "at": "2026-07-13T11:50:17.736612+00:00",
+    "release_train": "1.0.0.0",
+    "release_kind": "stable-enterprise",
+    "git_sha": "821b46ab784a5176bce24a519c09eb740e77ad3c",
+    "cos_uploaded": true,
+    "by": "release-desktop-workflow"
   }
 }

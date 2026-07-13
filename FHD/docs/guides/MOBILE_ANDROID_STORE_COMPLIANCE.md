@@ -4,8 +4,9 @@
 
 | SKU | applicationId | 目录 |
 |-----|---------------|------|
-| 个人版 | `com.xiuci.xcagi.mobile.personal` | `release/packages-v*/personal/`、`个人版/` |
 | 企业版 | `com.xiuci.xcagi.mobile.enterprise` | `release/packages-v*/enterprise/`、`企业版/` |
+
+个人版已冻结，不进入当前应用商店发布、签名、下载或验收；历史 applicationId 仅保留兼容记录。
 
 ## 隐私与协议
 
@@ -24,7 +25,7 @@
 
 ## 推送（国内商店）
 
-1. **Firebase**：在 Firebase 控制台创建项目，添加 personal/enterprise 两个 Android 应用，将 `google-services.json` 放入 `app/src/personal/`、`app/src/enterprise/`。
+1. **Firebase**：在 Firebase 控制台添加 enterprise Android 应用，将 `google-services.json` 放入企业版构建配置。
 2. **极光 JPush**：在 [极光控制台](https://www.jiguang.cn/) 创建应用，在 `local.properties` 设置 `JPUSH_APPKEY=你的AppKey`。
 3. 服务端 FHD：配置 `FIREBASE_SERVICE_ACCOUNT_JSON`、`JPUSH_APP_KEY`、`JPUSH_MASTER_SECRET` 后审批事件可推送。
 
@@ -42,10 +43,10 @@
 
 环境变量（MODstore）：`XCAGI_ANDROID_MIN_VERSION_CODE`、`XCAGI_ANDROID_LATEST_VERSION_CODE`、`XCAGI_ANDROID_LATEST_VERSION_NAME`。
 
-## 真机验收（1.4.0）
+## 真机验收（1.0.0.0）
 
 1. 首次安装 → 隐私同意 → 登录 → 首页/对话/工作台
-2. 个人账号仅个人包可登录；企业账号仅企业包
+2. 企业账号与管理员账号可登录；personal 账号不得进入企业工作台
 3. 检查更新、注销账号
 4. 审批推送（企业版 + 服务端密钥已配置）
 5. 扫码配对电脑（可选）
