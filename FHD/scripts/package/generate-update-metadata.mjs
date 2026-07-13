@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -16,12 +17,16 @@ const name = path.basename(artifact)
 const isMac = platform === 'mac' || name.endsWith('.dmg')
 const output = isMac ? 'latest-mac.yml' : 'latest.yml'
 
+if (isMac && path.extname(name).toLowerCase() !== '.zip') {
+  console.error(`macOS update metadata requires a ZIP artifact, got: ${name}`)
+  process.exit(2)
+}
+
 function resolveBuildSha() {
   const fromEnv = String(process.env.GITHUB_SHA || process.env.XCAGI_BUILD_SHA || '').trim()
   if (fromEnv) return fromEnv
   try {
-    const { execSync } = require('node:child_process')
-    return execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim()
+    return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
   } catch {
     return ''
   }

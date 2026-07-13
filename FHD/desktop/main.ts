@@ -4,6 +4,7 @@ import {
   Notification,
   Tray,
   app,
+  crashReporter,
   dialog,
   ipcMain,
   nativeImage,
@@ -19,6 +20,8 @@ import { networkInterfaces } from 'node:os'
 import path from 'node:path'
 import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
+import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
+import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 
 const APP_NAME = 'XCAGI'
 
@@ -334,6 +337,8 @@ let backendProcess: ChildProcessWithoutNullStreams | null = null
 let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
 let restartCount = 0
+let backendShutdownComplete = false
+let backendShutdownPromise: Promise<void> | null = null
 
 function repoRoot(): string {
   return app.isPackaged ? process.resourcesPath : path.resolve(__dirname, '..', '..')
@@ -462,6 +467,24 @@ function writeBackendLog(line: string): void {
   } catch {
     /* ignore logging failures */
   }
+}
+
+function initializeLocalCrashReporting(): void {
+  try {
+    const crashDir = path.join(app.getPath('userData'), 'crash-dumps')
+    fs.mkdirSync(crashDir, { recursive: true })
+    app.setPath('crashDumps', crashDir)
+    crashReporter.start({ uploadToServer: false, compress: true })
+    writeBackendLog(`[crash] local crash capture enabled dir=${crashDir}\n`)
+  } catch (error) {
+    writeBackendLog(`[crash] initialization failed: ${error instanceof Error ? error.message : String(error)}\n`)
+  }
+  process.on('uncaughtExceptionMonitor', error => {
+    writeBackendLog(`[crash] main uncaughtException: ${error.stack || error.message}\n`)
+  })
+  process.on('unhandledRejection', reason => {
+    writeBackendLog(`[crash] main unhandledRejection: ${reason instanceof Error ? reason.stack || reason.message : String(reason)}\n`)
+  })
 }
 
 function packagedBackendHealthTimeoutMs(): number {
@@ -969,31 +992,37 @@ function configureDesktopMediaPermissions(): void {
   })
 }
 
-function stopBackend(): void {
+async function stopBackend(): Promise<void> {
   const child = backendProcess
   backendProcess = null
-  if (!child || child.killed) {
+  if (!child) {
     return
   }
   writeBackendLog(`[${new Date().toISOString()}] backend stop requested\n`)
+  let result = 'already-exited'
   if (process.platform === 'win32' && child.pid) {
-    execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, error => {
-      if (error && !child.killed) {
-        child.kill()
-      }
+    const exited = waitForChildExit(child, 2500)
+    await new Promise<void>(resolve => {
+      execFile('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true }, () => resolve())
     })
+    result = (await exited) ? 'killed' : 'kill-timeout'
   } else {
-    child.kill('SIGTERM')
+    result = await terminateChildProcess(child)
   }
-  backendLogStream?.end(`[${new Date().toISOString()}] backend log closed\n`)
+  backendLogStream?.end(`[${new Date().toISOString()}] backend log closed result=${result}\n`)
   backendLogStream = null
 }
 
 async function createWindow(): Promise<void> {
   const icon = shellIconPath()
+  const statePath = path.join(app.getPath('userData'), 'window-state.json')
+  const savedBounds = readWindowState(statePath)
+  const display = savedBounds
+    ? screen.getDisplayMatching(savedBounds)
+    : screen.getPrimaryDisplay()
+  const initialBounds = clampWindowBounds(savedBounds, display.workArea)
   const winOpts: Electron.BrowserWindowConstructorOptions = {
-    width: 1440,
-    height: 920,
+    ...initialBounds,
     minWidth: 1180,
     minHeight: 760,
     title: APP_NAME,
@@ -1015,12 +1044,29 @@ async function createWindow(): Promise<void> {
   winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  const createdWindow = mainWindow
+  let stateWriteTimer: NodeJS.Timeout | null = null
+  const persistWindowState = () => {
+    if (createdWindow.isDestroyed() || createdWindow.isMinimized() || createdWindow.isFullScreen()) return
+    writeWindowState(statePath, createdWindow.getNormalBounds())
+  }
+  const scheduleWindowStateWrite = () => {
+    if (stateWriteTimer) clearTimeout(stateWriteTimer)
+    stateWriteTimer = setTimeout(() => {
+      stateWriteTimer = null
+      persistWindowState()
+    }, 250)
+  }
+  createdWindow.on('move', scheduleWindowStateWrite)
+  createdWindow.on('resize', scheduleWindowStateWrite)
+  createdWindow.on('close', persistWindowState)
   if (process.platform !== 'darwin') {
     mainWindow.setAutoHideMenuBar(true)
     mainWindow.setMenuBarVisibility(false)
   }
 
   mainWindow.on('closed', () => {
+    if (stateWriteTimer) clearTimeout(stateWriteTimer)
     mainWindow = null
   })
   if (process.platform === 'darwin') {
@@ -1044,6 +1090,26 @@ async function createWindow(): Promise<void> {
     }
     void shell.openExternal(url)
     return { action: 'deny' }
+  })
+  mainWindow.webContents.on('unresponsive', () => {
+    writeBackendLog('[crash] renderer unresponsive\n')
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeBackendLog(`[crash] renderer gone reason=${details.reason} exitCode=${details.exitCode}\n`)
+    if (!app.isQuitting && details.reason !== 'clean-exit') {
+      void dialog.showMessageBox(createdWindow, {
+        type: 'error',
+        title: APP_NAME,
+        message: '界面进程意外退出',
+        detail: '崩溃信息已保存在数据目录。可以重新加载界面继续工作，后端与本地数据不会被清除。',
+        buttons: ['重新加载', '退出'],
+        defaultId: 0,
+        cancelId: 1,
+      }).then(({ response }) => {
+        if (response === 0 && !createdWindow.isDestroyed()) createdWindow.reload()
+        else app.quit()
+      })
+    }
   })
 
   void mainWindow.loadURL(resolveDesktopSplashUrl())
@@ -1202,6 +1268,7 @@ function bootstrap(): void {
   if (!gotLock) {
     app.quit()
   } else {
+    initializeLocalCrashReporting()
     app.on('second-instance', () => {
       if (mainWindow) {
         if (mainWindow.isMinimized()) mainWindow.restore()
@@ -1211,7 +1278,21 @@ function bootstrap(): void {
 
     app.on('before-quit', () => {
       app.isQuitting = true
-      stopBackend()
+    })
+
+    // will-quit runs after BrowserWindows have closed, so renderer keep-alive
+    // connections no longer prevent the backend from shutting down gracefully.
+    app.on('will-quit', event => {
+      if (backendShutdownComplete) {
+        return
+      }
+      event.preventDefault()
+      if (!backendShutdownPromise) {
+        backendShutdownPromise = stopBackend().finally(() => {
+          backendShutdownComplete = true
+          app.quit()
+        })
+      }
     })
 
     app.whenReady().then(async () => {
