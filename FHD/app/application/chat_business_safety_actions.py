@@ -85,7 +85,7 @@ def _leave_fields(message: str) -> dict[str, Any]:
     elif "全天" in text or "一天" in text:
         period, hours = "full_day", 8.0
     else:
-        match = re.search(r"(\d+(?:\.\d+)?)小时", text)
+        match = re.search(r"(\d{1,4}(?:\.\d{1,2})?)小时", text)
         period, hours = ("hours", float(match.group(1))) if match else ("", 0.0)
     approval_positive = bool(
         re.search(r"(?:主管|领导|经理)?.{0,8}(?:已|已经)?(?:审批通过|批准|同意)", text)

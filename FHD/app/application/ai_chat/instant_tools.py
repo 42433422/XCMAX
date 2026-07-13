@@ -298,9 +298,16 @@ class AIChatInstantToolsMixin:
             return ""
 
         if original_message and len(products) >= 1:
-            normalized_msg = original_message.replace("，", ",").replace("。", "").replace(" ", "")
+            # Bound free-form input before applying the legacy compatibility
+            # expression.  Order messages are short and no valid command needs
+            # more than this limit.
+            normalized_msg = (
+                original_message.replace("，", ",").replace("。", "").replace(" ", "")[:2000]
+            )
             order_pattern = re.compile(
-                r"帮?打\s*(.+?)\s*的?\s*货单?[,，]?\s*(\d+)\s*桶\s*(\d+[A-Z]?(?:-\d+[A-Z]?)?)\s*规格\s*(\d+)\s*[,，]?\s*(\d+)\s*桶\s*(\d+[A-Z]?(?:-\d+[A-Z]?)?)\s*规格\s*(\d+)"
+                r"帮?打(.{1,100}?)的?货单?,?(\d{1,6})桶"
+                r"(\d{1,12}[A-Z]?(?:-\d{1,12}[A-Z]?)?)规格(\d{1,6}),?"
+                r"(\d{1,6})桶(\d{1,12}[A-Z]?(?:-\d{1,12}[A-Z]?)?)规格(\d{1,6})"
             )
             matches = list(order_pattern.finditer(normalized_msg))
 

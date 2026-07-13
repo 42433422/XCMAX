@@ -149,4 +149,4 @@ async def test_mobile_admin_codex_invoke_rejects_empty_message(ext_mod):
     assert isinstance(response, JSONResponse)
     assert response.status_code == 400
     payload = json.loads(response.body.decode("utf-8"))
-    assert payload["message"] == "message 不能为空"
+    assert payload["message"] == "请求参数无效"

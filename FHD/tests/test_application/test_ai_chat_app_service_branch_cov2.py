@@ -973,6 +973,10 @@ class TestGuessDefaultPurchaseUnit:
 class TestTryStructuredReloadRecords:
     """_try_structured_reload_records 分支测试。"""
 
+    @pytest.fixture(autouse=True)
+    def _trusted_test_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     def test_no_file_path_returns_none(self):
         result = AIChatApplicationService._try_structured_reload_records({}, {}, None)
         assert result is None
@@ -1747,6 +1751,10 @@ class TestProcessChatErrorBranches:
 
 
 class TestDefaultPurchaseUnitForImportBranchCov:
+    @pytest.fixture(autouse=True)
+    def _trusted_test_workspace(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("WORKSPACE_ROOT", str(tmp_path))
+
     """_default_purchase_unit_for_import additional branch tests."""
 
     def test_request_context_hint(self):

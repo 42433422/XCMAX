@@ -6,7 +6,6 @@
 
 import html
 import logging
-import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -15,6 +14,7 @@ from app.db.models import AIConversation, AIConversationSession
 from app.db.session import get_db
 from app.neuro_bus.event_publisher_mixin import NeuroEventPublisherMixin
 from app.services.mobile_push import notify_user
+from app.utils.html_text import html_to_plain_text
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class ConversationService(NeuroEventPublisherMixin):
     @staticmethod
     def _title_from_user_content(content: Any, max_length: int = 48) -> str:
         decoded = html.unescape(str(content or ""))
-        plain = " ".join(re.sub(r"<[^>]+>", " ", decoded).split())
+        plain = " ".join(html_to_plain_text(decoded).split())
         if len(plain) > max_length:
             return f"{plain[:max_length]}…"
         return plain

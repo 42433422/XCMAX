@@ -215,10 +215,11 @@ async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
         if not branches:
             branches = _mobile_git_branches_from_remote()
         return format_mobile_response(data={"branches": branches})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_git_branches")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -240,10 +241,11 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
             .list_groups(user_id=uid)
         )
         return format_mobile_response(data={"groups": groups})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_groups_list")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -271,10 +273,11 @@ async def mobile_ai_group_candidates(request: Request, user=Depends(get_mobile_u
                 "count": len(candidates),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_candidates")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -298,14 +301,15 @@ async def mobile_ai_groups_create(
             .create_group(user_id=uid, name=body.name)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_groups_create")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -332,10 +336,11 @@ async def mobile_ai_group_messages(
             .get_messages(user_id=uid, group_id=group_id, limit=limit)
         )
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -369,14 +374,15 @@ async def mobile_ai_group_post(
             )
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_post")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -410,14 +416,15 @@ async def mobile_ai_group_add_member(
             )
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_add_member")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -441,14 +448,15 @@ async def mobile_ai_group_remove_member(
             .remove_member(user_id=uid, group_id=group_id, employee_id=employee_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_remove_member")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -472,14 +480,15 @@ async def mobile_ai_group_toggle_pin(
             .toggle_pinned(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_toggle_pin")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -503,14 +512,15 @@ async def mobile_ai_group_mark_unread(
             .mark_unread(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_mark_unread")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -532,14 +542,15 @@ async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depend
             .mark_read(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_mark_read")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -563,14 +574,15 @@ async def mobile_ai_group_toggle_followed(
             .toggle_followed(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_toggle_followed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -594,14 +606,15 @@ async def mobile_ai_group_toggle_hidden(
             .toggle_hidden(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_toggle_hidden")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -623,12 +636,13 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
             .delete_group(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "请求参数无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_ai_group_delete")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
+            status_code=500,
         )

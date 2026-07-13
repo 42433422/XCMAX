@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.application.group_chat.constants import (
     _BROKEN_MARKDOWN_LINK_RE,
@@ -17,9 +22,11 @@ from app.application.group_chat.constants import (
 )
 from app.application.group_chat.employee_registry import (
     _member_public_shape,
-    _safe_json_line,
     _utc_now,
 )
+
+_PROCESS_STORAGE_KEY = Fernet.generate_key()
+_ENCRYPTED_LINE_PREFIX = "v1:"
 
 
 class AiGroupChatStorageMixin:
@@ -258,35 +265,63 @@ class AiGroupChatStorageMixin:
         if not path.exists():
             return []
         rows: list[dict[str, Any]] = []
+        saw_plaintext = False
         for line in path.read_text(encoding="utf-8").splitlines():
             if not line.strip():
                 continue
             try:
-                item = json.loads(line)
-            except json.JSONDecodeError:
+                if line.startswith(_ENCRYPTED_LINE_PREFIX):
+                    raw = self._storage_cipher().decrypt(
+                        line[len(_ENCRYPTED_LINE_PREFIX) :].encode("ascii")
+                    )
+                    item = json.loads(raw.decode("utf-8"))
+                else:
+                    item = json.loads(line)
+                    saw_plaintext = True
+            except (InvalidToken, UnicodeDecodeError, json.JSONDecodeError, ValueError):
                 continue
             if isinstance(item, dict):
                 rows.append(item)
+        if saw_plaintext:
+            self._rewrite_encrypted(path, rows)
         return rows
+
+    @staticmethod
+    def _storage_cipher() -> Fernet:
+        secret = (
+            os.environ.get("GROUP_CHAT_STORAGE_KEY") or os.environ.get("SECRET_KEY") or ""
+        ).strip()
+        if not secret:
+            return Fernet(_PROCESS_STORAGE_KEY)
+        digest = hashlib.sha256(f"xcagi-group-chat:{secret}".encode()).digest()
+        return Fernet(base64.urlsafe_b64encode(digest))
+
+    @classmethod
+    def _encrypted_line(cls, payload: dict[str, Any]) -> str:
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        token = cls._storage_cipher().encrypt(raw).decode("ascii")
+        return f"{_ENCRYPTED_LINE_PREFIX}{token}\n"
+
+    @classmethod
+    def _rewrite_encrypted(cls, path: Path, rows: list[dict[str, Any]]) -> None:
+        with path.open("w", encoding="utf-8") as fh:
+            for row in rows:
+                fh.write(cls._encrypted_line(row))
 
     def _append_group(self, group: dict[str, Any]) -> None:
         with self._groups_path.open("a", encoding="utf-8") as fh:
-            fh.write(_safe_json_line(group))
+            fh.write(self._encrypted_line(group))
 
     def _rewrite_groups(self, groups: list[dict[str, Any]]) -> None:
-        with self._groups_path.open("w", encoding="utf-8") as fh:
-            for g in groups:
-                fh.write(_safe_json_line(g))
+        self._rewrite_encrypted(self._groups_path, groups)
 
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("a", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(_safe_json_line(m))
+                fh.write(self._encrypted_line(m))
 
     def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
-        with self._messages_path.open("w", encoding="utf-8") as fh:
-            for m in messages:
-                fh.write(_safe_json_line(m))
+        self._rewrite_encrypted(self._messages_path, messages)
 
     def _resolve_group_id(self, *, user_id: int, group_id: str) -> str:
         raw = str(group_id or "").strip()

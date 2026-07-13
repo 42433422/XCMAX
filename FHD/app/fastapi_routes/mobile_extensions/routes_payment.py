@@ -115,10 +115,10 @@ async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
                 "payment_channels": list(_MOBILE_PAYMENT_CHANNELS),
             }
         return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile payment plans failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -180,10 +180,10 @@ async def mobile_payment_checkout(
                 status_code=status,
             )
         return format_mobile_response(data=payload, message="下单成功")
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile payment checkout failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -215,10 +215,10 @@ async def mobile_payment_query(
                 status_code=status,
             )
         return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile payment query failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 

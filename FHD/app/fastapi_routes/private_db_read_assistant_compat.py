@@ -120,6 +120,8 @@ def build_private_db_assistant_router() -> APIRouter:
             from app.application.facades.wechat_facade import refresh_wechat_contacts_from_decrypt
 
             payload, code = refresh_wechat_contacts_from_decrypt()
+            if code >= 500:
+                payload = {"success": False, "message": "微信联系人刷新暂不可用"}
             return JSONResponse(payload, status_code=code)
 
         if refresh_type == "messages":
@@ -129,9 +131,9 @@ def build_private_db_assistant_router() -> APIRouter:
                 payload = sync_group_messages()
                 code = 200 if payload.get("success") else 500
                 return JSONResponse(payload, status_code=code)
-            except RECOVERABLE_ERRORS as exc:
+            except RECOVERABLE_ERRORS:
                 return JSONResponse(
-                    {"success": False, "message": f"同步聊天记录失败：{exc}"},
+                    {"success": False, "message": "同步聊天记录暂不可用"},
                     status_code=500,
                 )
 

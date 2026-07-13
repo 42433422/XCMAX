@@ -94,10 +94,8 @@ def read_workspace_output_files(
     *,
     max_bytes: int = 2_097_152,
 ) -> list[dict[str, Any]]:
-    from fastapi import HTTPException
-
     from app.infrastructure.workspace import workspace_root as configured_workspace_root
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
+    from app.utils.safe_files import existing_file_under
 
     base = configured_workspace_root()
     out: list[dict[str, Any]] = []
@@ -105,33 +103,16 @@ def read_workspace_output_files(
         raw_path = str(raw or "").strip()
         if not raw_path:
             continue
-        candidate = Path(raw_path).expanduser()
-        if candidate.is_absolute():
-            path = candidate.resolve()
-            try:
-                rel = path.relative_to(base).as_posix()
-            except ValueError:
-                out.append({"path": raw_path, "kind": "text", "error": "invalid_path"})
-                continue
-        else:
-            rel = raw_path.replace("\\", "/").lstrip("/")
-            try:
-                path = resolve_safe_workspace_relpath(rel)
-            except (ValueError, HTTPException) as exc:
-                out.append({"path": rel, "kind": "text", "error": str(exc)})
-                continue
-        try:
-            path.relative_to(base)
-        except ValueError:
-            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
+        path = existing_file_under(base, raw_path)
+        if path is None:
+            display_path = raw_path if Path(raw_path).is_absolute() else raw_path.lstrip("/\\")
+            out.append({"path": display_path, "kind": "text", "error": "invalid_path"})
             continue
-        if not path.is_file():
-            out.append({"path": rel, "kind": "text", "error": "file_not_found"})
-            continue
+        rel = path.relative_to(base).as_posix()
         try:
             blob = path.read_bytes()[:max_bytes]
-        except OSError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
+        except OSError:
+            out.append({"path": rel, "kind": "text", "error": "file_read_failed"})
             continue
         suffix = path.suffix.lower()
         if suffix == ".json":

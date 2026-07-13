@@ -92,8 +92,8 @@ async def mobile_sync_status(user=Depends(get_mobile_user)):
             st["inbox_pending"] = conn.execute(
                 "SELECT COUNT(*) FROM sync_inbox WHERE status='pending'",
             ).fetchone()[0]
-    except OPERATIONAL_ERRORS as exc:
-        st = {"error": str(exc), "healthy": False}
+    except OPERATIONAL_ERRORS:
+        st = {"error": "同步状态暂不可用", "healthy": False}
     st.update(_mobile_sync_runtime_contract())
     return format_mobile_response(data=st)
 
@@ -136,7 +136,7 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_sync_pull: %s", exc)
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -168,13 +168,13 @@ async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
             from app.application.xcmax_sync_app import apply_inbox
 
             apply_result = apply_inbox(limit=written + 50) or {}
-        except OPERATIONAL_ERRORS as ae:
-            apply_result = {"error": str(ae)}
+        except OPERATIONAL_ERRORS:
+            apply_result = {"error": "同步应用暂不可用"}
         return format_mobile_response(data={"written": written, "apply": apply_result})
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_sync_push: %s", exc)
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -194,7 +194,7 @@ async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile_sync_ack: %s", exc)
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -218,6 +218,6 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
                 """,
             ).fetchall()
             items = [dict(r) for r in rows]
-    except OPERATIONAL_ERRORS as exc:
-        return format_mobile_response(data={"items": [], "error": str(exc)})
+    except OPERATIONAL_ERRORS:
+        return format_mobile_response(data={"items": [], "error": "同步冲突暂不可用"})
     return format_mobile_response(data={"items": items})

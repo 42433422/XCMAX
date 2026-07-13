@@ -310,14 +310,16 @@ class TestApiOrdersGet:
 
 class TestApiOrdersExport:
     def test_export_xlsx(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        export_file = tmp_path / "orders.xlsx"
+        export_file = tmp_path / "exports" / "orders.xlsx"
+        export_file.parent.mkdir()
         export_file.write_bytes(b"xlsx-test")
         _mock_svc.export_shipment_records.return_value = {
             "success": True,
             "file_path": str(export_file),
             "filename": "orders.xlsx",
         }
-        r = client.get("/api/orders/export")
+        with patch.object(shipment_orders, "get_data_dir", return_value=str(tmp_path)):
+            r = client.get("/api/orders/export")
         assert r.status_code == 200
         assert "spreadsheetml" in r.headers["content-type"]
 

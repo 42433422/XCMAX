@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 from datetime import datetime
 from typing import Any
 
@@ -249,7 +250,8 @@ class ShipmentApplicationService:
                     ]
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unit_prefix = unit_name if unit_name else "all"
+            unit_prefix = re.sub(r"[^0-9A-Za-z._\-\u4e00-\u9fff]+", "_", unit_name or "all")
+            unit_prefix = unit_prefix.strip("._-")[:80] or "all"
             filename = f"shipment_records_{unit_prefix}_{timestamp}.xlsx"
 
             export_dir = os.path.join(get_data_dir(), "exports")

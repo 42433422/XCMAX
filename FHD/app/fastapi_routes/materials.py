@@ -274,7 +274,7 @@ def batch_delete_materials(
         )
         if not result.get("success"):
             if result.get("error_code") == "tool_exception":
-                logger.error("批量删除原材料时 Agent 执行异常：%s", result.get("message"))
+                logger.error("批量删除原材料时 Agent 执行异常")
             else:
                 return JSONResponse(jsonable_encoder(result), status_code=400)
         return JSONResponse(

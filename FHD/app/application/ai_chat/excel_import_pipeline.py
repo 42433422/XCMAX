@@ -17,6 +17,8 @@ from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_QTY_MEASURE_RE,
     _enrich_confirmation_inner,
 )
+from app.utils.html_text import html_to_plain_text
+from app.utils.safe_files import existing_file_under
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,15 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
 class AIChatExcelImportMixin:
+    @staticmethod
+    def _trusted_excel_path(file_path: object) -> Path | None:
+        from app.infrastructure.workspace import workspace_root
+
+        path = existing_file_under(workspace_root(), file_path)
+        if path is None or path.suffix.lower() not in {".xlsx", ".xlsm", ".xls"}:
+            return None
+        return path
+
     def _resolve_excel_path_for_import(
         excel_analysis: dict[str, Any], preview_data: dict[str, Any]
     ) -> str:
@@ -115,8 +126,8 @@ class AIChatExcelImportMixin:
         fp = cls._resolve_excel_path_for_import(excel_analysis, preview_data)
         sheet = cls._resolve_sheet_name_for_reimport(excel_analysis, preview_data, request_context)
         if fp:
-            path = Path(fp)
-            if path.is_file():
+            path = cls._trusted_excel_path(fp)
+            if path is not None:
                 try:
                     from app.application.template_grid_core import _extract_customer_hint_from_excel
 
@@ -148,12 +159,22 @@ class AIChatExcelImportMixin:
         for token in ("产品报价表", "报价表", "报价单", "价格表", "产品报价", "报价"):
             if stem.endswith(token):
                 stem = stem[: -len(token)].strip()
-        m = re.search(
-            r"(.+?(?:有限公司|股份有限公司|集团有限公司|实业有限公司|科技公司|集团公司|公司|厂|店))",
-            stem,
+        company_endings = (
+            "股份有限公司",
+            "集团有限公司",
+            "实业有限公司",
+            "有限公司",
+            "科技公司",
+            "集团公司",
+            "公司",
+            "厂",
+            "店",
         )
-        if m:
-            return m.group(1).strip()
+        end_positions = [
+            index + len(ending) for ending in company_endings if (index := stem.find(ending)) >= 0
+        ]
+        if end_positions:
+            return stem[: min(end_positions)].strip()
         return stem if len(stem) >= 2 else ""
 
     @staticmethod
@@ -284,8 +305,8 @@ class AIChatExcelImportMixin:
         )
         if not fp:
             return None
-        path = Path(fp)
-        if not path.is_file():
+        path = cls._trusted_excel_path(fp)
+        if path is None:
             return None
         sheet = cls._resolve_sheet_name_for_reimport(excel_analysis, preview_data, request_context)
         force_hdr = cls._resolve_force_header_row_1based(excel_analysis, preview_data)
@@ -695,8 +716,7 @@ class AIChatExcelImportMixin:
         cur = str(user_message or "").strip()
 
         def _strip_htmlish(s: str) -> str:
-            t = re.sub(r"<br\s*/?>", "\n", s or "", flags=re.I)
-            return re.sub(r"<[^>]+>", "", t).strip()
+            return html_to_plain_text(s).strip()
 
         if isinstance(request_context, dict):
             rm = request_context.get("recent_messages")

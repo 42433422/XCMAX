@@ -48,10 +48,10 @@ async def mobile_admin_codex_super_employee_messages(
     try:
         messages = _parent().CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_codex_super_employee_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -97,15 +97,15 @@ async def mobile_admin_codex_super_employee_invoke(
             )
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
+            format_mobile_response(None, "请求参数无效", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_codex_super_employee_invoke")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -129,10 +129,10 @@ async def mobile_admin_claude_super_employee_messages(
     try:
         messages = _parent().ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_claude_super_employee_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -178,15 +178,15 @@ async def mobile_admin_claude_super_employee_invoke(
             )
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
+            format_mobile_response(None, "请求参数无效", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_claude_super_employee_invoke")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -210,10 +210,10 @@ async def mobile_admin_cursor_super_employee_messages(
     try:
         messages = _parent().CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_cursor_super_employee_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -250,15 +250,15 @@ async def mobile_admin_cursor_super_employee_invoke(
             )
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
+            format_mobile_response(None, "请求参数无效", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_cursor_super_employee_invoke")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -282,10 +282,10 @@ async def mobile_admin_trae_super_employee_messages(
     try:
         messages = _parent().TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_trae_super_employee_messages")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -331,15 +331,15 @@ async def mobile_admin_trae_super_employee_invoke(
             )
         )
         return format_mobile_response(data=result)
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
+            format_mobile_response(None, "请求参数无效", success=False, code=400),
             status_code=400,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_admin_trae_super_employee_invoke")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务暂不可用，请稍后重试", success=False, code=500),
             status_code=500,
         )
 
@@ -410,9 +410,9 @@ async def _stream_super_employee_invoke(
                 context=context,
             ):
                 yield _parent()._sse_line(event)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("mobile_super_employee_stream failed: %s", exc)
-            yield _parent()._sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
+        except Exception:  # noqa: BLE001
+            logger.exception("mobile_super_employee_stream failed")
+            yield _parent()._sse_line({"type": "error", "message": "流式调用暂不可用"})
 
     return StreamingResponse(
         sse_gen(),

@@ -17,6 +17,7 @@ import logging
 import os
 import re
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Body, HTTPException, Query, Request
@@ -27,6 +28,8 @@ from app.application.facades.query_facade import query_service
 from app.bootstrap import get_shipment_application_service_core
 from app.db.models import ShipmentRecord
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_data_dir
+from app.utils.safe_files import existing_file_under
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +38,12 @@ router = APIRouter(tags=["shipment-orders-compat"])
 
 def _svc():
     return get_shipment_application_service_core()
+
+
+def _shipment_export_file(result: dict[str, Any]) -> Path | None:
+    if not result.get("success"):
+        return None
+    return existing_file_under(Path(get_data_dir()) / "exports", result.get("file_path"))
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
@@ -48,8 +57,13 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success"):
+        # Agent/tool failures may contain exception class names, paths, SQL, or
+        # stack details.  Keep diagnostics in the runtime logs, never in the
+        # public route payload.
+        output.pop("error", None)
+        output.pop("traceback", None)
+        output["message"] = "请求处理失败，请稍后重试"
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -558,11 +572,11 @@ def api_orders_export(
         template_id=template_id,
         status_filter=status,
     )
-    file_path = result.get("file_path")
-    if result.get("success") and file_path and os.path.exists(str(file_path)):
+    file_path = _shipment_export_file(result)
+    if file_path is not None:
         return FileResponse(
             str(file_path),
-            filename=result.get("filename") or os.path.basename(str(file_path)),
+            filename=file_path.name,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     return JSONResponse(result, status_code=400 if not result.get("success") else 500)
@@ -766,12 +780,11 @@ def shipment_records_export(
         template_id=template_id,
         status_filter=status,
     )
-    fp = result.get("file_path")
-    if result.get("success") and fp and os.path.exists(str(fp)):
-        fn = result.get("filename") or os.path.basename(str(fp))
+    fp = _shipment_export_file(result)
+    if fp is not None:
         return FileResponse(
             str(fp),
-            filename=fn,
+            filename=fp.name,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)
