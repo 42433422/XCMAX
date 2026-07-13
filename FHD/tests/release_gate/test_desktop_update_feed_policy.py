@@ -1,0 +1,76 @@
+"""Desktop updater and security-gate release policy checks."""
+
+from __future__ import annotations
+
+import os
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.release_gate
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required for desktop updater policy test")
+
+    generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
+    update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+    update_zip.write_bytes(b"signed-app-archive-fixture")
+    env = {**os.environ, "XCAGI_BUILD_SHA": "a" * 40, "XCAGI_PRODUCT_VERSION": "1.0.0.0"}
+
+    subprocess.run(
+        [node, str(generator), str(update_zip), "1.0.0", "mac"],
+        check=True,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    feed = (tmp_path / "latest-mac.yml").read_text(encoding="utf-8")
+    assert f"url: {update_zip.name}" in feed
+    assert f"path: {update_zip.name}" in feed
+    assert "buildSha: " + "a" * 40 in feed
+
+
+def test_macos_update_feed_rejects_dmg(tmp_path: Path) -> None:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is required for desktop updater policy test")
+
+    generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
+    dmg = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.dmg"
+    dmg.write_bytes(b"dmg-fixture")
+    result = subprocess.run(
+        [node, str(generator), str(dmg), "1.0.0", "mac"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "requires a ZIP artifact" in result.stderr
+    assert not (tmp_path / "latest-mac.yml").exists()
+
+
+def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    uploader = (REPO_ROOT / "scripts" / "deploy" / "upload-desktop-skus.sh").read_text(
+        encoding="utf-8"
+    )
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
+
+    assert workflow.count("--include='*.zip'") >= 3
+    assert workflow.count("--include='*.zip.blockmap'") >= 3
+    assert '"$src_dir"/*.zip' in workflow
+    assert '"XCAGI-*-${VERSION}-mac-*.zip"' in uploader
+    assert '"XCAGI-*-${VERSION}-mac-*.zip.blockmap"' in uploader
+    assert "Node.js 20+ is required" in scanner
+    assert "synthetic green report" in scanner
+    assert 'electronegativity.csv" -r -v false || true' not in scanner
+    assert 'electronegativity.sarif" -r -v false || true' not in scanner
