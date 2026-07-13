@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from pathlib import Path
 from urllib.parse import unquote
 
@@ -11,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
+DEFAULT_OUTPUT_RELPATH = "424/考勤转换输出.xlsx"
 
 
 def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
@@ -18,7 +20,7 @@ def _load_products_personnel_roster_from_host() -> list[tuple[str, str, str]]:
     try:
         from app.db.models.product import Product
         from app.db.session import get_db
-    except Exception:
+    except Exception:  # noqa: BLE001 - optional host models may fail during isolated mod load
         return []
     out: list[tuple[str, str, str]] = []
     seen: set[str] = set()
@@ -89,6 +91,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
     from taiyangniao_attendance.convert import convert_attendance_file
+
     from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 
     # import_mod_backend_py 以独立模块名加载本文件时无包上下文，相对导入会失败。
@@ -119,10 +122,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             from resources.config.approval_config import get_approval_config
 
             pol = getattr(get_approval_config(), "attendance_policy", None) or {}
-        except Exception as exc:
+        except Exception:  # noqa: BLE001 - optional config provider failure becomes a stable API error
             logger.exception("读取考勤策略失败")
             return JSONResponse(
-                {"success": False, "message": str(exc)},
+                {"success": False, "message": "读取考勤策略失败"},
                 status_code=500,
             )
         return {"success": True, "attendance_policy": pol}
@@ -152,10 +155,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 "message": "考勤规则已保存",
                 "attendance_policy": config.attendance_policy,
             }
-        except Exception as exc:
+        except Exception:  # noqa: BLE001 - optional config provider failure becomes a stable API error
             logger.exception("保存考勤策略失败")
             return JSONResponse(
-                {"success": False, "message": str(exc)},
+                {"success": False, "message": "保存考勤策略失败"},
                 status_code=500,
             )
 
@@ -169,7 +172,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         ]
         config = {
             "default_header_row": 0,
-            "default_output_relpath": "424/考勤转换输出.xlsx",
+            "default_output_relpath": DEFAULT_OUTPUT_RELPATH,
             "accepted_extensions": [".xlsx", ".xlsm", ".xls"],
             "allow_template_append": True,
             "default_template_relpath": DEFAULT_TEMPLATE_RELPATH,
@@ -195,7 +198,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     "晚上：18:00 后按最后一次打卡计加班",
                     "周日：全部按星期天加班处理",
                 ],
-            }
+            },
         ]
         return {
             "success": True,
@@ -210,7 +213,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/attendance/convert-upload", response_model=None)
     async def attendance_convert_upload(
         file: UploadFile = File(...),
-        output_relpath: str = Form("424/考勤转换输出.xlsx"),
+        output_relpath: str = Form(DEFAULT_OUTPUT_RELPATH),
         template_relpath: str = Form(DEFAULT_TEMPLATE_RELPATH),
         month: str = Form(""),
         header_row: int = Form(0),
@@ -228,38 +231,45 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 {"success": False, "error": "unsupported file type"},
                 status_code=400,
             )
+        safe_suffix = ".xlsx" if suffix == ".xlsx" else ".xlsm" if suffix == ".xlsm" else ".xls"
 
         try:
             out_rel = _normalize_relpath(output_relpath, field_name="output_relpath")
-        except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except ValueError:
+            return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
+        if out_rel != DEFAULT_OUTPUT_RELPATH:
+            return JSONResponse(
+                {"success": False, "error": f"请使用固定输出路径: {DEFAULT_OUTPUT_RELPATH}"},
+                status_code=400,
+            )
+        out_rel = DEFAULT_OUTPUT_RELPATH
 
         try:
             upload_dir = resolve_safe_workspace_relpath("uploads")
             upload_dir.mkdir(parents=True, exist_ok=True)
-            src_name = Path(file.filename).name or "attendance-upload.xlsx"
+            src_name = f"attendance-{uuid.uuid4().hex}{safe_suffix}"
             src_path = upload_dir / src_name
             content = await file.read()
             with src_path.open("wb") as f:
                 f.write(content)
-        except Exception as e:
+        except Exception:  # noqa: BLE001 - upload storage failure becomes a stable API error
             logger.exception("Failed to save attendance upload")
             return JSONResponse(
-                {"success": False, "error": f"save upload failed: {e}"},
+                {"success": False, "error": "save upload failed"},
                 status_code=500,
             )
 
         try:
             out_path = resolve_safe_workspace_relpath(out_rel)
-        except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except Exception:  # noqa: BLE001 - path validation failure becomes a stable API error
+            return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
         if raw_tpl_rel:
             try:
                 normalized_raw_tpl = _normalize_relpath(raw_tpl_rel, field_name="template_relpath")
-            except ValueError as e:
-                return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            except ValueError:
+                return JSONResponse({"success": False, "error": "模板路径无效"}, status_code=400)
             if normalized_raw_tpl != DEFAULT_TEMPLATE_RELPATH:
                 return JSONResponse(
                     {"success": False, "error": f"请使用固定模板: {DEFAULT_TEMPLATE_RELPATH}"},
@@ -279,13 +289,16 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     {"success": False, "error": f"模板路径不是文件: {tpl_rel}"},
                     status_code=400,
                 )
-        except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except Exception:  # noqa: BLE001 - path validation failure becomes a stable API error
+            return JSONResponse({"success": False, "error": "模板路径无效"}, status_code=400)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
         use_llm_flag = (unquote(use_llm or "").strip().lower()) in (
-            "1", "true", "yes", "on",
+            "1",
+            "true",
+            "yes",
+            "on",
         )
         use_pr = (unquote(use_personnel_roster or "").strip().lower()) in (
             "1",
@@ -315,15 +328,15 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 use_llm=use_llm_flag or None,  # None -> 交给 env 开关决定
                 personnel_roster=roster,
             )
-        except Exception as e:
+        except Exception:
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
-                {"success": False, "error": f"convert failed: {e}"},
+                {"success": False, "error": "convert failed"},
                 status_code=500,
             )
         if not result.get("success"):
             return JSONResponse(
-                {"success": False, "error": str(result.get("error") or "convert failed")},
+                {"success": False, "error": "convert failed"},
                 status_code=400,
             )
 
@@ -377,25 +390,30 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.get("/attendance/download", response_model=None)
     async def attendance_download(relpath: str):
+        from app.infrastructure.workspace import workspace_root
+        from app.utils.safe_files import existing_file_under
+
         try:
             rel = _normalize_relpath(relpath, field_name="relpath")
-            p = resolve_safe_workspace_relpath(rel)
-        except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
-        except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+        except ValueError:
+            return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
+        p = existing_file_under(workspace_root(), rel)
 
-        if not p.exists() or not p.is_file():
+        if p is None:
             return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
 
         return FileResponse(path=str(p), filename=p.name, media_type="application/octet-stream")
 
     @router.get("/employees", response_model=None)
     async def list_employees(page: int = 1, page_size: int = 50, search: str = ""):
-        import sqlite3, math
+        import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return {"success": True, "data": {"items": [], "total": 0, "page": page, "page_size": page_size}}
+            return {
+                "success": True,
+                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
+            }
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -414,14 +432,21 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         items = [dict(r) for r in cur.fetchall()]
         conn.close()
-        return {"success": True, "data": {"items": items, "total": total, "page": page, "page_size": page_size}}
+        return {
+            "success": True,
+            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
+        }
 
     @router.get("/departments", response_model=None)
     async def list_departments(page: int = 1, page_size: int = 50, search: str = ""):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
-            return {"success": True, "data": {"items": [], "total": 0, "page": page, "page_size": page_size}}
+            return {
+                "success": True,
+                "data": {"items": [], "total": 0, "page": page, "page_size": page_size},
+            }
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -440,7 +465,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         )
         items = [dict(r) for r in cur.fetchall()]
         conn.close()
-        return {"success": True, "data": {"items": items, "total": total, "page": page, "page_size": page_size}}
+        return {
+            "success": True,
+            "data": {"items": items, "total": total, "page": page, "page_size": page_size},
+        }
 
     @router.get("/products/list", response_model=None)
     async def products_list(
@@ -450,6 +478,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         unit: str = "",
     ):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": [], "total": 0}
@@ -480,6 +509,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/{product_id}", response_model=None)
     async def products_get(product_id: int):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return JSONResponse({"success": False, "error": "not found"}, status_code=404)
@@ -495,7 +525,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/products/add", response_model=None)
     async def products_add(data: dict):
-        import sqlite3, datetime
+        import datetime
+        import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -510,7 +542,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 data.get("specification", ""),
                 float(data.get("price") or 0),
                 data.get("unit", ""),
-                now, now,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -520,7 +553,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/products/update", response_model=None)
     async def products_update(data: dict):
-        import sqlite3, datetime
+        import datetime
+        import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -544,6 +579,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/products/delete", response_model=None)
     async def products_delete(data: dict):
         import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -555,6 +591,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/products/batch-delete", response_model=None)
     async def products_batch_delete(data: dict):
         import sqlite3
+
         ids = data.get("ids") or []
         if not ids:
             return {"success": True}
@@ -570,6 +607,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/product_names", response_model=None)
     async def products_names():
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": []}
@@ -584,6 +622,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/products/product_names/search", response_model=None)
     async def products_names_search(keyword: str = ""):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": []}
@@ -600,7 +639,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/products/batch", response_model=None)
     async def products_batch_add(data: dict):
-        import sqlite3, datetime
+        import datetime
+        import sqlite3
+
         products_list = data.get("products") or []
         if not products_list:
             return {"success": True, "data": []}
@@ -610,11 +651,18 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         now = datetime.datetime.now().isoformat()
         rows = []
         for p in products_list:
-            rows.append((
-                "", p.get("model_number", ""), p.get("name", ""),
-                p.get("specification", ""), float(p.get("price") or 0),
-                p.get("unit", ""), now, now,
-            ))
+            rows.append(
+                (
+                    "",
+                    p.get("model_number", ""),
+                    p.get("name", ""),
+                    p.get("specification", ""),
+                    float(p.get("price") or 0),
+                    p.get("unit", ""),
+                    now,
+                    now,
+                )
+            )
         cur.executemany(
             "INSERT INTO products (source_file, model_number, name, specification, price, unit, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
             rows,
@@ -636,6 +684,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         purchase_unit: str = "",
     ):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return {"success": True, "data": [], "total": 0}
@@ -689,6 +738,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.get("/customers/{customer_id}", response_model=None)
     async def customers_get(customer_id: int):
         import sqlite3
+
         db_path = get_database_path()
         if not db_path.exists():
             return JSONResponse({"success": False, "error": "not found"}, status_code=404)
@@ -704,7 +754,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/customers", response_model=None)
     async def customers_add(data: dict):
-        import sqlite3, datetime
+        import datetime
+        import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -719,7 +771,8 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 data.get("contact_phone", ""),
                 data.get("address", ""),
                 data.get("purchase_unit", ""),
-                now, now,
+                now,
+                now,
             ),
         )
         new_id = cur.lastrowid
@@ -729,7 +782,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.put("/customers/{customer_id}", response_model=None)
     async def customers_update(customer_id: int, data: dict):
-        import sqlite3, datetime
+        import datetime
+        import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -753,6 +808,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.delete("/customers/{customer_id}", response_model=None)
     async def customers_delete(customer_id: int):
         import sqlite3
+
         db_path = get_database_path()
         conn = sqlite3.connect(str(db_path))
         cur = conn.cursor()
@@ -764,6 +820,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     @router.post("/customers/batch-delete", response_model=None)
     async def customers_batch_delete(data: dict):
         import sqlite3
+
         ids = data.get("ids") or []
         if not ids:
             return {"success": True}
@@ -778,11 +835,19 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
     @router.post("/customers/import", response_model=None)
     async def customers_import(file: UploadFile = File(...)):
-        import sqlite3, datetime, tempfile, shutil, openpyxl
+        import datetime
+        import shutil
+        import sqlite3
+        import tempfile
+
+        import openpyxl
+
         db_path = get_database_path()
         suffix = Path(file.filename or "import.xlsx").suffix.lower()
         if suffix not in {".xlsx", ".xlsm", ".xls"}:
-            return JSONResponse({"success": False, "error": "unsupported file type"}, status_code=400)
+            return JSONResponse(
+                {"success": False, "error": "unsupported file type"}, status_code=400
+            )
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             shutil.copyfileobj(file.file, tmp)
             tmp_path = tmp.name
@@ -802,7 +867,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 name = str(row[name_idx] or "").strip() if name_idx < len(row) else ""
                 if not name:
                     continue
-                contact = str(row[contact_idx]) if contact_idx >= 0 and contact_idx < len(row) else ""
+                contact = (
+                    str(row[contact_idx]) if contact_idx >= 0 and contact_idx < len(row) else ""
+                )
                 phone = str(row[phone_idx]) if phone_idx >= 0 and phone_idx < len(row) else ""
                 addr = str(row[addr_idx]) if addr_idx >= 0 and addr_idx < len(row) else ""
                 cur.execute(

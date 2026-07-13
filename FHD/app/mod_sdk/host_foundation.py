@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from app.mod_sdk.platform_shell import GENERIC_HOST_MOD_IDS, MINIMAL_HOST_MOD_IDS
+from app.utils.safe_files import existing_dir_under
 
 logger = logging.getLogger(__name__)
 
@@ -168,8 +169,8 @@ def install_aux_employee_pack_from_repo_seed(
         return False, "非触点员工包"
     src: Path | None = None
     for root in _repo_mod_seed_dirs():
-        candidate = root / pid
-        if (candidate / "manifest.json").is_file():
+        candidate = existing_dir_under(root, pid)
+        if candidate is not None and (candidate / "manifest.json").is_file():
             src = candidate
             break
     if src is None:
@@ -177,15 +178,15 @@ def install_aux_employee_pack_from_repo_seed(
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
-    dest = Path(mm.mods_root) / pid
+    dest = Path(mm.mods_root) / src.name
     try:
         if dest.is_dir():
             shutil.rmtree(dest)
         shutil.copytree(src, dest)
         mm.load_all_mods()
         return True, f"已从内置种子安装 {pid}"
-    except OSError as e:
-        return False, str(e)
+    except OSError:
+        return False, "内置员工包安装失败"
 
 
 def catalog_store_collection(row: dict[str, Any]) -> str:

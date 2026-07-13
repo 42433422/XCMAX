@@ -553,7 +553,8 @@ class TestRunWorkflowProductsQueryNormalProfile:
         ):
             result = run_workflow_products_query_normal_profile("查询A001")
         assert result["success"] is False
-        assert "boom" in result["message"]
+        assert result["message"] == "产品查询失败，请稍后重试"
+        assert "boom" not in result["message"]
         assert result["normal_tool_profile"] is True
 
     def test_empty_message_with_empty_node_params(self):
@@ -998,7 +999,7 @@ class TestBuildLabelPrintResponseDict:
             mock_get.return_value = mock_svc
             result = build_label_print_response_dict(route)
         assert result["success"] is False
-        assert "未知错误" in result["response"]
+        assert result["response"] == "打印失败，请检查打印机连接。"
 
     def test_service_failure_returns_error(self):
         route = {"intent": "label_print", "slots": {"model_number": "A001", "quantity": 1}}

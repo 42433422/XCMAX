@@ -45,4 +45,25 @@ def existing_file_under(root: Path, raw_path: object) -> Path | None:
     return current if current.is_file() else None
 
 
-__all__ = ["existing_file_under"]
+def existing_dir_under(root: Path, raw_name: object) -> Path | None:
+    """Select an existing direct child directory from a trusted root.
+
+    The untrusted value is compared with directory entry names and is never
+    interpolated into a filesystem path.  Direct children are sufficient for
+    upload session IDs and installed mod IDs, which must never contain path
+    separators.
+    """
+
+    name = str(raw_name or "").strip()
+    if not name or name in {".", ".."} or Path(name).name != name:
+        return None
+    try:
+        return next(
+            (entry for entry in root.resolve().iterdir() if entry.name == name and entry.is_dir()),
+            None,
+        )
+    except OSError:
+        return None
+
+
+__all__ = ["existing_dir_under", "existing_file_under"]

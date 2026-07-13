@@ -125,7 +125,8 @@ class TestXcagiChatHttpExcAdditional:
         exc = httpx.ConnectError("connection refused")
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
-        assert "custom.market" in result.detail
+        assert "custom.market" not in result.detail
+        assert "无法连接修茈平台" in result.detail
 
     def test_httpx_connect_error_with_modstore_env(self, monkeypatch):
         """Test httpx.ConnectError with MODSTORE_PLATFORM_URL env (fallback)."""
@@ -136,7 +137,8 @@ class TestXcagiChatHttpExcAdditional:
         exc = httpx.ConnectError("connection refused")
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
-        assert "modstore.example.com" in result.detail
+        assert "modstore.example.com" not in result.detail
+        assert "无法连接修茈平台" in result.detail
 
     def test_httpx_http_error(self):
         """Test httpx.HTTPError branch (non-ConnectError)."""

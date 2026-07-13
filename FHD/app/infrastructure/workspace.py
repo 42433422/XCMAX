@@ -26,7 +26,10 @@ def traditional_workspace_root() -> Path:
 def traditional_resolve_path(rel: str) -> Path:
     base = traditional_workspace_root()
     raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
-    target = (base / raw).resolve() if raw else base
+    parts = [os.path.basename(part) for part in raw.split("/") if part]
+    if any(part in {".", ".."} for part in parts):
+        raise HTTPException(status_code=400, detail="invalid path")
+    target = base.joinpath(*parts).resolve() if parts else base
     try:
         target.relative_to(base)
     except ValueError as e:
@@ -39,7 +42,10 @@ def resolve_safe_workspace_relpath(rel: str) -> Path:
     raw = unquote(rel or "").strip().replace("\\", "/").lstrip("/")
     if not raw:
         raise HTTPException(status_code=400, detail="missing path")
-    target = (base / raw).resolve()
+    parts = [os.path.basename(part) for part in raw.split("/") if part]
+    if not parts or any(part in {".", ".."} for part in parts):
+        raise HTTPException(status_code=400, detail="invalid path")
+    target = base.joinpath(*parts).resolve()
     try:
         target.relative_to(base)
     except ValueError as e:

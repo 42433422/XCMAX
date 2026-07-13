@@ -351,7 +351,8 @@ class TestInstallAuxEmployeePackFromRepoSeed:
                 with patch("shutil.copytree", side_effect=OSError("no space")):
                     ok, msg = install_aux_employee_pack_from_repo_seed(pid)
         assert ok is False
-        assert "no space" in msg
+        assert msg == "内置员工包安装失败"
+        assert "no space" not in msg
 
 
 # ===========================================================================

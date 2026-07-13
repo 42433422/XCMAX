@@ -821,7 +821,8 @@ class TestPersistMobileCsRequest:
             )
         assert result[0] == 0
         assert result[1] is False
-        assert "db gone" in result[2]
+        assert result[2] == "database operation failed"
+        assert "db gone" not in result[2]
 
 
 # ============================================================

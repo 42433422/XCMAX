@@ -91,11 +91,11 @@ def _handle_personnel_read(
             ).fetchone()[0]
             or 0
         )
-    except sqlite3.Error as exc:
+    except sqlite3.Error:
         return _not_executed(
             intent,
             "人员查询未执行：读取人员库失败。",
-            reason=f"personnel_query_failed:{exc}",
+            reason="personnel_query_failed",
             source=source,
             status="failed",
         )
@@ -260,8 +260,8 @@ def _attendance_rows(
             ).fetchall()
         ]
         return rows, meta, None
-    except sqlite3.Error as exc:
-        return [], {}, f"attendance_query_failed:{exc}"
+    except sqlite3.Error:
+        return [], {}, "attendance_query_failed"
     finally:
         conn.close()
 

@@ -195,7 +195,8 @@ class TestEmployeeDispatcher:
             mock_agent_cls.return_value = mock_agent
             result = _employee_dispatcher(tool_id="emp-1", action="run", params={"task": "x"})
         assert result["success"] is False
-        assert "agent crashed" in result["error"]
+        assert result["error"] == "employee collaboration failed"
+        assert "agent crashed" not in result["error"]
         assert result["employee_id"] == "emp-1"
 
     def test_task_resolution_priority_params_task(self) -> None:

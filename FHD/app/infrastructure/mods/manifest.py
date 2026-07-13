@@ -4,11 +4,12 @@ Mod Manifest Definition and Parsing
 
 import json
 import logging
-import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.safe_files import existing_file_under
 
 from .artifact_constants import ARTIFACT_MOD, normalize_artifact
 
@@ -149,9 +150,9 @@ class ModMetadata:
 
 
 def parse_manifest(mod_path: str) -> ModMetadata | None:
-    manifest_path = os.path.join(mod_path, "manifest.json")
+    manifest_path = existing_file_under(Path(mod_path), "manifest.json")
     logger.info("[parse_manifest] Checking manifest at: %s", manifest_path)
-    if not os.path.isfile(manifest_path):
+    if manifest_path is None:
         logger.warning("[parse_manifest] Mod manifest not found: %s", manifest_path)
         return None
 

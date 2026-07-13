@@ -40,6 +40,23 @@ _INTENT_PACKAGES_STATE: dict[str, bool] = {
 }
 
 
+def _public_unified_chat_payload(payload: dict[str, Any], status: int) -> dict[str, Any]:
+    """Keep exception-derived diagnostics behind the API boundary."""
+
+    if status < 400 and payload.get("success") is not False:
+        return payload
+    if status == 400 and payload.get("mode_guard") == "normal_only":
+        return {
+            "success": False,
+            "message": "专业版请求禁止使用 /api/ai/unified_chat，请改用 /api/ai/chat",
+            "mode_guard": "normal_only",
+        }
+    return {
+        "success": False,
+        "message": "请求参数无效" if status < 500 else "对话处理失败，请稍后重试",
+    }
+
+
 def _attach_unified_chat_run(
     payload: dict[str, Any],
     *,
@@ -130,6 +147,7 @@ def ai_chat_unified_alias(request: Request, body: dict = Body(default_factory=di
         body.get("context") or {},
     )
     status = int(payload.pop("_http_status", 200))
+    payload = _public_unified_chat_payload(payload, status)
     payload = _attach_unified_chat_run(
         payload,
         message=message,
@@ -163,6 +181,7 @@ def ai_chat_unified_batch_alias(request: Request, body: dict = Body(default_fact
             body.get("context") or {},
         )
         status = int(payload.pop("_http_status", 200))
+        payload = _public_unified_chat_payload(payload, status)
         if status >= 400:
             payload["_http_status"] = status
         payload = _attach_unified_chat_run(
@@ -187,9 +206,9 @@ def ai_intent_test(body: dict = Body(default_factory=dict)):
     try:
         payload = {"success": True, "data": recognize_intents(message)}
         return _trace_intent_test_run(payload, message=message, body=body or {})
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
-            {"success": False, "message": f"意图识别失败：{str(e)}"}, status_code=500
+            {"success": False, "message": "意图识别失败，请稍后重试"}, status_code=500
         )
 
 
@@ -203,10 +222,10 @@ def intent_health():
             BertIntentClassifier(model_path=model_path) if model_path else BertIntentClassifier()
         )
         return {"status": "ok", "model_available": classifier.is_available()}
-    except RECOVERABLE_ERRORS as e:
-        logger.error("intent health: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.error("intent health failed")
         return JSONResponse(
-            {"status": "error", "model_available": False, "error": str(e)},
+            {"status": "error", "model_available": False, "error": "intent model unavailable"},
             status_code=500,
         )
 
@@ -259,9 +278,9 @@ def intent_predict(body: dict = Body(default_factory=dict)):
     try:
         classifier = _bert_intent_classifier()
         return classifier.predict(text, return_probs=True)
-    except RECOVERABLE_ERRORS as e:
-        logger.error("intent predict: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.error("intent predict failed")
+        return JSONResponse({"error": "intent prediction failed"}, status_code=500)
 
 
 @router.post("/api/intent/predict_batch")
@@ -274,6 +293,6 @@ def intent_predict_batch(body: dict = Body(default_factory=dict)):
         classifier = _bert_intent_classifier()
         results = classifier.predict_batch(texts, return_probs=True)
         return {"results": results}
-    except RECOVERABLE_ERRORS as e:
-        logger.error("intent predict_batch: %s", e)
-        return JSONResponse({"error": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.error("intent predict batch failed")
+        return JSONResponse({"error": "intent batch prediction failed"}, status_code=500)

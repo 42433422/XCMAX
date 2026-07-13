@@ -252,12 +252,12 @@ def _handle_leave_write(
             record_id = int(cur.lastrowid)
             conn.commit()
             status = "created"
-    except sqlite3.Error as exc:
+    except sqlite3.Error:
         conn.rollback()
         return _not_executed(
             intent,
             "请假未登记：写入真实请假记录失败。",
-            reason=f"leave_write_failed:{exc}",
+            reason="leave_write_failed",
             source=source,
             status="failed",
         )
@@ -377,11 +377,11 @@ def _handle_personnel_export(
                 """
             ).fetchall()
         ]
-    except sqlite3.Error as exc:
+    except sqlite3.Error:
         return _not_executed(
             intent,
             "人员名单未导出：读取真实人员库失败。",
-            reason=f"personnel_query_failed:{exc}",
+            reason="personnel_query_failed",
             source=source,
             status="failed",
         )
@@ -397,11 +397,11 @@ def _handle_personnel_export(
         )
     try:
         output, relpath = _create_personnel_export(rows)
-    except Exception as exc:  # noqa: BLE001 - converted to a truthful receipt
+    except Exception:  # noqa: BLE001 - converted to a truthful receipt
         return _not_executed(
             intent,
             "人员名单未导出：文件写出失败。",
-            reason=f"personnel_export_failed:{exc}",
+            reason="personnel_export_failed",
             source=source,
             status="failed",
         )

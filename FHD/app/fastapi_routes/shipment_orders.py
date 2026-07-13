@@ -579,7 +579,10 @@ def api_orders_export(
             filename=file_path.name,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
-    return JSONResponse(result, status_code=400 if not result.get("success") else 500)
+    return JSONResponse(
+        {"success": False, "message": "导出失败，请稍后重试"},
+        status_code=400 if not result.get("success") else 500,
+    )
 
 
 @router.delete("/api/orders/clear-all")

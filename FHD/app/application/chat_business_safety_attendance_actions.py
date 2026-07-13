@@ -38,11 +38,11 @@ def handle_attendance_export(
         )
     try:
         output, relpath = create_attendance_export(rows, meta)
-    except Exception as exc:  # noqa: BLE001 - converted to a truthful receipt
+    except Exception:  # noqa: BLE001 - converted to a truthful receipt
         return _not_executed(
             intent,
             "考勤表未生成：文件写出失败。",
-            reason=f"attendance_export_failed:{exc}",
+            reason="attendance_export_failed",
             source=f"{_DB_NAME}:attendance_daily_records",
             status="failed",
             details=meta,
@@ -97,11 +97,11 @@ def handle_attendance_print(
     try:
         service = get_printer_service()
         printers = service.get_printers()
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return _not_executed(
             intent,
             "打印未执行：无法读取系统打印机状态。",
-            reason=f"printer_status_failed:{exc}",
+            reason="printer_status_failed",
             source="printer_service",
             status="failed",
         )
@@ -121,11 +121,11 @@ def handle_attendance_print(
     try:
         output, relpath = create_attendance_export(rows, meta)
         result = service.print_document(str(output))
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         return _not_executed(
             intent,
             "打印未执行：考勤文件生成或提交打印失败。",
-            reason=f"print_submit_failed:{exc}",
+            reason="print_submit_failed",
             source="printer_service",
             status="failed",
         )

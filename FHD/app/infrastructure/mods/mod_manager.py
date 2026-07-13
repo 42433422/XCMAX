@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.safe_files import existing_dir_under, existing_file_under
 
 from .artifact_constants import ARTIFACT_BUNDLE, ARTIFACT_EMPLOYEE_PACK, normalize_artifact
 from .artifact_package import (
@@ -131,7 +132,8 @@ def _all_mods_roots(primary: str) -> list[str]:
 
 
 def _backend_path_for_mod(mod_path: str) -> str:
-    return os.path.join(mod_path, "backend")
+    backend = existing_dir_under(Path(mod_path), "backend")
+    return str(backend) if backend is not None else ""
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
@@ -140,9 +142,12 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
     """
     backend_path = _backend_path_for_mod(mod_path)
-    path = os.path.join(backend_path, f"{stem}.py")
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Mod {mod_id} backend file missing: {path}")
+    safe_stem = os.path.basename(str(stem or "").strip())
+    if not backend_path or not safe_stem.isidentifier() or safe_stem != stem:
+        raise FileNotFoundError(f"Mod {mod_id} backend module is invalid")
+    path = existing_file_under(Path(backend_path), f"{safe_stem}.py")
+    if path is None:
+        raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
@@ -150,11 +155,11 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     path_digest = hashlib.sha256(os.path.normpath(os.path.abspath(mod_path)).encode()).hexdigest()[
         :16
     ]
-    spec_name = f"_xcagi_mod_{safe}_{path_digest}_{stem}"
+    spec_name = f"_xcagi_mod_{safe}_{path_digest}_{safe_stem}"
     existing = sys.modules.get(spec_name)
     if existing is not None:
         return existing
-    spec = importlib.util.spec_from_file_location(spec_name, path)
+    spec = importlib.util.spec_from_file_location(spec_name, str(path))
     if spec is None or spec.loader is None:
         raise ImportError(f"Cannot load spec for {path}")
     module = importlib.util.module_from_spec(spec)
@@ -387,11 +392,9 @@ class ModManager:
             if not cid:
                 return None
             for root in self.all_mods_roots():
-                mod_path = os.path.join(root, cid)
-                if os.path.isdir(mod_path) and os.path.isfile(
-                    os.path.join(mod_path, "manifest.json")
-                ):
-                    return mod_path
+                mod_path = existing_dir_under(Path(root), cid)
+                if mod_path is not None and (mod_path / "manifest.json").is_file():
+                    return str(mod_path)
             return None
 
         hit = _direct(mid)
@@ -600,8 +603,8 @@ class ModManager:
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
-        backend_path = os.path.join(mod_path, "backend")
-        if not os.path.isdir(backend_path):
+        backend_path = _backend_path_for_mod(mod_path)
+        if not backend_path:
             logger.debug("No backend directory for mod: %s", mod_id)
             return
 

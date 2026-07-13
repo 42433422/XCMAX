@@ -221,39 +221,33 @@ class XcagiCompatChatBatchBody(BaseModel):
 
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, TimeoutError):
-        msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
-        return HTTPException(status_code=504, detail=msg)
+        return HTTPException(status_code=504, detail="大模型响应超时，请稍后重试。")
     try:
         import httpx
 
         if isinstance(exc, httpx.ConnectError):
-            market = (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "修茈市场"
-            ).rstrip("/")
             return HTTPException(
                 status_code=503,
-                detail=f"无法连接修茈平台 LLM（{market}）：{exc}",
+                detail="无法连接修茈平台 LLM，请稍后重试。",
             )
         if isinstance(exc, httpx.HTTPError):
-            return HTTPException(status_code=502, detail=f"修茈平台 LLM 请求失败: {exc}")
+            return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
     except ImportError:
         pass
     if isinstance(exc, AuthenticationError):
-        return HTTPException(status_code=401, detail=f"大模型鉴权失败: {exc}")
+        return HTTPException(status_code=401, detail="大模型鉴权失败")
     if isinstance(exc, RateLimitError):
-        return HTTPException(status_code=429, detail=f"大模型限流: {exc}")
+        return HTTPException(status_code=429, detail="大模型请求过于频繁，请稍后重试")
     if isinstance(exc, APIConnectionError):
-        return HTTPException(status_code=503, detail=f"无法连接大模型服务: {exc}")
+        return HTTPException(status_code=503, detail="无法连接大模型服务")
     if isinstance(exc, APIError):
-        return HTTPException(status_code=502, detail=f"大模型接口错误: {exc}")
+        return HTTPException(status_code=502, detail="大模型接口错误")
     if isinstance(exc, UnsupportedMultimodalModelError):
-        return HTTPException(status_code=422, detail=str(exc))
+        return HTTPException(status_code=422, detail="当前模型不支持多模态输入")
     if isinstance(exc, EmptyMultimodalResponseError):
-        return HTTPException(status_code=502, detail=str(exc))
+        return HTTPException(status_code=502, detail="大模型未返回有效内容")
     if isinstance(exc, RuntimeError):
-        return HTTPException(status_code=503, detail=str(exc))
+        return HTTPException(status_code=503, detail="大模型服务暂时不可用")
     if isinstance(exc, ValueError):
         msg = str(exc).strip()
         if "余额不足" in msg or "402" in msg:
@@ -262,9 +256,9 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
                 detail="修茈市场模型余额不足，请在「模型支付」充值后重试。",
             )
         if "平台错误" in msg:
-            return HTTPException(status_code=502, detail=msg)
+            return HTTPException(status_code=502, detail="修茈平台服务异常")
     logger.exception("xcagi ai chat compat unexpected error")
-    return HTTPException(status_code=500, detail=f"对话处理失败: {exc}")
+    return HTTPException(status_code=500, detail="对话处理失败")
 
 
 def _xcagi_compat_reply_payload(

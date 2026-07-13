@@ -48,7 +48,7 @@ def default_employee_tools() -> list[dict[str, Any]]:
             out.append(spec)
         return out
     except RECOVERABLE_ERRORS:
-        logger.debug("default_employee_tools fallback to empty", exc_info=True)
+        logger.debug("default_employee_tools fallback to empty")
         return []
 
 
@@ -101,12 +101,12 @@ def run_employee_agent_loop(
 
         require_api_key()
         client = get_openai_compatible_client()
-    except (RuntimeError, *RECOVERABLE_ERRORS) as exc:
+    except (RuntimeError, *RECOVERABLE_ERRORS):
         return {
             "handler": "agent",
             "ok": False,
             "degraded": True,
-            "error": f"LLM 不可用，agent 多轮循环降级：{str(exc)[:200]}",
+            "error": "LLM 不可用，agent 多轮循环已降级",
             "output": "",
             "rounds": 0,
             "tool_calls": [],
@@ -146,12 +146,12 @@ def run_employee_agent_loop(
                 tools=tool_specs if tool_specs else None,
                 tool_choice="auto" if tool_specs else None,
             )
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("employee agent loop LLM call failed emp=%s", employee_id)
+        except RECOVERABLE_ERRORS:
+            logger.error("employee agent loop LLM call failed")
             return {
                 "handler": "agent",
                 "ok": False,
-                "error": str(exc)[:400],
+                "error": "LLM call failed",
                 "output": "",
                 "rounds": rounds,
                 "tool_calls": tool_trace,
@@ -248,9 +248,10 @@ def run_employee_agent_loop(
                 from app.application.tools.workflow import execute_workflow_tool
 
                 result_raw = execute_workflow_tool(tool_name, args, workspace_root)
-            except RECOVERABLE_ERRORS as exc:
+            except RECOVERABLE_ERRORS:
                 result_raw = json.dumps(
-                    {"success": False, "error": str(exc)[:300]}, ensure_ascii=False
+                    {"success": False, "error": "workflow tool execution failed"},
+                    ensure_ascii=False,
                 )
             tool_trace.append({"tool": tool_name, "args": args})
             trajectory.append(

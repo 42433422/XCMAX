@@ -374,7 +374,8 @@ class TestActionVendorConvertDeep:
         src.write_text("hi")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
-        assert "file system error" in out["error"]
+        assert out["error"] == "vendor conversion failed"
+        assert "file system error" not in out["error"]
 
     def test_convert_strips_file_path_from_payload(self, tmp_path) -> None:
         backend = tmp_path / "backend" / "vendor" / "csv"

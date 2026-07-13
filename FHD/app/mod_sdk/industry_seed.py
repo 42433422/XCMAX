@@ -10,6 +10,7 @@ from typing import Any
 
 from app.mod_sdk.industry_baseline import load_industry_baseline_document
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.safe_files import existing_dir_under
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +133,7 @@ def bundled_industry_seeds_dir() -> Path | None:
 
 
 def _resolve_seed_source(mod_id: str, pool: Path) -> Path | None:
-    trial = pool / mod_id
-    if trial.is_dir():
-        return trial
-    return None
+    return existing_dir_under(pool, mod_id)
 
 
 def other_open_industry_mod_ids(keep_mod_id: str) -> list[str]:
@@ -175,8 +173,8 @@ def deactivate_other_open_industry_mods(
             logger.warning("unload open industry mod %s failed: %s", mod_id, exc)
         removed = False
         if may_remove_files:
-            dest = mods_root / mod_id
-            if dest.is_dir():
+            dest = existing_dir_under(mods_root, mod_id)
+            if dest is not None:
                 try:
                     shutil.rmtree(dest)
                     removed = True
@@ -205,17 +203,18 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
-    dst = Path(mm.mods_root) / mod_id
+    mods_root = Path(mm.mods_root)
+    installed_dir = existing_dir_under(mods_root, mod_id)
     pool = bundled_industry_seeds_dir()
 
-    if dst.is_dir():
+    if installed_dir is not None:
         loaded = False
         try:
             loaded = bool(mm.load_mod(mod_id))
         except RECOVERABLE_ERRORS as exc:
             logger.warning("load_mod existing industry seed %s: %s", mod_id, exc)
         payload = {
-            "success": loaded or dst.is_dir(),
+            "success": loaded or installed_dir.is_dir(),
             "status": "already_present",
             "industry_id": iid,
             "mod_id": mod_id,
@@ -247,6 +246,7 @@ def seed_industry_mod(industry_id: str) -> dict[str, Any]:
             "message": f"行业种子池中无 {mod_id}，请从扩展市场安装",
         }
 
+    dst = mods_root / src.name
     try:
         os.makedirs(mm.mods_root, exist_ok=True)
         shutil.copytree(src, dst)

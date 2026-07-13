@@ -249,7 +249,8 @@ class TestActionVendorConvert:
         src.write_text("hi")
         out = exec_mod._action_vendor_convert(tmp_path, "emp-1", {"file_path": str(src)}, None)
         assert out["ok"] is False
-        assert "boom" in out["error"]
+        assert out["error"] == "vendor conversion failed"
+        assert "boom" not in out["error"]
 
     def test_convert_with_explicit_output_path(self, tmp_path):
         backend = tmp_path / "backend" / "vendor" / "csv"
@@ -363,7 +364,8 @@ class TestCognitionFhd:
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
-            assert "llm down" in out["error"]
+            assert out["error"] == "cognition failed"
+            assert "llm down" not in out["error"]
 
     def test_returns_error_when_raw_has_error(self):
         with patch(
@@ -372,7 +374,8 @@ class TestCognitionFhd:
         ):
             out = exec_mod._cognition_fhd({}, {"normalized_input": {}}, {}, "task")
             assert out["reasoning"] == ""
-            assert "bad request" in out["error"]
+            assert out["error"] == "cognition failed"
+            assert "bad request" not in out["error"]
 
     def test_empty_choices(self):
         with patch(

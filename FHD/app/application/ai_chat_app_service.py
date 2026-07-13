@@ -296,20 +296,20 @@ class AIChatApplicationService(
             ai_result = loop.run_until_complete(
                 self.ai_service.chat(user_id, message, prepared_context, source=source)
             )
-        except ConnectionError as conn_err:
-            logger.error("AI 服务连接失败：%s", conn_err)
+        except ConnectionError:
+            logger.error("AI 服务连接失败")
             loop.close()
             return _finalize(
                 self._build_fallback_response(
                     message, "AI 服务连接失败，可能是网络问题或服务未启动"
                 )
             )
-        except TimeoutError as timeout_err:
-            logger.error("AI 服务请求超时：%s", timeout_err)
+        except TimeoutError:
+            logger.error("AI 服务请求超时")
             loop.close()
             return _finalize(self._build_fallback_response(message, "AI 服务响应超时，请稍后重试"))
         except RECOVERABLE_ERRORS as e:
-            logger.error("AI 服务处理异常：%s", e, exc_info=True)
+            logger.error("AI 服务处理异常")
             loop.close()
             error_msg = str(e)
             if "api_key" in error_msg.lower() or "apikey" in error_msg.lower():
@@ -456,8 +456,8 @@ class AIChatApplicationService(
                     "hits": result.get("hits", []),
                 }
                 return enriched
-        except RECOVERABLE_ERRORS as err:
-            logger.warning("注入 Excel 向量上下文失败: %s", err, exc_info=True)
+        except RECOVERABLE_ERRORS:
+            logger.warning("注入 Excel 向量上下文失败")
 
         return context
 
@@ -1002,15 +1002,15 @@ class AIChatApplicationService(
                     else:
                         return {
                             "success": False,
-                            "message": result.get("error", "价格表生成失败"),
-                            "response": f"抱歉，价格表生成失败：{result.get('error', '未知错误')}",
+                            "message": "价格表生成失败",
+                            "response": "抱歉，价格表生成失败，请稍后重试。",
                         }
-                except RECOVERABLE_ERRORS as e:
-                    logger.error("价格表生成异常：%s", e, exc_info=True)
+                except RECOVERABLE_ERRORS:
+                    logger.error("价格表生成异常")
                     return {
                         "success": False,
-                        "message": f"价格表生成异常：{str(e)}",
-                        "response": f"抱歉，价格表生成时出现错误：{str(e)}",
+                        "message": "价格表生成异常",
+                        "response": "抱歉，价格表生成时出现错误，请稍后重试。",
                     }
 
         # 处理混合模式下的确认/取消

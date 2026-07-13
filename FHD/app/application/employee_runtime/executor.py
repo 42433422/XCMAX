@@ -197,10 +197,10 @@ def _action_vendor_convert(
         if not src.is_file() and payload.get("user_request"):
             payload_path = pack_root / "inputs" / "payload.json"
             payload_path.parent.mkdir(parents=True, exist_ok=True)
-            payload_path.write_text(
-                json.dumps({"user_request": payload["user_request"]}, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            # The actual request is already passed to ``convert_fn`` in
+            # ``payload``.  Keep the path-only compatibility input free of
+            # user content so prompts are never persisted in clear text.
+            payload_path.write_text("{}", encoding="utf-8")
             src = payload_path
         if not src or not src.is_file():
             return {
@@ -220,9 +220,9 @@ def _action_vendor_convert(
             ctx=ctx,
             rule_spec=rule_spec,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("vendor convert failed employee_id=%s", employee_id)
-        return {"handler": "direct_python", "ok": False, "error": str(exc)[:800]}
+    except RECOVERABLE_ERRORS:
+        logger.error("vendor convert failed")
+        return {"handler": "direct_python", "ok": False, "error": "vendor conversion failed"}
     return {
         "handler": "direct_python",
         "ok": True,
@@ -316,10 +316,10 @@ def _cognition_fhd(
         from app.application.employee_runtime.agent_runner import _chat_completion, _run_async
 
         raw = _run_async(_chat_completion(messages, max_tokens=max_tokens))
-    except RECOVERABLE_ERRORS as exc:
-        return {"reasoning": "", "error": str(exc)[:800], "input": normalized, "memory": memory}
+    except RECOVERABLE_ERRORS:
+        return {"reasoning": "", "error": "cognition failed", "input": normalized, "memory": memory}
     if raw.get("error"):
-        return {"reasoning": "", "error": raw["error"], "input": normalized, "memory": memory}
+        return {"reasoning": "", "error": "cognition failed", "input": normalized, "memory": memory}
     choices = raw.get("choices") or []
     text = ""
     if choices and isinstance(choices[0], dict):

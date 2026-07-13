@@ -178,8 +178,8 @@ def build_product_query_response_dict(route_result: dict[str, Any]) -> dict[str,
             n = (row.get("name") or row.get("product_name") or "-").strip()
             p = safe_float(row.get("price"))
             preview_lines.append(f"- {m or '-'} / {n} / ￥{format_money(p)}")
-    except RECOVERABLE_ERRORS as query_err:
-        logger.warning("产品查询预览失败：%s", query_err, exc_info=True)
+    except RECOVERABLE_ERRORS:
+        logger.warning("产品查询预览失败")
 
     query_desc_bits = []
     if unit_name:
@@ -256,9 +256,14 @@ def run_workflow_products_query_normal_profile(
             "raw": result,
             "normal_tool_profile": True,
         }
-    except RECOVERABLE_ERRORS as err:
-        logger.warning("normal_profile products.query 失败：%s", err, exc_info=True)
-        return {"success": False, "message": str(err), "data": [], "normal_tool_profile": True}
+    except RECOVERABLE_ERRORS:
+        logger.warning("normal_profile products.query 失败")
+        return {
+            "success": False,
+            "message": "产品查询失败，请稍后重试",
+            "data": [],
+            "normal_tool_profile": True,
+        }
 
 
 def resolve_tool_execution_profile(runtime_context: dict[str, Any] | None) -> str:
@@ -352,8 +357,8 @@ def build_customers_query_response_dict(route_result: dict[str, Any]) -> dict[st
             "data": {"intent": "customers_query", "customers": customers[:20]},
             "normal_slot_dispatch": True,
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("customers_query 失败: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.warning("customers_query 失败")
         return {
             "success": False,
             "response": "客户查询服务暂时不可用，请稍后重试。",
@@ -385,8 +390,8 @@ def build_inventory_alert_response_dict(route_result: dict[str, Any]) -> dict[st
             "data": {"intent": "inventory_alert", "low_stock_items": items[:20]},
             "normal_slot_dispatch": True,
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("inventory_alert 失败: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.warning("inventory_alert 失败")
         return {
             "success": False,
             "response": "库存查询服务暂时不可用，请稍后重试。",
@@ -420,15 +425,15 @@ def build_label_print_response_dict(route_result: dict[str, Any]) -> dict[str, A
         if result.get("success"):
             msg = f"已发送打印任务：{model_number} × {quantity} 张。"
         else:
-            msg = f"打印失败：{result.get('message', '未知错误')}。请检查打印机连接。"
+            msg = "打印失败，请检查打印机连接。"
         return {
             "success": result.get("success", False),
             "response": msg,
             "data": {"intent": "label_print", **result},
             "normal_slot_dispatch": True,
         }
-    except RECOVERABLE_ERRORS as e:
-        logger.warning("label_print 失败: %s", e)
+    except RECOVERABLE_ERRORS:
+        logger.warning("label_print 失败")
         return {
             "success": False,
             "response": "标签打印服务暂时不可用，请稍后重试。",

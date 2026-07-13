@@ -27,7 +27,8 @@ class TestXcagiChatHttpExcExtended:
         exc = TimeoutError("timeout occurred")
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 504
-        assert "timeout occurred" in result.detail
+        assert result.detail == "大模型响应超时，请稍后重试。"
+        assert "timeout occurred" not in result.detail
 
     def test_timeout_error_empty_message(self):
         exc = TimeoutError()
@@ -78,7 +79,8 @@ class TestXcagiChatHttpExcExtended:
         exc = RuntimeError("runtime failure")
         result = ch._xcagi_chat_http_exc(exc)
         assert result.status_code == 503
-        assert "runtime failure" in result.detail
+        assert result.detail == "大模型服务暂时不可用"
+        assert "runtime failure" not in result.detail
 
     def test_value_error_balance_insufficient(self):
         exc = ValueError("余额不足")
