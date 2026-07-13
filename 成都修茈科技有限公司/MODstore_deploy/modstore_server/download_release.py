@@ -56,9 +56,7 @@ def ssot_path() -> Path:
     root = _repo_root()
     candidates.append(root / "FHD" / "config" / "download_release.json")
     candidates.append(root / "config" / "download_release.json")
-    candidates.append(
-        Path(__file__).resolve().parent.parent / "config" / "download_release.json"
-    )
+    candidates.append(Path(__file__).resolve().parent.parent / "config" / "download_release.json")
     for p in candidates:
         if p.is_file():
             return p
@@ -146,9 +144,7 @@ def write_public_manifests(rel: Optional[Dict[str, Any]] = None) -> List[str]:
         try:
             if not tgt.parent.is_dir():
                 continue
-            tgt.write_text(
-                json.dumps(pub, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-            )
+            tgt.write_text(json.dumps(pub, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             written.append(str(tgt))
         except Exception:  # noqa: BLE001
             logger.exception("download_release: write public manifest failed %s", tgt)
