@@ -96,6 +96,9 @@ build_one_sku() {
   fi
 
   printf '{"sku":"%s","schema_version":1}\n' "${sku}" > desktop/resources/product-sku.json
+  local build_sha
+  build_sha="$(python3 scripts/package/generate-desktop-build-info.py --version "${VERSION}")"
+  export XCAGI_BUILD_SHA="${build_sha}"
   "${PYTHON:-python3}" scripts/package/generate-desktop-resources.py
 
   (cd desktop && [ -d node_modules ] || npm install)

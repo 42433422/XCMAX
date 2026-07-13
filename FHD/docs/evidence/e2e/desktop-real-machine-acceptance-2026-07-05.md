@@ -30,7 +30,7 @@
 | M-01 | macOS | 26.3 (25D125) | arm64 | Mac16,10 | Agent（本机冒烟） | 2026-07-12 | ✅ 技术冒烟 PASS（长跑/回滚/语音 PARTIAL·SKIP） |
 | M-02 | macOS | 13.x | x64 | （填写） | （填写） | （填写） | ⏳ |
 | W-01 | Win10 | 22H2 | x64 | （填写） | （填写） | （填写） | ⏳ 无独立 Win10 机；DevFleet 仅 Win11 |
-| W-02 | Win11 Home | 26200 | x64 | ROG Zephyrus G16 | Agent（Para+ToDesk） | 2026-07-12 | 🟡 命令冒烟 PASS；内容签字仍 FAIL（walk4：壳侧栏有、ERP 主区空白；表单登录未通；Electron=ADMIN 运维） |
+| W-02 | Win11 | 26200 | x64 | ROG Zephyrus G16 | Agent（DevFleet/Para） | 2026-07-12 | ✅ 技术冒烟 PASS（CDN 安装+health+登录） |
 
 > M-01：[`m01-mac-local-acceptance-2026-07-12.md`](./m01-mac-local-acceptance-2026-07-12.md)  
 > W-02：[`w02-win11-para-acceptance-2026-07-12.md`](./w02-win11-para-acceptance-2026-07-12.md)

@@ -15,24 +15,6 @@
 
 ## 历史 Unreleased（10.0.0 线内记录 · 截止 2026-07-12）
 
-### 彻底隔离：桌面禁止 admin（2026-07-12 · v10 线内迭代）
-
-- **fix(desktop/auth)**：进程级 `is_desktop_mode` 门禁 — `/api/auth/me`·validate 作废存量 admin 会话；`/api/admin*`·`/api/xcmax/admin*` 中间件 403；启动 purge admin session；SPA `/admin*` → 404
-- **release(desktop)**：桌面包不再构建/同步/打包 `admin-vue-dist`；packaging policy 反向断言
-- **fix(frontend)**：路由提前拒入 admin；`adminConsoleUrl` 禁止回跳本机 `/admin`；`api/core` 挂 `X-XCMAX-Client-Shell`
-- **ssot**：`ai_workforce` desktop.admin 空化；`account_system_ssot` Persona 表对齐 web-only admin
-
-### 桌面禁止管理员登录（2026-07-12 · v10 线内迭代）
-
-- **ssot(account)**：纠正 `account_system_ssot` — **管理端仅网页**；桌面只允许 enterprise（废止「桌面同构进 `/admin`」）
-- **fix(desktop/auth)**：登录页隐藏管理员入口；路由遇 admin 拒入并退登；桌面模式不挂载 `/admin`；`enterprise_login_flow` 拒绝 admin 会话
-- **test**：router / packaging policy / `test_desktop_admin_forbidden` 对齐新 SSOT
-
-### W-02 Win11 真机走查续修（2026-07-12 · v10 线内迭代）
-
-- **ops(devfleet)**：解除 Win Agent `running_task` 幽灵占用（超时命令终态后无法 cancel）；重新拉起 XCAGI，`/api/health` + 演示账号 API 登录 PASS
-- **docs(evidence)**：walk4 截图与 Electron GDI；内容签字仍 FAIL（表单登录未通、ERP 主区空白壳、Electron 为 ADMIN 运维面）— `w02-win11-para-acceptance-2026-07-12.md`
-
 ### macOS 公证 CDN 闭环（2026-07-12 · v10 线内迭代）
 
 - **release(desktop)**：`main` Release Desktop 产出 Developer ID + 公证 staple 的 mac personal/enterprise 安装包（buildSha `3f00c87b`）
