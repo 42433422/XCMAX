@@ -23,7 +23,10 @@ if (isMac && path.extname(name).toLowerCase() !== '.zip') {
 }
 
 function resolveBuildSha() {
-  const fromEnv = String(process.env.GITHUB_SHA || process.env.XCAGI_BUILD_SHA || '').trim()
+  // XCAGI_BUILD_SHA is the explicit packaging input. Prefer it over the
+  // ambient GitHub runner SHA so callers can generate metadata for a verified
+  // artifact without inheriting an unrelated workflow commit.
+  const fromEnv = String(process.env.XCAGI_BUILD_SHA || process.env.GITHUB_SHA || '').trim()
   if (fromEnv) return fromEnv
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
