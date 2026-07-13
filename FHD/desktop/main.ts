@@ -1177,20 +1177,15 @@ async function createWindow(): Promise<void> {
       return
     }
     const elapsed = Date.now() - phaseStarted
-    const totalSec = Math.floor((Date.now() - splashStarted) / 1000)
     if (splashPhase === 'boot') {
       // 后端拉起阶段：8% → 55%，按预算时间缓爬，始终有可见推进
       const creep = 8 + Math.min(47, (elapsed / splashBudgetMs) * 47)
-      const label =
-        totalSec >= 2 ? `正在启动本地服务…（已等待 ${totalSec}s）` : '正在启动本地服务…'
-      updateSplashProgress(creep, label)
+      updateSplashProgress(creep, '正在启动本地服务…')
       return
     }
     // 路由/模块就绪阶段：58% → 85%
     const creep = 58 + Math.min(27, (elapsed / Math.max(15_000, splashBudgetMs * 0.35)) * 27)
-    const label =
-      totalSec >= 2 ? `正在加载业务模块…（已等待 ${totalSec}s）` : '正在加载业务模块…'
-    updateSplashProgress(creep, label)
+    updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
   void waitForBackendPing(DEFAULT_PORT)
