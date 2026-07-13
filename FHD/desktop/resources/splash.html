@@ -159,13 +159,6 @@
           // 无宿主推送时也缓爬到 70%，避免用户误以为卡死
           var target = Math.min(70, 4 + Math.pow(elapsed / 90000, 0.65) * 66);
           if (target > current) applyProgress(target);
-          var sec = Math.floor(elapsed / 1000);
-          if (statusEl && sec >= 2 && !drivenByHost) {
-            statusEl.textContent = '正在启动本地服务…（已等待 ' + sec + 's）';
-          }
-          if (hint && sec >= 20) {
-            hint.textContent = '首次启动初始化较慢属正常现象，请继续等待';
-          }
         }
 
         window.xcagiSetSplashStatus = function (text) {
