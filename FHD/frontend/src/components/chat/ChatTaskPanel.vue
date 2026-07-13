@@ -230,8 +230,18 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
-                  <button v-if="task.status === 'failed' || task.status === 'cancelled'" class="btn btn-primary btn-sm" @click="$emit('retry-task', task.id)">{{ $t('chat.retryTask') }}</button>
-                  <button v-if="task.status === 'running' || task.status === 'queued'" class="btn btn-secondary btn-sm" @click="$emit('cancel-task-by-id', task.id)">{{ $t('chat.cancel') }}</button>
+                  <button
+                    v-if="(task.status === 'failed' || task.status === 'cancelled') && hasRealTaskActionCapability(task, 'retry')"
+                    class="btn btn-primary btn-sm"
+                    data-action="retry-task"
+                    @click="$emit('retry-task', task.id)"
+                  >{{ $t('chat.retryTask') }}</button>
+                  <button
+                    v-if="(task.status === 'running' || task.status === 'queued') && hasRealTaskActionCapability(task, 'cancel')"
+                    class="btn btn-secondary btn-sm"
+                    data-action="cancel-task-by-id"
+                    @click="$emit('cancel-task-by-id', task.id)"
+                  >{{ $t('chat.cancel') }}</button>
                 </div>
               </div>
             </div>
@@ -291,6 +301,26 @@ type WorkflowTaskPayload = {
   workflowProgressStarted?: boolean
   workflowProgressLabel?: string
   workflowSteps?: Array<{ id: string; label: string; status: string }>
+}
+
+type TaskActionName = 'retry' | 'cancel'
+
+type TaskActionCapability = {
+  enabled?: unknown
+  endpoint?: unknown
+}
+
+/**
+ * 任务历史里原先的重试/取消只会本地改状态，并不代表后端真的执行了动作。
+ * 只有任务生产方在 payload 中明确给出已启用且可调用的端点时，才向用户暴露按钮。
+ */
+function hasRealTaskActionCapability(task: TaskItem, action: TaskActionName): boolean {
+  const capabilities = task.payload?.actionCapabilities
+  if (!capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) return false
+  const capability = (capabilities as Record<string, unknown>)[action]
+  if (!capability || typeof capability !== 'object' || Array.isArray(capability)) return false
+  const { enabled, endpoint } = capability as TaskActionCapability
+  return enabled === true && typeof endpoint === 'string' && endpoint.trim().length > 0
 }
 
 function workflowPayload(task: TaskItem): WorkflowTaskPayload {

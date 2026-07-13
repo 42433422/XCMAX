@@ -3,13 +3,13 @@ import { useModsStore } from '@/stores/mods'
 import { writeAiSessionIdToStorage } from '@/utils/xcagiStorageKeys'
 import chatApi from '../api/chat'
 import {
-  persistExcelAnalysisContext,
+  CHAT_TASK_PANEL_STORAGE_PREFIX,
   useChatHistoryPersistence,
   type LinkedExcelSheet,
   type TaskItem,
 } from './useChatPersistence'
 import type { ShipmentTask } from './useShipmentTask'
-import type { ChatMessage } from './useChatMessages'
+import { mergeChatMessageSidecars, type ChatMessage } from './useChatMessages'
 import { asRecord, asArray, asString } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
@@ -28,6 +28,9 @@ export interface UseChatSessionHistoryDeps {
   persistTaskPanelStateForSession: (targetSessionId?: string) => void
   applyPersistedTaskPanelStateForSession: (sid: string) => void
   clearPersistedTaskPanelState: (sid: string) => void
+  activateSessionContext: (sid: string) => void
+  clearSessionContext: (sid: string, clearPersistedExcel?: boolean) => void
+  clearAllSessionContexts: () => void
   generateSessionId: () => string
   normalizeServerContentToHtml: (raw: unknown) => string
 }
@@ -57,6 +60,9 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     persistTaskPanelStateForSession,
     applyPersistedTaskPanelStateForSession,
     clearPersistedTaskPanelState,
+    activateSessionContext,
+    clearSessionContext,
+    clearAllSessionContexts,
     generateSessionId,
     normalizeServerContentToHtml,
   } = deps
@@ -75,6 +81,31 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   const historySessions = ref<HistorySessionItem[]>([])
   const historyLoading = ref(false)
   const historyError = ref('')
+
+  function clearAllPersistedTaskPanelStates(): void {
+    if (typeof sessionStorage === 'undefined') return
+    const removeKeys: string[] = []
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = String(sessionStorage.key(i) || '')
+      if (key.startsWith(CHAT_TASK_PANEL_STORAGE_PREFIX)) removeKeys.push(key)
+    }
+    removeKeys.forEach((key) => sessionStorage.removeItem(key))
+  }
+
+  function resetActiveConversation(nextSessionId: string): void {
+    sessionId.value = nextSessionId
+    writeAiSessionIdToStorage(nextSessionId)
+    taskList.value = []
+    activeTaskId.value = ''
+    expandedTaskIds.value = []
+    taskFilter.value = 'all'
+    currentTask.value = null
+    lastExcelAnalysisContext.value = null
+    linkedExcelSheet.value = null
+    linkedExcelAllSheets.value = false
+    clearPersistedTaskPanelState(nextSessionId)
+    clearMessages()
+  }
 
   async function showHistoryPanel() {
     if (historyLoading.value) return
@@ -111,14 +142,16 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     sessionId.value = sid
     writeAiSessionIdToStorage(sid)
     applyPersistedTaskPanelStateForSession(sid)
+    activateSessionContext(sid)
 
     try {
       const data = await chatApi.getConversation(sid)
+      if (String(sessionId.value || '').trim() !== sid) return
       const dataRow = asRecord(data)
       const serverMessages = asArray(dataRow.messages)
       const localMessages = readLocalMessagesBySession(sid)
       if (data.success && serverMessages.length > 0) {
-        loadMessages(serverMessages.map((msg: unknown) => {
+        const mappedServerMessages = serverMessages.map((msg: unknown) => {
           const row = asRecord(msg)
           const roleRaw = asString(row.role)
           return {
@@ -128,18 +161,11 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
               row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
             ),
           }
-        }))
+        }) as ChatMessage[]
+        loadMessages(mergeChatMessageSidecars(mappedServerMessages, localMessages))
       } else if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => {
-          const row = asRecord(msg)
-          const roleRaw = asString(row.role || (msg as { role?: string }).role)
-          return {
-            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            // 本地缓存已经是可展示内容；再次 HTML 转义会把 &quot; 变成可见实体。
-            content: asString(row.content || (msg as { content?: string }).content),
-            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
-          }
-        }))
+        // 本地缓存已经过 UI 消息白名单清洗，直接加载可保留审批、下载和轨迹卡片。
+        loadMessages(localMessages)
       } else if (data.success) {
         loadMessages([{
           role: 'ai',
@@ -151,17 +177,10 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
       }
       showHistory.value = false
     } catch (e) {
+      if (String(sessionId.value || '').trim() !== sid) return
       const localMessages = readLocalMessagesBySession(sid)
       if (localMessages.length > 0) {
-        loadMessages(localMessages.map((msg) => {
-          const row = asRecord(msg)
-          const roleRaw = asString(row.role || (msg as { role?: string }).role)
-          return {
-            role: roleRaw === 'user' || roleRaw === 'task' ? roleRaw : 'ai',
-            content: asString(row.content || (msg as { content?: string }).content),
-            time: formatChatMessageTime(row.time ?? row.timestamp ?? row.created_at),
-          }
-        }))
+        loadMessages(localMessages)
         historyError.value = ''
         showHistory.value = false
       } else {
@@ -169,6 +188,7 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
         sessionId.value = previousSessionId
         writeAiSessionIdToStorage(previousSessionId)
         applyPersistedTaskPanelStateForSession(previousSessionId || 'default')
+        activateSessionContext(previousSessionId || 'default')
         console.error('加载会话失败:', e)
       }
     } finally {
@@ -184,12 +204,18 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
     historyLoading.value = true
     historyError.value = ''
     try {
-      clearLocalHistoryCache()
       const data = await chatApi.clearConversations({ user_id: 'default' })
       if (!data?.success) throw new Error(asString((data as { message?: unknown }).message, '清空历史失败'))
-      historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
+      clearLocalHistoryCache()
+      clearAllPersistedTaskPanelStates()
+      clearAllSessionContexts()
+      const nextSessionId = generateSessionId()
+      resetActiveConversation(nextSessionId)
+      clearSessionContext(nextSessionId, true)
+      persistTaskPanelStateForSession(nextSessionId)
+      historySessions.value = []
+      showHistory.value = false
     } catch (e) {
-      historySessions.value = mergeHistorySessions([]) as HistorySessionItem[]
       historyError.value = e instanceof Error ? e.message : '清空历史失败，请稍后重试'
       console.error('清空历史失败:', e)
     } finally {
@@ -200,20 +226,12 @@ export function useChatSessionHistory(deps: UseChatSessionHistoryDeps) {
   function newConversation() {
     const prev = String(sessionId.value || '').trim() || 'default'
     persistTaskPanelStateForSession(prev)
-    persistExcelAnalysisContext(prev, null)
-    lastExcelAnalysisContext.value = null
-    linkedExcelSheet.value = null
-    linkedExcelAllSheets.value = false
-    sessionId.value = generateSessionId()
-    writeAiSessionIdToStorage(sessionId.value)
-    taskList.value = []
-    activeTaskId.value = ''
-    expandedTaskIds.value = []
-    taskFilter.value = 'all'
-    currentTask.value = null
-    clearPersistedTaskPanelState(sessionId.value)
-    persistTaskPanelStateForSession(sessionId.value)
-    clearMessages()
+    const nextSessionId = generateSessionId()
+    resetActiveConversation(nextSessionId)
+    clearSessionContext(nextSessionId, true)
+    persistTaskPanelStateForSession(nextSessionId)
+    historyError.value = ''
+    showHistory.value = false
   }
 
   function registerHistoryModWatch(showHistoryPanelFn: () => Promise<void>) {

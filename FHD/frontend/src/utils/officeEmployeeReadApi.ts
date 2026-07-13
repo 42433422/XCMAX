@@ -22,25 +22,17 @@ const EXTRACT_GRID_UPLOAD_PATH = '/api/templates/extract-grid'
 const OFFICE_DOCKING_EXTENSIONS = new Set([
   '.xlsx',
   '.xlsm',
-  '.xls',
-  '.csv',
   '.docx',
-  '.doc',
   '.pdf',
   '.pptx',
-  '.ppt',
 ])
 
 const EMPLOYEE_BY_EXTENSION: Record<string, string> = {
   '.xlsx': EXCEL_FULL_READ_EMPLOYEE_ID,
   '.xlsm': EXCEL_FULL_READ_EMPLOYEE_ID,
-  '.xls': EXCEL_FULL_READ_EMPLOYEE_ID,
-  '.csv': CSV_FULL_READ_EMPLOYEE_ID,
   '.docx': WORD_FULL_READ_EMPLOYEE_ID,
-  '.doc': WORD_FULL_READ_EMPLOYEE_ID,
   '.pdf': PDF_FULL_READ_EMPLOYEE_ID,
   '.pptx': PPT_FULL_READ_EMPLOYEE_ID,
-  '.ppt': PPT_FULL_READ_EMPLOYEE_ID,
 }
 
 let cachedWorkspaceRoot = ''

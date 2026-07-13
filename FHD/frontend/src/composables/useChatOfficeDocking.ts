@@ -22,7 +22,7 @@ import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 type OfficeDockingTarget = 'knowledge' | 'database'
 type OfficeDockingStatus = 'running' | 'ready' | 'error'
-type OfficeDockingCommitStatus = '' | 'committing' | 'committed' | 'failed'
+type OfficeDockingCommitStatus = '' | 'committing' | 'committed' | 'approval_pending' | 'failed'
 type OfficeDockingIntentId =
   | 'pending'
   | 'attendance_roster'
@@ -64,7 +64,17 @@ export type ChatOfficeDockingReviewItem = {
 export interface UseChatOfficeDockingDeps {
   addAndSaveMessage: (content: string, role?: 'user' | 'ai' | 'task', extras?: Record<string, unknown>) => Promise<void>
   stageExcelAnalysisContext: (payload: Record<string, unknown>) => void
-  sendDatabaseImportMessage: (message: string) => Promise<void>
+  sendDatabaseImportMessage: (message: string) => Promise<OfficeDatabaseImportResult>
+}
+
+export type OfficeDatabaseImportResult = {
+  status: 'committed' | 'approval_pending' | 'failed'
+  reason: string
+  response?: string
+  action?: string
+  affectedRows?: number
+  receipt?: Record<string, unknown>
+  payload?: Record<string, unknown>
 }
 
 const EMPLOYEE_LABELS: Record<string, string> = {
@@ -81,6 +91,155 @@ const KIND_LABELS: Record<string, string> = {
   [PDF_FULL_READ_EMPLOYEE_ID]: 'PDF',
   [PPT_FULL_READ_EMPLOYEE_ID]: 'PPT',
   [WORD_FULL_READ_EMPLOYEE_ID]: 'Word',
+}
+
+function collectPayloadRecords(value: unknown, depth = 0, seen = new Set<object>()): Record<string, unknown>[] {
+  if (depth > 7 || !value || typeof value !== 'object' || seen.has(value)) return []
+  seen.add(value)
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => collectPayloadRecords(item, depth + 1, seen))
+  }
+  const row = asRecord(value)
+  return [row, ...Object.values(row).flatMap((item) => collectPayloadRecords(item, depth + 1, seen))]
+}
+
+function firstPayloadText(records: Record<string, unknown>[], keys: string[]): string {
+  for (const key of keys) {
+    for (const row of records) {
+      const value = asString(row[key]).trim()
+      if (value) return value
+    }
+  }
+  return ''
+}
+
+/**
+ * Convert a chat round into a truthful database-import outcome.
+ * A rendered AI bubble or top-level `success: true` is not execution evidence.
+ */
+export function resolveOfficeDatabaseImportResult(payload: unknown): OfficeDatabaseImportResult {
+  const root = asRecord(payload)
+  const records = collectPayloadRecords(root)
+  const response = asString(root.response || root.message).trim()
+  const actions = records
+    .map((row) => asString(row.action || row.status).trim().toLowerCase())
+    .filter(Boolean)
+  const action = actions[0] || ''
+  const requiresToken = records.some((row) => row.requires_token === true)
+  const approvalAction = actions.find((value) => (
+    value === 'approval_pending'
+    || value === 'workflow_confirmation_required'
+    || value === 'confirmation_required'
+    || value === 'requires_approval'
+    || value === 'approval_required'
+  ))
+
+  if (requiresToken) {
+    const tokenReason = firstPayloadText(records, ['token_description', 'message', 'response'])
+    return {
+      status: 'approval_pending',
+      reason: tokenReason || '需要数据库写入授权；授权完成前不计为已入库',
+      response,
+      action: 'requires_token',
+      payload: root,
+    }
+  }
+  if (approvalAction) {
+    const reason = approvalAction === 'workflow_confirmation_required'
+      ? '后端已生成写库计划，仍需用户确认；尚未实际入库'
+      : '写库请求仍在审批中；尚未实际入库'
+    return {
+      status: 'approval_pending',
+      reason,
+      response,
+      action: approvalAction,
+      payload: root,
+    }
+  }
+
+  if (root.success !== true) {
+    return {
+      status: 'failed',
+      reason: response || firstPayloadText(records, ['error', 'detail']) || '数据库入库请求失败',
+      response,
+      action,
+      payload: root,
+    }
+  }
+
+  const receiptKeys = ['execution_receipt', 'business_receipt', 'receipt']
+  let receipt: Record<string, unknown> | undefined
+  for (const row of records) {
+    for (const key of receiptKeys) {
+      const candidate = asRecord(row[key])
+      if (Object.keys(candidate).length) {
+        receipt = candidate
+        break
+      }
+    }
+    if (receipt) break
+  }
+  const receiptExecuted = !!receipt && (
+    receipt.executed === true
+    || receipt.verified === true
+    || ['completed', 'created', 'submitted', 'success'].includes(asString(receipt.status).toLowerCase())
+  ) && receipt.executed !== false
+
+  const affectedKeys = [
+    'affected_rows',
+    'rows_written',
+    'imported_count',
+    'created_units',
+    'created_customers',
+    'created_products',
+    'updated_count',
+  ]
+  let affectedRows: number | undefined
+  for (const row of records) {
+    for (const key of affectedKeys) {
+      if (row[key] === '' || row[key] === null || row[key] === undefined) continue
+      const value = Number(row[key])
+      if (Number.isFinite(value) && value >= 0) {
+        affectedRows = value
+        break
+      }
+    }
+    if (affectedRows !== undefined) break
+  }
+
+  const successfulImportAction = records.some((row) => {
+    const toolId = asString(row.tool_id).toLowerCase()
+    const nodeAction = asString(row.action).toLowerCase()
+    return row.success === true
+      && ['excel_import', 'unit_products_import', 'customer_product_import'].includes(toolId)
+      && ['import_records', 'execute_import', 'import', 'upsert'].includes(nodeAction)
+  })
+  const workflowDone = actions.some((value) => (
+    value === 'workflow_done'
+    || value === 'business_tool_result'
+    || value === 'database_import_completed'
+    || value === 'import_completed'
+  ))
+
+  if (receiptExecuted || affectedRows !== undefined || (workflowDone && successfulImportAction)) {
+    return {
+      status: 'committed',
+      reason: '后端已返回可核验的真实入库结果',
+      response,
+      action: workflowDone ? actions.find((value) => value === 'workflow_done') || action : action,
+      ...(affectedRows !== undefined ? { affectedRows } : {}),
+      ...(receipt ? { receipt } : {}),
+      payload: root,
+    }
+  }
+
+  return {
+    status: 'failed',
+    reason: '后端未返回入库回执、影响行数或成功的入库动作；本次不计为已入库',
+    response,
+    action,
+    payload: root,
+  }
 }
 
 function newItemId(): string {
@@ -410,7 +569,11 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
   const officeDockingPanelOpen = ref(false)
   const officeDockingReviewItems = ref<ChatOfficeDockingReviewItem[]>([])
   const officeDockingPendingCount = computed(
-    () => officeDockingReviewItems.value.filter((item) => item.status === 'ready').length,
+    () => officeDockingReviewItems.value.filter((item) => (
+      item.status === 'ready'
+      && item.commitStatus !== 'committed'
+      && item.commitStatus !== 'approval_pending'
+    )).length,
   )
 
   function triggerOfficeDocking() {
@@ -568,6 +731,7 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       item.status === 'ready'
       && item.commitStatus !== 'committed'
       && item.commitStatus !== 'committing'
+      && item.commitStatus !== 'approval_pending'
       && (item.selectedKnowledge || item.selectedDatabase)
     ))
     if (!ready.length) return
@@ -589,7 +753,19 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
             item.summary = `考勤入库完成：人员 ${employeeRows} 条，部门 ${departmentRows} 条`
           } else if (item.databaseAction === 'customer_product_import') {
             deps.stageExcelAnalysisContext(item.excelAnalysis)
-            await deps.sendDatabaseImportMessage(`导入数据库，确认导入：${item.fileName}`)
+            const result = await deps.sendDatabaseImportMessage(`导入数据库，确认导入：${item.fileName}`)
+            if (result.status === 'approval_pending') {
+              item.commitStatus = 'approval_pending'
+              item.error = ''
+              item.summary = result.reason
+              continue
+            }
+            if (result.status !== 'committed') {
+              throw new Error(result.reason || '客户/产品库入库失败')
+            }
+            item.summary = result.affectedRows === undefined
+              ? result.reason
+              : `客户/产品库入库完成：后端回执 ${result.affectedRows} 条`
           } else {
             throw new Error(item.databaseDisabledReason || '未识别到可写入的业务数据库')
           }
@@ -603,9 +779,10 @@ export function useChatOfficeDocking(deps: UseChatOfficeDockingDeps) {
       }
     }
     const okCount = ready.filter((item) => item.commitStatus === 'committed').length
+    const pendingCount = ready.filter((item) => item.commitStatus === 'approval_pending').length
     const failCount = ready.filter((item) => item.commitStatus === 'failed').length
     await deps.addAndSaveMessage(
-      `[对接] 审核提交完成：成功 ${okCount} 个${failCount ? `，失败 ${failCount} 个` : ''}。`,
+      `[对接] 审核提交结果：已完成 ${okCount} 个${pendingCount ? `，待确认/审批 ${pendingCount} 个（不计为成功）` : ''}${failCount ? `，失败 ${failCount} 个` : ''}。`,
       failCount ? 'ai' : 'ai',
     )
   }

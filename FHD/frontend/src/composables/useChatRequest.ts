@@ -1,10 +1,12 @@
 import { ref, type Ref } from 'vue'
 import type { ChatMessage } from './useChatMessages'
+import type { MultimodalRequestSnapshot } from './useChatExcelContext'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
 
 export interface UseChatRequestDeps {
+  sessionId: Ref<string>
   messages: Ref<ChatMessage[]>
   proIntentExperienceEnabled?: Ref<boolean>
   isProMode: Ref<boolean>
@@ -14,11 +16,16 @@ export interface UseChatRequestDeps {
   getModeScopedUserId: (proEnabled: boolean) => string
   resolveChatDbTokensForPayload: () => { db_read_token?: string; db_write_token?: string }
   injectExcelContextPayload: (ctx: Record<string, unknown>, parts: string[]) => boolean
-  consumeMultimodalIntoPlannerContext: (ctx: Record<string, unknown>, parts: string[]) => void
+  consumeMultimodalIntoPlannerContext: (
+    ctx: Record<string, unknown>,
+    parts: string[],
+  ) => MultimodalRequestSnapshot | null
+  acknowledgeMultimodalRequest: (snapshot: MultimodalRequestSnapshot | null | undefined) => void
 }
 
 export function useChatRequest(deps: UseChatRequestDeps) {
   const {
+    sessionId,
     messages,
     proIntentExperienceEnabled,
     isProMode,
@@ -29,6 +36,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
+    acknowledgeMultimodalRequest,
   } = deps
 
   const loadingProgressText = ref('处理中...')
@@ -42,11 +50,13 @@ export function useChatRequest(deps: UseChatRequestDeps) {
   ): {
     body: Record<string, unknown>
     proIntentEnabled: boolean
+    multimodalSnapshot: MultimodalRequestSnapshot | null
   } {
     const runtimeProEnabled = resolveEffectiveProModeState()
     isProMode.value = runtimeProEnabled
 
     const proIntentEnabled = runtimeProEnabled || !!proIntentExperienceEnabled?.value
+    const session_id = String(sessionId.value || '').trim() || 'default'
     const hybridNormalUiProChannel = proIntentEnabled && !runtimeProEnabled
     const user_id = getModeScopedUserId(proIntentEnabled)
     const compactHistory = (messages.value || [])
@@ -65,7 +75,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
-    consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const multimodalSnapshot = consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     if (hybridNormalUiProChannel) {
@@ -86,8 +96,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     if (proIntentEnabled) {
       return {
         proIntentEnabled,
+        multimodalSnapshot,
         body: {
           message,
+          session_id,
           source: 'pro',
           mode: 'professional',
           user_id,
@@ -98,8 +110,10 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     }
     return {
       proIntentEnabled,
+      multimodalSnapshot,
       body: {
         message,
+        session_id,
         source: 'normal',
         mode: 'basic',
         user_id,
@@ -114,19 +128,42 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     fetchOptions: RequestInit = {},
     plannerOpts?: { fromWriteUnlock?: boolean }
   ): Promise<ChatPlannerPayload> {
-    const { body, proIntentEnabled } = buildPlannerChatRequestPayload(message, plannerOpts)
+    const { payload, multimodalSnapshot } = await dispatchChatByMode(message, fetchOptions, plannerOpts)
+    acknowledgeAcceptedMultimodalRequest(payload, multimodalSnapshot)
+    return payload
+  }
+
+  async function dispatchChatByMode(
+    message: string,
+    fetchOptions: RequestInit = {},
+    plannerOpts?: { fromWriteUnlock?: boolean },
+  ): Promise<{ payload: ChatPlannerPayload; multimodalSnapshot: MultimodalRequestSnapshot | null }> {
+    const { body, proIntentEnabled, multimodalSnapshot } = buildPlannerChatRequestPayload(message, plannerOpts)
     const reqOpts = { signal: fetchOptions.signal }
+    let payload: ChatPlannerPayload
     if (proIntentEnabled) {
-      return (await chatApi.sendChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
+      payload = (await chatApi.sendChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
+    } else {
+      payload = (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
     }
-    return (await chatApi.sendUnifiedChat(body as unknown as ChatRequest, reqOpts)) as unknown as ChatPlannerPayload
+    return { payload, multimodalSnapshot }
   }
 
   /** 与单条请求相同的 context / user_id，用于 /api/ai/chat/batch 与 unified_chat/batch */
   async function requestChatByModeBatch(batchTexts: string[], fetchOptions: RequestInit = {}): Promise<ChatPlannerPayload> {
+    const { payload, multimodalSnapshot } = await dispatchChatByModeBatch(batchTexts, fetchOptions)
+    acknowledgeAcceptedMultimodalRequest(payload, multimodalSnapshot)
+    return payload
+  }
+
+  async function dispatchChatByModeBatch(
+    batchTexts: string[],
+    fetchOptions: RequestInit = {},
+  ): Promise<{ payload: ChatPlannerPayload; multimodalSnapshot: MultimodalRequestSnapshot | null }> {
     const runtimeProEnabled = resolveEffectiveProModeState()
     isProMode.value = runtimeProEnabled
     const proIntentEnabled = runtimeProEnabled || !!proIntentExperienceEnabled?.value
+    const session_id = String(sessionId.value || '').trim() || 'default'
     const hybridNormalUiProChannel = proIntentEnabled && !runtimeProEnabled
     const user_id = getModeScopedUserId(proIntentEnabled)
     const compactHistory = (messages.value || [])
@@ -144,7 +181,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     const contextParts: string[] = []
     contextParts.push(`最近对话 ${compactHistory.length} 条`)
     const hasExcelContext = injectExcelContextPayload(contextPayload, contextParts)
-    consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
+    const multimodalSnapshot = consumeMultimodalIntoPlannerContext(contextPayload, contextParts)
     const linkedCount = compactHistory.length + (hasExcelContext ? 1 : 0)
     lastRequestContextSummary.value = `已关联上下文：${contextParts.join(' + ')}（共 ${linkedCount}）`
     if (hybridNormalUiProChannel) {
@@ -155,16 +192,28 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     const reqOpts = { signal: fetchOptions.signal }
     const batchBody = {
       messages: batchTexts,
+      session_id,
       user_id,
       context: contextPayload,
       source: proIntentEnabled ? ('pro' as const) : ('normal' as const),
       mode: proIntentEnabled ? ('professional' as const) : ('basic' as const),
       ...resolveChatDbTokensForPayload()
     }
+    let payload: ChatPlannerPayload
     if (proIntentEnabled) {
-      return (await chatApi.sendChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
+      payload = (await chatApi.sendChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
+    } else {
+      payload = (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
     }
-    return (await chatApi.sendUnifiedChatBatch(batchBody as ChatRequest & { messages: string[] }, reqOpts)) as unknown as ChatPlannerPayload
+    return { payload, multimodalSnapshot }
+  }
+
+  function acknowledgeAcceptedMultimodalRequest(
+    payload: ChatPlannerPayload,
+    snapshot: MultimodalRequestSnapshot | null,
+  ): void {
+    if (payload?.success === false) return
+    acknowledgeMultimodalRequest(snapshot)
   }
 
   function getChatBatchDebounceMs(): number {
@@ -208,30 +257,44 @@ export function useChatRequest(deps: UseChatRequestDeps) {
     plannerOpts?: { fromWriteUnlock?: boolean }
   ): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
+    let timeoutId: number | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         controller.abort()
         reject(new Error(`请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
       }, timeoutMs)
     })
-    return Promise.race([
-      requestChatByMode(message, { signal: controller.signal }, plannerOpts),
-      timeoutPromise
-    ])
+    try {
+      const { payload, multimodalSnapshot } = await Promise.race([
+        dispatchChatByMode(message, { signal: controller.signal }, plannerOpts),
+        timeoutPromise
+      ])
+      acknowledgeAcceptedMultimodalRequest(payload, multimodalSnapshot)
+      return payload
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+    }
   }
 
   async function requestChatByModeBatchWithTimeout(batchTexts: string[], timeoutMs: number = 45000): Promise<ChatPlannerPayload> {
     const controller = new AbortController()
+    let timeoutId: number | null = null
     const timeoutPromise = new Promise<never>((_, reject) => {
-      window.setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         controller.abort()
         reject(new Error(`批量请求超时（>${Math.floor(timeoutMs / 1000)}s），请检查后端是否可达或接口是否卡住`))
       }, timeoutMs)
     })
-    return Promise.race([
-      requestChatByModeBatch(batchTexts, { signal: controller.signal }),
-      timeoutPromise
-    ])
+    try {
+      const { payload, multimodalSnapshot } = await Promise.race([
+        dispatchChatByModeBatch(batchTexts, { signal: controller.signal }),
+        timeoutPromise
+      ])
+      acknowledgeAcceptedMultimodalRequest(payload, multimodalSnapshot)
+      return payload
+    } finally {
+      if (timeoutId !== null) window.clearTimeout(timeoutId)
+    }
   }
 
   function resolveChatTimeoutMs(message: string): number {

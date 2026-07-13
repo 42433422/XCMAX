@@ -75,7 +75,7 @@
     "uploadAttachment": "Upload attachment",
     "officeDocking": "Parse office file",
     "officeDockingBusy": "Parsing file",
-    "officeDockingTitle": "Read Word, Excel, CSV, PDF, or PPT and review before saving",
+    "officeDockingTitle": "Read .xlsx/.xlsm, .docx, .pdf, or .pptx; use Upload attachment for images",
     "newConversationTitle": "New conversation",
     "historyTitleBtn": "History"
   }

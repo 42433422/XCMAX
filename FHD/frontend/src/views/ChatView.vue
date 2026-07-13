@@ -132,13 +132,14 @@
         </button>
         <button
           class="btn btn-primary send-message-btn"
+          :class="{ 'send-message-btn--stop': isStreamingReply }"
           id="sendMessageBtn"
-          :disabled="!canSendMessage"
-          :aria-disabled="!canSendMessage"
+          :disabled="isStreamingReply ? false : !canSendMessage"
+          :aria-disabled="isStreamingReply ? false : !canSendMessage"
           :title="sendButtonTitle"
-          @click="sendMessage"
+          @click="handleSendButtonClick"
         >
-          发送
+          {{ isStreamingReply ? '停止生成' : '发送' }}
         </button>
       </div>
       <div
@@ -167,7 +168,7 @@
       ref="officeDockingInputRef"
       type="file"
       multiple
-      accept=".xlsx,.xlsm,.xls,.csv,.docx,.doc,.pdf,.pptx,.ppt"
+      accept=".xlsx,.xlsm,.docx,.pdf,.pptx"
       style="display:none"
       @change="onOfficeDockingFileChange"
     />
@@ -196,7 +197,10 @@ import ChatTaskPanel from '@/components/chat/ChatTaskPanel.vue'
 import ChatInputToolbar from '@/components/chat/ChatInputToolbar.vue'
 import ChatHistoryModal from '@/components/chat/ChatHistoryModal.vue'
 import ChatOfficeDockingReview from '@/components/chat/ChatOfficeDockingReview.vue'
-import { useChatOfficeDocking } from '@/composables/useChatOfficeDocking'
+import {
+  resolveOfficeDatabaseImportResult,
+  useChatOfficeDocking,
+} from '@/composables/useChatOfficeDocking'
 import { useResizablePane } from '@/composables/useResizablePane'
 import { useModsStore } from '@/stores/mods'
 import { useChatView } from '@/composables/useChatView'
@@ -263,6 +267,7 @@ const {
   taskTableItems,
   taskOrderNumber,
   sendMessage: chatSendMessage,
+  stopStreamingReply,
   confirmWorkflowFromCard,
   cancelWorkflowFromCard,
   confirmTask,
@@ -360,12 +365,14 @@ const hasTaskPanelContent = computed(() => (
 
 const canSendMessage = computed(() => !!messageInput.value.trim() && !isLoading.value)
 const sendButtonTitle = computed(() => {
+  if (isStreamingReply.value) return '停止当前回复生成'
   if (isLoading.value) return '正在发送，请稍候'
   if (!messageInput.value.trim()) return '请先输入内容'
   return '发送消息'
 })
 const composerStatusText = computed(() => {
   if (voiceFeedbackText.value) return voiceFeedbackText.value
+  if (isStreamingReply.value) return '正在生成回复，可随时停止'
   if (isLoading.value) return '正在发送，请稍候'
   if (!messageInput.value.trim()) return '请输入内容后再发送'
   return ''
@@ -378,6 +385,14 @@ const sendMessage = async () => {
   if (!message || isLoading.value) return
   messageInput.value = ''
   await chatSendMessage(message)
+}
+
+const handleSendButtonClick = () => {
+  if (isStreamingReply.value) {
+    stopStreamingReply()
+    return
+  }
+  void sendMessage()
 }
 
 const {
@@ -394,8 +409,8 @@ const {
   addAndSaveMessage,
   stageExcelAnalysisContext,
   sendDatabaseImportMessage: async (message: string) => {
-    messageInput.value = message
-    await sendMessage()
+    const payload = await chatSendMessage(message, { immediate: true })
+    return resolveOfficeDatabaseImportResult(payload)
   },
 })
 
@@ -454,5 +469,10 @@ function emitSwitchView(view: string) {
 
 .chat-composer-status--error {
   color: #b42318;
+}
+
+.send-message-btn--stop {
+  background: #b42318;
+  border-color: #b42318;
 }
 </style>

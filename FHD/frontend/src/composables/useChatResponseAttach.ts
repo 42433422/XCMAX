@@ -11,6 +11,7 @@ export interface UseChatResponseAttachDeps {
   taskList: Ref<TaskItem[]>
   upsertTask: (item: Partial<TaskItem> & Pick<TaskItem, 'id' | 'type' | 'source' | 'title' | 'status'>) => void
   createTaskId: (prefix: string) => string
+  persistMessagesCache?: () => void
 }
 
 function nestedData(data: ChatPlannerPayload): Record<string, unknown> {
@@ -32,6 +33,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
         msg.thinkingSteps = thinkingSteps
+        deps.persistMessagesCache?.()
         break
       }
     }
@@ -57,6 +59,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
         msg.todoSteps = todoSteps
+        deps.persistMessagesCache?.()
         break
       }
     }
@@ -90,6 +93,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
         if (nodeResults.length) {
           msg.nodeResults = nodeResults
         }
+        deps.persistMessagesCache?.()
         break
       }
     }
@@ -102,6 +106,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
         msg.contextSummary = summary
+        deps.persistMessagesCache?.()
         break
       }
     }
@@ -114,6 +119,7 @@ export function useChatResponseAttach(deps: UseChatResponseAttachDeps) {
       const msg = messages.value[i]
       if (msg?.role === 'ai') {
         msg.approvalCard = card
+        deps.persistMessagesCache?.()
         break
       }
     }

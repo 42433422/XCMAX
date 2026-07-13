@@ -1,13 +1,14 @@
 /**
  * Planner SSE 流式一轮对话（从 useChatOrchestration 拆出）。
  */
-import { ref, type Ref } from 'vue'
+import { type Ref } from 'vue'
 import chatApi, { parseChatStreamErrorResponse } from '@/api/chat'
 import { readPlannerSseResponse, type PlannerSseEvent } from '@/utils/chatSseStream'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asRecord, asString } from '@/utils/typeGuards'
 import { stripInternalMarkers } from '@/utils/lightMarkdown'
 import { stripPlannerDisplayMarkers } from '@/utils/chatBubbleDisplay'
+import type { MultimodalRequestSnapshot } from './useChatExcelContext'
 
 export type ChatStreamRoundDeps = {
   pushStreamingAiShell: () => number
@@ -17,6 +18,7 @@ export type ChatStreamRoundDeps = {
   persistMessagesCache: () => void
   scrollToBottom: () => void
   setLoadingProgress: (text: string) => void
+  getInitialLoadingProgressText?: () => string
   startWaitProgressTimer: () => void
   stopLoadingProgress: () => void
   queueVoice: (text: string) => void
@@ -25,7 +27,10 @@ export type ChatStreamRoundDeps = {
   buildPlannerChatRequestPayload: (
     message: string,
     opts?: { fromWriteUnlock?: boolean },
-  ) => { body: Record<string, unknown> }
+  ) => { body: Record<string, unknown>; multimodalSnapshot?: MultimodalRequestSnapshot | null }
+  acknowledgeMultimodalRequest?: (
+    snapshot: MultimodalRequestSnapshot | null | undefined,
+  ) => void
   resolveChatTimeoutMs: (text: string) => number
   handleChatRequiresToken: (tokenName: string, tokenDesc: string, remoteMessages: string[]) => void
   onStreamDone: (payload: ChatPlannerPayload, primaryText: string, _msgIndex: number) => Promise<void>
@@ -51,11 +56,11 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
   async function runPlannerSseStream(
     primaryForStream: string,
     remoteMessages: string[],
-    opts?: { fromWriteUnlock?: boolean },
-  ): Promise<boolean> {
+    opts?: { fromWriteUnlock?: boolean; isCurrentRound?: () => boolean },
+  ): Promise<ChatPlannerPayload> {
     deps.isStreamingReply.value = true
     deps.isLoading.value = true
-    deps.setLoadingProgress('正在流式生成回复…')
+    deps.setLoadingProgress(deps.getInitialLoadingProgressText?.() || '正在流式生成回复…')
     deps.startWaitProgressTimer()
     abortedByUser = false
 
@@ -67,6 +72,12 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
     let streamPlain = ''
     let doneResult: Record<string, unknown> | null = null
     let sseError: string | null = null
+    const tokenRequirement = { required: false, tokenName: '', tokenDescription: '' }
+    const isCurrentRound = opts?.isCurrentRound || (() => true)
+    const staleSessionResult = (): ChatPlannerPayload => ({
+      success: false,
+      message: '会话已切换，已丢弃旧响应',
+    })
     let ttsSpokenOffset = 0
     const ttsShouldSpeak = deps.ttsEnabled.value
     const SPEAK_SENTENCE_BOUNDARY = /[。！？!?；;\n]/g
@@ -93,7 +104,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
     }
 
     try {
-      const { body } = deps.buildPlannerChatRequestPayload(primaryForStream, {
+      const { body, multimodalSnapshot } = deps.buildPlannerChatRequestPayload(primaryForStream, {
         fromWriteUnlock: !!opts?.fromWriteUnlock,
       })
       const res = await chatApi.sendChatStream(
@@ -104,7 +115,16 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
       if (!res.ok) {
         throw new Error(await parseChatStreamErrorResponse(res))
       }
+      deps.acknowledgeMultimodalRequest?.(multimodalSnapshot)
+      if (!isCurrentRound()) {
+        controller.abort()
+        return staleSessionResult()
+      }
       await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
+        if (!isCurrentRound()) {
+          controller.abort()
+          return
+        }
         if (ev.type === 'token') {
           if (ev.ephemeral) return
           streamPlain += ev.text || ''
@@ -126,7 +146,12 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         } else if (ev.type === 'requires_token') {
           const tokenName = ev.token_name || ''
           const tokenDesc = ev.token_description || ''
+          tokenRequirement.required = true
+          tokenRequirement.tokenName = tokenName
+          tokenRequirement.tokenDescription = tokenDesc
           deps.handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
+          streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
+          deps.applyPlainTextToMessageIndex(msgIndex, streamPlain)
           const upTok = String(tokenName || '').toUpperCase()
           if (
             upTok.includes('WRITE') ||
@@ -137,6 +162,7 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
         }
       })
 
+      if (!isCurrentRound()) return staleSessionResult()
       if (sseError) throw new Error(sseError)
 
       const finalText =
@@ -152,12 +178,18 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
       await deps.saveMessage('ai', finalText)
       const wrap: ChatPlannerPayload =
         doneResult && typeof doneResult === 'object'
-          ? (doneResult as ChatPlannerPayload)
+          ? { ...(doneResult as ChatPlannerPayload), response: finalText }
           : { success: true, response: finalText }
+      if (tokenRequirement.required) {
+        wrap.requires_token = true
+        wrap.token_name = tokenRequirement.tokenName
+        wrap.token_description = tokenRequirement.tokenDescription
+      }
       await deps.onStreamDone(wrap, primaryForStream, msgIndex)
       deps.persistMessagesCache()
-      return true
+      return wrap
     } catch (err: unknown) {
+      if (!isCurrentRound()) return staleSessionResult()
       const errObj = err as { name?: string; message?: string }
       if (errObj?.name === 'AbortError' && abortedByUser) {
         const partial = cleanStreamDisplayText(streamPlain)
@@ -169,7 +201,13 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           deps.applyPlainTextToMessageIndex(msgIndex, '（已停止生成）')
           await deps.saveMessage('ai', '（已停止生成）')
         }
-        return true
+        deps.persistMessagesCache()
+        return {
+          success: false,
+          cancelled: true,
+          message: '用户已停止生成',
+          response: partial || '（已停止生成）',
+        }
       }
       const errText =
         errObj?.name === 'AbortError'
@@ -177,9 +215,9 @@ export function useChatStreamRound(deps: ChatStreamRoundDeps) {
           : errObj?.message || '流式对话失败'
       deps.applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
       await deps.saveMessage('ai', `处理失败：${errText}`)
-      return false
+      return { success: false, message: errText, response: `处理失败：${errText}` }
     } finally {
-      activeStreamController = null
+      if (activeStreamController === controller) activeStreamController = null
       deps.isStreamingReply.value = false
       window.clearTimeout(killTimer)
       deps.isLoading.value = false

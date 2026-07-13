@@ -1,6 +1,7 @@
 import { watch, type Ref } from 'vue'
 import { useModsStore } from '@/stores/mods'
 import { useWorkflowAiEmployeesStore, workflowAiEmployeesStorageKey } from '@/stores/workflowAiEmployees'
+import { apiFetch } from '@/utils/apiBase'
 import {
   buildModWorkflowPanelMeta,
   findWorkflowEmployeeEntry,
@@ -471,7 +472,7 @@ export function useChatWorkflowPanel(deps: UseChatWorkflowPanelDeps) {
     if (!base) return
     const ch = resolvePhoneChannelByEmployee(empId)
     try {
-      const resp = await fetch(`${base}/start?channel=${ch}`, {
+      const resp = await apiFetch(`${base}/start?channel=${ch}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel: ch }),

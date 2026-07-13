@@ -5,29 +5,47 @@
         v-for="(msg, idx) in messages"
         :key="idx"
         :class="['message', msg.role]"
-        :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
+        :style="{
+          minHeight: !isMessageCollapsed(msg, idx) && messageHeights.get(idx)
+            ? messageHeights.get(idx) + 'px'
+            : 'auto',
+        }"
       >
-        <div
-          class="message-html"
-          v-html="
-            msg.role === 'ai'
-              ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content))
-              : sanitizeChatBubbleHtml(msg.content)
-          "
-        ></div>
-        <div
-          v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
-          class="message-shipment-actions"
-        >
-          <a
-            class="btn btn-primary btn-sm"
-            :href="msg.shipmentDownloadUrl"
-            download
-            @click="$emit('shipment-download-click')"
+        <CollapsedMessagePreview
+          v-if="isMessageCollapsed(msg, idx)"
+          :preview="getCollapsedPreview(msg.content)"
+          expand-label="展开详情"
+          @expand="$emit('expand-message', idx)"
+        />
+        <template v-else>
+          <div
+            class="message-html"
+            v-html="
+              msg.role === 'ai'
+                ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content))
+                : sanitizeChatBubbleHtml(msg.content)
+            "
+          ></div>
+          <div
+            v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
+            class="message-shipment-actions"
           >
-            {{ $t('chat.downloadShipment') }}
-          </a>
-        </div>
+            <a
+              class="btn btn-primary btn-sm"
+              :href="msg.shipmentDownloadUrl"
+              download
+              @click="$emit('shipment-download-click')"
+            >
+              {{ $t('chat.downloadShipment') }}
+            </a>
+          </div>
+          <MessageCollapseLink
+            v-if="msg.role === 'ai' && idx < latestAiMessageIndex"
+            class="message-fold-action"
+            label="收起"
+            @collapse="$emit('collapse-message', idx)"
+          />
+        </template>
         <div
           v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary"
           class="context-summary"
@@ -118,6 +136,8 @@ import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
 import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
+import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 
 useI18n()
 

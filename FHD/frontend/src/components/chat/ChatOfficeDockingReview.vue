@@ -48,7 +48,7 @@
             <input
               type="checkbox"
               :checked="item.selectedKnowledge"
-              :disabled="item.status !== 'ready' || item.commitStatus === 'committing'"
+              :disabled="item.status !== 'ready' || item.commitStatus === 'committing' || item.commitStatus === 'committed' || item.commitStatus === 'approval_pending'"
               @change="onToggle(item.id, 'knowledge', $event)"
             >
             入知识库
@@ -57,7 +57,7 @@
             <input
               type="checkbox"
               :checked="item.selectedDatabase"
-              :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing'"
+              :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing' || item.commitStatus === 'committed' || item.commitStatus === 'approval_pending'"
               @change="onToggle(item.id, 'database', $event)"
             >
             入数据库{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
@@ -100,13 +100,16 @@ const emit = defineEmits<{
 }>()
 
 const readyCount = computed(() => props.items.filter((item) => (
-  item.status === 'ready' && item.commitStatus !== 'committed'
+  item.status === 'ready'
+  && item.commitStatus !== 'committed'
+  && item.commitStatus !== 'approval_pending'
 )).length)
 const committing = computed(() => props.items.some((item) => item.commitStatus === 'committing'))
 const selectedReadyItems = computed(() => props.items.filter((item) => (
   item.status === 'ready'
   && item.commitStatus !== 'committed'
   && item.commitStatus !== 'committing'
+  && item.commitStatus !== 'approval_pending'
   && (item.selectedKnowledge || item.selectedDatabase)
 )))
 const selectedReadyCount = computed(() => selectedReadyItems.value.length)
@@ -139,6 +142,7 @@ const confirmLabel = computed(() => {
 
 function statusText(item: ChatOfficeDockingReviewItem): string {
   if (item.commitStatus === 'committed') return '已提交'
+  if (item.commitStatus === 'approval_pending') return '待确认/审批'
   if (item.commitStatus === 'failed') return '提交失败'
   if (item.commitStatus === 'committing') return '提交中'
   if (item.status === 'running') return '识别中'

@@ -1,5 +1,6 @@
 import { ref, computed, type Ref } from 'vue'
 import {
+  EXCEL_ANALYSIS_STORAGE_PREFIX,
   readPersistedExcelAnalysisContext,
   persistExcelAnalysisContext,
   resolveExcelFilePathFromAnalysis,
@@ -15,18 +16,37 @@ export interface UseChatExcelContextDeps {
   resolveExcelAnalysisContextForRequest?: () => Record<string, unknown> | null
 }
 
+export type MultimodalRequestSnapshot = {
+  sessionId: string
+  rows: MultimodalAttachmentRow[]
+}
+
 export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   const { sessionId, addAndSaveMessage } = deps
 
   const lastExcelAnalysisContext = ref<Record<string, unknown> | null>(null)
   const linkedExcelSheet = ref<LinkedExcelSheet | null>(null)
   const linkedExcelAllSheets = ref(false)
-  const multimodalStaging = ref<MultimodalAttachmentRow[]>([])
+  const multimodalStagingBySession = ref<Record<string, MultimodalAttachmentRow[]>>({})
+  const sessionKey = (value: unknown = sessionId.value) => String(value || '').trim() || 'default'
+  let excelContextSessionId = sessionKey()
+  const multimodalStaging = computed<MultimodalAttachmentRow[]>({
+    get: () => multimodalStagingBySession.value[sessionKey()] || [],
+    set: (rows) => {
+      multimodalStagingBySession.value = {
+        ...multimodalStagingBySession.value,
+        [sessionKey()]: Array.isArray(rows) ? rows : [],
+      }
+    },
+  })
   const multimodalPendingCount = computed(() => multimodalStaging.value.length)
 
   function resolveExcelAnalysisContextForRequest(): Record<string, unknown> | null {
+    const sid = sessionKey()
+    if (excelContextSessionId !== sid) {
+      activateSessionContext(sid)
+    }
     if (lastExcelAnalysisContext.value) return lastExcelAnalysisContext.value
-    const sid = String(sessionId.value || '').trim() || 'default'
     const restored = readPersistedExcelAnalysisContext(sid)
     if (restored) {
       lastExcelAnalysisContext.value = restored
@@ -83,20 +103,83 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     return true
   }
 
+  /**
+   * Capture the current session's attachments for one request without removing
+   * them. The caller acknowledges the snapshot only after the server accepts
+   * the request, so network errors and timeouts remain retryable.
+   */
   function consumeMultimodalIntoPlannerContext(
     contextPayload: Record<string, unknown>,
     contextParts: string[]
-  ) {
+  ): MultimodalRequestSnapshot | null {
     const rows = multimodalStaging.value
-    if (!rows.length) return
+    if (!rows.length) return null
+    const snapshot = { sessionId: sessionKey(), rows: rows.slice() }
     contextPayload.multimodal_attachments = rows.map((r) => ({ ...r }))
     contextParts.push(`多模态附件 ${rows.length} 个`)
-    multimodalStaging.value = []
+    return snapshot
+  }
+
+  function acknowledgeMultimodalRequest(snapshot: MultimodalRequestSnapshot | null | undefined): void {
+    if (!snapshot?.rows.length) return
+    const sid = sessionKey(snapshot.sessionId)
+    const acknowledged = new Set(snapshot.rows)
+    const current = multimodalStagingBySession.value[sid] || []
+    if (!current.some((row) => acknowledged.has(row))) return
+    multimodalStagingBySession.value = {
+      ...multimodalStagingBySession.value,
+      [sid]: current.filter((row) => !acknowledged.has(row)),
+    }
+  }
+
+  function clearMultimodalForSession(targetSessionId: string = sessionKey()): void {
+    const sid = sessionKey(targetSessionId)
+    if (!(sid in multimodalStagingBySession.value)) return
+    const next = { ...multimodalStagingBySession.value }
+    delete next[sid]
+    multimodalStagingBySession.value = next
+  }
+
+  function activateSessionContext(targetSessionId: string): void {
+    const sid = sessionKey(targetSessionId)
+    excelContextSessionId = sid
+    const restored = readPersistedExcelAnalysisContext(sid)
+    lastExcelAnalysisContext.value = restored
+    linkedExcelAllSheets.value = false
+    linkedExcelSheet.value = resolveExcelSheetOptionsFromContext(restored)[0] || null
+  }
+
+  function clearSessionContext(targetSessionId: string, clearPersistedExcel = false): void {
+    const sid = sessionKey(targetSessionId)
+    clearMultimodalForSession(sid)
+    if (clearPersistedExcel) persistExcelAnalysisContext(sid, null)
+    if (sid === sessionKey()) {
+      excelContextSessionId = sid
+      lastExcelAnalysisContext.value = null
+      linkedExcelSheet.value = null
+      linkedExcelAllSheets.value = false
+    }
+  }
+
+  function clearAllSessionContexts(): void {
+    multimodalStagingBySession.value = {}
+    lastExcelAnalysisContext.value = null
+    linkedExcelSheet.value = null
+    linkedExcelAllSheets.value = false
+    excelContextSessionId = sessionKey()
+    if (typeof sessionStorage === 'undefined') return
+    const removeKeys: string[] = []
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const key = String(sessionStorage.key(i) || '')
+      if (key.startsWith(EXCEL_ANALYSIS_STORAGE_PREFIX)) removeKeys.push(key)
+    }
+    removeKeys.forEach((key) => sessionStorage.removeItem(key))
   }
 
   async function onMultimodalFileChange(ev: Event) {
     const el = ev.target as HTMLInputElement | null
     if (!el?.files?.length) return
+    const targetSessionId = sessionKey()
     // FileList is tied to the input and can become empty as soon as value is
     // reset. Snapshot the File objects first; otherwise image/PDF selection is
     // a silent no-op on Electron/macOS.
@@ -104,10 +187,17 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     el.value = ''
     const res = await filesToMultimodalRows(list)
     if (!res.ok) {
-      await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
+      if (targetSessionId === sessionKey()) {
+        await addAndSaveMessage(`[附件] ${res.error}`, 'ai')
+      }
       return
     }
-    multimodalStaging.value = [...multimodalStaging.value, ...res.rows].slice(-6)
+    const targetRows = multimodalStagingBySession.value[targetSessionId] || []
+    multimodalStagingBySession.value = {
+      ...multimodalStagingBySession.value,
+      [targetSessionId]: [...targetRows, ...res.rows].slice(-6),
+    }
+    if (targetSessionId !== sessionKey()) return
     await addAndSaveMessage(
       `[附件] 已加入 ${res.rows.length} 个文件（${res.rows.map((r) => r.filename).join('、')}），发送下一条消息时将一并提交给模型。`,
       'ai'
@@ -173,6 +263,11 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
+    acknowledgeMultimodalRequest,
+    clearMultimodalForSession,
+    activateSessionContext,
+    clearSessionContext,
+    clearAllSessionContexts,
     onMultimodalFileChange,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,

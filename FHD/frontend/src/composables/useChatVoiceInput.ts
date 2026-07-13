@@ -32,6 +32,10 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   let voiceStartedAt = 0
   let voiceMimeType = ''
   let voiceCancelRequested = false
+  let voiceStartToken = 0
+  let voicePendingStartToken: number | null = null
+  let voicePendingReleaseRequested = false
+  let voicePendingCancelRequested = false
   let voiceMaxTimer: number | null = null
   let voiceTickTimer: number | null = null
   let voiceErrorClearTimer: number | null = null
@@ -126,6 +130,15 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceMediaRecorder = null
   }
 
+  const stopMediaStreamTracks = (stream: MediaStream | null | undefined) => {
+    if (!stream) return
+    try {
+      stream.getTracks().forEach((track) => track.stop())
+    } catch {
+      /* ignore */
+    }
+  }
+
   const extractMimeExtension = (mime: string): string => {
     const m = String(mime || '').toLowerCase()
     if (m.includes('webm')) return 'webm'
@@ -182,6 +195,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   const startVoiceRecording = async () => {
     if (voiceButtonDisabled.value) return
     if (voiceState.value === 'recording' || voiceState.value === 'transcribing') return
+    if (voicePendingStartToken !== null) return
 
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
       setVoiceError('当前浏览器不支持麦克风采集')
@@ -195,10 +209,17 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceCancelRequested = false
     voiceChunks = []
     voiceElapsedSecs.value = 0
+    const startToken = ++voiceStartToken
+    voicePendingStartToken = startToken
+    voicePendingReleaseRequested = false
+    voicePendingCancelRequested = false
 
+    let acquiredStream: MediaStream
     try {
-      voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch (err: unknown) {
+      if (voicePendingStartToken !== startToken) return
+      voicePendingStartToken = null
       const e = err as { name?: string; message?: string }
       const name = e?.name ? String(e.name) : ''
       if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -210,6 +231,18 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       }
       return
     }
+
+    if (
+      voicePendingStartToken !== startToken
+      || voicePendingReleaseRequested
+      || voicePendingCancelRequested
+    ) {
+      stopMediaStreamTracks(acquiredStream)
+      if (voicePendingStartToken === startToken) voicePendingStartToken = null
+      return
+    }
+    voicePendingStartToken = null
+    voiceMediaStream = acquiredStream
 
     const mime = pickSupportedMimeType()
     voiceMimeType = mime
@@ -281,6 +314,15 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   }
 
   const stopVoiceRecording = (cancel: boolean) => {
+    if (voicePendingStartToken !== null) {
+      voicePendingReleaseRequested = true
+      voicePendingCancelRequested = cancel
+      voicePendingStartToken = null
+      voiceCancelRequested = cancel
+      voiceChunks = []
+      voiceElapsedSecs.value = 0
+      return
+    }
     if (voiceState.value !== 'recording') return
     if (!voiceMediaRecorder) return
 
@@ -296,6 +338,10 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
 
   function cleanupVoiceInput() {
     resetVoiceTimers()
+    voiceStartToken += 1
+    voicePendingStartToken = null
+    voicePendingReleaseRequested = true
+    voicePendingCancelRequested = true
     if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
       try {
         voiceCancelRequested = true

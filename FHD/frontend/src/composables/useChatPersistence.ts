@@ -1,5 +1,5 @@
 import type { Ref } from 'vue'
-import type { ChatMessage } from './useChatMessages'
+import { sanitizeChatMessagesList, type ChatMessage } from './useChatMessages'
 import type { ShipmentTask } from './useShipmentTask'
 import {
   CHAT_MESSAGES_STORAGE_PREFIX,
@@ -156,9 +156,10 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
   const t = String(raw || '').trim()
   if (t.length < 2 || t.length > 200) return null
   if (/^(什么|怎么|如何|为什么|能否|请|帮)/.test(t)) return null
-  if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单)/.test(t)) {
+  if (/(出货单|发货单|订单列表|客户列表|工作流|批量|导入|上传|数据库|打印标签|打印\s|有哪些客户|今天.*单|员工|人员|工号|考勤|部门|岗位|职位|请假|出勤|迟到|早退|打卡|人事|薪资|工资|排班)/.test(t)) {
     return null
   }
+  const hasExplicitProductIntent = /(产品|商品|型号|货号|sku|料号|品号|查价|价格|价钱|多少钱|库存|报价)/i.test(t)
   const patterns: RegExp[] = [
     /^查询\s*(.+)$/u,
     /^查一下\s*(.+?)\s*的?(?:价格|价钱|多少钱)?\s*[。！？…]*$/iu,
@@ -172,7 +173,8 @@ export function extractLikelyProductQueryKeyword(raw: string): string | null {
         k = k.slice(1, -1).trim()
       }
       k = k.replace(/^(产品|型号|货号)[是为：:\s]+/i, '').trim()
-      if (k.length >= 1 && k.length <= 120) return k
+      const looksLikeProductCode = /[a-z]/i.test(k) && /\d/.test(k)
+      if (k.length >= 1 && k.length <= 120 && (hasExplicitProductIntent || looksLikeProductCode)) return k
     }
   }
   return null
@@ -292,16 +294,7 @@ export function useChatHistoryPersistence(deps: ChatHistoryPersistenceDeps) {
       if (!raw) return []
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
-      return parsed
-        .map((msg: unknown) => {
-          const m = msg as Record<string, unknown>
-          return {
-            role: m?.role === 'user' || m?.role === 'task' ? m.role : 'ai',
-            content: String(m?.content || ''),
-            time: String(m?.time || '').trim() || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          } as ChatMessage
-        })
-        .filter((msg: ChatMessage) => !!toPlainText(msg.content))
+      return sanitizeChatMessagesList(parsed)
     } catch {
       return []
     }

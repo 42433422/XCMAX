@@ -255,6 +255,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia';
 import { useRouter } from 'vue-router';
 import api, { ApiError } from '@/api';
+import { chatApi } from '@/api/chat';
 import productsApi from '@/api/products';
 import { useTutorialStore } from '@/stores/tutorial';
 import { useOnboardingTutorialStore } from '@/stores/onboardingTutorial';
@@ -275,6 +276,7 @@ import {
 import { shouldTryWechatShipmentPreview } from '@/utils/wechatShipmentDetect';
 import { resolveErpApiPath } from '@/utils/erpDomainPaths';
 import { resolveWorkflowVisualizationLocation } from '@/utils/workflowNav';
+import { apiFetch } from '@/utils/apiBase';
 import { useWorkflowPanoramaNavVisible } from '@/composables/useWorkflowPanoramaNavVisible';
 import { useEnterpriseScopedWorkflowRegistry } from '@/composables/useEnterpriseScopedWorkflowRegistry';
 import { syncEnterpriseWorkflowRegistry } from '@/utils/syncEnterpriseWorkflowRegistry';
@@ -407,12 +409,7 @@ const runWechatMessageAiPipeline = async (item, latestMsg) => {
 
   if (useProIntentApi) {
     try {
-      const resp = await fetch('/api/ai/intent/test', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
-      });
-      const data = await resp.json().catch(() => ({}));
+      const data = await chatApi.testIntent({ message: text });
       if (data?.success && data?.data) {
         const d = data.data;
         primaryIntent = String(d.primary_intent || '').trim();
@@ -427,10 +424,15 @@ const runWechatMessageAiPipeline = async (item, latestMsg) => {
         intentDetail = `${local.detail}（意图 API 未返回有效结果，已回退本地规则）`;
         sourceApi = 'local_fallback';
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        const description = `意图识别请求被拒绝（403）：${error.message || '请刷新登录状态或检查操作权限'}`;
+        addPush({ title: '微信消息意图识别未授权', description });
+        recordOperation('wechat_intent_forbidden', { status: error.status, message: error.message });
+      }
       const local = inferWechatCustomerIntent(text);
       intentLabel = local.label;
-      intentDetail = `${local.detail}（意图 API 请求失败，已回退本地规则）`;
+      intentDetail = `${local.detail}（意图 API 请求失败${error instanceof ApiError && error.status === 403 ? '：403 未授权' : ''}，已回退本地规则）`;
       sourceApi = 'local_fallback';
     }
   } else {
@@ -450,7 +452,7 @@ const runWechatMessageAiPipeline = async (item, latestMsg) => {
     })
   ) {
     try {
-      const resp = await fetch('/api/tools/execute', {
+      const resp = await apiFetch('/api/tools/execute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -460,7 +462,14 @@ const runWechatMessageAiPipeline = async (item, latestMsg) => {
         }),
       });
       const data = await resp.json().catch(() => ({}));
-      if (data?.success && data?.task?.type === 'shipment_generate') {
+      if (!resp.ok) {
+        if (resp.status === 403) {
+          const reason = String(data?.message || data?.detail || data?.error?.message || '').trim();
+          const description = `发货预览请求被拒绝（403）：${reason || '请刷新登录状态或检查操作权限'}`;
+          addPush({ title: '微信发货预览未授权', description });
+          recordOperation('wechat_shipment_preview_forbidden', { status: resp.status, message: reason });
+        }
+      } else if (data?.success && data?.task?.type === 'shipment_generate') {
         window.dispatchEvent(
           new CustomEvent('xcagi:wechat-shipment-preview-task', {
             detail: {

@@ -1,51 +1,51 @@
 <template>
   <div class="mobile-pairing">
     <p class="mobile-pairing__lead">
-      使用 XCAGI App「探索 → 识别」扫描下方二维码，手机将与本机宿主绑定并互通。
+      {{ $t('settings.mobilePairingLead') }}
     </p>
 
     <div class="mobile-pairing__panel">
       <div class="mobile-pairing__qr-wrap" aria-live="polite">
         <div v-if="loading" class="mobile-pairing__qr-state">
           <i class="fa fa-spinner fa-spin" aria-hidden="true"></i>
-          <span>正在生成二维码…</span>
+          <span>{{ $t('settings.mobilePairingGenerating') }}</span>
         </div>
         <img
           v-else-if="qrDataUrl"
           :src="qrDataUrl"
-          alt="移动端配对二维码"
+          :alt="$t('settings.mobilePairingQrAlt')"
           class="mobile-pairing__qr"
         >
         <div v-else class="mobile-pairing__qr-state mobile-pairing__qr-state--error">
-          <span>{{ errorMessage || '无法生成二维码' }}</span>
+          <span>{{ errorMessage || $t('settings.mobilePairingUnavailable') }}</span>
         </div>
       </div>
 
       <div class="mobile-pairing__meta">
         <!-- 大号设备码展示，优先使用服务器中继码。 -->
         <div v-if="pairingShortCode" class="mobile-pairing__code-block">
-          <span class="mobile-pairing__code-label">设备码</span>
+          <span class="mobile-pairing__code-label">{{ $t('settings.mobilePairingDeviceCode') }}</span>
           <span class="mobile-pairing__code-value">{{ pairingShortCode }}</span>
           <button
             type="button"
             class="mobile-pairing__copy-code"
             :class="{ 'mobile-pairing__copy-code--copied': copied }"
-            :title="'复制设备码'"
+            :title="$t('settings.mobilePairingCopyCode')"
             @click="copyCode"
           >
             <i class="fa" :class="copied ? 'fa-check' : 'fa-copy'" aria-hidden="true"></i>
           </button>
           <Transition name="toast">
-            <span v-if="copied" class="mobile-pairing__copy-toast">已复制</span>
+            <span v-if="copied" class="mobile-pairing__copy-toast">{{ $t('settings.mobilePairingCopied') }}</span>
           </Transition>
         </div>
 
         <!-- 倒计时 + 刷新（保留） -->
         <p v-if="countdown > 0" class="mobile-pairing__countdown">
-          {{ countdown }} 秒后过期
+          {{ $t('settings.mobilePairingExpiresIn', { seconds: countdown }) }}
         </p>
         <p v-else-if="!loading && qrDataUrl" class="mobile-pairing__countdown mobile-pairing__countdown--warn">
-          二维码已过期，请刷新
+          {{ $t('settings.mobilePairingExpired') }}
         </p>
         <button
           type="button"
@@ -54,21 +54,23 @@
           @click="refreshQr"
         >
           <i class="fa fa-refresh" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
-          刷新二维码
+          {{ $t('settings.mobilePairingRefresh') }}
         </button>
       </div>
     </div>
 
     <ul class="mobile-pairing__tips">
-      <li>优先通过服务器中继绑定，手机和电脑不在同一局域网也可以连接。</li>
-      <li>扫描二维码或输入上方 6 位设备码即可连接。</li>
-      <li>登录确认请使用 App 扫描登录页的「App 扫码登录」二维码（非本设备码）。</li>
+      <li>{{ $t('settings.mobilePairingTipRelay') }}</li>
+      <li>{{ $t('settings.mobilePairingTipScan') }}</li>
+      <li>{{ $t('settings.mobilePairingTipLogin') }}</li>
     </ul>
   </div>
 </template>
 
+
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import QRCode from 'qrcode';
 import {
   applyDevProxyReachablePort,
@@ -80,6 +82,8 @@ import {
   resolveReachablePairingPort,
   type PairingPayload,
 } from '@/api/mobilePairing';
+
+const { t } = useI18n();
 
 const loading = ref(false);
 const qrDataUrl = ref('');
@@ -177,7 +181,7 @@ async function refreshQr() {
     await renderPayload(payload);
   } catch (error: unknown) {
     qrDataUrl.value = '';
-    errorMessage.value = error instanceof Error ? error.message : '生成配对二维码失败';
+    errorMessage.value = error instanceof Error ? error.message : t('settings.mobilePairingGenerateFailed');
   } finally {
     loading.value = false;
   }

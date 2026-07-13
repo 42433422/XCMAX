@@ -247,135 +247,150 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     ].join('\n')
   }
 
-  async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
-    const input = e.target as HTMLInputElement
-    const file = input.files?.[0]
-    if (!file) return
+  async function analyzeExcelFile(file: File): Promise<void> {
+    appendChatLine(`开始分析 Excel：${file.name}`, 'user')
+    options.onAnalyzeStart?.({ fileName: file.name })
+    options.onAnalyzeProgress?.({
+      fileName: file.name,
+      step: '正在上传并请求解析…',
+      progress: 12
+    })
 
-    if (/\.(xlsx|xlsm)$/i.test(file.name)) {
-      // Excel is copied into FormData synchronously below, so the picker can be
-      // reset now and selecting the same workbook again will still emit change.
-      input.value = ''
-      excelAnalyzeUploading.value = true
+    try {
+      await ensureCsrfReady()
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('analyze_all_sheets', 'true')
+      const controller = new AbortController()
+      const timeoutId = window.setTimeout(() => controller.abort(), EXTRACT_GRID_TIMEOUT_MS)
+      options.onAnalyzeProgress?.({
+        fileName: file.name,
+        step: '服务器正在解析工作簿（多表时可能需数十秒）…',
+        progress: 28
+      })
+      if (import.meta.env.DEV) {
+        console.debug(
+          '[excel-analysis] POST',
+          EXTRACT_GRID_PATH,
+          'page=',
+          typeof window !== 'undefined' ? window.location.origin : ''
+        )
+      }
       try {
-        appendChatLine(`开始分析 Excel：${file.name}`, 'user')
-        options.onAnalyzeStart?.({ fileName: file.name })
+        const response = await apiFetch(EXTRACT_GRID_PATH, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal
+        })
+        const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
+
+        if (!response.ok || !data?.success) {
+          throw new Error(asString(data?.message) || `HTTP ${response.status}`)
+        }
+
         options.onAnalyzeProgress?.({
           fileName: file.name,
-          step: '正在上传并请求解析…',
-          progress: 12
+          step: '正在整理分表与字段摘要…',
+          progress: 58
         })
 
-        try {
-          await ensureCsrfReady()
-          const formData = new FormData()
-          formData.append('file', file)
-          formData.append('analyze_all_sheets', 'true')
-          const controller = new AbortController()
-          const timeoutId = window.setTimeout(() => controller.abort(), EXTRACT_GRID_TIMEOUT_MS)
-          options.onAnalyzeProgress?.({
-            fileName: file.name,
-            step: '服务器正在解析工作簿（多表时可能需数十秒）…',
-            progress: 28
-          })
-          if (import.meta.env.DEV) {
-            console.debug(
-              '[excel-analysis] POST',
-              EXTRACT_GRID_PATH,
-              'page=',
-              typeof window !== 'undefined' ? window.location.origin : ''
-            )
-          }
-          try {
-            const response = await apiFetch(EXTRACT_GRID_PATH, {
-              method: 'POST',
-              body: formData,
-              signal: controller.signal
-            })
-            const data: ExcelExtractGridResponse = await readResponseJsonWithTimeout(response, 120_000)
-
-            if (!response.ok || !data?.success) {
-              throw new Error(asString(data?.message) || `HTTP ${response.status}`)
-            }
-
+        const hasMultiSheetDetails =
+          Array.isArray(data?.sheets) && data.sheets.length > 0
+            || (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
+        const sheetNames = asArray<string>(data?.preview_data?.sheet_names)
+        if (!hasMultiSheetDetails && sheetNames.length > 1) {
+          const detailedSheets: ExcelSheetDetail[] = []
+          for (let i = 0; i < sheetNames.length; i += 1) {
+            const name = String(sheetNames[i] || '').trim()
+            if (!name) continue
             options.onAnalyzeProgress?.({
               fileName: file.name,
-              step: '正在整理分表与字段摘要…',
-              progress: 58
+              step: `补全分表详情 ${i + 1}/${sheetNames.length}`,
+              progress: Math.floor(((i + 1) / sheetNames.length) * 100)
             })
-
-            const hasMultiSheetDetails =
-              Array.isArray(data?.sheets) && data.sheets.length > 0
-                || (Array.isArray(data?.preview_data?.all_sheets) && data.preview_data.all_sheets.length > 0)
-            const sheetNames = asArray<string>(data?.preview_data?.sheet_names)
-            if (!hasMultiSheetDetails && sheetNames.length > 1) {
-              const detailedSheets: ExcelSheetDetail[] = []
-              for (let i = 0; i < sheetNames.length; i += 1) {
-                const name = String(sheetNames[i] || '').trim()
-                if (!name) continue
-                options.onAnalyzeProgress?.({
-                  fileName: file.name,
-                  step: `补全分表详情 ${i + 1}/${sheetNames.length}`,
-                  progress: Math.floor(((i + 1) / sheetNames.length) * 100)
-                })
-                const detail = await extractSingleSheetDetail(file, name)
-                if (detail) {
-                  detailedSheets.push({
-                    sheet_index: i + 1,
-                    ...detail
-                  })
-                }
-              }
-              if (detailedSheets.length) {
-                data.sheets = detailedSheets
-                if (!data.preview_data) data.preview_data = {}
-                data.preview_data.all_sheets = detailedSheets
-              }
+            const detail = await extractSingleSheetDetail(file, name)
+            if (detail) {
+              detailedSheets.push({
+                sheet_index: i + 1,
+                ...detail
+              })
             }
-
-            options.onAnalyzeProgress?.({
-              fileName: file.name,
-              step: '正在生成对话摘要…',
-              progress: 82
-            })
-            const summary = summarizeExcelAnalysisResult(data as ExcelAnalysisResult)
-            appendChatLine(summary, 'ai')
-            options.onAnalyzed?.({
-              fileName: file.name,
-              summary,
-              result: data as ExcelAnalysisResult
-            })
-            options.onAnalyzeDone?.({ fileName: file.name, success: true })
-          } finally {
-            window.clearTimeout(timeoutId)
           }
-        } catch (err: unknown) {
-          const errObj = err as { name?: string; message?: string }
-          const isAbort = errObj?.name === 'AbortError'
-          const raw = String(errObj?.message || err || '')
-          const netFail =
-            /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || errObj?.name === 'TypeError'
-          let hint = ''
-          if (netFail && !isAbort) {
-            hint =
-              '（若后端无日志：请确认本机已启动 :5000、Vite 代理正常；开发环境请尽量用 http://127.0.0.1:5001 打开页面，避免局域网 IP + 直连 API 被浏览器拦截。）'
+          if (detailedSheets.length) {
+            data.sheets = detailedSheets
+            if (!data.preview_data) data.preview_data = {}
+            data.preview_data.all_sheets = detailedSheets
           }
-          const msg = isAbort
-            ? `Excel 分析超时（${Math.round(EXTRACT_GRID_TIMEOUT_MS / 1000)} 秒），请尝试更小文件、减少工作表数量或稍后重试。`
-            : `Excel 分析失败：${raw || '未知错误'}${hint}`
-          appendChatLine(msg, 'ai')
-          options.onAnalyzeDone?.({ fileName: file.name, success: false, message: msg })
         }
+
+        options.onAnalyzeProgress?.({
+          fileName: file.name,
+          step: '正在生成对话摘要…',
+          progress: 82
+        })
+        const summary = summarizeExcelAnalysisResult(data as ExcelAnalysisResult)
+        appendChatLine(summary, 'ai')
+        options.onAnalyzed?.({
+          fileName: file.name,
+          summary,
+          result: data as ExcelAnalysisResult
+        })
+        options.onAnalyzeDone?.({ fileName: file.name, success: true })
       } finally {
-        excelAnalyzeUploading.value = false
+        window.clearTimeout(timeoutId)
       }
-    } else {
+    } catch (err: unknown) {
+      const errObj = err as { name?: string; message?: string }
+      const isAbort = errObj?.name === 'AbortError'
+      const raw = String(errObj?.message || err || '')
+      const netFail =
+        /Failed to fetch|NetworkError|Load failed|网络/i.test(raw) || errObj?.name === 'TypeError'
+      let hint = ''
+      if (netFail && !isAbort) {
+        hint =
+          '（若后端无日志：请确认本机已启动 :5000、Vite 代理正常；开发环境请尽量用 http://127.0.0.1:5001 打开页面，避免局域网 IP + 直连 API 被浏览器拦截。）'
+      }
+      const msg = isAbort
+        ? `Excel 分析超时（${Math.round(EXTRACT_GRID_TIMEOUT_MS / 1000)} 秒），请尝试更小文件、减少工作表数量或稍后重试。`
+        : `Excel 分析失败：${raw || '未知错误'}${hint}`
+      appendChatLine(msg, 'ai')
+      options.onAnalyzeDone?.({ fileName: file.name, success: false, message: msg })
+    }
+  }
+
+  async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
+    const input = e.target as HTMLInputElement
+    const files = Array.from(input.files || [])
+    if (!files.length) return
+
+    const excelFiles = files.filter((file) => /\.(xlsx|xlsm)$/i.test(file.name))
+    if (!excelFiles.length) {
       if (onMultimodalFileChangeCallback) {
         await onMultimodalFileChangeCallback(e)
       }
       // The multimodal handler snapshots File objects before clearing. Keep
       // this fallback for callers that register a custom handler.
       input.value = ''
+      return
+    }
+
+    // Snapshot every selected File before resetting the picker. This permits
+    // selecting the same files again and prevents Electron's live FileList
+    // from becoming empty while a mixed Excel/image/PDF selection is routed.
+    input.value = ''
+    const attachmentFiles = files.filter((file) => !/\.(xlsx|xlsm)$/i.test(file.name))
+    if (attachmentFiles.length && onMultimodalFileChangeCallback) {
+      const attachmentInput = { files: attachmentFiles, value: '' } as unknown as HTMLInputElement
+      await onMultimodalFileChangeCallback({ target: attachmentInput } as unknown as Event)
+    }
+
+    excelAnalyzeUploading.value = true
+    try {
+      for (const file of excelFiles) {
+        await analyzeExcelFile(file)
+      }
+    } finally {
+      excelAnalyzeUploading.value = false
     }
   }
 
