@@ -11,10 +11,12 @@ from __future__ import annotations
 import base64
 import json
 import logging
-import os
 import time
 from typing import Any
 
+from app.enterprise.entitlement_sync_policy import (
+    entitlement_sync_ttl_seconds as _entitlement_sync_ttl_seconds,
+)
 from app.mod_sdk.platform_shell import PROTECTED_CLIENT_MOD_IDS
 from app.mod_sdk.product_skus import bundled_mod_ids_for_sku, resolve_product_sku
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -30,13 +32,6 @@ _cached_account_kind: str = "enterprise"
 _cached_market_is_admin: bool = False
 _entitlement_sync_at_by_session: dict[str, float] = {}
 _reloaded_entitlement_ids_by_session: dict[str, frozenset[str]] = {}
-
-
-def _entitlement_sync_ttl_seconds() -> float:
-    try:
-        return max(0.0, float(os.getenv("XCAGI_ENTITLEMENT_SYNC_TTL_SECONDS", "300")))
-    except ValueError:
-        return 300.0
 
 
 def is_client_mod_id(mod_id: str) -> bool:

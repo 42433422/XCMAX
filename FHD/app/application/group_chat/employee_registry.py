@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-from app.application.group_chat.constants import *  # noqa: F403
-
 import json
-import os
 import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.utils.path_utils import get_app_data_dir
+from app.application.group_chat.constants import (
+    _BRANCH_SAFE_RE,
+    _REQUIRED_GROUP_MEMBER_IDS,
+    _XIAOC_ASSISTANT_ID,
+)
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat()
@@ -381,5 +383,3 @@ _FALLBACK_ENTERPRISE_DEPARTMENTS: list[tuple[str, str]] = [
     ("service", "服务层"),
     ("management", "管理层"),
 ]
-
-

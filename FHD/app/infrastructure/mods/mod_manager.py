@@ -1292,6 +1292,8 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
     修复企业版登录后 reload 未传 app、太阳鸟等客户 Mod 仅出现在列表但未 load 导致 404。
     """
+    from app.runtime_integrity import clear_runtime_issue, record_runtime_issue
+
     mid = (mod_id or "").strip()
     if not mid or is_mods_disabled():
         return False
@@ -1311,8 +1313,6 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
             return False
         if not mm.load_mod(mid):
             _MOD_API_FAILURE_RETRY_AT[mid] = time.monotonic() + _MOD_API_FAILURE_BACKOFF_SECONDS
-            from app.runtime_integrity import record_runtime_issue
-
             record_runtime_issue(
                 f"industry_mod:{mid}",
                 f"Industry MOD failed to load: {mid}",
@@ -1321,8 +1321,6 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
             logger.warning("[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid)
             return False
         _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
-        from app.runtime_integrity import clear_runtime_issue
-
         clear_runtime_issue(f"industry_mod:{mid}")
 
     if mid in mm._http_routes_registered:
@@ -1389,9 +1387,7 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
         open_seed_ids = set(open_industry_seed_mod_ids())
         mods_root = Path(get_mod_manager().mods_root)
         candidates = {
-            mid
-            for mid in candidates
-            if mid not in open_seed_ids or (mods_root / mid).is_dir()
+            mid for mid in candidates if mid not in open_seed_ids or (mods_root / mid).is_dir()
         }
     except RECOVERABLE_ERRORS:
         logger.debug("filter unselected open industry seeds skipped", exc_info=True)

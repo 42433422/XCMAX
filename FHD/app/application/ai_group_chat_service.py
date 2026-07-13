@@ -16,26 +16,36 @@ SSOT 架构（双模式）：
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import re
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import UTC, datetime
 from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
-from app.utils.path_utils import get_app_data_dir
-
-# 单条用户消息最多触发的 AI 回复数，避免大群一次发太多请求。
-from app.application.group_chat.constants import *  # noqa: F403
-from app.application.group_chat.constants import (  # noqa: F401
+from app.application.group_chat.constants import (  # noqa: F401 - compatibility exports
+    _LEGACY_SUPER_EMPLOYEE_IDS,
+    _SUPER_EMPLOYEE_IDS,
+    _SUPER_EMPLOYEE_RELAY_KINDS,
+    _XIAOC_ASSISTANT_ID,
+    CHAT_ACCEPTANCE_SUMMARY_CHARS,
+    CHAT_REPORT_SUMMARY_CHARS,
+    CONTEXT_TURNS,
     MAX_RESPONDERS,
+    PUBLIC_ACCEPTANCE_BODY_MAX_CHARS,
+    PUBLIC_CHAT_BODY_MAX_CHARS,
+    RELAY_PROGRESS_MIN_INTERVAL_SEC,
+    SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+    SUPER_DISCUSSION_DEFAULT_ROUNDS,
+    SUPER_DISCUSSION_MAX_ROUNDS,
+    CompletionFn,
+    EmployeeExecutorFn,
+    _env_float,
 )
-
 from app.application.group_chat.dispatch_router import AiGroupChatDispatchMixin
 from app.application.group_chat.employee_registry import (  # noqa: F401
+    _FALLBACK_DEPARTMENTS,
+    _FALLBACK_ENTERPRISE_DEPARTMENTS,
     _append_super_employees,
     _default_completion,
     _default_departments,
@@ -56,6 +66,8 @@ from app.application.group_chat.employee_registry import (  # noqa: F401
 )
 from app.application.group_chat.message_formatting import AiGroupChatFormattingMixin
 from app.application.group_chat.storage import AiGroupChatStorageMixin
+from app.utils.path_utils import get_app_data_dir
+
 
 class AiGroupChatService(
     AiGroupChatDispatchMixin,
@@ -1848,7 +1860,6 @@ class AiGroupChatService(
             summary += "（详细结果已保留在执行端记录）"
         return summary
 
-    @staticmethod
     # ── 部门种子 ──
 
     def _seed_department_groups(self, user_id: int) -> list[dict[str, Any]]:
@@ -1916,5 +1927,6 @@ class AiGroupChatService(
         for g in seeded:
             self._append_group(g)
         return seeded
+
 
 __all__ = ["AiGroupChatService", "MAX_RESPONDERS"]

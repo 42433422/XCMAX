@@ -144,6 +144,18 @@ def other_open_industry_mod_ids(keep_mod_id: str) -> list[str]:
     return [mid for mid in open_industry_seed_mod_ids() if mid and mid != keep]
 
 
+def _is_bundled_mods_root(path: Path) -> bool:
+    """Protect repository/package seed roots from runtime uninstall cleanup."""
+
+    root = Path(__file__).resolve().parents[2]
+    protected = {root / "mods", root / "XCAGI" / "mods"}
+    try:
+        resolved = path.expanduser().resolve()
+    except OSError:
+        return False
+    return resolved in {candidate.resolve() for candidate in protected}
+
+
 def deactivate_other_open_industry_mods(
     keep_mod_id: str, *, remove_files: bool = True
 ) -> list[dict[str, Any]]:
@@ -151,6 +163,10 @@ def deactivate_other_open_industry_mods(
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
+    mods_root = Path(mm.mods_root)
+    may_remove_files = bool(remove_files and not _is_bundled_mods_root(mods_root))
+    if remove_files and not may_remove_files:
+        logger.warning("skip industry cleanup for bundled mods root: %s", mods_root)
     results: list[dict[str, Any]] = []
     for mod_id in other_open_industry_mod_ids(keep_mod_id):
         try:
@@ -158,8 +174,8 @@ def deactivate_other_open_industry_mods(
         except RECOVERABLE_ERRORS as exc:
             logger.warning("unload open industry mod %s failed: %s", mod_id, exc)
         removed = False
-        if remove_files:
-            dest = Path(mm.mods_root) / mod_id
+        if may_remove_files:
+            dest = mods_root / mod_id
             if dest.is_dir():
                 try:
                     shutil.rmtree(dest)

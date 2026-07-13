@@ -12,6 +12,15 @@ from typing import Any
 
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 
+_TABLE_INFO_SQL = {
+    "attendance_departments": "PRAGMA table_info(attendance_departments)",
+    "attendance_employees": "PRAGMA table_info(attendance_employees)",
+}
+_TABLE_FROM_SQL = {
+    "attendance_departments": " FROM attendance_departments",
+    "attendance_employees": " FROM attendance_employees",
+}
+
 
 def _names_from_host_units(payload: dict[str, Any] | None) -> set[str]:
     names: set[str] = set()
@@ -48,15 +57,15 @@ def attendance_unit_names(host_units: dict[str, Any] | None = None) -> list[str]
             for table in ("attendance_departments", "attendance_employees"):
                 if table not in tables:
                     continue
-                columns = {
-                    str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
-                }
+                columns = {str(row[1]) for row in conn.execute(_TABLE_INFO_SQL[table]).fetchall()}
                 selected = [name for name in ("department", "main_department") if name in columns]
                 if not selected:
                     continue
-                query = "SELECT " + ", ".join(selected) + f" FROM {table}"
+                query = "SELECT " + ", ".join(selected) + _TABLE_FROM_SQL[table]
                 for row in conn.execute(query).fetchall():
-                    names.update(str(value or "").strip() for value in row if str(value or "").strip())
+                    names.update(
+                        str(value or "").strip() for value in row if str(value or "").strip()
+                    )
     except sqlite3.Error:
         # The compatibility endpoint remains useful with host units even when a
         # customer-owned side database is temporarily unavailable.

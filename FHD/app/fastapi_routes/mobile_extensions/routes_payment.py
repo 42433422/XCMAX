@@ -15,10 +15,14 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.fastapi_routes.mobile_api_extensions import (
-    _mobile_unauthorized_response,
-    _mobile_market_authorization,
-)
+
+def _parent():
+    """Resolve legacy patch points from the compatibility parent module."""
+
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    return parent
+
 
 # ── 钱包 / 余额 ──
 
@@ -86,14 +90,14 @@ def _mobile_checkout_sign_body(body: dict[str, Any]) -> dict[str, Any]:
 async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
     """返回移动端可购买套餐与支付渠道。"""
     if user is None:
-        return _mobile_unauthorized_response()
+        return _parent()._mobile_unauthorized_response()
     try:
         from app.fastapi_routes.market_account import _market_base_url, _proxy_json
 
         payload = await _proxy_json(
             "GET",
             "/api/payment/plans",
-            authorization=_mobile_market_authorization(request, user),
+            authorization=_parent()._mobile_market_authorization(request, user),
             return_error_payload=True,
         )
         if isinstance(payload, dict) and payload.get("__proxy_error__"):
@@ -127,8 +131,8 @@ async def mobile_payment_checkout(
 ):
     """创建移动端支付订单并返回渠道下单参数。"""
     if user is None:
-        return _mobile_unauthorized_response()
-    authorization = _mobile_market_authorization(request, user)
+        return _parent()._mobile_unauthorized_response()
+    authorization = _parent()._mobile_market_authorization(request, user)
     if not authorization:
         return JSONResponse(
             format_mobile_response(None, "尚未绑定市场账号；请重新登录", success=False, code=401),
@@ -138,13 +142,15 @@ async def mobile_payment_checkout(
         from app.fastapi_routes.market_account import _proxy_json
 
         checkout_body = dict(body or {})
-        checkout_body["channel"] = _normalize_mobile_payment_channel(checkout_body.get("channel"))
+        checkout_body["channel"] = _parent()._normalize_mobile_payment_channel(
+            checkout_body.get("channel")
+        )
         checkout_body["client"] = str(checkout_body.get("client") or "android").strip()
         checkout_body.setdefault("return_url", "xcagi://payment/complete")
         signed = await _proxy_json(
             "POST",
             "/api/payment/sign-checkout",
-            json_body=_mobile_checkout_sign_body(checkout_body),
+            json_body=_parent()._mobile_checkout_sign_body(checkout_body),
             authorization=authorization,
             return_error_payload=True,
         )
@@ -190,14 +196,14 @@ async def mobile_payment_query(
 ):
     """查询移动端支付订单状态。"""
     if user is None:
-        return _mobile_unauthorized_response()
+        return _parent()._mobile_unauthorized_response()
     try:
         from app.fastapi_routes.market_account import _proxy_json
 
         payload = await _proxy_json(
             "GET",
             f"/api/payment/query/{out_trade_no}",
-            authorization=_mobile_market_authorization(request, user),
+            authorization=_parent()._mobile_market_authorization(request, user),
             return_error_payload=True,
         )
         if isinstance(payload, dict) and payload.get("__proxy_error__"):

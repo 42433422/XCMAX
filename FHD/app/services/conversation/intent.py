@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import logging
 import os
@@ -162,7 +163,8 @@ class IntentMixin:
             )
 
             logger.info("[INTENT] 使用 neuro + unified_recognizer (online)")
-            neuro_r = get_neuro_intent_recognizer().recognize(
+            neuro_r = await asyncio.to_thread(
+                get_neuro_intent_recognizer().recognize,
                 message,
                 user_id,
                 context=None,
@@ -174,7 +176,8 @@ class IntentMixin:
             intent_result = await online_intent_recognize(message)
         else:
             logger.info("[INTENT] 使用 unified_recognizer (online)")
-            recognizer_result = self.unified_recognizer.recognize(
+            recognizer_result = await asyncio.to_thread(
+                self.unified_recognizer.recognize,
                 message,
                 context=None,
                 context_data=request_context,

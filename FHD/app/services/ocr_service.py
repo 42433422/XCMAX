@@ -8,48 +8,19 @@ OCR服务模块
 import logging
 import os
 import re
-import subprocess
-import sys
-import tempfile
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from app.infrastructure.ocr.macos_vision import (
+    is_macos_vision_available,
+    recognize_macos_vision,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-_MACOS_VISION_OCR_JXA = r"""
-function run(argv) {
-  ObjC.import('Vision');
-  ObjC.import('CoreImage');
-  const path = String(argv[0] || '');
-  if (!path) return '';
-  const imageUrl = $.NSURL.fileURLWithPath(path);
-  const image = $.CIImage.imageWithContentsOfURL(imageUrl);
-  if (!image) return '';
-  const lines = [];
-  const request = $.VNRecognizeTextRequest.alloc.init;
-  request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
-  request.usesLanguageCorrection = true;
-  const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
-    image, $.NSDictionary.dictionary
-  );
-  const error = Ref();
-  if (!handler.performRequestsError($([request]), error)) return '';
-  const observations = request.results;
-  for (let i = 0; i < observations.count; i += 1) {
-    const candidates = observations.objectAtIndex(i).topCandidates(1);
-    if (candidates.count > 0) {
-      lines.push(ObjC.unwrap(candidates.objectAtIndex(0).string));
-    }
-  }
-  return lines.join('\n');
-}
-"""
 
 
 @dataclass
@@ -105,20 +76,15 @@ class OCRService:
             self._init_easyocr()
 
         if backend in ("auto", "macos_vision") and not self._paddle_enabled and self.reader is None:
-            self._init_macos_vision()
+            self.macos_vision_available = is_macos_vision_available()
 
-        if (
-            backend in ("auto", "tesseract")
-            and not self._paddle_enabled
-            and self.reader is None
-            and not self.macos_vision_available
-        ):
+        if backend in ("auto", "tesseract") and not self._paddle_enabled and self.reader is None:
             self._init_tesseract()
 
         if (
             not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
+            and not getattr(self, "macos_vision_available", False)
             and not self.tesseract_available
         ):
             self._init_tesseract()
@@ -147,49 +113,6 @@ class OCRService:
         except RECOVERABLE_ERRORS:
             self.tesseract_available = False
 
-    def _init_macos_vision(self) -> None:
-        """Enable the OCR engine built into macOS (no Python package or model download)."""
-        self.macos_vision_available = bool(
-            sys.platform == "darwin" and os.path.isfile("/usr/bin/osascript")
-        )
-        if self.macos_vision_available:
-            logger.info("OCR 回退引擎：macOS Vision")
-
-    def _recognize_macos_vision(self, image_array: np.ndarray) -> str:
-        if not self.macos_vision_available:
-            return ""
-        tmp_path = ""
-        try:
-            from PIL import Image
-
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                tmp_path = tmp.name
-            Image.fromarray(image_array).save(tmp_path, format="PNG")
-            proc = subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-l",
-                    "JavaScript",
-                    "-e",
-                    _MACOS_VISION_OCR_JXA,
-                    tmp_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-            if proc.returncode != 0:
-                logger.warning("macOS Vision OCR 失败: %s", (proc.stderr or "").strip()[:500])
-                return ""
-            return self._clean_text(proc.stdout or "")
-        except (subprocess.SubprocessError, *RECOVERABLE_ERRORS) as exc:
-            logger.warning("macOS Vision OCR 异常: %s", exc)
-            return ""
-        finally:
-            if tmp_path:
-                Path(tmp_path).unlink(missing_ok=True)
-
     def recognize(self, image) -> str:
         """
         识别图像中的文字
@@ -203,7 +126,7 @@ class OCRService:
         if (
             not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
+            and not getattr(self, "macos_vision_available", False)
             and not self.tesseract_available
         ):
             logger.error("OCR引擎未初始化")
@@ -229,8 +152,8 @@ class OCRService:
                 text = "\n".join(results)
                 return self._clean_text(text)
 
-            if self.macos_vision_available:
-                return self._recognize_macos_vision(image_array)
+            if getattr(self, "macos_vision_available", False):
+                return recognize_macos_vision(image_array, cleaner=self._clean_text)
 
             if self.tesseract_available:
                 from PIL import Image
@@ -401,7 +324,7 @@ class OCRService:
             return "paddleocr"
         if self.reader is not None:
             return "easyocr"
-        if self.macos_vision_available:
+        if getattr(self, "macos_vision_available", False):
             return "macos_vision"
         if self.tesseract_available:
             return "tesseract"

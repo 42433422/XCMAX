@@ -20,14 +20,10 @@ AI 聊天应用服务
 import asyncio
 import json
 import logging
-import math
-import os
 import re
 import uuid
 from pathlib import Path
-from typing import Any, cast
-
-import httpx
+from typing import Any
 
 from app.application.workflow import (
     HybridRiskGate,
@@ -43,16 +39,16 @@ from app.utils.path_utils import resolve_fhd_repo_root
 logger = logging.getLogger(__name__)
 
 
-
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
+from app.application.ai_chat.excel_import_pipeline import httpx as httpx  # noqa: F401
 from app.application.ai_chat.excel_import_policy import (
-    _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
-    _EXCEL_IMPORT_QTY_MEASURE_RE,
+    _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,  # noqa: F401 - legacy compatibility export
     _enrich_confirmation_inner,
     _skip_pro_excel_deterministic_import,
 )
 from app.application.ai_chat.instant_tools import AIChatInstantToolsMixin
 from app.application.ai_chat.workflow_response_builder import AIChatWorkflowResponseMixin
+
 
 class AIChatApplicationService(
     AIChatExcelImportMixin,
@@ -523,7 +519,6 @@ class AIChatApplicationService(
         hits = sum(1 for v in non_empty if cls._HEADER_HINT_RE.search(str(v)))
         return hits >= 2 and hits >= max(2, len(non_empty) // 3)
 
-    @staticmethod
     def _try_handle_multimodal_chat(
         self,
         *,
@@ -1803,6 +1798,7 @@ class AIChatApplicationService(
             )
 
         return response_data
+
 
 def get_ai_chat_app_service() -> AIChatApplicationService:
     """获取 AI 聊天应用服务单例"""

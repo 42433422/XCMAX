@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
@@ -21,10 +21,14 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.fastapi_routes.mobile_api_extensions import (
-    _ai_circle_user,
-    _ai_circle_employee_profiles,
-)
+
+def _parent():
+    """Resolve legacy patch points from the compatibility parent module."""
+
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    return parent
+
 
 # ── 同步 ──
 
@@ -58,9 +62,9 @@ async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[
         except Exception:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
             logger.warning("mobile sync: circle modstore report sync skipped", exc_info=True)
 
-        uid, _, _ = _ai_circle_user(user)
+        uid, _, _ = _parent()._ai_circle_user(user)
         posts = list_posts(user_id=uid, limit=limit)
-        profiles = _ai_circle_employee_profiles()
+        profiles = _parent()._ai_circle_employee_profiles()
         for post in posts:
             profile = profiles.get(str(post.get("employee_id") or ""))
             if profile:
@@ -110,10 +114,10 @@ async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
             sync_db.update_remote_cursor(int(cursor))
         im_entity_types = {"im_message", "im_read_state"}
         im_changes = [c for c in changes if str(c.get("entity_type") or "") in im_entity_types]
-        ai_changes = _ai_conversation_changes(user, limit=100)
-        circle_posts = await _mobile_sync_circle_posts(user, limit=50)
-        approvals = _safe_mobile_sync_items("approvals", _approval_items)
-        shipments = _safe_mobile_sync_items("shipments", _shipment_items)
+        ai_changes = _parent()._ai_conversation_changes(user, limit=100)
+        circle_posts = await _parent()._mobile_sync_circle_posts(user, limit=50)
+        approvals = _parent()._safe_mobile_sync_items("approvals", _parent()._approval_items)
+        shipments = _parent()._safe_mobile_sync_items("shipments", _parent()._shipment_items)
         return format_mobile_response(
             data={
                 **_mobile_sync_runtime_contract(),
@@ -217,5 +221,3 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
     except OPERATIONAL_ERRORS as exc:
         return format_mobile_response(data={"items": [], "error": str(exc)})
     return format_mobile_response(data={"items": items})
-
-

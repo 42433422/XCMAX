@@ -230,6 +230,7 @@ domains:
       - FHD/contracts/openapi.json
       - FHD/app/fastapi_routes/mobile_api.py
       - FHD/app/fastapi_routes/mobile_api_extensions.py
+      - FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py
       - FHD/mobile-flutter-poc/README.md
       - FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md
       - FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart

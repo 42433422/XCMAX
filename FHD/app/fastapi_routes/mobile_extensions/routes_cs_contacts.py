@@ -5,17 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.fastapi_routes.mobile_extensions.cs_helpers import (
-    _mobile_cs_source_id,
-    _mobile_cs_source_name,
-    _safe_user_id,
-    _safe_user_text,
-)
-from app.mod_sdk.assistant_ssot import dedicated_cs_label
 from app.utils.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -25,6 +18,15 @@ router = APIRouter()
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _mobile_request_user_id,
 )
+
+
+def _parent():
+    """Resolve legacy patch points from the compatibility parent module."""
+
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    return parent
+
 
 # ── 联系人固定区组成（surface SSOT 派生） ──
 
@@ -42,7 +44,7 @@ async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_us
         )
     from app.application.surface_contacts import mobile_fixed_contacts
 
-    return format_mobile_response(data=mobile_fixed_contacts(_mobile_group_mode(request)))
+    return format_mobile_response(data=mobile_fixed_contacts(_parent()._mobile_group_mode(request)))
 
 
 # ── 专属客服接口（企业版手机端） ──
@@ -155,12 +157,9 @@ async def get_cs_messages(
                     }
                     for m in raw
                 ]
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         logger.warning("mobile cs message history (IM) unavailable: %s", exc)
         error = str(exc)[:300]
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]
     return format_mobile_response(data={"messages": messages, "persist_error": error})
-
-
-

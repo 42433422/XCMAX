@@ -2,18 +2,23 @@
 
 from __future__ import annotations
 
-from app.application.group_chat.constants import *  # noqa: F403
-
 import asyncio
 import json
-import os
-import re
-import uuid
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from inspect import isawaitable
-from pathlib import Path
 from typing import Any
+
+from app.application.group_chat.constants import (
+    _BROKEN_MARKDOWN_LINK_RE,
+    _DEV_TASK_MARKERS,
+    _EVIDENCE_FILE_RE,
+    _EXECUTION_EVIDENCE_MARKERS,
+    _FAILED_REPORT_MARKERS,
+    _MARKDOWN_LINK_RE,
+    _PURE_RESEARCH_TASK_MARKERS,
+    _RESEARCH_ONLY_REPORT_MARKERS,
+    _TEMP_PATH_RE,
+    _UNFINISHED_REPORT_MARKERS,
+    CONTEXT_TURNS,
+)
 
 
 class AiGroupChatFormattingMixin:
@@ -327,4 +332,3 @@ class AiGroupChatFormattingMixin:
             return f"（{me} 暂时无法回应）"
         except Exception as exc:  # noqa: BLE001
             return f"（{me} 暂时无法回应：{str(exc)[:120]}）"
-

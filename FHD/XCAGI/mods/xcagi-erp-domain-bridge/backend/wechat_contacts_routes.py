@@ -9,7 +9,14 @@ from app.mod_sdk.erp_wechat_contacts_facade import tag_legacy_response
 
 
 def _to_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:
-    """Adapt the legacy desktop feed into the shape consumed by the chat assistant."""
+    """Adapt the legacy desktop feed into the shape consumed by the chat assistant.
+
+    The host compatibility route returns ``items`` while the current assistant
+    poller consumes ``feed`` entries with a ``messages`` list.  Keeping the
+    adapter in the Mod facade avoids a permanently failing 404 loop and makes
+    an unconfigured WeChat data source a healthy, empty feed instead of an
+    application error.
+    """
     items = raw.get("items") if isinstance(raw, dict) else []
     if not isinstance(items, list):
         items = []

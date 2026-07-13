@@ -176,6 +176,7 @@ class ModstorePlatformAdapter:
         default_provider: str = "xiaomi",
         default_model: str = "mimo-v2.5-pro",
         timeout: float = 60.0,
+        close_after_call: bool = False,
     ):
         """
         初始化平台代理适配器
@@ -190,6 +191,8 @@ class ModstorePlatformAdapter:
             default_provider: 默认供应商 (环境变量: LLM_PROVIDER)
             default_model: 默认模型 (环境变量: LLM_MODEL)
             timeout: 请求超时时间(秒)
+            close_after_call: 每次异步补全后关闭客户端。请求级适配器应开启，
+                              避免客户端跨越其创建事件循环的生命周期。
         """
         self.platform_url = (
             platform_url or os.environ.get("MODSTORE_PLATFORM_URL", "http://localhost:8000")
@@ -204,6 +207,7 @@ class ModstorePlatformAdapter:
         self.default_provider = os.environ.get("LLM_PROVIDER", default_provider).lower()
         self.default_model = os.environ.get("LLM_MODEL", default_model)
         self.timeout = timeout
+        self.close_after_call = bool(close_after_call)
 
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -311,7 +315,10 @@ class ModstorePlatformAdapter:
                 if not auth_token:
                     # 多用户环境按 user_id 过滤，防止 fallback 串号
                     fallback_user_id = _user_id_from_session(effective_session_id)
-                    if effective_session_id or fallback_user_id is not None:
+                    # An arbitrary/stale session id must never unlock the global
+                    # "latest token" fallback.  Only a session that resolves to
+                    # a concrete local user may reuse that user's latest token.
+                    if fallback_user_id is not None:
                         latest_token = latest_session_market_token(user_id=fallback_user_id)
                         if latest_token:
                             auth_token = latest_token
@@ -641,6 +648,12 @@ class ModstorePlatformAdapter:
         except RECOVERABLE_ERRORS as e:
             logger.error("[Modstore] 调用异常: %s", e, exc_info=True)
             raise
+        finally:
+            if self.close_after_call:
+                try:
+                    await self.close()
+                except RECOVERABLE_ERRORS:
+                    logger.debug("关闭请求级 Modstore 客户端失败", exc_info=True)
 
     async def stream_chat_completion(
         self,
@@ -680,12 +693,19 @@ class ModstorePlatformAdapter:
 
         logger.info("[Modstream] 启动流式请求: %s/%s", effective_provider, effective_model)
 
-        client = await self._get_client()
-        async with client.stream("POST", url, json=payload) as response:
-            response.raise_for_status()
-            async for line in response.aiter_lines():
-                if line.startswith("data: "):
-                    yield line[6:]
+        try:
+            client = await self._get_client()
+            async with client.stream("POST", url, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line.startswith("data: "):
+                        yield line[6:]
+        finally:
+            if self.close_after_call:
+                try:
+                    await self.close()
+                except RECOVERABLE_ERRORS:
+                    logger.debug("关闭请求级 Modstore 流式客户端失败", exc_info=True)
 
     def chat_completion_sync(
         self,

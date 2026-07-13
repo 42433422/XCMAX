@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import os
-import re
-from pathlib import Path
 from typing import Any
+
+from app.application.ai_chat.workflow_response_rendering import (
+    workflow_output_message,
+    workflow_output_preview,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +18,76 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
 class AIChatWorkflowResponseMixin:
+    @staticmethod
+    def _public_workflow_failure_reason(raw: Any) -> str:
+        """Return a short, user-actionable reason without leaking internals."""
+
+        text = str(raw or "").strip()
+        if not text:
+            return "执行工具没有返回可核验的完成结果"
+        lowered = text.lower()
+        internal_markers = (
+            "traceback",
+            "exception",
+            "字段 data 类型错误",
+            "schema",
+            "validationerror",
+            "typeerror",
+            "keyerror",
+            "sqlalchemy",
+        )
+        if any(marker in lowered for marker in internal_markers):
+            return "执行工具返回的数据格式不符合预期"
+        actionable_markers = (
+            "未找到",
+            "不存在",
+            "缺少",
+            "未配置",
+            "不可用",
+            "没有",
+            "权限",
+            "授权",
+            "超时",
+            "网络",
+            "连接",
+            "已取消",
+        )
+        if any(marker in text for marker in actionable_markers):
+            return text[:180]
+        return "执行工具未能完成该操作"
+
+    def _public_workflow_response(
+        self,
+        *,
+        success: bool,
+        success_lines: list[str],
+        failure_reasons: list[Any],
+        recovery_hints: list[str] | None = None,
+        artifacts: list[dict[str, Any]] | None = None,
+    ) -> str:
+        if success:
+            lines = ["任务已完成。"]
+            lines.extend(line for line in success_lines if str(line).strip())
+            for artifact in artifacts or []:
+                url = str(artifact.get("download_url") or "").strip()
+                filename = str(
+                    artifact.get("filename") or artifact.get("name") or "下载结果"
+                ).strip()
+                if url:
+                    lines.append(f"[下载 {filename}]({url})")
+            return "\n".join(lines)
+
+        reason = self._public_workflow_failure_reason(
+            next((item for item in failure_reasons if str(item or "").strip()), "")
+        )
+        lines = [f"任务未完成：{reason}。"]
+        hint = next((str(item).strip() for item in recovery_hints or [] if str(item).strip()), "")
+        if hint:
+            lines.append(f"建议：{hint[:180]}")
+        else:
+            lines.append("请检查输入或打开对应功能页后重试；没有完成回执时系统不会声称成功。")
+        return "\n".join(lines)
+
     def _format_agent_run_response(
         self,
         plan,
@@ -64,7 +134,10 @@ class AIChatWorkflowResponseMixin:
             else:
                 lines.append(f"- {step.node_id}: {step.status}（{step.error or '未完成'}）")
 
-        success = agent_run.status == "completed"
+        steps = list(getattr(agent_run, "steps", []) or [])
+        success = agent_run.status == "completed" and all(
+            getattr(step, "status", "") == "completed" for step in steps
+        )
         cost_units_total = int((agent_run.metadata or {}).get("cost_units_total") or 0)
         tool_call_count = int((agent_run.metadata or {}).get("tool_call_count") or 0)
         artifact_payloads = [
@@ -74,7 +147,36 @@ class AIChatWorkflowResponseMixin:
             lines.append(f"工具调用: {tool_call_count} 次，成本单位: {cost_units_total}")
         if artifact_payloads:
             lines.append(f"Artifacts: {len(artifact_payloads)} 个")
-        response_text = "\n".join(lines)
+        success_lines: list[str] = []
+        failure_reasons: list[Any] = []
+        for step in getattr(agent_run, "steps", []) or []:
+            if step.status == "completed":
+                item = type(
+                    "AgentNodeResult",
+                    (),
+                    {
+                        "node_id": step.node_id,
+                        "success": True,
+                        "tool_id": step.tool_id,
+                        "action": step.action,
+                        "output": step.output,
+                        "error": "",
+                    },
+                )()
+                success_lines.extend(
+                    self._format_workflow_tool_success_line(
+                        item,
+                        node_params_by_id.get(str(step.node_id), {}),
+                    )
+                )
+            else:
+                failure_reasons.append(step.error)
+        response_text = self._public_workflow_response(
+            success=success,
+            success_lines=success_lines,
+            failure_reasons=failure_reasons,
+            artifacts=artifact_payloads,
+        )
         payload: dict[str, Any] = {
             "success": success,
             "message": "处理完成" if success else "处理失败",
@@ -140,63 +242,11 @@ class AIChatWorkflowResponseMixin:
 
     @staticmethod
     def _workflow_output_preview(output: Any, max_chars: int = 700) -> str:
-        if output is None:
-            return ""
-        value = output
-        if isinstance(output, dict):
-            value = {
-                k: v
-                for k, v in output.items()
-                if k
-                in {
-                    "success",
-                    "message",
-                    "error",
-                    "employee_id",
-                    "exists",
-                    "created",
-                    "unit_name",
-                    "matched_count",
-                    "redirect",
-                }
-            }
-            data = output.get("data")
-            if isinstance(data, list):
-                value["row_count"] = len(data)
-                value["rows"] = data[:5]
-            elif isinstance(data, dict):
-                value["data"] = {
-                    k: v
-                    for k, v in data.items()
-                    if k
-                    in {
-                        "summary",
-                        "result",
-                        "error",
-                        "success",
-                        "registered_tool_count",
-                        "available_employee_ids",
-                    }
-                } or str(data)[:260]
-            elif data is not None:
-                value["data"] = data
-            raw = output.get("raw")
-            if raw is not None and "data" not in value:
-                value["raw"] = str(raw)[:260]
-        try:
-            text = json.dumps(value, ensure_ascii=False, default=str)
-        except (TypeError, ValueError):
-            text = str(value)
-        text = text.strip()
-        if len(text) > max_chars:
-            return text[:max_chars] + "..."
-        return text
+        return workflow_output_preview(output, max_chars=max_chars)
 
     @staticmethod
     def _workflow_output_message(output: Any) -> str:
-        if not isinstance(output, dict):
-            return ""
-        return str(output.get("message") or output.get("error") or "").strip()
+        return workflow_output_message(output)
 
     def _format_workflow_tool_success_line(
         self,
@@ -297,7 +347,24 @@ class AIChatWorkflowResponseMixin:
                     lines.append(f"    · 恢复建议: {recovery_hint}")
         if run_result.message:
             lines.append(f"说明: {run_result.message}")
-        response_text = "\n".join(lines)
+        success_lines: list[str] = []
+        failure_reasons: list[Any] = []
+        recovery_hints: list[str] = []
+        for item in run_result.node_results:
+            if item.success:
+                node_params = node_params_by_id.get(str(item.node_id), {})
+                success_lines.extend(self._format_workflow_tool_success_line(item, node_params))
+            else:
+                failure_reasons.append(item.error)
+                hint = getattr(item, "recovery_hint", "")
+                if isinstance(hint, str) and hint.strip():
+                    recovery_hints.append(hint.strip())
+        response_text = self._public_workflow_response(
+            success=bool(run_result.success),
+            success_lines=success_lines,
+            failure_reasons=failure_reasons,
+            recovery_hints=recovery_hints,
+        )
         payload: dict[str, Any] = {
             "success": run_result.success,
             "message": "处理完成" if run_result.success else "处理失败",
@@ -386,4 +453,3 @@ class AIChatWorkflowResponseMixin:
                     picked[key] = out[key]
             return picked
         return {}
-

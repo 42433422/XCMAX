@@ -5,20 +5,13 @@ from __future__ import annotations
 import logging
 import os
 import re
-import subprocess
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.fastapi_routes.mobile_extensions.admin_helpers import (
-    _mobile_request_user_id,
-    _mobile_session_meta,
-    _require_mobile_admin_or_enterprise,
-)
 from app.fastapi_routes.mobile_extensions.models import (
     AiGroupCreateBody,
     AiGroupMemberBody,
@@ -33,13 +26,21 @@ router = APIRouter()
 # ── AI 群聊（微信式多 AI 群组）──
 
 
+def _parent():
+    """Resolve legacy patch points from the compatibility parent module."""
+
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    return parent
+
+
 def _mobile_group_uid(request: Request, user) -> int:
-    return _mobile_request_user_id(request, user)
+    return _parent()._mobile_request_user_id(request, user)
 
 
 def _mobile_group_mode(request: Request) -> str:
     """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
-    meta = _mobile_session_meta(request) or {}
+    meta = _parent()._mobile_session_meta(request) or {}
     return (
         "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
     )
@@ -111,7 +112,7 @@ def _git_no_prompt_env() -> dict[str, str]:
 def _mobile_git_branches_from_repo(repo: Path) -> list[dict[str, Any]]:
     current = ""
     try:
-        cur = subprocess.run(
+        cur = _parent().subprocess.run(
             ["git", "-C", str(repo), "branch", "--show-current"],
             capture_output=True,
             text=True,
@@ -124,7 +125,7 @@ def _mobile_git_branches_from_repo(repo: Path) -> list[dict[str, Any]]:
     except Exception:  # noqa: BLE001
         current = ""
     try:
-        result = subprocess.run(
+        result = _parent().subprocess.run(
             [
                 "git",
                 "-C",
@@ -168,7 +169,7 @@ def _mobile_git_branches_from_remote() -> list[dict[str, Any]]:
     if not remote_url:
         return []
     try:
-        result = subprocess.run(
+        result = _parent().subprocess.run(
             ["git", "ls-remote", "--heads", remote_url],
             capture_output=True,
             text=True,
@@ -205,7 +206,7 @@ def _sort_mobile_git_branches(rows) -> list[dict[str, Any]]:
 @router.get("/git/branches")
 async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
     """列出手机端可选工作分支：优先本地 repo，部署包无 .git 时退到远端 heads。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
     try:
@@ -224,16 +225,20 @@ async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
 @router.get("/ai-groups")
 async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
     """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        groups = AiGroupChatService(mode=_mobile_group_mode(request)).list_groups(user_id=uid)
+        groups = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .list_groups(user_id=uid)
+        )
         return format_mobile_response(data={"groups": groups})
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_ai_groups_list")
@@ -245,16 +250,20 @@ async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user))
 @router.get("/ai-groups/candidates")
 async def mobile_ai_group_candidates(request: Request, user=Depends(get_mobile_user)):
     """可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        candidates = AiGroupChatService(mode=_mobile_group_mode(request)).list_member_candidates()
+        candidates = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .list_member_candidates()
+        )
         return format_mobile_response(
             data={
                 "candidates": candidates,
@@ -274,17 +283,19 @@ async def mobile_ai_groups_create(
     request: Request, body: AiGroupCreateBody, user=Depends(get_mobile_user)
 ):
     """创建自定义 AI 群聊。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).create_group(
-            user_id=uid, name=body.name
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .create_group(user_id=uid, name=body.name)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -306,17 +317,19 @@ async def mobile_ai_group_messages(
     user=Depends(get_mobile_user),
 ):
     """拉取某个 AI 群聊的历史消息。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(
-            user_id=uid, group_id=group_id, limit=limit
+        messages = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .get_messages(user_id=uid, group_id=group_id, limit=limit)
         )
         return format_mobile_response(data={"messages": messages})
     except RECOVERABLE_ERRORS as exc:
@@ -331,25 +344,29 @@ async def mobile_ai_group_post(
     request: Request, group_id: str, body: AiGroupMessageBody, user=Depends(get_mobile_user)
 ):
     """在 AI 群聊里发消息：群成员各回一条；@ 了具体成员则只有 TA 回复。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
         branch_context = _mobile_branch_context_from_body(body)
-        result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
-            user_id=uid,
-            group_id=group_id,
-            text=body.message,
-            sender_name=body.sender_name or "我",
-            mentions=body.mentions,
-            dispatch=bool(body.dispatch),
-            branch_context=branch_context,
-            context=body.context if isinstance(getattr(body, "context", None), dict) else {},
+        result = (
+            await _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .post_message(
+                user_id=uid,
+                group_id=group_id,
+                text=body.message,
+                sender_name=body.sender_name or "我",
+                mentions=body.mentions,
+                dispatch=bool(body.dispatch),
+                branch_context=branch_context,
+                context=body.context if isinstance(getattr(body, "context", None), dict) else {},
+            )
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -368,25 +385,29 @@ async def mobile_ai_group_add_member(
     request: Request, group_id: str, body: AiGroupMemberBody, user=Depends(get_mobile_user)
 ):
     """把一个 AI 员工拉进群。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).add_member(
-            user_id=uid,
-            group_id=group_id,
-            member={
-                "employee_id": body.employee_id,
-                "mod_id": body.mod_id,
-                "name": body.name,
-                "avatar": body.avatar,
-                "summary": body.summary,
-            },
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .add_member(
+                user_id=uid,
+                group_id=group_id,
+                member={
+                    "employee_id": body.employee_id,
+                    "mod_id": body.mod_id,
+                    "name": body.name,
+                    "avatar": body.avatar,
+                    "summary": body.summary,
+                },
+            )
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -405,17 +426,19 @@ async def mobile_ai_group_remove_member(
     request: Request, group_id: str, employee_id: str, user=Depends(get_mobile_user)
 ):
     """把一个 AI 员工移出群。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).remove_member(
-            user_id=uid, group_id=group_id, employee_id=employee_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .remove_member(user_id=uid, group_id=group_id, employee_id=employee_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -434,17 +457,19 @@ async def mobile_ai_group_toggle_pin(
     request: Request, group_id: str, user=Depends(get_mobile_user)
 ):
     """切换群聊置顶状态。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_pinned(
-            user_id=uid, group_id=group_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .toggle_pinned(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -463,17 +488,19 @@ async def mobile_ai_group_mark_unread(
     request: Request, group_id: str, user=Depends(get_mobile_user)
 ):
     """标为未读（显示小红点）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_unread(
-            user_id=uid, group_id=group_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .mark_unread(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -490,17 +517,19 @@ async def mobile_ai_group_mark_unread(
 @router.post("/ai-groups/{group_id}/mark-read")
 async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depends(get_mobile_user)):
     """清除未读标记。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_read(
-            user_id=uid, group_id=group_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .mark_read(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -519,17 +548,19 @@ async def mobile_ai_group_toggle_followed(
     request: Request, group_id: str, user=Depends(get_mobile_user)
 ):
     """切换是否关注（不再关注则不显示未读）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_followed(
-            user_id=uid, group_id=group_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .toggle_followed(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -548,17 +579,19 @@ async def mobile_ai_group_toggle_hidden(
     request: Request, group_id: str, user=Depends(get_mobile_user)
 ):
     """切换是否隐藏（不显示/恢复显示该聊天）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_hidden(
-            user_id=uid, group_id=group_id
+        group = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .toggle_hidden(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data={"group": group})
     except ValueError as exc:
@@ -575,17 +608,19 @@ async def mobile_ai_group_toggle_hidden(
 @router.delete("/ai-groups/{group_id}")
 async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(get_mobile_user)):
     """删除群聊。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
+    _, err = _parent()._require_mobile_admin_or_enterprise(request, user)
     if err is not None:
         return err
-    uid = _mobile_group_uid(request, user)
+    uid = _parent()._mobile_group_uid(request, user)
     if uid <= 0:
         return JSONResponse(
             format_mobile_response(None, "未授权", success=False, code=401), status_code=401
         )
     try:
-        result = AiGroupChatService(mode=_mobile_group_mode(request)).delete_group(
-            user_id=uid, group_id=group_id
+        result = (
+            _parent()
+            .AiGroupChatService(mode=_parent()._mobile_group_mode(request))
+            .delete_group(user_id=uid, group_id=group_id)
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -597,5 +632,3 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )
-
-

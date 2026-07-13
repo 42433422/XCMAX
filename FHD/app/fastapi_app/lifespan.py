@@ -31,6 +31,7 @@ from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_
 
 logger = logging.getLogger(__name__)
 
+
 def _desktop_fast_start_enabled() -> bool:
     import os
 

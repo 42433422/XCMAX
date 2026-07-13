@@ -27,6 +27,7 @@ from app.application.agent_orchestrator.chat_trace import (
     finalize_legacy_chat_run,
     start_legacy_chat_run,
 )
+from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
 from app.application.workflow.multimodal_user_content import (
     EmptyMultimodalResponseError,
     UnsupportedMultimodalModelError,
@@ -39,7 +40,6 @@ from app.domain.context.session_context import (
 from app.infrastructure.auth.db_token import effective_db_read_token
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat_stream_sse_events
-from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -162,6 +162,10 @@ class XcagiCompatChatBody(BaseModel):
             "neuro_ddd_context",
         ),
     )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
+    )
     system_prompt: str | None = Field(
         default=None,
         validation_alias=AliasChoices("system_prompt", "system", "instructions"),
@@ -196,6 +200,10 @@ class XcagiCompatChatBatchBody(BaseModel):
             "neuro_context",
             "neuro_ddd_context",
         ),
+    )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
     )
     system_prompt: str | None = Field(
         default=None,
@@ -654,7 +662,9 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
         request=request,
     )
     if business_payload is not None:
-        response_text = str(business_payload.get("response") or business_payload.get("message") or "")
+        response_text = str(
+            business_payload.get("response") or business_payload.get("message") or ""
+        )
         yield _sse_event_line({"type": "token", "text": response_text})
         yield _sse_event_line({"type": "done", "result": business_payload})
         return

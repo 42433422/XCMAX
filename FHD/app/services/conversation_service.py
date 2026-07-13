@@ -4,7 +4,9 @@
 提供对话历史和会话管理的业务逻辑。
 """
 
+import html
 import logging
+import re
 import uuid
 from datetime import datetime
 from typing import Any
@@ -39,6 +41,14 @@ class ConversationService(NeuroEventPublisherMixin):
             return int(text)
         return None
 
+    @staticmethod
+    def _title_from_user_content(content: Any, max_length: int = 48) -> str:
+        decoded = html.unescape(str(content or ""))
+        plain = " ".join(re.sub(r"<[^>]+>", " ", decoded).split())
+        if len(plain) > max_length:
+            return f"{plain[:max_length]}…"
+        return plain
+
     def save_message(
         self,
         session_id: str,
@@ -72,14 +82,18 @@ class ConversationService(NeuroEventPublisherMixin):
                 )
 
                 normalized_user_id = self._normalize_user_id(user_id)
+                derived_title = self._title_from_user_content(content) if role == "user" else ""
 
                 if session:
                     session.message_count += 1
                     session.last_message_at = datetime.now()
+                    if derived_title and not str(session.title or "").strip():
+                        session.title = derived_title
                 else:
                     session = AIConversationSession(
                         session_id=session_id,
                         user_id=normalized_user_id,
+                        title=derived_title or None,
                         message_count=1,
                         last_message_at=datetime.now(),
                         created_at=datetime.now(),
@@ -268,6 +282,33 @@ class ConversationService(NeuroEventPublisherMixin):
             except RECOVERABLE_ERRORS as e:
                 db.rollback()
                 logger.error("删除会话失败：%s", e)
+                raise
+
+    def delete_sessions(self, user_id: str = "default") -> int:
+        """Delete all durable chat sessions in the desktop user's storage scope."""
+
+        normalized_user_id = self._normalize_user_id(user_id)
+        with get_db() as db:
+            try:
+                sessions_query = db.query(AIConversationSession)
+                if normalized_user_id is None:
+                    sessions_query = sessions_query.filter(AIConversationSession.user_id.is_(None))
+                else:
+                    sessions_query = sessions_query.filter(
+                        AIConversationSession.user_id == normalized_user_id
+                    )
+                session_ids = [row.session_id for row in sessions_query.all()]
+                if not session_ids:
+                    return 0
+                db.query(AIConversation).filter(AIConversation.session_id.in_(session_ids)).delete(
+                    synchronize_session=False
+                )
+                deleted = sessions_query.delete(synchronize_session=False)
+                db.commit()
+                return int(deleted or 0)
+            except RECOVERABLE_ERRORS as e:
+                db.rollback()
+                logger.error("清空对话会话失败：%s", e)
                 raise
 
     def create_session(self, user_id: str = "default", title: str = None) -> str:

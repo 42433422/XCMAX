@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import math
-import os
 import re
+import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+import httpx
 
 from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
     _EXCEL_IMPORT_QTY_MEASURE_RE,
     _enrich_confirmation_inner,
-    _skip_pro_excel_deterministic_import,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,8 +80,9 @@ class AIChatExcelImportMixin:
             return True
         return bool(_EXCEL_IMPORT_QTY_MEASURE_RE.match(t))
 
-    @staticmethod
+    @classmethod
     def _default_purchase_unit_for_import(
+        cls,
         excel_analysis: dict[str, Any],
         preview_data: dict[str, Any],
         request_context: dict[str, Any] | None = None,
@@ -108,13 +109,11 @@ class AIChatExcelImportMixin:
             logger.debug("[导入调试] preview_data/excel_analysis customer_hint = %s", repr(hint))
             if hint:
                 return hint
-        grid_hint = AIChatExcelImportMixin._customer_hint_from_preview_grid(preview_data)
+        grid_hint = cls._customer_hint_from_preview_grid(preview_data)
         if grid_hint:
             return grid_hint
-        fp = AIChatExcelImportMixin._resolve_excel_path_for_import(excel_analysis, preview_data)
-        sheet = AIChatExcelImportMixin._resolve_sheet_name_for_reimport(
-            excel_analysis, preview_data, request_context
-        )
+        fp = cls._resolve_excel_path_for_import(excel_analysis, preview_data)
+        sheet = cls._resolve_sheet_name_for_reimport(excel_analysis, preview_data, request_context)
         if fp:
             path = Path(fp)
             if path.is_file():
@@ -128,7 +127,7 @@ class AIChatExcelImportMixin:
                         return doc_unit
                 except RECOVERABLE_ERRORS as err:
                     logger.debug("从工作簿读取客户提示失败: %s", err)
-        return AIChatExcelImportMixin._guess_default_purchase_unit(excel_analysis)
+        return cls._guess_default_purchase_unit(excel_analysis)
 
     @staticmethod
     def _guess_default_purchase_unit(excel_analysis: dict[str, Any]) -> str:
@@ -266,8 +265,9 @@ class AIChatExcelImportMixin:
                 return str(sn).strip()
         return None
 
-    @staticmethod
+    @classmethod
     def _try_structured_reload_records(
+        cls,
         excel_analysis: dict[str, Any],
         preview_data: dict[str, Any],
         request_context: dict[str, Any] | None = None,
@@ -287,12 +287,8 @@ class AIChatExcelImportMixin:
         path = Path(fp)
         if not path.is_file():
             return None
-        sheet = AIChatExcelImportMixin._resolve_sheet_name_for_reimport(
-            excel_analysis, preview_data, request_context
-        )
-        force_hdr = AIChatExcelImportMixin._resolve_force_header_row_1based(
-            excel_analysis, preview_data
-        )
+        sheet = cls._resolve_sheet_name_for_reimport(excel_analysis, preview_data, request_context)
+        force_hdr = cls._resolve_force_header_row_1based(excel_analysis, preview_data)
         try:
             pd0 = preview_data if isinstance(preview_data, dict) else {}
             if str(pd0.get("parse_mode") or "").strip().lower() == "rectangular":
@@ -314,12 +310,7 @@ class AIChatExcelImportMixin:
             out: list[dict[str, Any]] = []
             for row in rows:
                 if isinstance(row, dict):
-                    out.append(
-                        {
-                            k: AIChatExcelImportMixin._sanitize_import_scalar(v)
-                            for k, v in row.items()
-                        }
-                    )
+                    out.append({k: cls._sanitize_import_scalar(v) for k, v in row.items()})
             return out or None
         except RECOVERABLE_ERRORS as err:
             logger.debug("结构化重读 Excel 跳过: %s", err)
@@ -732,8 +723,9 @@ class AIChatExcelImportMixin:
             merged = merged[-8000:]
         return merged
 
-    @staticmethod
+    @classmethod
     def _resolve_unit_price_column(
+        cls,
         keys: list[str],
         current: str,
         user_message: str,
@@ -756,7 +748,7 @@ class AIChatExcelImportMixin:
             return "", None
 
         um = str(user_message or "").strip()
-        before, after, generic = AIChatExcelImportMixin._price_column_buckets(keyset)
+        before, after, generic = cls._price_column_buckets(keyset)
         has_tension = bool(before and after)
         # 分桶漏检（表头含空格/异体等）时，只要键名上同时出现「调价前」「调价后」仍视为双价列，须话术或覆盖项
         if not has_tension:
@@ -899,7 +891,7 @@ class AIChatExcelImportMixin:
 
         records = [
             (
-                {k: AIChatExcelImportMixin._sanitize_import_scalar(v) for k, v in r.items()}
+                {k: self._sanitize_import_scalar(v) for k, v in r.items()}
                 if isinstance(r, dict)
                 else r
             )
@@ -917,7 +909,7 @@ class AIChatExcelImportMixin:
                 if llm_roles.get(role):
                     inferred_roles[role] = llm_roles[role]
 
-        header_roles = AIChatExcelImportMixin._header_hint_column_roles(
+        header_roles = self._header_hint_column_roles(
             [str(k).strip() for k in records[0].keys()] if records else []
         )
         for role in ("unit_name", "product_name", "model_number", "unit_price"):
@@ -926,16 +918,14 @@ class AIChatExcelImportMixin:
                 inferred_roles[role] = hk
 
         keys = [str(k).strip() for k in records[0].keys() if str(k).strip()]
-        merged_intent = AIChatExcelImportMixin._merge_user_intent_for_price_resolution(
-            user_message, request_context
-        )
+        merged_intent = self._merge_user_intent_for_price_resolution(user_message, request_context)
         overrides = (
             request_context.get("excel_import_column_overrides")
             if isinstance(request_context, dict)
             else None
         )
         cur_price = str(inferred_roles.get("unit_price") or "").strip()
-        price_col, price_err = AIChatExcelImportMixin._resolve_unit_price_column(
+        price_col, price_err = self._resolve_unit_price_column(
             keys, cur_price, merged_intent, overrides if isinstance(overrides, dict) else {}
         )
         if price_err:
@@ -961,7 +951,7 @@ class AIChatExcelImportMixin:
         )
         if unit_key:
             col_vals = [str((row or {}).get(unit_key) or "").strip() for row in records]
-            if AIChatExcelImportMixin._packaging_or_measure_ratio(col_vals) >= 0.45:
+            if self._packaging_or_measure_ratio(col_vals) >= 0.45:
                 unit_key = ""
         if unit_key and unit_key == product_key:
             unit_key = ""
@@ -989,9 +979,7 @@ class AIChatExcelImportMixin:
                 or (
                     default_unit
                     and unit_name
-                    and AIChatExcelImportMixin._excel_cell_looks_like_product_measure_unit(
-                        unit_name
-                    )
+                    and self._excel_cell_looks_like_product_measure_unit(unit_name)
                 )
             ):
                 unit_name = default_unit.strip()
@@ -1107,8 +1095,10 @@ class AIChatExcelImportMixin:
         ) or any(k in lower for k in ("read", "query", "write", "create", "update", "delete"))
         return db_object and db_action
 
-    @staticmethod
-    def _looks_like_smart_workflow_intent(text: str, context: dict[str, Any] | None = None) -> bool:
+    @classmethod
+    def _looks_like_smart_workflow_intent(
+        cls, text: str, context: dict[str, Any] | None = None
+    ) -> bool:
         """Whether a non-pro chat turn should be allowed into executable planning.
 
         This keeps casual chat on the lightweight path, but lets ordinary
@@ -1118,7 +1108,7 @@ class AIChatExcelImportMixin:
         t = str(text or "").strip()
         if not t:
             return False
-        if AIChatExcelImportMixin._looks_like_explicit_workflow_tool_intent(t):
+        if cls._looks_like_explicit_workflow_tool_intent(t):
             return True
 
         ctx = context if isinstance(context, dict) else {}
@@ -1301,4 +1291,3 @@ class AIChatExcelImportMixin:
                 "data": _enrich_confirmation_inner(inner, action="workflow_confirmation_required"),
             },
         }
-

@@ -680,55 +680,11 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         conn.close()
         return units
 
-    def _distinct_attendance_departments() -> list[str]:
-        """Return real departments from the personnel and attendance stores."""
-        import sqlite3
-
-        values: set[str] = {
-            str(department).strip()
-            for department, _specification, _name in _load_products_personnel_roster_from_host()
-            if str(department).strip()
-        }
-        db_path = get_database_path()
-        if db_path.exists():
-            conn = sqlite3.connect(str(db_path))
-            cur = conn.cursor()
-            try:
-                table_names = {
-                    str(row[0])
-                    for row in cur.execute(
-                        "SELECT name FROM sqlite_master WHERE type = 'table'"
-                    ).fetchall()
-                }
-                if "attendance_departments" in table_names:
-                    for row in cur.execute(
-                        "SELECT department, main_department FROM attendance_departments"
-                    ).fetchall():
-                        values.update(str(value).strip() for value in row if str(value or "").strip())
-                if "attendance_employees" in table_names:
-                    for row in cur.execute(
-                        "SELECT department, main_department FROM attendance_employees"
-                    ).fetchall():
-                        values.update(str(value).strip() for value in row if str(value or "").strip())
-            except sqlite3.Error:
-                logger.exception("读取太阳鸟考勤部门失败")
-            finally:
-                conn.close()
-        if not values:
-            values.update(_distinct_customer_purchase_units())
-        return sorted(values, key=str.casefold)
-
     @router.get("/purchase_units")
     @router.get("/purchase_units/")
     async def purchase_units_list():
         units = _distinct_customer_purchase_units()
         return {"success": True, "data": units}
-
-    @router.get("/shipment/shipment-records/units")
-    @router.get("/shipment/shipment-records/units/")
-    async def shipment_record_units_compat():
-        units = _distinct_attendance_departments()
-        return {"success": True, "data": units, "units": units}
 
     @router.get("/customers/{customer_id}", response_model=None)
     async def customers_get(customer_id: int):

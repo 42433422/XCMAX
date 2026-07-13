@@ -154,6 +154,10 @@ class XcagiCompatChatBody(BaseModel):
             "neuro_ddd_context",
         ),
     )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
+    )
     system_prompt: str | None = Field(
         default=None,
         validation_alias=AliasChoices("system_prompt", "system", "instructions"),
@@ -188,6 +192,10 @@ class XcagiCompatChatBatchBody(BaseModel):
             "neuro_context",
             "neuro_ddd_context",
         ),
+    )
+    session_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("session_id", "conversation_id"),
     )
     system_prompt: str | None = Field(
         default=None,

@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import os
 import re
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -435,5 +431,3 @@ class AIChatInstantToolsMixin:
             logger.error("即时执行 shipments 失败：%s", tool_err, exc_info=True)
 
         return response_data
-
-

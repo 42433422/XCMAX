@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.models import AuthQrConfirmBody, OidcExchangeBody
 from app.utils.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
@@ -90,7 +89,7 @@ async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
                 import json as _json
 
                 msg = _json.loads(err.body.decode("utf-8")).get("message") or msg
-            except OPERATIONAL_ERRORS:
+            except RECOVERABLE_ERRORS:
                 pass
         return JSONResponse(
             format_mobile_response(None, msg, success=False, code=401),
@@ -135,7 +134,7 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         profile = (
             oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
         )
-    except OPERATIONAL_ERRORS as exc:
+    except RECOVERABLE_ERRORS as exc:
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=502),
             status_code=502,
@@ -188,5 +187,3 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         if key in payload and payload[key] is not None:
             data[key] = payload[key]
     return format_mobile_response(data=data)
-
-

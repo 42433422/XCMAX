@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -39,7 +40,10 @@ from app.fastapi_routes.xcagi_compat_chat_helpers import (
 )
 from app.infrastructure.llm.client import set_mode as set_llm_mode
 from app.legacy.chat.legacy_chat_adapter import chat as run_agent_chat
-from app.services.conversation.modstore_adapter import create_modstore_openai_client_from_request
+from app.services.conversation.modstore_adapter import (
+    ModstorePlatformAdapter,
+    create_modstore_openai_client_from_request,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -135,8 +139,7 @@ def _summarize_context_for_log(value: Any, *, key: str = "", depth: int = 0) -> 
         return summarized
     if isinstance(value, (list, tuple)):
         summarized_items = [
-            _summarize_context_for_log(item, key=key, depth=depth + 1)
-            for item in value[:12]
+            _summarize_context_for_log(item, key=key, depth=depth + 1) for item in value[:12]
         ]
         if len(value) > 12:
             summarized_items.append(f"<omitted_items={len(value) - 12}>")
@@ -265,6 +268,19 @@ def _env_truthy(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _runtime_context_with_body_session(
+    body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
+    runtime_context: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Keep the public top-level session id on the planner persistence path."""
+
+    merged = dict(runtime_context or {})
+    session_id = str(getattr(body, "session_id", None) or "").strip()
+    if session_id:
+        merged["session_id"] = session_id
+    return merged
+
+
 async def _await_with_timeout(awaitable, *, timeout: float):
     """Await with timeout without leaking a coroutine when ``wait_for`` fails early.
 
@@ -331,12 +347,27 @@ async def _execute_ai_chat_mainline(
     body: XcagiCompatChatBody | XcagiCompatChatBatchBody,
     runtime_context: dict[str, Any],
     *,
+    request: Request | None = None,
     message: str | None = None,
     kitten_extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     from app.application.ai_chat_app_service import AIChatApplicationService
 
     service = AIChatApplicationService()
+    if request is not None:
+        # The desktop login session owns the MODstore market token.  Never put
+        # that credential on the process-wide AIConversationService singleton:
+        # simultaneous desktop/mobile users must not be able to replace each
+        # other's provider.  A shallow copy keeps the existing shared
+        # conversation/context services while isolating request credentials.
+        request_adapter = ModstorePlatformAdapter.from_request(
+            request,
+            close_after_call=True,
+        )
+        if request_adapter.auth_token:
+            request_ai_service = copy.copy(service.ai_service)
+            request_ai_service.modstore_adapter = request_adapter
+            service.ai_service = request_ai_service
     file_context = runtime_context.get("file_context")
     if not isinstance(file_context, dict):
         file_context = runtime_context.get("file_analysis")
@@ -363,6 +394,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
         set_llm_mode(m)
 
     runtime_context, _ = _merge_runtime_context_with_message_paths(body.context, body.message)
+    runtime_context = _runtime_context_with_body_session(body, runtime_context)
     assert_p2_elevated_claim_or_raise(request)
     tier = resolve_ai_tier(request)
     runtime_context = runtime_context_with_tier(runtime_context, tier)
@@ -456,6 +488,7 @@ async def execute_compat_chat(request: Request, body: XcagiCompatChatBody) -> di
                 _execute_ai_chat_mainline(
                     body,
                     planner_runtime_context,
+                    request=request,
                     kitten_extra=kitten_extra or None,
                 ),
                 timeout=timeout,
@@ -609,7 +642,7 @@ async def execute_compat_chat_batch(
         set_llm_mode(m)
     results: list[dict[str, Any]] = []
     timeout = _xcagi_chat_timeout_seconds()
-    rolling_ctx = body.context
+    rolling_ctx = _runtime_context_with_body_session(body, body.context)
     llm_client = create_modstore_openai_client_from_request(request)
     for txt in msgs:
         runtime_context, _ = _merge_runtime_context_with_message_paths(rolling_ctx, txt)
@@ -696,6 +729,7 @@ async def execute_compat_chat_batch(
                     _execute_ai_chat_mainline(
                         body,
                         planner_runtime_context,
+                        request=request,
                         message=txt,
                     ),
                     timeout=timeout,
@@ -918,6 +952,7 @@ def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
 async def compat_chat_stream_async(
     request: Request, body: XcagiCompatChatBody, *, ai_tier: str | None = None
 ):
+    body.context = _runtime_context_with_body_session(body, body.context)
     # 注入 persona system_prompt（前端没传时用 persona 系统生成去客服腔 prompt）
     if not body.system_prompt and body.message:
         try:

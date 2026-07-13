@@ -226,8 +226,8 @@ def _run_memory_v2_agent(
     failure_status: int,
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     user_id = _memory_v2_user_id_from_request(request, data)
