@@ -6,7 +6,7 @@
 
 本页是 **18 份可直接执行** 的文档索引；更全的分层见 [`DOCUMENTATION_MAP.md`](DOCUMENTATION_MAP.md)。
 
-> **当前产品线口径**：`FHD/` 是 **企业桌面 ERP + AI 主交付线**。网站侧 AI 员工商店在仓根 `成都修茈科技有限公司/`，移动 AI 协同 App 在 `mobile-android/`，个人版暂停新增投入。跨线规范见仓根 [`specs/product-lines-3-plus-2.md`](../../specs/product-lines-3-plus-2.md)。阶段推进使用 v10-A/B/C/D，不 bump 产品版本。
+> **当前产品线口径**：`FHD/` 是 **企业桌面 ERP + AI 主交付线**。网站侧 AI 员工商店在仓根 `成都修茈科技有限公司/`，移动 AI 协同 App 的统一客户端在 `mobile-flutter-poc/`，个人版冻结。跨线规范见仓根 [`specs/product-lines-3-plus-2.md`](../../specs/product-lines-3-plus-2.md)。阶段推进使用 1.0-A/B/C/D，不 bump 产品版本。
 
 ### 登记索引
 

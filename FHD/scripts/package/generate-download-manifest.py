@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate manifest.json and download-release.json for XCAGI releases.
 
-Outputs a manifest with two channels:
+Outputs an enterprise-only stable manifest with two channels:
   - auto_update:       {base}/{sku}/{filename}      (electron-updater)
   - official_download: {base}/{sku}/{filename}      (官网下载页)
 
@@ -13,9 +13,6 @@ Manifest schema (verified by scripts/deploy/verify-download.sh):
   "channels": {
     "auto_update": {
       "base_url": "https://xiu-ci.com/releases/stable",
-      "personal": {
-        "win":  { "url": "...", "sha256": "...", "size": N, "filename": "..." }
-      },
       "enterprise": { ... }
     },
     "official_download": {
@@ -27,18 +24,21 @@ Manifest schema (verified by scripts/deploy/verify-download.sh):
 
 macOS uses an array because a single SKU may ship multiple arches (arm64 + x64).
 """
+
 from __future__ import annotations
 
 import argparse
 import datetime
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
-
-SKU_PATTERN = re.compile(r"(personal|enterprise)", re.IGNORECASE)
+# Product-line SSOT: specs/product-lines-3-plus-2.md.
+# Personal remains build-compatible for a future recovery, but it is frozen and must
+# never enter the current stable release manifest.
+ACTIVE_RELEASE_SKUS = ("enterprise",)
+FROZEN_RELEASE_SKUS = ("personal",)
 
 
 def compute_sha256(path: Path) -> str:
@@ -94,7 +94,7 @@ def collect_sku_files(release_root: Path, sku: str) -> list[Path]:
 
 def build_channel(base_url: str, release_root: Path) -> dict:
     channel: dict = {"base_url": base_url}
-    for sku in ("personal", "enterprise"):
+    for sku in ACTIVE_RELEASE_SKUS:
         sku_files = collect_sku_files(release_root, sku)
         if not sku_files:
             continue
@@ -114,7 +114,7 @@ def build_channel(base_url: str, release_root: Path) -> dict:
 
 
 def win_installer_mb(release_root: Path) -> int:
-    for sku in ("personal", "enterprise"):
+    for sku in ACTIVE_RELEASE_SKUS:
         for path in collect_sku_files(release_root, sku):
             if path.name.endswith(".exe"):
                 return int(round(path.stat().st_size / (1024 * 1024)))
@@ -124,9 +124,23 @@ def win_installer_mb(release_root: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--release-dir", required=True, help="Root containing <release-subdir>/<sku>/")
-    parser.add_argument("--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0")
+    parser.add_argument(
+        "--release-dir", required=True, help="Root containing <release-subdir>/<sku>/"
+    )
+    parser.add_argument(
+        "--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0"
+    )
     parser.add_argument("--git-sha", required=True)
+    parser.add_argument(
+        "--android-version",
+        default="",
+        help="Published enterprise Android product version to preserve in the website pointer.",
+    )
+    parser.add_argument(
+        "--android-git-sha",
+        default="",
+        help="Git SHA of the separately guarded enterprise Android artifact.",
+    )
     parser.add_argument("--output", required=True, help="manifest.json output path")
     parser.add_argument(
         "--download-release-output",
@@ -153,17 +167,19 @@ def main() -> int:
     auto_update = build_channel(args.auto_update_base, release_root)
     official_download = build_channel(official_base, release_root)
     release_ready = all(
-        official_download.get(sku, {}).get("win")
-        and official_download.get(sku, {}).get("mac")
-        for sku in ("personal", "enterprise")
+        official_download.get(sku, {}).get("win") and official_download.get(sku, {}).get("mac")
+        for sku in ACTIVE_RELEASE_SKUS
     )
 
     manifest = {
         "schema": "xcagi.download_manifest/v1",
         "version": args.version,
         "release_ready": release_ready,
+        "active_skus": list(ACTIVE_RELEASE_SKUS),
+        "frozen_skus": list(FROZEN_RELEASE_SKUS),
+        "primary_sku": "enterprise",
         "git_sha": args.git_sha,
-        "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "generated_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "channels": {
             "auto_update": auto_update,
             "official_download": official_download,
@@ -172,7 +188,9 @@ def main() -> int:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"[ok] wrote {output_path} ({output_path.stat().st_size} bytes)")
 
     download_release = {
@@ -180,6 +198,9 @@ def main() -> int:
         "version_lock": args.version,
         "download_version": args.version,
         "release_ready": release_ready,
+        "active_skus": list(ACTIVE_RELEASE_SKUS),
+        "frozen_skus": list(FROZEN_RELEASE_SKUS),
+        "primary_sku": "enterprise",
         "git_sha": args.git_sha,
         "generated_at": manifest["generated_at"],
         "win_installer_mb": win_installer_mb(release_root),
@@ -188,6 +209,10 @@ def main() -> int:
         "manifest_url": f"{official_base}/manifest.json",
         "auto_update_base": args.auto_update_base,
     }
+    if args.android_version:
+        download_release["android_version"] = args.android_version
+    if args.android_git_sha:
+        download_release["android_git_sha"] = args.android_git_sha
 
     dr_output = Path(args.download_release_output)
     dr_output.parent.mkdir(parents=True, exist_ok=True)
