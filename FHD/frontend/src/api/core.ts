@@ -103,16 +103,40 @@ export class ApiError extends Error {
 export interface RequestOptions extends RequestInit {
   skipDefaultJsonHeader?: boolean;
   responseType?: 'json' | 'blob';
+  timeoutMs?: number;
 }
 
 export type { ApiResponse } from '@/types/api';
 
 async function request<T = unknown>(url: string, options: RequestOptions = {}): Promise<T | Response> {
   const fullUrl = buildApiUrl(url);
-  const { skipDefaultJsonHeader = false, ...requestOptions } = options;
+  const {
+    skipDefaultJsonHeader = false,
+    responseType = 'json',
+    timeoutMs,
+    signal: callerSignal,
+    ...requestOptions
+  } = options;
+  const timeoutController = typeof timeoutMs === 'number' && timeoutMs > 0
+    ? new AbortController()
+    : null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  let detachCallerAbort: (() => void) | null = null;
+  if (timeoutController) {
+    timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+    if (callerSignal) {
+      const abortFromCaller = () => timeoutController.abort(callerSignal.reason);
+      if (callerSignal.aborted) abortFromCaller();
+      else {
+        callerSignal.addEventListener('abort', abortFromCaller, { once: true });
+        detachCallerAbort = () => callerSignal.removeEventListener('abort', abortFromCaller);
+      }
+    }
+  }
   const config: RequestOptions = {
     credentials: 'include',
-    ...requestOptions
+    ...requestOptions,
+    signal: timeoutController?.signal ?? callerSignal,
   };
   const baseHeaders = skipDefaultJsonHeader ? {} : defaultHeaders;
   config.headers = {
@@ -166,7 +190,7 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
       throw new ApiError(errorMessage, response.status, errorData);
     }
 
-    if (options.responseType === 'blob') {
+    if (responseType === 'blob') {
       return response;
     }
 
@@ -179,8 +203,16 @@ async function request<T = unknown>(url: string, options: RequestOptions = {}): 
       if (error instanceof ApiError) {
         throw error;
       }
-      const message = error instanceof Error ? error.message : '网络错误';
+      const message =
+        timeoutController?.signal.aborted && !callerSignal?.aborted
+          ? `请求超时（>${Math.ceil(Number(timeoutMs) / 1000)}s）`
+          : error instanceof Error
+            ? error.message
+            : '网络错误';
       throw new ApiError(message, 0, null);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+      detachCallerAbort?.();
     }
 }
 

@@ -796,7 +796,10 @@ router.beforeEach(async (to, _from, next) => {
     !isAdminConsoleSpa()
   ) {
     try {
-      const onboardingStep = await resolveHostPackOnboardingStep(true);
+      // The login success navigation refreshes this gate once.  Reusing its
+      // short session cache keeps a subsequent desktop deep-link/reload from
+      // blocking the usable screen on the same three bootstrap requests.
+      const onboardingStep = await resolveHostPackOnboardingStep(false);
       if (onboardingStep) {
         next({
           name: 'product-onboarding',

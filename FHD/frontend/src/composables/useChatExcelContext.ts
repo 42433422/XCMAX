@@ -97,7 +97,10 @@ export function useChatExcelContext(deps: UseChatExcelContextDeps) {
   async function onMultimodalFileChange(ev: Event) {
     const el = ev.target as HTMLInputElement | null
     if (!el?.files?.length) return
-    const list = el.files
+    // FileList is tied to the input and can become empty as soon as value is
+    // reset. Snapshot the File objects first; otherwise image/PDF selection is
+    // a silent no-op on Electron/macOS.
+    const list = Array.from(el.files)
     el.value = ''
     const res = await filesToMultimodalRows(list)
     if (!res.ok) {
