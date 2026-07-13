@@ -542,9 +542,12 @@ export const waitForBackendHealth = waitForBackendPing
 /** ping 就绪且业务路由已挂载（fast-start deferred 完成后）再加载主应用。 */
 export async function waitForBackendApplicationReady(
   port: number,
-  timeoutMs = packagedBackendHealthTimeoutMs()
+  timeoutMs = packagedBackendHealthTimeoutMs(),
+  options?: { skipPing?: boolean }
 ): Promise<void> {
-  await waitForBackendPing(port, timeoutMs)
+  if (!options?.skipPing) {
+    await waitForBackendPing(port, timeoutMs)
+  }
   const started = Date.now()
   const remaining = () => Math.max(0, timeoutMs - (Date.now() - started))
   while (remaining() > 0) {
@@ -570,12 +573,30 @@ export async function waitForBackendApplicationReady(
   console.warn('[xcagi-desktop] appRoutesReady 未在时限内为 true，仍加载主应用')
 }
 
-function updateSplashStatus(text: string): void {
+/** 闪屏进度 0–100；供启动阶段与单测共用。 */
+export function clampSplashProgress(percent: number): number {
+  if (!Number.isFinite(percent)) return 0
+  return Math.max(0, Math.min(100, Math.round(percent)))
+}
+
+function escapeSplashJsString(text: string): string {
+  return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+}
+
+/** 更新启动闪屏进度条与文案，减少用户等待时的「卡住」恐慌感。 */
+export function updateSplashProgress(
+  percent: number,
+  text?: string,
+  opts?: { error?: boolean }
+): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
-  const safe = text.replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-  void mainWindow.webContents
-    .executeJavaScript(`window.xcagiSetSplashStatus && window.xcagiSetSplashStatus('${safe}')`)
-    .catch(() => undefined)
+  const pct = clampSplashProgress(percent)
+  const errorFlag = opts?.error ? ',{error:true}' : ''
+  const js =
+    text !== undefined
+      ? `window.xcagiSetSplashProgress && window.xcagiSetSplashProgress(${pct},'${escapeSplashJsString(text)}'${errorFlag})`
+      : `window.xcagiSetSplashProgress && window.xcagiSetSplashProgress(${pct}${errorFlag ? ',undefined' + errorFlag : ''})`
+  void mainWindow.webContents.executeJavaScript(js).catch(() => undefined)
 }
 
 export function resolveDesktopSplashUrl(): string {
@@ -591,7 +612,7 @@ export function resolveDesktopSplashUrl(): string {
       return `file://${filePath.replace(/\\/g, '/')}`
     }
   }
-  const fallback = `<!doctype html><html><body style="margin:0;background:#f4f7fb;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui"><div>XCAGI 启动中…</div></body></html>`
+  const fallback = `<!doctype html><html><body style="margin:0;background:#f4f7fb;display:flex;align-items:center;justify-content:center;height:100vh;font-family:system-ui,sans-serif;color:#1a2b4a"><div style="text-align:center;min-width:280px"><div style="font-size:1.25rem;font-weight:600">XCAGI</div><div id="status" style="margin-top:12px;color:#5a6d8c">启动中…</div><div style="margin-top:16px;height:8px;background:#dce5f4;border-radius:99px;overflow:hidden"><div id="bar" style="height:100%;width:8%;background:#3b6fd9;border-radius:99px"></div></div><div id="pct" style="margin-top:8px;font-size:12px;color:#3b6fd9">8%</div></div><script>window.xcagiSetSplashStatus=function(t){var e=document.getElementById('status');if(e&&t)e.textContent=t};window.xcagiSetSplashProgress=function(p,t){var n=Math.max(0,Math.min(100,Math.round(Number(p)||0)));var b=document.getElementById('bar');var c=document.getElementById('pct');if(b)b.style.width=n+'%';if(c)c.textContent=n+'%';if(t)window.xcagiSetSplashStatus(t)};</script></body></html>`
   return `data:text/html;charset=utf-8,${encodeURIComponent(fallback)}`
 }
 
@@ -1120,7 +1141,7 @@ async function createWindow(): Promise<void> {
   void mainWindow.loadURL(resolveDesktopSplashUrl())
   mainWindow.show()
   mainWindow.focus()
-  updateSplashStatus('正在启动本地服务…')
+  updateSplashProgress(8, '正在启动本地服务…')
 
   if (shouldClearFrontendCache()) {
     void mainWindow.webContents.session
@@ -1132,6 +1153,7 @@ async function createWindow(): Promise<void> {
   const loadMainApplication = async (): Promise<void> => {
     if (!mainWindow) return
     try {
+      updateSplashProgress(92, '正在打开主界面…')
       await mainWindow.loadURL(desktopInitialUrl(), {
         extraHeaders: 'Cache-Control: no-cache\r\n'
       })
@@ -1146,25 +1168,47 @@ async function createWindow(): Promise<void> {
   }
 
   const splashStarted = Date.now()
+  const splashBudgetMs = packagedBackendHealthTimeoutMs()
+  let splashPhase: 'boot' | 'routes' | 'done' = 'boot'
+  let phaseStarted = splashStarted
   const splashTicker = setInterval(() => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
+    if (!mainWindow || mainWindow.isDestroyed() || splashPhase === 'done') {
       clearInterval(splashTicker)
       return
     }
-    const sec = Math.floor((Date.now() - splashStarted) / 1000)
-    if (sec > 0 && sec % 2 === 0) {
-      updateSplashStatus(`正在启动本地服务…（${sec}s）`)
+    const elapsed = Date.now() - phaseStarted
+    const totalSec = Math.floor((Date.now() - splashStarted) / 1000)
+    if (splashPhase === 'boot') {
+      // 后端拉起阶段：8% → 55%，按预算时间缓爬，始终有可见推进
+      const creep = 8 + Math.min(47, (elapsed / splashBudgetMs) * 47)
+      const label =
+        totalSec >= 2 ? `正在启动本地服务…（已等待 ${totalSec}s）` : '正在启动本地服务…'
+      updateSplashProgress(creep, label)
+      return
     }
-  }, 1000)
+    // 路由/模块就绪阶段：58% → 85%
+    const creep = 58 + Math.min(27, (elapsed / Math.max(15_000, splashBudgetMs * 0.35)) * 27)
+    const label =
+      totalSec >= 2 ? `正在加载业务模块…（已等待 ${totalSec}s）` : '正在加载业务模块…'
+    updateSplashProgress(creep, label)
+  }, 400)
 
-  void waitForBackendApplicationReady(DEFAULT_PORT)
+  void waitForBackendPing(DEFAULT_PORT)
     .then(() => {
-      updateSplashStatus('正在加载应用…')
+      splashPhase = 'routes'
+      phaseStarted = Date.now()
+      updateSplashProgress(58, '本地服务已就绪，正在加载业务模块…')
+      return waitForBackendApplicationReady(DEFAULT_PORT, undefined, { skipPing: true })
+    })
+    .then(() => {
+      splashPhase = 'done'
+      updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
-      updateSplashStatus('启动失败，请查看日志')
+      splashPhase = 'done'
+      updateSplashProgress(100, '启动失败，请查看日志', { error: true })
       void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
     })
     .finally(() => clearInterval(splashTicker))
@@ -1396,7 +1440,7 @@ function bootstrap(): void {
       try {
         // 先出 Splash，再并行拉起后端，避免用户长时间无窗口反馈
         await createWindow()
-        updateSplashStatus('正在连接本地服务…')
+        updateSplashProgress(12, '正在连接本地服务…')
         await startBackend()
         if (!backendProcess) {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
