@@ -23,7 +23,11 @@ _PUBLIC_KEYS = (
     "version_lock",
     "download_version",
     "android_version",
+    "android_git_sha",
     "release_ready",
+    "active_skus",
+    "frozen_skus",
+    "primary_sku",
     "win_installer_mb",
     "cos_base_url",
 )
@@ -95,11 +99,18 @@ def public_subset(rel: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         "version_lock": str(r.get("version_lock") or "1.0.0.0"),
         "download_version": dv,
         "android_version": str(r.get("android_version") or dv),
+        "android_git_sha": str(r.get("android_git_sha") or ""),
         "release_ready": bool(r.get("release_ready")),
+        "active_skus": list(r.get("active_skus") or ["enterprise"]),
+        "frozen_skus": list(r.get("frozen_skus") or ["personal"]),
+        "primary_sku": str(r.get("primary_sku") or "enterprise"),
+        "git_sha": str((r.get("last_push") or {}).get("git_sha") or ""),
         "win_installer_mb": r.get("win_installer_mb") or 212,
         "cos_base_url": base,
         "release_root": f"{base}/xcagi-v{dv}",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "manifest_url": f"{base}/xcagi-v{dv}/manifest.json",
+        "auto_update_base": "https://xiu-ci.com/releases/stable",
     }
     return out
 

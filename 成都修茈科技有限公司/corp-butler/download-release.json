@@ -3,9 +3,20 @@
   "version_lock": "1.0.0.0",
   "download_version": "1.0.0.0",
   "android_version": "1.0.0.0",
-  "release_ready": false,
-  "win_installer_mb": 213,
-  "cos_base_url": "https://xiu-ci.com",
+  "android_git_sha": "a6af956c70e5c4ced49859240455fc9ba8e42e5c",
+  "release_ready": true,
+  "active_skus": [
+    "enterprise"
+  ],
+  "frozen_skus": [
+    "personal"
+  ],
+  "primary_sku": "enterprise",
+  "git_sha": "821b46ab784a5176bce24a519c09eb740e77ad3c",
+  "generated_at": "2026-07-13T11:50:17.736612+00:00",
+  "win_installer_mb": 204,
+  "cos_base_url": "https://xiu-ci.com/xcagi-v1.0.0.0",
   "release_root": "https://xiu-ci.com/xcagi-v1.0.0.0",
-  "generated_at": "2026-07-05T15:19:17.000000+00:00"
+  "manifest_url": "https://xiu-ci.com/xcagi-v1.0.0.0/manifest.json",
+  "auto_update_base": "https://xiu-ci.com/releases/stable"
 }
