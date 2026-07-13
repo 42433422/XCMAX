@@ -512,8 +512,9 @@ def _run_tools_execute_agent(
     route_path: str,
 ) -> tuple[dict[str, Any], int] | None:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.tools import _normalize_action
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.tools import _normalize_action, get_workflow_tool_registry
+    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     raw_tool_id = body.get("tool_id") or body.get("skill_id")
     tool_id = str(raw_tool_id or "").strip()
@@ -646,7 +647,7 @@ def _run_system_maintenance_agent(
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.tools import get_workflow_tool_registry
+    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     registry = get_workflow_tool_registry()
@@ -688,10 +689,11 @@ def _run_system_maintenance_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "system-maintenance-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:
@@ -716,7 +718,7 @@ def _run_document_template_agent(
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.application.tools import get_workflow_tool_registry
+    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(body or {})
     registry = get_workflow_tool_registry()
@@ -764,10 +766,11 @@ def _run_document_template_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "document-template-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:

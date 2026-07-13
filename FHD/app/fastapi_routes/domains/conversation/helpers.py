@@ -24,6 +24,10 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.application.agent_orchestrator.chat_trace import attach_chat_trace_run
 from app.application.modstore_conversation_app import create_modstore_openai_client_from_request
+from app.application.workflow.multimodal_user_content import (
+    EmptyMultimodalResponseError,
+    UnsupportedMultimodalModelError,
+)
 from app.domain.ai.tier import runtime_context_with_tier
 from app.domain.context.session_context import (
     planner_workflow_interrupt_reply,
@@ -228,6 +232,10 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         return HTTPException(status_code=503, detail=f"无法连接大模型服务: {exc}")
     if isinstance(exc, APIError):
         return HTTPException(status_code=502, detail=f"大模型接口错误: {exc}")
+    if isinstance(exc, UnsupportedMultimodalModelError):
+        return HTTPException(status_code=422, detail=str(exc))
+    if isinstance(exc, EmptyMultimodalResponseError):
+        return HTTPException(status_code=502, detail=str(exc))
     if isinstance(exc, RuntimeError):
         return HTTPException(status_code=503, detail=str(exc))
     if isinstance(exc, ValueError):
@@ -704,12 +712,10 @@ def _xcagi_planner_stream_bytes(request: Request, body: XcagiCompatChatBody, *, 
             return
         merged = "".join(reply_parts)
         if not merged.strip():
-            market = (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "修茈市场"
-            ).rstrip("/")
-            msg = f"修茈平台未返回内容，请确认已登录且 {market} 可访问。"
+            msg = (
+                "模型服务已完成请求，但没有返回可显示的正文。"
+                "若附带图片，请确认当前账号已启用视觉模型，或上传文字更清晰的截图。"
+            )
             yield _sse_event_line({"type": "error", "message": msg})
             return
         thinking = _thinking_steps_from_planner_stream_text(merged)

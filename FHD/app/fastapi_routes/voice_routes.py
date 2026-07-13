@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -30,6 +31,18 @@ _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB；等同于 OpenAI Whisper 官方�
 
 # 懒加载：第一次调用才把 faster-whisper 模型加载进内存，避免服务冷启动时白耗几百 MB
 _model_holder: dict[str, Any] = {"instance": None, "signature": None}
+
+_MODEL_ALLOW_PATTERNS = (
+    "config.json",
+    "preprocessor_config.json",
+    "model.bin",
+    "tokenizer.json",
+    "vocabulary.*",
+)
+_DEFAULT_MODEL_ENDPOINTS = (
+    "https://huggingface.co",
+    "https://hf-mirror.com",
+)
 
 
 def _env(name: str, default: str = "") -> str:
@@ -61,17 +74,81 @@ def _resolve_model_name() -> str:
     return _env("XCAGI_CHAT_ASR_MODEL", "small")
 
 
+def _model_download_endpoints() -> tuple[str, ...]:
+    raw = _env("XCAGI_CHAT_ASR_MODEL_ENDPOINTS")
+    values = raw.split(",") if raw else list(_DEFAULT_MODEL_ENDPOINTS)
+    endpoints: list[str] = []
+    for value in values:
+        endpoint = value.strip().rstrip("/")
+        if endpoint and endpoint not in endpoints:
+            endpoints.append(endpoint)
+    return tuple(endpoints)
+
+
+def _resolve_model_source(model_name: str) -> str:
+    """Resolve a cached model or download it through a recoverable endpoint chain."""
+    model_path = Path(model_name).expanduser()
+    if model_path.exists():
+        return str(model_path)
+
+    try:
+        from faster_whisper.utils import _MODELS, download_model
+    except ImportError:
+        # Unit-test doubles and older faster-whisper builds can omit utils. In
+        # that case retain WhisperModel's native resolution behaviour.
+        return model_name
+
+    try:
+        return str(download_model(model_name, local_files_only=True))
+    except RECOVERABLE_ERRORS:
+        pass
+
+    repo_id = model_name if "/" in model_name else _MODELS.get(model_name)
+    if not repo_id:
+        raise RuntimeError(f"不支持的语音模型：{model_name}")
+
+    try:
+        from huggingface_hub import snapshot_download
+    except ImportError as exc:
+        raise RuntimeError("语音模型下载组件未安装") from exc
+
+    errors: list[str] = []
+    for endpoint in _model_download_endpoints():
+        logger.info("准备语音识别模型：model=%s endpoint=%s", model_name, endpoint)
+        try:
+            return str(
+                snapshot_download(
+                    repo_id,
+                    allow_patterns=list(_MODEL_ALLOW_PATTERNS),
+                    endpoint=endpoint,
+                    etag_timeout=5,
+                    max_workers=4,
+                )
+            )
+        except RECOVERABLE_ERRORS as exc:
+            errors.append(f"{endpoint}: {exc}")
+            logger.warning("语音模型源不可用：endpoint=%s error=%s", endpoint, exc)
+
+    detail = errors[-1] if errors else "没有可用下载源"
+    raise RuntimeError(
+        "语音模型尚未缓存，且官方源与备用源均不可用；请检查网络后重试。"
+        f"最后错误：{detail}"
+    )
+
+
 def _get_model():
     """返回已就绪的 faster-whisper 模型实例；未安装 faster-whisper 时抛 HTTPException 503"""
     try:
         from faster_whisper import WhisperModel
     except ImportError as exc:
         logger.error("faster-whisper 未安装，无法处理语音转写请求: %s", exc)
+        if getattr(sys, "frozen", False):
+            detail = "当前桌面安装包缺少语音识别组件，请更新或重新安装 XCAGI。"
+        else:
+            detail = "语音识别依赖未就绪：请安装 `faster-whisper` 后重启 FastAPI。"
         raise HTTPException(
             status_code=503,
-            detail=(
-                "语音识别依赖未就绪：请在服务器执行 `pip install faster-whisper` 后重启 FastAPI。"
-            ),
+            detail=detail,
         ) from exc
 
     model_name = _resolve_model_name()
@@ -89,7 +166,8 @@ def _get_model():
         compute_type,
     )
     try:
-        instance = WhisperModel(model_name, device=device, compute_type=compute_type)
+        model_source = _resolve_model_source(model_name)
+        instance = WhisperModel(model_source, device=device, compute_type=compute_type)
     except RECOVERABLE_ERRORS as exc:  # 例如 CUDA 不可用、模型未下载、依赖 DLL 缺失
         logger.exception("加载 faster-whisper 模型失败: %s", exc)
         raise HTTPException(

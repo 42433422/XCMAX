@@ -103,6 +103,16 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
         "sensetime": "SenseChat-5",
     }
 
+    # 小米 2026-06-30 下线 V2；缓存/环境变量里的旧 ID 映射到官方替代（与 MODstore llm_chat_proxy 对齐）
+    _XIAOMI_MODEL_ALIASES: Dict[str, str] = {
+        "mimo-v2-base": "mimo-v2.5-pro",
+        "MiMo-7B-RL-Think": "mimo-v2.5-pro",
+        "mimo-v2-flash": "mimo-v2.5-pro",
+        "mimo-v2-pro": "mimo-v2.5-pro",
+        "mimo-v2-omni": "mimo-v2.5",
+        "mimo-v2-tts": "mimo-v2.5-tts",
+    }
+
     ENV_KEY_MAPPING: Dict[str, List[str]] = {
         "xcauto": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
         "xiuci": ["XCAUTO_API_KEY", "XCAUTO_PAT", "XIUCI_API_KEY", "OPENAI_API_KEY"],
@@ -148,7 +158,10 @@ class OpenAICompatibleAdapter(BaseLLMAdapter):
             if base_url
             else self.PROVIDER_DEFAULT_URLS.get(self.provider, "https://api.openai.com")
         )
-        self._model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-3.5-turbo")
+        raw_model = model or self.DEFAULT_MODELS.get(self.provider, "gpt-3.5-turbo")
+        if self.provider == "xiaomi":
+            raw_model = self._XIAOMI_MODEL_ALIASES.get(raw_model, raw_model)
+        self._model = raw_model
 
         self._client: Optional[httpx.AsyncClient] = None
         self._stream_client: Optional[httpx.AsyncClient] = None

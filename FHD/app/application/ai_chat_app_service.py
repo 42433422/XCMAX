@@ -179,6 +179,19 @@ class AIChatApplicationService(
 
             return resp
 
+        # Direct callers of AIChatApplicationService (outside the compat
+        # routes) receive the same receipt-enforced behavior.  The route layer
+        # also invokes this policy so legacy-mode deployments are protected.
+        from app.application.chat_business_safety import try_handle_business_chat_action
+
+        business_payload = try_handle_business_chat_action(
+            message,
+            runtime_context=ctx,
+            user_id=user_id,
+        )
+        if business_payload is not None:
+            return _finalize(business_payload)
+
         try:
             from app.application.workflow.chat_deterministic_fast_paths import (
                 try_deterministic_chat_reply,

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import importlib.util
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from sqlalchemy.engine import make_url
@@ -32,9 +30,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 from .sqlite_paths import is_sqlite_url, resolve_effective_database_url, sqlite_db_file_from_url
 
 logger = logging.getLogger(__name__)
-
-_APP_ROOT = Path(__file__).resolve().parents[1]
-
 
 def _desktop_fast_start_enabled() -> bool:
     import os
@@ -170,15 +165,10 @@ async def _initialize_databases_async(app: FastAPI):
 
 
 def _run_ensure_ai_action_audit_table() -> None:
-    """加载审计 DDL 模块但不执行 app.services 包 __init__（避免牵连全量 application / 重型依赖）。"""
-    path = _APP_ROOT / "services" / "ai_action_audit_service.py"
-    spec = importlib.util.spec_from_file_location("_xcagi_ai_action_audit_service", str(path))
-    mod = importlib.util.module_from_spec(spec)
-    loader = spec.loader
-    if loader is None:
-        raise RuntimeError("无法加载 ai_action_audit_service")
-    loader.exec_module(mod)
-    mod.ensure_ai_action_audit_table()
+    """Initialize audit DDL through a normal import that also works when frozen."""
+    from app.services.ai_action_audit_service import ensure_ai_action_audit_table
+
+    ensure_ai_action_audit_table()
 
 
 def _initialize_databases_sync(app: FastAPI):
@@ -263,7 +253,13 @@ def _initialize_databases_sync(app: FastAPI):
 
         try:
             _run_ensure_ai_action_audit_table()
+            from app.runtime_integrity import clear_runtime_issue
+
+            clear_runtime_issue("ai_action_audit")
         except RECOVERABLE_ERRORS as audit_err:
+            from app.runtime_integrity import record_runtime_issue
+
+            record_runtime_issue("ai_action_audit", str(audit_err), ttl_seconds=3600)
             logger.warning("AI审计表初始化失败（不影响主流程）: %s", audit_err)
     except RECOVERABLE_ERRORS as e:
         safe_url = str(database_url or "").strip()

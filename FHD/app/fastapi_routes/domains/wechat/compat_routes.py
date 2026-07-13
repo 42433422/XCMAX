@@ -301,6 +301,60 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
         return {"items": [], "per_contact": per_contact, "error": str(e)}
 
 
+def _assistant_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:
+    """Adapt the legacy feed to the assistant poller's stable response shape."""
+
+    items = raw.get("items") if isinstance(raw, dict) else []
+    if not isinstance(items, list):
+        items = []
+    feed: list[dict] = []
+    for index, item in enumerate(items[:per_contact]):
+        if not isinstance(item, dict):
+            continue
+        contact_id = str(item.get("username") or item.get("contact_id") or index + 1)
+        summary = str(item.get("summary") or "").strip()
+        feed.append(
+            {
+                "contact_id": contact_id,
+                "contact_name": str(item.get("display_name") or contact_id),
+                "unread_count": int(item.get("unread_count") or 0),
+                "messages": (
+                    [
+                        {
+                            "role": "contact",
+                            "text": summary,
+                            "timestamp": item.get("timestamp") or 0,
+                            "msg_type": str(item.get("msg_type") or "text"),
+                        }
+                    ]
+                    if summary
+                    else []
+                ),
+            }
+        )
+    error = str(raw.get("error") or "").strip() if isinstance(raw, dict) else ""
+    return {
+        "success": True,
+        "feed": feed,
+        "items": items[:per_contact],
+        "per_contact": per_contact,
+        "unavailable_reason": error or None,
+        "source": "host_compat",
+    }
+
+
+@router.get("/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed")
+def wechat_work_mode_feed_host_alias(
+    per_contact: int = Query(default=1, ge=1, le=100),
+) -> dict:
+    """Avoid a 404 loop when an independently installed bridge is older than the host."""
+
+    return _assistant_work_mode_feed_payload(
+        wechat_work_mode_feed(per_contact=per_contact),
+        per_contact=per_contact,
+    )
+
+
 @router.get("/wechat_contacts/decrypt_status")
 def wechat_contacts_decrypt_status_compat() -> dict:
     path = os.environ.get("WECHAT_CONTACT_DB_PATH", "").strip()

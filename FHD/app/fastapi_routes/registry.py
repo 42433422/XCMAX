@@ -38,8 +38,9 @@ class RouteConflict:
 class RouteRegistry:
     """Collects route mounts, deduplicates by name, applies in priority order."""
 
-    def __init__(self) -> None:
+    def __init__(self, app: FastAPI | None = None) -> None:
         self._mounts: dict[str, RouteMount] = {}
+        self.app = app
 
     def register(self, mount: RouteMount) -> None:
         if mount.name in self._mounts:
