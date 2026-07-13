@@ -102,6 +102,14 @@ describe('updater — parseYamlField', () => {
   })
 })
 
+describe('updater — downloadUpdate is explicit', () => {
+  it('exports downloadUpdate for user-triggered installs', async () => {
+    const mod = await import('./updater.js')
+    expect(typeof mod.downloadUpdate).toBe('function')
+    expect(typeof mod.configureUpdater).toBe('function')
+  })
+})
+
 describe('updater — verifyLatestMetadataSignature', () => {
   const savedEnv = { ...process.env }
 
