@@ -151,18 +151,16 @@ build_one_sku() {
     "${app_path}" \
     "${package_stage}/XCAGI-${label}-${VERSION}-mac-${artifact_arch}.dmg" \
     "XCAGI ${label}"
-  ditto --norsrc "${package_stage}" "${out_dir}"
-  local copied_app="${out_dir}/mac-arm64/XCAGI.app"
-  if [ -d "${copied_app}" ]; then
-    # FileProvider-backed Desktop folders may add FinderInfo/resource-fork
-    # xattrs while the bundle is copied back into the checkout. They are not
-    # part of the signed payload and make codesign reject an otherwise sealed
-    # app, so remove them and fail the build if the copied bundle is not valid.
-    if command -v xattr >/dev/null 2>&1; then
-      xattr -cr "${copied_app}"
+  # Publish only sealed archive artifacts. A loose .app copied back into this
+  # Desktop/FileProvider checkout receives com.apple.FinderInfo again almost
+  # immediately, which makes codesign reject that copy even though the ZIP and
+  # DMG produced from the external staging directory remain valid.
+  local staged_file
+  for staged_file in "${package_stage}"/*; do
+    if [ -f "${staged_file}" ]; then
+      ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"
     fi
-    codesign --verify --deep --strict "${copied_app}"
-  fi
+  done
   rm -rf "${package_stage}"
 
   # electron-updater's macOS differential updater consumes the ZIP artifact.
