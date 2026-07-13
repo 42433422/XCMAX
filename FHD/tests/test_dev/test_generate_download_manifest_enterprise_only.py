@@ -13,6 +13,7 @@ SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-download-manifest.py"
 VERIFY_SCRIPT = FHD_ROOT / "scripts" / "deploy" / "verify-download.sh"
 RELEASE_WORKFLOW = FHD_ROOT / ".github" / "workflows" / "release-desktop.yml"
 FINALIZE_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh"
+BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-info.py"
 
 
 def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[dict, dict]:
@@ -106,6 +107,61 @@ def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> Non
     assert 'xcrun stapler staple "${DMG_PATH}"' in finalize_script
     assert "executeAppBuilderAsJson" in finalize_script
     assert "generate-update-metadata.mjs" in finalize_script
+
+
+def test_desktop_build_info_requires_and_preserves_full_git_identity(tmp_path: Path) -> None:
+    output = tmp_path / "build-info.json"
+    git_sha = "a" * 40
+    passed = subprocess.run(
+        [
+            sys.executable,
+            str(BUILD_INFO_SCRIPT),
+            "--version",
+            "1.0.0.0",
+            "--git-sha",
+            git_sha,
+            "--output",
+            str(output),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert passed.stdout.strip() == git_sha
+    assert json.loads(output.read_text()) == {
+        "schema_version": 1,
+        "gitSha": git_sha,
+        "version": "1.0.0.0",
+    }
+
+    rejected = subprocess.run(
+        [
+            sys.executable,
+            str(BUILD_INFO_SCRIPT),
+            "--version",
+            "1.0.0.0",
+            "--git-sha",
+            "dev",
+            "--output",
+            str(output),
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0
+    assert "requires a full Git SHA" in rejected.stderr
+
+
+def test_release_workflow_hard_checks_packaged_git_sha_and_version() -> None:
+    workflow = RELEASE_WORKFLOW.read_text()
+
+    assert 'build_info="${app}/Contents/Resources/build-info.json"' in workflow
+    assert 'BUILD_INFO_PATH="${build_info}"' in workflow
+    assert 'EXPECTED_BUILD_SHA="${GITHUB_SHA}"' in workflow
+    assert 'EXPECTED_PRODUCT_VERSION="${v}"' in workflow
+    assert "packaged gitSha mismatch" in workflow
+    assert "packaged version mismatch" in workflow
 
 
 def test_download_verifier_accepts_udif_trailer_and_propagates_failures(tmp_path: Path) -> None:
