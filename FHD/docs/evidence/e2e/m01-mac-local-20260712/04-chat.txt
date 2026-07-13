@@ -1,0 +1,1 @@
+{"success":false,"error_code":"http_405","message":"Method Not Allowed","path":"/api/chat"}

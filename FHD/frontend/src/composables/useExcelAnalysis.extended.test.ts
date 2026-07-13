@@ -50,6 +50,30 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
+  it('keeps multimodal files available until the callback snapshots them', async () => {
+    const api = useExcelAnalysis(makeMessages())
+    const file = new File(['image'], 'test.png', { type: 'image/png' })
+    let liveFiles: File[] = [file]
+    let inputValue = '/fake/test.png'
+    const input = {
+      get files() { return liveFiles },
+      get value() { return inputValue },
+      set value(next: string) {
+        inputValue = next
+        if (!next) liveFiles = []
+      },
+    } as unknown as HTMLInputElement
+    const cb = vi.fn(async (event: Event) => {
+      expect((event.target as HTMLInputElement).files?.[0]).toBe(file)
+    })
+    api.setOnMultimodalFileChangeCallback(cb)
+
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(cb).toHaveBeenCalledOnce()
+    expect(input.value).toBe('')
+  })
+
   it('onExcelAnalyzeFileChange ignores when no file', async () => {
     const api = useExcelAnalysis(makeMessages())
     const input = { files: [], value: '' } as unknown as HTMLInputElement

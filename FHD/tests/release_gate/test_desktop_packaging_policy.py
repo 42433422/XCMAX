@@ -74,6 +74,58 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "console=False" in spec
 
 
+def test_desktop_package_includes_chat_voice_runtime() -> None:
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
+        encoding="utf-8"
+    )
+
+    excludes = spec.split("desktop_excludes = [", 1)[1].split("]", 1)[0]
+    assert '"faster_whisper"' not in excludes
+    assert '"av"' not in excludes
+    assert 'collect_submodules(module)' in spec
+    assert 'collect_dynamic_libs(module)' in spec
+    assert 'binaries=binaries' in spec
+
+
+def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
+    installer = (REPO_ROOT / "scripts" / "package" / "build-installer.sh").read_text(
+        encoding="utf-8"
+    )
+    dmg_builder = (REPO_ROOT / "scripts" / "package" / "create-mac-dmg.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'xattr -cr desktop/node_modules/electron/dist' in installer
+    assert '"--config.electronDist=node_modules/electron/dist"' in installer
+    assert '"--config.directories.output=${package_stage}"' in installer
+    assert 'ditto --norsrc "${package_stage}" "${out_dir}"' in installer
+    assert "electron-builder --mac zip" in installer
+    assert "electron-builder --mac dmg" not in installer
+    assert "scripts/package/create-mac-dmg.sh" in installer
+    assert "hdiutil create" in dmg_builder
+    assert "notarytool submit" in dmg_builder
+    assert "stapler staple" in dmg_builder
+
+
+def test_desktop_staging_bundles_visible_office_employee_executors() -> None:
+    scripts = REPO_ROOT / "scripts" / "package"
+    sh_stage = (scripts / "stage-bundled-mods.sh").read_text(encoding="utf-8")
+    ps_stage = (scripts / "stage-bundled-mods.ps1").read_text(encoding="utf-8")
+
+    for stage_script in (sh_stage, ps_stage):
+        assert "office_pack_catalog.json" in stage_script
+        assert "_employees" in stage_script
+        assert "Missing required Office employee pack" in stage_script
+
+
+def test_frozen_backend_dispatches_multiprocessing_workers_before_cli() -> None:
+    entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
+    frozen_main = entrypoint.split('if __name__ == "__main__":', 1)[1]
+
+    assert "multiprocessing.freeze_support()" in frozen_main
+    assert frozen_main.index("multiprocessing.freeze_support()") < frozen_main.index("main()")
+
+
 def test_missing_industry_seed_does_not_block_desktop_release() -> None:
     scripts = REPO_ROOT / "scripts" / "package"
     ps_stage = (scripts / "stage-industry-seeds.ps1").read_text(encoding="utf-8")

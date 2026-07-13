@@ -22,6 +22,7 @@ from app.fastapi_routes.voice_routes import (
     _get_model,
     _resolve_compute_type,
     _resolve_device,
+    _resolve_model_source,
     _resolve_model_name,
     _run_transcribe,
     _save_upload_to_tempfile,
@@ -200,6 +201,9 @@ class TestGetModel:
         with patch.dict(
             "sys.modules",
             {"faster_whisper": MagicMock(WhisperModel=mock_whisper_cls)},
+        ), patch(
+            "app.fastapi_routes.voice_routes._resolve_model_source",
+            return_value="small",
         ):
             with pytest.raises(HTTPException) as exc_info:
                 _get_model()
@@ -242,11 +246,54 @@ class TestGetModel:
         with patch.dict(
             "sys.modules",
             {"faster_whisper": MagicMock(WhisperModel=mock_whisper_cls)},
+        ), patch(
+            "app.fastapi_routes.voice_routes._resolve_model_source",
+            return_value="small",
         ):
             result = _get_model()
             assert result is mock_instance
             assert mod._model_holder["instance"] is mock_instance
             assert mod._model_holder["signature"] == ("small", "cpu", "int8")
+
+
+class TestResolveModelSource:
+    def test_cached_model_wins_without_network(self):
+        with patch(
+            "faster_whisper.utils.download_model",
+            return_value="/tmp/cached-whisper",
+        ), patch("huggingface_hub.snapshot_download") as snapshot_download:
+            assert _resolve_model_source("tiny") == "/tmp/cached-whisper"
+            snapshot_download.assert_not_called()
+
+    def test_falls_back_to_reachable_mirror(self, monkeypatch):
+        monkeypatch.delenv("XCAGI_CHAT_ASR_MODEL_ENDPOINTS", raising=False)
+        with patch(
+            "faster_whisper.utils.download_model",
+            side_effect=RuntimeError("not cached"),
+        ), patch(
+            "huggingface_hub.snapshot_download",
+            side_effect=[RuntimeError("official unavailable"), "/tmp/mirror-whisper"],
+        ) as snapshot_download:
+            assert _resolve_model_source("tiny") == "/tmp/mirror-whisper"
+            assert [call.kwargs["endpoint"] for call in snapshot_download.call_args_list] == [
+                "https://huggingface.co",
+                "https://hf-mirror.com",
+            ]
+
+    def test_custom_endpoint_order_is_respected(self, monkeypatch):
+        monkeypatch.setenv(
+            "XCAGI_CHAT_ASR_MODEL_ENDPOINTS",
+            "https://mirror-one.example, https://mirror-two.example",
+        )
+        with patch(
+            "faster_whisper.utils.download_model",
+            side_effect=RuntimeError("not cached"),
+        ), patch(
+            "huggingface_hub.snapshot_download",
+            return_value="/tmp/custom-whisper",
+        ) as snapshot_download:
+            assert _resolve_model_source("tiny") == "/tmp/custom-whisper"
+            assert snapshot_download.call_args.kwargs["endpoint"] == "https://mirror-one.example"
 
 
 # ---------------------------------------------------------------------------

@@ -85,6 +85,31 @@ def test_loader_parse_v2_and_runtime_probe(employee_mods_root):
     assert pack_has_direct_python_runtime(Path(pack["pack_dir"]))
 
 
+def test_loader_falls_back_to_bundled_employee_pack(employee_mods_root, tmp_path, monkeypatch):
+    bundled_mods = tmp_path / "bundled-mods"
+    pack_dir = _write_csv_read_pack(bundled_mods)
+    from app.mod_sdk import edition_policy
+
+    monkeypatch.setattr(edition_policy, "bundled_mods_dir", lambda: bundled_mods)
+    from app.application.employee_runtime.loader import load_employee_pack_from_disk
+
+    pack = load_employee_pack_from_disk("csv-full-read-employee")
+    assert Path(pack["pack_dir"]) == pack_dir.resolve()
+
+
+def test_loader_prefers_user_employee_pack_over_bundle(employee_mods_root, tmp_path, monkeypatch):
+    user_pack = _write_csv_read_pack(employee_mods_root)
+    bundled_mods = tmp_path / "bundled-mods"
+    _write_csv_read_pack(bundled_mods)
+    from app.mod_sdk import edition_policy
+
+    monkeypatch.setattr(edition_policy, "bundled_mods_dir", lambda: bundled_mods)
+    from app.application.employee_runtime.loader import load_employee_pack_from_disk
+
+    pack = load_employee_pack_from_disk("csv-full-read-employee")
+    assert Path(pack["pack_dir"]) == user_pack.resolve()
+
+
 def test_tool_registry_uses_pack_id_as_tool_name(employee_mods_root):
     _write_csv_read_pack(employee_mods_root)
     from app.mod_sdk.employee_tool_registry import (

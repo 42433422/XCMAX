@@ -657,12 +657,16 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.db.init_db.ensure_sqlite_rbac_bootstrap") as mock_rbac,
             patch("app.db.init_db.ensure_sqlite_inventory_bootstrap") as mock_inv,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
+            patch("app.db.init_db.ensure_employee_run_log_bootstrap") as mock_ledger,
+            patch("app.db.init_db.ensure_ai_conversation_bootstrap") as mock_conversation,
         ):
             ensure_runtime_auth_bootstrap(None)
             mock_auth.assert_called_once()
             mock_rbac.assert_called_once()
             mock_inv.assert_called_once()
             mock_pref.assert_called_once()
+            mock_ledger.assert_called_once()
+            mock_conversation.assert_called_once()
 
     def test_postgresql_url_calls_pg_bootstrap(self):
         from app.db.init_db import ensure_runtime_auth_bootstrap
@@ -682,11 +686,42 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
             patch("app.db.init_db.ensure_neuro_event_log_bootstrap") as mock_neuro,
+            patch("app.db.init_db.ensure_employee_run_log_bootstrap") as mock_ledger,
+            patch("app.db.init_db.ensure_ai_conversation_bootstrap") as mock_conversation,
         ):
             ensure_runtime_auth_bootstrap(None)
             mock_pg.assert_called_once()
             mock_pref.assert_called_once()
             mock_neuro.assert_called_once()
+            mock_ledger.assert_called_once()
+            mock_conversation.assert_called_once()
+
+
+class TestEnsureEmployeeRunLogBootstrap:
+    def test_creates_missing_employee_run_log_table(self):
+        from sqlalchemy import inspect
+
+        from app.db.init_db import ensure_employee_run_log_bootstrap
+
+        engine = create_engine("sqlite:///:memory:")
+        ensure_employee_run_log_bootstrap(engine, swallow_errors=False)
+
+        assert "employee_run_logs" in inspect(engine).get_table_names()
+
+
+class TestEnsureAiConversationBootstrap:
+    def test_creates_missing_ai_conversation_tables(self):
+        from sqlalchemy import inspect
+
+        from app.db.init_db import ensure_ai_conversation_bootstrap
+        from app.db.models.user import User
+
+        engine = create_engine("sqlite:///:memory:")
+        User.__table__.create(engine, checkfirst=True)
+        ensure_ai_conversation_bootstrap(engine, swallow_errors=False)
+
+        tables = set(inspect(engine).get_table_names())
+        assert {"ai_conversation_sessions", "ai_conversations"}.issubset(tables)
 
 
 # ========================= _seed_sqlite_rbac_defaults ====================
@@ -1069,6 +1104,7 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
             result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
             tables = {row[0] for row in result}
         assert "warehouses" in tables
+        assert "materials" in tables
         assert "suppliers" in tables
         assert "purchase_orders" in tables
         assert "shipment_records" in tables
@@ -1089,6 +1125,7 @@ class TestEnsureSqliteInventoryBootstrapCreatesTables:
             result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
             tables = {row[0] for row in result}
         assert "warehouses" in tables
+        assert "materials" in tables
         assert "purchase_orders" in tables
         assert "suppliers" in tables
         assert "shipment_records" in tables

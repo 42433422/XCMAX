@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  aiMarkdownSourceFromContent,
   extractToolInvocationChips,
   formatToolInvocationChip,
   hasVisibleChatBubbleBody,
@@ -44,6 +45,14 @@ describe('chatBubbleDisplay', () => {
     const raw = '{&quot;file_path&quot;: &quot;uploads/a.xlsx&quot;, &quot;action&quot;: &quot;read&quot;}'
     expect(hasVisibleChatBubbleBody(raw)).toBe(false)
     expect(extractToolInvocationChips(raw)).toEqual([{ label: '读取', detail: 'a.xlsx' }])
+  })
+
+  it('decodes legacy double-escaped quote entities for restored replies', () => {
+    const raw = '系统显示 &amp;quot;正常&amp;quot;，但没有数据来源。'
+    const restored = aiMarkdownSourceFromContent(raw)
+    expect(restored).toContain('"正常"')
+    expect(restored).not.toContain('&quot;')
+    expect(restored).not.toContain('&amp;')
   })
 
   it('strips planner display markers', () => {

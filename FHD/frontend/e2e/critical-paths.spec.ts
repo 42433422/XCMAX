@@ -1,5 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { installE2eShellMocks, captureEvidence, isFullStack, loginBrowserSession } from './helpers';
+import {
+  installE2eShellMocks,
+  captureEvidence,
+  csrfHeaders,
+  isFullStack,
+  loginBrowserSession,
+} from './helpers';
 
 test.describe('P0 critical paths', () => {
   test.beforeEach(async ({ page }) => {
@@ -65,17 +71,22 @@ test.describe('P0 critical paths', () => {
     await captureEvidence(page, '05-mod.png');
   });
 
-  test('06 fulfillment — 订单发货后状态流转为已发货', async ({ page, request }) => {
-    const apiBase = (process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5001').replace(/\/$/, '');
-    const fetchJson = async (path: string, init?: RequestInit) => {
+  test('06 order data loop — 创建、编辑、导出并回读出货单', async ({ page }) => {
+    const apiBase = (
+      process.env.MOD_PILOT_FHD_API ||
+      process.env.PLAYWRIGHT_BASE_URL ||
+      'http://127.0.0.1:5000'
+    ).replace(/\/$/, '');
+    const fetchJson = async (path: string, init: RequestInit = {}) => {
       if (isFullStack()) {
-        const resp =
-          init?.method === 'POST'
-            ? await request.post(`${apiBase}${path}`, {
-                data: init.body ? JSON.parse(String(init.body)) : undefined,
-                timeout: 15_000,
-              })
-            : await request.get(`${apiBase}${path}`, { timeout: 15_000 });
+        const liveRequest = page.request;
+        const method = String(init.method || 'GET').toUpperCase();
+        const options = {
+          data: init.body ? JSON.parse(String(init.body)) : undefined,
+          headers: method === 'GET' ? {} : await csrfHeaders(liveRequest, {}, apiBase),
+          timeout: 30_000,
+        };
+        const resp = await liveRequest.fetch(`${apiBase}${path}`, { ...options, method });
         const text = await resp.text();
         let body: any = {};
         try {
@@ -101,54 +112,170 @@ test.describe('P0 critical paths', () => {
       );
     };
 
+    const unitName = `E2E客户-${Date.now()}`;
+    const updatedUnitName = `${unitName}-已编辑`;
+    let orderId = '';
+
     if (!isFullStack()) {
-      let mockOrderStatus = 'pending';
-      await page.route('**/api/orders/E2E-1001', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: { id: 'E2E-1001', status: mockOrderStatus, total: 199.0 },
-          }),
-        })
-      );
-      await page.route('**/api/orders/*/fulfill', (route) => {
-        mockOrderStatus = 'shipped';
+      const mockOrder = {
+        id: 1001,
+        purchase_unit: unitName,
+        product_name: 'E2E产品',
+        quantity_kg: 10,
+        status: 'pending',
+      };
+      await page.route('**/api/orders', (route) => {
+        if (route.request().method() === 'POST') {
+          return route.fulfill({
+            status: 201,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: true, shipment: mockOrder }),
+          });
+        }
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            success: true,
-            data: { id: 'E2E-1001', status: 'shipped', tracking_no: 'SF-E2E-001' },
-          }),
+          body: JSON.stringify({ success: true, data: [mockOrder], count: 1 }),
         });
       });
+      await page.route('**/api/orders/1001', async (route) => {
+        if (route.request().method() === 'PATCH') {
+          Object.assign(mockOrder, JSON.parse(route.request().postData() || '{}'));
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, data: mockOrder }),
+        });
+      });
+      await page.route('**/api/orders/export**', (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          body: 'mock-xlsx',
+        })
+      );
     }
 
-    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
-    await expect(page.locator('.app-shell.is-ready')).toBeVisible({ timeout: 25_000 });
-
-    const beforeResp = await fetchJson('/api/orders/E2E-1001');
-    expect(beforeResp.status, beforeResp.text).toBeLessThan(500);
-    const beforeBody = beforeResp.body;
-    const beforeStatus = String(beforeBody?.data?.status || beforeBody?.status || 'pending');
-    expect(['pending', 'paid', 'unfulfilled', 'shipped', 'delivered']).toContain(beforeStatus);
-
-    const fulfillResp = await fetchJson('/api/orders/E2E-1001/fulfill', {
+    const createResp = await fetchJson('/api/orders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tracking_no: 'SF-E2E-001', carrier: 'SF' }),
+      body: JSON.stringify({
+        purchase_unit: unitName,
+        products: [
+          {
+            product_name: 'E2E产品',
+            model_number: 'E2E-M1',
+            quantity_tins: 1,
+            tin_spec: 10,
+            unit_price: 19.9,
+            amount: 19.9,
+          },
+        ],
+      }),
     });
-    expect(fulfillResp.status, fulfillResp.text).toBeLessThan(500);
-    const fulfillBody = fulfillResp.body;
-    expect(fulfillBody?.success, `fulfill body: ${JSON.stringify(fulfillBody)}`).toBe(true);
+    expect([200, 201], createResp.text).toContain(createResp.status);
+    expect(createResp.body?.success, createResp.text).toBe(true);
+    orderId = String(createResp.body?.shipment?.id || createResp.body?.data?.id || '1001');
+    expect(orderId).not.toBe('');
 
-    const afterResp = await fetchJson('/api/orders/E2E-1001');
-    const afterBody = afterResp.body;
-    const afterStatus = String(afterBody?.data?.status || afterBody?.status || '');
-    expect(['shipped', 'delivered']).toContain(afterStatus);
+    const updateResp = await fetchJson(`/api/orders/${encodeURIComponent(orderId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        purchase_unit: updatedUnitName,
+        product_name: 'E2E产品-已编辑',
+        quantity_kg: 20,
+        status: 'completed',
+      }),
+    });
+    expect(updateResp.status, updateResp.text).toBe(200);
+    expect(updateResp.body?.success, updateResp.text).toBe(true);
 
-    await captureEvidence(page, '06-fulfillment.png');
+    const readResp = await fetchJson(`/api/orders/${encodeURIComponent(orderId)}`);
+    expect(readResp.status, readResp.text).toBe(200);
+    expect(readResp.body?.data?.purchase_unit).toBe(updatedUnitName);
+    expect(readResp.body?.data?.product_name).toBe('E2E产品-已编辑');
+    expect(readResp.body?.data?.status).toBe('completed');
+
+    if (isFullStack()) {
+      const exportResp = await page.request.get(`${apiBase}/api/orders/export`, {
+        timeout: 30_000,
+      });
+      expect(exportResp.status(), await exportResp.text()).toBe(200);
+      expect(exportResp.headers()['content-type'] || '').toContain('spreadsheetml');
+      expect((await exportResp.body()).byteLength).toBeGreaterThan(100);
+    }
+
+    await page.goto('/orders', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page.locator('#view-orders')).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText(updatedUnitName, { exact: true })).toBeVisible({ timeout: 20_000 });
+
+    await captureEvidence(page, '06-order-data-loop.png');
+  });
+
+  test('07 material data loop — 创建、编辑、导出并回读材料', async ({ page }) => {
+    test.skip(!isFullStack(), 'covered by the mandatory release full-stack job');
+    const apiBase = (
+      process.env.MOD_PILOT_FHD_API ||
+      process.env.PLAYWRIGHT_BASE_URL ||
+      'http://127.0.0.1:5000'
+    ).replace(/\/$/, '');
+    const requestJson = async (path: string, method = 'GET', data?: Record<string, unknown>) => {
+      const headers = method === 'GET' ? {} : await csrfHeaders(page.request, {}, apiBase);
+      const response = await page.request.fetch(`${apiBase}${path}`, {
+        method,
+        headers,
+        data,
+        timeout: 30_000,
+      });
+      const text = await response.text();
+      return {
+        status: response.status(),
+        text,
+        body: JSON.parse(text || '{}') as Record<string, any>,
+      };
+    };
+
+    const stamp = Date.now();
+    const materialName = `E2E材料-${stamp}`;
+    const updatedName = `${materialName}-已编辑`;
+    const created = await requestJson('/api/materials', 'POST', {
+      material_code: `E2E-MAT-${stamp}`,
+      name: materialName,
+      category: 'E2E验收',
+      unit: 'kg',
+      quantity: 12,
+      unit_price: 8.5,
+      supplier: 'E2E供应商',
+    });
+    expect(created.status, created.text).toBe(200);
+    expect(created.body.success, created.text).toBe(true);
+    const materialId = String(created.body?.data?.id || '');
+    expect(materialId).not.toBe('');
+
+    const updated = await requestJson(`/api/materials/${encodeURIComponent(materialId)}`, 'PUT', {
+      name: updatedName,
+      category: 'E2E验收-已编辑',
+      quantity: 24,
+      unit_price: 9.75,
+    });
+    expect(updated.status, updated.text).toBe(200);
+    expect(updated.body.success, updated.text).toBe(true);
+
+    const listed = await requestJson(`/api/materials?search=${encodeURIComponent(updatedName)}`);
+    expect(listed.status, listed.text).toBe(200);
+    const rows = Array.isArray(listed.body?.data) ? listed.body.data : [];
+    expect(rows.some((row: any) => String(row.id) === materialId && row.name === updatedName)).toBe(true);
+
+    const exported = await page.request.get(`${apiBase}/api/materials/export`, { timeout: 30_000 });
+    expect(exported.status(), await exported.text()).toBe(200);
+    expect(exported.headers()['content-type'] || '').toContain('spreadsheetml');
+    expect((await exported.body()).byteLength).toBeGreaterThan(100);
+
+    await page.goto('/materials', { waitUntil: 'domcontentloaded', timeout: 30_000 });
+    await expect(page.locator('#view-materials')).toBeVisible({ timeout: 25_000 });
+    await expect(page.getByText(updatedName, { exact: true })).toBeVisible({ timeout: 20_000 });
+    await captureEvidence(page, '07-material-data-loop.png');
   });
 });
