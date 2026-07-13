@@ -80,18 +80,21 @@ def _prefix_fhd_paths(content: str, out_name: str) -> str:
     )
 
     def repl_path(m: re.Match[str]) -> str:
-        raw = m.group(1)
+        indent = m.group(1)
+        raw = m.group(2)
         # Quoted list items are not always paths. Keep workflow-dispatch version
         # choices intact instead of rewriting `1.0.0.0` as `FHD/1.0.0.0`.
         if re.fullmatch(r"\d+(?:\.\d+){2,3}", raw):
-            return f'- "{raw}"'
+            return f'{indent}- "{raw}"'
         if raw.startswith(("FHD/", ".github/", "scripts/", "_archive/")):
-            return f'- "{raw}"'
+            return f'{indent}- "{raw}"'
         if raw.startswith("成都"):
-            return f'- "{raw}"'
-        return f'- "FHD/{raw}"'
+            return f'{indent}- "{raw}"'
+        return f'{indent}- "FHD/{raw}"'
 
-    content = re.sub(r'-\s+"([^"]+)"', repl_path, content)
+    # Only rewrite YAML list items. A broad ``- "..."`` pattern also matches
+    # shell syntax such as ``bash -s -- "$arg"`` inside run blocks.
+    content = re.sub(r'(?m)^([ \t]*)-\s+"([^"]+)"', repl_path, content)
 
     # NOTE: the guard-temp-scripts allow-list/patterns now compute `rel="${file#FHD/}"`
     # directly in the FHD source (ci-cd.yml), so the previous publish-time string
@@ -158,14 +161,15 @@ def _prefix_mod_paths(content: str, out_name: str) -> str:
     mod_root = "成都修茈科技有限公司/MODstore_deploy"
 
     def repl_path(m: re.Match[str]) -> str:
-        raw = m.group(1)
+        indent = m.group(1)
+        raw = m.group(2)
         if raw.startswith(("成都", ".github/", "scripts/")):
-            return f'- "{raw}"'
+            return f'{indent}- "{raw}"'
         if raw.startswith("FHD/"):
-            return f'- "{raw}"'
-        return f'- "{mod_root}/{raw}"'
+            return f'{indent}- "{raw}"'
+        return f'{indent}- "{mod_root}/{raw}"'
 
-    content = re.sub(r'-\s+"([^"]+)"', repl_path, content)
+    content = re.sub(r'(?m)^([ \t]*)-\s+"([^"]+)"', repl_path, content)
     content = content.replace(
         ".github/workflows/ci-backend-python.yml",
         f".github/workflows/{out_name}",

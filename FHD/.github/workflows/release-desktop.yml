@@ -426,11 +426,15 @@ jobs:
           raw="${raw#v}"
           raw="${raw#V}"
           version="${raw:-1.0.0.0}"
+          android_version="$(jq -er '.android_version' config/download_release.json)"
+          android_git_sha="$(jq -er '.android_git_sha' config/download_release.json)"
           python scripts/package/generate-download-manifest.py \
             --version "$version" \
             --release-dir release \
             --release-subdir "xcagi-v${version}" \
             --git-sha "${{ github.sha }}" \
+            --android-version "$android_version" \
+            --android-git-sha "$android_git_sha" \
             --output "${RUNNER_TEMP}/manifest.json" \
             --download-release-output "${RUNNER_TEMP}/download-release.json"
       - name: Upload manifest artifacts
@@ -518,6 +522,60 @@ jobs:
           set -euo pipefail
           # Workflow-level defaults already set working-directory to FHD.
           bash scripts/deploy/verify-download.sh "${RUNNER_TEMP}/manifest/manifest.json"
+      - name: Publish verified website download pointer
+        if: ${{ inputs.verify_only != true }}
+        env:
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::Verified release pointer publication requires SERVER_SSH_KEY or FHD_PUSH_SSH_KEY."
+            exit 1
+          fi
+          manifest="${RUNNER_TEMP}/manifest/manifest.json"
+          pointer="${RUNNER_TEMP}/manifest/download-release.json"
+          test -f "$pointer"
+          jq -e --slurpfile manifest "$manifest" '
+            .schema == "xcagi.download_release.public/v1"
+            and .release_ready == true
+            and .version_lock == $manifest[0].version
+            and .download_version == $manifest[0].version
+            and .git_sha == $manifest[0].git_sha
+            and .active_skus == ["enterprise"]
+            and (.frozen_skus | index("personal") != null)
+            and .primary_sku == "enterprise"
+            and (.android_version | type == "string" and length > 0)
+            and (.android_git_sha | test("^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$"))
+          ' "$pointer" >/dev/null
+
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=15)
+          root_target="/root/成都修茈科技有限公司/download-release.json"
+          remote_tmp="${root_target}.tmp.${GITHUB_RUN_ID}.${GITHUB_RUN_ATTEMPT}"
+          scp "${SSH_OPTS[@]}" "$pointer" "root@${HOST}:${remote_tmp}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "bash -s" -- "$remote_tmp" "$root_target" <<'REMOTE'
+          set -euo pipefail
+          incoming="$1"
+          root_target="$2"
+          chmod 0644 "$incoming"
+          mv -f "$incoming" "$root_target"
+          for target in \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/public/download-release.json" \
+            "/root/成都修茈科技有限公司/MODstore_deploy/market/dist/download-release.json" \
+            "/root/成都修茈科技有限公司/corp-butler/download-release.json"
+          do
+            if [ -d "$(dirname "$target")" ]; then
+              tmp="${target}.tmp.$$"
+              cp -f "$root_target" "$tmp"
+              chmod 0644 "$tmp"
+              mv -f "$tmp" "$target"
+            fi
+          done
+          REMOTE
 
   github-release:
     needs: [windows, macos, verify-download]

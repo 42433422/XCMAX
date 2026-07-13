@@ -24,6 +24,7 @@ Manifest schema (verified by scripts/deploy/verify-download.sh):
 
 macOS uses an array because a single SKU may ship multiple arches (arm64 + x64).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -123,9 +124,23 @@ def win_installer_mb(release_root: Path) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--release-dir", required=True, help="Root containing <release-subdir>/<sku>/")
-    parser.add_argument("--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0")
+    parser.add_argument(
+        "--release-dir", required=True, help="Root containing <release-subdir>/<sku>/"
+    )
+    parser.add_argument(
+        "--release-subdir", required=True, help="Subdirectory name like xcagi-v1.0.0.0"
+    )
     parser.add_argument("--git-sha", required=True)
+    parser.add_argument(
+        "--android-version",
+        default="",
+        help="Published enterprise Android product version to preserve in the website pointer.",
+    )
+    parser.add_argument(
+        "--android-git-sha",
+        default="",
+        help="Git SHA of the separately guarded enterprise Android artifact.",
+    )
     parser.add_argument("--output", required=True, help="manifest.json output path")
     parser.add_argument(
         "--download-release-output",
@@ -152,8 +167,7 @@ def main() -> int:
     auto_update = build_channel(args.auto_update_base, release_root)
     official_download = build_channel(official_base, release_root)
     release_ready = all(
-        official_download.get(sku, {}).get("win")
-        and official_download.get(sku, {}).get("mac")
+        official_download.get(sku, {}).get("win") and official_download.get(sku, {}).get("mac")
         for sku in ACTIVE_RELEASE_SKUS
     )
 
@@ -174,7 +188,9 @@ def main() -> int:
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    output_path.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
     print(f"[ok] wrote {output_path} ({output_path.stat().st_size} bytes)")
 
     download_release = {
@@ -193,6 +209,10 @@ def main() -> int:
         "manifest_url": f"{official_base}/manifest.json",
         "auto_update_base": args.auto_update_base,
     }
+    if args.android_version:
+        download_release["android_version"] = args.android_version
+    if args.android_git_sha:
+        download_release["android_git_sha"] = args.android_git_sha
 
     dr_output = Path(args.download_release_output)
     dr_output.parent.mkdir(parents=True, exist_ok=True)
