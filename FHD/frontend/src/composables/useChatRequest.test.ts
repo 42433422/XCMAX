@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
 import { useChatRequest } from './useChatRequest'
+import type { MultimodalAttachmentRow } from '@/utils/multimodalAttachments'
 
 vi.mock('@/api/chat', () => ({
   default: {
@@ -21,6 +22,7 @@ vi.mock('@/utils/typeGuards', () => ({
 
 function makeDeps() {
   return {
+    sessionId: ref('session-contract-1'),
     messages: ref([
       { role: 'user', content: 'previous message', time: '10:00' },
     ]),
@@ -32,7 +34,17 @@ function makeDeps() {
     getModeScopedUserId: (proEnabled: boolean) => proEnabled ? 'pro-user-1' : 'basic-user-1',
     resolveChatDbTokensForPayload: () => ({}),
     injectExcelContextPayload: vi.fn(() => false),
-    consumeMultimodalIntoPlannerContext: vi.fn(),
+    consumeMultimodalIntoPlannerContext: vi.fn(() => null),
+    acknowledgeMultimodalRequest: vi.fn(),
+  }
+}
+
+function makeAttachment(filename: string): MultimodalAttachmentRow {
+  return {
+    kind: 'image',
+    filename,
+    mime_type: 'image/png',
+    data_url: 'data:image/png;base64,eA==',
   }
 }
 
@@ -79,6 +91,7 @@ describe('useChatRequest', () => {
     expect(body.source).toBe('normal')
     expect(body.mode).toBe('basic')
     expect(body.user_id).toBe('basic-user-1')
+    expect(body.session_id).toBe('session-contract-1')
   })
 
   it('buildPlannerChatRequestPayload builds pro mode payload', () => {
@@ -192,7 +205,10 @@ describe('useChatRequest', () => {
   it('requestChatByModeBatch calls sendUnifiedChatBatch in basic mode', async () => {
     const chatApi = (await import('@/api/chat')).default
     await request.requestChatByModeBatch(['msg1', 'msg2'])
-    expect(chatApi.sendUnifiedChatBatch).toHaveBeenCalled()
+    expect(chatApi.sendUnifiedChatBatch).toHaveBeenCalledWith(
+      expect.objectContaining({ session_id: 'session-contract-1' }),
+      expect.any(Object),
+    )
   })
 
   it('requestChatByModeBatch calls sendChatBatch in pro mode', async () => {
@@ -302,6 +318,60 @@ describe('useChatRequest', () => {
     const req = useChatRequest(deps)
     req.buildPlannerChatRequestPayload('hello')
     expect(deps.consumeMultimodalIntoPlannerContext).toHaveBeenCalled()
+  })
+
+  it('keeps the attachment snapshot when a single request fails', async () => {
+    const deps = makeDeps()
+    const snapshot = { sessionId: 'session-contract-1', rows: [makeAttachment('retry.png')] }
+    deps.consumeMultimodalIntoPlannerContext.mockReturnValue(snapshot)
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.sendUnifiedChat).mockRejectedValueOnce(new Error('network down'))
+    const req = useChatRequest(deps)
+
+    await expect(req.requestChatByMode('识别图片')).rejects.toThrow('network down')
+    expect(deps.acknowledgeMultimodalRequest).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges the attachment snapshot only after a successful single request', async () => {
+    const deps = makeDeps()
+    const snapshot = { sessionId: 'session-contract-1', rows: [makeAttachment('ok.png')] }
+    deps.consumeMultimodalIntoPlannerContext.mockReturnValue(snapshot)
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.sendUnifiedChat).mockResolvedValueOnce({ success: true, response: 'ok' })
+    const req = useChatRequest(deps)
+
+    await req.requestChatByMode('识别图片')
+    expect(deps.acknowledgeMultimodalRequest).toHaveBeenCalledOnce()
+    expect(deps.acknowledgeMultimodalRequest).toHaveBeenCalledWith(snapshot)
+  })
+
+  it('retains the attachment snapshot when the server returns a failed payload', async () => {
+    const deps = makeDeps()
+    const snapshot = { sessionId: 'session-contract-1', rows: [makeAttachment('failed.png')] }
+    deps.consumeMultimodalIntoPlannerContext.mockReturnValue(snapshot)
+    const chatApi = (await import('@/api/chat')).default
+    vi.mocked(chatApi.sendUnifiedChat).mockResolvedValueOnce({ success: false, message: 'failed' })
+    const req = useChatRequest(deps)
+
+    await req.requestChatByMode('识别图片')
+    expect(deps.acknowledgeMultimodalRequest).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges a successful batch snapshot and retains a failed one', async () => {
+    const deps = makeDeps()
+    const snapshot = { sessionId: 'session-contract-1', rows: [makeAttachment('batch.png')] }
+    deps.consumeMultimodalIntoPlannerContext.mockReturnValue(snapshot)
+    const chatApi = (await import('@/api/chat')).default
+    const req = useChatRequest(deps)
+
+    vi.mocked(chatApi.sendUnifiedChatBatch).mockResolvedValueOnce({ success: true })
+    await req.requestChatByModeBatch(['a', 'b'])
+    expect(deps.acknowledgeMultimodalRequest).toHaveBeenCalledWith(snapshot)
+
+    deps.acknowledgeMultimodalRequest.mockClear()
+    vi.mocked(chatApi.sendUnifiedChatBatch).mockRejectedValueOnce(new Error('offline'))
+    await expect(req.requestChatByModeBatch(['a', 'b'])).rejects.toThrow('offline')
+    expect(deps.acknowledgeMultimodalRequest).not.toHaveBeenCalled()
   })
 
   it('resolveChatDbTokensForPayload is called in buildPlannerChatRequestPayload', () => {

@@ -17,23 +17,26 @@ import { useShipmentTask, type ShipmentTask } from './useShipmentTask'
 import { usePrintService } from './usePrintService'
 import { useExcelAnalysis } from './useExcelAnalysis'
 import { isStartPrintMessage, detectRuntimeModeCommand } from '../utils/textParser'
-import chatApi, { parseChatStreamErrorResponse } from '../api/chat'
+import chatApi from '../api/chat'
 import productsApi from '../api/products'
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl'
-import { readPlannerSseResponse, isChatStreamEnabled, type PlannerSseEvent } from '@/utils/chatSseStream'
+import { isChatStreamEnabled } from '@/utils/chatSseStream'
 import { fetchShipmentRecordsForUnit, summarizeShipmentRecordsForAudit } from '@/utils/shipmentMgmtPostPrint'
 import { isCoreWorkflowModInstalled } from '@/constants/coreWorkflowMod'
 import { dispatchCoreWorkflowModRun } from '@/workflow/coreWorkflowDispatcher'
 import { FHD_DB_WRITE_UNLOCKED_EVENT } from '@/fhd/dbTokenHeaders'
+import { apiFetch } from '@/utils/apiBase'
+import { appAlert } from '@/utils/appDialog'
 import { useChatWorkflowPanel } from './useChatWorkflowPanel'
 import { useChatDbTokenGate } from './useChatDbTokenGate'
 import { useChatExcelContext } from './useChatExcelContext'
 import { useChatRequest } from './useChatRequest'
 import { useChatResponseAttach } from './useChatResponseAttach'
 import { useChatSessionHistory } from './useChatSessionHistory'
+import { useChatStreamRound } from './useChatStreamRound'
 import { useAgentRunEventSync } from './useAgentRunEvents'
 import type { UseChatViewOptions } from './useChatView'
-import type { ChatAutoAction, ChatPlannerPayload, ChatRequest } from '@/types/chat'
+import type { ChatAutoAction, ChatPlannerPayload } from '@/types/chat'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
 
 type XcagiChatWindow = Window & {
@@ -96,6 +99,11 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     saveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    patchMessageAtIndex = (index, patch) => {
+      const row = messages.value[index]
+      if (row) Object.assign(row, patch)
+    },
+    persistMessagesCache = () => {},
     clearMessages,
     loadMessages,
     syncFromServer,
@@ -197,6 +205,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     resolveExcelAnalysisContextForRequest,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
+    acknowledgeMultimodalRequest,
+    activateSessionContext,
+    clearSessionContext,
+    clearAllSessionContexts,
     onMultimodalFileChange,
     bindExcelSheetToChat,
     bindAllExcelSheetsToChat,
@@ -214,6 +226,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     taskList,
     upsertTask,
     createTaskId,
+    persistMessagesCache,
   })
   const {
     getLastAiMessageRef,
@@ -231,6 +244,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   })
 
   const chatRequest = useChatRequest({
+    sessionId,
     messages,
     proIntentExperienceEnabled,
     isProMode,
@@ -241,6 +255,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     resolveChatDbTokensForPayload: dbGate.resolveChatDbTokensForPayload,
     injectExcelContextPayload,
     consumeMultimodalIntoPlannerContext,
+    acknowledgeMultimodalRequest,
   })
 
   const {
@@ -252,12 +267,61 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     requestChatByModeBatch,
     getChatBatchDebounceMs,
     setLoadingProgress,
+    getInitialLoadingProgressText: () => (
+      !!proIntentExperienceEnabled?.value && !resolveEffectiveProModeState()
+        ? '专业意图处理中（流式）…'
+        : '正在流式生成回复…'
+    ),
     startWaitProgressTimer,
     stopLoadingProgress,
     requestChatByModeWithTimeout,
     requestChatByModeBatchWithTimeout,
     resolveChatTimeoutMs,
   } = chatRequest
+
+  const streamRound = useChatStreamRound({
+    pushStreamingAiShell,
+    applyPlainTextToMessageIndex,
+    patchMessageAtIndex,
+    saveMessage,
+    persistMessagesCache,
+    scrollToBottom,
+    setLoadingProgress,
+    startWaitProgressTimer,
+    stopLoadingProgress,
+    queueVoice,
+    clearVoiceQueue,
+    ttsEnabled,
+    buildPlannerChatRequestPayload,
+    acknowledgeMultimodalRequest,
+    resolveChatTimeoutMs,
+    handleChatRequiresToken,
+    plannerWriteUnlockResumeDraft,
+    isLoading,
+    isStreamingReply,
+    onStreamDone: async (payload, primaryText) => {
+      syncTaskFromChatResponse(payload, primaryText)
+      await syncAgentRunFromPayload(payload, primaryText)
+      attachContextSummaryToLastAiMessage()
+      attachThinkingStepsToLastAiMessage(payload)
+      attachTodoStepsToLastAiMessage(payload)
+      attachWorkflowTraceToLastAiMessage(payload)
+      attachApprovalCardToLastAiMessage(payload)
+      if (payload.task) {
+        showTaskConfirm(payload.task)
+        emitAssistantPush({
+          title: asString(asRecord(payload.task).title || '新任务'),
+          description: asString(asRecord(payload.task).description || '收到一条任务，请处理'),
+        })
+      }
+      if (!payload.task && (payload.autoAction?.type === 'show_products_float' || payload.autoAction?.type === 'show_products')) {
+        currentTask.value = null
+      }
+      if (payload.autoAction) handleAutoAction(payload.autoAction, primaryText)
+      if (payload.task) maybeCloseAssistantFloatForShipmentTask(payload.task, payload.autoAction)
+    },
+  })
+  const { runPlannerSseStream, stopStreamingReply } = streamRound
 
   function generateSessionId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
@@ -292,6 +356,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     persistTaskPanelStateForSession,
     applyPersistedTaskPanelStateForSession,
     clearPersistedTaskPanelState,
+    activateSessionContext,
+    clearSessionContext,
+    clearAllSessionContexts,
     generateSessionId,
     normalizeServerContentToHtml,
   })
@@ -381,7 +448,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             source: task.source,
             status: 'success',
             progress: 100,
+            stage: '分析完成',
             summary,
+            error: '',
             messageRef: getLastAiMessageRef()
           })
         }
@@ -878,9 +947,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     try {
       let result
       if (method === 'GET') {
-        result = await fetch(apiUrl)
+        result = await apiFetch(apiUrl)
       } else {
-        result = await fetch(apiUrl, {
+        result = await apiFetch(apiUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
@@ -1063,8 +1132,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
   async function executeRemoteChatRound(
     remoteMessages: string[],
     opts?: { fromWriteUnlock?: boolean }
-  ) {
-    if (!remoteMessages.length) return
+  ): Promise<ChatPlannerPayload> {
+    if (!remoteMessages.length) {
+      return { success: false, message: '没有可发送的消息' }
+    }
+    const roundSessionId = String(sessionId.value || '').trim() || 'default'
+    const isCurrentRoundSession = () =>
+      (String(sessionId.value || '').trim() || 'default') === roundSessionId
+    const staleSessionResult = (): ChatPlannerPayload => ({
+      success: false,
+      message: '会话已切换，已丢弃旧响应',
+    })
     if (!opts?.fromWriteUnlock) {
       pendingDbWriteChatRetryMessages.value = null
       plannerWriteUnlockResumeDraft.value = ''
@@ -1094,6 +1172,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       startWaitProgressTimer()
       try {
         const resp = await productsApi.searchProducts(kwFast)
+        if (!isCurrentRoundSession()) return staleSessionResult()
         const respRow = asRecord(resp)
         if (resp && resp.success === false) {
           throw new Error(String(resp.message || '产品库查询失败'))
@@ -1146,8 +1225,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             primaryText
           )
         }
-        return
+        return payload
       } catch {
+        if (!isCurrentRoundSession()) return staleSessionResult()
         /* 回退到下方 unified / chat 全链路 */
       } finally {
         isLoading.value = false
@@ -1158,143 +1238,10 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     /** ChatView 主路径：单条消息走 Planner SSE，token 逐字写入气泡；批量仍用 JSON。可用 ``VITE_CHAT_STREAM=0`` 关闭。 */
     if (remoteMessages.length === 1 && isChatStreamEnabled()) {
       const primaryForStream = remoteMessages[0] || ''
-      isStreamingReply.value = true
-      isLoading.value = true
-      const runtimeProForLoadingS = resolveEffectiveProModeState()
-      const hybridS = !!proIntentExperienceEnabled?.value && !runtimeProForLoadingS
-      setLoadingProgress(hybridS ? '专业意图处理中（流式）…' : '正在流式生成回复…')
-      startWaitProgressTimer()
-      const baseS = resolveChatTimeoutMs(primaryForStream)
-      const timeoutMsS = Math.min(120000, baseS)
-      const controller = new AbortController()
-      const killTimer = window.setTimeout(() => controller.abort(), timeoutMsS)
-      const msgIndex = pushStreamingAiShell()
-      let streamPlain = ''
-      let doneResult: unknown = null
-      let sseError: string | null = null
-      // TTS 增量朗读：以句末标点为界把已稳定的前缀丢给语音队列，避免边生成边合成后半句卡顿或被重复打断
-      let ttsSpokenOffset = 0
-      const ttsShouldSpeakThisMessage = ttsEnabled.value
-      const SPEAK_SENTENCE_BOUNDARY = /[。！？!?；;\n]/g
-      const flushTtsFromStream = (text: string, force: boolean) => {
-        // 开关状态可能在流式过程中被改掉；每次检查当前值，关闭后立即停止追加
-        if (!ttsShouldSpeakThisMessage || !ttsEnabled.value) return
-        const pending = text.slice(ttsSpokenOffset)
-        if (!pending) return
-        if (force) {
-          queueVoice(pending)
-          ttsSpokenOffset = text.length
-          return
-        }
-        // 找到最后一个句末标点的位置；若没有就暂不朗读，等后续 token 到达再重新判
-        SPEAK_SENTENCE_BOUNDARY.lastIndex = 0
-        let lastBoundary = -1
-        let match: RegExpExecArray | null
-        while ((match = SPEAK_SENTENCE_BOUNDARY.exec(pending)) !== null) {
-          lastBoundary = match.index + match[0].length
-        }
-        if (lastBoundary < 0) return
-        const chunk = pending.slice(0, lastBoundary).trim()
-        if (chunk) queueVoice(chunk)
-        ttsSpokenOffset += lastBoundary
-      }
-      try {
-        const { body } = buildPlannerChatRequestPayload(primaryForStream, {
-          fromWriteUnlock: !!opts?.fromWriteUnlock
-        })
-        const res = await chatApi.sendChatStream(
-          { ...body, message: String(body.message || primaryForStream) } as ChatRequest &
-          Record<string, unknown>,
-          { signal: controller.signal },
-        )
-        if (!res.ok) {
-          throw new Error(await parseChatStreamErrorResponse(res))
-        }
-        await readPlannerSseResponse(res, (ev: PlannerSseEvent) => {
-          if (ev.type === 'token') {
-            streamPlain += ev.text || ''
-            applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
-            setLoadingProgress('正在生成回复…')
-          } else if (ev.type === 'done') {
-            doneResult = ev.result
-          } else if (ev.type === 'error') {
-            sseError = String(ev.message || '流式接口错误')
-          } else if (ev.type === 'requires_token') {
-            const tokenName = ev.token_name || ''
-            const tokenDesc = ev.token_description || ''
-            handleChatRequiresToken(tokenName, tokenDesc, remoteMessages)
-            streamPlain += `\n[需要授权：${tokenDesc || tokenName || '授权信息'}]\n`
-            applyPlainTextToMessageIndex(msgIndex, streamPlain)
-            flushTtsFromStream(streamPlain, false)
-            const upTok = String(tokenName || '').toUpperCase()
-            if (
-              upTok.includes('WRITE') ||
-              /写入|导入|入库|二级|数据库写入|DB_WRITE/i.test(String(tokenDesc || ''))
-            ) {
-              plannerWriteUnlockResumeDraft.value = streamPlain
-            }
-          }
-        })
-        if (sseError) {
-          throw new Error(sseError)
-        }
-        const donePayload = asPlannerPayload(doneResult)
-        const finalText = String(donePayload.response ?? streamPlain).trim() || streamPlain || '（无内容）'
-        applyPlainTextToMessageIndex(msgIndex, finalText)
-        // 后端 done 事件可能带一段非 token 的尾部文本（比如总结段），统一再做一次兜底朗读
-        if (ttsShouldSpeakThisMessage && ttsEnabled.value) {
-          if (finalText.length >= ttsSpokenOffset) {
-            // 用 finalText 做最终来源，确保 done 额外补的那段也能被念到
-            const tail = finalText.slice(ttsSpokenOffset).trim()
-            if (tail) queueVoice(tail)
-            ttsSpokenOffset = finalText.length
-          } else {
-            flushTtsFromStream(streamPlain, true)
-          }
-        }
-        await saveMessage('ai', finalText)
-        const wrap: ChatPlannerPayload =
-          doneResult && typeof doneResult === 'object'
-            ? donePayload
-            : { success: true, response: finalText }
-        syncTaskFromChatResponse(wrap, primaryText)
-        await syncAgentRunFromPayload(wrap, primaryText)
-        attachContextSummaryToLastAiMessage()
-        attachThinkingStepsToLastAiMessage(wrap)
-        attachTodoStepsToLastAiMessage(wrap)
-        attachWorkflowTraceToLastAiMessage(wrap)
-        attachApprovalCardToLastAiMessage(wrap)
-        if (wrap.task) {
-          showTaskConfirm(wrap.task)
-          emitAssistantPush({
-            title: asString(asRecord(wrap.task).title || '新任务'),
-            description: asString(asRecord(wrap.task).description || '收到一条任务，请处理')
-          })
-        }
-        if (!wrap.task && (wrap?.autoAction?.type === 'show_products_float' || wrap?.autoAction?.type === 'show_products')) {
-          currentTask.value = null
-        }
-        if (wrap.autoAction) {
-          handleAutoAction(wrap.autoAction, primaryText)
-        }
-        if (wrap.task) {
-          maybeCloseAssistantFloatForShipmentTask(wrap.task, wrap.autoAction)
-        }
-      } catch (err: unknown) {
-        const errText =
-          err instanceof Error && err.name === 'AbortError'
-            ? `请求超时（>${Math.floor(timeoutMsS / 1000)}s）或已中断`
-            : errorMessage(err, '流式对话失败')
-        applyPlainTextToMessageIndex(msgIndex, `处理失败：${errText}`)
-        await saveMessage('ai', `处理失败：${errText}`)
-      } finally {
-        isStreamingReply.value = false
-        window.clearTimeout(killTimer)
-        isLoading.value = false
-        stopLoadingProgress()
-      }
-      return
+      return runPlannerSseStream(primaryForStream, remoteMessages, {
+        fromWriteUnlock: !!opts?.fromWriteUnlock,
+        isCurrentRound: isCurrentRoundSession,
+      })
     }
 
     isLoading.value = true
@@ -1348,6 +1295,8 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       stopLoadingProgress()
     }
 
+    if (!isCurrentRoundSession()) return staleSessionResult()
+
     if (data.batch && Array.isArray(data.results)) {
       const results = data.results.map((part) => asPlannerPayload(part))
       if (data.success) {
@@ -1397,7 +1346,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       } else {
         await addAndSaveMessage('处理失败: ' + (data.message || '批量请求失败'), 'ai')
       }
-      return
+      return data
     }
 
     if (data.success) {
@@ -1434,38 +1383,65 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     } else {
       await addAndSaveMessage('处理失败: ' + (data.message || '未知错误'), 'ai')
     }
+    return data
+  }
+
+  let approvalActionInFlight = false
+
+  async function submitWorkflowCardAction(
+    command: '确认' | '取消',
+    terminalStatus: 'confirmed' | 'cancelled',
+  ): Promise<void> {
+    if (approvalActionInFlight) return
+    const actionSessionId = String(sessionId.value || '').trim() || 'default'
+    let targetIndex = -1
+    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+      const msg = messages.value[i]
+      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
+        targetIndex = i
+        break
+      }
+    }
+    if (targetIndex < 0) return
+
+    approvalActionInFlight = true
+    try {
+      const result = await sendMessage(command, { immediate: true })
+      if (result.success !== true) return
+      if ((String(sessionId.value || '').trim() || 'default') !== actionSessionId) return
+      const target = messages.value[targetIndex]
+      if (target?.role !== 'ai' || target.approvalCard?.status !== 'pending') return
+      target.approvalCard = { ...target.approvalCard, status: terminalStatus }
+      persistMessagesCache()
+    } finally {
+      approvalActionInFlight = false
+    }
   }
 
   async function confirmWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'confirmed' }
-        break
-      }
-    }
-    await sendMessage('确认')
+    await submitWorkflowCardAction('确认', 'confirmed')
   }
 
   async function cancelWorkflowFromCard() {
-    for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-      const msg = messages.value[i]
-      if (msg?.role === 'ai' && msg.approvalCard?.status === 'pending') {
-        msg.approvalCard = { ...msg.approvalCard, status: 'cancelled' }
-        break
-      }
-    }
-    await sendMessage('取消')
+    await submitWorkflowCardAction('取消', 'cancelled')
   }
 
-  async function sendMessage(message: string) {
+  async function sendMessage(
+    message: string,
+    opts?: { immediate?: boolean },
+  ): Promise<ChatPlannerPayload> {
+    const sendSessionId = String(sessionId.value || '').trim() || 'default'
     await addAndSaveMessage(message, 'user')
 
     const modeHandled = await tryHandleRuntimeModeCommand(message)
-    if (modeHandled) return
+    if (modeHandled) {
+      return { success: false, message: '消息由本地模式命令处理，未执行数据库入库' }
+    }
 
     const previewModified = await handleShipmentModify(message)
-    if (previewModified) return
+    if (previewModified) {
+      return { success: false, message: '消息仅修改了任务预览，未执行数据库入库' }
+    }
 
     const xcagiWindow = getXcagiWindow()
     if (
@@ -1475,20 +1451,26 @@ export function useChatOrchestration(options: UseChatViewOptions) {
       typeof xcagiWindow.jarvisSendMessage === 'function'
     ) {
       xcagiWindow.jarvisSendMessage(message)
-      return
+      return { success: false, message: '消息已交给专业任务通道，尚无数据库执行回执' }
     }
 
     const printHandled = await handleStartPrintCommand(message)
-    if (printHandled) return
+    if (printHandled) {
+      return { success: false, message: '消息由打印流程处理，未执行数据库入库' }
+    }
+
+    if ((String(sessionId.value || '').trim() || 'default') !== sendSessionId) {
+      return { success: false, message: '会话已切换，已丢弃旧响应' }
+    }
 
     const debounceMs = getChatBatchDebounceMs()
-    if (debounceMs <= 0) {
-      await executeRemoteChatRound([message])
-      return
+    if (debounceMs <= 0 || opts?.immediate) {
+      return executeRemoteChatRound([message])
     }
     enqueueChatBatchMessage(message, debounceMs, (msgs) => {
       void executeRemoteChatRound(msgs)
     })
+    return { success: false, message: '消息已进入批处理队列，尚未收到数据库执行回执' }
   }
   function handleShipmentDownloadClick() {
     addAndSaveMessage('发货单已开始下载。是否现在执行打印？可点击"开始打印"按钮或直接发送"开始打印"。', 'ai')
@@ -1504,12 +1486,17 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     const text = [title, desc].filter(Boolean).join('\n')
     if (!text) return
     try {
+      if (!navigator.clipboard?.writeText) {
+        throw new Error('当前环境不支持剪贴板写入')
+      }
+      await navigator.clipboard.writeText(text)
       pushCopied.value = true
       window.setTimeout(() => {
         pushCopied.value = false
       }, 1200)
-    } catch (_e) {
+    } catch (e) {
       pushCopied.value = false
+      await appAlert(`复制失败：${errorMessage(e, '无法访问系统剪贴板')}`)
     }
   }
 
@@ -1526,7 +1513,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     }
   }
 
-  executeRemoteChatRoundRef.fn = executeRemoteChatRound
+  executeRemoteChatRoundRef.fn = async (msgs, opts) => {
+    await executeRemoteChatRound(msgs, opts)
+  }
 
   registerHistoryModWatch(showHistoryPanel)
 
@@ -1589,6 +1578,7 @@ export function useChatOrchestration(options: UseChatViewOptions) {
     scrollToBottom,
     syncProModeState: dbGate.syncProModeState,
     sendMessage,
+    stopStreamingReply,
     confirmWorkflowFromCard,
     cancelWorkflowFromCard,
     confirmTask,

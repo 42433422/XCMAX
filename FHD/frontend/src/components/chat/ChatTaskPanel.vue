@@ -5,8 +5,8 @@
       <div class="task-panel-body">
         <template v-if="currentTask">
           <div class="task-card" :class="{ 'excel-import-task': currentTask?.type === 'excel_import' }">
-            <div class="task-header">{{ currentTask.title }}</div>
-            <div class="task-description">{{ currentTask.description }}</div>
+            <div class="task-header">{{ normalizeTaskDisplayText(currentTask.title) }}</div>
+            <div class="task-description">{{ normalizeTaskDisplayText(currentTask.description) }}</div>
             <div v-if="currentTask?.type === 'excel_import' && !currentTask?.completed" class="excel-import-preview">
               <div class="excel-import-stats">
                 <div class="stat-item">
@@ -128,9 +128,9 @@
                 <span
                   class="task-dot"
                   :class="`status-${workflowTaskDotStatusClass(task)}`"
-                  :title="workflowTaskDotTitle(task)"
+                  :title="normalizeTaskDisplayText(workflowTaskDotTitle(task))"
                 />
-                <span class="task-list-title">{{ task.title }}</span>
+                <span class="task-list-title">{{ normalizeTaskDisplayText(task.title) }}</span>
                 <span
                   v-if="task.type === 'workflow_employee'"
                   class="task-list-chevron"
@@ -146,7 +146,7 @@
                 <span
                   v-if="typeof task.progress === 'number' && task.status !== 'failed' && task.status !== 'cancelled' && !(task.type === 'workflow_employee' && task.payload?.workflowProgressStarted === false)"
                 >{{ $t('chat.progress', { pct: task.progress }) }}</span>
-                <span v-if="task.stage">{{ task.stage }}</span>
+                <span v-if="task.stage">{{ normalizeTaskDisplayText(task.stage) }}</span>
               </div>
               <div
                 v-if="task.type === 'workflow_employee' && expandedTaskIds.includes(task.id) && hasWorkflowBody(task)"
@@ -160,12 +160,12 @@
                     <span class="task-wf-progress-title">{{ $t('chat.taskProgress') }}</span>
                     <span class="task-wf-progress-meta">
                       <template v-if="task.payload?.workflowProgressStarted === false">
-                        {{ task.payload.workflowProgressLabel }}
+                        {{ normalizeTaskDisplayText(task.payload.workflowProgressLabel) }}
                       </template>
                       <template v-else>
                         {{ task.payload.workflowProgressPct }}%
                         <template v-if="task.payload.workflowProgressLabel">
-                          · {{ task.payload.workflowProgressLabel }}
+                          · {{ normalizeTaskDisplayText(task.payload.workflowProgressLabel) }}
                         </template>
                       </template>
                     </span>
@@ -191,14 +191,14 @@
                     <div class="task-wf-monitor-kicker">{{ $t('chat.workflowMonitor') }}</div>
                     <div
                       class="task-wf-monitor-text"
-                      :title="workflowPayload(task).workflowMonitorLine"
+                      :title="normalizeTaskDisplayText(workflowPayload(task).workflowMonitorLine)"
                     >
-                      {{ workflowPayload(task).workflowMonitorLine }}
+                      {{ normalizeTaskDisplayText(workflowPayload(task).workflowMonitorLine) }}
                     </div>
                   </div>
                 </div>
                 <div v-if="task.payload?.workflowCurrentHint" class="task-workflow-hint task-workflow-hint-secondary">
-                  {{ task.payload.workflowCurrentHint }}
+                  {{ normalizeTaskDisplayText(task.payload.workflowCurrentHint) }}
                 </div>
                 <details v-if="workflowPayload(task).workflowSteps?.length" class="task-wf-steps-details">
                   <summary>{{ $t('chat.stepDetails') }}</summary>
@@ -208,7 +208,7 @@
                       :key="s.id"
                       :class="['task-workflow-step', `task-workflow-step--${s.status}`]"
                     >
-                      <span class="task-workflow-step-text">{{ s.label }}</span>
+                      <span class="task-workflow-step-text">{{ normalizeTaskDisplayText(s.label) }}</span>
                       <span class="task-workflow-step-state">{{
                         s.status === 'done' ? $t('chat.stepDone') : s.status === 'active' ? $t('chat.stepActive') : $t('chat.stepPending')
                       }}</span>
@@ -217,8 +217,8 @@
                 </details>
               </div>
               <div v-if="expandedTaskIds.includes(task.id)" class="task-list-detail">
-                <div v-if="task.summary" class="task-summary">{{ task.summary }}</div>
-                <div v-if="task.error" class="task-error">{{ task.error }}</div>
+                <div v-if="task.summary" class="task-summary">{{ normalizeTaskDisplayText(task.summary) }}</div>
+                <div v-if="task.error" class="task-error">{{ normalizeTaskDisplayText(task.error) }}</div>
                 <div
                   v-if="task.type !== 'workflow_employee'"
                   class="task-actions"
@@ -230,8 +230,18 @@
                     @click="$emit('open-shipment-records')"
                   >{{ $t('chat.openShipmentRecords') }}</button>
                   <button class="btn btn-secondary btn-sm" @click="$emit('jump-to-task-message', task)">{{ $t('chat.jumpToMessage') }}</button>
-                  <button v-if="task.status === 'failed' || task.status === 'cancelled'" class="btn btn-primary btn-sm" @click="$emit('retry-task', task.id)">{{ $t('chat.retryTask') }}</button>
-                  <button v-if="task.status === 'running' || task.status === 'queued'" class="btn btn-secondary btn-sm" @click="$emit('cancel-task-by-id', task.id)">{{ $t('chat.cancel') }}</button>
+                  <button
+                    v-if="(task.status === 'failed' || task.status === 'cancelled') && hasRealTaskActionCapability(task, 'retry')"
+                    class="btn btn-primary btn-sm"
+                    data-action="retry-task"
+                    @click="$emit('retry-task', task.id)"
+                  >{{ $t('chat.retryTask') }}</button>
+                  <button
+                    v-if="(task.status === 'running' || task.status === 'queued') && hasRealTaskActionCapability(task, 'cancel')"
+                    class="btn btn-secondary btn-sm"
+                    data-action="cancel-task-by-id"
+                    @click="$emit('cancel-task-by-id', task.id)"
+                  >{{ $t('chat.cancel') }}</button>
                 </div>
               </div>
             </div>
@@ -239,14 +249,14 @@
         </template>
         <template v-if="!currentTask && !taskList.length && isProMode && proRuntimeTask">
           <div class="task-card">
-            <div class="task-header">{{ proRuntimeTask.title }}</div>
+            <div class="task-header">{{ normalizeTaskDisplayText(proRuntimeTask.title) }}</div>
             <div style="margin-top:6px;">
               <span :class="['task-item-status', proRuntimeTask.statusClass]">
-                {{ proRuntimeTask.statusText }}
+                {{ normalizeTaskDisplayText(proRuntimeTask.statusText) }}
               </span>
             </div>
             <div style="margin-top:10px; color:var(--app-text-muted); font-size:13px;">
-              {{ proRuntimeTask.description }}
+              {{ normalizeTaskDisplayText(proRuntimeTask.description) }}
             </div>
           </div>
         </template>
@@ -280,6 +290,7 @@ import { useI18n } from 'vue-i18n'
 import type { ShipmentTask } from '@/composables/useShipmentTask'
 import type { TaskItem } from '@/composables/useChatPersistence'
 import { workflowProgressIsIdle } from '@/workflow/coreWorkflowTaskUi'
+import { normalizeTaskDisplayText } from '@/utils/chatTaskLabels'
 
 useI18n()
 
@@ -290,6 +301,26 @@ type WorkflowTaskPayload = {
   workflowProgressStarted?: boolean
   workflowProgressLabel?: string
   workflowSteps?: Array<{ id: string; label: string; status: string }>
+}
+
+type TaskActionName = 'retry' | 'cancel'
+
+type TaskActionCapability = {
+  enabled?: unknown
+  endpoint?: unknown
+}
+
+/**
+ * 任务历史里原先的重试/取消只会本地改状态，并不代表后端真的执行了动作。
+ * 只有任务生产方在 payload 中明确给出已启用且可调用的端点时，才向用户暴露按钮。
+ */
+function hasRealTaskActionCapability(task: TaskItem, action: TaskActionName): boolean {
+  const capabilities = task.payload?.actionCapabilities
+  if (!capabilities || typeof capabilities !== 'object' || Array.isArray(capabilities)) return false
+  const capability = (capabilities as Record<string, unknown>)[action]
+  if (!capability || typeof capability !== 'object' || Array.isArray(capability)) return false
+  const { enabled, endpoint } = capability as TaskActionCapability
+  return enabled === true && typeof endpoint === 'string' && endpoint.trim().length > 0
 }
 
 function workflowPayload(task: TaskItem): WorkflowTaskPayload {

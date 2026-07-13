@@ -11,7 +11,31 @@ describe('usePrintService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    document.cookie = 'csrf_token=print-csrf'
     service = usePrintService()
+  })
+
+  it('routes every mutating print request through the CSRF-aware API client', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, updated: true }),
+    } as Response)
+
+    await service.printLabel('/label.pdf')
+    await service.printDocument('/shipment.pdf')
+    await service.markAsPrinted('/shipment.pdf', 42)
+
+    expect(fetchSpy).toHaveBeenCalledTimes(3)
+    expect(fetchSpy.mock.calls.map(([url]) => url)).toEqual([
+      'http://localhost/api/print/label',
+      'http://localhost/api/print/document',
+      'http://localhost/api/shipment/print',
+    ])
+    for (const [, init] of fetchSpy.mock.calls) {
+      expect(init?.credentials).toBe('include')
+      expect((init?.headers as Record<string, string>)['X-CSRF-Token']).toBe('print-csrf')
+    }
   })
 
   describe('printLabel', () => {

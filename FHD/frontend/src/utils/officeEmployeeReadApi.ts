@@ -22,25 +22,17 @@ const EXTRACT_GRID_UPLOAD_PATH = '/api/templates/extract-grid'
 const OFFICE_DOCKING_EXTENSIONS = new Set([
   '.xlsx',
   '.xlsm',
-  '.xls',
-  '.csv',
   '.docx',
-  '.doc',
   '.pdf',
   '.pptx',
-  '.ppt',
 ])
 
 const EMPLOYEE_BY_EXTENSION: Record<string, string> = {
   '.xlsx': EXCEL_FULL_READ_EMPLOYEE_ID,
   '.xlsm': EXCEL_FULL_READ_EMPLOYEE_ID,
-  '.xls': EXCEL_FULL_READ_EMPLOYEE_ID,
-  '.csv': CSV_FULL_READ_EMPLOYEE_ID,
   '.docx': WORD_FULL_READ_EMPLOYEE_ID,
-  '.doc': WORD_FULL_READ_EMPLOYEE_ID,
   '.pdf': PDF_FULL_READ_EMPLOYEE_ID,
   '.pptx': PPT_FULL_READ_EMPLOYEE_ID,
-  '.ppt': PPT_FULL_READ_EMPLOYEE_ID,
 }
 
 let cachedWorkspaceRoot = ''
@@ -122,12 +114,35 @@ export async function uploadChatOfficeFile(file: File): Promise<OfficeFileUpload
   }
 }
 
-const EMPLOYEE_RUN_PATHS: Record<string, string> = {
+const EMPLOYEE_LEGACY_RUN_PATHS: Record<string, string> = {
   [EXCEL_FULL_READ_EMPLOYEE_ID]: `/api/mod/${EXCEL_FULL_READ_EMPLOYEE_ID}/employees/${EXCEL_FULL_READ_EMPLOYEE_ID}/run`,
   [CSV_FULL_READ_EMPLOYEE_ID]: `/api/mod/${CSV_FULL_READ_EMPLOYEE_ID}/employees/${CSV_FULL_READ_EMPLOYEE_ID}/run`,
   [PDF_FULL_READ_EMPLOYEE_ID]: `/api/mod/${PDF_FULL_READ_EMPLOYEE_ID}/employees/${PDF_FULL_READ_EMPLOYEE_ID}/run`,
   [PPT_FULL_READ_EMPLOYEE_ID]: `/api/mod/${PPT_FULL_READ_EMPLOYEE_ID}/employees/${PPT_FULL_READ_EMPLOYEE_ID}/run`,
   [WORD_FULL_READ_EMPLOYEE_ID]: `/api/mod/${WORD_FULL_READ_EMPLOYEE_ID}/employees/${WORD_FULL_READ_EMPLOYEE_ID}/run`,
+}
+
+function localEmployeeRunPath(employeeId: string): string {
+  return `/api/xcmax/local/employees/${encodeURIComponent(employeeId)}/execute`
+}
+
+function isMissingEmployeeRoute(response: Response, body: Record<string, unknown>): boolean {
+  if (response.status === 404 || response.status === 405) return true
+  const message = asString(body.message || body.error).trim()
+  return /404|405|Not Found|Method Not Allowed/i.test(message)
+}
+
+function unwrapLocalEmployeeData(body: Record<string, unknown>): Record<string, unknown> {
+  const outerData = asRecord(body.data)
+  const runtimeResult = asRecord(outerData.result)
+  const outputs = asArray<Record<string, unknown>>(runtimeResult.outputs)
+  for (const row of outputs) {
+    const output = asRecord(row.output)
+    if (Object.keys(output).length) return output
+  }
+  if (Object.keys(runtimeResult).length) return runtimeResult
+  if (Object.keys(outerData).length) return outerData
+  return body
 }
 
 export type OfficeEmployeeOutputFile = {
@@ -202,8 +217,8 @@ export async function runOfficeEmployeeRead(
   workspaceRoot: string,
   options?: { outputRelpath?: string },
 ): Promise<Record<string, unknown>> {
-  const path = EMPLOYEE_RUN_PATHS[employeeId]
-  if (!path) throw new Error(`未知办公员工：${employeeId}`)
+  const legacyPath = EMPLOYEE_LEGACY_RUN_PATHS[employeeId]
+  if (!legacyPath) throw new Error(`未知办公员工：${employeeId}`)
   await ensureCsrf()
   const payload: Record<string, unknown> = {
     file_path: filePath,
@@ -211,16 +226,30 @@ export async function runOfficeEmployeeRead(
     action: 'convert',
   }
   if (options?.outputRelpath) payload.output_relpath = options.outputRelpath
-  const res = await apiFetch(path, {
+  let res = await apiFetch(localEmployeeRunPath(employeeId), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      task: 'convert',
+      input_data: payload,
+      workspace_root: workspaceRoot,
+      retry_max: 1,
+    }),
   })
-  const body = await res.json().catch(() => ({}))
+  let body = asRecord(await res.json().catch(() => ({})))
+  if (isMissingEmployeeRoute(res, body)) {
+    await ensureCsrf()
+    res = await apiFetch(legacyPath, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    body = asRecord(await res.json().catch(() => ({})))
+  }
   if (!res.ok || body?.success === false) {
     throw new Error(String(body?.message || body?.error || `员工执行失败 HTTP ${res.status}`))
   }
-  return asRecord(body?.data || body)
+  return unwrapLocalEmployeeData(body)
 }
 
 function workbookPayloadFromEmployeeData(data: Record<string, unknown>): Record<string, unknown> {

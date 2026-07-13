@@ -277,6 +277,10 @@ vi.mock('./useChatExcelContext', async () => {
       excelSheetOptions: state.excelSheetOptions!,
       injectExcelContextPayload: vi.fn((p: unknown) => p),
       consumeMultimodalIntoPlannerContext: vi.fn(),
+      acknowledgeMultimodalRequest: vi.fn(),
+      activateSessionContext: vi.fn(),
+      clearSessionContext: vi.fn(),
+      clearAllSessionContexts: vi.fn(),
       onMultimodalFileChange: vi.fn(),
     }),
   }
@@ -988,7 +992,10 @@ describe('useChatOrchestration coverage – confirmTask 各分支', () => {
       payload: {},
     })
     await api.confirmTask()
-    expect(fetch).toHaveBeenCalledWith('/api/get')
+    expect(fetch).toHaveBeenCalledWith('/api/get', expect.objectContaining({
+      credentials: 'include',
+      headers: {},
+    }))
     expect(api.currentTask.value?.completed).toBe(true)
     vi.unstubAllGlobals()
   })
@@ -1712,6 +1719,10 @@ describe('useChatOrchestration coverage – copyAssistantPushContent', () => {
     setActivePinia(createPinia())
     localStorage.clear()
     resetMockState()
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+    })
   })
 
   it('有内容时设置 pushCopied 并定时重置', async () => {

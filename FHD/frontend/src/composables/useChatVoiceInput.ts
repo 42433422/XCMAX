@@ -32,6 +32,10 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   let voiceStartedAt = 0
   let voiceMimeType = ''
   let voiceCancelRequested = false
+  let voiceStartToken = 0
+  let voicePendingStartToken: number | null = null
+  let voicePendingReleaseRequested = false
+  let voicePendingCancelRequested = false
   let voiceMaxTimer: number | null = null
   let voiceTickTimer: number | null = null
   let voiceErrorClearTimer: number | null = null
@@ -71,6 +75,11 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     if (voiceState.value === 'error') return voiceErrorText.value || '语音识别失败'
     return '按住这里说话，松开后会自动转写成文字填入输入框'
   })
+
+  /** 独立于按钮文案的可访问反馈，避免识别失败后用户只看到按钮恢复原状。 */
+  const voiceFeedbackText = computed(() => (
+    voiceState.value === 'error' ? (voiceErrorText.value || '语音识别失败，请重试') : ''
+  ))
 
   const pickSupportedMimeType = (): string => {
     const MR = (window as unknown as { MediaRecorder?: typeof MediaRecorder }).MediaRecorder
@@ -121,6 +130,15 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceMediaRecorder = null
   }
 
+  const stopMediaStreamTracks = (stream: MediaStream | null | undefined) => {
+    if (!stream) return
+    try {
+      stream.getTracks().forEach((track) => track.stop())
+    } catch {
+      /* ignore */
+    }
+  }
+
   const extractMimeExtension = (mime: string): string => {
     const m = String(mime || '').toLowerCase()
     if (m.includes('webm')) return 'webm'
@@ -151,7 +169,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       }
       const text = String(data?.data?.text || '').trim()
       if (!text) {
-        setVoiceError('未识别到内容，请靠近麦克风再试')
+        setVoiceError('未识别到语音，请靠近麦克风后重试')
         return
       }
       const existing = (messageInput.value || '').trimEnd()
@@ -177,6 +195,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   const startVoiceRecording = async () => {
     if (voiceButtonDisabled.value) return
     if (voiceState.value === 'recording' || voiceState.value === 'transcribing') return
+    if (voicePendingStartToken !== null) return
 
     if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
       setVoiceError('当前浏览器不支持麦克风采集')
@@ -190,10 +209,17 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceCancelRequested = false
     voiceChunks = []
     voiceElapsedSecs.value = 0
+    const startToken = ++voiceStartToken
+    voicePendingStartToken = startToken
+    voicePendingReleaseRequested = false
+    voicePendingCancelRequested = false
 
+    let acquiredStream: MediaStream
     try {
-      voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      acquiredStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     } catch (err: unknown) {
+      if (voicePendingStartToken !== startToken) return
+      voicePendingStartToken = null
       const e = err as { name?: string; message?: string }
       const name = e?.name ? String(e.name) : ''
       if (name === 'NotAllowedError' || name === 'SecurityError') {
@@ -205,6 +231,18 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
       }
       return
     }
+
+    if (
+      voicePendingStartToken !== startToken
+      || voicePendingReleaseRequested
+      || voicePendingCancelRequested
+    ) {
+      stopMediaStreamTracks(acquiredStream)
+      if (voicePendingStartToken === startToken) voicePendingStartToken = null
+      return
+    }
+    voicePendingStartToken = null
+    voiceMediaStream = acquiredStream
 
     const mime = pickSupportedMimeType()
     voiceMimeType = mime
@@ -276,6 +314,15 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
   }
 
   const stopVoiceRecording = (cancel: boolean) => {
+    if (voicePendingStartToken !== null) {
+      voicePendingReleaseRequested = true
+      voicePendingCancelRequested = cancel
+      voicePendingStartToken = null
+      voiceCancelRequested = cancel
+      voiceChunks = []
+      voiceElapsedSecs.value = 0
+      return
+    }
     if (voiceState.value !== 'recording') return
     if (!voiceMediaRecorder) return
 
@@ -291,6 +338,10 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
 
   function cleanupVoiceInput() {
     resetVoiceTimers()
+    voiceStartToken += 1
+    voicePendingStartToken = null
+    voicePendingReleaseRequested = true
+    voicePendingCancelRequested = true
     if (voiceMediaRecorder && voiceMediaRecorder.state !== 'inactive') {
       try {
         voiceCancelRequested = true
@@ -312,6 +363,7 @@ export function useChatVoiceInput(deps: UseChatVoiceInputDeps) {
     voiceButtonIcon,
     voiceButtonText,
     voiceButtonTitle,
+    voiceFeedbackText,
     startVoiceRecording,
     stopVoiceRecording,
     cleanupVoiceInput,

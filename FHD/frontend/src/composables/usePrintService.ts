@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { resolveErpApiPath } from '@/utils/erpDomainPaths'
+import { apiFetch } from '@/utils/apiBase'
 
 export interface PrintResult {
   success: boolean
@@ -31,7 +32,7 @@ export function usePrintService() {
 
   async function printLabel(filePath: string, copies: number = 1): Promise<PrintResult> {
     try {
-      const resp = await fetch(resolveErpApiPath('/api/print/label'), {
+      const resp = await apiFetch(resolveErpApiPath('/api/print/label'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath, copies })
@@ -56,7 +57,7 @@ export function usePrintService() {
 
   async function printDocument(filePath: string): Promise<PrintResult> {
     try {
-      const resp = await fetch(resolveErpApiPath('/api/print/document'), {
+      const resp = await apiFetch(resolveErpApiPath('/api/print/document'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_path: filePath })
@@ -86,7 +87,7 @@ export function usePrintService() {
         payload.order_id = orderId
       }
 
-      const resp = await fetch(resolveErpApiPath('/api/shipment/print'), {
+      const resp = await apiFetch(resolveErpApiPath('/api/shipment/print'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

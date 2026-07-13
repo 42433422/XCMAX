@@ -5,31 +5,57 @@
         v-for="(msg, idx) in messages"
         :key="idx"
         :class="['message', msg.role]"
-        :style="{ minHeight: messageHeights.get(idx) ? messageHeights.get(idx) + 'px' : 'auto' }"
+        :style="{
+          minHeight: !isMessageCollapsed(msg, idx) && messageHeights.get(idx)
+            ? messageHeights.get(idx) + 'px'
+            : 'auto',
+        }"
       >
-        <div
-          class="message-html"
-          v-html="
-            msg.role === 'ai' ? sanitizeChatBubbleMarkdown(msg.content) : sanitizeChatBubbleHtml(msg.content)
-          "
-        ></div>
-        <div
-          v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
-          class="message-shipment-actions"
-        >
-          <a
-            class="btn btn-primary btn-sm"
-            :href="msg.shipmentDownloadUrl"
-            download
-            @click="$emit('shipment-download-click')"
+        <CollapsedMessagePreview
+          v-if="isMessageCollapsed(msg, idx)"
+          :preview="getCollapsedPreview(msg.content)"
+          expand-label="展开详情"
+          @expand="$emit('expand-message', idx)"
+        />
+        <template v-else>
+          <div
+            class="message-html"
+            v-html="
+              msg.role === 'ai'
+                ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content))
+                : sanitizeChatBubbleHtml(msg.content)
+            "
+          ></div>
+          <div
+            v-if="msg.role === 'ai' && msg.shipmentDownloadUrl"
+            class="message-shipment-actions"
           >
-            {{ $t('chat.downloadShipment') }}
-          </a>
-        </div>
-        <div v-if="msg.role === 'ai' && msg.contextSummary" class="context-summary">
+            <a
+              class="btn btn-primary btn-sm"
+              :href="msg.shipmentDownloadUrl"
+              download
+              @click="$emit('shipment-download-click')"
+            >
+              {{ $t('chat.downloadShipment') }}
+            </a>
+          </div>
+          <MessageCollapseLink
+            v-if="msg.role === 'ai' && idx < latestAiMessageIndex"
+            class="message-fold-action"
+            label="收起"
+            @collapse="$emit('collapse-message', idx)"
+          />
+        </template>
+        <div
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary"
+          class="context-summary"
+        >
           {{ msg.contextSummary }}
         </div>
-        <details v-if="msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
+        <details
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps"
+          class="thinking-panel"
+        >
           <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
           <pre>{{ msg.thinkingSteps }}</pre>
         </details>
@@ -45,7 +71,10 @@
           @confirm="$emit('approval-confirm')"
           @cancel="$emit('approval-cancel')"
         />
-        <div v-if="msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))" class="trace-panel">
+        <div
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
+          class="trace-panel"
+        >
           <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
           <div class="trace-stages">
             <span class="trace-chip">{{ $t('chat.traceThinking') }}</span>
@@ -105,7 +134,10 @@ import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
+import CollapsedMessagePreview from '@/components/chat/CollapsedMessagePreview.vue'
+import MessageCollapseLink from '@/components/chat/MessageCollapseLink.vue'
 
 useI18n()
 
@@ -121,6 +153,8 @@ const props = defineProps<{
   getCollapsedPreview: (htmlText: string) => string
   canSpeakMessage: (msg: ChatMessage) => boolean
   chatMessagesRef?: Ref<HTMLElement | null>
+  /** 默认不向普通用户暴露内部上下文计数；诊断界面可显式开启。 */
+  showDiagnosticMetadata?: boolean
 }>()
 
 defineEmits<{

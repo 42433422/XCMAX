@@ -9,7 +9,9 @@ import {
   buildChatMessagesKey,
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
-import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
+import { formatChatMessageTime } from '@/utils/chatTaskLabels'
+import type { ChatApprovalCard, UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -70,11 +72,230 @@ export function clearVoiceQueue() {
   stopSpeaking()
 }
 
-import type { UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
-
 /** UI 聊天消息（与 ApiChatMessage 不同：role 用 ai、时间字段为 time） */
 export type ChatMessage = UiChatMessage
 export type ChatMessageExtras = UiChatMessageExtras
+
+const CHAT_MESSAGE_SIDECAR_KEYS = [
+  'thinkingSteps',
+  'todoSteps',
+  'workflowAction',
+  'nodeResults',
+  'contextSummary',
+  'streamingShell',
+  'toolProgressLabel',
+  'downloadUrl',
+  'shipmentDownloadUrl',
+  'approvalCard',
+  'attachments',
+] as const
+
+function hasMeaningfulChatContent(raw: unknown): boolean {
+  const html = String(raw || '')
+  if (!html) return false
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .trim()
+    .length > 0
+}
+
+function sanitizeStringList(raw: unknown): string[] {
+  return asArray(raw).map((item) => asString(item).trim()).filter(Boolean)
+}
+
+function sanitizeApprovalCard(raw: unknown): ChatApprovalCard | undefined {
+  const row = asRecord(raw)
+  if (!Object.keys(row).length) return undefined
+
+  const statusRaw = asString(row.status).trim()
+  const status = statusRaw === 'confirmed' || statusRaw === 'cancelled' ? statusRaw : 'pending'
+  const approvalNodes = asArray(row.approval_nodes)
+    .map((item) => {
+      const node = asRecord(item)
+      const nodeId = asString(node.node_id).trim()
+      const toolId = asString(node.tool_id).trim()
+      const action = asString(node.action).trim()
+      if (!nodeId && !toolId && !action) return null
+      return {
+        ...(nodeId ? { node_id: nodeId } : {}),
+        ...(toolId ? { tool_id: toolId } : {}),
+        ...(action ? { action } : {}),
+      }
+    })
+    .filter((item): item is NonNullable<typeof item> => !!item)
+  const version = asNumber(row.version, 0)
+  const card: ChatApprovalCard = {
+    ...(version > 0 ? { version } : {}),
+    ...(['kind', 'plan_id', 'run_id', 'agent_run_id', 'intent', 'reason', 'confirm_mode'] as const)
+      .reduce<Partial<ChatApprovalCard>>((result, key) => {
+        const value = asString(row[key]).trim()
+        if (value) Object.assign(result, { [key]: value })
+        return result
+      }, {}),
+    ...(sanitizeStringList(row.blocking_nodes).length
+      ? { blocking_nodes: sanitizeStringList(row.blocking_nodes) }
+      : {}),
+    ...(approvalNodes.length ? { approval_nodes: approvalNodes } : {}),
+    ...(sanitizeStringList(row.approval_request_ids).length
+      ? { approval_request_ids: sanitizeStringList(row.approval_request_ids) }
+      : {}),
+    ...(sanitizeStringList(row.todo).length ? { todo: sanitizeStringList(row.todo) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(row, 'approval_required')
+      ? { approval_required: asBoolean(row.approval_required) }
+      : {}),
+    status,
+  }
+
+  const hasIdentity = !!(
+    card.kind
+    || card.plan_id
+    || card.run_id
+    || card.agent_run_id
+    || card.intent
+    || card.reason
+    || card.approval_nodes?.length
+    || card.approval_request_ids?.length
+    || card.todo?.length
+  )
+  return hasIdentity ? card : undefined
+}
+
+function sanitizeMessageExtras(row: Record<string, unknown>): ChatMessageExtras {
+  const extras: ChatMessageExtras = {}
+  if (asBoolean(row.streamingShell)) extras.streamingShell = true
+
+  const toolProgressLabel = asString(row.toolProgressLabel).trim()
+  if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
+
+  const downloadUrl = asString(row.downloadUrl).trim()
+  if (downloadUrl) extras.downloadUrl = downloadUrl
+
+  const shipmentDownloadUrl = asString(row.shipmentDownloadUrl).trim()
+  if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
+
+  const thinkingSteps = asString(row.thinkingSteps).trim()
+  if (thinkingSteps) extras.thinkingSteps = thinkingSteps
+
+  const workflowAction = asString(row.workflowAction).trim()
+  if (workflowAction) extras.workflowAction = workflowAction
+
+  const todoSteps = sanitizeStringList(row.todoSteps)
+  if (todoSteps.length) extras.todoSteps = todoSteps
+
+  const nodeResults = asArray(row.nodeResults)
+    .map((raw) => {
+      const node = asRecord(raw)
+      const nodeId = asString(node.node_id).trim()
+      const toolId = asString(node.tool_id).trim()
+      const action = asString(node.action).trim()
+      if (!nodeId && !toolId && !action) return null
+      const result: NonNullable<ChatMessageExtras['nodeResults']>[number] = {
+        node_id: nodeId,
+        tool_id: toolId,
+        action,
+        success: asBoolean(node.success),
+      }
+      for (const key of ['error', 'message', 'output_preview', 'recovery_hint'] as const) {
+        const value = asString(node[key]).trim()
+        if (value) result[key] = value
+      }
+      for (const key of ['retries', 'duration_ms'] as const) {
+        const value = asNumber(node[key], Number.NaN)
+        if (Number.isFinite(value)) result[key] = value
+      }
+      if (Object.prototype.hasOwnProperty.call(node, 'retryable')) {
+        result.retryable = asBoolean(node.retryable)
+      }
+      return result
+    })
+    .filter((node): node is NonNullable<ChatMessageExtras['nodeResults']>[number] => !!node)
+  if (nodeResults.length) extras.nodeResults = nodeResults
+
+  const attachments = asArray(row.attachments)
+    .map((item) => asRecord(item))
+    .filter((item) => Object.keys(item).length > 0)
+  if (attachments.length) extras.attachments = attachments
+
+  const contextSummary = asString(row.contextSummary).trim()
+  if (contextSummary) extras.contextSummary = contextSummary
+
+  const approvalCard = sanitizeApprovalCard(row.approvalCard)
+  if (approvalCard) extras.approvalCard = approvalCard
+
+  return extras
+}
+
+function hasRenderableSidecar(row: Record<string, unknown>): boolean {
+  return Object.keys(sanitizeMessageExtras(row)).length > 0
+}
+
+/** Whitelist and normalize persisted UI messages without discarding structured result cards. */
+export function sanitizeChatMessagesList(rawList: unknown[]): ChatMessage[] {
+  return (Array.isArray(rawList) ? rawList : [])
+    .map((msg: unknown) => {
+      const row = asRecord(msg)
+      const roleRaw = asString(row.role)
+      const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
+      const content = asString(row.content)
+      if (!hasMeaningfulChatContent(content) && !hasRenderableSidecar(row)) return null
+      return {
+        role,
+        content,
+        time: asString(row.time).trim()
+          || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+        ...sanitizeMessageExtras(row),
+      } as ChatMessage
+    })
+    .filter((message): message is ChatMessage => !!message)
+}
+
+export function pickChatMessageSidecars(message: ChatMessage): ChatMessageExtras {
+  const result: ChatMessageExtras = {}
+  for (const key of CHAT_MESSAGE_SIDECAR_KEYS) {
+    const value = message[key]
+    if (value !== undefined) Object.assign(result, { [key]: value })
+  }
+  return result
+}
+
+function comparableMessageText(raw: unknown): string {
+  return String(raw || '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(nbsp|#160);/gi, ' ')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Overlay local-only UI result cards onto the durable server transcript. */
+export function mergeChatMessageSidecars(
+  serverMessages: ChatMessage[],
+  cachedMessages: ChatMessage[],
+): ChatMessage[] {
+  const server = sanitizeChatMessagesList(serverMessages)
+  const cached = sanitizeChatMessagesList(cachedMessages)
+  const consumed = new Set<number>()
+
+  return server.map((message) => {
+    const targetText = comparableMessageText(message.content)
+    const matchIndex = cached.findIndex((candidate, index) => (
+      !consumed.has(index)
+      && candidate.role === message.role
+      && comparableMessageText(candidate.content) === targetText
+      && Object.keys(pickChatMessageSidecars(candidate)).length > 0
+    ))
+    if (matchIndex < 0) return message
+    consumed.add(matchIndex)
+    return { ...message, ...pickChatMessageSidecars(cached[matchIndex]) }
+  })
+}
 
 export function useChatMessages(sessionId: Ref<string>) {
   const modsStore = useModsStore()
@@ -104,7 +325,7 @@ export function useChatMessages(sessionId: Ref<string>) {
       if (!raw) return getDefaultWelcome()
       const parsed = JSON.parse(raw)
       if (!Array.isArray(parsed) || !parsed.length) return getDefaultWelcome()
-      const sanitized = sanitizeMessagesList(parsed)
+      const sanitized = sanitizeChatMessagesList(parsed)
       if (!sanitized.length) return getDefaultWelcome()
       if (isWelcomeMessage(sanitized[0]) && /<[a-z]+[\s>]/i.test(sanitized[0].content)) {
         sanitized[0] = getDefaultWelcome()[0]
@@ -117,7 +338,7 @@ export function useChatMessages(sessionId: Ref<string>) {
 
   function persistMessagesCache(): void {
     try {
-      const sanitized = sanitizeMessagesList(messages.value)
+      const sanitized = sanitizeChatMessagesList(messages.value)
       if (sanitized.length !== messages.value.length) {
         messages.value = sanitized
       }
@@ -129,7 +350,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   const messages = ref<ChatMessage[]>(readCachedMessages())
-  const bootSanitized = sanitizeMessagesList(messages.value)
+  const bootSanitized = sanitizeChatMessagesList(messages.value)
   if (bootSanitized.length !== messages.value.length) {
     messages.value = bootSanitized.length ? bootSanitized : getDefaultWelcome()
     try {
@@ -148,86 +369,7 @@ export function useChatMessages(sessionId: Ref<string>) {
     return div.innerHTML
   }
 
-  function hasMeaningfulContent(raw: unknown): boolean {
-    const html = String(raw || '')
-    if (!html) return false
-    const text = html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
-    return text.length > 0
-  }
-
-  function hasRenderableSidecar(row: Record<string, unknown>): boolean {
-    if (asBoolean(row.streamingShell)) return true
-    if (asString(row.toolProgressLabel).trim()) return true
-    if (asString(row.downloadUrl).trim()) return true
-    if (asString(row.shipmentDownloadUrl).trim()) return true
-    if (asString(row.thinkingSteps).trim()) return true
-    if (asString(row.workflowAction).trim()) return true
-    if (asArray(row.todoSteps).length) return true
-    if (asArray(row.nodeResults).length) return true
-    if (row.contextSummary != null && String(row.contextSummary).trim()) return true
-    return false
-  }
-
-  function sanitizeMessageExtras(row: Record<string, unknown>): ChatMessageExtras {
-    const extras: ChatMessageExtras = {}
-    if (asBoolean(row.streamingShell)) extras.streamingShell = true
-
-    const toolProgressLabel = asString(row.toolProgressLabel).trim()
-    if (toolProgressLabel) extras.toolProgressLabel = toolProgressLabel
-
-    const downloadUrl = asString(row.downloadUrl).trim()
-    if (downloadUrl) extras.downloadUrl = downloadUrl
-
-    const shipmentDownloadUrl = asString(row.shipmentDownloadUrl).trim()
-    if (shipmentDownloadUrl) extras.shipmentDownloadUrl = shipmentDownloadUrl
-
-    const thinkingSteps = asString(row.thinkingSteps).trim()
-    if (thinkingSteps) extras.thinkingSteps = thinkingSteps
-
-    const workflowAction = asString(row.workflowAction).trim()
-    if (workflowAction) extras.workflowAction = workflowAction
-
-    const todoSteps = asArray(row.todoSteps)
-      .map((step) => asString(step).trim())
-      .filter(Boolean)
-    if (todoSteps.length) extras.todoSteps = todoSteps
-
-    const nodeResults = asArray(row.nodeResults)
-      .map((raw) => {
-        const node = asRecord(raw)
-        const nodeId = asString(node.node_id).trim()
-        const toolId = asString(node.tool_id).trim()
-        const action = asString(node.action).trim()
-        if (!nodeId && !toolId && !action) return null
-        const result: NonNullable<ChatMessageExtras['nodeResults']>[number] = {
-          node_id: nodeId,
-          tool_id: toolId,
-          action,
-          success: asBoolean(node.success),
-        }
-        const error = asString(node.error).trim()
-        if (error) result.error = error
-        return result
-      })
-      .filter((node): node is NonNullable<ChatMessageExtras['nodeResults']>[number] => !!node)
-    if (nodeResults.length) extras.nodeResults = nodeResults
-
-    const attachments = asArray(row.attachments)
-      .map((item) => asRecord(item))
-      .filter((item) => Object.keys(item).length > 0)
-    if (attachments.length) extras.attachments = attachments
-
-    const contextSummary = asString(row.contextSummary).trim()
-    if (contextSummary) {
-      extras.contextSummary = contextSummary
-    }
-
-    return extras
-  }
+  const hasMeaningfulContent = hasMeaningfulChatContent
 
   function toPlainText(raw: unknown): string {
     return String(raw || '')
@@ -269,28 +411,6 @@ export function useChatMessages(sessionId: Ref<string>) {
     } catch {
       // ignore storage errors
     }
-  }
-
-  function sanitizeMessagesList(rawList: unknown[]): ChatMessage[] {
-    return (Array.isArray(rawList) ? rawList : [])
-      .map((msg: unknown) => {
-        const row = asRecord(msg)
-        const roleRaw = asString(row.role)
-        const role = (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai'
-        const content = asString(row.content)
-        const streamingShell = asBoolean(row.streamingShell)
-        const toolProgressLabel = asString(row.toolProgressLabel).trim()
-        if (!hasMeaningfulContent(content) && !streamingShell && !toolProgressLabel) return null
-        return {
-          role,
-          content,
-          time: asString(row.time).trim()
-            || new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
-          ...(streamingShell ? { streamingShell: true } : {}),
-          ...(toolProgressLabel ? { toolProgressLabel } : {}),
-        } as ChatMessage
-      })
-      .filter((m): m is ChatMessage => !!m)
   }
 
   function normalizeServerContentToHtml(raw: unknown): string {
@@ -375,13 +495,20 @@ export function useChatMessages(sessionId: Ref<string>) {
     persistMessagesCache()
   }
 
+  function patchMessageAtIndex(index: number, patch: ChatMessageExtras): void {
+    const row = messages.value[index]
+    if (!row) return
+    Object.assign(row, patch)
+    persistMessagesCache()
+  }
+
   function clearMessages() {
     messages.value = []
     persistMessagesCache()
   }
 
   function loadMessages(newMessages: ChatMessage[]) {
-    messages.value = sanitizeMessagesList(newMessages)
+    messages.value = sanitizeChatMessagesList(newMessages)
     persistMessagesCache()
   }
 
@@ -400,10 +527,12 @@ export function useChatMessages(sessionId: Ref<string>) {
         return {
           role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
           content: normalizeServerContentToHtml(row.content),
-          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          time: formatChatMessageTime(
+            row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
+          ),
         }
       })
-      const sanitized = sanitizeMessagesList(mapped)
+      const sanitized = mergeChatMessageSidecars(mapped, messages.value)
       if (!sanitized.length) return false
       loadMessages(sanitized)
       return true
@@ -436,6 +565,8 @@ export function useChatMessages(sessionId: Ref<string>) {
     addAndSaveMessage,
     pushStreamingAiShell,
     applyPlainTextToMessageIndex,
+    patchMessageAtIndex,
+    persistMessagesCache,
     clearMessages,
     loadMessages,
     syncFromServer,

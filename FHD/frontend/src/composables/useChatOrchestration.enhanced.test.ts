@@ -12,6 +12,12 @@ import { setActivePinia, createPinia } from 'pinia'
 
 // ── Mocks ──────────────────────────────────────────────────
 
+const { mockAppAlert } = vi.hoisted(() => ({
+  mockAppAlert: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/utils/appDialog', () => ({ appAlert: mockAppAlert }))
+
 vi.mock('./useChatMessages', async () => {
   const { ref } = await import('vue')
   return {
@@ -142,6 +148,10 @@ vi.mock('./useChatExcelContext', () => ({
     excelSheetOptions: ref([]),
     injectExcelContextPayload: vi.fn((p: unknown) => p),
     consumeMultimodalIntoPlannerContext: vi.fn(),
+    acknowledgeMultimodalRequest: vi.fn(),
+    activateSessionContext: vi.fn(),
+    clearSessionContext: vi.fn(),
+    clearAllSessionContexts: vi.fn(),
     onMultimodalFileChange: vi.fn(),
   }),
 }))
@@ -371,6 +381,31 @@ describe('useChatOrchestration – confirmTask', () => {
     await api.confirmTask()
     expect(api.currentTask.value).toBeNull()
   })
+
+  it('uses the CSRF-aware API client when confirming a mutating task', async () => {
+    document.cookie = 'csrf_token=confirm-csrf'
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ success: true, message: '任务完成' }),
+    } as Response)
+    const api = createApi()
+    api.currentTask.value = {
+      type: 'other',
+      api_url: '/api/tasks/confirm',
+      method: 'POST',
+      payload: { task_id: 'task-1' },
+    }
+
+    await api.confirmTask()
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [, init] = fetchSpy.mock.calls[0]
+    expect(init?.credentials).toBe('include')
+    expect((init?.headers as Record<string, string>)['X-CSRF-Token']).toBe('confirm-csrf')
+    expect(JSON.parse(String(init?.body))).toEqual({ task_id: 'task-1' })
+    fetchSpy.mockRestore()
+  })
 })
 
 describe('useChatOrchestration – showTaskConfirm', () => {
@@ -475,6 +510,17 @@ describe('useChatOrchestration – sendMessage', () => {
     expect(mockRequestChatByModeWithTimeout).toHaveBeenCalled()
   })
 
+  it('keeps the employee quick action on the normal chat route', async () => {
+    mockRequestChatByModeWithTimeout.mockClear()
+    vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue(null)
+    const api = createApi()
+
+    await api.sendMessage('查询工号1001的员工信息')
+
+    expect(productsApi.searchProducts).not.toHaveBeenCalled()
+    expect(mockRequestChatByModeWithTimeout).toHaveBeenCalled()
+  })
+
   it('uses product fast path when keyword extracted', async () => {
     mockRequestChatByModeWithTimeout.mockClear()
     vi.mocked(extractLikelyProductQueryKeyword).mockReturnValue('5003A')
@@ -500,9 +546,17 @@ describe('useChatOrchestration – sendMessage', () => {
 })
 
 describe('useChatOrchestration – copyAssistantPushContent', () => {
+  let writeText: ReturnType<typeof vi.fn>
+
   beforeEach(() => {
     setActivePinia(createPinia())
     localStorage.clear()
+    mockAppAlert.mockClear()
+    writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    })
   })
 
   it('does nothing when no push content', async () => {
@@ -512,11 +566,24 @@ describe('useChatOrchestration – copyAssistantPushContent', () => {
     expect(api.pushCopied.value).toBe(false)
   })
 
-  it('sets pushCopied when content exists', async () => {
+  it('writes the push text to the system clipboard before showing success', async () => {
     const api = createApi()
     api.latestAssistantPush.value = { title: '测试', description: '描述' }
     await api.copyAssistantPushContent()
+    expect(writeText).toHaveBeenCalledWith('测试\n描述')
     expect(api.pushCopied.value).toBe(true)
+    expect(mockAppAlert).not.toHaveBeenCalled()
+  })
+
+  it('shows the real clipboard error and does not claim success', async () => {
+    writeText.mockRejectedValueOnce(new Error('clipboard permission denied'))
+    const api = createApi()
+    api.latestAssistantPush.value = { title: '测试', description: '描述' }
+
+    await api.copyAssistantPushContent()
+
+    expect(api.pushCopied.value).toBe(false)
+    expect(mockAppAlert).toHaveBeenCalledWith('复制失败：clipboard permission denied')
   })
 })
 

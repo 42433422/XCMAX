@@ -50,6 +50,83 @@ describe('useExcelAnalysis - extended', () => {
     expect(api.excelAnalyzeUploading.value).toBe(false)
   })
 
+  it('keeps multimodal files available until the callback snapshots them', async () => {
+    const api = useExcelAnalysis(makeMessages())
+    const file = new File(['image'], 'test.png', { type: 'image/png' })
+    let liveFiles: File[] = [file]
+    let inputValue = '/fake/test.png'
+    const input = {
+      get files() { return liveFiles },
+      get value() { return inputValue },
+      set value(next: string) {
+        inputValue = next
+        if (!next) liveFiles = []
+      },
+    } as unknown as HTMLInputElement
+    const cb = vi.fn(async (event: Event) => {
+      expect((event.target as HTMLInputElement).files?.[0]).toBe(file)
+    })
+    api.setOnMultimodalFileChangeCallback(cb)
+
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(cb).toHaveBeenCalledOnce()
+    expect(input.value).toBe('')
+  })
+
+  it('routes every file in a mixed multi-select without silently dropping attachments or workbooks', async () => {
+    vi.mocked(global.fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        success: true,
+        fields: [],
+        preview_data: {
+          sheet_name: 'Sheet1',
+          grid_preview: { rows: [] },
+          grid_style_cache: { styles: {}, cell_style_refs: {} },
+          tables: [],
+        },
+      }),
+    } as Response)
+    const onAnalyzeStart = vi.fn()
+    const api = useExcelAnalysis(makeMessages(), { onAnalyzeStart })
+    const routedAttachments: File[] = []
+    api.setOnMultimodalFileChangeCallback(async (event) => {
+      routedAttachments.push(...Array.from((event.target as HTMLInputElement).files || []))
+    })
+
+    const firstWorkbook = new File(['first'], 'first.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    const image = new File(['image'], 'photo.png', { type: 'image/png' })
+    const secondWorkbook = new File(['second'], 'second.xlsm', {
+      type: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+    })
+    const pdf = new File(['pdf'], 'notes.pdf', { type: 'application/pdf' })
+    let liveFiles: File[] = [firstWorkbook, image, secondWorkbook, pdf]
+    let inputValue = '/fake/multiple'
+    const input = {
+      get files() { return liveFiles },
+      get value() { return inputValue },
+      set value(next: string) {
+        inputValue = next
+        if (!next) liveFiles = []
+      },
+    } as unknown as HTMLInputElement
+
+    await api.onExcelAnalyzeFileChange({ target: input } as unknown as Event)
+
+    expect(routedAttachments.map((file) => file.name)).toEqual(['photo.png', 'notes.pdf'])
+    expect(onAnalyzeStart.mock.calls.map(([payload]) => payload.fileName)).toEqual([
+      'first.xlsx',
+      'second.xlsm',
+    ])
+    expect(global.fetch).toHaveBeenCalledTimes(2)
+    expect(input.value).toBe('')
+    expect(api.excelAnalyzeUploading.value).toBe(false)
+  })
+
   it('onExcelAnalyzeFileChange ignores when no file', async () => {
     const api = useExcelAnalysis(makeMessages())
     const input = { files: [], value: '' } as unknown as HTMLInputElement

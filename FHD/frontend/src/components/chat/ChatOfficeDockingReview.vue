@@ -35,15 +35,20 @@
           <span v-for="field in item.fieldNames.slice(0, 12)" :key="field">{{ field }}</span>
         </div>
 
-        <pre v-if="item.sampleRows.length" class="office-docking-review__preview">{{ samplePreview(item) }}</pre>
-        <pre v-else-if="item.textPreview" class="office-docking-review__preview">{{ item.textPreview }}</pre>
+        <p v-if="previewSnippet(item)" class="office-docking-review__preview-snippet">
+          {{ previewSnippet(item) }}
+        </p>
+        <details v-if="hasDetailedPreview(item)" class="office-docking-review__preview-details">
+          <summary>{{ item.sampleRows.length ? '查看样例数据' : '查看原文摘录' }}</summary>
+          <pre class="office-docking-review__preview">{{ detailedPreview(item) }}</pre>
+        </details>
 
         <div class="office-docking-review__targets">
           <label>
             <input
               type="checkbox"
               :checked="item.selectedKnowledge"
-              :disabled="item.status !== 'ready' || item.commitStatus === 'committing'"
+              :disabled="item.status !== 'ready' || item.commitStatus === 'committing' || item.commitStatus === 'committed' || item.commitStatus === 'approval_pending'"
               @change="onToggle(item.id, 'knowledge', $event)"
             >
             入知识库
@@ -52,7 +57,7 @@
             <input
               type="checkbox"
               :checked="item.selectedDatabase"
-              :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing'"
+              :disabled="!item.excelAnalysis || !item.databaseAction || item.status !== 'ready' || item.commitStatus === 'committing' || item.commitStatus === 'committed' || item.commitStatus === 'approval_pending'"
               @change="onToggle(item.id, 'database', $event)"
             >
             入数据库{{ item.databaseTargetLabel ? `（${item.databaseTargetLabel}）` : '' }}
@@ -65,14 +70,15 @@
     </div>
 
     <footer class="office-docking-review__foot">
+      <span class="office-docking-review__selection-hint">{{ selectionHint }}</span>
       <button type="button" class="btn" @click="$emit('close')">取消</button>
       <button
         type="button"
         class="btn btn-primary"
-        :disabled="processing || !readyCount || committing"
+        :disabled="processing || !selectedReadyCount || committing"
         @click="$emit('confirm')"
       >
-        {{ committing ? '提交中...' : '确认入库' }}
+        {{ confirmLabel }}
       </button>
     </footer>
   </section>
@@ -93,11 +99,50 @@ const emit = defineEmits<{
   toggleTarget: [id: string, target: 'knowledge' | 'database', enabled: boolean]
 }>()
 
-const readyCount = computed(() => props.items.filter((item) => item.status === 'ready').length)
+const readyCount = computed(() => props.items.filter((item) => (
+  item.status === 'ready'
+  && item.commitStatus !== 'committed'
+  && item.commitStatus !== 'approval_pending'
+)).length)
 const committing = computed(() => props.items.some((item) => item.commitStatus === 'committing'))
+const selectedReadyItems = computed(() => props.items.filter((item) => (
+  item.status === 'ready'
+  && item.commitStatus !== 'committed'
+  && item.commitStatus !== 'committing'
+  && item.commitStatus !== 'approval_pending'
+  && (item.selectedKnowledge || item.selectedDatabase)
+)))
+const selectedReadyCount = computed(() => selectedReadyItems.value.length)
+
+const databaseTargets = computed(() => [...new Set(
+  selectedReadyItems.value
+    .filter((item) => item.selectedDatabase)
+    .map((item) => item.databaseTargetLabel || '业务数据库'),
+)])
+const hasKnowledgeTarget = computed(() => selectedReadyItems.value.some((item) => item.selectedKnowledge))
+
+const selectionHint = computed(() => {
+  if (!selectedReadyCount.value) return '请选择至少一种处理方式'
+  const targets: string[] = []
+  if (hasKnowledgeTarget.value) targets.push('知识库')
+  targets.push(...databaseTargets.value)
+  const base = `将写入：${targets.join('、')}`
+  return databaseTargets.value.length ? base : `${base}；不会修改业务数据库`
+})
+
+const confirmLabel = computed(() => {
+  if (committing.value) return '正在提交...'
+  if (!selectedReadyCount.value) return '请选择处理方式'
+  if (hasKnowledgeTarget.value && !databaseTargets.value.length) return '确认加入知识库'
+  if (!hasKnowledgeTarget.value && databaseTargets.value.length === 1) {
+    return `确认写入${databaseTargets.value[0]}`
+  }
+  return '确认按所选方式写入'
+})
 
 function statusText(item: ChatOfficeDockingReviewItem): string {
   if (item.commitStatus === 'committed') return '已提交'
+  if (item.commitStatus === 'approval_pending') return '待确认/审批'
   if (item.commitStatus === 'failed') return '提交失败'
   if (item.commitStatus === 'committing') return '提交中'
   if (item.status === 'running') return '识别中'
@@ -111,6 +156,34 @@ function samplePreview(item: ChatOfficeDockingReviewItem): string {
   } catch {
     return ''
   }
+}
+
+function normalizedTextPreview(item: ChatOfficeDockingReviewItem): string {
+  return String(item.textPreview || '').replace(/\s+/g, ' ').trim()
+}
+
+function previewSnippet(item: ChatOfficeDockingReviewItem): string {
+  if (item.sampleRows.length) {
+    const first = item.sampleRows[0]
+    const cells = Object.entries(first)
+      .slice(0, 6)
+      .map(([key, value]) => `${key}：${String(value ?? '')}`)
+    const rowLabel = item.rowCount ? `共 ${item.rowCount} 行` : `已读取 ${item.sampleRows.length} 行样例`
+    return `${rowLabel}${cells.length ? `；首行 ${cells.join('，')}` : ''}`
+  }
+  const text = normalizedTextPreview(item)
+  if (!text) return ''
+  return text.length > 220 ? `${text.slice(0, 220)}…` : text
+}
+
+function detailedPreview(item: ChatOfficeDockingReviewItem): string {
+  if (item.sampleRows.length) return samplePreview(item)
+  return String(item.textPreview || '').trim()
+}
+
+function hasDetailedPreview(item: ChatOfficeDockingReviewItem): boolean {
+  if (item.sampleRows.length) return true
+  return normalizedTextPreview(item).length > 220
 }
 
 function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
@@ -147,7 +220,8 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
 .office-docking-review__meta span,
 .office-docking-review__summary,
 .office-docking-review__intent,
-.office-docking-review__hint {
+.office-docking-review__hint,
+.office-docking-review__selection-hint {
   color: var(--app-text-muted, #667085);
   font-size: var(--app-font-size-caption, 12px);
 }
@@ -219,6 +293,26 @@ function onToggle(id: string, target: 'knowledge' | 'database', event: Event) {
   background: var(--app-muted-bg, #f6f8fb);
   font-size: 12px;
   white-space: pre-wrap;
+}
+
+.office-docking-review__preview-snippet {
+  margin: 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--app-muted-bg, #f6f8fb);
+  color: var(--app-text, #111827);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.office-docking-review__preview-details summary {
+  color: var(--app-interactive, #175cd3);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.office-docking-review__selection-hint {
+  margin-right: auto;
 }
 
 .office-docking-review__targets label {
