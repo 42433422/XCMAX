@@ -10,6 +10,7 @@ import {
   buildChatSessionMetaKey,
 } from '@/utils/chatStorageKeys'
 import { asRecord, asArray, asString, asBoolean } from '@/utils/typeGuards'
+import { formatChatMessageTime } from '@/utils/chatTaskLabels'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
 const VOICE_PLAY_TIMEOUT_MS = 30_000
@@ -400,7 +401,9 @@ export function useChatMessages(sessionId: Ref<string>) {
         return {
           role: (roleRaw === 'user' || roleRaw === 'task') ? roleRaw : 'ai',
           content: normalizeServerContentToHtml(row.content),
-          time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+          time: formatChatMessageTime(
+            row.time ?? row.timestamp ?? row.created_at ?? row.createdAt ?? row.updated_at,
+          ),
         }
       })
       const sanitized = sanitizeMessagesList(mapped)

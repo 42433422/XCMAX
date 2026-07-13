@@ -637,9 +637,12 @@ function stopEntitlementSyncPolling() {
 
 function startEntitlementSyncPolling() {
   if (!shouldShowEntitlementSyncStatus.value || entitlementSyncPollTimer != null) return
-  void refreshEntitlementSyncStatus({ pull: true })
+  // 权益快照由服务器主动推送到本机；侧边栏轮询只读本地快照。
+  // 旧逻辑每 30 秒强制访问远端同步端口，离线部署会持续产生连接失败日志，
+  // 同时把“本地状态读取”错误地变成了外网依赖。
+  void refreshEntitlementSyncStatus()
   entitlementSyncPollTimer = window.setInterval(() => {
-    void refreshEntitlementSyncStatus({ pull: true })
+    void refreshEntitlementSyncStatus()
   }, 30_000)
 }
 

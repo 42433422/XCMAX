@@ -7,6 +7,7 @@
     "retry": "Retry",
     "refresh": "Refresh",
     "clear": "Clear",
+    "closeHistory": "Close chat history",
     "current": "Current",
     "newSession": "New session",
     "messageCount": "{count} messages",
@@ -71,6 +72,10 @@
     "ttsToggle": "Voice playback",
     "ttsTitle": "AI replies will be read aloud when enabled",
     "uploadTitle": "Upload Excel, image, or PDF",
+    "uploadAttachment": "Upload attachment",
+    "officeDocking": "Parse office file",
+    "officeDockingBusy": "Parsing file",
+    "officeDockingTitle": "Read Word, Excel, CSV, PDF, or PPT and review before saving",
     "newConversationTitle": "New conversation",
     "historyTitleBtn": "History"
   }

@@ -197,7 +197,6 @@ function stopQrPoll() {
 
 async function completeLoginSuccess(raw: Record<string, unknown>) {
   clearHostPackSkippedSession();
-  await applyMarketTokensAfterFhdLogin(raw);
   accountProfileStore.applyFromLoginPayload(raw);
   // SSOT：桌面壳禁止管理员会话（派生 account_kind=admin 时拒入）
   if (isDesktopShell() && accountProfileStore.isAdminAccount) {
@@ -214,24 +213,33 @@ async function completeLoginSuccess(raw: Record<string, unknown>) {
       ? (raw.data as Record<string, unknown>)
       : raw;
   const accountUsername = String(loginUser?.username || username.value || phone.value || '').trim();
-  if (isEnterpriseEdition.value) {
-    try {
-      const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods');
-      const entitled = readEntitledModIdsFromAuthPayload(raw);
-      await useModsStore().initialize(true, {
-        entitledModIds: entitled,
-        forceFromEntitlements: entitled.length > 0,
-        accountUsername,
-      });
-    } catch (modErr) {
-      console.warn('[Login] mods refresh after auth:', modErr);
-    }
-  }
   await router.replace(
     isAdminConsoleSpa() && (redirectPath.value === '/' || !redirectPath.value)
       ? `/${ADMIN_OPERATOR_HOME_ROUTE}`
       : redirectPath.value,
   );
+
+  // Token handoff and MOD discovery are optional post-login bootstrap work.
+  // They must never hold the login button in "正在登录" or delay the first
+  // usable ERP screen when the market/MOD service is slow or offline.
+  void applyMarketTokensAfterFhdLogin(raw).catch((marketErr) => {
+    console.warn('[Login] market token handoff after auth:', marketErr);
+  });
+  if (isEnterpriseEdition.value) {
+    void (async () => {
+      try {
+        const { readEntitledModIdsFromAuthPayload, useModsStore } = await import('@/stores/mods');
+        const entitled = readEntitledModIdsFromAuthPayload(raw);
+        await useModsStore().initialize(true, {
+          entitledModIds: entitled,
+          forceFromEntitlements: entitled.length > 0,
+          accountUsername,
+        });
+      } catch (modErr) {
+        console.warn('[Login] mods refresh after auth:', modErr);
+      }
+    })();
+  }
 }
 
 function startOidcLogin() {
