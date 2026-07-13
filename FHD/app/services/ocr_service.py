@@ -14,6 +14,10 @@ from typing import Any
 
 import numpy as np
 
+from app.infrastructure.ocr.macos_vision import (
+    is_macos_vision_available,
+    recognize_macos_vision,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,7 @@ class OCRService:
         self.use_gpu = use_gpu
         self.reader = None
         self.tesseract_available = False
+        self.macos_vision_available = False
         self._paddle_enabled = False
         self._init_engines()
 
@@ -70,10 +75,18 @@ class OCRService:
         if backend in ("auto", "easyocr") and not self._paddle_enabled:
             self._init_easyocr()
 
+        if backend in ("auto", "macos_vision") and not self._paddle_enabled and self.reader is None:
+            self.macos_vision_available = is_macos_vision_available()
+
         if backend in ("auto", "tesseract") and not self._paddle_enabled and self.reader is None:
             self._init_tesseract()
 
-        if not self._paddle_enabled and self.reader is None and not self.tesseract_available:
+        if (
+            not self._paddle_enabled
+            and self.reader is None
+            and not getattr(self, "macos_vision_available", False)
+            and not self.tesseract_available
+        ):
             self._init_tesseract()
 
     def _init_easyocr(self) -> None:
@@ -110,7 +123,12 @@ class OCRService:
         Returns:
             识别出的文字
         """
-        if not self._paddle_enabled and self.reader is None and not self.tesseract_available:
+        if (
+            not self._paddle_enabled
+            and self.reader is None
+            and not getattr(self, "macos_vision_available", False)
+            and not self.tesseract_available
+        ):
             logger.error("OCR引擎未初始化")
             return ""
 
@@ -133,6 +151,9 @@ class OCRService:
                 results = self.reader.readtext(image_array, detail=0)
                 text = "\n".join(results)
                 return self._clean_text(text)
+
+            if getattr(self, "macos_vision_available", False):
+                return recognize_macos_vision(image_array, cleaner=self._clean_text)
 
             if self.tesseract_available:
                 from PIL import Image
@@ -303,6 +324,8 @@ class OCRService:
             return "paddleocr"
         if self.reader is not None:
             return "easyocr"
+        if getattr(self, "macos_vision_available", False):
+            return "macos_vision"
         if self.tesseract_available:
             return "tesseract"
         return "none"
