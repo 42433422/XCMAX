@@ -11,6 +11,7 @@ import {
 } from '@/utils/chatStorageKeys'
 import { asRecord, asArray, asString, asBoolean, asNumber } from '@/utils/typeGuards'
 import { formatChatMessageTime } from '@/utils/chatTaskLabels'
+import { plainTextFromHtml } from '@/utils/htmlPlainText'
 import type { ChatApprovalCard, UiChatMessage, UiChatMessageExtras } from '@/types/chat-ui'
 
 const WELCOME_MESSAGE_PREFIX = '您好！我是您的'
@@ -50,10 +51,7 @@ async function playNextVoice() {
 export function queueVoice(text: string) {
   // 去除 HTML 标签和标点符号，只保留纯文本用于语音
   const plainText = cleanTextForSpeech(
-    String(text || '')
-      .replace(/<br\s*\/?>/gi, ' ')
-      .replace(/<[^>]*>/g, ' ')
-      .replace(/&nbsp;/gi, ' ')
+    plainTextFromHtml(text)
       .replace(/\s+/g, ' ')
       .trim()
   )
@@ -91,14 +89,7 @@ const CHAT_MESSAGE_SIDECAR_KEYS = [
 ] as const
 
 function hasMeaningfulChatContent(raw: unknown): boolean {
-  const html = String(raw || '')
-  if (!html) return false
-  return html
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim()
-    .length > 0
+  return plainTextFromHtml(raw).trim().length > 0
 }
 
 function sanitizeStringList(raw: unknown): string[] {
@@ -261,15 +252,7 @@ export function pickChatMessageSidecars(message: ChatMessage): ChatMessageExtras
 }
 
 function comparableMessageText(raw: unknown): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&(nbsp|#160);/gi, ' ')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&')
+  return plainTextFromHtml(raw)
     .replace(/\s+/g, ' ')
     .trim()
 }
@@ -372,11 +355,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   const hasMeaningfulContent = hasMeaningfulChatContent
 
   function toPlainText(raw: unknown): string {
-    return String(raw || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
+    return plainTextFromHtml(raw).trim()
   }
 
   function isWelcomeMessage(msg: Pick<ChatMessage, 'role' | 'content'>): boolean {

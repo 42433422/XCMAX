@@ -1,5 +1,6 @@
 import type { Ref } from 'vue'
 import { sanitizeChatMessagesList, type ChatMessage } from './useChatMessages'
+import { plainTextFromHtml } from '@/utils/htmlPlainText'
 import type { ShipmentTask } from './useShipmentTask'
 import {
   CHAT_MESSAGES_STORAGE_PREFIX,
@@ -239,11 +240,7 @@ export function clearPersistedTaskPanelState(sessionKey: string): void {
 export const TASK_HISTORY_LIMIT = 20
 
 export function toPlainText(raw: unknown): string {
-  return String(raw || '')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/gi, ' ')
-    .trim()
+  return plainTextFromHtml(raw).trim()
 }
 
 export function isWelcomeMessage(msg: { role?: unknown; content?: unknown }): boolean {

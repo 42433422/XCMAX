@@ -4,6 +4,7 @@ import type { MultimodalRequestSnapshot } from './useChatExcelContext'
 import chatApi from '../api/chat'
 import type { ChatPlannerPayload, ChatRequest } from '@/types/chat'
 import { asRecord, asArray, asString, asBoolean, asDisposable } from '@/utils/typeGuards'
+import { plainTextFromHtml } from '@/utils/htmlPlainText'
 
 export interface UseChatRequestDeps {
   sessionId: Ref<string>
@@ -63,10 +64,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       .slice(-6)
       .map((m) => ({
         role: m.role,
-        content: String(m.content || '')
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]*>/g, '')
-          .slice(0, 500)
+        content: plainTextFromHtml(m.content).slice(0, 500)
       }))
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory
@@ -170,10 +168,7 @@ export function useChatRequest(deps: UseChatRequestDeps) {
       .slice(-6)
       .map((m) => ({
         role: m.role,
-        content: String(m.content || '')
-          .replace(/<br\s*\/?>/gi, '\n')
-          .replace(/<[^>]*>/g, '')
-          .slice(0, 500)
+        content: plainTextFromHtml(m.content).slice(0, 500)
       }))
     const contextPayload: Record<string, unknown> = {
       recent_messages: compactHistory
