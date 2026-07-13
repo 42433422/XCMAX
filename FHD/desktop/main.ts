@@ -18,7 +18,12 @@ import fs from 'node:fs'
 import net from 'node:net'
 import { networkInterfaces } from 'node:os'
 import path from 'node:path'
-import { configureUpdater, installUpdate, runUpdateCheckWithDirectNet } from './updater'
+import {
+  configureUpdater,
+  downloadUpdate,
+  installUpdate,
+  runUpdateCheckWithDirectNet,
+} from './updater'
 import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
@@ -1179,7 +1184,7 @@ async function createWindow(): Promise<void> {
     void showDbRecoveryDialogIfNeeded(status)
   })
 
-  configureUpdater(mainWindow, runBackendMigrationWithRollback)
+  configureUpdater(mainWindow)
 }
 
 function createMenu(): void {
@@ -1343,6 +1348,7 @@ function bootstrap(): void {
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
+      ipcMain.handle('xcagi:download-update', () => downloadUpdate())
       ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))

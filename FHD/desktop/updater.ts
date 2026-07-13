@@ -1,4 +1,4 @@
-import { BrowserWindow, app, dialog, net, session } from 'electron'
+import { BrowserWindow, app, net, session } from 'electron'
 import type { Session } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import type { UpdateInfo } from 'electron-updater'
@@ -8,9 +8,11 @@ import path from 'node:path'
 
 let updateDownloaded = false
 let remoteBuildSha = ''
+let remoteReleaseNotes = ''
 let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
+let downloadInFlight = false
 
 export async function ensureUpdaterNetSession(): Promise<Session> {
   if (updaterNetSession) {
@@ -122,9 +124,26 @@ function installSameVersionRebuildHook(): void {
   }
 }
 
-export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toVersion: string) => Promise<void>): void {
+function enrichUpdateInfo(info: UpdateInfo): UpdateInfo & { buildSha?: string; releaseNotes?: string } {
+  const notes = String(
+    (info as UpdateInfo & { releaseNotes?: string }).releaseNotes || remoteReleaseNotes || ''
+  ).trim()
+  return {
+    ...info,
+    buildSha: String(
+      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
+    ).trim(),
+    releaseNotes: notes,
+  }
+}
+
+/**
+ * Cursor-style updates: check in background, never auto-download / auto-prompt.
+ * Renderer shows a corner badge; user opens notes modal, then downloads & restarts.
+ */
+export function configureUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  autoUpdater.autoInstallOnAppQuit = false
   if (process.env.XCAGI_DESKTOP_TEST !== '1') {
     void ensureUpdaterNetSession()
   }
@@ -144,55 +163,28 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
   }
 
   const send = (type: string, data?: unknown) => {
-    mainWindow.webContents.send('xcagi:update-event', { type, data })
+    if (!mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('xcagi:update-event', { type, data })
+    }
   }
 
   autoUpdater.on('checking-for-update', () => send('checking-for-update'))
   autoUpdater.on('update-available', info => {
-    send('update-available', info)
-    void autoUpdater.downloadUpdate().catch(error => {
-      send('error', { message: error.message, phase: 'download' })
-      appendUpdaterEvent('download_failed', { message: error.message })
-      updateDownloaded = false
-    })
+    appendUpdaterEvent('update_available', { version: info.version })
+    send('update-available', enrichUpdateInfo(info))
   })
   autoUpdater.on('update-not-available', info => send('update-not-available', info))
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
-  autoUpdater.on('update-downloaded', async info => {
+  autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true
-    send('update-downloaded', info)
-    const result = await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      buttons: ['稍后', '立即重启安装'],
-      defaultId: 1,
-      cancelId: 0,
-      title: 'XCAGI 更新已下载',
-      message: `新版本 ${info.version} 已准备好，是否立即重启安装？`
-    })
-    if (result.response === 1) {
-      try {
-        if (beforeInstall) {
-          await beforeInstall(info.version)
-        }
-        appendUpdaterEvent('install_start', { version: info.version })
-        autoUpdater.quitAndInstall(false, true)
-      } catch (error) {
-        appendUpdaterEvent('install_failed', {
-          message: error instanceof Error ? error.message : String(error),
-        })
-        updateDownloaded = true
-        await dialog.showMessageBox(mainWindow, {
-          type: 'error',
-          title: '更新安装失败',
-          message: '更新安装未完成，当前版本仍可继续使用。可导出诊断包后重试或安装上一版本。',
-        })
-      }
-    }
+    downloadInFlight = false
+    appendUpdaterEvent('update_downloaded', { version: info.version })
+    send('update-downloaded', enrichUpdateInfo(info))
   })
   autoUpdater.on('error', error => {
+    downloadInFlight = false
     send('error', { message: error.message, stack: error.stack, phase: 'updater' })
     appendUpdaterEvent('error', { message: error.message, stack: error.stack })
-    updateDownloaded = false
   })
 
   setTimeout(() => {
@@ -205,6 +197,27 @@ export function configureUpdater(mainWindow: BrowserWindow, beforeInstall?: (toV
     }
     void runUpdateCheckWithDirectNet().catch(error => send('error', { message: error.message }))
   }, 6 * 60 * 60 * 1000)
+}
+
+export async function downloadUpdate(): Promise<unknown> {
+  if (updateDownloaded) {
+    return { alreadyDownloaded: true }
+  }
+  if (downloadInFlight) {
+    return { downloading: true }
+  }
+  downloadInFlight = true
+  appendUpdaterEvent('download_start', {})
+  try {
+    return await autoUpdater.downloadUpdate()
+  } catch (error) {
+    downloadInFlight = false
+    updateDownloaded = false
+    appendUpdaterEvent('download_failed', {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    throw error
+  }
 }
 
 export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
@@ -222,6 +235,24 @@ export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
   }
 }
 
+function parseYamlBlock(content: string, field: string): string {
+  const lines = content.split(/\r?\n/)
+  const start = lines.findIndex(line => line.startsWith(`${field}:`))
+  if (start < 0) return ''
+  const head = lines[start].slice(`${field}:`.length).trim()
+  if (head && head !== '|' && head !== '>') {
+    return head.replace(/^["']|["']$/g, '')
+  }
+  const collected: string[] = []
+  for (let i = start + 1; i < lines.length; i += 1) {
+    const line = lines[i]
+    if (!line.startsWith(' ') && !line.startsWith('\t') && line.trim() !== '') break
+    if (line.startsWith('signature:')) break
+    collected.push(line.replace(/^\s{2}/, ''))
+  }
+  return collected.join('\n').trim()
+}
+
 export async function checkForUpdates(): Promise<unknown> {
   if (!app.isPackaged && !process.env.XCAGI_UPDATE_URL) {
     return { skipped: true, reason: 'dev-mode-without-XCAGI_UPDATE_URL' }
@@ -234,6 +265,7 @@ export async function checkForUpdates(): Promise<unknown> {
   if (publicKeyPem && updateUrl) {
     const metadataText = await fetchLatestMetadataText()
     remoteBuildSha = parseYamlField(metadataText, 'buildSha')
+    remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
     installSameVersionRebuildHook()
   }
   return autoUpdater.checkForUpdates()
@@ -269,12 +301,20 @@ export async function verifyLatestMetadataSignature(): Promise<void> {
 
 export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
   if (!updateDownloaded) {
-    throw new Error('尚未下载更新包，请先检查更新并等待下载完成')
+    throw new Error('尚未下载更新包，请先在更新面板确认下载')
   }
-  if (beforeInstall) {
-    await beforeInstall('manual')
+  try {
+    if (beforeInstall) {
+      await beforeInstall('manual')
+    }
+    appendUpdaterEvent('install_start', {})
+    autoUpdater.quitAndInstall(false, true)
+  } catch (error) {
+    appendUpdaterEvent('install_failed', {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    throw error
   }
-  autoUpdater.quitAndInstall(false, true)
 }
 
 /** 纯函数：校验 update 元数据文本的 Ed25519 二次签名。便于单测。 */

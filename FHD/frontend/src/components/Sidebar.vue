@@ -84,6 +84,7 @@
         <div class="status-indicator">
           <span class="status-dot online"></span>
           <span>系统正常</span>
+          <DesktopAppUpdatePrompt />
           <span
             v-if="adminDeployStatusText"
             class="sidebar-update-chip"
@@ -173,6 +174,7 @@ import { useImUnreadBadge } from '@/composables/useImUnreadBadge'
 import { primeCsrfCookie } from '@/api/core'
 import { xcmaxAdminApi } from '@/api/xcmaxAdmin'
 import SidebarMenuItem from '@/components/SidebarMenuItem.vue'
+import DesktopAppUpdatePrompt from '@/components/DesktopAppUpdatePrompt.vue'
 import packageJson from '../../package.json'
 
 const { imUnreadTotal } = useImUnreadBadge()

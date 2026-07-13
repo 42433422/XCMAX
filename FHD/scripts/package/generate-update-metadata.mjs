@@ -34,11 +34,30 @@ function resolveBuildSha() {
 
 const buildSha = resolveBuildSha()
 const productVersion = String(process.env.XCAGI_PRODUCT_VERSION || version).trim()
+const releaseNotes = String(process.env.XCAGI_RELEASE_NOTES || '').trim()
+
+function yamlEscapeBlock(text) {
+  return text
+    .split(/\r?\n/)
+    .map((line) => `  ${line}`)
+    .join('\n')
+}
 
 let body = [
   `version: ${version}`,
   ...(productVersion !== version ? [`productVersion: ${productVersion}`] : []),
   ...(buildSha ? [`buildSha: ${buildSha}`] : []),
+  ...(releaseNotes
+    ? [`releaseNotes: |`, yamlEscapeBlock(releaseNotes)]
+    : [
+        'releaseNotes: |',
+        `  版本 ${productVersion || version}`,
+        ...(buildSha ? [`  构建 ${buildSha.slice(0, 12)}`] : []),
+        '  ',
+        '  • 更新桌面壳与本地后端运行时',
+        '  • 保留本机业务数据与已安装 Mod',
+        '  • 安装完成后重新加载进入新版本',
+      ]),
   'files:',
   `  - url: ${name}`,
   `    sha512: ${sha512}`,
