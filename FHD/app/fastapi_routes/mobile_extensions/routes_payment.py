@@ -16,11 +16,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 from app.fastapi_routes.mobile_api_extensions import (
+    _mobile_market_authorization as _mobile_market_authorization_impl,
+)
+from app.fastapi_routes.mobile_api_extensions import (
     _mobile_unauthorized_response,
-    _mobile_market_authorization,
 )
 
 # ── 钱包 / 余额 ──
+
+
+def _mobile_market_authorization(request: Request, user: Any | None = None) -> str:
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    resolver = getattr(parent, "_mobile_market_authorization", _mobile_market_authorization_impl)
+    if resolver is _mobile_market_authorization:
+        resolver = _mobile_market_authorization_impl
+    return str(resolver(request, user) or "")
+
 
 _MOBILE_PAYMENT_CHANNELS: tuple[dict[str, str], ...] = (
     {

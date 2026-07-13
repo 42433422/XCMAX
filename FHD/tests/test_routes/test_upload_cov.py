@@ -29,6 +29,18 @@ class TestUploadAuth:
         resp = client.post("/api/upload/temp")
         assert resp.status_code == 401
 
+    def test_session_store_failure_fails_closed(self):
+        client = _make_client(authenticated=False)
+        with patch(
+            "app.application.facades.session_facade.get_session_service",
+            side_effect=OSError("database not ready"),
+        ):
+            resp = client.post(
+                "/api/upload/temp",
+                headers={"X-Session-ID": "stale-session"},
+            )
+        assert resp.status_code == 401
+
 
 class TestAllowedFile:
     def test_allowed_extensions(self):

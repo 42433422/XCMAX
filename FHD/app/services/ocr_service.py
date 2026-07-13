@@ -8,12 +8,8 @@ OCR服务模块
 import logging
 import os
 import re
-import subprocess
-import sys
-import tempfile
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -21,35 +17,6 @@ import numpy as np
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
-
-_MACOS_VISION_OCR_JXA = r"""
-function run(argv) {
-  ObjC.import('Vision');
-  ObjC.import('CoreImage');
-  const path = String(argv[0] || '');
-  if (!path) return '';
-  const imageUrl = $.NSURL.fileURLWithPath(path);
-  const image = $.CIImage.imageWithContentsOfURL(imageUrl);
-  if (!image) return '';
-  const lines = [];
-  const request = $.VNRecognizeTextRequest.alloc.init;
-  request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
-  request.usesLanguageCorrection = true;
-  const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
-    image, $.NSDictionary.dictionary
-  );
-  const error = Ref();
-  if (!handler.performRequestsError($([request]), error)) return '';
-  const observations = request.results;
-  for (let i = 0; i < observations.count; i += 1) {
-    const candidates = observations.objectAtIndex(i).topCandidates(1);
-    if (candidates.count > 0) {
-      lines.push(ObjC.unwrap(candidates.objectAtIndex(0).string));
-    }
-  }
-  return lines.join('\n');
-}
-"""
 
 
 @dataclass
@@ -74,121 +41,29 @@ class OCRService:
         self._init_engines()
 
     def _init_engines(self) -> None:
-        """
-        初始化识别后端。
-        XCAGI_OCR_BACKEND: auto（默认）| paddle | easyocr | tesseract
-        - auto: Paddle → EasyOCR → Tesseract
-        - paddle: 仅 Paddle（失败则无任何引擎）
-        """
-        backend = os.environ.get("XCAGI_OCR_BACKEND", "auto").lower().strip() or "auto"
+        from app.infrastructure.ocr_backends import initialize_engines
 
-        if backend in ("auto", "paddle"):
-            try:
-                from app.services.paddle_ocr_runner import (
-                    check_paddle_available,
-                    get_paddle_ocr_instance,
-                )
-
-                if check_paddle_available():
-                    get_paddle_ocr_instance()
-                    self._paddle_enabled = True
-                    logger.info("OCR 主引擎：PaddleOCR")
-            except RECOVERABLE_ERRORS as e:
-                logger.warning("PaddleOCR 初始化失败: %s", e)
-
-        if backend == "paddle" and not self._paddle_enabled:
-            logger.error(
-                "XCAGI_OCR_BACKEND=paddle 但 PaddleOCR 不可用，请安装 paddlepaddle paddleocr"
-            )
-
-        if backend in ("auto", "easyocr") and not self._paddle_enabled:
-            self._init_easyocr()
-
-        if backend in ("auto", "macos_vision") and not self._paddle_enabled and self.reader is None:
-            self._init_macos_vision()
-
-        if (
-            backend in ("auto", "tesseract")
-            and not self._paddle_enabled
-            and self.reader is None
-            and not self.macos_vision_available
-        ):
-            self._init_tesseract()
-
-        if (
-            not self._paddle_enabled
-            and self.reader is None
-            and not self.macos_vision_available
-            and not self.tesseract_available
-        ):
-            self._init_tesseract()
+        initialize_engines(self)
 
     def _init_easyocr(self) -> None:
-        try:
-            import easyocr
+        from app.infrastructure.ocr_backends import initialize_easyocr
 
-            self.reader = easyocr.Reader(["ch_sim", "en"], gpu=self.use_gpu)
-            logger.info("OCR 回退引擎：EasyOCR")
-        except ImportError:
-            logger.warning("EasyOCR 未安装")
-            self.reader = None
-        except RECOVERABLE_ERRORS as e:
-            logger.error("EasyOCR 初始化失败: %s", e)
-            self.reader = None
+        initialize_easyocr(self)
 
     def _init_tesseract(self) -> None:
-        """初始化Tesseract"""
-        try:
-            import pytesseract
+        from app.infrastructure.ocr_backends import initialize_tesseract
 
-            pytesseract.get_tesseract_version()
-            self.tesseract_available = True
-            logger.info("OCR 回退引擎：Tesseract")
-        except RECOVERABLE_ERRORS:
-            self.tesseract_available = False
+        initialize_tesseract(self)
 
     def _init_macos_vision(self) -> None:
-        """Enable the OCR engine built into macOS (no Python package or model download)."""
-        self.macos_vision_available = bool(
-            sys.platform == "darwin" and os.path.isfile("/usr/bin/osascript")
-        )
-        if self.macos_vision_available:
-            logger.info("OCR 回退引擎：macOS Vision")
+        from app.infrastructure.ocr_backends import initialize_macos_vision
+
+        initialize_macos_vision(self)
 
     def _recognize_macos_vision(self, image_array: np.ndarray) -> str:
-        if not self.macos_vision_available:
-            return ""
-        tmp_path = ""
-        try:
-            from PIL import Image
+        from app.infrastructure.ocr_backends import recognize_macos_vision
 
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                tmp_path = tmp.name
-            Image.fromarray(image_array).save(tmp_path, format="PNG")
-            proc = subprocess.run(
-                [
-                    "/usr/bin/osascript",
-                    "-l",
-                    "JavaScript",
-                    "-e",
-                    _MACOS_VISION_OCR_JXA,
-                    tmp_path,
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-            if proc.returncode != 0:
-                logger.warning("macOS Vision OCR 失败: %s", (proc.stderr or "").strip()[:500])
-                return ""
-            return self._clean_text(proc.stdout or "")
-        except (subprocess.SubprocessError, *RECOVERABLE_ERRORS) as exc:
-            logger.warning("macOS Vision OCR 异常: %s", exc)
-            return ""
-        finally:
-            if tmp_path:
-                Path(tmp_path).unlink(missing_ok=True)
+        return recognize_macos_vision(self, image_array)
 
     def recognize(self, image) -> str:
         """
@@ -203,7 +78,7 @@ class OCRService:
         if (
             not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
+            and not getattr(self, "macos_vision_available", False)
             and not self.tesseract_available
         ):
             logger.error("OCR引擎未初始化")
@@ -229,7 +104,7 @@ class OCRService:
                 text = "\n".join(results)
                 return self._clean_text(text)
 
-            if self.macos_vision_available:
+            if getattr(self, "macos_vision_available", False):
                 return self._recognize_macos_vision(image_array)
 
             if self.tesseract_available:
@@ -401,7 +276,7 @@ class OCRService:
             return "paddleocr"
         if self.reader is not None:
             return "easyocr"
-        if self.macos_vision_available:
+        if getattr(self, "macos_vision_available", False):
             return "macos_vision"
         if self.tesseract_available:
             return "tesseract"

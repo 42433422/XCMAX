@@ -104,27 +104,36 @@ def _isolate_edition_and_product_sku_env(monkeypatch):
     同时清理桌面 runtime bootstrap（configure_desktop_environment）通过 os.environ.setdefault
     设置的 XCAGI_MODS_ROOT / XCAGI_MODS_DIR 等环境变量，避免污染 ModManager 测试。
     """
-    for key in (
-        "XCAGI_PRODUCT_SKU",
-        "XCAGI_EDITION",
-        "XCAGI_GENERIC_EDITION",
-        "XCAGI_MINIMAL_EDITION",
-        "XCAGI_DEFAULT_EDITION",
-        "XCAGI_RESOURCES_DIR",
-        "XCAGI_DESKTOP_RESOURCES",
-        "XCAGI_STAGED_MODS_DIR",
-        "XCAGI_MODS_ROOT",
-        "XCAGI_MODS_DIR",
-        "XCAGI_DESKTOP_MODE",
-        "XCAGI_DATA_DIR",
-        "XCAGI_DESKTOP_DATA_DIR",
-    ):
-        monkeypatch.delenv(key, raising=False)
-    monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
-    monkeypatch.setenv(
-        "XCAGI_PRODUCT_SKU_FILE",
-        os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),
-    )
+    original_environ = dict(os.environ)
+    try:
+        for key in (
+            "XCAGI_PRODUCT_SKU",
+            "XCAGI_EDITION",
+            "XCAGI_GENERIC_EDITION",
+            "XCAGI_MINIMAL_EDITION",
+            "XCAGI_DEFAULT_EDITION",
+            "XCAGI_RESOURCES_DIR",
+            "XCAGI_DESKTOP_RESOURCES",
+            "XCAGI_STAGED_MODS_DIR",
+            "XCAGI_MODS_ROOT",
+            "XCAGI_MODS_DIR",
+            "XCAGI_DESKTOP_MODE",
+            "XCAGI_DATA_DIR",
+            "XCAGI_DESKTOP_DATA_DIR",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("FHD_ALLOW_X_USER_ID_HEADER", "1")
+        monkeypatch.setenv(
+            "XCAGI_PRODUCT_SKU_FILE",
+            os.path.join(PROJECT_ROOT, "tests", "_fixtures", "no-product-sku.json"),
+        )
+        yield
+    finally:
+        # Some runtime bootstrap functions intentionally write os.environ
+        # directly.  Restore the complete process environment so a desktop
+        # tmp_path cannot leak into later API/database tests.
+        os.environ.clear()
+        os.environ.update(original_environ)
 
 
 @pytest.fixture(scope="session")

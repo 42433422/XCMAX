@@ -39,8 +39,8 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.get("/user-cs/wechat/llm-status")
     def wechat_llm_status(request: Request):
+        from app.application.wechat_route_facade import probe_passive_llm_ready
         from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import probe_passive_llm_ready
 
         return {
             "success": True,
@@ -52,8 +52,8 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.post("/user-cs/wechat/passive-poll")
     async def passive_poll(request: Request, body: PassivePollBody):
+        from app.application.wechat_route_facade import passive_poll_once
         from app.fastapi_routes.market_account import session_id_from_request
-        from app.services.wechat_passive_group_monitor import passive_poll_once
 
         out = passive_poll_once(
             market_user_id=int(body.market_user_id),
@@ -73,7 +73,7 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.get("/user-cs/wechat/passive-loop")
     def passive_loop_get(market_user_id: int, username: str = ""):
-        from app.services.wechat_passive_group_monitor import get_passive_poll_config
+        from app.application.wechat_route_facade import get_passive_poll_config
 
         return {
             "success": True,
@@ -85,7 +85,7 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
         operation_id="fhd_user_cs_passive_loop_post_compat",
     )
     def passive_loop_save_post(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import save_passive_poll_config
+        from app.application.wechat_route_facade import save_passive_poll_config
 
         data = save_passive_poll_config(
             int(body.market_user_id),
@@ -100,7 +100,7 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
         operation_id="fhd_user_cs_passive_loop_put_compat",
     )
     def passive_loop_save_put(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import save_passive_poll_config
+        from app.application.wechat_route_facade import save_passive_poll_config
 
         data = save_passive_poll_config(
             int(body.market_user_id),
@@ -112,7 +112,7 @@ def build_user_cs_wechat_passive_router() -> APIRouter:
 
     @router.post("/user-cs/wechat/passive-reset-watch")
     def passive_reset_watch(body: PassiveLoopConfigBody):
-        from app.services.wechat_passive_group_monitor import reset_passive_watch
+        from app.application.wechat_route_facade import reset_passive_watch
 
         state = reset_passive_watch(int(body.market_user_id), username=body.username)
         return {"success": True, "data": state}

@@ -76,8 +76,8 @@ def _run_shipment_records_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("shipment_records") or {}).get("actions") or {}).get(action)
@@ -143,8 +143,8 @@ def _run_shipment_orders_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("shipment_orders") or {}).get("actions") or {}).get(action)
@@ -450,7 +450,10 @@ def api_orders_create(request: Request, payload: dict[str, Any] = Body(default_f
     ``/api/shipment/shipment-records/record`` compatibility path.
     """
     purchase_unit = str(
-        payload.get("purchase_unit") or payload.get("unit_name") or payload.get("customer_name") or ""
+        payload.get("purchase_unit")
+        or payload.get("unit_name")
+        or payload.get("customer_name")
+        or ""
     ).strip()
     products = payload.get("products") or payload.get("items") or []
     if not purchase_unit:

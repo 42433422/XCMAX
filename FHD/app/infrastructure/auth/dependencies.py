@@ -11,11 +11,16 @@ Phase 计划：等待正式会话/JWT 层就绪后，替换为标准 OAuth2 Bear
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Callable
 from typing import Any
 
 from fastapi import Header, HTTPException, Request
+
+from app.utils.operational_errors import RECOVERABLE_ERRORS
+
+logger = logging.getLogger(__name__)
 
 
 def _write_lock_enabled() -> bool:
@@ -102,8 +107,6 @@ def session_id_from_request(request: Request) -> str:
 
 
 def resolve_session_user(request: Request) -> Any | None:
-    from app.application.facades.session_facade import get_session_service
-
     sid = session_id_from_request(request)
     if not sid:
         return None
@@ -115,7 +118,16 @@ def resolve_session_user(request: Request) -> Any | None:
             return None
     except Exception:  # noqa: BLE001
         pass
-    user = get_session_service().validate_session(sid)
+    try:
+        from app.application.facades.session_facade import get_session_service
+
+        user = get_session_service().validate_session(sid)
+    except RECOVERABLE_ERRORS as exc:
+        # Authentication must fail closed when the session store is not ready
+        # (for example, during first-run SQLite bootstrap), not turn every
+        # protected endpoint into a 500 response.
+        logger.warning("session validation unavailable; treating request as anonymous: %s", exc)
+        return None
     if user is not None:
         return user
     # 增量无状态 JWT（XCAGI_WEB_JWT_AUTH=1 时）：Bearer 非有效 session 时尝试 web JWT 验签。

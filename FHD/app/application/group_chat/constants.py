@@ -220,6 +220,22 @@ _XIAOC_ASSISTANT_ID = "xcagi-assistant"
 _REQUIRED_GROUP_MEMBER_IDS: frozenset[str] = frozenset({_XIAOC_ASSISTANT_ID})
 _BRANCH_SAFE_RE = re.compile(r"[^A-Za-z0-9._/-]+")
 
+# 部门配置不可用时的内置兜底，保证默认群组仍可创建。
+_FALLBACK_DEPARTMENTS: list[tuple[str, str]] = [
+    ("ops_acquisition", "O-A 获客部"),
+    ("ops_partner", "O-B 伙伴部"),
+    ("prod_web", "P-W 网站部"),
+    ("prod_mod", "P-M Mod 部"),
+    ("prod_software", "P-S 软件部"),
+    ("shared_retention", "S-R 归档部"),
+]
+_FALLBACK_ENTERPRISE_DEPARTMENTS: list[tuple[str, str]] = [
+    ("tools", "工具层"),
+    ("execution", "执行层"),
+    ("service", "服务层"),
+    ("management", "管理层"),
+]
+
 CompletionFn = Callable[[list[dict[str, str]]], Awaitable[dict[str, Any]]]
 EmployeeExecutorFn = Callable[
     [str, str, dict[str, Any], int],
@@ -256,7 +272,8 @@ __all__ = [
     "_XIAOC_ASSISTANT_ID",
     "_REQUIRED_GROUP_MEMBER_IDS",
     "_BRANCH_SAFE_RE",
+    "_FALLBACK_DEPARTMENTS",
+    "_FALLBACK_ENTERPRISE_DEPARTMENTS",
     "CompletionFn",
     "EmployeeExecutorFn",
 ]
-

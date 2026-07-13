@@ -1,9 +1,6 @@
-"""企业版 Mod  entitlement：客户 Mod 仅对修茈市场账号绑定的 user_mods 可见。
+"""企业版 Mod 权限：宿主桥接包始终可用，客户包仅按市场账号 user_mods 授权。
 
-规则摘要：
-- 宿主桥接 Mod（platform_shell 内置包）始终可用。
-- 客户 Mod（taiyangniao-pro、sz-qsm-pro 等）仅当出现在当前登录修茈账号的 user_mods 中。
-- 本地 FHD ``role=admin`` **不**绕过上述规则（避免「本地管理员看见所有企业 Mod」）。
+本地 FHD 管理员不绕过客户包授权，避免显示未购买的企业 Mod。
 """
 
 from __future__ import annotations

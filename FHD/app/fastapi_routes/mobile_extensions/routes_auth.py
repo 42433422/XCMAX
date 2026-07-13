@@ -5,14 +5,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.models import AuthQrConfirmBody, OidcExchangeBody
 from app.utils.mobile_api import format_mobile_response
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
+OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -188,5 +188,3 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         if key in payload and payload[key] is not None:
             data[key] = payload[key]
     return format_mobile_response(data=data)
-
-

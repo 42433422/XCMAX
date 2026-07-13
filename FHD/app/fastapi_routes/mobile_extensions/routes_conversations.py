@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
@@ -15,9 +15,6 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.fastapi_routes.mobile_extensions.admin_helpers import (
-    _mobile_request_user_id,
-)
 
 # ── 会话状态管理（非群聊的个人 AI 会话） ──
 
@@ -153,5 +150,3 @@ async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobi
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )
-
-

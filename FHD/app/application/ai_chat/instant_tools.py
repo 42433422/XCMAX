@@ -1,13 +1,9 @@
-"""Pro/Normal instant tools mixin for AIChatInstantToolsMixin."""
+"""Pro/Normal instant-tool application service."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
-import os
 import re
-from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -17,7 +13,7 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
-class AIChatInstantToolsMixin:
+class AIChatInstantToolService:
     def _execute_pro_mode_tools(
         self,
         response_data: dict[str, Any],
@@ -435,5 +431,3 @@ class AIChatInstantToolsMixin:
             logger.error("即时执行 shipments 失败：%s", tool_err, exc_info=True)
 
         return response_data
-
-

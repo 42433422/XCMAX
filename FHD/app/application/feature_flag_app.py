@@ -19,4 +19,5 @@ def is_enabled(name: FeatureFlagName | str, *, default: bool = False) -> bool:
         return bool(default)
     return raw.strip().lower() in {"1", "true", "yes", "on", "enabled"}
 
+
 __all__ = ["FeatureFlagName", "is_enabled"]

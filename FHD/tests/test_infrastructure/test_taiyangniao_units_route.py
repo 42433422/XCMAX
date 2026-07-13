@@ -7,17 +7,15 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.application.attendance_reference_data import attendance_unit_names
+from app.fastapi_routes.openapi_route_compat import iter_effective_routes
 
 
 def test_host_attendance_units_merge_private_db_and_host_data(tmp_path, monkeypatch) -> None:
     db_path = tmp_path / "taiyangniao_pro.db"
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "CREATE TABLE attendance_departments (department TEXT, main_department TEXT)"
-        )
+        conn.execute("CREATE TABLE attendance_departments (department TEXT, main_department TEXT)")
         conn.execute("INSERT INTO attendance_departments VALUES ('研发部', '总部')")
         conn.execute("CREATE TABLE attendance_employees (department TEXT)")
         conn.execute("INSERT INTO attendance_employees VALUES ('生产部')")
@@ -31,19 +29,13 @@ def test_host_attendance_units_merge_private_db_and_host_data(tmp_path, monkeypa
     ) == ["总部", "生产部", "研发部", "销售部"]
 
 
-def test_shipment_units_route_returns_real_attendance_departments(tmp_path, monkeypatch) -> None:
+def test_mod_does_not_duplicate_host_owned_shipment_units_route(tmp_path, monkeypatch) -> None:
     backend_dir = (
-        Path(__file__).resolve().parents[2]
-        / "XCAGI"
-        / "mods"
-        / "taiyangniao-pro"
-        / "backend"
+        Path(__file__).resolve().parents[2] / "XCAGI" / "mods" / "taiyangniao-pro" / "backend"
     )
     db_path = tmp_path / "taiyangniao.db"
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "CREATE TABLE attendance_departments (department TEXT, main_department TEXT)"
-        )
+        conn.execute("CREATE TABLE attendance_departments (department TEXT, main_department TEXT)")
         conn.execute("INSERT INTO attendance_departments VALUES ('研发部', '总部')")
         conn.execute("CREATE TABLE attendance_employees (department TEXT, main_department TEXT)")
         conn.execute("INSERT INTO attendance_employees VALUES ('生产部', '工厂')")
@@ -68,9 +60,6 @@ def test_shipment_units_route_returns_real_attendance_departments(tmp_path, monk
 
     app = FastAPI()
     module.register_fastapi_routes(app, "taiyangniao-pro")
-    response = TestClient(app).get(
-        "/api/mod/taiyangniao-pro/shipment/shipment-records/units"
-    )
+    paths = {route.path for route in iter_effective_routes(app.routes)}
 
-    assert response.status_code == 200
-    assert response.json()["units"] == ["工厂", "总部", "生产部", "研发部", "销售部"]
+    assert "/api/mod/taiyangniao-pro/shipment/shipment-records/units" not in paths

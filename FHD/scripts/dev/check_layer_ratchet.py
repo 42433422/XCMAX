@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """分层债棘轮（ratchet）：只减不增地收口后端分层债。
 
 守护两条基线（v10 线内迭代 · 配合 docs/architecture/REFACTOR_DECOMPOSITION_PLAN.md §1.4）：

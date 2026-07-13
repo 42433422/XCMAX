@@ -8,7 +8,6 @@ Exit code: 0 = all checks pass, 1 = violations found
 """
 
 import ast
-import os
 import sys
 from pathlib import Path
 
@@ -18,6 +17,10 @@ MODSTORE_SERVER_DIR = REPO_ROOT / "MODstore" / "modstore_server"
 
 MAX_FILE_LINES = 500
 BASELINE_FILE = Path(__file__).resolve().parent / "arch_fitness_baseline.txt"
+CRITICAL_HOSTS = (
+    Path("app/application/ai_chat_app_service.py"),
+    Path("app/application/tools/workflow.py"),
+)
 
 VIOLATIONS: list[str] = []
 
@@ -128,6 +131,40 @@ def check_no_giant_files_in_app() -> None:
             )
 
 
+def check_critical_hosts_are_thin_and_composed() -> None:
+    """Critical public facades may compose collaborators but never inherit mixins."""
+    for rel in CRITICAL_HOSTS:
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            VIOLATIONS.append(f"[critical-host-missing] {rel} — required facade is missing")
+            continue
+        line_count = _count_lines(path)
+        if line_count > MAX_FILE_LINES:
+            VIOLATIONS.append(
+                f"[critical-host-size] {rel} — {line_count} lines "
+                f"(max {MAX_FILE_LINES}; split responsibilities)"
+            )
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except SyntaxError:
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            inherited = []
+            for base in node.bases:
+                if isinstance(base, ast.Name):
+                    inherited.append(base.id)
+                elif isinstance(base, ast.Attribute):
+                    inherited.append(base.attr)
+            mixins = [name for name in inherited if name.lower().endswith("mixin")]
+            if mixins:
+                VIOLATIONS.append(
+                    f"[critical-host-mixin] {rel}:{node.lineno} — "
+                    f"{node.name} inherits {', '.join(mixins)}; use composition"
+                )
+
+
 def check_no_giant_files_in_modstore_server() -> None:
     if not MODSTORE_SERVER_DIR.is_dir():
         print(f"  [skip] modstore_server not found at {MODSTORE_SERVER_DIR}")
@@ -168,6 +205,7 @@ def main() -> int:
     check_routes_not_import_services()
     check_domain_not_depend_on_infrastructure()
     check_no_giant_files_in_app()
+    check_critical_hosts_are_thin_and_composed()
     check_no_giant_files_in_modstore_server()
     check_legacy_boundary()
 

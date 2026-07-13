@@ -1963,11 +1963,6 @@ async def market_wallet_overview(request: Request):
     if not authorization:
         # Backward-compatible explicit/header lookup for API clients without a local session.
         authorization = _market_auth_from_request(request)
-    if not authorization:
-        return JSONResponse(
-            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
-            status_code=401,
-        )
     payload = await _proxy_json(
         "GET",
         "/api/wallet/overview",

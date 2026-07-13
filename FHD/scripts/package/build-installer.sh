@@ -158,12 +158,8 @@ build_one_sku() {
   # Desktop/FileProvider checkout receives com.apple.FinderInfo again almost
   # immediately, which makes codesign reject that copy even though the ZIP and
   # DMG produced from the external staging directory remain valid.
-  local staged_file
-  for staged_file in "${package_stage}"/*; do
-    if [ -f "${staged_file}" ]; then
-      ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"
-    fi
-  done
+  find "${package_stage}" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+  ditto --norsrc "${package_stage}" "${out_dir}"
   rm -rf "${package_stage}"
 
   # electron-updater's macOS differential updater consumes the ZIP artifact.

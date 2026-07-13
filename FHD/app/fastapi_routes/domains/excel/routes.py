@@ -101,8 +101,8 @@ def _run_excel_skill_agent(
     message: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get(tool_id) or {}).get("actions") or {}).get(action)

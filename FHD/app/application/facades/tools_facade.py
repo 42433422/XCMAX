@@ -1,3 +1,4 @@
+from app.services.tools_execution.registry import _normalize_action
 from app.services.tools_execution_service import (
     _parse_order_text,
     execute_registered_workflow_tool,
@@ -8,6 +9,7 @@ from app.services.tools_execution_service import (
 
 __all__ = [
     "_parse_order_text",
+    "_normalize_action",
     "execute_registered_workflow_tool",
     "execute_tool_from_payload",
     "get_workflow_tool_registry",

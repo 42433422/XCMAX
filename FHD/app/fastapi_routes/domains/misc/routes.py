@@ -177,7 +177,7 @@ def preferences_post(body: dict = Body(default_factory=dict)) -> dict:
 
 
 def _memory_v2_service():
-    from app.services.user_memory_service import get_user_memory_service
+    from app.application.user_memory_facade import get_user_memory_service
 
     return get_user_memory_service()
 
@@ -226,8 +226,8 @@ def _run_memory_v2_agent(
     failure_status: int,
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     user_id = _memory_v2_user_id_from_request(request, data)

@@ -5,6 +5,10 @@
 所有公共符号均在此重新导出。
 """
 
+# Compatibility imports and the bottom-of-module router wiring are intentional:
+# callers and tests patch these symbols through this legacy parent module.
+# ruff: noqa: F401, I001
+
 from __future__ import annotations
 
 import asyncio
@@ -2403,6 +2407,7 @@ async def mobile_employee_chat_stream(
         },
     )
 
+
 # ── Strangler: domain sub-routers (helpers above must be defined first) ──
 from app.fastapi_routes.mobile_extensions.routes_payment import router as _payment_router
 from app.fastapi_routes.mobile_extensions.routes_sync import router as _sync_router
@@ -2427,51 +2432,166 @@ extension_router.include_router(_cs_contacts_router)
 extension_router.include_router(_payment_router)
 
 # ── Re-export extracted route handlers (tests patch parent module paths) ──
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_git_branches as mobile_git_branches  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_groups_list as mobile_ai_groups_list  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_candidates as mobile_ai_group_candidates  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_groups_create as mobile_ai_groups_create  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_messages as mobile_ai_group_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_post as mobile_ai_group_post  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_add_member as mobile_ai_group_add_member  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_remove_member as mobile_ai_group_remove_member  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_mark_unread as mobile_ai_group_mark_unread  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_mark_read as mobile_ai_group_mark_read  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_ai_groups import mobile_ai_group_delete as mobile_ai_group_delete  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_auth import mobile_auth_qr_confirm as mobile_auth_qr_confirm  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_auth import mobile_auth_oidc_exchange as mobile_auth_oidc_exchange  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_pin as mobile_conversation_toggle_pin  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_mark_unread as mobile_conversation_mark_unread  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_mark_read as mobile_conversation_mark_read  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_followed as mobile_conversation_toggle_followed  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_conversations import mobile_conversation_delete as mobile_conversation_delete  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_mobile_fixed_contacts as get_mobile_fixed_contacts  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _clean_mobile_git_branch as _clean_mobile_git_branch,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_branch_context_from_body as _mobile_branch_context_from_body,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_mode as _mobile_group_mode,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_uid as _mobile_group_uid,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_git_branches as mobile_git_branches,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_list as mobile_ai_groups_list,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_candidates as mobile_ai_group_candidates,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_create as mobile_ai_groups_create,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_messages as mobile_ai_group_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_post as mobile_ai_group_post,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_add_member as mobile_ai_group_add_member,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_remove_member as mobile_ai_group_remove_member,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_unread as mobile_ai_group_mark_unread,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_read as mobile_ai_group_mark_read,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_delete as mobile_ai_group_delete,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_qr_confirm as mobile_auth_qr_confirm,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_oidc_exchange as mobile_auth_oidc_exchange,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    _conversation_state_uid as _conversation_state_uid,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_pin as mobile_conversation_toggle_pin,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_unread as mobile_conversation_mark_unread,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_read as mobile_conversation_mark_read,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_followed as mobile_conversation_toggle_followed,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_delete as mobile_conversation_delete,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_mobile_fixed_contacts as get_mobile_fixed_contacts,
+)  # noqa: E402,F401
 from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_cs_info as get_cs_info  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import post_cs_message as post_cs_message  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_cs_contacts import get_cs_messages as get_cs_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_plans as mobile_payment_plans  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_checkout as mobile_payment_checkout  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_payment_query as mobile_payment_query  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_payment import mobile_wallet_balance as mobile_wallet_balance  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import _stream_super_employee_invoke as _stream_super_employee_invoke  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_super_employee import mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_status as mobile_sync_status  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    post_cs_message as post_cs_message,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_cs_messages as get_cs_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _mobile_checkout_sign_body as _mobile_checkout_sign_body,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _normalize_mobile_payment_channel as _normalize_mobile_payment_channel,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_plans as mobile_payment_plans,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_checkout as mobile_payment_checkout,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_query as mobile_payment_query,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_wallet_balance as mobile_wallet_balance,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    _stream_super_employee_invoke as _stream_super_employee_invoke,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_circle_posts as _mobile_sync_circle_posts,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_runtime_contract as _mobile_sync_runtime_contract,
+)  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_status as mobile_sync_status,
+)  # noqa: E402,F401
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_pull as mobile_sync_pull  # noqa: E402,F401
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_push as mobile_sync_push  # noqa: E402,F401
 from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_ack as mobile_sync_ack  # noqa: E402,F401
-from app.fastapi_routes.mobile_extensions.routes_sync import mobile_sync_conflicts as mobile_sync_conflicts  # noqa: E402,F401
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_conflicts as mobile_sync_conflicts,
+)  # noqa: E402,F401

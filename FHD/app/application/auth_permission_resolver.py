@@ -109,7 +109,10 @@ def resolve_permissions(
         "route_reason": route_reason,
         "personal_shell_blocked": personal_blocked_shell,
         "admin_shell_blocked": admin_blocked_shell,
-        "allowed": route_allowed and mod_allowed and not personal_blocked_shell and not admin_blocked_shell,
+        "allowed": route_allowed
+        and mod_allowed
+        and not personal_blocked_shell
+        and not admin_blocked_shell,
     }
 
 

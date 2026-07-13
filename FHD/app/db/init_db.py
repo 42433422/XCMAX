@@ -1248,12 +1248,12 @@ def ensure_runtime_auth_bootstrap(
         ensure_ai_conversation_bootstrap(
             engine,
             database_url=url,
-            swallow_errors=swallow_errors,
+            swallow_errors=True,
         )
         ensure_mobile_push_bootstrap(
             engine,
             database_url=url,
-            swallow_errors=swallow_errors,
+            swallow_errors=True,
         )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
@@ -1280,12 +1280,12 @@ def ensure_runtime_auth_bootstrap(
         ensure_ai_conversation_bootstrap(
             engine,
             database_url=url,
-            swallow_errors=swallow_errors,
+            swallow_errors=True,
         )
         ensure_mobile_push_bootstrap(
             engine,
             database_url=url,
-            swallow_errors=swallow_errors,
+            swallow_errors=True,
         )
 
 

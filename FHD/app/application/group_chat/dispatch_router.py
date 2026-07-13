@@ -2,22 +2,39 @@
 
 from __future__ import annotations
 
-from app.application.group_chat.constants import *  # noqa: F403
-
 import asyncio
 import json
-import os
-import re
 import uuid
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from inspect import isawaitable
-from pathlib import Path
 from typing import Any
+
+from app.application.group_chat.constants import (
+    _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
+    _SUPER_EMPLOYEE_IDS,
+    _XIAOC_ASSISTANT_ID,
+    CONTEXT_TURNS,
+    MAX_RESPONDERS,
+    SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+    SUPER_DISCUSSION_DEFAULT_ROUNDS,
+    SUPER_DISCUSSION_MAX_ROUNDS,
+)
+from app.application.group_chat.employee_registry import _is_required_group_member
 
 
 class AiGroupChatDispatchMixin:
     # ── 回复编排 ──
+
+    @staticmethod
+    def _discussion_completion_timeout() -> float:
+        """Keep the legacy facade's patch point working after extraction."""
+        from app.application import ai_group_chat_service as facade
+
+        return float(
+            getattr(
+                facade,
+                "SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC",
+                SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+            )
+        )
 
     def _pick_responders(
         self,
@@ -276,7 +293,7 @@ class AiGroupChatDispatchMixin:
                         {"role": "user", "content": user_content},
                     ]
                 ),
-                timeout=SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+                timeout=self._discussion_completion_timeout(),
             )
         except TimeoutError:
             return self._fallback_super_discussion_reply(
@@ -427,7 +444,7 @@ class AiGroupChatDispatchMixin:
                         {"role": "user", "content": user_content},
                     ]
                 ),
-                timeout=SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+                timeout=self._discussion_completion_timeout(),
             )
             content = str(res.get("content") or "") if isinstance(res, dict) else ""
             target_ids, rationale = self._parse_routing_json(content, candidates)
@@ -910,4 +927,3 @@ class AiGroupChatDispatchMixin:
                 "raw": task,
             },
         )
-

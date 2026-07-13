@@ -64,9 +64,7 @@ def _employee_roots() -> list[Path]:
         bundled = bundled_mods_dir()
         if bundled is not None:
             candidate = Path(bundled) / "_employees"
-            if candidate.is_dir() and all(
-                candidate.resolve() != root.resolve() for root in roots
-            ):
+            if candidate.is_dir() and all(candidate.resolve() != root.resolve() for root in roots):
                 roots.append(candidate)
     except RECOVERABLE_ERRORS:
         logger.debug("resolve bundled employee root failed", exc_info=True)

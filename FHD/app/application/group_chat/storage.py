@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
-from app.application.group_chat.constants import *  # noqa: F403
-
-import asyncio
 import json
-import os
-import re
 import uuid
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from inspect import isawaitable
 from pathlib import Path
 from typing import Any
+
+from app.application.group_chat.constants import (
+    _BROKEN_MARKDOWN_LINK_RE,
+    _MARKDOWN_LINK_RE,
+    _RELAY_TASK_ID_RE,
+    _TEMP_PATH_RE,
+    PUBLIC_ACCEPTANCE_BODY_MAX_CHARS,
+    PUBLIC_CHAT_BODY_MAX_CHARS,
+)
+from app.application.group_chat.employee_registry import (
+    _member_public_shape,
+    _safe_json_line,
+    _utc_now,
+)
 
 
 class AiGroupChatStorageMixin:
@@ -300,5 +306,3 @@ class AiGroupChatStorageMixin:
     @staticmethod
     def _replace(groups: list[dict[str, Any]], updated: dict[str, Any]) -> list[dict[str, Any]]:
         return [updated if str(g.get("id")) == str(updated.get("id")) else g for g in groups]
-
-

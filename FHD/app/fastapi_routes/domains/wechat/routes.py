@@ -18,8 +18,8 @@ router = APIRouter(tags=["legacy-wechat"], deprecated=True)
 
 def _send_wechat_via_automation(contact_name: str, message: str) -> dict:
     """优先 DesktopAutomationService，失败则回退 wechat_cv_send。"""
+    from app.application.wechat_route_facade import assert_safe_outbound_group_reply
     from app.desktop_automation.service import get_desktop_automation_service
-    from app.services.wechat_passive_group_monitor import assert_safe_outbound_group_reply
 
     safe = assert_safe_outbound_group_reply(message)
     if not safe:
@@ -116,14 +116,14 @@ def wechat_starred_messages(
 ):
     """星标/绑定群聊最近一条上下文消息，供内部客服「客户微信摘要」。"""
     try:
-        from app.services.wechat_group_customer_bridge import (
+        from app.application.wechat_route_facade import (
             build_starred_group_feed,
             sync_group_messages,
         )
 
         if type.strip().lower() == "group":
             if sync and market_user_id is not None:
-                from app.services.wechat_group_customer_bridge import (
+                from app.application.wechat_route_facade import (
                     sync_bound_groups_from_live_wechat,
                 )
 
@@ -150,9 +150,9 @@ def wechat_starred_messages(
             if cid is None:
                 continue
             messages = service.get_contact_context(int(cid))
-            from app.services.wechat_group_customer_bridge import _latest_context_message
+            from app.application.wechat_route_facade import latest_context_message
 
-            last = _latest_context_message(messages)
+            last = latest_context_message(messages)
             if not last:
                 continue
             text = _wechat_message_text(last)
@@ -188,7 +188,7 @@ def wechat_groups_sync_messages(
     data = body or {}
     uid = market_user_id if market_user_id is not None else data.get("market_user_id")
     try:
-        from app.services.wechat_group_customer_bridge import sync_group_messages
+        from app.application.wechat_route_facade import sync_group_messages
 
         force_refresh = data.get("force_refresh")
         if force_refresh is None:
@@ -222,7 +222,7 @@ def wechat_groups_list(
 ):
     """列出已导入的微信群（供管理员绑定企业客户）。"""
     try:
-        from app.services.wechat_group_customer_bridge import list_group_contacts
+        from app.application.wechat_route_facade import list_group_contacts
 
         rows = list_group_contacts(keyword=keyword or None, limit=limit)
         return {"success": True, "data": rows, "total": len(rows)}
@@ -305,7 +305,7 @@ def wechat_contact_context_api(contact_id: int, refresh: bool = False):
         service = get_wechat_contact_app_service()
         if refresh:
             try:
-                from app.services.wechat_decrypt_autoconfig import (
+                from app.application.wechat_route_facade import (
                     prepare_wechat_message_db_for_read,
                 )
 

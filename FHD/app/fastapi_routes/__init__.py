@@ -39,6 +39,13 @@ def _register_platform_shell_bootstrap(app: FastAPI) -> None:
     try:
         from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
 
+        if any(
+            getattr(route, "original_router", None) is platform_shell_router
+            or str(getattr(route, "path", "")).startswith("/api/platform-shell/")
+            for route in app.routes
+        ):
+            logger.debug("Platform shell bootstrap routes already registered")
+            return
         app.include_router(platform_shell_router)
         record_runtime_component(app, "platform_shell_routes", ok=True, required=True)
         logger.info("Registered platform_shell bootstrap routes")

@@ -12,12 +12,14 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService
+from app.application.ai_group_chat_service import AiGroupChatService as _AiGroupChatService
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _mobile_request_user_id,
     _mobile_session_meta,
-    _require_mobile_admin_or_enterprise,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _require_mobile_admin_or_enterprise as _require_mobile_admin_or_enterprise_impl,
 )
 from app.fastapi_routes.mobile_extensions.models import (
     AiGroupCreateBody,
@@ -33,13 +35,43 @@ router = APIRouter()
 # ── AI 群聊（微信式多 AI 群组）──
 
 
+def _parent():
+    """Resolve compatibility symbols patched through the legacy parent module."""
+    from app.fastapi_routes import mobile_api_extensions as parent
+
+    return parent
+
+
+def AiGroupChatService(*args, **kwargs):
+    service_factory = getattr(_parent(), "AiGroupChatService", _AiGroupChatService)
+    return service_factory(*args, **kwargs)
+
+
+def _require_mobile_admin_or_enterprise(request: Request, user):
+    checker = getattr(
+        _parent(),
+        "_require_mobile_admin_or_enterprise",
+        _require_mobile_admin_or_enterprise_impl,
+    )
+    if checker is _require_mobile_admin_or_enterprise:
+        checker = _require_mobile_admin_or_enterprise_impl
+    return checker(request, user)
+
+
 def _mobile_group_uid(request: Request, user) -> int:
+    resolver = getattr(_parent(), "_mobile_group_uid", _mobile_group_uid)
+    if resolver is not _mobile_group_uid:
+        return int(resolver(request, user))
     return _mobile_request_user_id(request, user)
 
 
 def _mobile_group_mode(request: Request) -> str:
     """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
-    meta = _mobile_session_meta(request) or {}
+    resolver = getattr(_parent(), "_mobile_group_mode", _mobile_group_mode)
+    if resolver is not _mobile_group_mode:
+        return str(resolver(request))
+    session_meta = getattr(_parent(), "_mobile_session_meta", _mobile_session_meta)
+    meta = session_meta(request) or {}
     return (
         "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
     )
@@ -597,5 +629,3 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )
-
-

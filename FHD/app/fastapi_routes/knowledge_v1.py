@@ -251,8 +251,8 @@ def _run_dataset_rag_agent(
     route_path: str,
 ) -> JSONResponse:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     data = dict(params or {})
     access_payload = _dataset_access_payload_from_request(request)

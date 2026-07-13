@@ -144,6 +144,27 @@ def other_open_industry_mod_ids(keep_mod_id: str) -> list[str]:
     return [mid for mid in open_industry_seed_mod_ids() if mid and mid != keep]
 
 
+def _is_bundled_mods_root(path: Path) -> bool:
+    """Return whether *path* is a read-only bundled/repository Mod root.
+
+    In a source checkout ``ModManager`` falls back to ``FHD/mods``.  Treating
+    that fallback as tenant-owned storage made an industry switch physically
+    delete the other bundled industry package.  Packaged seed roots have the
+    same ownership rule: they are distribution assets, not uninstall targets.
+    """
+    try:
+        from app.infrastructure.mods.mod_manager import _repo_layout_mods_candidates
+
+        resolved = path.expanduser().resolve()
+        return any(
+            resolved == Path(candidate).expanduser().resolve()
+            for candidate in _repo_layout_mods_candidates()
+        )
+    except (OSError, RuntimeError):
+        logger.debug("bundled mods root ownership check failed", exc_info=True)
+        return False
+
+
 def deactivate_other_open_industry_mods(
     keep_mod_id: str, *, remove_files: bool = True
 ) -> list[dict[str, Any]]:
@@ -151,6 +172,8 @@ def deactivate_other_open_industry_mods(
     from app.infrastructure.mods.mod_manager import get_mod_manager
 
     mm = get_mod_manager()
+    mods_root = Path(mm.mods_root).expanduser()
+    remove_mutable_files = remove_files and not _is_bundled_mods_root(mods_root)
     results: list[dict[str, Any]] = []
     for mod_id in other_open_industry_mod_ids(keep_mod_id):
         try:
@@ -158,8 +181,8 @@ def deactivate_other_open_industry_mods(
         except RECOVERABLE_ERRORS as exc:
             logger.warning("unload open industry mod %s failed: %s", mod_id, exc)
         removed = False
-        if remove_files:
-            dest = Path(mm.mods_root) / mod_id
+        if remove_mutable_files:
+            dest = mods_root / mod_id
             if dest.is_dir():
                 try:
                     shutil.rmtree(dest)

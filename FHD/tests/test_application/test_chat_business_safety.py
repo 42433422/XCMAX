@@ -176,9 +176,7 @@ def test_natural_employee_lookup_uses_real_personnel_store(business_db: tuple[Pa
 def test_personal_late_query_is_grounded_in_imported_record(
     business_db: tuple[Path, Path],
 ) -> None:
-    result = safety.try_handle_business_chat_action(
-        "我2026年7月13日有没有迟到？", user_id="u-1001"
-    )
+    result = safety.try_handle_business_chat_action("我2026年7月13日有没有迟到？", user_id="u-1001")
     assert result is not None
     assert "有迟到标记" in result["response"]
     assert "08:03:00" in result["response"]
@@ -388,9 +386,7 @@ def test_stream_path_preempts_legacy_planner_and_returns_same_receipt(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message="我2026年7月13日有没有迟到？", user_id="u-1001"
-    )
+    body = chat_helpers.XcagiCompatChatBody(message="我2026年7月13日有没有迟到？", user_id="u-1001")
     raw = b"".join(chat_helpers._xcagi_planner_stream_bytes(request, body, ai_tier="P0"))
     events = [
         json.loads(line.removeprefix("data: "))
@@ -412,16 +408,12 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
     monkeypatch.setattr(
         planner_compat,
         "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("legacy chat must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
     )
     monkeypatch.setattr(
         planner_compat,
         "_execute_ai_chat_mainline",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("AI mainline must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("AI mainline must not run")),
     )
     request = Request(
         {
@@ -432,9 +424,7 @@ async def test_json_path_preempts_both_mainline_and_legacy_chat(
             "client": ("127.0.0.1", 12345),
         }
     )
-    body = chat_helpers.XcagiCompatChatBody(
-        message="1001号员工叫什么名字？", user_id="u-1001"
-    )
+    body = chat_helpers.XcagiCompatChatBody(message="1001号员工叫什么名字？", user_id="u-1001")
     result = await planner_compat.execute_compat_chat(request, body)
     assert result["business_receipt"]["operation"] == "personnel_read"
     assert result["business_receipt"]["verified"] is True
@@ -450,9 +440,7 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
     monkeypatch.setattr(
         planner_compat,
         "run_agent_chat",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(
-            AssertionError("legacy chat must not run")
-        ),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("legacy chat must not run")),
     )
     request = Request(
         {

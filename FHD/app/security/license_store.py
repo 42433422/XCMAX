@@ -172,6 +172,7 @@ class AllowedClient:
 
 _lock = threading.Lock()
 _initialized = False
+_initialized_path: str | None = None
 
 
 def _now() -> int:
@@ -194,15 +195,18 @@ def _connect() -> Iterator[sqlite3.Connection]:
 
 
 def ensure_schema() -> None:
-    global _initialized
-    if _initialized:
+    global _initialized, _initialized_path
+    current_path = str(get_lan_config().license_db_path.expanduser().resolve())
+    if _initialized and _initialized_path == current_path:
         return
     with _lock:
-        if _initialized:
+        current_path = str(get_lan_config().license_db_path.expanduser().resolve())
+        if _initialized and _initialized_path == current_path:
             return
         with _connect() as conn:
             conn.executescript(_SCHEMA)
         _initialized = True
+        _initialized_path = current_path
         logger.info("LAN license store schema ensured at %s", get_lan_config().license_db_path)
 
 

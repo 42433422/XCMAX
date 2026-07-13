@@ -6,6 +6,7 @@ import os
 import re
 from typing import Any
 
+
 def _skip_pro_excel_deterministic_import(context: dict[str, Any] | None) -> bool:
     """
     是否跳过「专业版聊天：excel_analysis + 导入关键词 → 直接规则入库」的捷径。
@@ -71,5 +72,3 @@ def _enrich_confirmation_inner(inner: dict[str, Any], *, action: str) -> dict[st
     enriched = dict(inner)
     enriched["approval_card"] = build_approval_card_payload(action=action, inner=inner)
     return enriched
-
-

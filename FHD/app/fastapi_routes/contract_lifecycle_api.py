@@ -45,8 +45,7 @@ def esign_channel(request: Request):
 
 @router.get("/status")
 def contract_lifecycle_status(market_user_id: int, username: str = ""):
-    from app.services.contract_lifecycle import get_contract_block
-    from app.services.user_cs_pipeline import load_pipeline
+    from app.application.contract_lifecycle_facade import get_contract_block, load_pipeline
 
     uid = int(market_user_id)
     doc = load_pipeline(uid, username=username)
@@ -74,8 +73,12 @@ def contract_lifecycle_status(market_user_id: int, username: str = ""):
 
 @router.post("/transition")
 def contract_transition(body: ContractTransitionBody):
-    from app.services.contract_lifecycle import apply_contract_to_crm_meta, transition_contract
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+    from app.application.contract_lifecycle_facade import (
+        apply_contract_to_crm_meta,
+        load_pipeline,
+        save_pipeline,
+        transition_contract,
+    )
 
     uid = body.market_user_id
     status = body.status.strip()
@@ -88,8 +91,12 @@ def contract_transition(body: ContractTransitionBody):
 
 @router.post("/esign/start")
 def esign_start(body: EsignStartBody):
-    from app.services.contract_lifecycle import apply_contract_to_crm_meta, start_esign_flow
-    from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+    from app.application.contract_lifecycle_facade import (
+        apply_contract_to_crm_meta,
+        load_pipeline,
+        save_pipeline,
+        start_esign_flow,
+    )
 
     uid = body.market_user_id
     doc = load_pipeline(uid, username=body.username)

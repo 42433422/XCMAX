@@ -77,7 +77,7 @@ def finance_crm_invoices_list(
     if gate is not None:
         return gate
     try:
-        from app.services.user_cs_crm_store import list_crm_invoices
+        from app.application.finance_invoice_facade import list_crm_invoices
 
         data = list_crm_invoices(
             market_user_id=market_user_id,
@@ -97,7 +97,7 @@ def finance_crm_invoice_detail(request: Request, invoice_id: int):
     if gate is not None:
         return gate
     try:
-        from app.services.user_cs_crm_store import get_crm_invoice_by_id
+        from app.application.finance_invoice_facade import get_crm_invoice_by_id
 
         inv = get_crm_invoice_by_id(int(invoice_id))
         if not inv:
@@ -114,9 +114,12 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
     if gate is not None:
         return gate
     try:
-        from app.services.tax_invoice_provider import issue_crm_invoice_for_pipeline
-        from app.services.user_cs_crm_store import get_opportunity_by_market_user
-        from app.services.user_cs_pipeline import load_pipeline, save_pipeline
+        from app.application.finance_invoice_facade import (
+            get_opportunity_by_market_user,
+            issue_crm_invoice_for_pipeline,
+            load_pipeline,
+            save_pipeline,
+        )
 
         uid = int(body.market_user_id or 0)
         opp_id = int(body.opportunity_id or 0)
@@ -126,15 +129,11 @@ def finance_crm_invoice_issue(request: Request, body: CrmInvoiceIssueBody):
                 status_code=400,
             )
         if uid <= 0 and opp_id > 0:
-            from app.services.user_cs_crm_store import _connect, ensure_crm_schema
+            from app.application.finance_invoice_facade import (
+                market_user_id_for_opportunity,
+            )
 
-            ensure_crm_schema()
-            with _connect() as conn:
-                row = conn.execute(
-                    "SELECT market_user_id FROM cs_crm_opportunities WHERE id = ?",
-                    (opp_id,),
-                ).fetchone()
-            uid = int(row["market_user_id"]) if row else 0
+            uid = market_user_id_for_opportunity(opp_id)
         if uid <= 0:
             return JSONResponse(
                 {"success": False, "message": "无法解析 market_user_id"}, status_code=400
@@ -168,8 +167,10 @@ def finance_crm_invoice_archive(request: Request, invoice_id: int):
     if gate is not None:
         return gate
     try:
-        from app.services.finance_unified_archive import archive_from_crm_invoice
-        from app.services.user_cs_crm_store import get_crm_invoice_by_id
+        from app.application.finance_invoice_facade import (
+            archive_from_crm_invoice,
+            get_crm_invoice_by_id,
+        )
 
         inv = get_crm_invoice_by_id(int(invoice_id))
         if not inv:

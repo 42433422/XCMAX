@@ -1,14 +1,10 @@
-"""Workflow response formatting mixin for AIChatWorkflowResponseMixin."""
+"""Workflow response builder used by the AI chat facade."""
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
-import os
-import re
-from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +13,10 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 
 
-class AIChatWorkflowResponseMixin:
+class AIChatWorkflowResponseBuilder:
+    def __init__(self, products_float_query: Callable[..., str]) -> None:
+        self._products_float_query = products_float_query
+
     def _format_agent_run_response(
         self,
         plan,
@@ -342,7 +341,7 @@ class AIChatWorkflowResponseMixin:
             r.success and r.tool_id == "products" and r.action == "query"
             for r in run_result.node_results
         ):
-            q = self._workflow_products_float_query(plan, run_result, user_message)
+            q = self._products_float_query(plan, run_result, user_message)
             payload["autoAction"] = {
                 "type": "show_products_float",
                 "feature": "products",
@@ -386,4 +385,3 @@ class AIChatWorkflowResponseMixin:
                     picked[key] = out[key]
             return picked
         return {}
-

@@ -112,6 +112,31 @@ def test_openapi_schema_builds_without_pydantic_errors():
     assert "/api/health" in (schema.get("paths") or {}), "健康检查端点必须在 OpenAPI 中可见"
 
 
+def test_platform_shell_routes_are_registered_once():
+    """bootstrap + deferred 装配不得把同一 platform-shell 路由挂两遍。"""
+    from app.fastapi_app import create_fastapi_app
+    from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
+
+    app = create_fastapi_app()
+    included_routers = [
+        route
+        for route in app.routes
+        if getattr(route, "original_router", None) is platform_shell_router
+    ]
+    route_keys = [
+        (method, route.path)
+        for route in app.routes
+        if str(getattr(route, "path", "")).startswith("/api/platform-shell/")
+        for method in getattr(route, "methods", set())
+    ]
+
+    if included_routers:
+        assert len(included_routers) == 1
+    else:
+        assert route_keys
+        assert len(route_keys) == len(set(route_keys))
+
+
 def test_warning_baseline_detects_new_warning(tmp_path: Path):
     """strict 模式应允许已登记 warning，但阻断新增 warning。"""
     checker = _load_checker_module()

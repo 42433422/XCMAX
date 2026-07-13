@@ -95,6 +95,7 @@ def read_workspace_output_files(
     max_bytes: int = 2_097_152,
 ) -> list[dict[str, Any]]:
     from fastapi import HTTPException
+
     from app.infrastructure.workspace import workspace_root as configured_workspace_root
     from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 

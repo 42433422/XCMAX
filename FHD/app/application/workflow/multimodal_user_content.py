@@ -270,8 +270,7 @@ def replace_image_parts_with_ocr_text(
                 recognized_images += 1
                 message_recognized += 1
                 chunks.append(
-                    f"[第 {image_index} 张图片的本地 OCR 文字]\n"
-                    f"{ocr_text[:_MAX_OCR_TEXT_CHARS]}"
+                    f"[第 {image_index} 张图片的本地 OCR 文字]\n{ocr_text[:_MAX_OCR_TEXT_CHARS]}"
                 )
             except RECOVERABLE_ERRORS as exc:
                 logger.info("local OCR fallback failed for image %s: %s", image_index, exc)

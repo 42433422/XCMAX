@@ -203,8 +203,7 @@ def build_deliverable_status(
             or (edition == "minimal" and minimal_ready)
         )
     deliverable = edition_ready and not any(
-        b["code"] in ("MOD_ROUTES_NOT_MOUNTED", "RUNTIME_COMPONENT_UNAVAILABLE")
-        for b in blockers
+        b["code"] in ("MOD_ROUTES_NOT_MOUNTED", "RUNTIME_COMPONENT_UNAVAILABLE") for b in blockers
     )
 
     product_flow_step = "daily_use"

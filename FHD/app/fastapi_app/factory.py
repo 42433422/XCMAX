@@ -31,7 +31,9 @@ from .middleware_extra import register_extra_middleware, register_prometheus_met
 
 
 def _desktop_fast_start_enabled() -> bool:
-    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "1").strip().lower()
+    # Electron opts in explicitly. Other callers need a complete API surface
+    # immediately; otherwise their first request can race deferred route mounts.
+    raw = os.environ.get("XCAGI_DESKTOP_FAST_START", "0").strip().lower()
     return raw not in {"0", "false", "off", "no"}
 
 

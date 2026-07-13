@@ -1305,7 +1305,7 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(
-                "[ModManager] ensure_mod_api_ready: load_mod(%s) in failure backoff",
+                "[ModManager] ensure_mod_api_ready: load_mod(%s) in retry delay",
                 mid,
             )
             return False
@@ -1389,9 +1389,7 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
         open_seed_ids = set(open_industry_seed_mod_ids())
         mods_root = Path(get_mod_manager().mods_root)
         candidates = {
-            mid
-            for mid in candidates
-            if mid not in open_seed_ids or (mods_root / mid).is_dir()
+            mid for mid in candidates if mid not in open_seed_ids or (mods_root / mid).is_dir()
         }
     except RECOVERABLE_ERRORS:
         logger.debug("filter unselected open industry seeds skipped", exc_info=True)
