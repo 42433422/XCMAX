@@ -503,7 +503,7 @@ class TestInitDbRuntimeAuthBootstrap:
             lambda: "sqlite:///test.db",
         )
         monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: True)
-        called = {"auth": 0, "rbac": 0, "inv": 0, "prefs": 0}
+        called = {"auth": 0, "rbac": 0, "inv": 0, "prefs": 0, "ledger": 0}
 
         def fake_auth(engine, *, database_url=None, swallow_errors=True):
             called["auth"] += 1
@@ -517,13 +517,17 @@ class TestInitDbRuntimeAuthBootstrap:
         def fake_prefs(engine, *, database_url=None, swallow_errors=True):
             called["prefs"] += 1
 
+        def fake_ledger(engine, *, database_url=None, swallow_errors=True):
+            called["ledger"] += 1
+
         monkeypatch.setattr("app.db.init_db.ensure_sqlite_auth_bootstrap", fake_auth)
         monkeypatch.setattr("app.db.init_db.ensure_sqlite_rbac_bootstrap", fake_rbac)
         monkeypatch.setattr("app.db.init_db.ensure_sqlite_inventory_bootstrap", fake_inv)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
+        monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
 
         ensure_runtime_auth_bootstrap()
-        assert called == {"auth": 1, "rbac": 1, "inv": 1, "prefs": 1}
+        assert called == {"auth": 1, "rbac": 1, "inv": 1, "prefs": 1, "ledger": 1}
 
     def test_runtime_auth_bootstrap_postgres_url(self, monkeypatch):
         from app.db.init_db import ensure_runtime_auth_bootstrap
@@ -533,7 +537,7 @@ class TestInitDbRuntimeAuthBootstrap:
             lambda: "postgresql://user:pass@host/db",
         )
         monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: False)
-        called = {"pg": 0, "prefs": 0, "neuro": 0}
+        called = {"pg": 0, "prefs": 0, "neuro": 0, "ledger": 0}
 
         # Mock every bootstrap helper the postgres branch calls so no real
         # PostgreSQL connection (port 5432) is attempted; the branch fans out to
@@ -548,12 +552,16 @@ class TestInitDbRuntimeAuthBootstrap:
         def fake_neuro(engine, *, database_url=None, swallow_errors=True):
             called["neuro"] += 1
 
+        def fake_ledger(engine, *, database_url=None, swallow_errors=True):
+            called["ledger"] += 1
+
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
         monkeypatch.setattr("app.db.init_db.ensure_neuro_event_log_bootstrap", fake_neuro)
+        monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
 
         ensure_runtime_auth_bootstrap()
-        assert called == {"pg": 1, "prefs": 1, "neuro": 1}
+        assert called == {"pg": 1, "prefs": 1, "neuro": 1, "ledger": 1}
 
 
 class TestInitDbSessionsColumns:

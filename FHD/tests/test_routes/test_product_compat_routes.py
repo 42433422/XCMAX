@@ -53,6 +53,30 @@ class TestShipmentRecordsUnits:
             r = client_compat.get("/shipment/shipment-records/units")
             assert r.status_code == 200
 
+    def test_taiyangniao_host_alias_does_not_depend_on_private_mod_version(
+        self, client_compat
+    ):
+        with (
+            patch(
+                "app.fastapi_routes.domains.product.compat_routes._products_units_for_select",
+                return_value={"success": True, "data": [{"name": "销售部"}]},
+            ),
+            patch(
+                "app.application.attendance_reference_data.attendance_unit_names",
+                return_value=["生产部", "销售部"],
+            ),
+        ):
+            r = client_compat.get(
+                "/mod/taiyangniao-pro/shipment/shipment-records/units"
+            )
+        assert r.status_code == 200
+        assert r.json() == {
+            "success": True,
+            "data": ["生产部", "销售部"],
+            "units": ["生产部", "销售部"],
+            "source": "host_compat",
+        }
+
 
 # ========================= GET /purchase_units ===========================
 

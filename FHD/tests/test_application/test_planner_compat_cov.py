@@ -283,6 +283,54 @@ def test_derive_industry_admin_kind():
     assert result == "管理端"
 
 
+def test_derive_industry_prefers_authenticated_request_state():
+    helpers_mod = MagicMock()
+    helpers_mod._session_id_from_request = MagicMock(return_value="sess-state")
+    meta_mod = MagicMock()
+    meta_mod.load_session_account_meta = MagicMock(
+        return_value={"account_kind": "enterprise", "local_user_id": 42}
+    )
+    request = _req()
+    request.state.industry_id = "考勤"
+
+    with patch.dict(
+        sys.modules,
+        {
+            "app.fastapi_routes.domains.misc.helpers": helpers_mod,
+            "app.application.session_account_meta": meta_mod,
+        },
+    ):
+        result = _derive_industry_from_session(request)
+
+    assert result == "考勤"
+
+
+def test_derive_industry_uses_workspace_preference_before_user_row():
+    helpers_mod = MagicMock()
+    helpers_mod._session_id_from_request = MagicMock(return_value="sess-workspace")
+    meta_mod = MagicMock()
+    meta_mod.load_session_account_meta = MagicMock(
+        return_value={"account_kind": "enterprise", "tenant_id": 8, "local_user_id": 42}
+    )
+    prefs_mod = MagicMock()
+    prefs_mod.get_workspace_prefs = MagicMock(
+        return_value={"selected_industry_id": "考勤"}
+    )
+
+    with patch.dict(
+        sys.modules,
+        {
+            "app.fastapi_routes.domains.misc.helpers": helpers_mod,
+            "app.application.session_account_meta": meta_mod,
+            "app.application.tenant_workspace_prefs": prefs_mod,
+        },
+    ):
+        result = _derive_industry_from_session(_req())
+
+    assert result == "考勤"
+    prefs_mod.get_workspace_prefs.assert_called_once_with("tenant:8")
+
+
 # ===========================================================================
 # 3. _derive_industry_from_session — local_user_id found, row has industry  [71→72, 77→78]
 # ===========================================================================

@@ -249,6 +249,33 @@ def test_work_mode_feed_invalid_per_contact_returns_422() -> None:
     assert resp2.status_code == 422
 
 
+def test_work_mode_feed_host_alias_returns_assistant_shape() -> None:
+    client = _wechat_compat_client()
+    legacy = {
+        "items": [
+            {
+                "username": "wx_1",
+                "display_name": "测试联系人",
+                "summary": "今天的消息",
+                "timestamp": 123,
+                "unread_count": 2,
+            }
+        ],
+        "per_contact": 1,
+    }
+    with patch.object(wechat_compat, "wechat_work_mode_feed", return_value=legacy):
+        resp = client.get(
+            "/mod/xcagi-erp-domain-bridge/wechat_contacts/work_mode_feed",
+            params={"per_contact": 1},
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["source"] == "host_compat"
+    assert body["feed"][0]["contact_name"] == "测试联系人"
+    assert body["feed"][0]["messages"][0]["text"] == "今天的消息"
+
+
 def test_work_mode_feed_recoverable_error_returns_empty_with_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
