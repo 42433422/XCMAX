@@ -15,12 +15,6 @@
     "routes": "frontend/routes",
     "menu": [
       {
-        "id": "mod-model-payment",
-        "label": "模型服务",
-        "icon": "fa-credit-card",
-        "path": "/mod/xcagi-model-payment-bridge/model-payment"
-      },
-      {
         "id": "mod-kitten-finance",
         "label": "财务分析",
         "icon": "fa-line-chart",

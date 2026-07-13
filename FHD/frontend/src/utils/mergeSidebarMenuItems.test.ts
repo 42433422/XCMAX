@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { mergeSidebarMenuItems } from './mergeSidebarMenuItems'
 
 describe('mergeSidebarMenuItems', () => {
-  it('drops mod customer-service when trailing host keys exist', () => {
+  it('drops all retired customer-service menu entries', () => {
     const core = [{ key: 'products', name: '人员', iconClass: 'fa-cubes' }]
     const mod = [
       {
@@ -20,8 +20,82 @@ describe('mergeSidebarMenuItems', () => {
     const merged = mergeSidebarMenuItems(core, mod, [], trailing, ['taiyangniao-pro'])
     const keys = merged.map((m) => m.key)
     expect(keys).not.toContain('mod-enterprise-customer-service')
-    expect(keys.filter((k) => k === 'enterprise-customer-service')).toHaveLength(1)
+    expect(keys).not.toContain('enterprise-customer-service')
     expect(keys).not.toContain('internal-customer-service')
+  })
+
+  it('drops stale WeChat contact entries now represented by data sources', () => {
+    const merged = mergeSidebarMenuItems(
+      [{ key: 'data-sources', name: '数据来源', iconClass: 'fa-database' }],
+      [
+        {
+          key: 'mod-erp-wechat-contacts',
+          name: '企业微信联系人',
+          iconClass: 'fa-weixin',
+          modId: 'xcagi-erp-domain-bridge',
+          path: '/mod/xcagi-erp-domain-bridge/wechat-contacts',
+        },
+        {
+          key: 'wechat-contacts-ai-employee-entry',
+          name: '微信联系人',
+          iconClass: 'fa-weixin',
+          modId: 'wechat-contacts-ai-employee',
+          path: '/wechat-contacts',
+        },
+      ],
+      [],
+      [],
+      [],
+    )
+    expect(merged.map((item) => item.key)).toEqual(['data-sources'])
+  })
+
+  it('drops stale materials-list entries now represented by materials', () => {
+    const merged = mergeSidebarMenuItems(
+      [{ key: 'materials', name: '资源库', iconClass: 'fa-archive' }],
+      [
+        {
+          key: 'mod-erp-materials-list',
+          name: '资源列表',
+          iconClass: 'fa-list-alt',
+          modId: 'xcagi-erp-domain-bridge',
+          path: '/mod/xcagi-erp-domain-bridge/materials-list',
+        },
+      ],
+      [],
+      [{ key: 'materials-list', name: '资源列表', iconClass: 'fa-list-alt' }],
+      [],
+    )
+    expect(merged.map((item) => item.key)).toEqual(['materials'])
+  })
+
+  it('keeps model service in settings and business docking in chat, not primary navigation', () => {
+    const merged = mergeSidebarMenuItems(
+      [
+        { key: 'chat', name: '智能对话', iconClass: 'fa-comments-o' },
+        { key: 'settings', name: '系统设置', iconClass: 'fa-cog' },
+      ],
+      [
+        {
+          key: 'mod-model-payment',
+          name: '模型服务',
+          iconClass: 'fa-credit-card',
+          modId: 'xcagi-model-payment-bridge',
+          path: '/mod/xcagi-model-payment-bridge/model-payment',
+        },
+        {
+          key: 'mod-erp-business-docking',
+          name: '业务对接',
+          iconClass: 'fa-exchange',
+          modId: 'xcagi-erp-domain-bridge',
+          path: '/mod/xcagi-erp-domain-bridge/business-docking',
+        },
+      ],
+      [],
+      [],
+      [],
+    )
+    expect(merged.map((item) => item.key)).toEqual(['chat', 'settings'])
   })
 
   it('drops mod item when key uses erroneous mod-mod- prefix', () => {

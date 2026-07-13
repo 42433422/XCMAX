@@ -24,12 +24,6 @@ const modRoutes = [
 
 const modMenu = [
   {
-    id: 'mod-model-payment',
-    label: '模型服务',
-    icon: 'fa-credit-card',
-    path: `${PREFIX}/model-payment`,
-  },
-  {
     id: 'mod-kitten-finance',
     label: '财务分析',
     icon: 'fa-line-chart',

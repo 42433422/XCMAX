@@ -2246,19 +2246,35 @@ def api_admin_list_wallets(
     offset: int = Query(0, ge=0),
     user: User = Depends(_require_admin),
 ):
+    """Return one wallet row per account, including users whose balance is still zero.
+
+    A wallet record is created lazily on first wallet use.  Listing the ``wallets`` table alone
+    therefore made untouched accounts look as if their balance could not be queried.
+    """
     sf = get_session_factory()
     with sf() as session:
-        total = session.query(Wallet).count()
-        rows = session.query(Wallet).order_by(Wallet.id).offset(offset).limit(limit).all()
+        total = session.query(User).count()
+        rows = (
+            session.query(User, Wallet)
+            .outerjoin(Wallet, Wallet.user_id == User.id)
+            .order_by(User.created_at.desc(), User.id.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
         return {
             "items": [
                 {
-                    "id": w.id,
-                    "user_id": w.user_id,
-                    "balance": w.balance,
-                    "updated_at": w.updated_at.isoformat() if w.updated_at else "",
+                    "id": wallet.id if wallet else None,
+                    "user_id": account.id,
+                    "balance": wallet.balance if wallet else 0.0,
+                    "updated_at": (
+                        wallet.updated_at.isoformat()
+                        if wallet is not None and wallet.updated_at
+                        else ""
+                    ),
                 }
-                for w in rows
+                for account, wallet in rows
             ],
             "total": total,
         }

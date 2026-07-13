@@ -66,9 +66,6 @@ export const INDUSTRY_DELIVERY_ERP_MENU_KEYS = [
   'template-preview',
   'tools',
   'approval-hub',
-  'enterprise-customer-service',
-  'internal-customer-service',
-  'wechat-contacts',
 ] as const
 
 export const INDUSTRY_DELIVERY_ROUTE_NAMES = new Set<string>([

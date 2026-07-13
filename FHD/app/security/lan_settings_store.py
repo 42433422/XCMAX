@@ -36,11 +36,20 @@ def _resolve_repo_root() -> Path:
     return here.parents[2]
 
 
+def _default_data_dir() -> Path:
+    desktop_root = (
+        os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+    ).strip()
+    if desktop_root:
+        return Path(desktop_root).expanduser().resolve() / "data"
+    return (_resolve_repo_root() / "data").resolve()
+
+
 def _settings_path() -> Path:
     override = (os.environ.get("LAN_SETTINGS_FILE") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
-    return (_resolve_repo_root() / "data" / _SETTINGS_FILENAME).resolve()
+    return _default_data_dir() / _SETTINGS_FILENAME
 
 
 @dataclass

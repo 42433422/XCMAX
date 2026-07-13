@@ -206,7 +206,7 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
       path: '/wechat-contacts',
       name: 'wechat-contacts',
       redirect: { name: 'data-sources', query: { source: 'wechat_local_db' } },
-      meta: { title: '企业微信联系人' },
+      meta: { title: '数据来源' },
     },
     {
       path: '/print',
@@ -263,14 +263,14 @@ if (import.meta.env.VITE_XCAGI_EDITION !== 'minimal') {
     {
       path: '/enterprise-customer-service',
       name: 'enterprise-customer-service',
-      component: () => import('../views/EnterpriseCustomerServiceView.vue'),
-      meta: { title: '外部客服', customerServiceSide: 'enterprise' },
+      redirect: { name: 'im' },
+      meta: { title: '信息' },
     },
     {
       path: '/internal-customer-service',
       name: 'internal-customer-service',
-      component: () => import('../views/InternalCustomerServiceView.vue'),
-      meta: { title: '内部客服', customerServiceSide: 'admin', requiresAdminAccount: true },
+      redirect: { name: 'im' },
+      meta: { title: '信息' },
     },
     {
       path: '/approval-hub',
@@ -687,28 +687,6 @@ router.beforeEach(async (to, _from, next) => {
       }
     } catch {
       /* ignore — 后续企业会话校验会兜底 */
-    }
-  }
-
-  const customerServiceSide = to.meta?.customerServiceSide as string | undefined;
-  if (customerServiceSide === 'enterprise' || customerServiceSide === 'admin') {
-    try {
-      const { useAccountProfileStore } = await import('@/stores/accountProfile');
-      const profile = useAccountProfileStore();
-      if (!profile.loaded) {
-        await profile.refreshFromServer();
-      }
-      if (customerServiceSide === 'admin' && !profile.isAdminAccount) {
-        next({ name: 'im' });
-        return;
-      }
-      if (customerServiceSide === 'enterprise' && profile.isAdminAccount) {
-        next({ name: 'internal-customer-service' });
-        return;
-      }
-    } catch {
-      next({ name: 'chat' });
-      return;
     }
   }
 

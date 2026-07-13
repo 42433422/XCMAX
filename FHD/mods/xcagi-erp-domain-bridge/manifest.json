@@ -40,12 +40,6 @@
         "path": "/mod/xcagi-erp-domain-bridge/shipment-records"
       },
       {
-        "id": "mod-erp-materials-list",
-        "label": "资源列表",
-        "icon": "fa-list-alt",
-        "path": "/mod/xcagi-erp-domain-bridge/materials-list"
-      },
-      {
         "id": "mod-erp-materials",
         "label": "资源库",
         "icon": "fa-archive",
@@ -56,12 +50,6 @@
         "label": "表格模式",
         "icon": "fa-table",
         "path": "/mod/xcagi-erp-domain-bridge/traditional-mode"
-      },
-      {
-        "id": "mod-erp-business-docking",
-        "label": "业务对接",
-        "icon": "fa-exchange",
-        "path": "/mod/xcagi-erp-domain-bridge/business-docking"
       },
       {
         "id": "mod-erp-data-sources",
@@ -86,12 +74,6 @@
         "label": "模板库",
         "icon": "fa-file-o",
         "path": "/mod/xcagi-erp-domain-bridge/template-preview"
-      },
-      {
-        "id": "mod-erp-wechat-contacts",
-        "label": "企业微信联系人",
-        "icon": "fa-weixin",
-        "path": "/mod/xcagi-erp-domain-bridge/wechat-contacts"
       }
     ],
     "menu_overrides": [
@@ -112,15 +94,7 @@
         "hidden": true
       },
       {
-        "key": "wechat-contacts",
-        "hidden": true
-      },
-      {
         "key": "materials",
-        "hidden": true
-      },
-      {
-        "key": "materials-list",
         "hidden": true
       },
       {

@@ -722,47 +722,14 @@ describe('router/index 覆盖率补齐', () => {
   // 10. beforeEach 守卫 - customer service 路由
   // ═══════════════════════════════════════════════════════════
   describe('beforeEach 守卫 - customer service', () => {
-    it('enterprise 客服 + admin 账号时重定向到 internal-customer-service', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = true
+    it('旧 enterprise 客服入口统一重定向到信息', async () => {
       await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('internal-customer-service')
-    })
-
-    it('enterprise 客服 + 非 admin 账号时允许', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('enterprise-customer-service')
-    })
-
-    it('admin 客服 + 非 admin 账号时重定向到 im', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/internal-customer-service')
       expect(router.currentRoute.value.name).toBe('im')
     })
 
-    it('admin 客服 + admin 账号时允许', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = true
+    it('旧 internal 客服入口统一重定向到信息', async () => {
       await router.push('/internal-customer-service')
-      expect(router.currentRoute.value.name).toBe('internal-customer-service')
-    })
-
-    it('profile 未加载时调用 refreshFromServer', async () => {
-      mockAccountProfileStore.loaded = false
-      mockAccountProfileStore.refreshFromServer.mockResolvedValue(undefined)
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/enterprise-customer-service')
-      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
-    })
-
-    it('profile refresh 异常时重定向到 chat', async () => {
-      mockAccountProfileStore.loaded = false
-      mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
-      await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('chat')
+      expect(router.currentRoute.value.name).toBe('im')
     })
   })
 
@@ -1089,15 +1056,17 @@ describe('router/index 覆盖率补齐', () => {
       expect(route?.meta?.mod).toBe(true)
     })
 
-    it('enterprise-customer-service 有 customerServiceSide=enterprise', () => {
+    it('enterprise-customer-service 仅保留信息兼容跳转元数据', () => {
       const route = router.getRoutes().find((r) => r.name === 'enterprise-customer-service')
-      expect(route?.meta?.customerServiceSide).toBe('enterprise')
+      expect(route?.meta?.title).toBe('信息')
+      expect(route?.meta?.customerServiceSide).toBeUndefined()
     })
 
-    it('internal-customer-service 有 customerServiceSide=admin 和 requiresAdminAccount', () => {
+    it('internal-customer-service 不再要求客服侧或管理员权限', () => {
       const route = router.getRoutes().find((r) => r.name === 'internal-customer-service')
-      expect(route?.meta?.customerServiceSide).toBe('admin')
-      expect(route?.meta?.requiresAdminAccount).toBe(true)
+      expect(route?.meta?.title).toBe('信息')
+      expect(route?.meta?.customerServiceSide).toBeUndefined()
+      expect(route?.meta?.requiresAdminAccount).toBeUndefined()
     })
 
     it('admin-entitlements 有 requiresAdminAccount', () => {
