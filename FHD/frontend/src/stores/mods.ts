@@ -372,10 +372,23 @@ export const useModsStore = defineStore('mods', () => {
       }
       return mods.value;
     }
+    const activeCanonical = canonicalEntitlementId(active);
+    const overlayExtras = (): ModInfo[] =>
+      mods.value.filter((m) => {
+        const id = String(m.id || '').trim();
+        if (!id || id === active) return false;
+        if (isAuxEmployeePackModId(id)) return true;
+        return Boolean(
+          activeCanonical &&
+            isAccountCustomModId(id) &&
+            canonicalEntitlementId(id) === activeCanonical,
+        );
+      });
+
     const hit = mods.value.find((m) => String(m.id || '').trim() === active);
-    if (hit) return [hit];
+    if (hit) return [hit, ...overlayExtras()];
     if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
-      return [findClientPrimaryErpMod() || buildAttendanceIndustryModStub()];
+      return [findClientPrimaryErpMod() || buildAttendanceIndustryModStub(), ...overlayExtras()];
     }
     return mods.value;
   });
@@ -754,11 +767,20 @@ export const useModsStore = defineStore('mods', () => {
     return idx >= 0 ? idx : 100;
   }
 
-  /** 侧栏 Mod 菜单来源：已选行业扩展时仅该包 + AI 员工触点；不遍历全部 bridge */
+  /** 侧栏 Mod 菜单来源：已选行业扩展时该包 + 同线账号定制 + AI 员工触点；不遍历全部 bridge */
   function modsContributingSidebarMenu(): ModInfo[] {
     const ui = modsForUi.value;
     const full = mods.value;
     const active = String(activeModId.value || '').trim();
+    const activeCanonical = active ? canonicalEntitlementId(active) : '';
+
+    /** 账号定制叠在行业包上（如太阳鸟「考勤表转换」），与行业包并存、不互斥 */
+    const isOverlayCustomForActive = (id: string): boolean =>
+      Boolean(
+        activeCanonical &&
+          isAccountCustomModId(id) &&
+          canonicalEntitlementId(id) === activeCanonical,
+      );
 
     const pickForActive = (pool: ModInfo[]): ModInfo[] =>
       pool.filter((m) => {
@@ -766,17 +788,26 @@ export const useModsStore = defineStore('mods', () => {
         if (!id) return false;
         if (id === active) return true;
         if (isAuxEmployeePackModId(id)) return true;
+        if (isOverlayCustomForActive(id)) return true;
         return false;
       });
 
     if (active && isSelectableExtensionModId(active)) {
-      const fromUi = pickForActive(ui);
-      if (fromUi.length) return fromUi;
+      // modsForUi 在已选扩展时仅含 active 一项；若先 pick(ui) 会提前返回，
+      // 同线账号定制（如太阳鸟「考勤表转换」）永远进不了侧栏。
+      // 原版关闭 / 管理端 SPA：ui 故意为空，不贡献。
+      if (!ui.length) return [];
       const fromFull = pickForActive(full);
       if (fromFull.length) return fromFull;
       if (active === CLIENT_PRIMARY_ERP_MOD_ID) {
         const stub = findClientPrimaryErpMod() || buildAttendanceIndustryModStub();
-        return [stub, ...full.filter((m) => isAuxEmployeePackModId(String(m.id || '')))];
+        return [
+          stub,
+          ...full.filter((m) => {
+            const id = String(m.id || '').trim();
+            return isAuxEmployeePackModId(id) || isOverlayCustomForActive(id);
+          }),
+        ];
       }
       return [];
     }
