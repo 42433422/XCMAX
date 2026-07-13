@@ -12,7 +12,7 @@ import json
 import logging
 import os
 import re
-import subprocess
+import subprocess as subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -21,13 +21,21 @@ from typing import Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService
-from app.application.claude_super_employee_service import ClaudeSuperEmployeeService
-from app.application.codex_super_employee_service import CodexSuperEmployeeService
-from app.application.cursor_super_employee_service import CursorSuperEmployeeService
-from app.application.execution_scope import factory_context
+from app.application.ai_group_chat_service import AiGroupChatService as AiGroupChatService
+from app.application.claude_super_employee_service import (
+    ClaudeSuperEmployeeService as ClaudeSuperEmployeeService,
+)
+from app.application.codex_super_employee_service import (
+    CodexSuperEmployeeService as CodexSuperEmployeeService,
+)
+from app.application.cursor_super_employee_service import (
+    CursorSuperEmployeeService as CursorSuperEmployeeService,
+)
+from app.application.execution_scope import factory_context as factory_context
 from app.application.facades.mobile_relay_facade import MobileRelayService
-from app.application.trae_super_employee_service import TraeSuperEmployeeService
+from app.application.trae_super_employee_service import (
+    TraeSuperEmployeeService as TraeSuperEmployeeService,
+)
 from app.fastapi_routes.mobile_api import get_mobile_user
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _admin_employee_match_keys,
@@ -39,13 +47,15 @@ from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _mobile_request_user_id,
     _mobile_session_meta,
     _require_mobile_admin,
-    _require_mobile_admin_or_enterprise,
 )
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _index_market_ai_employee_profiles as _index_market_ai_employee_profiles,
 )
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _mobile_session_meta as _mobile_session_meta,
+)
+from app.fastapi_routes.mobile_extensions.admin_helpers import (
+    _require_mobile_admin_or_enterprise as _require_mobile_admin_or_enterprise,
 )
 from app.fastapi_routes.mobile_extensions.constants import (
     ADMIN_MOBILE_FEATURES,
@@ -56,21 +66,11 @@ from app.fastapi_routes.mobile_extensions.cs_helpers import (
     _safe_user_id,
     _safe_user_text,
 )
-
-# ── 子模块导入 ──
 from app.fastapi_routes.mobile_extensions.models import (
     AiCircleCommentBody,
     AiCirclePostBody,
-    AiGroupCreateBody,
-    AiGroupMemberBody,
-    AiGroupMessageBody,
-    AuthQrConfirmBody,
-    ClaudeSuperEmployeeMobileMessageBody,
-    CodexSuperEmployeeMobileMessageBody,
-    CursorSuperEmployeeMobileMessageBody,
     DeviceRegisterBody,
     MobileServiceBridgeRespondBody,
-    OidcExchangeBody,
     PairingExchangeBody,
     PairingIssueBody,
     PairingLookupBody,
@@ -79,13 +79,47 @@ from app.fastapi_routes.mobile_extensions.models import (
     RelayDesktopRegisterBody,
     RelayMobileBindAccountBody,
     RelayTaskCreateBody,
-    SyncAckBody,
-    SyncPullBody,
-    SyncPushBody,
-    TraeSuperEmployeeMobileMessageBody,
+)
+
+# ── 子模块导入 ──
+from app.fastapi_routes.mobile_extensions.models import (
+    AiGroupCreateBody as AiGroupCreateBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    AiGroupMemberBody as AiGroupMemberBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    AiGroupMessageBody as AiGroupMessageBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    AuthQrConfirmBody as AuthQrConfirmBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    ClaudeSuperEmployeeMobileMessageBody as ClaudeSuperEmployeeMobileMessageBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    CodexSuperEmployeeMobileMessageBody as CodexSuperEmployeeMobileMessageBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    CursorSuperEmployeeMobileMessageBody as CursorSuperEmployeeMobileMessageBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    OidcExchangeBody as OidcExchangeBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    SyncAckBody as SyncAckBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    SyncPullBody as SyncPullBody,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    SyncPushBody as SyncPushBody,
 )
 from app.fastapi_routes.mobile_extensions.models import (
     SyncPushItem as SyncPushItem,
+)
+from app.fastapi_routes.mobile_extensions.models import (
+    TraeSuperEmployeeMobileMessageBody as TraeSuperEmployeeMobileMessageBody,
 )
 from app.fastapi_routes.mobile_extensions.pairing_helpers import (
     _enrich_pairing_payload,
@@ -1569,1123 +1603,6 @@ async def mobile_admin_home(request: Request, user=Depends(get_mobile_user)):
     )
 
 
-@extension_router.get("/admin/codex-super-employee/messages")
-async def mobile_admin_codex_super_employee_messages(
-    request: Request,
-    limit: int = Query(default=80, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的 Codex 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        messages = CodexSuperEmployeeService().list_messages(user_id=uid, limit=limit)
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_codex_super_employee_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/admin/codex-super-employee/messages")
-async def mobile_admin_codex_super_employee_invoke(
-    request: Request,
-    body: CodexSuperEmployeeMobileMessageBody,
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的软件内 Codex 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    text = (body.message or body.body or "").strip()
-    context = dict(body.context or {})
-    context.setdefault("source", "mobile_im")
-    context.setdefault("client_surface", "mobile")
-    context.setdefault("target_devices", ["all"])
-    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
-    if (
-        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
-        == "admin"
-    ):
-        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
-        context = factory_context(workspace_id=_wsid, base=context)
-    try:
-        result = CodexSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
-            status_code=400,
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_codex_super_employee_invoke")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/admin/claude-super-employee/messages")
-async def mobile_admin_claude_super_employee_messages(
-    request: Request,
-    limit: int = Query(default=80, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的 Claude 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        messages = ClaudeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_claude_super_employee_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/admin/claude-super-employee/messages")
-async def mobile_admin_claude_super_employee_invoke(
-    request: Request,
-    body: ClaudeSuperEmployeeMobileMessageBody,
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的软件内 Claude 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    text = (body.message or body.body or "").strip()
-    context = dict(body.context or {})
-    context.setdefault("source", "mobile_im")
-    context.setdefault("client_surface", "mobile")
-    context.setdefault("target_devices", ["all"])
-    # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
-    if (
-        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
-        == "admin"
-    ):
-        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
-        context = factory_context(workspace_id=_wsid, base=context)
-    try:
-        result = ClaudeSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
-            status_code=400,
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_claude_super_employee_invoke")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/admin/cursor-super-employee/messages")
-async def mobile_admin_cursor_super_employee_messages(
-    request: Request,
-    limit: int = Query(default=80, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的 Cursor 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        messages = CursorSuperEmployeeService().list_messages(user_id=uid, limit=limit)
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_cursor_super_employee_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/admin/cursor-super-employee/messages")
-async def mobile_admin_cursor_super_employee_invoke(
-    request: Request,
-    body: CursorSuperEmployeeMobileMessageBody,
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的软件内 Cursor 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    text = (body.message or body.body or "").strip()
-    context = dict(body.context or {})
-    context.setdefault("source", "mobile_im")
-    context.setdefault("device_scope", "all_devices")
-    context.setdefault("target_devices", ["all"])
-    try:
-        result = CursorSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
-            status_code=400,
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_cursor_super_employee_invoke")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/admin/trae-super-employee/messages")
-async def mobile_admin_trae_super_employee_messages(
-    request: Request,
-    limit: int = Query(default=80, ge=1, le=200),
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的 Trae 超级员工对话记录（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        messages = TraeSuperEmployeeService().list_messages(user_id=uid, limit=limit)
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_trae_super_employee_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/admin/trae-super-employee/messages")
-async def mobile_admin_trae_super_employee_invoke(
-    request: Request,
-    body: TraeSuperEmployeeMobileMessageBody,
-    user=Depends(get_mobile_user),
-):
-    """移动端管理员信息页的软件内 Trae 调用入口（仅管理端）。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    text = (body.message or body.body or "").strip()
-    context = dict(body.context or {})
-    context.setdefault("source", "mobile_im")
-    context.setdefault("client_surface", "mobile")
-    context.setdefault("device_scope", "all_devices")
-    context.setdefault("target_devices", ["all"])
-    if (
-        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
-        == "admin"
-    ):
-        _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
-        context = factory_context(workspace_id=_wsid, base=context)
-    try:
-        result = TraeSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400),
-            status_code=400,
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_admin_trae_super_employee_invoke")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-# ── 超级员工 LAN SSE 流式直答 ──
-
-
-def _super_employee_service_for_tool(tool: str):
-    """根据工具名返回对应的 SuperEmployeeService 实例。"""
-    tool_lower = (tool or "").strip().lower()
-    if tool_lower == "codex":
-        return CodexSuperEmployeeService()
-    if tool_lower == "claude":
-        return ClaudeSuperEmployeeService()
-    if tool_lower == "cursor":
-        return CursorSuperEmployeeService()
-    if tool_lower == "trae":
-        return TraeSuperEmployeeService()
-    return None
-
-
-async def _stream_super_employee_invoke(
-    request: Request,
-    tool: str,
-    body: dict[str, Any],
-    user,
-):
-    """超级员工 SSE 流式直答的共享实现。"""
-    _, err = _require_mobile_admin(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401),
-            status_code=401,
-        )
-    service = _super_employee_service_for_tool(tool)
-    if service is None:
-        return JSONResponse(
-            format_mobile_response(None, f"未知超级员工工具：{tool}", success=False, code=400),
-            status_code=400,
-        )
-    text = str((body or {}).get("message") or (body or {}).get("body") or "").strip()
-    if not text:
-        return JSONResponse(
-            format_mobile_response(None, "message 必填", success=False, code=400),
-            status_code=400,
-        )
-    context = dict((body or {}).get("context") or {})
-    context.setdefault("source", "mobile_im")
-    context.setdefault("client_surface", "mobile")
-    context.setdefault("target_devices", ["all"])
-    if (
-        str((_mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
-        == "admin"
-    ):
-        _wsid = str((body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax")
-        context = factory_context(workspace_id=_wsid, base=context)
-
-    async def sse_gen():
-        try:
-            async for event in service.invoke_stream(
-                user_id=uid,
-                message=text,
-                context=context,
-            ):
-                yield _sse_line(event)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("mobile_super_employee_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
-
-    return StreamingResponse(
-        sse_gen(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
-
-
-@extension_router.post("/admin/codex-super-employee/messages/stream")
-async def mobile_admin_codex_super_employee_stream(
-    request: Request,
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """移动端 Codex 超级员工 LAN SSE 流式直答。"""
-    return await _stream_super_employee_invoke(request, "codex", body, user)
-
-
-@extension_router.post("/admin/claude-super-employee/messages/stream")
-async def mobile_admin_claude_super_employee_stream(
-    request: Request,
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """移动端 Claude 超级员工 LAN SSE 流式直答。"""
-    return await _stream_super_employee_invoke(request, "claude", body, user)
-
-
-@extension_router.post("/admin/cursor-super-employee/messages/stream")
-async def mobile_admin_cursor_super_employee_stream(
-    request: Request,
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """移动端 Cursor 超级员工 LAN SSE 流式直答。"""
-    return await _stream_super_employee_invoke(request, "cursor", body, user)
-
-
-@extension_router.post("/admin/trae-super-employee/messages/stream")
-async def mobile_admin_trae_super_employee_stream(
-    request: Request,
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """移动端 Trae 超级员工 LAN SSE 流式直答。"""
-    return await _stream_super_employee_invoke(request, "trae", body, user)
-
-
-# ── AI 群聊（微信式多 AI 群组）──
-
-
-def _mobile_group_uid(request: Request, user) -> int:
-    return _mobile_request_user_id(request, user)
-
-
-def _mobile_group_mode(request: Request) -> str:
-    """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
-    meta = _mobile_session_meta(request) or {}
-    return (
-        "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
-    )
-
-
-def _clean_mobile_git_branch(raw: Any) -> str:
-    branch = str(raw or "").strip()
-    if branch.startswith("refs/heads/"):
-        branch = branch.removeprefix("refs/heads/")
-    if branch.startswith("refs/remotes/"):
-        branch = branch.removeprefix("refs/remotes/")
-    if branch.startswith("origin/"):
-        branch = branch.removeprefix("origin/")
-    branch = re.sub(r"[^A-Za-z0-9._/-]+", "-", branch)[:180].strip("/.")
-    if not branch or branch in {"HEAD", "origin/HEAD", ".", ".."}:
-        return ""
-    if ".." in branch or "//" in branch or "@{" in branch or branch.endswith(".lock"):
-        return ""
-    return branch
-
-
-def _mobile_branch_context_from_body(body: AiGroupMessageBody) -> str:
-    context_raw = getattr(body, "context", {})
-    context = context_raw if isinstance(context_raw, dict) else {}
-    return _clean_mobile_git_branch(
-        getattr(body, "branch_context", "")
-        or getattr(body, "branch", "")
-        or context.get("branch_context")
-        or context.get("branch")
-    )
-
-
-def _mobile_git_repo_root() -> Path | None:
-    candidates: list[Path] = []
-    for key in (
-        "XCMAX_REPO_ROOT",
-        "FHD_REPO_ROOT",
-        "DEVFLEET_REPO_ROOT",
-        "CODEX_WORKSPACE",
-        "WORKSPACE_ROOT",
-    ):
-        value = str(os.environ.get(key) or "").strip()
-        if value:
-            candidates.append(Path(value).expanduser())
-    candidates.append(Path.cwd())
-    candidates.extend(Path(__file__).resolve().parents)
-    seen: set[Path] = set()
-    for candidate in candidates:
-        try:
-            roots = [candidate, *candidate.parents] if candidate.exists() else [candidate]
-        except RuntimeError:
-            roots = [candidate]
-        for root in roots:
-            if root in seen:
-                continue
-            seen.add(root)
-            if (root / ".git").exists():
-                return root
-    return None
-
-
-def _git_no_prompt_env() -> dict[str, str]:
-    env = os.environ.copy()
-    env.setdefault("GIT_TERMINAL_PROMPT", "0")
-    env.setdefault("GIT_ASKPASS", "true")
-    return env
-
-
-def _mobile_git_branches_from_repo(repo: Path) -> list[dict[str, Any]]:
-    current = ""
-    try:
-        cur = subprocess.run(
-            ["git", "-C", str(repo), "branch", "--show-current"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=_git_no_prompt_env(),
-            check=False,
-        )
-        if cur.returncode == 0:
-            current = _clean_mobile_git_branch(cur.stdout)
-    except Exception:  # noqa: BLE001
-        current = ""
-    try:
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(repo),
-                "for-each-ref",
-                "--format=%(refname:short)",
-                "refs/heads",
-                "refs/remotes/origin",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            env=_git_no_prompt_env(),
-            check=False,
-        )
-    except Exception:  # noqa: BLE001
-        return []
-    if result.returncode != 0:
-        return []
-    branches: dict[str, dict[str, Any]] = {}
-    for line in result.stdout.splitlines():
-        raw = line.strip()
-        if not raw or raw == "origin/HEAD":
-            continue
-        remote = raw.startswith("origin/")
-        name = _clean_mobile_git_branch(raw)
-        if not name:
-            continue
-        row = branches.setdefault(name, {"name": name, "current": False, "remote": False})
-        row["current"] = bool(row["current"] or name == current)
-        row["remote"] = bool(row["remote"] or remote)
-    return _sort_mobile_git_branches(branches.values())
-
-
-def _mobile_git_branches_from_remote() -> list[dict[str, Any]]:
-    remote_url = str(
-        os.environ.get("XCMAX_GIT_REMOTE_URL")
-        or os.environ.get("FHD_GIT_REMOTE_URL")
-        or "https://github.com/42433422/XCMAX.git"
-    ).strip()
-    if not remote_url:
-        return []
-    try:
-        result = subprocess.run(
-            ["git", "ls-remote", "--heads", remote_url],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            env=_git_no_prompt_env(),
-            check=False,
-        )
-    except Exception:  # noqa: BLE001
-        return []
-    if result.returncode != 0:
-        return []
-    branches: dict[str, dict[str, Any]] = {}
-    for line in result.stdout.splitlines():
-        if "refs/heads/" not in line:
-            continue
-        name = _clean_mobile_git_branch(line.rsplit("refs/heads/", 1)[-1])
-        if name:
-            branches[name] = {"name": name, "current": False, "remote": True}
-    return _sort_mobile_git_branches(branches.values())
-
-
-def _sort_mobile_git_branches(rows) -> list[dict[str, Any]]:
-    branches = list(rows)
-    branches.sort(
-        key=lambda item: (
-            not bool(item.get("current")),
-            0 if item.get("name") in {"main", "master"} else 1,
-            str(item.get("name") or "").lower(),
-        )
-    )
-    return branches[:200]
-
-
-@extension_router.get("/git/branches")
-async def mobile_git_branches(request: Request, user=Depends(get_mobile_user)):
-    """列出手机端可选工作分支：优先本地 repo，部署包无 .git 时退到远端 heads。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    try:
-        repo = _mobile_git_repo_root()
-        branches = _mobile_git_branches_from_repo(repo) if repo else []
-        if not branches:
-            branches = _mobile_git_branches_from_remote()
-        return format_mobile_response(data={"branches": branches})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_git_branches")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.get("/ai-groups")
-async def mobile_ai_groups_list(request: Request, user=Depends(get_mobile_user)):
-    """列出当前用户的 AI 群聊（首次自动按 6 个部门种出 6 个群）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        groups = AiGroupChatService(mode=_mobile_group_mode(request)).list_groups(user_id=uid)
-        return format_mobile_response(data={"groups": groups})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_groups_list")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.get("/ai-groups/candidates")
-async def mobile_ai_group_candidates(request: Request, user=Depends(get_mobile_user)):
-    """可拉入群聊的 AI 员工候选（普通员工 + 超级员工）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        candidates = AiGroupChatService(mode=_mobile_group_mode(request)).list_member_candidates()
-        return format_mobile_response(
-            data={
-                "candidates": candidates,
-                "items": candidates,
-                "count": len(candidates),
-            }
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_candidates")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/ai-groups")
-async def mobile_ai_groups_create(
-    request: Request, body: AiGroupCreateBody, user=Depends(get_mobile_user)
-):
-    """创建自定义 AI 群聊。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).create_group(
-            user_id=uid, name=body.name
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_groups_create")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.get("/ai-groups/{group_id}/messages")
-async def mobile_ai_group_messages(
-    request: Request,
-    group_id: str,
-    limit: int = Query(default=100, ge=1, le=300),
-    user=Depends(get_mobile_user),
-):
-    """拉取某个 AI 群聊的历史消息。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        messages = AiGroupChatService(mode=_mobile_group_mode(request)).get_messages(
-            user_id=uid, group_id=group_id, limit=limit
-        )
-        return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_messages")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/ai-groups/{group_id}/messages")
-async def mobile_ai_group_post(
-    request: Request, group_id: str, body: AiGroupMessageBody, user=Depends(get_mobile_user)
-):
-    """在 AI 群聊里发消息：群成员各回一条；@ 了具体成员则只有 TA 回复。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        branch_context = _mobile_branch_context_from_body(body)
-        result = await AiGroupChatService(mode=_mobile_group_mode(request)).post_message(
-            user_id=uid,
-            group_id=group_id,
-            text=body.message,
-            sender_name=body.sender_name or "我",
-            mentions=body.mentions,
-            dispatch=bool(body.dispatch),
-            branch_context=branch_context,
-            context=body.context if isinstance(getattr(body, "context", None), dict) else {},
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_post")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/ai-groups/{group_id}/members")
-async def mobile_ai_group_add_member(
-    request: Request, group_id: str, body: AiGroupMemberBody, user=Depends(get_mobile_user)
-):
-    """把一个 AI 员工拉进群。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).add_member(
-            user_id=uid,
-            group_id=group_id,
-            member={
-                "employee_id": body.employee_id,
-                "mod_id": body.mod_id,
-                "name": body.name,
-                "avatar": body.avatar,
-                "summary": body.summary,
-            },
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_add_member")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.delete("/ai-groups/{group_id}/members/{employee_id}")
-async def mobile_ai_group_remove_member(
-    request: Request, group_id: str, employee_id: str, user=Depends(get_mobile_user)
-):
-    """把一个 AI 员工移出群。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).remove_member(
-            user_id=uid, group_id=group_id, employee_id=employee_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_remove_member")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.put("/ai-groups/{group_id}/pin")
-async def mobile_ai_group_toggle_pin(
-    request: Request, group_id: str, user=Depends(get_mobile_user)
-):
-    """切换群聊置顶状态。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_pinned(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_pin")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/ai-groups/{group_id}/mark-unread")
-async def mobile_ai_group_mark_unread(
-    request: Request, group_id: str, user=Depends(get_mobile_user)
-):
-    """标为未读（显示小红点）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_unread(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_mark_unread")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/ai-groups/{group_id}/mark-read")
-async def mobile_ai_group_mark_read(request: Request, group_id: str, user=Depends(get_mobile_user)):
-    """清除未读标记。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).mark_read(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_mark_read")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.put("/ai-groups/{group_id}/followed")
-async def mobile_ai_group_toggle_followed(
-    request: Request, group_id: str, user=Depends(get_mobile_user)
-):
-    """切换是否关注（不再关注则不显示未读）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_followed(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_followed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.put("/ai-groups/{group_id}/hidden")
-async def mobile_ai_group_toggle_hidden(
-    request: Request, group_id: str, user=Depends(get_mobile_user)
-):
-    """切换是否隐藏（不显示/恢复显示该聊天）。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        group = AiGroupChatService(mode=_mobile_group_mode(request)).toggle_hidden(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data={"group": group})
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_toggle_hidden")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.delete("/ai-groups/{group_id}")
-async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(get_mobile_user)):
-    """删除群聊。"""
-    _, err = _require_mobile_admin_or_enterprise(request, user)
-    if err is not None:
-        return err
-    uid = _mobile_group_uid(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        result = AiGroupChatService(mode=_mobile_group_mode(request)).delete_group(
-            user_id=uid, group_id=group_id
-        )
-        return format_mobile_response(data=result)
-    except ValueError as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_ai_group_delete")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-# ── 会话状态管理（非群聊的个人 AI 会话） ──
-
-
-def _conversation_state_uid(user: Any) -> int:
-    uid = int(getattr(user, "id", 0) or 0)
-    return uid if uid > 0 else 0
-
-
-@extension_router.put("/conversations/{conversation_id}/pin")
-async def mobile_conversation_toggle_pin(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().toggle_pinned(
-                user_id=uid, conversation_id=conversation_id
-            )
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_pin")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/conversations/{conversation_id}/mark-unread")
-async def mobile_conversation_mark_unread(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().mark_unread(
-                user_id=uid, conversation_id=conversation_id
-            )
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_mark_unread")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.post("/conversations/{conversation_id}/mark-read")
-async def mobile_conversation_mark_read(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().mark_read(user_id=uid, conversation_id=conversation_id)
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_mark_read")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.put("/conversations/{conversation_id}/followed")
-async def mobile_conversation_toggle_followed(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().toggle_followed(
-                user_id=uid, conversation_id=conversation_id
-            )
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_followed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.put("/conversations/{conversation_id}/hidden")
-async def mobile_conversation_toggle_hidden(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().toggle_hidden(
-                user_id=uid, conversation_id=conversation_id
-            )
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_toggle_hidden")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
-@extension_router.delete("/conversations/{conversation_id}")
-async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobile_user)):
-    uid = _conversation_state_uid(user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.application.conversation_state_service import ConversationStateService
-
-        return format_mobile_response(
-            data=ConversationStateService().delete(user_id=uid, conversation_id=conversation_id)
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile_conversation_delete")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
-        )
-
-
 # ── MOD / 平台 / 首页 ──
 
 
@@ -3199,836 +2116,6 @@ async def mobile_nav_menu(user=Depends(get_mobile_user)):
     return format_mobile_response(data={"items": items, "account_kind": account_kind})
 
 
-# ── 同步 ──
-
-
-def _mobile_sync_runtime_contract() -> dict[str, Any]:
-    return {
-        "source": "cloud",
-        "sync_mode": "cloud",
-        "standalone_supported": True,
-        "desktop_required": False,
-        "executor_required": False,
-        "mobile_flow_parity": True,
-        "offline_cache_supported": True,
-        "desktop_executor": {
-            "required": False,
-            "role": "optional_local_executor",
-            "required_for": ["local_files", "local_cli", "local_printing", "lan_devices"],
-        },
-    }
-
-
-async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[str, Any]]:
-    try:
-        import importlib
-
-        from app.application.ai_circle_service import list_posts
-
-        employee_circle_sync = importlib.import_module("app.application.employee_circle_sync")
-        try:
-            await employee_circle_sync.sync_modstore_reports()
-        except Exception:  # noqa: BLE001 - 交流圈同步是拉取增强项，不能拖垮整次手机同步
-            logger.warning("mobile sync: circle modstore report sync skipped", exc_info=True)
-
-        uid, _, _ = _ai_circle_user(user)
-        posts = list_posts(user_id=uid, limit=limit)
-        profiles = _ai_circle_employee_profiles()
-        for post in posts:
-            profile = profiles.get(str(post.get("employee_id") or ""))
-            if profile:
-                post["author_name"] = profile["name"]
-                post["author_avatar"] = profile["avatar"] or post.get("author_avatar")
-        return posts
-    except Exception as exc:  # noqa: BLE001 - 手机同步的其他数据不能被交流圈投影拖垮
-        logger.warning("mobile sync: circle posts skipped: %s", exc)
-        return []
-
-
-@extension_router.get("/sync/status")
-async def mobile_sync_status(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.db.xcmax_sync import SyncDb, _ensure_schema, _get_conn
-
-        db = SyncDb()
-        st = dict(db.get_status())
-        with _get_conn() as conn:
-            _ensure_schema(conn)
-            st["inbox_pending"] = conn.execute(
-                "SELECT COUNT(*) FROM sync_inbox WHERE status='pending'",
-            ).fetchone()[0]
-    except OPERATIONAL_ERRORS as exc:
-        st = {"error": str(exc), "healthy": False}
-    st.update(_mobile_sync_runtime_contract())
-    return format_mobile_response(data=st)
-
-
-@extension_router.post("/sync/pull")
-async def mobile_sync_pull(body: SyncPullBody, user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.db.xcmax_sync import SyncDb
-
-        sync_db = SyncDb()
-        changes = sync_db.get_changes(since_cursor=body.since_cursor, limit=200)
-        cursor = sync_db.get_status().get("local_cursor") or body.since_cursor
-        if cursor:
-            sync_db.update_remote_cursor(int(cursor))
-        im_entity_types = {"im_message", "im_read_state"}
-        im_changes = [c for c in changes if str(c.get("entity_type") or "") in im_entity_types]
-        ai_changes = _ai_conversation_changes(user, limit=100)
-        circle_posts = await _mobile_sync_circle_posts(user, limit=50)
-        approvals = _safe_mobile_sync_items("approvals", _approval_items)
-        shipments = _safe_mobile_sync_items("shipments", _shipment_items)
-        return format_mobile_response(
-            data={
-                **_mobile_sync_runtime_contract(),
-                "cursor": cursor,
-                "changes": changes,
-                "im_changes": im_changes,
-                "im_change_count": len(im_changes),
-                "ai_changes": ai_changes,
-                "ai_change_count": len(ai_changes),
-                "circle_posts": circle_posts,
-                "circle_post_count": len(circle_posts),
-                "approvals": approvals,
-                "shipments": shipments,
-            },
-        )
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_pull: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/sync/push")
-async def mobile_sync_push(body: SyncPushBody, user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    actor = getattr(user, "username", None) or f"user-{getattr(user, 'id', 0)}"
-    written = 0
-    try:
-        from app.db.xcmax_sync import SyncDb
-
-        sync_db = SyncDb()
-        for item in body.items[:50]:
-            sync_db.append_change(
-                item.entity_type,
-                item.entity_id,
-                item.operation,
-                item.payload,
-                actor=actor,
-                origin_node="mobile",
-            )
-            written += 1
-        apply_result: dict[str, Any] = {}
-        try:
-            from app.application.xcmax_sync_app import apply_inbox
-
-            apply_result = apply_inbox(limit=written + 50) or {}
-        except OPERATIONAL_ERRORS as ae:
-            apply_result = {"error": str(ae)}
-        return format_mobile_response(data={"written": written, "apply": apply_result})
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_push: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/sync/ack")
-async def mobile_sync_ack(body: SyncAckBody, user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    try:
-        from app.db.xcmax_sync import SyncDb
-
-        sync_db = SyncDb()
-        sync_db.update_remote_cursor(int(body.cursor))
-        return format_mobile_response(data={"acked": int(body.cursor)})
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile_sync_ack: %s", exc)
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/sync/conflicts")
-async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    items: list[dict[str, Any]] = []
-    try:
-        from app.db.xcmax_sync import _ensure_schema, _get_conn
-
-        with _get_conn() as conn:
-            _ensure_schema(conn)
-            rows = conn.execute(
-                """
-                SELECT id, entity_type, entity_id, conflict_note, received_at
-                FROM sync_inbox WHERE status='conflict' ORDER BY id DESC LIMIT 50
-                """,
-            ).fetchall()
-            items = [dict(r) for r in rows]
-    except OPERATIONAL_ERRORS as exc:
-        return format_mobile_response(data={"items": [], "error": str(exc)})
-    return format_mobile_response(data={"items": items})
-
-
-# ── 认证 ──
-
-
-@extension_router.post("/auth/qr/confirm")
-async def mobile_auth_qr_confirm(body: AuthQrConfirmBody, request: Request):
-    """手机确认 PC 扫码登录。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import run_market_first_login
-    from app.application.session_account_meta import normalize_account_kind
-    from app.fastapi_routes.domains.auth.routes import (
-        _jit_create_local_user_for_enterprise,
-        _market_user_email_from_raw,
-    )
-    from app.fastapi_routes.market_account import login_market_with_password
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.auth_qr_login import confirm_auth_qr, get_auth_qr
-
-    rec = get_auth_qr(body.qr_id)
-    if not rec or rec.get("status") == "expired":
-        return JSONResponse(
-            format_mobile_response(None, "二维码已过期", success=False, code=400),
-            status_code=400,
-        )
-
-    username = (body.username or "").strip()
-    password = body.password or ""
-    auth_app_service = get_auth_app_service()
-    sku = resolve_product_sku()
-    fields_set = getattr(body, "model_fields_set", getattr(body, "__fields_set__", set()))
-    qr_account_kind = str(rec.get("account_kind") or "").strip()
-    body_account_kind = body.account_kind if "account_kind" in fields_set else qr_account_kind
-    account_kind = normalize_account_kind(
-        body_account_kind,
-        default=qr_account_kind or ("enterprise" if sku == "enterprise" else "personal"),
-    )
-
-    authorization = request.headers.get("Authorization") or ""
-    if authorization.startswith("Bearer ") and not username:
-        from app.security.mobile_jwt import user_id_from_mobile_bearer
-
-        uid = user_id_from_mobile_bearer(authorization)
-        if uid:
-            from app.db.models.user import User
-            from app.db.session import get_db
-
-            with get_db() as db:
-                row = db.query(User).filter(User.id == int(uid)).first()
-                if row:
-                    username = str(row.username or "")
-
-    if not username or not password:
-        return JSONResponse(
-            format_mobile_response(None, "请提供账号与密码确认登录", success=False, code=400),
-            status_code=400,
-        )
-
-    result, err = await run_market_first_login(
-        username=username,
-        password=password,
-        account_kind=account_kind,
-        market_result=None,
-        auth_app_service=auth_app_service,
-        sku=sku,
-        jit_create_fn=_jit_create_local_user_for_enterprise,
-        market_user_email_from_raw=_market_user_email_from_raw,
-        login_market_fn=login_market_with_password,
-    )
-    if err:
-        msg = "登录失败"
-        if hasattr(err, "body") and err.body:
-            try:
-                import json as _json
-
-                msg = _json.loads(err.body.decode("utf-8")).get("message") or msg
-            except OPERATIONAL_ERRORS:
-                pass
-        return JSONResponse(
-            format_mobile_response(None, msg, success=False, code=401),
-            status_code=401,
-        )
-    session_id = str((result or {}).get("session_id") or "")
-    if not session_id:
-        return JSONResponse(
-            format_mobile_response(None, "会话创建失败", success=False, code=500),
-            status_code=500,
-        )
-    ok = confirm_auth_qr(body.qr_id.strip(), session_id=session_id, login_payload=result or {})
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "二维码无效", success=False, code=400),
-            status_code=400,
-        )
-    return format_mobile_response(data={"confirmed": True, "qr_id": body.qr_id.strip()})
-
-
-@extension_router.post("/auth/oidc/exchange")
-async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
-    """Android Custom Tabs OIDC 回调换 mobile JWT。"""
-    from app.application.auth_app_service import get_auth_app_service
-    from app.application.enterprise_login_flow import finalize_auth_after_oidc
-    from app.application.session_account_meta import normalize_account_kind
-    from app.infrastructure.auth.oidc_provider import (
-        exchange_oidc_authorization,
-        verify_oidc_state,
-    )
-    from app.mod_sdk.product_skus import resolve_product_sku
-    from app.security.mobile_jwt import issue_mobile_tokens
-
-    ok, _rt = verify_oidc_state(body.state)
-    if not ok:
-        return JSONResponse(
-            format_mobile_response(None, "OIDC state 无效", success=False, code=400),
-            status_code=400,
-        )
-    try:
-        oidc_session = await exchange_oidc_authorization(body.code)
-        profile = (
-            oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
-        )
-    except OPERATIONAL_ERRORS as exc:
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=502),
-            status_code=502,
-        )
-    auth_app_service = get_auth_app_service()
-    auth_result = auth_app_service.authenticate_oidc_user(profile)
-    if not auth_result.get("success"):
-        return JSONResponse(
-            format_mobile_response(
-                None,
-                str(auth_result.get("message") or "OIDC 登录失败"),
-                success=False,
-                code=401,
-            ),
-            status_code=401,
-        )
-    sku = resolve_product_sku()
-    account_kind = normalize_account_kind(
-        None, default="enterprise" if sku == "enterprise" else "personal"
-    )
-    username = str((auth_result.get("user") or {}).get("username") or "")
-    session_id = auth_result.get("session_id")
-    payload = await finalize_auth_after_oidc(
-        auth_result=auth_result,
-        oidc_profile=profile,
-        oidc_access_token=str(oidc_session.get("access_token") or ""),
-        account_kind=account_kind,
-        sku=sku,
-    )
-    user_raw = payload.get("user") or {}
-    tokens = issue_mobile_tokens(
-        user_id=int(user_raw["id"]),
-        session_id=str(session_id),
-        account_kind=str(payload.get("account_kind") or account_kind),
-        username=username,
-    )
-    data: dict[str, Any] = {
-        "user": user_raw,
-        "session_id": session_id,
-        "account_kind": payload.get("account_kind") or account_kind,
-        **tokens,
-    }
-    for key in (
-        "market_access_token",
-        "market_refresh_token",
-        "company_brand",
-        "market_is_admin",
-        "market_is_enterprise",
-    ):
-        if key in payload and payload[key] is not None:
-            data[key] = payload[key]
-    return format_mobile_response(data=data)
-
-
-# ── 联系人固定区组成（surface SSOT 派生） ──
-
-
-@extension_router.get("/contacts/fixed")
-async def get_mobile_fixed_contacts(request: Request, user=Depends(get_mobile_user)):
-    """返回手机端联系人固定区(按端 SSOT 派生)。
-
-    top/bottom 以平台员工为界:渲染顺序 = top + 平台员工(动态) + bottom。
-    管理端不含专属客服(由 surface SSOT 自动 gating);两端均含小C与超级员工。
-    """
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.surface_contacts import mobile_fixed_contacts
-
-    return format_mobile_response(data=mobile_fixed_contacts(_mobile_group_mode(request)))
-
-
-# ── 专属客服接口（企业版手机端） ──
-
-
-@extension_router.get("/cs/info")
-async def get_cs_info(request: Request, user=Depends(get_mobile_user)):
-    """返回当前用户的小C/智能客服信息。"""
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    return format_mobile_response(
-        data={
-            "cs_available": True,
-            "cs_name": "企业专属客服",
-            "cs_avatar": None,
-            "cs_online": True,
-            "backend": "enterprise-cs",
-        }
-    )
-
-
-@extension_router.post("/cs/messages")
-async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_user)):
-    """发送消息到企业桌面端同源智能客服通道。"""
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    msg_body = str(body.get("body", "") or "").strip()
-    if not msg_body:
-        return JSONResponse(
-            format_mobile_response(None, "消息不能为空", success=False, code=400),
-            status_code=400,
-        )
-    # 专属客服 = 企业客户↔运营者管理端的真实 IM 通道(与桌面端同源 enterprise-cs),不再复用小C LLM。
-    # 客户消息写入 IM,运营者在管理端「客服收件箱」收到并以「企业专属客服」身份回复。
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.application.im_app_service import ImApplicationService
-    from app.db.session import get_db
-
-    try:
-        with get_db() as db:
-            svc = ImApplicationService(db)
-            cs = svc._ensure_enterprise_dedicated_cs_user()
-            if cs is None or int(cs.id) == uid:
-                return JSONResponse(
-                    format_mobile_response(None, "客服通道不可用", success=False, code=500),
-                    status_code=500,
-                )
-            conv = svc.get_or_create_direct(uid, int(cs.id))
-            result = svc.send_message(int(conv["id"]), uid, msg_body)
-        sent = result.get("message") or {}
-        return format_mobile_response(
-            data={
-                "message_id": str(sent.get("id") or ""),
-                # 真实客服:无 LLM 自动回复;客户端见空 reply 即 loadMessages 刷新等运营者回复。
-                "reply": "",
-                "backend": "enterprise-cs",
-                "timestamp": str(sent.get("created_at") or ""),
-            }
-        )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile cs send via IM failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/cs/messages")
-async def get_cs_messages(
-    request: Request, since: str | None = None, user=Depends(get_mobile_user)
-):
-    """拉取小C/智能客服消息。"""
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    # 从 enterprise-cs 真实 IM 会话拉取消息(客户发的 + 运营者以「企业专属客服」回复的)。
-    from app.application.im_app_service import ImApplicationService
-    from app.db.session import get_db
-
-    uid = _mobile_request_user_id(request, user)
-    if uid <= 0:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    error = ""
-    messages: list[dict[str, Any]] = []
-    try:
-        with get_db() as db:
-            svc = ImApplicationService(db)
-            cs = svc._ensure_enterprise_dedicated_cs_user()
-            if cs is not None and int(cs.id) != uid:
-                conv = svc.get_or_create_direct(uid, int(cs.id))
-                raw = svc.list_messages(int(conv["id"]), uid, limit=100)
-                messages = [
-                    {
-                        "messageId": str(m.get("id") or ""),
-                        # 发送者是自己=user,否则=客服(运营者以 enterprise-cs 身份回复)。
-                        "sender": "user" if int(m.get("sender_user_id") or 0) == uid else "cs",
-                        "body": str(m.get("body") or ""),
-                        "timestamp": str(m.get("created_at") or ""),
-                    }
-                    for m in raw
-                ]
-    except OPERATIONAL_ERRORS as exc:
-        logger.warning("mobile cs message history (IM) unavailable: %s", exc)
-        error = str(exc)[:300]
-    if since:
-        messages = [m for m in messages if str(m.get("timestamp") or "") > since]
-    return format_mobile_response(data={"messages": messages, "persist_error": error})
-
-
-# ── 钱包 / 余额 ──
-
-_MOBILE_PAYMENT_CHANNELS: tuple[dict[str, str], ...] = (
-    {
-        "id": "mobile_h5",
-        "title": "手机网页",
-        "description": "统一收银台，适合 App 内或手机浏览器打开",
-    },
-    {
-        "id": "alipay",
-        "title": "支付宝",
-        "description": "支付宝 H5 / 跳转支付，取决于市场侧配置",
-    },
-    {
-        "id": "wechat_h5",
-        "title": "微信支付",
-        "description": "微信 H5 支付，取决于市场侧配置",
-    },
-)
-
-
-def _normalize_mobile_payment_channel(raw: Any) -> str:
-    value = str(raw or "").strip().lower().replace("-", "_")
-    aliases = {
-        "": "mobile_h5",
-        "mobile": "mobile_h5",
-        "h5": "mobile_h5",
-        "wap": "mobile_h5",
-        "alipay_h5": "alipay",
-        "zhifubao": "alipay",
-        "wechat": "wechat_h5",
-        "weixin": "wechat_h5",
-        "weixin_h5": "wechat_h5",
-    }
-    value = aliases.get(value, value)
-    allowed = {item["id"] for item in _MOBILE_PAYMENT_CHANNELS}
-    return value if value in allowed else "mobile_h5"
-
-
-def _mobile_checkout_sign_body(body: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    if body.get("plan_id"):
-        out["plan_id"] = str(body.get("plan_id"))
-    wallet_recharge = body.get("wallet_recharge")
-    if wallet_recharge is True or str(wallet_recharge).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-        "on",
-    }:
-        out["wallet_recharge"] = True
-        try:
-            out["total_amount"] = float(body.get("total_amount") or 0)
-        except (TypeError, ValueError):
-            out["total_amount"] = 0.0
-        out["subject"] = str(body.get("subject") or "钱包充值")
-    for key in ("out_trade_no", "metadata"):
-        if key in body:
-            out[key] = body[key]
-    return out
-
-
-@extension_router.get("/payment/plans", response_model=dict[str, Any])
-async def mobile_payment_plans(request: Request, user=Depends(get_mobile_user)):
-    """返回移动端可购买套餐与支付渠道。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    try:
-        from app.fastapi_routes.market_account import _market_base_url, _proxy_json
-
-        payload = await _proxy_json(
-            "GET",
-            "/api/payment/plans",
-            authorization=_mobile_market_authorization(request, user),
-            return_error_payload=True,
-        )
-        if isinstance(payload, dict) and payload.get("__proxy_error__"):
-            status = int(payload.get("status_code") or 502)
-            return JSONResponse(
-                format_mobile_response(
-                    payload.get("payload"), "套餐加载失败", success=False, code=status
-                ),
-                status_code=status,
-            )
-        if isinstance(payload, dict):
-            payload = {
-                **payload,
-                "market_base_url": _market_base_url(),
-                "payment_channels": list(_MOBILE_PAYMENT_CHANNELS),
-            }
-        return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment plans failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.post("/payment/checkout", response_model=dict[str, Any])
-async def mobile_payment_checkout(
-    request: Request,
-    body: dict[str, Any],
-    user=Depends(get_mobile_user),
-):
-    """创建移动端支付订单并返回渠道下单参数。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    authorization = _mobile_market_authorization(request, user)
-    if not authorization:
-        return JSONResponse(
-            format_mobile_response(None, "尚未绑定市场账号；请重新登录", success=False, code=401),
-            status_code=401,
-        )
-    try:
-        from app.fastapi_routes.market_account import _proxy_json
-
-        checkout_body = dict(body or {})
-        checkout_body["channel"] = _normalize_mobile_payment_channel(checkout_body.get("channel"))
-        checkout_body["client"] = str(checkout_body.get("client") or "android").strip()
-        checkout_body.setdefault("return_url", "xcagi://payment/complete")
-        signed = await _proxy_json(
-            "POST",
-            "/api/payment/sign-checkout",
-            json_body=_mobile_checkout_sign_body(checkout_body),
-            authorization=authorization,
-            return_error_payload=True,
-        )
-        if isinstance(signed, dict) and signed.get("__proxy_error__"):
-            status = int(signed.get("status_code") or 502)
-            return JSONResponse(
-                format_mobile_response(
-                    signed.get("payload"), "支付签名失败", success=False, code=status
-                ),
-                status_code=status,
-            )
-        if isinstance(signed, dict):
-            checkout_body.update(signed)
-        payload = await _proxy_json(
-            "POST",
-            "/api/payment/checkout",
-            json_body=checkout_body,
-            authorization=authorization,
-            return_error_payload=True,
-        )
-        if isinstance(payload, dict) and payload.get("__proxy_error__"):
-            status = int(payload.get("status_code") or 502)
-            return JSONResponse(
-                format_mobile_response(
-                    payload.get("payload"), "支付下单失败", success=False, code=status
-                ),
-                status_code=status,
-            )
-        return format_mobile_response(data=payload, message="下单成功")
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment checkout failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/payment/query/{out_trade_no}", response_model=dict[str, Any])
-async def mobile_payment_query(
-    request: Request,
-    out_trade_no: str,
-    user=Depends(get_mobile_user),
-):
-    """查询移动端支付订单状态。"""
-    if user is None:
-        return _mobile_unauthorized_response()
-    try:
-        from app.fastapi_routes.market_account import _proxy_json
-
-        payload = await _proxy_json(
-            "GET",
-            f"/api/payment/query/{out_trade_no}",
-            authorization=_mobile_market_authorization(request, user),
-            return_error_payload=True,
-        )
-        if isinstance(payload, dict) and payload.get("__proxy_error__"):
-            status = int(payload.get("status_code") or 502)
-            return JSONResponse(
-                format_mobile_response(
-                    payload.get("payload"), "订单查询失败", success=False, code=status
-                ),
-                status_code=status,
-            )
-        return format_mobile_response(data=payload)
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("mobile payment query failed")
-        return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
-            status_code=500,
-        )
-
-
-@extension_router.get("/wallet/balance")
-async def mobile_wallet_balance(request: Request, user=Depends(get_mobile_user)):
-    """返回当前用户的市场钱包余额与会员信息（供移动端"我"页面展示）。
-
-    数据来源：market ``/api/wallet/overview`` + ``/api/payment/my-plan``。
-    任一上游不可用时返回降级空值，保持 200 以便客户端渲染占位 UI。
-    """
-    if user is None:
-        return JSONResponse(
-            format_mobile_response(None, "未授权", success=False, code=401), status_code=401
-        )
-    from app.fastapi_routes.market_account import (
-        _auth_header,
-        _market_base_url,
-        _proxy_json,
-        latest_session_market_token,
-        session_market_token,
-    )
-    from app.security.mobile_jwt import verify_mobile_jwt
-
-    # 1) 解析移动端 session_id，优先用 session 绑定的 market token
-    sid = ""
-    auth_hdr = request.headers.get("Authorization") or ""
-    if auth_hdr.startswith("Bearer "):
-        payload = verify_mobile_jwt(auth_hdr[7:].strip())
-        if payload:
-            sid = str(payload.get("session_id") or "")
-    if not sid:
-        from app.infrastructure.auth.dependencies import session_id_from_request
-
-        sid = session_id_from_request(request)
-    market_token = ""
-    if sid:
-        market_token = session_market_token(sid)
-    if not market_token:
-        # 多用户环境按 user_id 过滤，防止串号（fallback 仅用于单用户桌面模式）
-        market_token = latest_session_market_token(user_id=getattr(user, "id", None))
-    if not market_token:
-        return format_mobile_response(
-            data={
-                "balance": None,
-                "currency": "CNY",
-                "membership_level": None,
-                "experience": None,
-                "byok_configured": False,
-                "synced": False,
-                "message": "尚未绑定市场账号",
-            }
-        )
-    authorization = _auth_header(market_token)
-
-    # 2) 拉取钱包概览
-    wallet_payload = await _proxy_json(
-        "GET", "/api/wallet/overview", authorization=authorization, return_error_payload=True
-    )
-    if isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
-        # 降级：尝试 /api/wallet/balance
-        wallet_payload = await _proxy_json(
-            "GET", "/api/wallet/balance", authorization=authorization, return_error_payload=True
-        )
-    wallet_obj: dict[str, Any] = {}
-    if isinstance(wallet_payload, dict) and not wallet_payload.get("__proxy_error__"):
-        wallet_obj = (
-            wallet_payload.get("wallet")
-            if isinstance(wallet_payload.get("wallet"), dict)
-            else wallet_payload
-        )
-    elif isinstance(wallet_payload, dict) and wallet_payload.get("__proxy_error__"):
-        logger.warning(
-            "mobile_wallet_balance: wallet overview unavailable: %s",
-            wallet_payload.get("payload"),
-        )
-
-    # 3) 拉取套餐/会员信息
-    plan_payload = await _proxy_json(
-        "GET", "/api/payment/my-plan", authorization=authorization, return_error_payload=True
-    )
-    plan_obj: dict[str, Any] = {}
-    if isinstance(plan_payload, dict) and not plan_payload.get("__proxy_error__"):
-        plan_obj = plan_payload if isinstance(plan_payload, dict) else {}
-    elif isinstance(plan_payload, dict) and plan_payload.get("__proxy_error__"):
-        logger.warning(
-            "mobile_wallet_balance: my-plan unavailable: %s",
-            plan_payload.get("payload"),
-        )
-
-    # 4) 拉取 BYOK 状态
-    llm_payload = await _proxy_json(
-        "GET", "/api/llm/status", authorization=authorization, return_error_payload=True
-    )
-    byok_count = 0
-    if isinstance(llm_payload, dict) and not llm_payload.get("__proxy_error__"):
-        providers = llm_payload.get("providers") or []
-        byok_count = len(
-            [p for p in providers if isinstance(p, dict) and p.get("has_user_override")]
-        )
-
-    # 5) 组装简化余额信息
-    balance_raw = wallet_obj.get("balance")
-    try:
-        balance_val = float(balance_raw) if balance_raw is not None else None
-    except (TypeError, ValueError):
-        balance_val = None
-    membership = plan_obj.get("membership") if isinstance(plan_obj, dict) else None
-    membership_level = None
-    if isinstance(membership, dict):
-        membership_level = (
-            membership.get("level") or membership.get("name") or membership.get("tier")
-        )
-    elif isinstance(membership, str):
-        membership_level = membership
-    experience = None
-    if isinstance(membership, dict):
-        experience = membership.get("experience") or membership.get("exp")
-
-    return format_mobile_response(
-        data={
-            "balance": balance_val,
-            "currency": str(wallet_obj.get("currency") or "CNY"),
-            "membership_level": membership_level,
-            "experience": experience,
-            "byok_configured": byok_count > 0,
-            "byok_count": byok_count,
-            "synced": balance_val is not None,
-            "market_base_url": _market_base_url(),
-        }
-    )
-
-
 # ──────────────────────────────────────────────────────────────────────
 # 员工任务中心：手机端拉员工 Phase-D 主动提问 + 老板回答
 # 通过 httpx 代理调 MODstore 后端 admin_employee_autonomy_api：
@@ -4349,3 +2436,194 @@ async def mobile_employee_chat_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ── Strangler: domain sub-routers (helpers above must be defined first) ──
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import router as _ai_groups_router
+from app.fastapi_routes.mobile_extensions.routes_auth import router as _auth_router
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    router as _conversations_router,
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    router as _cs_contacts_router,
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import router as _payment_router
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    router as _super_employee_router,
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import router as _sync_router
+
+extension_router.include_router(_super_employee_router)
+extension_router.include_router(_ai_groups_router)
+extension_router.include_router(_conversations_router)
+extension_router.include_router(_sync_router)
+extension_router.include_router(_auth_router)
+extension_router.include_router(_cs_contacts_router)
+extension_router.include_router(_payment_router)
+
+# ── Re-export extracted route handlers (tests patch parent module paths) ──
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_mode as _mobile_group_mode,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    _mobile_group_uid as _mobile_group_uid,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_add_member as mobile_ai_group_add_member,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_candidates as mobile_ai_group_candidates,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_delete as mobile_ai_group_delete,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_read as mobile_ai_group_mark_read,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_mark_unread as mobile_ai_group_mark_unread,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_messages as mobile_ai_group_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_post as mobile_ai_group_post,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_remove_member as mobile_ai_group_remove_member,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_followed as mobile_ai_group_toggle_followed,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_hidden as mobile_ai_group_toggle_hidden,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_group_toggle_pin as mobile_ai_group_toggle_pin,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_create as mobile_ai_groups_create,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_ai_groups_list as mobile_ai_groups_list,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_ai_groups import (
+    mobile_git_branches as mobile_git_branches,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_oidc_exchange as mobile_auth_oidc_exchange,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_auth import (
+    mobile_auth_qr_confirm as mobile_auth_qr_confirm,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    _conversation_state_uid as _conversation_state_uid,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_delete as mobile_conversation_delete,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_read as mobile_conversation_mark_read,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_mark_unread as mobile_conversation_mark_unread,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_followed as mobile_conversation_toggle_followed,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_hidden as mobile_conversation_toggle_hidden,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_conversations import (
+    mobile_conversation_toggle_pin as mobile_conversation_toggle_pin,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_cs_info as get_cs_info,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_cs_messages as get_cs_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    get_mobile_fixed_contacts as get_mobile_fixed_contacts,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_cs_contacts import (
+    post_cs_message as post_cs_message,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _mobile_checkout_sign_body as _mobile_checkout_sign_body,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    _normalize_mobile_payment_channel as _normalize_mobile_payment_channel,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_checkout as mobile_payment_checkout,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_plans as mobile_payment_plans,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_payment_query as mobile_payment_query,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_payment import (
+    mobile_wallet_balance as mobile_wallet_balance,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    _stream_super_employee_invoke as _stream_super_employee_invoke,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_invoke as mobile_admin_claude_super_employee_invoke,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_messages as mobile_admin_claude_super_employee_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_claude_super_employee_stream as mobile_admin_claude_super_employee_stream,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_invoke as mobile_admin_codex_super_employee_invoke,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_messages as mobile_admin_codex_super_employee_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_codex_super_employee_stream as mobile_admin_codex_super_employee_stream,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_invoke as mobile_admin_cursor_super_employee_invoke,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_messages as mobile_admin_cursor_super_employee_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_cursor_super_employee_stream as mobile_admin_cursor_super_employee_stream,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_invoke as mobile_admin_trae_super_employee_invoke,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_messages as mobile_admin_trae_super_employee_messages,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_super_employee import (
+    mobile_admin_trae_super_employee_stream as mobile_admin_trae_super_employee_stream,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_circle_posts as _mobile_sync_circle_posts,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    _mobile_sync_runtime_contract as _mobile_sync_runtime_contract,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_ack as mobile_sync_ack,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_conflicts as mobile_sync_conflicts,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_pull as mobile_sync_pull,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_push as mobile_sync_push,  # noqa: E402,F401
+)
+from app.fastapi_routes.mobile_extensions.routes_sync import (
+    mobile_sync_status as mobile_sync_status,  # noqa: E402,F401
+)
