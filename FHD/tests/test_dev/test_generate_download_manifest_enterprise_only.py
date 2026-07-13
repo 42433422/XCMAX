@@ -12,6 +12,7 @@ FHD_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-download-manifest.py"
 VERIFY_SCRIPT = FHD_ROOT / "scripts" / "deploy" / "verify-download.sh"
 RELEASE_WORKFLOW = FHD_ROOT / ".github" / "workflows" / "release-desktop.yml"
+ROOT_RELEASE_WORKFLOW = FHD_ROOT.parent / ".github" / "workflows" / "fhd-release-desktop.yml"
 FINALIZE_MACOS_DMG = FHD_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh"
 BUILD_INFO_SCRIPT = FHD_ROOT / "scripts" / "package" / "generate-desktop-build-info.py"
 
@@ -45,6 +46,10 @@ def _generate(tmp_path: Path, *, include_enterprise_mac: bool = True) -> tuple[d
             "xcagi-v1.0.0.0",
             "--git-sha",
             "abc123",
+            "--android-version",
+            "1.0.0.0",
+            "--android-git-sha",
+            "a" * 40,
             "--output",
             str(manifest_path),
             "--download-release-output",
@@ -71,6 +76,8 @@ def test_stable_manifest_is_enterprise_only_even_when_personal_files_exist(tmp_p
     assert public_release["frozen_skus"] == ["personal"]
     assert public_release["primary_sku"] == "enterprise"
     assert public_release["win_installer_mb"] == 0
+    assert public_release["android_version"] == "1.0.0.0"
+    assert public_release["android_git_sha"] == "a" * 40
 
 
 def test_release_is_not_ready_without_enterprise_windows_and_macos(tmp_path: Path) -> None:
@@ -90,6 +97,14 @@ def test_release_workflow_uses_fhd_relative_download_verifier_path() -> None:
     assert "verify_only:" in workflow
     assert "inputs.verify_only == true || needs.generate-manifest.result == 'success'" in workflow
     assert '"https://xiu-ci.com/xcagi-v${version}/manifest.json"' in workflow
+    assert "Publish verified website download pointer" in workflow
+    assert '.active_skus == ["enterprise"]' in workflow
+    assert 'root_target="/root/成都修茈科技有限公司/download-release.json"' in workflow
+    assert "if: ${{ inputs.verify_only != true }}" in workflow
+
+    root_workflow = ROOT_RELEASE_WORKFLOW.read_text()
+    assert '-- "$remote_tmp" "$root_target"' in root_workflow
+    assert '"FHD/$remote_tmp"' not in root_workflow
 
 
 def test_release_workflow_notarizes_outer_dmg_and_hard_fails_gatekeeper() -> None:
