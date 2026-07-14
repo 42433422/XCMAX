@@ -899,9 +899,9 @@ def _recent_history(svc, user_id: str) -> list[dict]:
 
 
 def _resolve_chat_user_id(request: Request, body: XcagiCompatChatBody) -> str:
-    """统一对话流 user_id 口径，与 butler 路由 (_resolve_user_id_int) 对齐：
-    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'（与 butler 默认 1 同源），
-    使单部署单用户时对话流与 Settings UI 天然指向同一画像（桥接合并 / 目标 5）。
+    """统一对话流 user_id 口径，与 butler 路由 (_resolve_persona_user_id) 对齐：
+    优先 body.user_id，其次 X-User-Id 头，最后默认 '1'，
+    使 Settings UI 用同一会话作用域 id（``web_normal_<session>``）读到对话写入的画像。
     """
     uid = getattr(body, "user_id", None)
     if uid:

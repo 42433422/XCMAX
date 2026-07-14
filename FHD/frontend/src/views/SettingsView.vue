@@ -911,6 +911,7 @@ import { systemApi, type Industry as ApiIndustry } from '../api/system';
 import { intentPackagesApi, type IntentPackage as ApiIntentPackage } from '../api/intentPackages';
 import { memoryV2Api, type MemoryV2Record, type MemoryV2Status, type MemoryV2Summary, type MemoryV2Type } from '@/api/memoryV2';
 import { butlerProfileApi, type ButlerProfileView } from '@/api/butlerProfile';
+import { resolveModeScopedChatUserId } from '@/composables/useChatDbTokenGate';
 import { useIndustryStore } from '../stores/industry';
 import {
   SIDEBAR_THEME_OPTIONS,
