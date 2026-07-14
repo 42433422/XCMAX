@@ -15,8 +15,8 @@ from urllib.parse import unquote
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
-from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 from app.infrastructure.workspace import workspace_root
+from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
 from app.mod_sdk.workspace import (
     allocate_generated_workspace_file,
     resolve_existing_workspace_file,

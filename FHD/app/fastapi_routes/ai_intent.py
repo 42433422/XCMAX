@@ -187,7 +187,7 @@ def ai_intent_test(body: dict = Body(default_factory=dict)):
     try:
         payload = {"success": True, "data": recognize_intents(message)}
         return _trace_intent_test_run(payload, message=message, body=body or {})
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         return JSONResponse(
             {"success": False, "message": "意图识别失败，请稍后重试"}, status_code=500
         )

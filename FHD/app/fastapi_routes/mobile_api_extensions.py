@@ -1320,7 +1320,7 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
                 status_code=404,
             )
         return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_create_task")
         return JSONResponse(
             format_mobile_response(None, "任务创建失败", success=False, code=500),
@@ -1400,7 +1400,7 @@ async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopComplete
                 status_code=404,
             )
         return format_mobile_response(data={"task": task})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_desktop_complete")
         return JSONResponse(
             format_mobile_response(None, "任务完成回传失败", success=False, code=500),
@@ -1486,7 +1486,8 @@ async def mobile_im_cs_inbox(request: Request, user=Depends(get_mobile_user)):
     except RECOVERABLE_ERRORS:
         logger.exception("mobile cs inbox failed")
         return JSONResponse(
-            format_mobile_response(None, "客服收件箱加载失败", success=False, code=500), status_code=500
+            format_mobile_response(None, "客服收件箱加载失败", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -1520,7 +1521,8 @@ async def mobile_im_cs_inbox_messages(
     except RECOVERABLE_ERRORS:
         logger.exception("mobile cs inbox messages failed")
         return JSONResponse(
-            format_mobile_response(None, "客服消息加载失败", success=False, code=500), status_code=500
+            format_mobile_response(None, "客服消息加载失败", success=False, code=500),
+            status_code=500,
         )
 
 
@@ -1550,11 +1552,11 @@ async def mobile_im_cs_inbox_reply(
                 "timestamp": str(sent.get("created_at") or ""),
             }
         )
-    except (ValueError, PermissionError) as exc:
+    except (ValueError, PermissionError):
         return JSONResponse(
             format_mobile_response(None, "回复内容无效", success=False, code=400), status_code=400
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile cs inbox reply failed")
         return JSONResponse(
             format_mobile_response(None, "客服回复失败", success=False, code=500), status_code=500
@@ -1651,7 +1653,7 @@ async def mobile_ai_circle_create_post(
     try:
         post_id = create_user_post(user_id=uid, author_name=name, avatar=avatar, body=body.body)
         return format_mobile_response(data={"id": post_id}, message="发布成功")
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
             format_mobile_response(None, "动态内容无效", success=False, code=400), status_code=400
         )
@@ -1669,7 +1671,7 @@ async def mobile_ai_circle_toggle_like(post_id: int, user=Depends(get_mobile_use
     try:
         liked = toggle_like(post_id=post_id, user_id=uid)
         return format_mobile_response(data={"liked": liked})
-    except LookupError as exc:
+    except LookupError:
         return JSONResponse(
             format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
         )
@@ -1691,11 +1693,11 @@ async def mobile_ai_circle_add_comment(
     try:
         comment_id = add_comment(post_id=post_id, user_id=uid, author_name=name, body=body.body)
         return format_mobile_response(data={"id": comment_id}, message="评论成功")
-    except ValueError as exc:
+    except ValueError:
         return JSONResponse(
             format_mobile_response(None, "评论内容无效", success=False, code=400), status_code=400
         )
-    except LookupError as exc:
+    except LookupError:
         return JSONResponse(
             format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
         )
@@ -1762,7 +1764,7 @@ async def mobile_industry_baseline(
 
         data = await build_industry_baseline_plan_for_request(request, industry_id)
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile industry baseline failed")
         return JSONResponse(
             format_mobile_response(None, "行业基线加载失败", success=False, code=500),
@@ -1842,7 +1844,7 @@ async def mobile_install_host_foundation(
             success=bool(result.success),
             code=200 if result.success else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile install host foundation failed")
         return JSONResponse(
             format_mobile_response(None, "基础员工包安装失败", success=False, code=500),
@@ -1878,7 +1880,7 @@ async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mo
             success=bool(data.get("success")),
             code=200 if data.get("success") else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile install industry seed failed")
         return JSONResponse(
             format_mobile_response(None, "行业种子安装失败", success=False, code=500),
@@ -1907,7 +1909,7 @@ async def mobile_install_mod(body: dict[str, Any], user=Depends(get_mobile_user)
             success=bool(result.success),
             code=200 if result.success else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile install mod failed")
         return JSONResponse(
             format_mobile_response(None, "MOD 安装失败", success=False, code=500),
@@ -1952,7 +1954,7 @@ async def mobile_install_customer_delivery_seed(
             success=bool(data.get("success")),
             code=200 if data.get("success") else 409,
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile install customer delivery seed failed")
         return JSONResponse(
             format_mobile_response(None, "客户交付包安装失败", success=False, code=500),
@@ -1976,7 +1978,7 @@ async def mobile_home(user=Depends(get_mobile_user)):
         from app.db.xcmax_sync import SyncDb
 
         sync_data = SyncDb().get_status()
-    except OPERATIONAL_ERRORS as exc:
+    except OPERATIONAL_ERRORS:
         sync_data = {"error": "市场同步失败"}
     return format_mobile_response(
         data={
