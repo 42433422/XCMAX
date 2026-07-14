@@ -70,6 +70,32 @@ class TestBackendPathForMod:
         assert _backend_path_for_mod("/mods/test-mod") == "/mods/test-mod/backend"
 
 
+class TestTrustedRelativeFile:
+    def test_resolves_nested_file_from_directory_entries(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import _trusted_relative_file
+
+        target = tmp_path / "employees" / "worker.py"
+        target.parent.mkdir()
+        target.write_text("pass\n", encoding="utf-8")
+
+        assert _trusted_relative_file(str(tmp_path), "employees/worker.py") == str(target)
+
+    @pytest.mark.parametrize("relative", ["", "../worker.py", "employees/../worker.py"])
+    def test_rejects_untrusted_relative_shape(self, tmp_path, relative):
+        from app.infrastructure.mods.mod_manager import _trusted_relative_file
+
+        assert _trusted_relative_file(str(tmp_path), relative) is None
+
+    def test_rejects_symlink(self, tmp_path):
+        from app.infrastructure.mods.mod_manager import _trusted_relative_file
+
+        outside = tmp_path.parent / f"{tmp_path.name}-worker.py"
+        outside.write_text("pass\n", encoding="utf-8")
+        (tmp_path / "worker.py").symlink_to(outside)
+
+        assert _trusted_relative_file(str(tmp_path), "worker.py") is None
+
+
 class TestDefaultModsRoot:
     def test_env_var_set_and_dir_exists(self, tmp_path):
         from app.infrastructure.mods.mod_manager import _default_mods_root
