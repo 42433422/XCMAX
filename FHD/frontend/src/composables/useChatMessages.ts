@@ -149,15 +149,16 @@ export function useChatMessages(sessionId: Ref<string>) {
     return div.innerHTML
   }
 
+  function extractPlainText(raw: unknown): string {
+    const doc = new DOMParser().parseFromString(String(raw || ''), 'text/html')
+    doc.body.querySelectorAll('br').forEach((node) => {
+      node.replaceWith(doc.createTextNode('\n'))
+    })
+    return (doc.body.textContent || '').replace(/\u00a0/g, ' ').trim()
+  }
+
   function hasMeaningfulContent(raw: unknown): boolean {
-    const html = String(raw || '')
-    if (!html) return false
-    const text = html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
-    return text.length > 0
+    return extractPlainText(raw).length > 0
   }
 
   function hasRenderableSidecar(row: Record<string, unknown>): boolean {
@@ -231,11 +232,7 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   function toPlainText(raw: unknown): string {
-    return String(raw || '')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/gi, ' ')
-      .trim()
+    return extractPlainText(raw)
   }
 
   function isWelcomeMessage(msg: Pick<ChatMessage, 'role' | 'content'>): boolean {

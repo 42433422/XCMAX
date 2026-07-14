@@ -1330,7 +1330,7 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
         retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
         if retry_at > time.monotonic():
             logger.debug(
-                "[ModManager] ensure_mod_api_ready: load_mod(%s) in failure backoff",
+                "[ModManager] ensure_mod_api_ready: load_mod(%s) retry delay active",
                 mid,
             )
             return False

@@ -70,17 +70,16 @@ def _handle_personnel_read(
                 str(person["employee_no"] or ""),
                 str(person["user_id"] or ""),
             ]
+        # ``where`` is selected only from the constant clauses above; all actor
+        # and message-derived values remain bound parameters.
         rows = conn.execute(
-            f"""
-            SELECT employee_name, employee_no, department, position, user_id
-            FROM attendance_employees WHERE {where}
-            ORDER BY employee_name, id LIMIT 50
-            """,
+            "SELECT employee_name, employee_no, department, position, user_id "
+            "FROM attendance_employees WHERE " + where + " ORDER BY employee_name, id LIMIT 50",
             params,
         ).fetchall()
         total = int(
             conn.execute(
-                f"SELECT COUNT(*) FROM attendance_employees WHERE {where}", params
+                "SELECT COUNT(*) FROM attendance_employees WHERE " + where, params
             ).fetchone()[0]
             or 0
         )
