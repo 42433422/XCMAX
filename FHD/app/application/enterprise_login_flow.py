@@ -14,6 +14,8 @@ from app.application.desktop_admin_gate import (
     delete_session_quiet,
     forbidden_payload,
     is_admin_account_kind,
+)
+from app.application.desktop_admin_gate import (
     is_desktop_runtime as _gate_is_desktop_runtime,
 )
 from app.application.session_account_meta import (

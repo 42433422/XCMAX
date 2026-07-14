@@ -16,46 +16,82 @@ SSOT 架构（双模式）：
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import re
 import uuid
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from datetime import UTC, datetime
 from inspect import isawaitable
 from pathlib import Path
 from typing import Any
 
-from app.utils.path_utils import get_app_data_dir
-
-# 单条用户消息最多触发的 AI 回复数，避免大群一次发太多请求。
-from app.application.group_chat.constants import *  # noqa: F403
-from app.application.group_chat.constants import (  # noqa: F401
+from app.application.group_chat.constants import (
+    _LEGACY_SUPER_EMPLOYEE_IDS,
+    _SUPER_EMPLOYEE_IDS,
+    _SUPER_EMPLOYEE_RELAY_KINDS,
+    _XIAOC_ASSISTANT_ID,
+    CHAT_ACCEPTANCE_SUMMARY_CHARS,
+    CHAT_REPORT_SUMMARY_CHARS,
+    CONTEXT_TURNS,
     MAX_RESPONDERS,
+    RELAY_PROGRESS_MIN_INTERVAL_SEC,
+    CompletionFn,
+    EmployeeExecutorFn,
 )
-
+from app.application.group_chat.constants import (
+    PUBLIC_ACCEPTANCE_BODY_MAX_CHARS as PUBLIC_ACCEPTANCE_BODY_MAX_CHARS,
+)
+from app.application.group_chat.constants import (
+    PUBLIC_CHAT_BODY_MAX_CHARS as PUBLIC_CHAT_BODY_MAX_CHARS,
+)
+from app.application.group_chat.constants import (
+    SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC as SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+)
+from app.application.group_chat.constants import (
+    SUPER_DISCUSSION_DEFAULT_ROUNDS as SUPER_DISCUSSION_DEFAULT_ROUNDS,
+)
+from app.application.group_chat.constants import (
+    SUPER_DISCUSSION_MAX_ROUNDS as SUPER_DISCUSSION_MAX_ROUNDS,
+)
+from app.application.group_chat.constants import (
+    _env_float as _env_float,
+)
 from app.application.group_chat.dispatch_router import AiGroupChatDispatchMixin
-from app.application.group_chat.employee_registry import (  # noqa: F401
-    _append_super_employees,
+from app.application.group_chat.employee_registry import (
+    _FALLBACK_DEPARTMENTS,
+    _FALLBACK_ENTERPRISE_DEPARTMENTS,
     _default_completion,
     _default_departments,
     _default_duty_employee_loader,
     _default_employee_executor,
     _default_enterprise_departments,
     _default_enterprise_employee_loader,
-    _dept_key_to_employee_ids,
-    _employee_manifest,
     _is_required_group_member,
     _member_employee_id,
-    _member_public_shape,
     _normalize_branch_context,
-    _safe_json_line,
     _utc_now,
     _with_required_group_members,
-    _xiaoc_assistant_member,
+)
+from app.application.group_chat.employee_registry import (
+    _append_super_employees as _append_super_employees,
+)
+from app.application.group_chat.employee_registry import (
+    _dept_key_to_employee_ids as _dept_key_to_employee_ids,
+)
+from app.application.group_chat.employee_registry import (
+    _employee_manifest as _employee_manifest,
+)
+from app.application.group_chat.employee_registry import (
+    _member_public_shape as _member_public_shape,
+)
+from app.application.group_chat.employee_registry import (
+    _safe_json_line as _safe_json_line,
+)
+from app.application.group_chat.employee_registry import (
+    _xiaoc_assistant_member as _xiaoc_assistant_member,
 )
 from app.application.group_chat.message_formatting import AiGroupChatFormattingMixin
 from app.application.group_chat.storage import AiGroupChatStorageMixin
+from app.utils.path_utils import get_app_data_dir
+
 
 class AiGroupChatService(
     AiGroupChatDispatchMixin,
@@ -1848,7 +1884,6 @@ class AiGroupChatService(
             summary += "（详细结果已保留在执行端记录）"
         return summary
 
-    @staticmethod
     # ── 部门种子 ──
 
     def _seed_department_groups(self, user_id: int) -> list[dict[str, Any]]:
@@ -1917,4 +1952,13 @@ class AiGroupChatService(
             self._append_group(g)
         return seeded
 
-__all__ = ["AiGroupChatService", "MAX_RESPONDERS"]
+__all__ = [
+    "AiGroupChatService",
+    "CHAT_ACCEPTANCE_SUMMARY_CHARS",
+    "CHAT_REPORT_SUMMARY_CHARS",
+    "MAX_RESPONDERS",
+    "PUBLIC_ACCEPTANCE_BODY_MAX_CHARS",
+    "PUBLIC_CHAT_BODY_MAX_CHARS",
+    "SUPER_DISCUSSION_DEFAULT_ROUNDS",
+    "SUPER_DISCUSSION_MAX_ROUNDS",
+]

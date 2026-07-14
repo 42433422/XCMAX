@@ -537,7 +537,15 @@ class TestInitDbRuntimeAuthBootstrap:
             lambda: "postgresql://user:pass@host/db",
         )
         monkeypatch.setattr("app.fastapi_app.sqlite_paths.is_sqlite_url", lambda url: False)
-        called = {"pg": 0, "prefs": 0, "neuro": 0, "ledger": 0}
+        called = {
+            "pg": 0,
+            "prefs": 0,
+            "neuro": 0,
+            "im": 0,
+            "ledger": 0,
+            "conversation": 0,
+            "push": 0,
+        }
 
         # Mock every bootstrap helper the postgres branch calls so no real
         # PostgreSQL connection (port 5432) is attempted; the branch fans out to
@@ -555,13 +563,33 @@ class TestInitDbRuntimeAuthBootstrap:
         def fake_ledger(engine, *, database_url=None, swallow_errors=True):
             called["ledger"] += 1
 
+        def fake_im(engine, *, database_url=None, swallow_errors=True):
+            called["im"] += 1
+
+        def fake_conversation(engine, *, database_url=None, swallow_errors=True):
+            called["conversation"] += 1
+
+        def fake_push(engine, *, database_url=None, swallow_errors=True):
+            called["push"] += 1
+
         monkeypatch.setattr("app.db.init_db.ensure_postgresql_auth_bootstrap", fake_pg)
         monkeypatch.setattr("app.db.init_db.ensure_user_preferences_bootstrap", fake_prefs)
         monkeypatch.setattr("app.db.init_db.ensure_neuro_event_log_bootstrap", fake_neuro)
+        monkeypatch.setattr("app.db.init_db.ensure_sqlite_im_bootstrap", fake_im)
         monkeypatch.setattr("app.db.init_db.ensure_employee_run_log_bootstrap", fake_ledger)
+        monkeypatch.setattr("app.db.init_db.ensure_ai_conversation_bootstrap", fake_conversation)
+        monkeypatch.setattr("app.db.init_db.ensure_mobile_push_bootstrap", fake_push)
 
         ensure_runtime_auth_bootstrap()
-        assert called == {"pg": 1, "prefs": 1, "neuro": 1, "ledger": 1}
+        assert called == {
+            "pg": 1,
+            "prefs": 1,
+            "neuro": 1,
+            "im": 1,
+            "ledger": 1,
+            "conversation": 1,
+            "push": 1,
+        }
 
 
 class TestInitDbSessionsColumns:

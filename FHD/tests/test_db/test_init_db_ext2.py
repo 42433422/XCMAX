@@ -686,15 +686,19 @@ class TestEnsureRuntimeAuthBootstrapDeep:
             patch("app.db.init_db.ensure_postgresql_auth_bootstrap") as mock_pg,
             patch("app.db.init_db.ensure_user_preferences_bootstrap") as mock_pref,
             patch("app.db.init_db.ensure_neuro_event_log_bootstrap") as mock_neuro,
+            patch("app.db.init_db.ensure_sqlite_im_bootstrap") as mock_im,
             patch("app.db.init_db.ensure_employee_run_log_bootstrap") as mock_ledger,
             patch("app.db.init_db.ensure_ai_conversation_bootstrap") as mock_conversation,
+            patch("app.db.init_db.ensure_mobile_push_bootstrap") as mock_push,
         ):
             ensure_runtime_auth_bootstrap(None)
             mock_pg.assert_called_once()
             mock_pref.assert_called_once()
             mock_neuro.assert_called_once()
+            mock_im.assert_called_once()
             mock_ledger.assert_called_once()
             mock_conversation.assert_called_once()
+            mock_push.assert_called_once()
 
 
 class TestEnsureEmployeeRunLogBootstrap:

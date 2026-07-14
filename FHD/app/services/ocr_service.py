@@ -111,14 +111,13 @@ class OCRService:
             backend in ("auto", "tesseract")
             and not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
         ):
             self._init_tesseract()
 
         if (
             not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
+            and not getattr(self, "macos_vision_available", False)
             and not self.tesseract_available
         ):
             self._init_tesseract()
@@ -203,7 +202,7 @@ class OCRService:
         if (
             not self._paddle_enabled
             and self.reader is None
-            and not self.macos_vision_available
+            and not getattr(self, "macos_vision_available", False)
             and not self.tesseract_available
         ):
             logger.error("OCR引擎未初始化")
@@ -229,7 +228,7 @@ class OCRService:
                 text = "\n".join(results)
                 return self._clean_text(text)
 
-            if self.macos_vision_available:
+            if getattr(self, "macos_vision_available", False):
                 return self._recognize_macos_vision(image_array)
 
             if self.tesseract_available:
@@ -401,7 +400,7 @@ class OCRService:
             return "paddleocr"
         if self.reader is not None:
             return "easyocr"
-        if self.macos_vision_available:
+        if getattr(self, "macos_vision_available", False):
             return "macos_vision"
         if self.tesseract_available:
             return "tesseract"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 import os
 import re
@@ -12,13 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.application.ai_group_chat_service import AiGroupChatService
 from app.fastapi_routes.mobile_api import get_mobile_user
-from app.fastapi_routes.mobile_extensions.admin_helpers import (
-    _mobile_request_user_id,
-    _mobile_session_meta,
-    _require_mobile_admin_or_enterprise,
-)
 from app.fastapi_routes.mobile_extensions.models import (
     AiGroupCreateBody,
     AiGroupMemberBody,
@@ -30,16 +25,38 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+def _parent():
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
+
+
+def _require_mobile_admin_or_enterprise(request: Request, user):
+    return _parent()._require_mobile_admin_or_enterprise(request, user)
+
+
+def AiGroupChatService(*args, **kwargs):
+    """Resolve through the parent compatibility surface so legacy patches apply."""
+    return _parent().AiGroupChatService(*args, **kwargs)
+
+
 # ── AI 群聊（微信式多 AI 群组）──
 
 
 def _mobile_group_uid(request: Request, user) -> int:
-    return _mobile_request_user_id(request, user)
+    parent = _parent()
+    override = getattr(parent, "_mobile_group_uid", None)
+    if override is not None and override is not _mobile_group_uid:
+        return override(request, user)
+    return parent._mobile_request_user_id(request, user)
 
 
 def _mobile_group_mode(request: Request) -> str:
     """从 session 判定群聊模式：admin（6 部门 + 上岗员工）或 enterprise（4 部门 + 上架/未上架）。"""
-    meta = _mobile_session_meta(request) or {}
+    parent = _parent()
+    override = getattr(parent, "_mobile_group_mode", None)
+    if override is not None and override is not _mobile_group_mode:
+        return override(request)
+    meta = parent._mobile_session_meta(request) or {}
     return (
         "admin" if str(meta.get("account_kind") or "").strip().lower() == "admin" else "enterprise"
     )
@@ -597,5 +614,3 @@ async def mobile_ai_group_delete(request: Request, group_id: str, user=Depends(g
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )
-
-

@@ -1213,7 +1213,31 @@ def _register_single_mod_http_routes(
         if hasattr(module, "register_fastapi_routes"):
             register_fastapi_fn = module.register_fastapi_routes
             if callable(register_fastapi_fn):
+                routes_before = list(getattr(app.router, "routes", []))
                 register_fastapi_fn(app, mid)
+                routes_after = list(getattr(app.router, "routes", []))
+                new_routes = [route for route in routes_after if route not in routes_before]
+                for old_route in routes_before:
+                    endpoint_name = str(
+                        getattr(getattr(old_route, "endpoint", None), "__name__", "")
+                    )
+                    if not endpoint_name.endswith("_host_alias"):
+                        continue
+                    old_path = getattr(old_route, "path", None)
+                    old_methods = set(getattr(old_route, "methods", set()) or set())
+                    if any(
+                        getattr(new_route, "path", None) == old_path
+                        and old_methods.intersection(
+                            set(getattr(new_route, "methods", set()) or set())
+                        )
+                        for new_route in new_routes
+                    ):
+                        app.router.routes.remove(old_route)
+                        logger.info(
+                            "Removed superseded host alias after loading Mod %s: %s",
+                            mid,
+                            old_path,
+                        )
                 logger.info("FastAPI routes registered for mod: %s", mid)
                 registered = True
         if hasattr(module, "register_websocket_routes"):

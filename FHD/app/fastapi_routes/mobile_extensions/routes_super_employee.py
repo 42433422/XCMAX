@@ -385,10 +385,10 @@ async def _stream_super_employee_invoke(
                 message=text,
                 context=context,
             ):
-                yield _sse_line(event)
+                yield _parent()._sse_line(event)
         except Exception as exc:  # noqa: BLE001
             logger.exception("mobile_super_employee_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
+            yield _parent()._sse_line({"type": "error", "message": f"流式调用失败：{exc}"})
 
     return StreamingResponse(
         sse_gen(),
@@ -439,5 +439,4 @@ async def mobile_admin_trae_super_employee_stream(
 ):
     """移动端 Trae 超级员工 LAN SSE 流式直答。"""
     return await _stream_super_employee_invoke(request, "trae", body, user)
-
 
