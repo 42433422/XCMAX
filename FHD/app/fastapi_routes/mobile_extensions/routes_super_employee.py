@@ -73,6 +73,11 @@ async def mobile_admin_codex_super_employee_invoke(
             status_code=401,
         )
     text = (body.message or body.body or "").strip()
+    if not text:
+        return JSONResponse(
+            format_mobile_response(None, "message 不能为空", success=False, code=400),
+            status_code=400,
+        )
     context = dict(body.context or {})
     context.setdefault("source", "mobile_im")
     context.setdefault("client_surface", "mobile")
