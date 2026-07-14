@@ -103,4 +103,36 @@ describe('DesktopAppUpdatePrompt', () => {
     await flushPromises()
     expect(desktopApi.installUpdate).toHaveBeenCalledTimes(1)
   })
+
+  it('renders poster carousel and optional play button for video slides', async () => {
+    const wrapper = mountPrompt()
+    await flushPromises()
+    emitUpdate('update-available', {
+      version: '1.0.0',
+      releaseNotes: '• media card',
+      releaseMedia: [
+        {
+          posterUrl: 'https://cdn.example.com/a.webp',
+          videoUrl: 'https://cdn.example.com/a.mp4',
+          caption: '拟人系统',
+        },
+        {
+          posterUrl: 'https://cdn.example.com/b.webp',
+          caption: '弹窗居中',
+        },
+      ],
+    })
+    await nextTick()
+    await wrapper.find('.desktop-update-chip').trigger('click')
+    await nextTick()
+    expect(wrapper.find('.desktop-update-media__poster').exists()).toBe(true)
+    expect(wrapper.text()).toContain('拟人系统')
+    expect(wrapper.find('.desktop-update-media__play').exists()).toBe(true)
+    expect(wrapper.findAll('.desktop-update-media__dot')).toHaveLength(2)
+    await wrapper.findAll('.desktop-update-media__dot')[1].trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('弹窗居中')
+    expect(wrapper.find('.desktop-update-media__play').exists()).toBe(false)
+  })
 })
+

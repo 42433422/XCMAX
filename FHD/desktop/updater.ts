@@ -5,10 +5,16 @@ import type { UpdateInfo } from 'electron-updater'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import {
+  normalizeReleaseMedia,
+  parseReleaseMediaFromYaml,
+  type ReleaseMediaSlide,
+} from './release-media.js'
 
 let updateDownloaded = false
 let remoteBuildSha = ''
 let remoteReleaseNotes = ''
+let remoteReleaseMedia: ReleaseMediaSlide[] = []
 let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
@@ -131,16 +137,23 @@ function installSameVersionRebuildHook(): void {
   }
 }
 
-function enrichUpdateInfo(info: UpdateInfo): UpdateInfo & { buildSha?: string; releaseNotes?: string } {
+function enrichUpdateInfo(
+  info: UpdateInfo,
+): UpdateInfo & { buildSha?: string; releaseNotes?: string; releaseMedia?: ReleaseMediaSlide[] } {
   const notes = String(
     (info as UpdateInfo & { releaseNotes?: string }).releaseNotes || remoteReleaseNotes || ''
   ).trim()
+  const fromInfo = normalizeReleaseMedia(
+    (info as UpdateInfo & { releaseMedia?: unknown }).releaseMedia,
+  )
+  const releaseMedia = fromInfo.length ? fromInfo : remoteReleaseMedia
   return {
     ...info,
     buildSha: String(
       (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || ''
     ).trim(),
     releaseNotes: notes,
+    ...(releaseMedia.length ? { releaseMedia } : {}),
   }
 }
 
@@ -293,6 +306,7 @@ export async function checkForUpdates(): Promise<unknown> {
     const metadataText = await fetchLatestMetadataText()
     remoteBuildSha = parseYamlField(metadataText, 'buildSha')
     remoteReleaseNotes = parseYamlBlock(metadataText, 'releaseNotes')
+    remoteReleaseMedia = parseReleaseMediaFromYaml(metadataText)
     installSameVersionRebuildHook()
   }
   return autoUpdater.checkForUpdates()
@@ -366,4 +380,10 @@ export function __resetUpdateDownloadedForTest(): void {
   updateDownloaded = false
   lastUpdateEvent = null
   downloadInFlight = false
+  remoteReleaseMedia = []
+  remoteReleaseNotes = ''
+  remoteBuildSha = ''
 }
+
+export { normalizeReleaseMedia, parseReleaseMediaFromYaml } from './release-media.js'
+export type { ReleaseMediaSlide } from './release-media.js'
