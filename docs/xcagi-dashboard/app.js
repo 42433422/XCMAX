@@ -223,11 +223,19 @@ const Ops = (() => {
     const host = location.hostname || '';
     const origin = !isFile ? (location.origin || '').replace(/\/$/, '') : '';
     const urls = [];
-    if (origin) urls.push(origin + '/api/operations-line/health');
-    /* 桌面壳 iframe（5003）仅用同源 API，勿回退 MODstore/FHD 直连，避免 CORS 与控制台噪音 */
-    const embedOnDesktop =
-      !isFile && (host === '127.0.0.1' || host === 'localhost') && port === '5003';
-    if (!embedOnDesktop) {
+    /* 管理端 :5011 / 企业端 :5001 / 桌面壳 :5003：仅同源（Vite/FHD 反代），禁止直连 :8788 以免 CORS 噪音 */
+    const embedSameOrigin =
+      !isFile &&
+      (host === '127.0.0.1' || host === 'localhost') &&
+      (port === '5003' || port === '5011' || port === '5001');
+    if (origin) {
+      /* 优先走 Vite→MODstore 的生产线路由（admin-console 已反代 /api/admin/production-line） */
+      if (embedSameOrigin) {
+        urls.push(origin + '/api/admin/production-line/operations-health');
+      }
+      urls.push(origin + '/api/operations-line/health');
+    }
+    if (!embedSameOrigin) {
       const modBase = modstoreBase();
       if (modBase && modBase !== origin) {
         urls.push(modBase + '/api/admin/production-line/operations-health');
@@ -1352,8 +1360,8 @@ const LineCoverage = (() => {
 
   async function loadPytestCoverage() {
     const paths = [
-      'xcmax-pytest-coverage.json',
       '.cache/xcmax/xcmax-pytest-coverage.json',
+      'xcmax-pytest-coverage.json',
       'FHD/metrics/coverage-dual-summary.json',
     ];
     for (const path of paths) {

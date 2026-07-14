@@ -57,6 +57,13 @@ def _get_allowed_origins() -> list[str]:
         "http://localhost:5176",
         "http://127.0.0.1:4173",
         "http://localhost:4173",
+        # FHD 企业端 / 管理端 / API（全景页 iframe 偶发直连时放行）
+        "http://127.0.0.1:5000",
+        "http://localhost:5000",
+        "http://127.0.0.1:5001",
+        "http://localhost:5001",
+        "http://127.0.0.1:5011",
+        "http://localhost:5011",
         "https://xiu-ci.com",
         "https://www.xiu-ci.com",
     ]
