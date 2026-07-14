@@ -96,8 +96,12 @@ def read_workspace_output_files(
 ) -> list[dict[str, Any]]:
     from fastapi import HTTPException
 
-    from app.infrastructure.workspace import workspace_root as configured_workspace_root
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
+    from app.infrastructure.workspace import (
+        resolve_existing_file_under_root,
+    )
+    from app.infrastructure.workspace import (
+        workspace_root as configured_workspace_root,
+    )
 
     base = configured_workspace_root()
     out: list[dict[str, Any]] = []
@@ -115,17 +119,12 @@ def read_workspace_output_files(
         else:
             rel = normalized.lstrip("/")
         try:
-            path = resolve_safe_workspace_relpath(rel)
-        except (ValueError, HTTPException):
-            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
-            continue
-        try:
-            path.relative_to(base)
-        except ValueError:
-            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
-            continue
-        if not path.is_file():
+            path = resolve_existing_file_under_root(base, rel)
+        except FileNotFoundError:
             out.append({"path": rel, "kind": "text", "error": "file_not_found"})
+            continue
+        except (ValueError, OSError, HTTPException):
+            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
             continue
         try:
             blob = path.read_bytes()[:max_bytes]
