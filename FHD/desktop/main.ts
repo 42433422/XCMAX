@@ -996,6 +996,13 @@ export function isTrustedDesktopOrigin(rawUrl: string | undefined, expectedPort?
   }
 }
 
+export function desktopWindowOpenAction(
+  rawUrl: string,
+  expectedPort = DEFAULT_PORT,
+): 'allow' | 'deny' {
+  return isTrustedDesktopOrigin(rawUrl, expectedPort) ? 'allow' : 'deny'
+}
+
 function configureDesktopMediaPermissions(): void {
   const ses = session.defaultSession
   ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
@@ -1112,11 +1119,11 @@ async function createWindow(): Promise<void> {
     }
   })
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (isTrustedDesktopOrigin(url, DEFAULT_PORT)) {
-      return { action: 'allow' }
+    const action = desktopWindowOpenAction(url)
+    if (action === 'deny') {
+      console.warn(`[xcagi-desktop] blocked window open to ${url}`)
     }
-    void shell.openExternal(url)
-    return { action: 'deny' }
+    return { action }
   })
   mainWindow.webContents.on('unresponsive', () => {
     writeBackendLog('[crash] renderer unresponsive\n')
