@@ -125,12 +125,8 @@ def _get_optional_user(authorization: Optional[str] = Header(None)) -> Optional[
 class RegisterDTO(BaseModel):
     username: str = Field(..., min_length=2, max_length=64)
     password: str = Field(..., min_length=6)
-    email: str = Field(
-        ..., min_length=5, max_length=128, description="必填，用于接收验证码"
-    )
-    verification_code: str = Field(
-        ..., min_length=4, max_length=16, description="邮箱验证码"
-    )
+    email: str = Field(..., min_length=5, max_length=128, description="必填，用于接收验证码")
+    verification_code: str = Field(..., min_length=4, max_length=16, description="邮箱验证码")
 
 
 class LoginDTO(BaseModel):
@@ -290,9 +286,7 @@ def api_register(body: RegisterDTO):
         user = register_user(body.username, body.password, email_norm)
     except ValueError as e:
         raise HTTPException(409, str(e))
-    access_token = create_access_token(
-        user.id, user.username, is_admin=bool(user.is_admin)
-    )
+    access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
     return {
         "ok": True,
@@ -314,9 +308,7 @@ def api_login(body: LoginDTO):
     user = authenticate_user(body.username, body.password)
     if not user:
         raise HTTPException(401, "用户名或密码错误")
-    access_token = create_access_token(
-        user.id, user.username, is_admin=bool(user.is_admin)
-    )
+    access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
     return {
         "ok": True,
@@ -383,9 +375,7 @@ def api_send_code(body: SendCodeDTO, background_tasks: BackgroundTasks):
         session.add(vc)
         session.commit()
 
-    background_tasks.add_task(
-        _background_send_verification_email, email_norm, code, "login"
-    )
+    background_tasks.add_task(_background_send_verification_email, email_norm, code, "login")
 
     return {
         "ok": True,
@@ -420,9 +410,7 @@ def api_send_register_code(body: SendCodeDTO, background_tasks: BackgroundTasks)
         session.add(vc)
         session.commit()
 
-    background_tasks.add_task(
-        _background_send_verification_email, email_norm, code, "register"
-    )
+    background_tasks.add_task(_background_send_verification_email, email_norm, code, "register")
 
     return {
         "ok": True,
@@ -460,9 +448,7 @@ def api_login_with_code(body: LoginWithCodeDTO):
         vc.used = True
         session.commit()
 
-    access_token = create_access_token(
-        user.id, user.username, is_admin=bool(user.is_admin)
-    )
+    access_token = create_access_token(user.id, user.username, is_admin=bool(user.is_admin))
     refresh_token = create_refresh_token(user.id, user.username)
     return {
         "ok": True,
@@ -501,9 +487,7 @@ def api_send_reset_password_code(body: SendCodeDTO, background_tasks: Background
         session.add(vc)
         session.commit()
 
-    background_tasks.add_task(
-        _background_send_verification_email, email_norm, code, "reset"
-    )
+    background_tasks.add_task(_background_send_verification_email, email_norm, code, "reset")
 
     return {
         "ok": True,
@@ -551,11 +535,7 @@ def api_update_profile(body: ProfileUpdateDTO, user: User = Depends(_get_current
         if not row:
             raise HTTPException(404, "用户不存在")
         if un:
-            taken = (
-                session.query(User)
-                .filter(User.username == un, User.id != user.id)
-                .first()
-            )
+            taken = session.query(User).filter(User.username == un, User.id != user.id).first()
             if taken:
                 raise HTTPException(409, "用户名已被占用")
             row.username = un
@@ -570,9 +550,7 @@ def api_update_profile(body: ProfileUpdateDTO, user: User = Depends(_get_current
 
 
 @router.post("/auth/change-password")
-def api_change_password(
-    body: PasswordChangeDTO, user: User = Depends(_get_current_user)
-):
+def api_change_password(body: PasswordChangeDTO, user: User = Depends(_get_current_user)):
     sf = get_session_factory()
     with sf() as session:
         row = session.query(User).filter(User.id == user.id).first()
@@ -593,9 +571,7 @@ def api_admin_reset_user_password(
     """凭 ``MODSTORE_ADMIN_RECHARGE_TOKEN`` 重置用户密码；请求头 ``X-Modstore-Recharge-Token`` 与钱包直充一致。"""
     admin_token = (os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or "").strip()
     if not admin_token:
-        raise HTTPException(
-            503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法执行管理员密码重置"
-        )
+        raise HTTPException(503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法执行管理员密码重置")
     client_token = (request.headers.get("X-Modstore-Recharge-Token") or "").strip()
     if client_token != admin_token:
         raise HTTPException(403, "无效的管理员授权")
@@ -634,9 +610,7 @@ def api_refresh_token(body: RefreshTokenDTO):
         raise HTTPException(401, "用户不存在")
 
     # 生成新的访问令牌和刷新令牌
-    new_access_token = create_access_token(
-        user_id, username, is_admin=bool(user.is_admin)
-    )
+    new_access_token = create_access_token(user_id, username, is_admin=bool(user.is_admin))
     new_refresh_token = create_refresh_token(user_id, username)
 
     return {
@@ -704,9 +678,7 @@ def api_wallet_recharge(
 ):
     """管理员线下直充（需密钥）。用户日常充值请使用「支付宝」在钱包页发起。"""
     if not user.is_admin:
-        raise HTTPException(
-            403, "仅管理员可使用 Token 直充接口，且只能为当前登录账号加款"
-        )
+        raise HTTPException(403, "仅管理员可使用 Token 直充接口，且只能为当前登录账号加款")
     admin_token = (os.environ.get("MODSTORE_ADMIN_RECHARGE_TOKEN") or "").strip()
     if not admin_token:
         raise HTTPException(503, "未配置 MODSTORE_ADMIN_RECHARGE_TOKEN，无法直充")
@@ -718,12 +690,7 @@ def api_wallet_recharge(
 
     sf = get_session_factory()
     with sf() as session:
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -753,9 +720,7 @@ def _admin_self_credit_cap() -> float:
 
 
 @router.post("/wallet/admin-self-credit")
-def api_wallet_admin_self_credit(
-    body: AdminSelfCreditDTO, user: User = Depends(_get_current_user)
-):
+def api_wallet_admin_self_credit(body: AdminSelfCreditDTO, user: User = Depends(_get_current_user)):
     """管理员为本人钱包加款（仅 JWT 鉴权，不依赖 MODSTORE_ADMIN_RECHARGE_TOKEN）。"""
     if not user.is_admin:
         raise HTTPException(403, "仅管理员可为本人钱包加款")
@@ -765,12 +730,7 @@ def api_wallet_admin_self_credit(
 
     sf = get_session_factory()
     with sf() as session:
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -806,12 +766,7 @@ def api_admin_credit_user_wallet(
         target = session.query(User).filter(User.id == user_id).first()
         if not target:
             raise HTTPException(404, "用户不存在")
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user_id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user_id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user_id, balance=0.0)
             session.add(wallet)
@@ -839,9 +794,7 @@ def api_admin_credit_user_wallet(
 
 def _wallet_money(value: Any) -> Decimal:
     try:
-        return Decimal(str(value or "0")).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
+        return Decimal(str(value or "0")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     except Exception:
         return Decimal("0.00")
 
@@ -856,9 +809,7 @@ def _ai_hold_no(user_id: int, idempotency_key: str) -> str:
 
 
 def _ai_wallet_meta(**payload: Any) -> str:
-    return "ai_wallet:" + json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, default=str
-    )
+    return "ai_wallet:" + json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
 
 
 def _parse_ai_wallet_meta(description: str) -> dict[str, Any]:
@@ -888,9 +839,7 @@ def _ai_wallet_transaction_payload(txn: Transaction) -> dict[str, Any]:
     }
 
 
-def _find_ai_preauth_by_hold(
-    session: Any, user_id: int, hold_no: str
-) -> Transaction | None:
+def _find_ai_preauth_by_hold(session: Any, user_id: int, hold_no: str) -> Transaction | None:
     rows = (
         session.query(Transaction)
         .filter(Transaction.user_id == user_id, Transaction.txn_type == "ai_preauth")
@@ -945,9 +894,7 @@ def _ai_settled_amount_for_hold(session: Any, user_id: int, hold_no: str) -> Dec
     settled = Decimal("0.00")
     for row in _ai_txns_for_hold(session, user_id, "ai_settle", hold_no):
         meta = _parse_ai_wallet_meta(row.description)
-        settled = max(
-            settled, _wallet_money(meta.get("actual_amount") or abs(row.amount or 0))
-        )
+        settled = max(settled, _wallet_money(meta.get("actual_amount") or abs(row.amount or 0)))
     return settled
 
 
@@ -992,12 +939,7 @@ def api_wallet_ai_preauthorize(
     sf = get_session_factory()
     with sf() as session:
         existing = _find_ai_txn_by_key(session, user.id, "ai_preauth", key)
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -1052,12 +994,7 @@ def api_wallet_ai_settle(
     sf = get_session_factory()
     with sf() as session:
         existing = _find_ai_txn_by_key(session, user.id, "ai_settle", key)
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -1068,9 +1005,7 @@ def api_wallet_ai_settle(
         if existing:
             return {
                 "ok": True,
-                "hold": _ai_hold_payload(
-                    preauth, status="settled", settled_amount=actual
-                ),
+                "hold": _ai_hold_payload(preauth, status="settled", settled_amount=actual),
                 "balance": _wallet_money_str(wallet.balance),
                 "idempotent": True,
             }
@@ -1115,12 +1050,7 @@ def api_wallet_ai_release(
     sf = get_session_factory()
     with sf() as session:
         existing = _find_ai_txn_by_key(session, user.id, "ai_release", key)
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -1143,8 +1073,7 @@ def api_wallet_ai_release(
             .all()
         )
         if any(
-            str(_parse_ai_wallet_meta(row.description).get("hold_no") or "")
-            == body.hold_no.strip()
+            str(_parse_ai_wallet_meta(row.description).get("hold_no") or "") == body.hold_no.strip()
             for row in settled
         ):
             return {
@@ -1188,12 +1117,7 @@ def api_wallet_ai_refund(
     sf = get_session_factory()
     with sf() as session:
         existing = _find_ai_txn_by_key(session, user.id, "ai_refund", key)
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=user.id, balance=0.0)
             session.add(wallet)
@@ -1213,9 +1137,7 @@ def api_wallet_ai_refund(
                     "status": "refunded",
                     "refund_transaction_id": existing.id,
                 },
-                "hold": _ai_hold_payload(
-                    preauth, status="refunded", settled_amount=settled_amount
-                ),
+                "hold": _ai_hold_payload(preauth, status="refunded", settled_amount=settled_amount),
                 "balance": _wallet_money_str(wallet.balance),
                 "idempotent": True,
             }
@@ -1256,9 +1178,7 @@ def api_wallet_ai_refund(
                 "status": "refunded",
                 "refund_transaction_id": txn.id,
             },
-            "hold": _ai_hold_payload(
-                preauth, status="refunded", settled_amount=settled_amount
-            ),
+            "hold": _ai_hold_payload(preauth, status="refunded", settled_amount=settled_amount),
             "balance": _wallet_money_str(wallet.balance),
         }
 
@@ -1271,9 +1191,7 @@ def api_wallet_transactions(
 ):
     sf = get_session_factory()
     with sf() as session:
-        total = (
-            session.query(Transaction).filter(Transaction.user_id == user.id).count()
-        )
+        total = session.query(Transaction).filter(Transaction.user_id == user.id).count()
         rows = (
             session.query(Transaction)
             .filter(Transaction.user_id == user.id)
@@ -1407,9 +1325,7 @@ def api_buy_item(item_id: int, user: User = Depends(_get_current_user)):
                 return {"ok": True, "message": "已拥有"}
             purchase = Purchase(user_id=user.id, catalog_id=item.id, amount=0)
             session.add(purchase)
-            _grant_catalog_entitlement(
-                session, user_id=user.id, item=item, source="free_catalog"
-            )
+            _grant_catalog_entitlement(session, user_id=user.id, item=item, source="free_catalog")
             session.commit()
             return {"ok": True, "message": "免费领取成功"}
 
@@ -1421,20 +1337,12 @@ def api_buy_item(item_id: int, user: User = Depends(_get_current_user)):
         if existing:
             return {"ok": True, "message": "已拥有"}
 
-        wallet = (
-            session.query(Wallet)
-            .filter(Wallet.user_id == user.id)
-            .with_for_update()
-            .first()
-        )
+        wallet = session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
         if not wallet:
             session.add(Wallet(user_id=user.id, balance=0.0))
             session.flush()
             wallet = (
-                session.query(Wallet)
-                .filter(Wallet.user_id == user.id)
-                .with_for_update()
-                .first()
+                session.query(Wallet).filter(Wallet.user_id == user.id).with_for_update().first()
             )
         if not wallet or wallet.balance < item.price:
             raise HTTPException(
@@ -1523,11 +1431,7 @@ def api_my_store(
         )
         items = []
         for p in rows:
-            item = (
-                session.query(CatalogItem)
-                .filter(CatalogItem.id == p.catalog_id)
-                .first()
-            )
+            item = session.query(CatalogItem).filter(CatalogItem.id == p.catalog_id).first()
             if item:
                 items.append(
                     {
@@ -1538,9 +1442,7 @@ def api_my_store(
                         "name": item.name,
                         "artifact": item.artifact or "mod",
                         "price_paid": p.amount,
-                        "purchased_at": p.created_at.isoformat()
-                        if p.created_at
-                        else "",
+                        "purchased_at": p.created_at.isoformat() if p.created_at else "",
                     }
                 )
         return {"items": items, "total": total}
@@ -1747,9 +1649,7 @@ def api_admin_sync_xc_catalog_packages(user: User = Depends(_require_admin)):
     """将 ``packages.json`` 中尚未出现在 ``catalog_items`` 的包插入数据库（可选复制文件）。"""
     sf = get_session_factory()
     with sf() as session:
-        out = catalog_sync.sync_packages_json_to_catalog_items(
-            session, admin_user_id=user.id
-        )
+        out = catalog_sync.sync_packages_json_to_catalog_items(session, admin_user_id=user.id)
         session.commit()
     return {"ok": True, **out}
 
@@ -2032,11 +1932,7 @@ def api_admin_delete_employee_pack(pkg_id: str, user: User = Depends(_require_ad
     removed_db = False
     sf = get_session_factory()
     with sf() as session:
-        rows = (
-            session.query(CatalogItem)
-            .filter(CatalogItem.artifact == "employee_pack")
-            .all()
-        )
+        rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
         to_delete = [x for x in rows if catalog_store.norm_pkg_id(x.pkg_id) == pid]
         for item in to_delete:
             if item.stored_filename:
@@ -2079,9 +1975,7 @@ async def api_admin_align_employee_llm_to_auto(
         align_catalog_employee_packs_llm_to_auto_sentinel,
     )
 
-    return await align_catalog_employee_packs_llm_to_auto_sentinel(
-        user, dry_run=dry_run
-    )
+    return await align_catalog_employee_packs_llm_to_auto_sentinel(user, dry_run=dry_run)
 
 
 @router.post("/admin/employee-packs/{pkg_id}/align-llm-to-auto-single")
@@ -2143,11 +2037,7 @@ def api_admin_purge_all_employee_packs(user: User = Depends(_require_admin)):
     preserved_duty_db_rows = 0
     sf = get_session_factory()
     with sf() as session:
-        rows = (
-            session.query(CatalogItem)
-            .filter(CatalogItem.artifact == "employee_pack")
-            .all()
-        )
+        rows = session.query(CatalogItem).filter(CatalogItem.artifact == "employee_pack").all()
         for item in rows:
             if is_planned_duty_employee_pack(item.pkg_id, item.artifact):
                 preserved_duty_db_rows += 1
@@ -2214,9 +2104,7 @@ def api_admin_purge_all_mods(user: User = Depends(_require_admin)):
 def api_admin_list_users(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    is_enterprise: bool | None = Query(
-        None, description="true=仅企业级，false=仅非企业级"
-    ),
+    is_enterprise: bool | None = Query(None, description="true=仅企业级，false=仅非企业级"),
     user: User = Depends(_require_admin),
 ):
     sf = get_session_factory()
@@ -2490,12 +2378,8 @@ def api_wallet_overview(
     with sf() as session:
         wallet = session.query(Wallet).filter(Wallet.user_id == user.id).first()
         balance = wallet.balance if wallet else 0.0
-        updated_at = (
-            wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
-        )
-        total = (
-            session.query(Transaction).filter(Transaction.user_id == user.id).count()
-        )
+        updated_at = wallet.updated_at.isoformat() if wallet and wallet.updated_at else ""
+        total = session.query(Transaction).filter(Transaction.user_id == user.id).count()
         rows = (
             session.query(Transaction)
             .filter(Transaction.user_id == user.id)
