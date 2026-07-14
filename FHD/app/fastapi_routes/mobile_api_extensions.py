@@ -793,7 +793,7 @@ def _persist_mobile_cs_request(
             return int(row.id), True, ""
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile cs service request persist skipped: %s", exc)
-        return 0, False, str(exc)[:300]
+        return 0, False, "服务请求保存失败"
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -1204,16 +1204,16 @@ async def mobile_service_bridge_request_respond(
         return format_mobile_response(data=req.to_dict())
     except HTTPException:
         raise
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_service_bridge_request_respond")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务响应失败", success=False, code=500),
             status_code=500,
         )
-    except Exception as exc:
+    except Exception:
         logger.exception("mobile service-bridge respond failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "服务响应失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1232,10 +1232,10 @@ async def mobile_relay_desktop_register(body: RelayDesktopRegisterBody):
             relay_base_url=body.relay_base_url,
         )
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_desktop_register")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "桌面端注册失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1270,10 +1270,10 @@ async def mobile_relay_bind_account(
                 **_relay_mobile_auth_payload(user_public, desktop),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_bind_account")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "账号绑定失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1289,10 +1289,10 @@ async def mobile_relay_desktops(user=Depends(get_mobile_user)):
     try:
         items = MobileRelayService().list_desktops(user_id=uid)
         return format_mobile_response(data={"items": items, "count": len(items)})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_desktops")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "暂时无法获取桌面端", success=False, code=500),
             status_code=500,
         )
 
@@ -1323,7 +1323,7 @@ async def mobile_relay_create_task(body: RelayTaskCreateBody, user=Depends(get_m
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_create_task")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "任务创建失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1376,10 +1376,10 @@ async def mobile_relay_desktop_poll(body: RelayDesktopPollBody):
                 status_code=404,
             )
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_relay_desktop_poll")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "轮询桌面任务失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1403,7 +1403,7 @@ async def mobile_relay_desktop_complete(task_id: str, body: RelayDesktopComplete
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile_relay_desktop_complete")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "任务完成回传失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1483,10 +1483,10 @@ async def mobile_im_cs_inbox(request: Request, user=Depends(get_mobile_user)):
             for c in items
         ]
         return format_mobile_response(data={"conversations": conversations})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile cs inbox failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "客服收件箱加载失败", success=False, code=500), status_code=500
         )
 
 
@@ -1517,10 +1517,10 @@ async def mobile_im_cs_inbox_messages(
             for m in raw
         ]
         return format_mobile_response(data={"messages": messages})
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile cs inbox messages failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "客服消息加载失败", success=False, code=500), status_code=500
         )
 
 
@@ -1552,12 +1552,12 @@ async def mobile_im_cs_inbox_reply(
         )
     except (ValueError, PermissionError) as exc:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "回复内容无效", success=False, code=400), status_code=400
         )
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile cs inbox reply failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "客服回复失败", success=False, code=500), status_code=500
         )
 
 
@@ -1653,7 +1653,7 @@ async def mobile_ai_circle_create_post(
         return format_mobile_response(data={"id": post_id}, message="发布成功")
     except ValueError as exc:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "动态内容无效", success=False, code=400), status_code=400
         )
 
 
@@ -1671,7 +1671,7 @@ async def mobile_ai_circle_toggle_like(post_id: int, user=Depends(get_mobile_use
         return format_mobile_response(data={"liked": liked})
     except LookupError as exc:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
+            format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
         )
 
 
@@ -1693,11 +1693,11 @@ async def mobile_ai_circle_add_comment(
         return format_mobile_response(data={"id": comment_id}, message="评论成功")
     except ValueError as exc:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=400), status_code=400
+            format_mobile_response(None, "评论内容无效", success=False, code=400), status_code=400
         )
     except LookupError as exc:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=404), status_code=404
+            format_mobile_response(None, "动态不存在", success=False, code=404), status_code=404
         )
 
 
@@ -1740,10 +1740,10 @@ async def mobile_onboarding_industries(request: Request, user=Depends(get_mobile
 
         data = await build_onboarding_industry_catalog_for_request(request)
         return format_mobile_response(data=data)
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile onboarding industries failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "行业目录加载失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1765,7 +1765,7 @@ async def mobile_industry_baseline(
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile industry baseline failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "行业基线加载失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1802,9 +1802,9 @@ async def mobile_select_onboarding_industry(
                 _mobile_session_id_from_request(request),
                 industry_id,
             )
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             logger.exception("mobile select onboarding industry market sync failed")
-            market_entitlements = {"success": False, "message": str(exc)}
+            market_entitlements = {"success": False, "message": "市场权益同步失败"}
         if not market_entitlements.get("success"):
             logger.warning(
                 "mobile onboarding industry saved while market entitlement sync failed: "
@@ -1816,10 +1816,10 @@ async def mobile_select_onboarding_industry(
             data={**(data or {}), "market_entitlements": market_entitlements},
             message="行业已绑定到当前账号",
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile select onboarding industry failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "行业绑定失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1845,7 +1845,7 @@ async def mobile_install_host_foundation(
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile install host foundation failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "基础员工包安装失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1881,7 +1881,7 @@ async def mobile_install_industry_seed(body: dict[str, Any], user=Depends(get_mo
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile install industry seed failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "行业种子安装失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1910,7 +1910,7 @@ async def mobile_install_mod(body: dict[str, Any], user=Depends(get_mobile_user)
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile install mod failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "MOD 安装失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1955,7 +1955,7 @@ async def mobile_install_customer_delivery_seed(
     except RECOVERABLE_ERRORS as exc:
         logger.exception("mobile install customer delivery seed failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "客户交付包安装失败", success=False, code=500),
             status_code=500,
         )
 
@@ -1977,7 +1977,7 @@ async def mobile_home(user=Depends(get_mobile_user)):
 
         sync_data = SyncDb().get_status()
     except OPERATIONAL_ERRORS as exc:
-        sync_data = {"error": str(exc)}
+        sync_data = {"error": "市场同步失败"}
     return format_mobile_response(
         data={
             "mods": mod_items,
@@ -2424,7 +2424,7 @@ async def mobile_employee_chat_stream(
             yield _sse_line({"type": "done", "result": {"response": final_text}})
         except Exception as exc:
             logger.exception("mobile_employee_chat_stream failed: %s", exc)
-            yield _sse_line({"type": "error", "message": f"员工对话失败：{exc}"})
+            yield _sse_line({"type": "error", "message": "员工对话失败，请稍后重试"})
 
     return StreamingResponse(
         sse_gen(),
