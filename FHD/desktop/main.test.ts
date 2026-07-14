@@ -60,7 +60,7 @@ const electronMocks = vi.hoisted(() => {
     showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true }))
   }
   const ipcMain = { handle: vi.fn() }
-  const shell = { openPath: vi.fn(), openExternal: vi.fn() }
+  const shell = { openPath: vi.fn() }
   const session = {
     defaultSession: {
       setPermissionRequestHandler: vi.fn(),
@@ -240,6 +240,23 @@ describe('main — desktop splash & ping readiness', () => {
     const { resolveDesktopSplashUrl } = await import('./main.js')
     const url = resolveDesktopSplashUrl()
     expect(url.startsWith('file://') || url.startsWith('data:text/html')).toBe(true)
+  })
+
+  it('clampSplashProgress clamps to 0–100 integers', async () => {
+    const { clampSplashProgress } = await import('./main.js')
+    expect(clampSplashProgress(-5)).toBe(0)
+    expect(clampSplashProgress(42.6)).toBe(43)
+    expect(clampSplashProgress(150)).toBe(100)
+    expect(clampSplashProgress(Number.NaN)).toBe(0)
+  })
+
+  it('splash.html exposes progress helpers and a progressbar', () => {
+    const splashPath = path.join(__dirname, 'resources', 'splash.html')
+    const html = fs.readFileSync(splashPath, 'utf8')
+    expect(html).toContain('role="progressbar"')
+    expect(html).toContain('xcagiSetSplashProgress')
+    expect(html).toContain('id="bar"')
+    expect(html).toContain('id="pct"')
   })
 })
 
@@ -468,6 +485,19 @@ describe('main — isTrustedDesktopOrigin', () => {
   it('returns false for malformed URL', async () => {
     const { isTrustedDesktopOrigin } = await import('./main.js')
     expect(isTrustedDesktopOrigin('not-a-url', 17500)).toBe(false)
+  })
+})
+
+describe('main — desktopWindowOpenAction', () => {
+  it('allows only the trusted local desktop origin', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('http://127.0.0.1:17500/orders', 17500)).toBe('allow')
+  })
+
+  it('denies external and malformed URLs', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('https://example.com/', 17500)).toBe('deny')
+    expect(desktopWindowOpenAction('not-a-url', 17500)).toBe('deny')
   })
 })
 

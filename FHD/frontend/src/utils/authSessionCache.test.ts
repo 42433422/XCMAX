@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import {
   validateEnterpriseSessionCached,
   invalidateEnterpriseSessionCache,
+  markEnterpriseSessionValid,
 } from './authSessionCache'
 
 vi.mock('@/api/auth', () => ({
@@ -38,5 +39,11 @@ describe('authSessionCache', () => {
     invalidateEnterpriseSessionCache()
     await validateEnterpriseSessionCached()
     expect(authApi.validateSession).toHaveBeenCalledTimes(2)
+  })
+
+  it('trusts the freshly established login session without a blocking probe', async () => {
+    markEnterpriseSessionValid()
+    await expect(validateEnterpriseSessionCached()).resolves.toBe(true)
+    expect(authApi.validateSession).not.toHaveBeenCalled()
   })
 })

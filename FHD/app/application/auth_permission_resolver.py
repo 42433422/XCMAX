@@ -59,9 +59,13 @@ def resolve_permissions(
     mid = str(mod_id or "").strip()
     if mid and kind == "enterprise":
         try:
-            from app.enterprise.mod_entitlements import user_has_mod_entitlement
+            from app.enterprise.mod_entitlements import is_mod_visible_for_enterprise
 
-            mod_allowed = user_has_mod_entitlement(user, mid)
+            # Entitlements are restored into the authenticated desktop session
+            # cache before this shared resolver runs.  Use the same visibility
+            # SSOT as Mod discovery instead of calling a non-existent per-user
+            # helper and failing every enterprise Mod closed.
+            mod_allowed = is_mod_visible_for_enterprise(mid)
             if not mod_allowed:
                 mod_reason = "mod_entitlement_required"
         except RECOVERABLE_ERRORS as exc:
@@ -84,9 +88,18 @@ def resolve_permissions(
                 route_reason = "employee_invoke_denied"
 
     personal_blocked_shell = False
+    admin_blocked_shell = False
     shell = str(meta.get("client_shell") or meta.get("shell") or "").strip().lower()
     if kind == "personal" and shell in {"desktop", "mobile", "android"}:
         personal_blocked_shell = True
+    # 桌面进程整机禁 admin（不依赖未接线的 client_shell=desktop）
+    if kind == "admin":
+        try:
+            from app.application.desktop_admin_gate import is_desktop_runtime
+
+            admin_blocked_shell = bool(is_desktop_runtime())
+        except Exception:  # noqa: BLE001
+            admin_blocked_shell = shell in {"desktop"}
 
     return {
         "account_kind": kind,
@@ -99,7 +112,11 @@ def resolve_permissions(
         "route_allowed": route_allowed,
         "route_reason": route_reason,
         "personal_shell_blocked": personal_blocked_shell,
-        "allowed": route_allowed and mod_allowed and not personal_blocked_shell,
+        "admin_shell_blocked": admin_blocked_shell,
+        "allowed": route_allowed
+        and mod_allowed
+        and not personal_blocked_shell
+        and not admin_blocked_shell,
     }
 
 
@@ -111,6 +128,8 @@ def require_allowed(**kwargs: Any) -> None:
         reason = (
             decision.get("route_reason")
             or decision.get("mod_reason")
-            or ("personal_shell_blocked" if decision.get("personal_shell_blocked") else "forbidden")
+            or ("personal_shell_blocked" if decision.get("personal_shell_blocked") else None)
+            or ("admin_shell_blocked" if decision.get("admin_shell_blocked") else None)
+            or "forbidden"
         )
         raise HTTPException(status_code=403, detail=str(reason))

@@ -33,7 +33,14 @@ def _guess_lan_ipv4() -> str:
 def _read_runtime_api_port(default: int = 0) -> int:
     """读取 run_fastapi 写入的 .runtime/api.port（与 frontend Vite 联动）。"""
     try:
-        port_file = _REPO_ROOT / ".runtime" / "api.port"
+        data_root = (
+            os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+        ).strip()
+        port_file = (
+            Path(data_root).expanduser().resolve() / ".runtime" / "api.port"
+            if data_root
+            else _REPO_ROOT / ".runtime" / "api.port"
+        )
         if port_file.is_file():
             port = int(port_file.read_text(encoding="utf-8").strip())
             if 0 < port <= 65535:

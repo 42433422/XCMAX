@@ -122,6 +122,20 @@ class AgentOrchestrator:
             return None
 
         waiting_step = self._find_waiting_step(run, approved_step_id=approved_step_id)
+        # A SQL-backed run can be observed at the durable ``pending`` snapshot
+        # between plan persistence and the approval transition.  Route callers
+        # pass an exact node/step id, so it is safe to resume that one pending
+        # step instead of returning a false "still running" response.
+        if waiting_step is None and str(approved_step_id or "").strip():
+            wanted = str(approved_step_id).strip()
+            waiting_step = next(
+                (
+                    step
+                    for step in run.steps
+                    if step.status == "pending" and wanted in {step.step_id, step.node_id}
+                ),
+                None,
+            )
         if waiting_step is None:
             run.add_event(
                 "run.continue_ignored",

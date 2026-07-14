@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { i18n, setAppLocale } from './index'
+import { detectLocale, i18n, setAppLocale } from './index'
 
 describe('i18n/index', () => {
   afterEach(() => {
@@ -47,6 +47,17 @@ describe('i18n/index', () => {
   })
 
   describe('detectLocale (via initial locale)', () => {
+    it('defaults the Chinese business UI to zh-CN even on an English OS', () => {
+      window.localStorage.removeItem('xcagi_locale')
+      vi.stubGlobal('navigator', { language: 'en-US' })
+      expect(detectLocale()).toBe('zh-CN')
+    })
+
+    it('keeps an explicitly selected English locale', () => {
+      window.localStorage.setItem('xcagi_locale', 'en-US')
+      expect(detectLocale()).toBe('en-US')
+    })
+
     it('detects locale from localStorage when stored as en-US', () => {
       window.localStorage.setItem('xcagi_locale', 'en-US')
       // Re-import to trigger detectLocale — but since module is cached, we verify

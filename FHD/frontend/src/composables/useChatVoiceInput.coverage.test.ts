@@ -507,7 +507,7 @@ describe('useChatVoiceInput – coverage ramp', () => {
 
   // ── 转录失败：空识别结果 ─────────────────────────────────────────
 
-  it('转录返回空文字时设置"未识别到内容"错误', async () => {
+  it('转录返回空文字时设置清晰的未识别语音错误', async () => {
     const stream = makeMockStream()
     const mockRecorder = createMockMediaRecorder(stream)
 
@@ -537,7 +537,8 @@ describe('useChatVoiceInput – coverage ramp', () => {
     await vi.advanceTimersByTimeAsync(10)
     await nextTick()
 
-    expect(api.voiceButtonText.value).toContain('未识别到内容')
+    expect(api.voiceButtonText.value).toContain('未识别到语音')
+    expect(api.voiceFeedbackText.value).toContain('请靠近麦克风后重试')
   })
 
   // ── 转录失败：响应体非 JSON ──────────────────────────────────────

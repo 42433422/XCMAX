@@ -1,0 +1,8 @@
+name: "XCAGI production CodeQL scope"
+
+paths-ignore:
+  - "**/tests/**"
+  - "**/examples/**"
+  - "scripts/**"
+  - "**/node_modules/**"
+  - "**/dist/**"

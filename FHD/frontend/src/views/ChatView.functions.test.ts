@@ -103,6 +103,7 @@ vi.mock('@/composables/useChatVoiceInput', () => ({
     voiceButtonIcon: { value: 'fa-microphone' },
     voiceButtonText: { value: '语音' },
     voiceButtonTitle: { value: '语音输入' },
+    voiceFeedbackText: { value: '' },
     startVoiceRecording: vi.fn(),
     stopVoiceRecording: vi.fn(),
     cleanupVoiceInput: vi.fn(),
@@ -282,6 +283,8 @@ describe('ChatView functions – sendMessage', () => {
     vm.messageInput = ''
     await vm.sendMessage()
     expect(mockChatSendMessage).not.toHaveBeenCalled()
+    expect(wrapper.get('#sendMessageBtn').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('#chat-composer-status').text()).toContain('请输入内容')
     wrapper.unmount()
   })
 
@@ -301,6 +304,18 @@ describe('ChatView functions – sendMessage', () => {
     await vm.sendMessage()
     expect(mockChatSendMessage).toHaveBeenCalledWith('测试消息')
     expect(vm.messageInput).toBe('')
+    wrapper.unmount()
+  })
+
+  it('有内容时发送按钮可用并提供可访问状态', async () => {
+    const { wrapper } = await mountChatView()
+    const vm = wrapper.vm as any
+    vm.messageInput = '准备发送'
+    await nextTick()
+    const button = wrapper.get('#sendMessageBtn')
+    expect(button.attributes('disabled')).toBeUndefined()
+    expect(button.attributes('aria-disabled')).toBe('false')
+    expect(button.attributes('title')).toBe('发送消息')
     wrapper.unmount()
   })
 
@@ -538,6 +553,23 @@ describe('ChatView functions – inputPlaceholder computed', () => {
     mockChatViewApi.isProMode.value = true
     await nextTick()
     expect(vm.inputPlaceholder).toBe('请输入专业模式消息')
+    wrapper.unmount()
+  })
+})
+
+describe('ChatView task panel layout', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    vi.clearAllMocks()
+    localStorage.clear()
+    resetMockRefs()
+  })
+
+  it('does not reserve a wide empty task panel before any task exists', async () => {
+    const { wrapper } = await mountChatView()
+    expect((wrapper.vm as any).hasTaskPanelContent).toBe(false)
+    expect(wrapper.findComponent({ name: 'ChatTaskPanel' }).exists()).toBe(false)
+    expect(wrapper.find('.chat-pane-handle-slot').exists()).toBe(false)
     wrapper.unmount()
   })
 })

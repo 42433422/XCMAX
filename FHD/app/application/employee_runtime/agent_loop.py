@@ -146,12 +146,12 @@ def run_employee_agent_loop(
                 tools=tool_specs if tool_specs else None,
                 tool_choice="auto" if tool_specs else None,
             )
-        except RECOVERABLE_ERRORS as exc:
-            logger.exception("employee agent loop LLM call failed emp=%s", employee_id)
+        except RECOVERABLE_ERRORS:
+            logger.exception("employee agent loop LLM call failed")
             return {
                 "handler": "agent",
                 "ok": False,
-                "error": str(exc)[:400],
+                "error": "员工模型调用失败，请稍后重试",
                 "output": "",
                 "rounds": rounds,
                 "tool_calls": tool_trace,

@@ -10,7 +10,9 @@
         <div
           class="message-html"
           v-html="
-            msg.role === 'ai' ? sanitizeChatBubbleMarkdown(msg.content) : sanitizeChatBubbleHtml(msg.content)
+            msg.role === 'ai'
+              ? sanitizeChatBubbleMarkdown(aiMarkdownSourceFromContent(msg.content))
+              : sanitizeChatBubbleHtml(msg.content)
           "
         ></div>
         <div
@@ -26,10 +28,16 @@
             {{ $t('chat.downloadShipment') }}
           </a>
         </div>
-        <div v-if="msg.role === 'ai' && msg.contextSummary" class="context-summary">
+        <div
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.contextSummary"
+          class="context-summary"
+        >
           {{ msg.contextSummary }}
         </div>
-        <details v-if="msg.role === 'ai' && msg.thinkingSteps" class="thinking-panel">
+        <details
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && msg.thinkingSteps"
+          class="thinking-panel"
+        >
           <summary>{{ $t('chat.viewThinkingSteps') }}</summary>
           <pre>{{ msg.thinkingSteps }}</pre>
         </details>
@@ -45,7 +53,10 @@
           @confirm="$emit('approval-confirm')"
           @cancel="$emit('approval-cancel')"
         />
-        <div v-if="msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))" class="trace-panel">
+        <div
+          v-if="showDiagnosticMetadata && msg.role === 'ai' && (msg.workflowAction || (msg.nodeResults && msg.nodeResults.length))"
+          class="trace-panel"
+        >
           <div class="trace-title">{{ $t('chat.traceTitle') }}</div>
           <div class="trace-stages">
             <span class="trace-chip">{{ $t('chat.traceThinking') }}</span>
@@ -105,6 +116,7 @@ import { ref, watch, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { ChatMessage } from '@/composables/useChatMessages'
 import { sanitizeChatBubbleHtml, sanitizeChatBubbleMarkdown } from '@/utils/sanitizeHtml'
+import { aiMarkdownSourceFromContent } from '@/utils/chatBubbleDisplay'
 import ChatApprovalInlineCard from '@/components/chat/ChatApprovalInlineCard.vue'
 
 useI18n()
@@ -121,6 +133,8 @@ const props = defineProps<{
   getCollapsedPreview: (htmlText: string) => string
   canSpeakMessage: (msg: ChatMessage) => boolean
   chatMessagesRef?: Ref<HTMLElement | null>
+  /** 默认不向普通用户暴露内部上下文计数；诊断界面可显式开启。 */
+  showDiagnosticMetadata?: boolean
 }>()
 
 defineEmits<{

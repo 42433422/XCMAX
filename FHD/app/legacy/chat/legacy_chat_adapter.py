@@ -20,7 +20,11 @@ from typing import Any
 
 from openai import OpenAI
 
-from app.application.workflow.multimodal_user_content import build_openai_user_content
+from app.application.workflow.multimodal_user_content import (
+    EmptyMultimodalResponseError,
+    build_openai_user_content,
+    messages_have_image_parts,
+)
 from app.domain.context.session_context import (
     enrich_excel_tool_arguments,
     merge_system_prompt,
@@ -456,6 +460,7 @@ def chat(
     messages.append(
         {"role": "user", "content": build_openai_user_content(user_message, runtime_context)}
     )
+    has_image_input = messages_have_image_parts(messages)
     if client is None:
         require_api_key()
         cli = get_openai_compatible_client()
@@ -523,6 +528,11 @@ def chat(
                 )
             continue
         result = str(msg.content or "").strip()
+        if has_image_input and not result:
+            raise EmptyMultimodalResponseError(
+                f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。"
+                "系统已停止重复空请求，请重试或切换视觉模型。"
+            )
         full_response = result
         if tool_outputs:
             full_response = "\n".join(tool_outputs) + "\n\n" + result
@@ -563,6 +573,7 @@ def chat_stream_text(
     messages.append(
         {"role": "user", "content": build_openai_user_content(user_message, runtime_context)}
     )
+    has_image_input = messages_have_image_parts(messages)
     if client is None:
         require_api_key()
         cli = get_openai_compatible_client()
@@ -694,6 +705,11 @@ def chat_stream_text(
             continue
         if text_parts:
             return
+        if has_image_input:
+            raise EmptyMultimodalResponseError(
+                f"模型 {mdl} 完成了图片处理请求，但没有返回可显示的正文。"
+                "系统已停止重复空请求，请重试或切换视觉模型。"
+            )
     return
 
 

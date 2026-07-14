@@ -137,12 +137,50 @@ npm version $ToolchainVersion --no-git-tag-version --allow-same-version
 $ebAppId = $skuAppIds[$ProductSku]
 $ebPublishUrl = $skuUpdateUrls[$ProductSku]
 $ebArtifact = "XCAGI-$label-Setup-$Version-`${arch}.`${ext}"
-npx electron-builder --win nsis zip --x64 --publish never `
-  "--config.directories.output=../release/xcagi-v$Version/$outSubdir" `
-  "--config.appId=$ebAppId" `
-  "--config.publish.url=$ebPublishUrl" `
-  "--config.nsis.artifactName=$ebArtifact" `
+$electronBuilderArgs = @(
+  'electron-builder',
+  '--win', 'nsis', 'zip',
+  '--x64',
+  '--publish', 'never',
+  "--config.directories.output=../release/xcagi-v$Version/$outSubdir",
+  "--config.appId=$ebAppId",
+  "--config.publish.url=$ebPublishUrl",
+  "--config.nsis.artifactName=$ebArtifact",
   "--config.extraMetadata.productSku=$ProductSku"
+)
+
+if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
+  $requiredSigningVars = @(
+    'AZURE_TENANT_ID',
+    'AZURE_CLIENT_ID',
+    'AZURE_CLIENT_SECRET',
+    'AZURE_TRUSTED_SIGNING_ENDPOINT',
+    'AZURE_TRUSTED_SIGNING_ACCOUNT',
+    'AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE'
+  )
+  $missingSigningVars = @($requiredSigningVars | Where-Object {
+    -not (Get-Item "Env:$_" -ErrorAction SilentlyContinue).Value
+  })
+  if ($missingSigningVars.Count -gt 0) {
+    throw "Windows signing is required, but these variables are missing: $($missingSigningVars -join ', ')"
+  }
+
+  $publisherName = $env:XCAGI_WINDOWS_PUBLISHER_NAME
+  if (-not $publisherName) {
+    $publisherName = '成都修茈科技有限公司'
+  }
+  Write-Host "Windows Authenticode signing required (Azure Trusted Signing; publisher=$publisherName)"
+  $electronBuilderArgs += @(
+    '--config.forceCodeSigning=true',
+    "--config.win.azureSignOptions.endpoint=$($env:AZURE_TRUSTED_SIGNING_ENDPOINT)",
+    "--config.win.azureSignOptions.codeSigningAccountName=$($env:AZURE_TRUSTED_SIGNING_ACCOUNT)",
+    "--config.win.azureSignOptions.certificateProfileName=$($env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE)",
+    "--config.win.azureSignOptions.publisherName=$publisherName"
+  )
+}
+
+& npx @electronBuilderArgs
+if ($LASTEXITCODE -ne 0) { throw "electron-builder failed with exit code $LASTEXITCODE" }
 Pop-Location
 
 Assert-FileExists (Join-Path $outDir "win-unpacked\resources\app.asar") "Electron app.asar"

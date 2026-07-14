@@ -18,11 +18,19 @@ export const useOrdersStore = defineStore('orders', () => {
 
   const orderCount = computed(() => orders.value.length)
 
-  function normalizeOrders(data: unknown): Order[] {
+  function normalizeOrders(data: unknown, depth = 0): Order[] {
+    if (depth > 4) return []
+    if (Array.isArray(data)) return data as Order[]
     const row = asRecord(data)
     if (Array.isArray(row.data)) return row.data as Order[]
     if (Array.isArray(row.orders)) return row.orders as Order[]
-    if (Array.isArray(data)) return data as Order[]
+    // The ERP Mod facade retains its envelope around the host response:
+    // { success, data: { success, data: [...] } }.  Normalize both the host
+    // and facade contracts so the desktop page does not render an empty table
+    // while the same record is already present in the database.
+    if (row.data && typeof row.data === 'object') {
+      return normalizeOrders(row.data, depth + 1)
+    }
     return []
   }
 
@@ -88,6 +96,33 @@ export const useOrdersStore = defineStore('orders', () => {
     }
   }
 
+  async function updateOrder(
+    orderNumber: string,
+    payload: Record<string, unknown>
+  ): Promise<OperationResult> {
+    loading.value = true
+    error.value = null
+    try {
+      const data = await ordersApi.updateOrder(orderNumber, payload)
+      if (!data?.success) {
+        error.value = data?.message || '更新失败'
+        return { success: false, message: error.value }
+      }
+      const updated = asRecord(data.data) as unknown as Order
+      orders.value = orders.value.map(order =>
+        String(order.id || order.order_number) === String(orderNumber)
+          ? { ...order, ...updated }
+          : order
+      )
+      return { success: true, data: updated }
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : '更新失败'
+      return { success: false, message: error.value }
+    } finally {
+      loading.value = false
+    }
+  }
+
   async function clearAllOrders(): Promise<OperationResult> {
     loading.value = true
     error.value = null
@@ -115,6 +150,7 @@ export const useOrdersStore = defineStore('orders', () => {
     orderCount,
     fetchOrders,
     searchOrders,
+    updateOrder,
     deleteOrder,
     clearAllOrders
   }

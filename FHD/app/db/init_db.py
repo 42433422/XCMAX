@@ -860,6 +860,7 @@ def ensure_sqlite_inventory_bootstrap(
         StorageLocation,
         Warehouse,
     )
+    from app.db.models.material import Material
     from app.db.models.product import Product
     from app.db.models.purchase import (
         PurchaseInbound,
@@ -878,6 +879,7 @@ def ensure_sqlite_inventory_bootstrap(
         tables = set(insp.get_table_names() or [])
         needed = {
             "products",
+            "materials",
             "warehouses",
             "storage_locations",
             "inventory_ledger",
@@ -897,6 +899,7 @@ def ensure_sqlite_inventory_bootstrap(
                 real_engine,
                 tables=[
                     Product.__table__,
+                    Material.__table__,
                     Warehouse.__table__,
                     StorageLocation.__table__,
                     InventoryLedger.__table__,
@@ -1075,6 +1078,120 @@ def ensure_sqlite_im_bootstrap(
         raise
 
 
+def ensure_employee_run_log_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """Create the employee execution ledger when migrations are not run.
+
+    Desktop SQLite bundles intentionally bootstrap their schema in-process
+    instead of invoking Alembic. The local employee execute endpoint writes to
+    this table before running any employee, so a missing ledger must not turn
+    every Office docking action into HTTP 500.
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.employee_run_log import EmployeeRunLog
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        tables = set(inspect(real_engine).get_table_names() or [])
+        if "employee_run_logs" not in tables:
+            logger.info("缺少 employee_run_logs 表，正在通过 ORM 创建 …")
+            Base.metadata.create_all(
+                real_engine,
+                tables=[EmployeeRunLog.__table__],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_employee_run_log_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
+def ensure_ai_conversation_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """Create the AI conversation memory tables when migrations are not run.
+
+    Desktop bundles bootstrap their database schema in-process. Both the main
+    chat service and local employee runtime persist context through these
+    tables, so leaving them to Alembic makes otherwise-successful employee runs
+    emit database errors and silently lose their conversation memory.
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.ai import AIConversation, AIConversationSession
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        tables = set(inspect(real_engine).get_table_names() or [])
+        needed = {"ai_conversation_sessions", "ai_conversations"}
+        missing = needed - tables
+        if missing:
+            logger.info("缺少 AI 会话表 %s，正在通过 ORM 创建 …", sorted(missing))
+            Base.metadata.create_all(
+                real_engine,
+                tables=[
+                    AIConversationSession.__table__,
+                    AIConversation.__table__,
+                ],
+                checkfirst=True,
+            )
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_ai_conversation_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
+def ensure_mobile_push_bootstrap(
+    engine: Engine | None = None,
+    *,
+    database_url: str | None = None,
+    swallow_errors: bool = True,
+) -> None:
+    """Idempotently create device-token and notification-outbox tables.
+
+    Conversation completion can enqueue a mobile notification before any
+    mobile API route has been visited.  These tables therefore belong to the
+    desktop runtime bootstrap instead of route-local lazy initialization.
+    """
+    from sqlalchemy import inspect
+
+    from app.db.base import Base
+    from app.db.models.mobile_device import MobileDeviceToken
+    from app.db.models.mobile_notification import MobileNotificationOutbox
+
+    real_engine = _resolve_auth_bootstrap_engine(engine, database_url=database_url)
+    if real_engine is None:
+        return
+    try:
+        tables = set(inspect(real_engine).get_table_names() or [])
+        model_tables = [MobileDeviceToken.__table__, MobileNotificationOutbox.__table__]
+        missing = [table for table in model_tables if table.name not in tables]
+        if missing:
+            logger.info("缺少移动推送表 %s，正在通过 ORM 创建 …", [t.name for t in missing])
+            Base.metadata.create_all(real_engine, tables=missing, checkfirst=True)
+    except RECOVERABLE_ERRORS as exc:
+        if swallow_errors:
+            logger.warning("ensure_mobile_push_bootstrap 失败: %s", exc, exc_info=True)
+            return
+        raise
+
+
 def ensure_runtime_auth_bootstrap(
     engine: Engine | None = None,
     *,
@@ -1123,6 +1240,21 @@ def ensure_runtime_auth_bootstrap(
             database_url=url,
             swallow_errors=swallow_errors,
         )
+        ensure_employee_run_log_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_ai_conversation_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_mobile_push_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
     else:
         ensure_postgresql_auth_bootstrap(engine, database_url=url)
         ensure_user_preferences_bootstrap(
@@ -1136,6 +1268,21 @@ def ensure_runtime_auth_bootstrap(
             swallow_errors=swallow_errors,
         )
         ensure_sqlite_im_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_employee_run_log_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_ai_conversation_bootstrap(
+            engine,
+            database_url=url,
+            swallow_errors=swallow_errors,
+        )
+        ensure_mobile_push_bootstrap(
             engine,
             database_url=url,
             swallow_errors=swallow_errors,

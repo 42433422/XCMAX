@@ -12320,7 +12320,7 @@
           "dataset_id": "user_eval-user",
           "backend": "sqlite_vector",
           "created_at": 1781861207.0653088,
-          "updated_at": 1783845777.1079528,
+          "updated_at": 1783955755.310511,
           "chunk_count": 242,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -12331,9 +12331,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 242,
-        "vector_backend_synced_at": "2026-07-12T08:42:57.114909Z",
+        "vector_backend_synced_at": "2026-07-13T15:15:55.323854Z",
         "vector_backend_error": "",
-        "updated_at": "2026-07-12T08:42:57.115140Z"
+        "updated_at": "2026-07-13T15:15:55.324087Z"
       },
       "rebuild_jobs": {}
     },
@@ -37040,7 +37040,7 @@
           "dataset_id": "user_tenant-a",
           "backend": "sqlite_vector",
           "created_at": 1781869000.041301,
-          "updated_at": 1783845792.587692,
+          "updated_at": 1783955755.3248289,
           "chunk_count": 484,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -37051,9 +37051,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 484,
-        "vector_backend_synced_at": "2026-07-12T08:43:12.599763Z",
+        "vector_backend_synced_at": "2026-07-13T15:15:55.337757Z",
         "vector_backend_error": "",
-        "updated_at": "2026-07-12T08:43:12.600148Z"
+        "updated_at": "2026-07-13T15:15:55.337990Z"
       },
       "rebuild_jobs": {}
     },
@@ -41207,7 +41207,7 @@
           "dataset_id": "user_u",
           "backend": "sqlite_vector",
           "created_at": 1781882167.630595,
-          "updated_at": 1783845812.300992,
+          "updated_at": 1783955755.338112,
           "chunk_count": 81,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
@@ -41218,9 +41218,9 @@
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
         "vector_backend_synced_chunks": 81,
-        "vector_backend_synced_at": "2026-07-12T08:43:32.307757Z",
+        "vector_backend_synced_at": "2026-07-13T15:15:55.340021Z",
         "vector_backend_error": "",
-        "updated_at": "2026-07-12T08:43:32.308153Z"
+        "updated_at": "2026-07-13T15:15:55.340160Z"
       },
       "rebuild_jobs": {}
     },
@@ -41846,6 +41846,29 @@
             "tenant_id": "u1",
             "document_version": 148,
             "version_label": "v148"
+          }
+        },
+        "artifact_art_2913fb0199234c02aab1979b9512dfc4": {
+          "document_id": "artifact_art_2913fb0199234c02aab1979b9512dfc4",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 182,
+          "version_label": "v182",
+          "metadata": {
+            "artifact_id": "art_2913fb0199234c02aab1979b9512dfc4",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_a8970fb5640e4b28a554e29222730b64",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 182,
+            "version_label": "v182"
           }
         },
         "artifact_art_2c1c42f0a6e244e79119101eb1f61a65": {
@@ -44169,6 +44192,29 @@
             "tenant_id": "u1",
             "document_version": 25,
             "version_label": "v25"
+          }
+        },
+        "artifact_art_c51845a0e3a04ddd98f2b31330b42ed1": {
+          "document_id": "artifact_art_c51845a0e3a04ddd98f2b31330b42ed1",
+          "source": "excel_import_records",
+          "parser": "inline_text",
+          "text_length": 30,
+          "chunk_count": 1,
+          "tenant_id": "u1",
+          "version": 181,
+          "version_label": "v181",
+          "metadata": {
+            "artifact_id": "art_c51845a0e3a04ddd98f2b31330b42ed1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_5333f34cdd0c435bab4c611b17d9b4e0",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": "",
+            "tenant_id": "u1",
+            "document_version": 181,
+            "version_label": "v181"
           }
         },
         "artifact_art_c52b848a13d84477b06f838e0d5d9959": {
@@ -50408,14 +50454,70 @@
           },
           "source_url": "excel_import_records",
           "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 180,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_c51845a0e3a04ddd98f2b31330b42ed1",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 181,
+            "version_label": "v181",
+            "artifact_id": "art_c51845a0e3a04ddd98f2b31330b42ed1",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_5333f34cdd0c435bab4c611b17d9b4e0",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
+        },
+        {
+          "text": "{\"fields\": [{\"name\": \"产品名称\"}]}",
+          "score": 0.0,
+          "source": "excel_import_records",
+          "chunk_index": 181,
+          "char_start": 0,
+          "char_end": 30,
+          "metadata": {
+            "dataset_id": "user_u1",
+            "document_id": "artifact_art_2913fb0199234c02aab1979b9512dfc4",
+            "source": "excel_import_records",
+            "parser": "inline_text",
+            "strategy": "fixed",
+            "tenant_id": "u1",
+            "document_version": 182,
+            "version_label": "v182",
+            "artifact_id": "art_2913fb0199234c02aab1979b9512dfc4",
+            "artifact_type": "excel_records",
+            "artifact_name": "excel_import_records",
+            "artifact_source": "excel_analysis",
+            "agent_run_id": "run_a8970fb5640e4b28a554e29222730b64",
+            "user_id": "u1",
+            "mime_type": "",
+            "parser_used": ""
+          },
+          "source_url": "excel_import_records",
+          "page": null
         }
       ],
       "index": {
         "schema_version": 2,
         "retriever": "hybrid_bm25_vector",
         "reranker": "lexical_overlap_v1",
-        "document_count": 180,
-        "chunk_count": 180,
+        "document_count": 182,
+        "chunk_count": 182,
         "embedding_count": 0,
         "embedding_persisted": false,
         "vector_backend": {
@@ -50423,20 +50525,20 @@
           "dataset_id": "user_u1",
           "backend": "sqlite_vector",
           "created_at": 1781862909.5152361,
-          "updated_at": 1783845777.1337228,
-          "chunk_count": 180,
+          "updated_at": 1783955755.449623,
+          "chunk_count": 182,
           "path": "/Users/a4243342/Desktop/XCMAX/FHD/dataset_rag/datasets.json.vectors.sqlite",
           "persistent": true,
           "index_exists": true
         },
         "vector_backend_name": "sqlite_vector",
-        "vector_backend_chunk_count": 180,
+        "vector_backend_chunk_count": 182,
         "vector_backend_persistent": true,
         "vector_backend_sync_status": "synced",
-        "vector_backend_synced_chunks": 180,
-        "vector_backend_synced_at": "2026-07-12T08:42:57.137517Z",
+        "vector_backend_synced_chunks": 182,
+        "vector_backend_synced_at": "2026-07-13T15:15:55.455486Z",
         "vector_backend_error": "",
-        "updated_at": "2026-07-12T08:42:57.137728Z"
+        "updated_at": "2026-07-13T15:15:55.455643Z"
       },
       "rebuild_jobs": {}
     }

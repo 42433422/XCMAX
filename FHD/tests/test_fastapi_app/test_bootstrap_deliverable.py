@@ -23,6 +23,17 @@ def fast_start_client(monkeypatch, tmp_path):
     monkeypatch.setattr(lan_store, "load_overrides", lambda: LanSettingsOverride(enabled=False))
     reset_lan_config_cache()
 
+    import app.fastapi_app.deferred_startup as deferred_startup
+
+    async def keep_deferred_routes_pending(_app):
+        return None
+
+    monkeypatch.setattr(
+        deferred_startup,
+        "schedule_deferred_heavy_startup",
+        keep_deferred_routes_pending,
+    )
+
     app = create_fastapi_app()
     assert getattr(app.state, "deferred_routes_pending", False) is True
     with TestClient(app) as client:

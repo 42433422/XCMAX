@@ -305,3 +305,53 @@ class TestFindLowStock:
         ):
             result = repo.find_low_stock()
         assert result == []
+
+
+class TestExportToExcel:
+    def test_material_rows_are_detached_before_session_close(self, repo, tmp_path):
+        active = {"value": False}
+        fields = {
+            "material_code": "MAT-EXPORT",
+            "name": "导出材料",
+            "category": "验收",
+            "specification": "10kg",
+            "unit": "kg",
+            "quantity": 12.0,
+            "unit_price": 8.5,
+            "supplier": "供应商",
+        }
+
+        class GuardedMaterial:
+            def __getattr__(self, name):
+                if name in fields:
+                    if not active["value"]:
+                        raise RuntimeError("detached material access")
+                    return fields[name]
+                raise AttributeError(name)
+
+        mock_db = MagicMock()
+        query = MagicMock()
+        mock_db.query.return_value = query
+        query.filter.return_value = query
+        query.order_by.return_value.all.return_value = [GuardedMaterial()]
+
+        class GuardedContext:
+            def __enter__(self):
+                active["value"] = True
+                return mock_db
+
+            def __exit__(self, *_args):
+                active["value"] = False
+                return False
+
+        with (
+            patch(
+                "app.infrastructure.persistence.material_repository_impl.get_db",
+                return_value=GuardedContext(),
+            ),
+            patch("app.utils.path_utils.get_data_dir", return_value=str(tmp_path)),
+        ):
+            result = repo.export_to_excel()
+
+        assert result["success"] is True
+        assert result["count"] == 1

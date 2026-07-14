@@ -13,13 +13,15 @@ router = APIRouter(prefix="/api/wechat/decrypt", tags=["wechat-decrypt"])
 
 @router.get("/status")
 def wechat_decrypt_config_status():
-    from app.services.wechat_decrypt_autoconfig import get_wechat_decrypt_status
+    from app.application.wechat_decrypt_app_service import get_wechat_decrypt_status
 
     return get_wechat_decrypt_status()
 
 
 @router.post("/auto_configure")
 def wechat_decrypt_auto_configure(body: dict | None = Body(default=None)):
-    from app.services.wechat_decrypt_http import wechat_decrypt_auto_configure_response
+    from app.application.wechat_decrypt_app_service import (
+        wechat_decrypt_auto_configure_response,
+    )
 
     return wechat_decrypt_auto_configure_response(body)

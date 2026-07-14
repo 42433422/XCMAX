@@ -50,6 +50,7 @@ def build_support_bundle_zip(
     dirs["root"]
     logs_dir = dirs["logs"]
     backups_dir = dirs["backups"]
+    crash_dir = dirs["root"] / "crash-dumps"
 
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     manifest = {
@@ -60,6 +61,7 @@ def build_support_bundle_zip(
         "machine": platform.machine(),
         "desktopPaths": export_config(data_dir),
         "backupFiles": sorted(p.name for p in backups_dir.glob("*.db") if p.is_file())[-50:],
+        "crashDumpFiles": sorted(p.name for p in crash_dir.glob("*") if p.is_file())[-50:],
         "note": "不含数据库正文；数据库备份请在 backups/ 目录单独拷贝。",
     }
 
@@ -86,7 +88,9 @@ def build_support_bundle_zip(
                 "将此 ZIP 提供给技术支持即可。\n"
                 "- manifest.json：环境与路径摘要（不含密钥）。\n"
                 "- logs/xcagi.log（若存在）：后端近期日志节选。\n"
+                "- logs/electron-backend.log（若存在）：桌面壳、后端进程与崩溃事件。\n"
                 "- logs/updater-events.jsonl（若存在）：桌面更新事件。\n"
+                "崩溃转储仅在 manifest 中列名，不自动打包；需要时从 crash-dumps/ 单独提供。\n"
                 "数据库文件默认不在包内；如需一并分析请单独发送 backups 下的 .db 备份。\n"
             ).encode(),
         )
@@ -94,7 +98,13 @@ def build_support_bundle_zip(
             "manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2).encode("utf-8")
         )
 
-        for name in ("xcagi.log", "xcagi.log.1", "xcagi.log.2"):
+        for name in (
+            "xcagi.log",
+            "xcagi.log.1",
+            "xcagi.log.2",
+            "electron-backend.log",
+            "electron-backend.log.1",
+        ):
             chunk = _tail_bytes(logs_dir / name)
             if chunk:
                 zf.writestr(f"logs/{name}", _redact_log_bytes(chunk))

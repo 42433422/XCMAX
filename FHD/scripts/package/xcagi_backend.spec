@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 
 import setuptools
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 ROOT = Path.cwd().resolve()
 
@@ -28,8 +28,10 @@ def add_data(relative_path: str):
 
 
 datas = []
+binaries = []
 for item in [
     "templates/vue-dist",
+    # 桌面企业包刻意不携带 admin-vue-dist（管理端仅网页 SSOT）。
     "static",
     "resources",
     "config",
@@ -73,6 +75,7 @@ for module in [
     "app.middleware",
     "app.infrastructure.mods",
     "app.mod_sdk",
+    "app.control",
     "uvicorn",
     "fastapi",
     "sqlalchemy",
@@ -92,8 +95,32 @@ hiddenimports.extend(
         "app.mod_sdk.edition_policy",
         "app.mod_sdk.edition_bootstrap",
         "app.mod_sdk.product_skus",
+        "app.fastapi_routes.domains.admin_audit.routes",
+        "app.application.attendance_reference_data",
+        "app.application.chat_business_safety",
+        "app.services.ai_action_audit_service",
+        "app.services.ocr_service",
+        "app.runtime_integrity",
     ]
 )
+
+# 主聊天“按住说话”是桌面端正式功能，不能把运行时依赖从安装包里排除。
+# faster-whisper 依赖 ctranslate2 + PyAV 的原生扩展；显式收集可避免 PyInstaller
+# 只看到 voice_routes 中的懒导入而漏包，最终在已安装应用里返回 503。
+for module in ["faster_whisper", "ctranslate2", "av", "tokenizers", "huggingface_hub"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
+for module in ["ctranslate2", "av"]:
+    try:
+        binaries.extend(collect_dynamic_libs(module))
+    except Exception:
+        pass
 # de-dupe while preserving order
 _seen = set()
 _deduped = []
@@ -105,7 +132,6 @@ hiddenimports = _deduped
 
 desktop_excludes = [
     "altair",
-    "av",
     "bitsandbytes",
     "IPython",
     "black",
@@ -114,7 +140,6 @@ desktop_excludes = [
     "cv2",
     "dash",
     "datasets",
-    "faster_whisper",
     "gradio",
     "grpc",
     "h5py",
@@ -160,7 +185,7 @@ desktop_excludes = [
 a = Analysis(
     [str(ROOT / "XCAGI" / "run_fastapi.py")],
     pathex=[str(ROOT), str(ROOT / "XCAGI")],
-    binaries=[],
+    binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

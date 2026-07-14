@@ -395,15 +395,60 @@ describe('runOfficeEmployeeRead', () => {
 
     expect(result).toEqual({ sheets: [], summary: 'ok' })
     expect(mocks.apiFetch).toHaveBeenCalledWith(
-      '/api/mod/excel-full-read-employee/employees/excel-full-read-employee/run',
+      '/api/xcmax/local/employees/excel-full-read-employee/execute',
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({
-          file_path: '/path',
+          task: 'convert',
+          input_data: {
+            file_path: '/path',
+            workspace_root: '/root',
+            action: 'convert',
+          },
           workspace_root: '/root',
-          action: 'convert',
+          retry_max: 1,
         }),
       }),
+    )
+  })
+
+  it('解包本地员工运行时的 direct_python 输出', async () => {
+    mocks.apiFetch.mockResolvedValueOnce(
+      jsonRes({
+        success: true,
+        data: {
+          success: true,
+          result: {
+            outputs: [
+              {
+                handler: 'direct_python',
+                ok: true,
+                output: { ok: true, summary: 'csv ok', items: [{ output_path: '/root/out.json' }] },
+              },
+            ],
+          },
+        },
+      }),
+    )
+
+    const result = await mod.runOfficeEmployeeRead('csv-full-read-employee', '/path', '/root')
+    expect(result).toEqual({
+      ok: true,
+      summary: 'csv ok',
+      items: [{ output_path: '/root/out.json' }],
+    })
+  })
+
+  it('本地员工执行路由缺失时回退旧 Mod 路由', async () => {
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ message: 'Method Not Allowed' }, { ok: false, status: 405 }))
+    mocks.apiFetch.mockResolvedValueOnce(jsonRes({ success: true, data: { ok: true, summary: 'legacy ok' } }))
+
+    const result = await mod.runOfficeEmployeeRead('word-full-read-employee', '/path', '/root')
+    expect(result.summary).toBe('legacy ok')
+    expect(mocks.apiFetch).toHaveBeenNthCalledWith(
+      2,
+      '/api/mod/word-full-read-employee/employees/word-full-read-employee/run',
+      expect.objectContaining({ method: 'POST' }),
     )
   })
 

@@ -59,8 +59,8 @@ export const PRODUCT_FLOW_STEPS: ProductFlowStepMeta[] = [
   {
     id: 'host-pack',
     index: 3,
-    title: '补基础线',
-    subtitle: '装侧栏宿主能力卡片（桥接 Mod），非 AI 员工；定制 Mod 才补员工',
+    title: '准备菜单',
+    subtitle: '一键装齐本行业侧栏菜单，即可进入对话',
   },
   {
     id: 'seed-demo',
