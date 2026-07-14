@@ -1,5 +1,9 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { isDesktopShell } from '@/utils/desktopShell'
+import {
+  normalizeReleaseMedia,
+  type ReleaseMediaSlide,
+} from '@/utils/releaseMedia'
 
 export type DesktopUpdatePhase =
   | 'idle'
@@ -14,7 +18,10 @@ export interface DesktopUpdateInfo {
   releaseNotes?: string
   releaseName?: string
   path?: string
+  releaseMedia?: ReleaseMediaSlide[]
 }
+
+export type { ReleaseMediaSlide }
 
 interface UpdateEventPayload {
   type?: string
@@ -61,8 +68,12 @@ function isDismissed(info: DesktopUpdateInfo | null): boolean {
 }
 
 function applyAvailable(data: DesktopUpdateInfo) {
-  updateInfo.value = data
-  if (isDismissed(data)) {
+  const media = normalizeReleaseMedia(data.releaseMedia)
+  updateInfo.value = {
+    ...data,
+    ...(media.length ? { releaseMedia: media } : { releaseMedia: undefined }),
+  }
+  if (isDismissed(updateInfo.value)) {
     phase.value = 'idle'
     return
   }
@@ -194,6 +205,8 @@ export function useDesktopAppUpdater() {
       .join('\n')
   })
 
+  const mediaSlides = computed(() => normalizeReleaseMedia(updateInfo.value?.releaseMedia))
+
   function openModal() {
     modalOpen.value = true
   }
@@ -266,6 +279,7 @@ export function useDesktopAppUpdater() {
     badgeVisible,
     badgeLabel,
     notesText,
+    mediaSlides,
     openModal,
     closeModal,
     dismiss,

@@ -22,7 +22,15 @@ def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
     generator = REPO_ROOT / "scripts" / "package" / "generate-update-metadata.mjs"
     update_zip = tmp_path / "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
     update_zip.write_bytes(b"signed-app-archive-fixture")
-    env = {**os.environ, "XCAGI_BUILD_SHA": "a" * 40, "XCAGI_PRODUCT_VERSION": "1.0.0.0"}
+    env = {
+        **os.environ,
+        "XCAGI_BUILD_SHA": "a" * 40,
+        "XCAGI_PRODUCT_VERSION": "1.0.0.0",
+        "XCAGI_RELEASE_MEDIA_JSON": (
+            '[{"posterUrl":"https://cdn.example.com/a.webp",'
+            '"videoUrl":"https://cdn.example.com/a.mp4","caption":"demo"}]'
+        ),
+    }
 
     subprocess.run(
         [node, str(generator), str(update_zip), "1.0.0", "mac"],
@@ -35,6 +43,9 @@ def test_macos_update_feed_is_generated_from_zip(tmp_path: Path) -> None:
     assert f"url: {update_zip.name}" in feed
     assert f"path: {update_zip.name}" in feed
     assert "buildSha: " + "a" * 40 in feed
+    assert "releaseMedia:" in feed
+    assert "https://cdn.example.com/a.webp" in feed
+    assert "https://cdn.example.com/a.mp4" in feed
 
 
 def test_macos_update_feed_rejects_dmg(tmp_path: Path) -> None:
