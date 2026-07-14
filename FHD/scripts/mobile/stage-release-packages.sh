@@ -7,7 +7,8 @@ HARMONY_ARTIFACT=""
 APK_PATH=""
 SKIP_ZIP=0
 ALLOW_MISSING_HARMONY=0
-ANDROID_ONLY=0
+# Product shipping is Android-only; Harmony is optional (archived under archive/mobile/).
+ANDROID_ONLY=1
 
 usage() {
   cat <<'USAGE'
@@ -15,13 +16,12 @@ Usage: stage-release-packages.sh [--version <1.0.0.0>] [--android-version <1.0.0
   [--harmony-artifact <path>] [--apk-path <path>] [--skip-zip] [--android-only] \
   [--allow-missing-harmony]
 
-生成鸿蒙企业版发布目录（企业版-only）：
+生成企业版移动发布目录（默认仅 Android）：
   - release/packages-v${VERSION}/enterprise/
   - release/packages-v${VERSION}/企业版/
   - release/XCAGI-Enterprise-Mobile-Packages-v${VERSION}.zip（可选）
 
-默认必须提供企业版鸿蒙 .hap/.hsp。正式 Android-only 发布显式传 --android-only；
-只有临时验证 Android 分发目录时才传 --allow-missing-harmony。
+默认 --android-only。鸿蒙工程已归档；仅在显式传入 --harmony-artifact 时附带 .hap/.hsp。
 USAGE
   exit 1
 }
@@ -75,15 +75,17 @@ normalize_version() {
 }
 
 log_info() {
-  echo "[harmony-stage] $1"
+  echo "[mobile-stage] $1"
 }
 
 resolve_root() {
   local script_dir
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  MODULE_ROOT="$(cd "${script_dir}/.." && pwd)"
-  FHD_ROOT="$(cd "${MODULE_ROOT}/.." && pwd)"
+  # FHD/scripts/mobile → FHD → repo root
+  FHD_ROOT="$(cd "${script_dir}/../.." && pwd)"
   REPO_ROOT="$(cd "${FHD_ROOT}/.." && pwd)"
+  # Optional scan root for archived Harmony artifacts
+  MODULE_ROOT="${REPO_ROOT}/archive/mobile/mobile-harmony"
 }
 
 resolve_version() {
@@ -177,9 +179,9 @@ emit_readme() {
   cat <<EOF_README > "${dir}/README.txt"
 XCAGI 企业版 (Enterprise) v${VERSION}
 
-  本目录包含企业版 Android APK；联合发布时同时包含鸿蒙安装包，不含个人版。
+  本目录包含企业版 Android APK（对外发版仅 Android），不含个人版。
   Android: XCAGI-Enterprise-Android-${ANDROID_VERSION}.apk
-  鸿蒙（企业版）: $(basename "$harmony_file")
+  鸿蒙（可选）: $(basename "$harmony_file")
   包名: com.xiuci.xcagi.mobile.enterprise
 
   备注：Windows 安装包不在本目录输出。

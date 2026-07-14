@@ -32,15 +32,6 @@ ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/u
 ANDROID_SHAPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
 ANDROID_ANALYTICS = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt"
 
-IOS_PARITY = ROOT / "mobile-ios/PARITY_MATRIX.md"
-IOS_PROJECT_YML = ROOT / "mobile-ios/project.yml"
-IOS_THEME = ROOT / "mobile-ios/XCAGIMobile/DesignSystem/Theme.swift"
-IOS_PERF = ROOT / "mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift"
-
-HARMONY_PARITY = ROOT / "mobile-harmony/docs/PARITY_MATRIX.md"
-HARMONY_TOKENS = ROOT / "mobile-harmony/entry/src/main/ets/design/DesignTokens.ets"
-HARMONY_PERF = ROOT / "mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets"
-
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
     "Flutter 统一前端",
@@ -135,10 +126,10 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
         "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
         "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
-        "FHD/mobile-ios/project.yml",
-        "FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift",
-        "FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets",
-        "FHD/mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt",
     ):
         if rel not in derived:
             errors.append(f"mobile-tri-platform.derived 缺少 {rel}")
@@ -239,31 +230,7 @@ def _check_platform_files(errors: list[str]) -> None:
     android_analytics = _read_text(ANDROID_ANALYTICS, errors)
     if android_analytics and "logPerformanceMetric" not in android_analytics:
         errors.append("Android XcagiAnalytics.kt 缺少 logPerformanceMetric")
-
-    ios_parity = _read_text(IOS_PARITY, errors)
-    if ios_parity and "对标 `mobile-android`" not in ios_parity:
-        errors.append("iOS PARITY_MATRIX.md 未声明对标 mobile-android")
-    ios_project_yml = _read_text(IOS_PROJECT_YML, errors)
-    if ios_project_yml and "MetricKit/os.log" not in ios_project_yml:
-        errors.append("iOS project.yml 未声明 MetricKit/os.log 系统框架")
-    ios_theme = _read_text(IOS_THEME, errors)
-    if ios_theme:
-        for snippet in ("brandFallback = Color(red: 0.388", "static let xxxl: CGFloat = 32"):
-            if snippet not in ios_theme:
-                errors.append(f"iOS Theme.swift 缺少 token 片段: {snippet}")
-    ios_perf = _read_text(IOS_PERF, errors)
-    if ios_perf and ("MetricKit" not in ios_perf or "MXMetricManagerSubscriber" not in ios_perf):
-        errors.append("iOS MobilePerformanceMonitor.swift 必须接 MetricKit")
-
-    harmony_parity = _read_text(HARMONY_PARITY, errors)
-    if harmony_parity and "对标 `mobile-android`" not in harmony_parity:
-        errors.append("Harmony PARITY_MATRIX.md 未声明对标 mobile-android")
-    harmony_tokens = _read_text(HARMONY_TOKENS, errors)
-    if harmony_tokens and ("static readonly primary: string = '#6366F1'" not in harmony_tokens):
-        errors.append("Harmony DesignTokens.ets 未保留 token primary #6366F1")
-    harmony_perf = _read_text(HARMONY_PERF, errors)
-    if harmony_perf and "mobile.api.latency" not in harmony_perf:
-        errors.append("Harmony PerformanceMonitor.ets 缺少统一性能指标名")
+    # 原生 iOS / Harmony 已归档至 archive/mobile/；产品对外仅 Android，不再 gate 其源码。
 
 
 def check_drift() -> int:
