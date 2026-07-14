@@ -1077,11 +1077,7 @@ const persyLoading = ref(false);
 const persyInferring = ref(false);
 const persyLastReason = ref('');
 
-const persyUserId = computed(() => {
-  const raw = localUser.value?.id || '1';
-  const num = Number(raw);
-  return Number.isFinite(num) && num > 0 ? num : 1;
-});
+const persyUserId = computed(() => resolveModeScopedChatUserId());
 
 const persyFoldMeta = computed(() => {
   if (!persyProfile.value) return '待确认 0 · 已确认 0';
