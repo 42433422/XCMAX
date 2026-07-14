@@ -11,7 +11,12 @@ import pytest
 from fastapi import Request
 
 from app.application import chat_business_safety as safety
+from app.application import chat_business_safety_attendance as attendance_safety
+from app.application import chat_business_safety_leave as leave_safety
+from app.application import chat_business_safety_output as output_safety
+from app.application import chat_business_safety_personnel as personnel_safety
 from app.application import planner_compat_service as planner_compat
+from app.application.chat_business_safety_core import BusinessActorIdentity, BusinessChatIntent
 from app.fastapi_routes import xcagi_compat_chat_helpers as chat_helpers
 
 
@@ -125,6 +130,7 @@ def business_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, 
     workspace = tmp_path / "workspace"
     _create_business_db(db_path)
     monkeypatch.setattr(safety, "_db_path", lambda: db_path)
+    monkeypatch.setenv("WORKSPACE_ROOT", str(workspace))
     monkeypatch.setattr(safety, "resolve_safe_workspace_relpath", lambda rel: workspace / rel)
     return db_path, workspace
 
@@ -466,3 +472,404 @@ async def test_batch_path_applies_receipt_policy_to_every_protected_message(
         "attendance_read",
     ]
     assert all(row["business_receipt"]["verified"] for row in result["results"])
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("前天", ("day", "2026-07-12", "2026-07-12")),
+        ("昨日", ("day", "2026-07-13", "2026-07-13")),
+        ("明天", ("day", "2026-07-15", "2026-07-15")),
+        ("后天", ("day", "2026-07-16", "2026-07-16")),
+        ("今日", ("day", "2026-07-14", "2026-07-14")),
+        ("2026年8月2日", ("day", "2026-08-02", "2026-08-02")),
+        ("8月3日", ("day", "2026-08-03", "2026-08-03")),
+        ("2026年12月", ("month", "2026-12-01", "2026-12-31")),
+        ("本月", ("month", "2026-07-01", "2026-07-31")),
+        ("2026年13月1日", None),
+        ("2月30日", None),
+        ("2026年13月", None),
+        ("没有日期", None),
+    ],
+)
+def test_date_scope_parser_covers_supported_and_invalid_shapes(
+    message: str, expected: tuple[str, str, str] | None
+) -> None:
+    from datetime import date
+
+    assert attendance_safety._parse_date_scope(message, now=date(2026, 7, 14)) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ('["08:00", 17]', ["08:00", "17"]),
+        ('{"time":"08:00"}', []),
+        ("not-json", []),
+        (None, []),
+    ],
+)
+def test_attendance_json_list_is_fail_closed(raw: Any, expected: list[str]) -> None:
+    assert attendance_safety._json_list(raw) == expected
+
+
+def test_attendance_read_failures_are_truthful(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    intent = BusinessChatIntent("attendance_read", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+
+    missing = tmp_path / "missing.db"
+    monkeypatch.setattr(safety, "_db_path", lambda: missing)
+    result = attendance_safety._handle_attendance_read("今天考勤", intent, actor=actor)
+    assert result["execution_receipt"]["reason"] == "attendance_database_missing"
+
+    empty = tmp_path / "empty.db"
+    sqlite3.connect(empty).close()
+    monkeypatch.setattr(safety, "_db_path", lambda: empty)
+    result = attendance_safety._handle_attendance_read("今天考勤", intent, actor=actor)
+    assert result["execution_receipt"]["reason"] == "attendance_records_missing"
+
+    broken = tmp_path / "broken.db"
+    conn = sqlite3.connect(broken)
+    conn.execute("CREATE TABLE attendance_daily_records (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(safety, "_db_path", lambda: broken)
+    result = attendance_safety._handle_attendance_read("今天考勤", intent, actor=actor)
+    assert result["execution_receipt"]["status"] == "failed"
+    assert result["execution_receipt"]["reason"].startswith("attendance_query_failed:")
+
+    result = attendance_safety._handle_attendance_read("考勤情况", intent, actor=actor)
+    assert result["execution_receipt"]["reason"] == "missing_date_scope"
+
+
+def test_attendance_read_covers_empty_punch_leave_and_multi_late_summaries(
+    business_db: tuple[Path, Path],
+) -> None:
+    intent = BusinessChatIntent("attendance_read", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+
+    empty = attendance_safety._handle_attendance_read(
+        "李四2026年7月20日有没有迟到", intent, actor=actor
+    )
+    assert empty["execution_receipt"]["status"] == "verified_empty"
+
+    punch = attendance_safety._handle_attendance_read(
+        "李四2026年7月13日几点打卡", intent, actor=actor
+    )
+    assert "08:03:00" in punch["response"]
+
+    conn = sqlite3.connect(str(business_db[0]))
+    conn.execute("UPDATE attendance_daily_records SET leave_hours=4 WHERE employee_name='李四'")
+    conn.commit()
+    conn.close()
+    leave = attendance_safety._handle_attendance_read(
+        "李四2026年7月13日请假情况", intent, actor=actor
+    )
+    assert "1 条含请假时长" in leave["response"]
+
+    late = attendance_safety._handle_attendance_read(
+        "研发部2026年7月13日谁迟到", intent, actor=actor
+    )
+    assert "2 条真实考勤记录" in late["response"]
+    assert "李四" in late["response"]
+
+
+def test_attendance_read_covers_unscoped_employee_month_and_zero_summaries(
+    business_db: tuple[Path, Path],
+) -> None:
+    intent = BusinessChatIntent("attendance_read", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+
+    rows, meta, error = attendance_safety._attendance_rows(
+        "考勤情况", actor=actor, require_scope=False
+    )
+    assert error is None
+    assert meta == {}
+    assert len(rows) == 2
+
+    employee = attendance_safety._handle_attendance_read(
+        "工号1001在2026年7月13日的考勤", intent, actor=actor
+    )
+    assert employee["execution_receipt"]["affected_rows"] == 1
+    assert employee["execution_receipt"]["details"]["employee_no"] == "1001"
+
+    month = attendance_safety._handle_attendance_read("2026年7月谁出勤", intent, actor=actor)
+    month_details = month["execution_receipt"]["details"]
+    assert month_details["scope"] == "month"
+    assert (month_details["date_start"], month_details["date_end"]) == (
+        "2026-07-01",
+        "2026-07-31",
+    )
+
+    conn = sqlite3.connect(str(business_db[0]))
+    conn.execute("UPDATE attendance_daily_records SET late_count_hint=0, leave_hours=0")
+    conn.commit()
+    conn.close()
+
+    no_late = attendance_safety._handle_attendance_read(
+        "研发部2026年7月13日谁迟到", intent, actor=actor
+    )
+    assert "其中 0 条带迟到标记" in no_late["response"]
+
+    no_leave = attendance_safety._handle_attendance_read(
+        "研发部2026年7月13日请假情况", intent, actor=actor
+    )
+    assert "其中 0 条含请假时长" in no_leave["response"]
+
+
+def test_personnel_read_covers_missing_table_actor_empty_and_truncation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    business_db: tuple[Path, Path],
+) -> None:
+    intent = BusinessChatIntent("personnel_read", "personnel")
+    anonymous = BusinessActorIdentity(authenticated=False)
+
+    monkeypatch.setattr(safety, "_db_path", lambda: tmp_path / "missing.db")
+    missing = personnel_safety._handle_personnel_read("查人员", intent, actor=anonymous)
+    assert missing["execution_receipt"]["reason"] == "personnel_database_missing"
+
+    empty_db = tmp_path / "empty.db"
+    sqlite3.connect(empty_db).close()
+    monkeypatch.setattr(safety, "_db_path", lambda: empty_db)
+    no_table = personnel_safety._handle_personnel_read("查人员", intent, actor=anonymous)
+    assert no_table["execution_receipt"]["reason"] == "personnel_table_missing"
+
+    monkeypatch.setattr(safety, "_db_path", lambda: business_db[0])
+    unmapped = personnel_safety._handle_personnel_read("我是谁", intent, actor=anonymous)
+    assert unmapped["execution_receipt"]["reason"] == "current_user_not_mapped"
+
+    actor = BusinessActorIdentity(authenticated=True, local_user_id="u-1001")
+    current = personnel_safety._handle_personnel_read("我是谁", intent, actor=actor)
+    assert "李四" in current["response"]
+
+    not_found = personnel_safety._handle_personnel_read("查赵六的部门", intent, actor=anonymous)
+    assert not_found["execution_receipt"]["status"] == "verified_empty"
+
+    conn = sqlite3.connect(str(business_db[0]))
+    for index in range(55):
+        conn.execute(
+            "INSERT INTO attendance_employees "
+            "(employee_name, department, employee_no, position, user_id) VALUES (?, '研发部', ?, '工程师', ?)",
+            (f"测试员工{index:02d}", f"T{index:02d}", f"test-{index:02d}"),
+        )
+    conn.commit()
+    conn.close()
+    all_rows = personnel_safety._handle_personnel_read("查人员", intent, actor=anonymous)
+    assert "另有" in all_rows["response"]
+
+
+def test_personnel_query_error_is_not_reported_as_success(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "broken-personnel.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("CREATE TABLE attendance_employees (id INTEGER PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(safety, "_db_path", lambda: db_path)
+    result = personnel_safety._handle_personnel_read(
+        "查人员",
+        BusinessChatIntent("personnel_read", "personnel"),
+        actor=BusinessActorIdentity(authenticated=False),
+    )
+    assert result["execution_receipt"]["status"] == "failed"
+    assert result["execution_receipt"]["reason"].startswith("personnel_query_failed:")
+
+
+@pytest.mark.parametrize(
+    ("message", "period", "hours", "approval"),
+    [
+        ("李四2026年7月14日上午事假", "morning", 4.0, "pending"),
+        ("李四2026年7月14日下午病假", "afternoon", 4.0, "pending"),
+        ("李四2026年7月14日年假半天", "half_day_unspecified", 4.0, "pending"),
+        ("李四2026年7月14日调休全天", "full_day", 8.0, "pending"),
+        ("李四2026年7月14日婚假2.5小时，经理同意", "hours", 2.5, "reported_approved"),
+        ("李四2026年7月14日丧假，经理拒绝", "", 0.0, "pending"),
+    ],
+)
+def test_leave_field_parser_covers_period_and_approval_shapes(
+    message: str, period: str, hours: float, approval: str
+) -> None:
+    fields = leave_safety._leave_fields(message)
+    assert fields["period"] == period
+    assert fields["hours"] == hours
+    assert fields["approval_status"] == approval
+
+
+def test_leave_modify_current_actor_and_pending_upgrade(
+    business_db: tuple[Path, Path],
+) -> None:
+    intent = BusinessChatIntent("leave_write", "attendance")
+    actor = BusinessActorIdentity(authenticated=True, local_user_id="u-1001")
+
+    blocked = leave_safety._handle_leave_write("把李四明天事假改成病假", intent, actor=actor)
+    assert blocked["execution_receipt"]["reason"] == "leave_modify_tool_unavailable"
+
+    message = "我2026年7月16日下午病假半天"
+    created = leave_safety._handle_leave_write(message, intent, actor=actor)
+    assert created["execution_receipt"]["status"] == "created"
+    assert created["execution_receipt"]["details"]["employee_name"] == "李四"
+
+    approved = leave_safety._handle_leave_write(message + "，主管已经审批通过", intent, actor=actor)
+    assert approved["execution_receipt"]["status"] == "updated"
+    assert approved["execution_receipt"]["details"]["approval_status"] == "reported_approved"
+
+
+def test_leave_write_rejects_missing_database_and_personnel_table(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    business_db: tuple[Path, Path],
+) -> None:
+    intent = BusinessChatIntent("leave_write", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+    message = "李四2026年7月18日上午事假半天"
+
+    unmapped = leave_safety._handle_leave_write("我2026年7月18日上午事假半天", intent, actor=actor)
+    assert unmapped["execution_receipt"]["reason"] == "missing_required_fields"
+
+    monkeypatch.setattr(safety, "_db_path", lambda: tmp_path / "missing.db")
+    missing_identity = leave_safety._handle_leave_write(
+        "我2026年7月18日上午事假半天", intent, actor=actor
+    )
+    assert missing_identity["execution_receipt"]["reason"] == "missing_required_fields"
+
+    missing = leave_safety._handle_leave_write(message, intent, actor=actor)
+    assert missing["execution_receipt"]["reason"] == "personnel_database_missing"
+
+    empty_db = tmp_path / "empty.db"
+    sqlite3.connect(empty_db).close()
+    monkeypatch.setattr(safety, "_db_path", lambda: empty_db)
+    no_table = leave_safety._handle_leave_write(message, intent, actor=actor)
+    assert no_table["execution_receipt"]["reason"] == "personnel_table_missing"
+
+
+class _PrinterServiceResult:
+    def __init__(self, printers: Any, result: Any = None) -> None:
+        self.printers = printers
+        self.result = result
+
+    def get_printers(self) -> Any:
+        if isinstance(self.printers, Exception):
+            raise self.printers
+        return self.printers
+
+    def print_document(self, _path: str) -> Any:
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
+
+
+def test_attendance_export_covers_query_empty_and_write_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intent = BusinessChatIntent("attendance_export", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+
+    monkeypatch.setattr(
+        output_safety,
+        "_attendance_rows",
+        lambda *_args, **_kwargs: ([], {}, "attendance_database_missing"),
+    )
+    query_error = output_safety._handle_attendance_export("今天考勤", intent, actor=actor)
+    assert query_error["execution_receipt"]["reason"] == "attendance_database_missing"
+
+    monkeypatch.setattr(
+        output_safety, "_attendance_rows", lambda *_args, **_kwargs: ([], {"scope": "day"}, None)
+    )
+    empty = output_safety._handle_attendance_export("今天考勤", intent, actor=actor)
+    assert empty["execution_receipt"]["reason"] == "no_attendance_rows"
+
+    monkeypatch.setattr(
+        output_safety,
+        "_attendance_rows",
+        lambda *_args, **_kwargs: ([{"work_date": "2026-07-14"}], {}, None),
+    )
+    monkeypatch.setattr(
+        output_safety,
+        "_create_attendance_export",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+    failed = output_safety._handle_attendance_export("今天考勤", intent, actor=actor)
+    assert failed["execution_receipt"]["status"] == "failed"
+    assert failed["execution_receipt"]["reason"].startswith("attendance_export_failed:")
+
+
+@pytest.mark.parametrize(
+    ("printers", "print_result", "reason"),
+    [
+        (RuntimeError("offline"), None, "printer_status_failed:"),
+        ([], None, "no_available_printer"),
+        ({"success": False, "printers": []}, None, "no_available_printer"),
+        ({"success": True, "printers": [{"name": "QA"}]}, None, "printer_rejected"),
+        (
+            {"success": True, "count": 1, "printers": [{"name": "QA"}]},
+            {"success": False, "message": "queue full"},
+            "queue full",
+        ),
+    ],
+)
+def test_attendance_print_covers_printer_failure_contracts(
+    monkeypatch: pytest.MonkeyPatch, printers: Any, print_result: Any, reason: str
+) -> None:
+    intent = BusinessChatIntent("attendance_print", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+    monkeypatch.setattr(
+        output_safety,
+        "_attendance_rows",
+        lambda *_args, **_kwargs: ([{"work_date": "2026-07-14"}], {}, None),
+    )
+    monkeypatch.setattr(
+        safety, "_get_printer_service", lambda: _PrinterServiceResult(printers, print_result)
+    )
+    monkeypatch.setattr(
+        output_safety,
+        "_create_attendance_export",
+        lambda *_args, **_kwargs: (Path(__file__), "test.xlsx"),
+    )
+    result = output_safety._handle_attendance_print("打印今天考勤", intent, actor=actor)
+    assert result["execution_receipt"]["executed"] is False
+    assert result["execution_receipt"]["reason"].startswith(reason)
+
+
+def test_attendance_print_covers_query_empty_and_submit_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    intent = BusinessChatIntent("attendance_print", "attendance")
+    actor = BusinessActorIdentity(authenticated=False)
+
+    monkeypatch.setattr(
+        output_safety,
+        "_attendance_rows",
+        lambda *_args, **_kwargs: ([], {}, "attendance_records_missing"),
+    )
+    query_error = output_safety._handle_attendance_print("打印今天考勤", intent, actor=actor)
+    assert query_error["execution_receipt"]["reason"] == "attendance_records_missing"
+
+    monkeypatch.setattr(output_safety, "_attendance_rows", lambda *_args, **_kwargs: ([], {}, None))
+    empty = output_safety._handle_attendance_print("打印今天考勤", intent, actor=actor)
+    assert empty["execution_receipt"]["reason"] == "no_attendance_rows"
+
+    monkeypatch.setattr(
+        output_safety,
+        "_attendance_rows",
+        lambda *_args, **_kwargs: ([{"work_date": "2026-07-14"}], {}, None),
+    )
+    monkeypatch.setattr(
+        safety,
+        "_get_printer_service",
+        lambda: _PrinterServiceResult(
+            {"success": True, "count": 1, "printers": [{"name": "QA"}]},
+            RuntimeError("submit failed"),
+        ),
+    )
+    monkeypatch.setattr(
+        output_safety,
+        "_create_attendance_export",
+        lambda *_args, **_kwargs: (Path(__file__), "test.xlsx"),
+    )
+    failed = output_safety._handle_attendance_print("打印今天考勤", intent, actor=actor)
+    assert failed["execution_receipt"]["status"] == "failed"
+    assert failed["execution_receipt"]["reason"].startswith("print_submit_failed:")
