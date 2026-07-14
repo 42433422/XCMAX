@@ -748,8 +748,7 @@ def check_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[str
     act_lines = actual.splitlines()
     for i, (e, a) in enumerate(zip(exp_lines, act_lines)):
         if e != a:
-            print(f"    L{i+1} 期望: {e[:100]}")
-            print(f"    L{i+1} 实际: {a[:100]}")
+            print(f"    L{i+1} 内容不一致（已隐藏敏感值）")
             break
     if len(exp_lines) != len(act_lines):
         print(f"    行数差异: 期望 {len(exp_lines)} 实际 {len(act_lines)}")

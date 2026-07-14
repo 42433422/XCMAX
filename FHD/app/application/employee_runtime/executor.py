@@ -190,8 +190,6 @@ def _action_vendor_convert(
     rule_spec = _load_rule_spec(pack_root)
     default_out = str(rule_spec.get("default_output_relpath") or "outputs/data.json")
     output_path = out_dir / Path(default_out).name
-    if payload.get("output_path"):
-        output_path = Path(str(payload["output_path"]))
     if is_generate:
         src = src or (pack_root / "inputs" / "payload.json")
         if not src.is_file() and payload.get("user_request"):
@@ -220,9 +218,9 @@ def _action_vendor_convert(
             ctx=ctx,
             rule_spec=rule_spec,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("vendor convert failed employee_id=%s", employee_id)
-        return {"handler": "direct_python", "ok": False, "error": str(exc)[:800]}
+    except RECOVERABLE_ERRORS:
+        logger.exception("vendor convert failed")
+        return {"handler": "direct_python", "ok": False, "error": "转换失败，请查看服务日志"}
     return {
         "handler": "direct_python",
         "ok": True,

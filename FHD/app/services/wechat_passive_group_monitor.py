@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -14,10 +13,7 @@ from app.services.user_cs_pipeline import _pipeline_roots
 
 logger = logging.getLogger(__name__)
 
-_THINKING_MARKERS = re.compile(
-    r"(^|\n)\s*(思考|Thought|Let me think|我需要先|分析如下)",
-    re.I,
-)
+_THINKING_PREFIXES = ("思考", "thought", "let me think", "我需要先", "分析如下")
 
 
 def _now_iso() -> str:
@@ -89,7 +85,10 @@ def assert_safe_outbound_group_reply(message: str) -> str | None:
     text = str(message or "").strip()
     if not text:
         return None
-    if _THINKING_MARKERS.search(text):
+    if any(
+        line.lstrip().lower().startswith(_THINKING_PREFIXES)
+        for line in text.splitlines()
+    ):
         return None
     if len(text) > 4000:
         return text[:4000]
