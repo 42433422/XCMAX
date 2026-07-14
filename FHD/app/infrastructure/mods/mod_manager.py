@@ -130,8 +130,23 @@ def _all_mods_roots(primary: str) -> list[str]:
     return roots
 
 
-def _backend_path_for_mod(mod_path: str) -> str:
-    return os.path.join(mod_path, "backend")
+def _trusted_child_path(parent: str, child_name: str, *, directory: bool) -> str | None:
+    try:
+        with os.scandir(parent) as entries:
+            for entry in entries:
+                if entry.name != child_name or entry.is_symlink():
+                    continue
+                if directory and entry.is_dir(follow_symlinks=False):
+                    return entry.path
+                if not directory and entry.is_file(follow_symlinks=False):
+                    return entry.path
+    except OSError:
+        return None
+    return None
+
+
+def _backend_path_for_mod(mod_path: str) -> str | None:
+    return _trusted_child_path(mod_path, "backend", directory=True)
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
@@ -140,9 +155,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
     """
     backend_path = _backend_path_for_mod(mod_path)
-    path = os.path.join(backend_path, f"{stem}.py")
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Mod {mod_id} backend file missing: {path}")
+    path = _trusted_child_path(backend_path, f"{stem}.py", directory=False) if backend_path else None
+    if path is None:
+        raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
@@ -387,10 +402,8 @@ class ModManager:
             if not cid:
                 return None
             for root in self.all_mods_roots():
-                mod_path = os.path.join(root, cid)
-                if os.path.isdir(mod_path) and os.path.isfile(
-                    os.path.join(mod_path, "manifest.json")
-                ):
+                mod_path = _trusted_child_path(root, cid, directory=True)
+                if mod_path and _trusted_child_path(mod_path, "manifest.json", directory=False):
                     return mod_path
             return None
 
@@ -600,8 +613,8 @@ class ModManager:
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
-        backend_path = os.path.join(mod_path, "backend")
-        if not os.path.isdir(backend_path):
+        backend_path = _backend_path_for_mod(mod_path)
+        if backend_path is None:
             logger.debug("No backend directory for mod: %s", mod_id)
             return
 

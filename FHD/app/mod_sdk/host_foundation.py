@@ -163,15 +163,29 @@ def install_aux_employee_pack_from_repo_seed(
     pack_id: str, *, activate: bool = True
 ) -> tuple[bool, str]:
     """无远端 zip 时，从仓库内置 mods/<pack_id> 复制到用户 mods 根。"""
-    pid = str(pack_id or "").strip()
-    if not is_aux_employee_pack_mod_id(pid):
+    requested = str(pack_id or "").strip()
+    pid = next((candidate for candidate in AUX_EMPLOYEE_PACK_MOD_IDS if candidate == requested), None)
+    if pid is None:
         return False, "非触点员工包"
     src: Path | None = None
     for root in _repo_mod_seed_dirs():
-        candidate = root / pid
-        if (candidate / "manifest.json").is_file():
-            src = candidate
-            break
+        try:
+            with os.scandir(root) as entries:
+                entry = next(
+                    (
+                        item
+                        for item in entries
+                        if item.name == pid
+                        and not item.is_symlink()
+                        and item.is_dir(follow_symlinks=False)
+                    ),
+                    None,
+                )
+            if entry is not None:
+                src = Path(entry.path)
+                break
+        except OSError:
+            continue
     if src is None:
         return False, f"未找到内置员工包：{pid}"
     from app.infrastructure.mods.mod_manager import get_mod_manager
