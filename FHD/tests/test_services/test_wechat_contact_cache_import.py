@@ -337,6 +337,8 @@ class TestRefreshWechatContactsFromDecrypt:
             assert status == 503
             assert payload["success"] is False
             assert payload["reason"] == "not_configured"
+            assert payload["message"] == "微信解密尚未配置"
+            assert "no config" not in payload["message"]
 
     def test_returns_500_when_sync_fails_no_reason(self):
         with patch(
@@ -346,6 +348,8 @@ class TestRefreshWechatContactsFromDecrypt:
             payload, status = refresh_wechat_contacts_from_decrypt()
             assert status == 500
             assert payload["success"] is False
+            assert payload["message"] == "同步解密失败"
+            assert "sync error" not in payload["message"]
 
     def test_returns_200_when_no_contacts_found(self, tmp_path):
         wechat_dir = tmp_path / "wechat-decrypt"
@@ -378,6 +382,8 @@ class TestRefreshWechatContactsFromDecrypt:
             payload, status = refresh_wechat_contacts_from_decrypt()
             assert status == 500
             assert payload["success"] is False
+            assert payload["message"] == "微信联系人刷新失败"
+            assert "unexpected" not in payload["message"]
 
     def test_imports_from_contact_db(self, tmp_path):
         """Test importing contacts from a contact.db SQLite file."""

@@ -104,6 +104,11 @@ def _account_profile_fields(user: Any, session_meta: dict[str, Any]) -> dict[str
 @router.get("/api/auth/me")
 def auth_me(request: Request):
     from app.application.auth_app_service import get_auth_app_service
+    from app.application.desktop_admin_gate import assert_desktop_allows_session_id
+
+    denied = assert_desktop_allows_session_id(session_id_from_request(request))
+    if denied is not None:
+        return JSONResponse(denied, status_code=403)
 
     user = resolve_session_user(request)
     if not user:
@@ -232,6 +237,7 @@ def auth_token_refresh(body: dict = Body(default_factory=dict)):
 @router.get("/api/auth/session/validate")
 async def auth_session_validate(request: Request):
     from app.application.auth_app_service import get_auth_app_service
+    from app.application.desktop_admin_gate import assert_desktop_allows_session_id
 
     session_id = session_id_from_request(request)
     if not session_id:
@@ -240,6 +246,9 @@ async def auth_session_validate(request: Request):
             {**error_envelope(NO_SESSION, "无会话信息"), "valid": False},
             status_code=200,
         )
+    denied = assert_desktop_allows_session_id(session_id)
+    if denied is not None:
+        return JSONResponse(denied, status_code=403)
     auth_app_service = get_auth_app_service()
     session_info = auth_app_service.session_manager.get_session_info(session_id)
     if not session_info:

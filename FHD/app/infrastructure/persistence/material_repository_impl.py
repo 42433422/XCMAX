@@ -252,20 +252,22 @@ class SQLAlchemyMaterialRepository(MaterialRepository):
                     query = query.filter(Material.category == category)
 
                 materials = query.order_by(Material.id.desc()).all()
-
-            records = [
-                {
-                    "material_code": m.material_code or "",
-                    "name": m.name or "",
-                    "category": m.category or "",
-                    "specification": m.specification or "",
-                    "unit": m.unit or "",
-                    "stock_quantity": m.quantity if m.quantity is not None else 0,
-                    "unit_price": m.unit_price if m.unit_price is not None else 0,
-                    "supplier": m.supplier or "",
-                }
-                for m in materials
-            ]
+                # Material attributes may be expired when get_db commits and
+                # closes the session.  Detach only plain export rows while the
+                # ORM instances are still bound to the live session.
+                records = [
+                    {
+                        "material_code": m.material_code or "",
+                        "name": m.name or "",
+                        "category": m.category or "",
+                        "specification": m.specification or "",
+                        "unit": m.unit or "",
+                        "stock_quantity": m.quantity if m.quantity is not None else 0,
+                        "unit_price": m.unit_price if m.unit_price is not None else 0,
+                        "supplier": m.supplier or "",
+                    }
+                    for m in materials
+                ]
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"materials_{timestamp}.xlsx"

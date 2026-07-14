@@ -62,7 +62,7 @@ export XCAGI_STAGED_MODS_DIR="${ROOT}/build/staged-mods-${SKU}"
 export XCAGI_MODS_ROOT="${XCAGI_STAGED_MODS_DIR}"
 export XCAGI_STAGED_INDUSTRY_SEEDS_DIR="${ROOT}/build/staged-industry-seeds-${SKU}"
 
-# 前端
+# 前端（桌面包不含 admin-console / admin-vue-dist）
 (cd frontend && [ -d node_modules ] || npm install)
 if [[ "${SKU}" == "personal" ]]; then
   (cd frontend && VITE_XCAGI_PRODUCT_SKU=personal VITE_XCAGI_EDITION=minimal npm run build:minimal)

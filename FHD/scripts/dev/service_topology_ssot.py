@@ -193,7 +193,6 @@ def render_json(m: dict[str, Any]) -> str:
 TARGETS: list[tuple[str, str, Any]] = [
     ("python", "app/infrastructure/topology.py", render_python),
     ("ts", "frontend/src/constants/topology.ts", render_ts),
-    ("ets", "mobile-harmony/entry/src/main/ets/models/ServiceTopology.ets", render_ets),
     (
         "kotlin",
         "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/network/Topology.kt",

@@ -22,6 +22,7 @@ from app.fastapi_routes.mounts import (
 from app.fastapi_routes.registry import RouteRegistry
 from app.legacy.routes.legacy_gap import register_legacy_gap_routers
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.runtime_integrity import record_runtime_component
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,12 @@ def _register_platform_shell_bootstrap(app: FastAPI) -> None:
         from app.fastapi_routes.platform_shell_routes import router as platform_shell_router
 
         app.include_router(platform_shell_router)
+        record_runtime_component(app, "platform_shell_routes", ok=True, required=True)
         logger.info("Registered platform_shell bootstrap routes")
     except RECOVERABLE_ERRORS as exc:
+        record_runtime_component(
+            app, "platform_shell_routes", ok=False, required=True, detail=str(exc)
+        )
         logger.warning("Platform shell bootstrap routes skipped: %s", exc)
 
 
@@ -57,7 +62,7 @@ def register_deferred_routes(app: FastAPI) -> None:
     # 若 bootstrap 阶段 platform-shell 因 frozen 导入失败未挂上，这里再补一次；
     # 随后 deferred_startup 会把 SPA catch-all 挪到路由表末尾，避免 GET 被吞。
     _register_platform_shell_bootstrap(app)
-    registry = RouteRegistry()
+    registry = RouteRegistry(app=app)
 
     register_business_routes(app, registry)
     registry.apply(app)

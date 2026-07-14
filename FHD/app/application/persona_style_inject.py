@@ -27,15 +27,21 @@ def persona_style_for_user(user_id: int) -> str:
     try:
         import asyncio
 
+        # ``asyncio.run(coro)`` constructs ``coro`` before it notices an
+        # already-running loop. Detect that state first so we do not leak an
+        # un-awaited repository coroutine from async employee/API paths.
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            return ""
+
         from app.infrastructure.persona.persona_repository_impl import PersonaRepositoryImpl
         from app.services.persona.prompt_builder import persona_style_section
 
         repo = PersonaRepositoryImpl()
-        try:
-            profile = asyncio.run(repo.find_by_user_id(str(uid)))
-        except RuntimeError:
-            # 已有运行中的事件循环(异步上下文)→ 跳过同步读取,避免崩溃
-            return ""
+        profile = asyncio.run(repo.find_by_user_id(str(uid)))
         if profile is None:
             return ""
         return persona_style_section(profile)

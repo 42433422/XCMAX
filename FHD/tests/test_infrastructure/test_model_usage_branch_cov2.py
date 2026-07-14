@@ -166,6 +166,15 @@ class TestModelUsageLedgerPath:
         assert path.name == "model_usage_ledger.json"
         assert "data" in path.parts
 
+    def test_packaged_default_path_uses_user_data(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("MODEL_USAGE_LEDGER_PATH", raising=False)
+        bundle_root = tmp_path / "XCAGI.app" / "Contents" / "Resources" / "backend" / "_internal"
+        user_data = tmp_path / "Application Support" / "XCAGI"
+        monkeypatch.setattr(mu.sys, "_MEIPASS", str(bundle_root), raising=False)
+        monkeypatch.setattr(mu, "get_app_data_dir", lambda: str(user_data))
+
+        assert mu.model_usage_ledger_path() == user_data / "data" / "model_usage_ledger.json"
+
 
 # ---------------------------------------------------------------------------
 # _load_usage_state

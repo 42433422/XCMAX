@@ -1,0 +1,1 @@
+{"success":false,"message":"管理员账号不能从企业账号入口登录，请切换到管理员入口登录。","error":{"code":"ACCOUNT_KIND_MISMATCH","message":"管理员账号不能从企业账号入口登录，请切换到管理员入口登录。"},"market_account":{"success":true,"market_base_url":"https://xiu-ci.com","is_enterprise":true,"is_market_admin":true}}

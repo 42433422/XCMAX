@@ -466,14 +466,61 @@ def stop_desktop_relay_poller() -> None:
     _STOP_EVENT.set()
 
 
+def _relay_poll_backoff_seconds(
+    failure_count: int,
+    *,
+    base_interval: float,
+    max_interval: float,
+) -> float:
+    """Return bounded exponential backoff for an unavailable public relay."""
+    failures = max(0, int(failure_count))
+    if failures <= 0:
+        return max(1.0, base_interval)
+    return min(max_interval, max(1.0, base_interval) * (2 ** min(failures - 1, 8)))
+
+
 def _poll_loop() -> None:
     interval = float(os.environ.get("XCAGI_RELAY_POLL_INTERVAL_SEC") or "4")
+    max_backoff = float(os.environ.get("XCAGI_RELAY_POLL_MAX_BACKOFF_SEC") or "300")
+    failure_count = 0
     while not _STOP_EVENT.is_set():
+        wait_seconds = max(1.0, interval)
         try:
             _poll_once()
-        except Exception:  # noqa: BLE001
-            logger.warning("mobile relay poll failed", exc_info=True)
-        _STOP_EVENT.wait(max(1.0, interval))
+            if failure_count:
+                logger.info("mobile relay poll recovered after %d failure(s)", failure_count)
+            failure_count = 0
+        except (httpx.HTTPError, httpx.InvalidURL, ValueError) as exc:
+            failure_count += 1
+            wait_seconds = _relay_poll_backoff_seconds(
+                failure_count,
+                base_interval=interval,
+                max_interval=max_backoff,
+            )
+            # 首次及指数节点保留一条精简告警；中间失败降为 debug，避免每次
+            # ConnectTimeout 都打印完整 traceback，把桌面日志刷满。
+            if failure_count == 1 or failure_count & (failure_count - 1) == 0:
+                logger.warning(
+                    "mobile relay unavailable; retry in %.0fs (failure %d): %s",
+                    wait_seconds,
+                    failure_count,
+                    exc,
+                )
+            else:
+                logger.debug("mobile relay remains unavailable: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            failure_count += 1
+            wait_seconds = _relay_poll_backoff_seconds(
+                failure_count,
+                base_interval=interval,
+                max_interval=max_backoff,
+            )
+            logger.warning(
+                "mobile relay poll failed; retry in %.0fs: %s",
+                wait_seconds,
+                exc,
+            )
+        _STOP_EVENT.wait(wait_seconds)
 
 
 def _complete_relay_task(

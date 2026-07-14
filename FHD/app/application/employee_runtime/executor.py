@@ -190,17 +190,21 @@ def _action_vendor_convert(
     rule_spec = _load_rule_spec(pack_root)
     default_out = str(rule_spec.get("default_output_relpath") or "outputs/data.json")
     output_path = out_dir / Path(default_out).name
-    if payload.get("output_path"):
-        output_path = Path(str(payload["output_path"]))
+    vendor_payload = {
+        k: v for k, v in payload.items() if k not in ("file_path", "path", "output_path")
+    }
+    if payload.get("user_request") and not any(
+        vendor_payload.get(key) for key in ("user_query", "plain_text", "task")
+    ):
+        vendor_payload["user_query"] = payload["user_request"]
     if is_generate:
         src = src or (pack_root / "inputs" / "payload.json")
         if not src.is_file() and payload.get("user_request"):
             payload_path = pack_root / "inputs" / "payload.json"
             payload_path.parent.mkdir(parents=True, exist_ok=True)
-            payload_path.write_text(
-                json.dumps({"user_request": payload["user_request"]}, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            # The request remains in memory via ``vendor_payload``.  Persist only a
+            # non-sensitive placeholder because converters require a source path.
+            payload_path.write_text("{}", encoding="utf-8")
             src = payload_path
         if not src or not src.is_file():
             return {
@@ -216,13 +220,13 @@ def _action_vendor_convert(
             src,
             output_path,
             template_path=None,
-            payload={k: v for k, v in payload.items() if k not in ("file_path", "path")},
+            payload=vendor_payload,
             ctx=ctx,
             rule_spec=rule_spec,
         )
-    except RECOVERABLE_ERRORS as exc:
-        logger.exception("vendor convert failed employee_id=%s", employee_id)
-        return {"handler": "direct_python", "ok": False, "error": str(exc)[:800]}
+    except RECOVERABLE_ERRORS:
+        logger.exception("vendor convert failed")
+        return {"handler": "direct_python", "ok": False, "error": "转换失败，请查看服务日志"}
     return {
         "handler": "direct_python",
         "ok": True,

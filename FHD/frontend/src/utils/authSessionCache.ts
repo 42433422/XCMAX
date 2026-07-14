@@ -25,3 +25,9 @@ export function invalidateEnterpriseSessionCache(): void {
   cachedValid = null;
   cachedAt = 0;
 }
+
+/** Login just established the cookie; avoid an immediate blocking validate round-trip. */
+export function markEnterpriseSessionValid(): void {
+  cachedValid = true;
+  cachedAt = Date.now();
+}

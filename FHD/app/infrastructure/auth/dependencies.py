@@ -107,6 +107,14 @@ def resolve_session_user(request: Request) -> Any | None:
     sid = session_id_from_request(request)
     if not sid:
         return None
+    # 桌面进程：存量 admin 会话一律作废（管理端仅网页）
+    try:
+        from app.application.desktop_admin_gate import assert_desktop_allows_session_id
+
+        if assert_desktop_allows_session_id(sid) is not None:
+            return None
+    except Exception:  # noqa: BLE001
+        pass
     user = get_session_service().validate_session(sid)
     if user is not None:
         return user

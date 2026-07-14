@@ -143,7 +143,7 @@ describe('ProductOnboardingView.vue', () => {
     })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('进入后侧栏将补齐')
+    expect(wrapper.text()).toContain('装好后侧栏会出现')
     expect(wrapper.text()).toContain('考勤表转换')
     expect(wrapper.text()).toContain('人员管理')
     expect(wrapper.text()).toContain('考勤数据源')

@@ -32,13 +32,13 @@ def api_fhd_reconciliation_period(
     period_end: str = Query(..., description="ISO 8601"),
 ):
     _require_internal_api_key(request)
-    from app.services.fhd_payment_reconciliation import (
-        _parse_dt,
+    from app.application.payment_reconciliation_app_service import (
         compute_fhd_period_snapshot,
+        parse_period_dt,
     )
 
-    start = _parse_dt(period_start)
-    end = _parse_dt(period_end)
+    start = parse_period_dt(period_start)
+    end = parse_period_dt(period_end)
     if not start or not end:
         raise HTTPException(400, detail="invalid period_start or period_end")
     if end <= start:

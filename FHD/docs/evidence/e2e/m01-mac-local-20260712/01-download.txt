@@ -1,0 +1,1 @@
+-rw-r--r--@ 1 a4243342  staff  236693837 Jul 12 01:47 /Users/a4243342/Desktop/XCMAX/FHD/docs/evidence/e2e/m01-mac-local-20260712/XCAGI-10.0.0-mac-arm64.enterprise.dmg

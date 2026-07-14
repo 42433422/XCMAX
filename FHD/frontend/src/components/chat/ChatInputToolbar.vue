@@ -15,19 +15,19 @@
       :disabled="excelAnalyzeUploading"
     >
       <i class="fa fa-upload" aria-hidden="true"></i>
-      {{ excelAnalyzeUploading ? $t('shell.uploadAnalyzing') : $t('shell.upload') }}
+      {{ excelAnalyzeUploading ? $t('shell.uploadAnalyzing') : $t('chat.uploadAttachment') }}
       {{ multimodalPendingCount ? `(${multimodalPendingCount})` : '' }}
     </button>
     <button
       class="toolbar-btn"
       type="button"
       data-tutorial-id="toolbar-office-docking"
-      title="办公文件对接（Excel/CSV/Word/PDF/PPT）"
+      :title="$t('chat.officeDockingTitle')"
       @click="$emit('trigger-office-docking')"
       :disabled="officeDockingProcessing"
     >
       <i class="fa fa-file-text-o" aria-hidden="true"></i>
-      {{ officeDockingProcessing ? '对接识别中' : '办公对接' }}
+      {{ officeDockingProcessing ? $t('chat.officeDockingBusy') : $t('chat.officeDocking') }}
     </button>
     <input
       ref="fileInputRef"
@@ -95,7 +95,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   'new-conversation': []
   'show-history': []
-  'trigger-upload': []
   'trigger-office-docking': []
   'register-excel-input': [input: HTMLInputElement | null]
   'excel-file-change': [event: Event]
@@ -117,7 +116,6 @@ watch(fileInputRef, (el) => {
 
 function triggerUpload() {
   fileInputRef.value?.click()
-  emit('trigger-upload')
 }
 
 function onFileChange(event: Event) {
