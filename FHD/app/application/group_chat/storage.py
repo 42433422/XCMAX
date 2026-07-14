@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any
+
+from cryptography.fernet import Fernet, InvalidToken
 
 from app.application.group_chat.constants import (
     _BROKEN_MARKDOWN_LINK_RE,
@@ -23,6 +28,8 @@ from app.application.group_chat.employee_registry import (
 
 
 class AiGroupChatStorageMixin:
+    _ENCRYPTED_MESSAGE_PREFIX = "enc:v1:"
+
     # ── 持久化 ──
 
     def _public_group(
@@ -252,7 +259,45 @@ class AiGroupChatStorageMixin:
         return self._read_jsonl(self._groups_path)
 
     def _read_messages(self) -> list[dict[str, Any]]:
-        return self._read_jsonl(self._messages_path)
+        if not self._messages_path.exists():
+            return []
+        rows: list[dict[str, Any]] = []
+        saw_plaintext = False
+        cipher = self._message_cipher()
+        for line in self._messages_path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                if raw.startswith(self._ENCRYPTED_MESSAGE_PREFIX):
+                    token = raw.removeprefix(self._ENCRYPTED_MESSAGE_PREFIX).encode("ascii")
+                    item = json.loads(cipher.decrypt(token).decode("utf-8"))
+                else:
+                    item = json.loads(raw)
+                    saw_plaintext = True
+            except (InvalidToken, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(item, dict):
+                rows.append(item)
+        if saw_plaintext:
+            self._rewrite_messages(rows)
+        return rows
+
+    @staticmethod
+    def _message_cipher() -> Fernet:
+        secret = (
+            os.environ.get("SECRET_KEY", "").strip()
+            or os.environ.get("XCAGI_SECRET_KEY", "").strip()
+        )
+        if not secret:
+            raise RuntimeError("SECRET_KEY is required for encrypted AI group-chat storage")
+        digest = hashlib.sha256(secret.encode("utf-8")).digest()
+        return Fernet(base64.urlsafe_b64encode(digest))
+
+    def _encrypted_message_line(self, message: dict[str, Any]) -> str:
+        payload = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        token = self._message_cipher().encrypt(payload).decode("ascii")
+        return f"{self._ENCRYPTED_MESSAGE_PREFIX}{token}\n"
 
     def _read_jsonl(self, path: Path) -> list[dict[str, Any]]:
         if not path.exists():
@@ -281,12 +326,12 @@ class AiGroupChatStorageMixin:
     def _append_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("a", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(_safe_json_line(m))
+                fh.write(self._encrypted_message_line(m))
 
     def _rewrite_messages(self, messages: list[dict[str, Any]]) -> None:
         with self._messages_path.open("w", encoding="utf-8") as fh:
             for m in messages:
-                fh.write(_safe_json_line(m))
+                fh.write(self._encrypted_message_line(m))
 
     def _resolve_group_id(self, *, user_id: int, group_id: str) -> str:
         raw = str(group_id or "").strip()

@@ -110,10 +110,10 @@ async def post_cs_message(request: Request, body: dict, user=Depends(get_mobile_
                 "timestamp": str(sent.get("created_at") or ""),
             }
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile cs send via IM failed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500),
+            format_mobile_response(None, "客服通道暂不可用", success=False, code=500),
             status_code=500,
         )
 
@@ -157,7 +157,7 @@ async def get_cs_messages(
                 ]
     except OPERATIONAL_ERRORS as exc:
         logger.warning("mobile cs message history (IM) unavailable: %s", exc)
-        error = str(exc)[:300]
+        error = "客服消息历史暂不可用"
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]
     return format_mobile_response(data={"messages": messages, "persist_error": error})

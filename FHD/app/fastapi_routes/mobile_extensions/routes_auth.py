@@ -135,9 +135,9 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         profile = (
             oidc_session.get("profile") if isinstance(oidc_session.get("profile"), dict) else {}
         )
-    except OPERATIONAL_ERRORS as exc:
+    except OPERATIONAL_ERRORS:
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=502),
+            format_mobile_response(None, "OIDC 登录服务暂不可用", success=False, code=502),
             status_code=502,
         )
     auth_app_service = get_auth_app_service()

@@ -274,7 +274,7 @@ def batch_delete_materials(
         )
         if not result.get("success"):
             if result.get("error_code") == "tool_exception":
-                logger.error("批量删除原材料时 Agent 执行异常：%s", result.get("message"))
+                logger.error("批量删除原材料时 Agent 执行异常")
             else:
                 return JSONResponse(jsonable_encoder(result), status_code=400)
         return JSONResponse(
@@ -286,9 +286,9 @@ def batch_delete_materials(
             },
             status_code=200,
         )
-    except RECOVERABLE_ERRORS as e:
-        logger.error("批量删除原材料失败：%s", e)
-        return JSONResponse({"success": False, "message": str(e)}, status_code=500)
+    except RECOVERABLE_ERRORS:
+        logger.exception("批量删除原材料失败")
+        return JSONResponse({"success": False, "message": "批量删除失败"}, status_code=500)
 
 
 @router.get("/api/materials/low-stock")

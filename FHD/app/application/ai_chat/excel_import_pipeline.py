@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import re
 import uuid
 from pathlib import Path
@@ -148,12 +149,21 @@ class AIChatExcelImportMixin:
         for token in ("产品报价表", "报价表", "报价单", "价格表", "产品报价", "报价"):
             if stem.endswith(token):
                 stem = stem[: -len(token)].strip()
-        m = re.search(
-            r"(.+?(?:有限公司|股份有限公司|集团有限公司|实业有限公司|科技公司|集团公司|公司|厂|店))",
-            stem,
+        company_suffixes = (
+            "股份有限公司",
+            "集团有限公司",
+            "实业有限公司",
+            "有限公司",
+            "科技公司",
+            "集团公司",
+            "公司",
+            "厂",
+            "店",
         )
-        if m:
-            return m.group(1).strip()
+        for end in range(2, len(stem) + 1):
+            prefix = stem[:end]
+            if prefix.endswith(company_suffixes):
+                return prefix.strip()
         return stem if len(stem) >= 2 else ""
 
     @staticmethod
@@ -283,7 +293,41 @@ class AIChatExcelImportMixin:
         )
         if not fp:
             return None
-        path = Path(fp)
+        from fastapi import HTTPException
+
+        from app.infrastructure.workspace import (
+            resolve_safe_workspace_relpath,
+            workspace_root,
+        )
+        from app.utils.path_utils import get_upload_dir
+
+        normalized = fp.replace("\\", "/")
+        workspace_base = workspace_root()
+        workspace_text = workspace_base.as_posix().rstrip("/")
+        path: Path | None = None
+        if normalized.startswith(f"{workspace_text}/"):
+            rel = normalized[len(workspace_text) + 1 :]
+            try:
+                path = resolve_safe_workspace_relpath(rel)
+            except (ValueError, OSError, HTTPException):
+                return None
+        elif not normalized.startswith("/") and not (
+            len(normalized) >= 3 and normalized[1:3] == ":/"
+        ):
+            try:
+                path = resolve_safe_workspace_relpath(normalized)
+            except (ValueError, OSError, HTTPException):
+                return None
+        else:
+            upload_base = Path(get_upload_dir()).resolve()
+            upload_text = upload_base.as_posix().rstrip("/")
+            if normalized.startswith(f"{upload_text}/"):
+                raw_upload_name = normalized[len(upload_text) + 1 :]
+                upload_name = os.path.basename(raw_upload_name)
+                if upload_name == raw_upload_name and upload_name not in {"", ".", ".."}:
+                    path = upload_base / upload_name
+        if path is None:
+            return None
         if not path.is_file():
             return None
         sheet = AIChatExcelImportMixin._resolve_sheet_name_for_reimport(
@@ -703,8 +747,23 @@ class AIChatExcelImportMixin:
         cur = str(user_message or "").strip()
 
         def _strip_htmlish(s: str) -> str:
-            t = re.sub(r"<br\s*/?>", "\n", s or "", flags=re.I)
-            return re.sub(r"<[^>]+>", "", t).strip()
+            source = str(s or "")
+            plain: list[str] = []
+            index = 0
+            while index < len(source):
+                if source[index] == "<":
+                    tag_end = source.find(">", index + 1)
+                    if tag_end < 0:
+                        plain.append(source[index:])
+                        break
+                    tag_name = source[index + 1 : tag_end].strip().lower()
+                    if tag_name in {"br", "br/"} or tag_name.startswith("br "):
+                        plain.append("\n")
+                    index = tag_end + 1
+                    continue
+                plain.append(source[index])
+                index += 1
+            return "".join(plain).replace("&nbsp;", " ").replace("&amp;", "&").strip()
 
         if isinstance(request_context, dict):
             rm = request_context.get("recent_messages")
