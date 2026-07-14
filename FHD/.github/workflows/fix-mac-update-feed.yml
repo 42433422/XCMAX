@@ -13,7 +13,7 @@ on:
         required: true
         default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
       build_sha:
-        description: Optional buildSha override (40-char git sha)
+        description: Optional buildSha override (40-char git sha); empty = read from ZIP build-info.json
         required: false
         default: ""
 
@@ -41,9 +41,9 @@ jobs:
         env:
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-          ZIP_NAME: ${{ inputs.zip_name }}
-          PRODUCT_VERSION: ${{ inputs.version }}
-          BUILD_SHA: ${{ inputs.build_sha }}
+          ZIP_NAME: ${{ github.event.inputs.zip_name }}
+          PRODUCT_VERSION: ${{ github.event.inputs.version }}
+          BUILD_SHA: ${{ github.event.inputs.build_sha }}
         run: |
           set -euo pipefail
           if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
@@ -63,18 +63,28 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
 
           scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
+          scp "${SSH_OPTS[@]}" scripts/deploy/extract_zip_build_sha.py "root@${HOST}:/tmp/extract_zip_build_sha.py"
           META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${DEST}/${ZIP_NAME}'")"
           SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
           SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
           echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
 
+          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${DEST}/${ZIP_NAME}'")"
+          RESOLVED_SHA="${BUILD_SHA:-}"
+          if [ -z "${RESOLVED_SHA}" ]; then
+            RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
+          fi
+          if [ -z "${RESOLVED_SHA}" ]; then
+            echo "::error::buildSha unresolved (input empty and ZIP has no build-info.json)"
+            exit 1
+          fi
+          echo "Resolved buildSha=${RESOLVED_SHA} (input='${BUILD_SHA:-}' zip='${ZIP_BUILD_SHA:-}')"
+
           WORK="$(mktemp -d)"
           : > "${WORK}/${ZIP_NAME}"
           TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
           export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
-          if [ -n "${BUILD_SHA}" ]; then
-            export XCAGI_BUILD_SHA="${BUILD_SHA}"
-          fi
+          export XCAGI_BUILD_SHA="${RESOLVED_SHA}"
           node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
           python3 scripts/deploy/patch_latest_mac_yml_hashes.py "${WORK}/latest-mac.yml" "${SHA512}" "${SIZE}"
           python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
