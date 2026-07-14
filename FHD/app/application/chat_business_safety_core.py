@@ -103,8 +103,8 @@ _PERSONAL_OR_DATE_RE = re.compile(
 
 
 _EMPLOYEE_NUMBER_PATTERNS = (
-    re.compile(r"(?:工号|员工号)\s*[:：#-]?\s*([A-Za-z0-9_-]+)", re.IGNORECASE),
-    re.compile(r"\b([A-Za-z0-9_-]+)\s*号员工", re.IGNORECASE),
+    re.compile(r"(?:工号|员工号)[:：#-]?([A-Za-z0-9_-]{1,64})", re.IGNORECASE),
+    re.compile(r"\b([A-Za-z0-9_-]{1,64})号员工", re.IGNORECASE),
 )
 
 
@@ -149,18 +149,18 @@ def classify_business_chat_intent(message: str) -> BusinessChatIntent | None:
             or _LEAVE_CANCEL_RE.search(text)
             or (
                 _PERSONAL_OR_DATE_RE.search(text)
-                and re.search(r"半天|全天|一天|上午|下午|\d+(?:\.\d+)?小时", text)
+                and re.search(r"半天|全天|一天|上午|下午|\d{1,4}(?:\.\d{1,2})?小时", text)
             )
         )
         if concrete_leave and not is_explanation:
             return BusinessChatIntent("leave_write", "attendance")
 
-    strong_record_question = bool(
-        re.search(
-            r"有没有|是否|是不是|几点|谁(?:出勤|打卡)|多少次|几次|"
-            r"今天.*(?:迟到|出勤|打卡)|(?:迟到|出勤|打卡).*(?:了)?吗",
-            text,
-        )
+    record_terms = ("迟到", "出勤", "打卡")
+    strong_record_question = (
+        any(cue in text for cue in ("有没有", "是否", "是不是", "几点", "多少次", "几次"))
+        or any(f"谁{term}" in text for term in ("出勤", "打卡"))
+        or ("今天" in text and any(term in text for term in record_terms))
+        or (text.endswith("吗") and any(term in text for term in record_terms))
     )
     if has_attendance and has_record_cue and not (is_explanation and not strong_record_question):
         return BusinessChatIntent("attendance_read", "attendance")

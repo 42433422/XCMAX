@@ -309,13 +309,16 @@ class TestApiOrdersGet:
 
 
 class TestApiOrdersExport:
-    def test_export_xlsx(self, client: TestClient, _mock_svc: MagicMock, tmp_path):
-        export_file = tmp_path / "orders.xlsx"
+    def test_export_xlsx(self, client: TestClient, _mock_svc: MagicMock, tmp_path, monkeypatch):
+        export_dir = tmp_path / "exports"
+        export_dir.mkdir()
+        export_file = export_dir / "shipment_records_all_20260714_000000.xlsx"
         export_file.write_bytes(b"xlsx-test")
+        monkeypatch.setattr("app.utils.path_utils.get_data_dir", lambda: str(tmp_path))
         _mock_svc.export_shipment_records.return_value = {
             "success": True,
             "file_path": str(export_file),
-            "filename": "orders.xlsx",
+            "filename": export_file.name,
         }
         r = client.get("/api/orders/export")
         assert r.status_code == 200

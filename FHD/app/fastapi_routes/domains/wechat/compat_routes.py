@@ -296,9 +296,9 @@ def wechat_work_mode_feed(per_contact: int = Query(default=1, ge=1, le=100)) -> 
 
         return {"items": items[:per_contact], "per_contact": per_contact, "total": len(items)}
 
-    except RECOVERABLE_ERRORS as e:
+    except RECOVERABLE_ERRORS:
         logger.exception("wechat_work_mode_feed error")
-        return {"items": [], "per_contact": per_contact, "error": str(e)}
+        return {"items": [], "per_contact": per_contact, "error": "微信工作模式数据暂不可用"}
 
 
 def _assistant_work_mode_feed_payload(raw: dict, *, per_contact: int) -> dict:

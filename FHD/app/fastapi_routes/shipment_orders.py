@@ -37,6 +37,16 @@ def _svc():
     return get_shipment_application_service_core()
 
 
+def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
+    from app.utils.path_utils import get_data_dir
+
+    filename = os.path.basename(str(result.get("filename") or ""))
+    if not re.fullmatch(r"shipment_records_[^/\\]{1,160}_\d{8}_\d{6}\.xlsx", filename):
+        return None
+    candidate = os.path.join(get_data_dir(), "exports", filename)
+    return candidate if os.path.isfile(candidate) else None
+
+
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
     final_output = getattr(run, "final_output", None)
     node_outputs = dict((final_output or {}).get("node_outputs") or {})
@@ -48,8 +58,10 @@ def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:
                 break
     if not output:
         output = {"success": getattr(run, "status", "") == "completed"}
-    if not output.get("success") and getattr(run, "error", "") and not output.get("message"):
-        output["message"] = getattr(run, "error", "")
+    if not output.get("success"):
+        output["message"] = "出货单操作失败"
+        output.pop("error", None)
+        output.pop("traceback", None)
     run_id = str(getattr(run, "run_id", "") or "")
     if run_id:
         output["run_id"] = run_id
@@ -558,11 +570,11 @@ def api_orders_export(
         template_id=template_id,
         status_filter=status,
     )
-    file_path = result.get("file_path")
-    if result.get("success") and file_path and os.path.exists(str(file_path)):
+    file_path = _safe_shipment_export_path(result)
+    if result.get("success") and file_path:
         return FileResponse(
-            str(file_path),
-            filename=result.get("filename") or os.path.basename(str(file_path)),
+            file_path,
+            filename=os.path.basename(file_path),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     return JSONResponse(result, status_code=400 if not result.get("success") else 500)
@@ -766,12 +778,11 @@ def shipment_records_export(
         template_id=template_id,
         status_filter=status,
     )
-    fp = result.get("file_path")
-    if result.get("success") and fp and os.path.exists(str(fp)):
-        fn = result.get("filename") or os.path.basename(str(fp))
+    fp = _safe_shipment_export_path(result)
+    if result.get("success") and fp:
         return FileResponse(
-            str(fp),
-            filename=fn,
+            fp,
+            filename=os.path.basename(fp),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
     return JSONResponse(result, status_code=200 if result.get("success") else 500)

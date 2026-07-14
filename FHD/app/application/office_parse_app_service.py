@@ -105,21 +105,20 @@ def read_workspace_output_files(
         raw_path = str(raw or "").strip()
         if not raw_path:
             continue
-        candidate = Path(raw_path).expanduser()
-        if candidate.is_absolute():
-            path = candidate.resolve()
-            try:
-                rel = path.relative_to(base).as_posix()
-            except ValueError:
-                out.append({"path": raw_path, "kind": "text", "error": "invalid_path"})
-                continue
+        normalized = raw_path.replace("\\", "/")
+        base_text = base.as_posix().rstrip("/")
+        if normalized.startswith(f"{base_text}/"):
+            rel = normalized[len(base_text) + 1 :]
+        elif normalized.startswith("/") or (len(normalized) >= 3 and normalized[1:3] == ":/"):
+            out.append({"path": raw_path, "kind": "text", "error": "invalid_path"})
+            continue
         else:
-            rel = raw_path.replace("\\", "/").lstrip("/")
-            try:
-                path = resolve_safe_workspace_relpath(rel)
-            except (ValueError, HTTPException) as exc:
-                out.append({"path": rel, "kind": "text", "error": str(exc)})
-                continue
+            rel = normalized.lstrip("/")
+        try:
+            path = resolve_safe_workspace_relpath(rel)
+        except (ValueError, HTTPException):
+            out.append({"path": rel, "kind": "text", "error": "invalid_path"})
+            continue
         try:
             path.relative_to(base)
         except ValueError:
@@ -130,8 +129,8 @@ def read_workspace_output_files(
             continue
         try:
             blob = path.read_bytes()[:max_bytes]
-        except OSError as exc:
-            out.append({"path": rel, "kind": "text", "error": str(exc)})
+        except OSError:
+            out.append({"path": rel, "kind": "text", "error": "read_failed"})
             continue
         suffix = path.suffix.lower()
         if suffix == ".json":

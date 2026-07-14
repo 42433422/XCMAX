@@ -38,10 +38,10 @@ async def mobile_conversation_toggle_pin(conversation_id: str, user=Depends(get_
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_toggle_pin")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
 
 
@@ -60,10 +60,10 @@ async def mobile_conversation_mark_unread(conversation_id: str, user=Depends(get
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_mark_unread")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
 
 
@@ -80,10 +80,10 @@ async def mobile_conversation_mark_read(conversation_id: str, user=Depends(get_m
         return format_mobile_response(
             data=ConversationStateService().mark_read(user_id=uid, conversation_id=conversation_id)
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_mark_read")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
 
 
@@ -102,10 +102,10 @@ async def mobile_conversation_toggle_followed(conversation_id: str, user=Depends
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_toggle_followed")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
 
 
@@ -124,10 +124,10 @@ async def mobile_conversation_toggle_hidden(conversation_id: str, user=Depends(g
                 user_id=uid, conversation_id=conversation_id
             )
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_toggle_hidden")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
 
 
@@ -144,8 +144,8 @@ async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobi
         return format_mobile_response(
             data=ConversationStateService().delete(user_id=uid, conversation_id=conversation_id)
         )
-    except RECOVERABLE_ERRORS as exc:
+    except RECOVERABLE_ERRORS:
         logger.exception("mobile_conversation_delete")
         return JSONResponse(
-            format_mobile_response(None, str(exc), success=False, code=500), status_code=500
+            format_mobile_response(None, "会话操作失败", success=False, code=500), status_code=500
         )
