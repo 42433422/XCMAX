@@ -1,4 +1,4 @@
-# 紧急修复：用本机/公网已有 ZIP 重签 latest-mac.yml 并上架到 stable/enterprise。
+# 紧急修复：基于 CDN 上已有 ZIP 重签 latest-mac.yml（不重复上传大包）。
 name: Fix macOS update feed
 
 on:
@@ -8,10 +8,10 @@ on:
         description: Product version (four-part)
         required: true
         default: "1.0.0.0"
-      zip_url:
-        description: Source ZIP URL (default = CDN enterprise zip)
-        required: false
-        default: "https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+      zip_name:
+        description: ZIP filename on CDN enterprise dir
+        required: true
+        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
       build_sha:
         description: Optional buildSha override (40-char git sha)
         required: false
@@ -37,11 +37,11 @@ jobs:
           python-version: "3.11"
       - name: Install cryptography
         run: pip install --quiet cryptography
-      - name: Download ZIP, generate + sign latest-mac.yml, upload
+      - name: Hash remote ZIP, sign latest-mac.yml, upload yml only
         env:
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
-          ZIP_URL: ${{ inputs.zip_url }}
+          ZIP_NAME: ${{ inputs.zip_name }}
           PRODUCT_VERSION: ${{ inputs.version }}
           BUILD_SHA: ${{ inputs.build_sha }}
         run: |
@@ -56,26 +56,64 @@ jobs:
           fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           DEST="/var/www/update/releases/stable/enterprise"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
+
+          # Hash the ZIP already on the update server (avoid multi-hundred-MB download).
+          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 - <<'PY'
+import base64, hashlib, pathlib
+p = pathlib.Path('${DEST}/${ZIP_NAME}')
+if not p.is_file():
+    raise SystemExit(f'missing {p}')
+h = hashlib.sha512()
+with p.open('rb') as f:
+    for chunk in iter(lambda: f.read(1024 * 1024), b''):
+        h.update(chunk)
+print(p.stat().st_size)
+print(base64.b64encode(h.digest()).decode())
+PY")"
+          SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
+          SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
+          echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
+
           WORK="$(mktemp -d)"
-          ZIP_NAME="$(basename "${ZIP_URL}")"
-          curl -fsSL "${ZIP_URL}" -o "${WORK}/${ZIP_NAME}"
+          # Create a stub file of the same name so generate-update-metadata accepts it,
+          # then overwrite the computed sha/size with remote values.
+          : > "${WORK}/${ZIP_NAME}"
           TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
           export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
           if [ -n "${BUILD_SHA}" ]; then
             export XCAGI_BUILD_SHA="${BUILD_SHA}"
           fi
           node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
+          python3 - <<PY
+from pathlib import Path
+p = Path("${WORK}/latest-mac.yml")
+text = p.read_text(encoding="utf-8")
+lines = []
+for line in text.splitlines():
+    if line.startswith("  - url:"):
+        lines.append(line)
+    elif line.strip().startswith("sha512:"):
+        indent = line.split("sha512:")[0]
+        lines.append(f"{indent}sha512: ${SHA512}")
+    elif line.strip().startswith("size:"):
+        indent = line.split("size:")[0]
+        lines.append(f"{indent}size: ${SIZE}")
+    elif line.startswith("sha512:"):
+        lines.append(f"sha512: ${SHA512}")
+    else:
+        lines.append(line)
+p.write_text("\n".join(lines) + "\n", encoding="utf-8")
+print(p.read_text(encoding="utf-8"))
+PY
           python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
           echo "---- signed feed ----"
           cat "${WORK}/latest-mac.yml"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes)
-          # 原子替换 yml；ZIP 若与远端同名则一并覆盖（保证 hash 一致）
-          scp "${SSH_OPTS[@]}" "${WORK}/${ZIP_NAME}" "root@${HOST}:${DEST}/${ZIP_NAME}.part"
           scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${DEST}/latest-mac.yml.part"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "mv -f '${DEST}/${ZIP_NAME}.part' '${DEST}/${ZIP_NAME}' && mv -f '${DEST}/latest-mac.yml.part' '${DEST}/latest-mac.yml' && ls -la '${DEST}/latest-mac.yml' '${DEST}/${ZIP_NAME}'"
-          echo "Uploaded ZIP + latest-mac.yml to ${DEST}"
+            "mv -f '${DEST}/latest-mac.yml.part' '${DEST}/latest-mac.yml' && head -20 '${DEST}/latest-mac.yml'"
+          echo "Uploaded latest-mac.yml to ${DEST}"
