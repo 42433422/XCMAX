@@ -107,6 +107,8 @@ describe('updater — downloadUpdate is explicit', () => {
     const mod = await import('./updater.js')
     expect(typeof mod.downloadUpdate).toBe('function')
     expect(typeof mod.configureUpdater).toBe('function')
+    expect(typeof mod.getUpdateStatus).toBe('function')
+    expect(mod.getUpdateStatus()).toBeNull()
   })
 })
 

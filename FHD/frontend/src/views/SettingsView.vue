@@ -2280,6 +2280,12 @@ async function onCheckForUpdates() {
   aboutUpdateMessage.value = '';
   aboutUpdateError.value = false;
   try {
+    // 手动检查时清掉「稍后提醒」，否则同版本角标会一直被 sessionStorage 压住
+    try {
+      sessionStorage.removeItem('xcagi_desktop_update_dismiss_version');
+    } catch {
+      /* ignore */
+    }
     await window.xcagiDesktop.checkForUpdates();
     aboutUpdateMessage.value = t('settings.updateCheckStarted');
   } catch (e: unknown) {

@@ -129,9 +129,28 @@ function releaseSubscribe() {
   }
 }
 
+async function syncUpdateStatusFromHost() {
+  if (!isDesktopShell()) return
+  try {
+    const status = await window.xcagiDesktop?.getUpdateStatus?.()
+    if (status?.type) {
+      onUpdateEvent(status)
+    }
+  } catch {
+    /* ignore */
+  }
+  // 刷新页面后主进程可能已检过更新但事件丢失；主动再查一次（有则发 update-available）
+  try {
+    await window.xcagiDesktop?.checkForUpdates?.()
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useDesktopAppUpdater() {
   onMounted(() => {
     ensureSubscribed()
+    void syncUpdateStatusFromHost()
   })
 
   onUnmounted(() => {

@@ -21,6 +21,7 @@ import path from 'node:path'
 import {
   configureUpdater,
   downloadUpdate,
+  getUpdateStatus,
   installUpdate,
   runUpdateCheckWithDirectNet,
 } from './updater'
@@ -1387,6 +1388,7 @@ function bootstrap(): void {
       ipcMain.handle('xcagi:get-data-dir', () => app.getPath('userData'))
       ipcMain.handle('xcagi:export-support-bundle', () => exportSupportBundleInteractive())
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
+      ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
       ipcMain.handle('xcagi:download-update', () => downloadUpdate())
       ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
