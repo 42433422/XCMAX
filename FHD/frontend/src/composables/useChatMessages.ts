@@ -150,11 +150,51 @@ export function useChatMessages(sessionId: Ref<string>) {
   }
 
   function extractPlainText(raw: unknown): string {
-    const doc = new DOMParser().parseFromString(String(raw || ''), 'text/html')
-    doc.body.querySelectorAll('br').forEach((node) => {
-      node.replaceWith(doc.createTextNode('\n'))
-    })
-    return (doc.body.textContent || '').replace(/\u00a0/g, ' ').trim()
+    const source = String(raw || '')
+    const entities: Record<string, string> = {
+      amp: '&',
+      apos: "'",
+      gt: '>',
+      lt: '<',
+      nbsp: ' ',
+      quot: '"',
+    }
+    let plain = ''
+    let index = 0
+
+    while (index < source.length) {
+      if (source[index] === '<') {
+        const tagEnd = source.indexOf('>', index + 1)
+        if (tagEnd < 0) {
+          plain += source.slice(index)
+          break
+        }
+        const tagName = source.slice(index + 1, tagEnd).trim().toLowerCase()
+        if (tagName === 'br' || tagName === 'br/' || tagName.startsWith('br ')) {
+          plain += '\n'
+        }
+        index = tagEnd + 1
+        continue
+      }
+
+      if (source[index] === '&') {
+        const entityEnd = source.indexOf(';', index + 1)
+        if (entityEnd > index && entityEnd - index <= 10) {
+          const entityName = source.slice(index + 1, entityEnd).toLowerCase()
+          const decoded = entities[entityName]
+          if (decoded !== undefined) {
+            plain += decoded
+            index = entityEnd + 1
+            continue
+          }
+        }
+      }
+
+      plain += source[index]
+      index += 1
+    }
+
+    return plain.replace(/\u00a0/g, ' ').trim()
   }
 
   function hasMeaningfulContent(raw: unknown): boolean {
