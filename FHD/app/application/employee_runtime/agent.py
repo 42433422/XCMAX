@@ -426,7 +426,7 @@ class EmployeeAgent:
                 if upstream and not upstream.get("skipped")
                 else None,
             }
-        except RECOVERABLE_ERRORS as exc:
+        except RECOVERABLE_ERRORS:
             duration_ms = round((time.perf_counter() - t0) * 1000, 3)
             logger.exception("employee_agent_run failed")
             return {

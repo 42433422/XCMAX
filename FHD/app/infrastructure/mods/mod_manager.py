@@ -155,7 +155,9 @@ def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
     """
     backend_path = _backend_path_for_mod(mod_path)
-    path = _trusted_child_path(backend_path, f"{stem}.py", directory=False) if backend_path else None
+    path = (
+        _trusted_child_path(backend_path, f"{stem}.py", directory=False) if backend_path else None
+    )
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)

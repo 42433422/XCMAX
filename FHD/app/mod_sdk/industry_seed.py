@@ -135,7 +135,11 @@ def _resolve_seed_source(mod_id: str, pool: Path) -> Path | None:
     try:
         with os.scandir(pool) as entries:
             for entry in entries:
-                if entry.name == mod_id and not entry.is_symlink() and entry.is_dir(follow_symlinks=False):
+                if (
+                    entry.name == mod_id
+                    and not entry.is_symlink()
+                    and entry.is_dir(follow_symlinks=False)
+                ):
                     return Path(entry.path)
     except OSError:
         return None
@@ -146,7 +150,11 @@ def _existing_mod_directory(root: str, mod_id: str) -> Path | None:
     try:
         with os.scandir(root) as entries:
             for entry in entries:
-                if entry.name == mod_id and not entry.is_symlink() and entry.is_dir(follow_symlinks=False):
+                if (
+                    entry.name == mod_id
+                    and not entry.is_symlink()
+                    and entry.is_dir(follow_symlinks=False)
+                ):
                     return Path(entry.path)
     except OSError:
         return None

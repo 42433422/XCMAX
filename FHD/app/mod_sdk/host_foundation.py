@@ -164,7 +164,9 @@ def install_aux_employee_pack_from_repo_seed(
 ) -> tuple[bool, str]:
     """无远端 zip 时，从仓库内置 mods/<pack_id> 复制到用户 mods 根。"""
     requested = str(pack_id or "").strip()
-    pid = next((candidate for candidate in AUX_EMPLOYEE_PACK_MOD_IDS if candidate == requested), None)
+    pid = next(
+        (candidate for candidate in AUX_EMPLOYEE_PACK_MOD_IDS if candidate == requested), None
+    )
     if pid is None:
         return False, "非触点员工包"
     src: Path | None = None

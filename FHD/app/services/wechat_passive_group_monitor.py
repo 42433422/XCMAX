@@ -85,10 +85,7 @@ def assert_safe_outbound_group_reply(message: str) -> str | None:
     text = str(message or "").strip()
     if not text:
         return None
-    if any(
-        line.lstrip().lower().startswith(_THINKING_PREFIXES)
-        for line in text.splitlines()
-    ):
+    if any(line.lstrip().lower().startswith(_THINKING_PREFIXES) for line in text.splitlines()):
         return None
     if len(text) > 4000:
         return text[:4000]
