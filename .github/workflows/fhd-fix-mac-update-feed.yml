@@ -1,0 +1,83 @@
+# CI SSOT: generated from FHD/.github/workflows/fix-mac-update-feed.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# 紧急修复：用本机/公网已有 ZIP 重签 latest-mac.yml 并上架到 stable/enterprise。
+name: Fix macOS update feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version (four-part)
+        required: true
+        default: "1.0.0.0"
+      zip_url:
+        description: Source ZIP URL (default = CDN enterprise zip)
+        required: false
+        default: "https://xiu-ci.com/releases/stable/enterprise/XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+      build_sha:
+        description: Optional buildSha override (40-char git sha)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  republish-mac-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Download ZIP, generate + sign latest-mac.yml, upload
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          ZIP_URL: ${{ inputs.zip_url }}
+          PRODUCT_VERSION: ${{ inputs.version }}
+          BUILD_SHA: ${{ inputs.build_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing"
+            exit 1
+          fi
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
+            exit 1
+          fi
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          DEST="/var/www/update/releases/stable/enterprise"
+          WORK="$(mktemp -d)"
+          ZIP_NAME="$(basename "${ZIP_URL}")"
+          curl -fsSL "${ZIP_URL}" -o "${WORK}/${ZIP_NAME}"
+          TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
+          export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
+          if [ -n "${BUILD_SHA}" ]; then
+            export XCAGI_BUILD_SHA="${BUILD_SHA}"
+          fi
+          node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
+          python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
+          echo "---- signed feed ----"
+          cat "${WORK}/latest-mac.yml"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes)
+          # 原子替换 yml；ZIP 若与远端同名则一并覆盖（保证 hash 一致）
+          scp "${SSH_OPTS[@]}" "${WORK}/${ZIP_NAME}" "root@${HOST}:${DEST}/${ZIP_NAME}.part"
+          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${DEST}/latest-mac.yml.part"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "mv -f '${DEST}/${ZIP_NAME}.part' '${DEST}/${ZIP_NAME}' && mv -f '${DEST}/latest-mac.yml.part' '${DEST}/latest-mac.yml' && ls -la '${DEST}/latest-mac.yml' '${DEST}/${ZIP_NAME}'"
+          echo "Uploaded ZIP + latest-mac.yml to ${DEST}"
