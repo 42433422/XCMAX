@@ -403,6 +403,8 @@ async def attendance_convert_upload(
 async def attendance_download(relpath: str):
     try:
         p = _safe_workspace_file(relpath, field_name="relpath")
+    except FileNotFoundError:
+        return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
     except ValueError as exc:
         return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
     except RECOVERABLE_ERRORS:
