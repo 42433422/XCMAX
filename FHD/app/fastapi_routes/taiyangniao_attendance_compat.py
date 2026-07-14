@@ -16,7 +16,11 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
 from app.mod_sdk.private_sqlite import resolve_mod_private_sqlite_path
-from app.mod_sdk.workspace import resolve_safe_workspace_relpath
+from app.infrastructure.workspace import workspace_root
+from app.mod_sdk.workspace import (
+    allocate_generated_workspace_file,
+    resolve_existing_workspace_file,
+)
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -169,7 +173,7 @@ def _resolve_personnel_roster() -> list[tuple[str, str, str]]:
 def _safe_workspace_file(relpath: str, *, field_name: str) -> Path:
     """Resolve user-supplied relative path inside workspace sandbox."""
     rel = _normalize_relpath(relpath, field_name=field_name)
-    return resolve_safe_workspace_relpath(rel)
+    return resolve_existing_workspace_file(rel)
 
 
 def _normalize_relpath(raw: str, *, field_name: str) -> str:
@@ -250,16 +254,15 @@ async def attendance_convert_upload(
             status_code=400,
         )
 
-    try:
-        out_rel = _normalize_relpath(output_relpath, field_name="output_relpath")
-    except ValueError as exc:
-        return JSONResponse({"success": False, "error": str(exc)}, status_code=400)
+    _ = output_relpath
 
     try:
-        upload_dir = resolve_safe_workspace_relpath("uploads")
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        src_name = Path(file.filename).name or "attendance-upload.xlsx"
-        src_path = upload_dir / src_name
+        upload_kind = {
+            ".xlsx": "attendance-upload-xlsx",
+            ".xlsm": "attendance-upload-xlsm",
+            ".xls": "attendance-upload-xls",
+        }[suffix]
+        src_path = allocate_generated_workspace_file(upload_kind)
         content = await file.read()
         src_path.write_bytes(content)
     except RECOVERABLE_ERRORS:
@@ -270,7 +273,8 @@ async def attendance_convert_upload(
         )
 
     try:
-        out_path = resolve_safe_workspace_relpath(out_rel)
+        out_path = allocate_generated_workspace_file("attendance-output")
+        out_rel = out_path.relative_to(workspace_root()).as_posix()
     except RECOVERABLE_ERRORS:
         return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
@@ -288,7 +292,7 @@ async def attendance_convert_upload(
 
     tpl_rel = DEFAULT_TEMPLATE_RELPATH
     try:
-        template_path = resolve_safe_workspace_relpath(tpl_rel)
+        template_path = resolve_existing_workspace_file(tpl_rel)
         if not template_path.exists():
             return JSONResponse(
                 {"success": False, "error": f"模板文件不存在: {tpl_rel}"},

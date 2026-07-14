@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -40,16 +39,14 @@ _EXPORT_COLUMNS = (
 def _create_attendance_export(rows: list[dict[str, Any]], meta: dict[str, Any]) -> tuple[Path, str]:
     import openpyxl
 
-    token = uuid.uuid4().hex[:12]
-    label = str(meta.get("date_start") or "records")
-    if meta.get("scope") == "month":
-        label = label[:7]
-    filename = f"attendance-{label}-{token}.xlsx"
-    relpath = f"attendance_exports/{filename}"
-    from app.application import chat_business_safety as facade
+    _ = meta
+    from app.infrastructure.workspace import (
+        allocate_generated_workspace_file,
+        workspace_root,
+    )
 
-    output = facade.resolve_safe_workspace_relpath(relpath)
-    output.parent.mkdir(parents=True, exist_ok=True)
+    output = allocate_generated_workspace_file("attendance-export")
+    relpath = output.relative_to(workspace_root()).as_posix()
 
     wb = openpyxl.Workbook()
     ws = wb.active

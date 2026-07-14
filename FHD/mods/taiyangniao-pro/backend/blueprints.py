@@ -9,6 +9,8 @@ from urllib.parse import unquote
 from fastapi import APIRouter, Body, File, Form, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 
+from app.infrastructure.workspace import workspace_root
+
 logger = logging.getLogger(__name__)
 DEFAULT_TEMPLATE_RELPATH = "424/考勤-2026-3月份考勤统计表.xlsx"
 
@@ -89,7 +91,6 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     # 考勤转换的实现放在 mod 私有包 ``taiyangniao_attendance/``
     # （被 mod_manager 加到 sys.path 的 ``backend/`` 可直接绝对 import）。
     from taiyangniao_attendance.convert import convert_attendance_file
-    from app.mod_sdk.workspace import resolve_safe_workspace_relpath
 
     # import_mod_backend_py 以独立模块名加载本文件时无包上下文，相对导入会失败。
     try:
@@ -229,16 +230,17 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                 status_code=400,
             )
 
-        try:
-            out_rel = _normalize_relpath(output_relpath, field_name="output_relpath")
-        except ValueError as e:
-            return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
+        _ = output_relpath
 
         try:
-            upload_dir = resolve_safe_workspace_relpath("uploads")
-            upload_dir.mkdir(parents=True, exist_ok=True)
-            src_name = Path(file.filename).name or "attendance-upload.xlsx"
-            src_path = upload_dir / src_name
+            from app.mod_sdk.workspace import allocate_generated_workspace_file
+
+            upload_kind = {
+                ".xlsx": "attendance-upload-xlsx",
+                ".xlsm": "attendance-upload-xlsm",
+                ".xls": "attendance-upload-xls",
+            }[suffix]
+            src_path = allocate_generated_workspace_file(upload_kind)
             content = await file.read()
             with src_path.open("wb") as f:
                 f.write(content)
@@ -250,7 +252,10 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             )
 
         try:
-            out_path = resolve_safe_workspace_relpath(out_rel)
+            from app.mod_sdk.workspace import allocate_generated_workspace_file
+
+            out_path = allocate_generated_workspace_file("attendance-output")
+            out_rel = out_path.relative_to(workspace_root()).as_posix()
         except Exception as e:
             return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
@@ -268,7 +273,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
 
         tpl_rel = DEFAULT_TEMPLATE_RELPATH
         try:
-            template_path = resolve_safe_workspace_relpath(tpl_rel)
+            from app.mod_sdk.workspace import resolve_existing_workspace_file
+
+            template_path = resolve_existing_workspace_file(tpl_rel)
             if not template_path.exists():
                 return JSONResponse(
                     {"success": False, "error": f"模板文件不存在: {tpl_rel}"},
@@ -379,7 +386,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
     async def attendance_download(relpath: str):
         try:
             rel = _normalize_relpath(relpath, field_name="relpath")
-            p = resolve_safe_workspace_relpath(rel)
+            from app.mod_sdk.workspace import resolve_existing_workspace_file
+
+            p = resolve_existing_workspace_file(rel)
         except ValueError as e:
             return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
         except Exception as e:
