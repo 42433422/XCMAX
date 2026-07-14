@@ -65,21 +65,13 @@ jobs:
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
 
           scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
+          scp "${SSH_OPTS[@]}" scripts/deploy/extract_zip_build_sha.py "root@${HOST}:/tmp/extract_zip_build_sha.py"
           META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${DEST}/${ZIP_NAME}'")"
           SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
           SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
           echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
 
-          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 - <<'PY'
-import json, zipfile
-path = '${DEST}/${ZIP_NAME}'
-with zipfile.ZipFile(path) as zf:
-    for name in zf.namelist():
-        if name.endswith('build-info.json'):
-            data = json.loads(zf.read(name).decode('utf-8'))
-            print((data.get('gitSha') or data.get('buildSha') or '').strip())
-            break
-PY")"
+          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${DEST}/${ZIP_NAME}'")"
           RESOLVED_SHA="${BUILD_SHA:-}"
           if [ -z "${RESOLVED_SHA}" ]; then
             RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
