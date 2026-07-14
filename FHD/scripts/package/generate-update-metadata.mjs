@@ -17,7 +17,7 @@ const isMac = platform === 'mac' || name.endsWith('.dmg')
 const output = isMac ? 'latest-mac.yml' : 'latest.yml'
 
 function resolveBuildSha() {
-  const fromEnv = String(process.env.GITHUB_SHA || process.env.XCAGI_BUILD_SHA || '').trim()
+  const fromEnv = String(process.env.XCAGI_BUILD_SHA || process.env.GITHUB_SHA || '').trim()
   if (fromEnv) return fromEnv
   try {
     const { execSync } = require('node:child_process')
