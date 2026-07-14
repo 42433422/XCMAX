@@ -512,9 +512,8 @@ def _run_tools_execute_agent(
     route_path: str,
 ) -> tuple[dict[str, Any], int] | None:
     from app.application.agent_orchestrator import AgentOrchestrator
-    from app.application.tools import _normalize_action
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import _normalize_action, get_workflow_tool_registry
 
     raw_tool_id = body.get("tool_id") or body.get("skill_id")
     tool_id = str(raw_tool_id or "").strip()
@@ -647,7 +646,7 @@ def _run_system_maintenance_agent(
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     data = dict(params or {})
     registry = get_workflow_tool_registry()
@@ -718,7 +717,7 @@ def _run_document_template_agent(
 ) -> tuple[dict[str, Any], int]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     data = dict(body or {})
     registry = get_workflow_tool_registry()

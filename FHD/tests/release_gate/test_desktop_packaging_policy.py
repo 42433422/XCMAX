@@ -35,10 +35,11 @@ def test_desktop_enterprise_installer_builds_full_frontend() -> None:
         assert "(cd admin-console && npm run build)" not in script
 
     assert "admin-console" not in ps_backend or "不构建 admin-console" in ps_backend
-    assert "Push-Location (Join-Path $Root \"admin-console\")" not in ps_backend
+    assert 'Push-Location (Join-Path $Root "admin-console")' not in ps_backend
     assert "templates/admin-vue-dist" not in spec
     assert "admin-console" not in ps_sync
     assert "does not include admin-vue-dist" in ps_sync
+
 
 def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     desktop_main = (REPO_ROOT / "desktop" / "main.ts").read_text(encoding="utf-8")
@@ -78,15 +79,13 @@ def test_windows_release_requires_azure_signing_and_system_authenticode() -> Non
     workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
         encoding="utf-8"
     )
-    build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
+    build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
     )
-    post_gate = (
-        REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1"
-    ).read_text(encoding="utf-8")
-    verifier = (
-        REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1"
-    ).read_text(encoding="utf-8")
+    verifier = (REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1").read_text(
+        encoding="utf-8"
+    )
 
     for name in (
         "AZURE_TENANT_ID",
@@ -110,16 +109,14 @@ def test_windows_release_requires_azure_signing_and_system_authenticode() -> Non
 
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
-    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
-        encoding="utf-8"
-    )
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
 
     excludes = spec.split("desktop_excludes = [", 1)[1].split("]", 1)[0]
     assert '"faster_whisper"' not in excludes
     assert '"av"' not in excludes
-    assert 'collect_submodules(module)' in spec
-    assert 'collect_dynamic_libs(module)' in spec
-    assert 'binaries=binaries' in spec
+    assert "collect_submodules(module)" in spec
+    assert "collect_dynamic_libs(module)" in spec
+    assert "binaries=binaries" in spec
 
 
 def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
@@ -130,7 +127,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
         encoding="utf-8"
     )
 
-    assert 'xattr -cr desktop/node_modules/electron/dist' in installer
+    assert "xattr -cr desktop/node_modules/electron/dist" in installer
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
     assert 'for staged_file in "${package_stage}"/*' in installer

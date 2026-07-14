@@ -149,4 +149,3 @@ async def mobile_conversation_delete(conversation_id: str, user=Depends(get_mobi
         return JSONResponse(
             format_mobile_response(None, str(exc), success=False, code=500), status_code=500
         )
-

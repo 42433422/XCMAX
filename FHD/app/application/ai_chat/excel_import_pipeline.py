@@ -113,9 +113,7 @@ class AIChatExcelImportMixin:
         if grid_hint:
             return grid_hint
         fp = cls._resolve_excel_path_for_import(excel_analysis, preview_data)
-        sheet = cls._resolve_sheet_name_for_reimport(
-            excel_analysis, preview_data, request_context
-        )
+        sheet = cls._resolve_sheet_name_for_reimport(excel_analysis, preview_data, request_context)
         if fp:
             path = Path(fp)
             if path.is_file():
@@ -927,9 +925,7 @@ class AIChatExcelImportMixin:
                 inferred_roles[role] = hk
 
         keys = [str(k).strip() for k in records[0].keys() if str(k).strip()]
-        merged_intent = self._merge_user_intent_for_price_resolution(
-            user_message, request_context
-        )
+        merged_intent = self._merge_user_intent_for_price_resolution(user_message, request_context)
         overrides = (
             request_context.get("excel_import_column_overrides")
             if isinstance(request_context, dict)

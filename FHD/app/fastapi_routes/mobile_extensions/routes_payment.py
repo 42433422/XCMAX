@@ -28,6 +28,7 @@ def _mobile_market_authorization(request: Request, user) -> str:
 def _mobile_unauthorized_response():
     return _parent()._mobile_unauthorized_response()
 
+
 # ── 钱包 / 余额 ──
 
 _MOBILE_PAYMENT_CHANNELS: tuple[dict[str, str], ...] = (

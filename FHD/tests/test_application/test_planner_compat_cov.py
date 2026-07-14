@@ -313,9 +313,7 @@ def test_derive_industry_uses_workspace_preference_before_user_row():
         return_value={"account_kind": "enterprise", "tenant_id": 8, "local_user_id": 42}
     )
     prefs_mod = MagicMock()
-    prefs_mod.get_workspace_prefs = MagicMock(
-        return_value={"selected_industry_id": "考勤"}
-    )
+    prefs_mod.get_workspace_prefs = MagicMock(return_value={"selected_industry_id": "考勤"})
 
     with patch.dict(
         sys.modules,

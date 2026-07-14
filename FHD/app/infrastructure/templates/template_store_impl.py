@@ -240,9 +240,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     "path": path,
                     "file_path": path,
                     "category": category,
-                    "business_scope": self._business_scope(
-                        getattr(r, "template_type", "")
-                    ),
+                    "business_scope": self._business_scope(getattr(r, "template_type", "")),
                     "preview_capable": exists,
                     "is_active": getattr(r, "is_active", 1),
                     "source": "db",

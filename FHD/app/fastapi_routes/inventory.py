@@ -60,7 +60,7 @@ def _run_inventory_agent(
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
+    from app.application.workflow_registry_app import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("inventory") or {}).get("actions") or {}).get(action)

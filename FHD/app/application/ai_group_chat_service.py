@@ -1952,6 +1952,7 @@ class AiGroupChatService(
             self._append_group(g)
         return seeded
 
+
 __all__ = [
     "AiGroupChatService",
     "CHAT_ACCEPTANCE_SUMMARY_CHARS",

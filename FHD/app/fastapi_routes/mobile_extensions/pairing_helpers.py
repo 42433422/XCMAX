@@ -34,9 +34,7 @@ def _read_runtime_api_port(default: int = 0) -> int:
     """读取 run_fastapi 写入的 .runtime/api.port（与 frontend Vite 联动）。"""
     try:
         data_root = (
-            os.environ.get("XCAGI_DATA_DIR")
-            or os.environ.get("XCAGI_DESKTOP_DATA_DIR")
-            or ""
+            os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
         ).strip()
         port_file = (
             Path(data_root).expanduser().resolve() / ".runtime" / "api.port"

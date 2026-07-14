@@ -21,6 +21,7 @@ router = APIRouter()
 def _parent():
     return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
 
+
 from app.fastapi_routes.mobile_extensions.admin_helpers import (
     _mobile_request_user_id,
 )
@@ -160,4 +161,3 @@ async def get_cs_messages(
     if since:
         messages = [m for m in messages if str(m.get("timestamp") or "") > since]
     return format_mobile_response(data={"messages": messages, "persist_error": error})
-

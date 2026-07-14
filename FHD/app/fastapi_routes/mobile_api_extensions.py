@@ -2436,6 +2436,7 @@ async def mobile_employee_chat_stream(
         },
     )
 
+
 # ── Strangler: domain sub-routers (helpers above must be defined first) ──
 from app.fastapi_routes.mobile_extensions.routes_ai_groups import router as _ai_groups_router
 from app.fastapi_routes.mobile_extensions.routes_auth import router as _auth_router

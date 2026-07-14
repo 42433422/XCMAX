@@ -72,5 +72,3 @@ def _enrich_confirmation_inner(inner: dict[str, Any], *, action: str) -> dict[st
     enriched = dict(inner)
     enriched["approval_card"] = build_approval_card_payload(action=action, inner=inner)
     return enriched
-
-

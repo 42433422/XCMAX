@@ -11,9 +11,7 @@ def test_reads_relative_and_absolute_outputs_inside_workspace(tmp_path, monkeypa
     output.parent.mkdir()
     output.write_text(json.dumps({"row_count": 3}), encoding="utf-8")
 
-    files = read_workspace_output_files(
-        str(tmp_path), ["outputs/data.json", str(output)]
-    )
+    files = read_workspace_output_files(str(tmp_path), ["outputs/data.json", str(output)])
 
     assert [item["path"] for item in files] == ["outputs/data.json", "outputs/data.json"]
     assert [item["json"] for item in files] == [{"row_count": 3}, {"row_count": 3}]

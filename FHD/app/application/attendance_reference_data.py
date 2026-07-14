@@ -56,7 +56,9 @@ def attendance_unit_names(host_units: dict[str, Any] | None = None) -> list[str]
                     continue
                 query = "SELECT " + ", ".join(selected) + f" FROM {table}"
                 for row in conn.execute(query).fetchall():
-                    names.update(str(value or "").strip() for value in row if str(value or "").strip())
+                    names.update(
+                        str(value or "").strip() for value in row if str(value or "").strip()
+                    )
     except sqlite3.Error:
         # The compatibility endpoint remains useful with host units even when a
         # customer-owned side database is temporarily unavailable.

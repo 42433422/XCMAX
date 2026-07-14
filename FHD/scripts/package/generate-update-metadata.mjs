@@ -23,7 +23,7 @@ if (isMac && path.extname(name).toLowerCase() !== '.zip') {
 }
 
 function resolveBuildSha() {
-  const fromEnv = String(process.env.GITHUB_SHA || process.env.XCAGI_BUILD_SHA || '').trim()
+  const fromEnv = String(process.env.XCAGI_BUILD_SHA || process.env.GITHUB_SHA || '').trim()
   if (fromEnv) return fromEnv
   try {
     return execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()

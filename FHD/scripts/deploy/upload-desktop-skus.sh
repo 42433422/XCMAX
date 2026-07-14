@@ -12,7 +12,8 @@ RELEASE_ROOT="${ROOT}/release/xcagi-v${VERSION}"
 
 HOST="${XCAGI_UPDATE_SSH_HOST:-119.27.178.147}"
 USER="${XCAGI_UPDATE_SSH_USER:-root}"
-REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update}"
+# 公网 OTA / 下载路径：https://xiu-ci.com/releases/stable/{sku}/
+REMOTE_BASE="${XCAGI_UPDATE_SSH_PATH:-/var/www/update/releases/stable}"
 SSH_KEY="${XCAGI_UPDATE_SSH_KEY:-}"
 
 SSH_OPTS=(-o StrictHostKeyChecking=no -o ServerAliveInterval=30)

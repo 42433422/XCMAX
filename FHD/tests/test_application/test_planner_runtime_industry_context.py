@@ -17,7 +17,9 @@ def _request(*, cookie: str = "", authorization: str = "") -> Request:
         headers.append((b"cookie", cookie.encode()))
     if authorization:
         headers.append((b"authorization", authorization.encode()))
-    request = Request({"type": "http", "method": "POST", "path": "/api/ai/chat/stream", "headers": headers})
+    request = Request(
+        {"type": "http", "method": "POST", "path": "/api/ai/chat/stream", "headers": headers}
+    )
     request.state.industry_id = "通用"
     request.state.tenant_id = None
     return request

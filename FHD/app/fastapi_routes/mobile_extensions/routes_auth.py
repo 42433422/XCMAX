@@ -188,4 +188,3 @@ async def mobile_auth_oidc_exchange(body: OidcExchangeBody):
         if key in payload and payload[key] is not None:
             data[key] = payload[key]
     return format_mobile_response(data=data)
-
