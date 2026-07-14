@@ -82,6 +82,7 @@ class TestValidateAccountKind:
 class TestSessionRowToMeta:
     def test_defaults(self):
         row = SimpleNamespace(
+            user_id=7,
             account_kind=None,
             company_brand="",
             market_user_id=9,
@@ -95,3 +96,4 @@ class TestSessionRowToMeta:
         assert meta["account_kind"] == "enterprise"
         assert meta["market_user_id"] == 9
         assert meta["tenant_id"] == 3
+        assert meta["local_user_id"] == 7

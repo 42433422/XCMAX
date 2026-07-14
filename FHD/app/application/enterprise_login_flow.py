@@ -8,6 +8,16 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from app.application.desktop_admin_gate import (
+    DESKTOP_ADMIN_FORBIDDEN_CODE,
+    DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+    delete_session_quiet,
+    forbidden_payload,
+    is_admin_account_kind,
+)
+from app.application.desktop_admin_gate import (
+    is_desktop_runtime as _gate_is_desktop_runtime,
+)
 from app.application.session_account_meta import (
     AccountKind,
     company_brand_from_user_blob,
@@ -18,6 +28,24 @@ from app.application.session_account_meta import (
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+
+def _is_desktop_runtime() -> bool:
+    return _gate_is_desktop_runtime()
+
+
+def _reject_admin_on_desktop(
+    *,
+    session_id: str | None,
+    account_kind: str | None,
+) -> dict[str, Any] | None:
+    """桌面嵌入式后端禁止管理员会话（管理端仅网页 SSOT）。"""
+    if not is_admin_account_kind(account_kind):
+        return None
+    if not _is_desktop_runtime():
+        return None
+    delete_session_quiet(session_id)
+    return forbidden_payload()
 
 
 def _login_client_http_status(upstream_status: int) -> int:
@@ -406,6 +434,12 @@ async def finalize_enterprise_login(
         except RECOVERABLE_ERRORS:
             logger.exception("account_mod_binding fallback on login failed")
 
+    denied = _reject_admin_on_desktop(
+        session_id=str(session_id) if session_id else None,
+        account_kind=str(result.get("account_kind") or account_kind or ""),
+    )
+    if denied is not None:
+        return denied
     return result
 
 
@@ -424,6 +458,17 @@ async def run_market_first_login(
 ) -> tuple[dict[str, Any] | None, JSONResponse | None]:
     """企业 SKU：市场先行，再本地 session + finalize。"""
     from app.application.session_account_meta import persist_session_account_meta
+
+    # 桌面端：显式 admin 入口直接拒绝（即使市场可达也不开管理员会话）
+    if str(account_kind).strip().lower() == "admin" and _is_desktop_runtime():
+        return {
+            "success": False,
+            "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+            "error": {
+                "code": DESKTOP_ADMIN_FORBIDDEN_CODE,
+                "message": DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
+            },
+        }, None
 
     login_username = username
     if sku == "enterprise":
@@ -487,6 +532,12 @@ async def run_market_first_login(
                             or "市场不可达，已使用本地管理员会话"
                         ),
                     }
+                    denied = _reject_admin_on_desktop(
+                        session_id=str(session_id) if session_id else None,
+                        account_kind="admin",
+                    )
+                    if denied is not None:
+                        return denied, None
                     return local_admin, None
             return None, market_auth_error_response(market_result or {})
         kind_err = validate_account_kind_for_market(

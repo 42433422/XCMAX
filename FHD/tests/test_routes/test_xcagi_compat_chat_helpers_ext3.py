@@ -934,7 +934,8 @@ class TestXcagiPlannerStreamBytesAdditional:
         # Last event should be error
         last_data = json.loads(results[-1].replace(b"data: ", b"").strip())
         assert last_data["type"] == "error"
-        assert "修茈平台未返回内容" in last_data["message"]
+        assert "没有返回可显示的正文" in last_data["message"]
+        assert "已登录" not in last_data["message"]
 
     def test_merged_reply_with_thinking_steps(self):
         """Test that merged reply with thinking steps yields done with dict reply."""

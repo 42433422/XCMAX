@@ -43,7 +43,7 @@ const CORE_LINKS: Record<string, WorkflowEmployeeDatabaseLink> = {
     empId: 'wechat_msg',
     routeName: 'data-sources',
     query: { source: 'wechat_local_db' },
-    label: '查看微信联系人',
+    label: '查看微信数据来源',
     description: '微信消息处理 AI 员工监控的星标联系人与会话（数据来源 · 微信本地库）',
   },
   wechat_phone: {

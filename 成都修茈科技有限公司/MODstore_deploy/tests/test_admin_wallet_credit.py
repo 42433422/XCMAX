@@ -59,6 +59,19 @@ def test_admin_can_credit_target_user_wallet(client):
         assert txn.idempotency_key.startswith("admin_credit:")
 
 
+def test_admin_wallet_list_includes_accounts_without_wallet_rows(client):
+    target_id, _ = _auth_headers_for_user()
+    _, admin_headers = _auth_headers_for_user(is_admin=True)
+
+    resp = client.get("/api/admin/wallets?limit=500", headers=admin_headers)
+
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    target = next(item for item in items if item["user_id"] == target_id)
+    assert target["id"] is None
+    assert float(target["balance"]) == 0.0
+
+
 def test_admin_can_credit_same_user_twice(client):
     from modstore_server.models import Transaction, Wallet, get_session_factory
 

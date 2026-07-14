@@ -34,7 +34,7 @@ def finance_unified_ledger(
 ):
     """XCAGI 自建财务统一单据：CRM 账单 + MODstore 订单 + 归档凭证。"""
     try:
-        from app.services.finance_unified_archive import list_ledger
+        from app.application.finance_unified_ledger_app_service import list_ledger
 
         items = list_ledger(
             market_user_id=market_user_id,
@@ -61,7 +61,7 @@ def finance_unified_ledger_summary(
 ):
     """按轨道汇总笔数与金额（分）。"""
     try:
-        from app.services.finance_unified_archive import summarize_ledger
+        from app.application.finance_unified_ledger_app_service import summarize_ledger
 
         summary = summarize_ledger(market_user_id=market_user_id)
         return {
@@ -81,7 +81,9 @@ def finance_unified_ledger_summary(
 def finance_unified_ledger_rebuild(body: FinanceLedgerRebuildBody):
     """从 CRM 发票与 Token 订单幂等重建 financial_transactions 归档。"""
     try:
-        from app.services.finance_unified_archive import rebuild_ledger_archive
+        from app.application.finance_unified_ledger_app_service import (
+            rebuild_ledger_archive,
+        )
 
         market_user_id = body.market_user_id
         result = rebuild_ledger_archive(market_user_id=market_user_id)

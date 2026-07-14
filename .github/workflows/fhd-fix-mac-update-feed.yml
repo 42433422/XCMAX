@@ -1,0 +1,98 @@
+# CI SSOT: generated from FHD/.github/workflows/fix-mac-update-feed.yml — DO NOT edit here.
+# Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
+# 紧急修复：基于 CDN 上已有 ZIP 重签 latest-mac.yml（不重复上传大包）。
+name: Fix macOS update feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Product version (four-part)
+        required: true
+        default: "1.0.0.0"
+      zip_name:
+        description: ZIP filename on CDN enterprise dir
+        required: true
+        default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
+      build_sha:
+        description: Optional buildSha override (40-char git sha); empty = read from ZIP build-info.json
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: FHD
+
+jobs:
+  republish-mac-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install cryptography
+        run: pip install --quiet cryptography
+      - name: Hash remote ZIP, sign latest-mac.yml, upload yml only
+        env:
+          XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
+          DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
+          ZIP_NAME: ${{ github.event.inputs.zip_name }}
+          PRODUCT_VERSION: ${{ github.event.inputs.version }}
+          BUILD_SHA: ${{ github.event.inputs.build_sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
+            echo "::error::XCAGI_UPDATE_ED25519_PRIVATE_KEY missing"
+            exit 1
+          fi
+          if [ -z "${DESKTOP_SSH_KEY:-}" ]; then
+            echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
+            exit 1
+          fi
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          DEST="/var/www/update/releases/stable/enterprise"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
+
+          scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
+          scp "${SSH_OPTS[@]}" scripts/deploy/extract_zip_build_sha.py "root@${HOST}:/tmp/extract_zip_build_sha.py"
+          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${DEST}/${ZIP_NAME}'")"
+          SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
+          SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
+          echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
+
+          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${DEST}/${ZIP_NAME}'")"
+          RESOLVED_SHA="${BUILD_SHA:-}"
+          if [ -z "${RESOLVED_SHA}" ]; then
+            RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
+          fi
+          if [ -z "${RESOLVED_SHA}" ]; then
+            echo "::error::buildSha unresolved (input empty and ZIP has no build-info.json)"
+            exit 1
+          fi
+          echo "Resolved buildSha=${RESOLVED_SHA} (input='${BUILD_SHA:-}' zip='${ZIP_BUILD_SHA:-}')"
+
+          WORK="$(mktemp -d)"
+          : > "${WORK}/${ZIP_NAME}"
+          TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
+          export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
+          export XCAGI_BUILD_SHA="${RESOLVED_SHA}"
+          node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
+          python3 scripts/deploy/patch_latest_mac_yml_hashes.py "${WORK}/latest-mac.yml" "${SHA512}" "${SIZE}"
+          python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
+          echo "---- signed feed ----"
+          cat "${WORK}/latest-mac.yml"
+          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${DEST}/latest-mac.yml.part"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "mv -f '${DEST}/latest-mac.yml.part' '${DEST}/latest-mac.yml' && head -20 '${DEST}/latest-mac.yml'"
+          echo "Uploaded latest-mac.yml to ${DEST}"

@@ -18,6 +18,7 @@ TOKENS = ROOT / "config" / "mobile_design_tokens.json"
 OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
 FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
+FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
 
 FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
 FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md"
@@ -30,15 +31,6 @@ ANDROID_THEME = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/
 ANDROID_TYPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt"
 ANDROID_SHAPE = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt"
 ANDROID_ANALYTICS = ROOT / "mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt"
-
-IOS_PARITY = ROOT / "mobile-ios/PARITY_MATRIX.md"
-IOS_PROJECT_YML = ROOT / "mobile-ios/project.yml"
-IOS_THEME = ROOT / "mobile-ios/XCAGIMobile/DesignSystem/Theme.swift"
-IOS_PERF = ROOT / "mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift"
-
-HARMONY_PARITY = ROOT / "mobile-harmony/docs/PARITY_MATRIX.md"
-HARMONY_TOKENS = ROOT / "mobile-harmony/entry/src/main/ets/design/DesignTokens.ets"
-HARMONY_PERF = ROOT / "mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets"
 
 REQUIRED_DOC_SNIPPETS = (
     "唯一真相源",
@@ -127,16 +119,17 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/contracts/openapi.json",
         "FHD/app/fastapi_routes/mobile_api.py",
         "FHD/app/fastapi_routes/mobile_api_extensions.py",
+        "FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py",
         "FHD/mobile-flutter-poc/README.md",
         "FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md",
         "FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart",
         "FHD/mobile-flutter-poc/lib/src/api/mobile_models.dart",
         "FHD/mobile-flutter-poc/lib/src/data/mobile_repository.dart",
         "FHD/mobile-flutter-poc/lib/src/theme/app_theme.dart",
-        "FHD/mobile-ios/project.yml",
-        "FHD/mobile-ios/XCAGIMobile/Observability/MobilePerformanceMonitor.swift",
-        "FHD/mobile-harmony/entry/src/main/ets/design/DesignTokens.ets",
-        "FHD/mobile-harmony/entry/src/main/ets/state/PerformanceMonitor.ets",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Theme.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Type.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/ui/theme/Shape.kt",
+        "FHD/mobile-android/app/src/main/java/com/xiuci/xcagi/mobile/core/observability/XcagiAnalytics.kt",
     ):
         if rel not in derived:
             errors.append(f"mobile-tri-platform.derived 缺少 {rel}")
@@ -190,9 +183,15 @@ def _check_unified_stack(errors: list[str]) -> None:
                 errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
     if fastapi_ext:
-        for snippet in ('@extension_router.get("/admin/home")', '@extension_router.get("/ai-groups")'):
+        for snippet in (
+            '@extension_router.get("/admin/home")',
+            "extension_router.include_router(_ai_groups_router)",
+        ):
             if snippet not in fastapi_ext:
                 errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
+    fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
+    if fastapi_ai_groups and '@router.get("/ai-groups")' not in fastapi_ai_groups:
+        errors.append("routes_ai_groups.py 缺少移动 AI 群组路由片段: " '@router.get("/ai-groups")')
 
 
 def _check_tokens(errors: list[str]) -> None:
@@ -231,31 +230,7 @@ def _check_platform_files(errors: list[str]) -> None:
     android_analytics = _read_text(ANDROID_ANALYTICS, errors)
     if android_analytics and "logPerformanceMetric" not in android_analytics:
         errors.append("Android XcagiAnalytics.kt 缺少 logPerformanceMetric")
-
-    ios_parity = _read_text(IOS_PARITY, errors)
-    if ios_parity and "对标 `mobile-android`" not in ios_parity:
-        errors.append("iOS PARITY_MATRIX.md 未声明对标 mobile-android")
-    ios_project_yml = _read_text(IOS_PROJECT_YML, errors)
-    if ios_project_yml and "MetricKit/os.log" not in ios_project_yml:
-        errors.append("iOS project.yml 未声明 MetricKit/os.log 系统框架")
-    ios_theme = _read_text(IOS_THEME, errors)
-    if ios_theme:
-        for snippet in ("brandFallback = Color(red: 0.388", "static let xxxl: CGFloat = 32"):
-            if snippet not in ios_theme:
-                errors.append(f"iOS Theme.swift 缺少 token 片段: {snippet}")
-    ios_perf = _read_text(IOS_PERF, errors)
-    if ios_perf and ("MetricKit" not in ios_perf or "MXMetricManagerSubscriber" not in ios_perf):
-        errors.append("iOS MobilePerformanceMonitor.swift 必须接 MetricKit")
-
-    harmony_parity = _read_text(HARMONY_PARITY, errors)
-    if harmony_parity and "对标 `mobile-android`" not in harmony_parity:
-        errors.append("Harmony PARITY_MATRIX.md 未声明对标 mobile-android")
-    harmony_tokens = _read_text(HARMONY_TOKENS, errors)
-    if harmony_tokens and ("static readonly primary: string = '#6366F1'" not in harmony_tokens):
-        errors.append("Harmony DesignTokens.ets 未保留 token primary #6366F1")
-    harmony_perf = _read_text(HARMONY_PERF, errors)
-    if harmony_perf and "mobile.api.latency" not in harmony_perf:
-        errors.append("Harmony PerformanceMonitor.ets 缺少统一性能指标名")
+    # 原生 iOS / Harmony 已归档至 archive/mobile/；产品对外仅 Android，不再 gate 其源码。
 
 
 def check_drift() -> int:

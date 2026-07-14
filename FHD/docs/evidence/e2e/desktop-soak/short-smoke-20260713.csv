@@ -1,0 +1,13 @@
+timestamp_utc,endpoint,http_status,latency_seconds,desktop_rss_kb
+2026-07-13T07:52:49Z,/api/ping,200,0.001825,
+2026-07-13T07:52:49Z,/api/health,200,0.003366,
+2026-07-13T07:52:49Z,/api/desktop/status,200,0.004533,
+2026-07-13T07:52:50Z,/api/ping,200,0.001603,
+2026-07-13T07:52:50Z,/api/health,200,0.003319,
+2026-07-13T07:52:50Z,/api/desktop/status,200,0.002460,
+2026-07-13T07:52:51Z,/api/ping,200,0.003112,
+2026-07-13T07:52:51Z,/api/health,200,0.006863,
+2026-07-13T07:52:51Z,/api/desktop/status,200,0.002343,
+2026-07-13T07:52:52Z,/api/ping,200,0.001979,
+2026-07-13T07:52:52Z,/api/health,200,0.004647,
+2026-07-13T07:52:53Z,/api/desktop/status,200,0.005546,

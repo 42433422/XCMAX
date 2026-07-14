@@ -4,12 +4,14 @@ import enUS from './locales/en-US'
 
 const LOCALE_KEY = 'xcagi_locale'
 
-function detectLocale(): string {
+export function detectLocale(): 'zh-CN' | 'en-US' {
   if (typeof window === 'undefined') return 'zh-CN'
   const stored = window.localStorage.getItem(LOCALE_KEY)
   if (stored === 'en-US' || stored === 'zh-CN') return stored
-  const nav = navigator.language || ''
-  return nav.toLowerCase().startsWith('en') ? 'en-US' : 'zh-CN'
+  // XCAGI 桌面端以中文业务模块为主。不要仅因操作系统是英文就把通用控件
+  // 自动切成英文，否则会出现中文业务内容 + 英文按钮的割裂体验。
+  // 用户仍可在设置中显式切换并持久化英文。
+  return 'zh-CN'
 }
 
 export const i18n = createI18n({

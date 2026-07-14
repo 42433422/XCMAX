@@ -1,17 +1,20 @@
 <template>
-  <div class="modal" :class="{ visible: modelValue }" @click.self="handleClose">
-    <div class="modal-content" :style="contentStyle">
-      <div class="modal-header" v-if="title">
-        {{ title }}
-      </div>
-      <div class="modal-body">
-        <slot></slot>
-      </div>
-      <div class="modal-footer" v-if="$slots.footer">
-        <slot name="footer"></slot>
+  <!-- Teleport 到 body，避免侧栏 transform/overflow 把 fixed 遮罩困在侧栏里 -->
+  <Teleport to="body">
+    <div class="modal" :class="{ visible: modelValue }" @click.self="handleClose">
+      <div class="modal-content" :style="contentStyle">
+        <div class="modal-header" v-if="title">
+          {{ title }}
+        </div>
+        <div class="modal-body">
+          <slot></slot>
+        </div>
+        <div class="modal-footer" v-if="$slots.footer">
+          <slot name="footer"></slot>
+        </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup>
@@ -52,12 +55,9 @@ const handleClose = () => {
 .modal {
   display: none;
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1000;
+  z-index: 10050;
   justify-content: center;
   align-items: center;
 }

@@ -1,7 +1,8 @@
-# XCAGI 移动客户端（Flutter 主线）
+# XCAGI 移动客户端（Flutter · 对外仅 Android）
 
-> **状态（2026-07-07）**：**Flutter 为唯一移动交付主线**（`FHD/mobile-flutter-poc`）。  
-> **归档中**：`FHD/mobile-android/`（Kotlin）、`FHD/mobile-ios/`（SwiftUI）仅保留兼容构建与行为参照，**禁止新增产品流程**。
+> **状态（2026-07-14）**：**对外发版仅 Android**，工程主线为 `FHD/mobile-flutter-poc/`（Flutter）。  
+> **已归档**：原生 `mobile-ios` / `mobile-harmony` → [`archive/mobile/`](../../../archive/mobile/README.md)。  
+> **归档中**：`FHD/mobile-android/`（Kotlin）仅作迁移参照。
 
 > **SSOT**：[`mobile_tri_platform_ssot.md`](../mobile_tri_platform_ssot.md) · OpenAPI [`contracts/openapi.json`](../../contracts/openapi.json)
 
@@ -9,10 +10,11 @@
 
 | 路径 | 状态 | 说明 |
 |------|------|------|
-| `FHD/mobile-flutter-poc/` | **主线** | Android + iOS 统一 UI；新功能、UX 修复、发版优先在此 |
-| `FHD/mobile-android/` | **归档中** | 迁移参照；仅 P0 安全/构建修复，不做新 Tab/新流程 |
-| `FHD/mobile-ios/` | **归档中** | 同上；TestFlight 维护可选，默认不再扩功能 |
-| `FHD/mobile-harmony/` | **冻结** | 参照 [`mobile_tri_platform_ssot.md`](../mobile_tri_platform_ssot.md) |
+| `FHD/mobile-flutter-poc/` | **主线** | 对外 Android APK；新功能、UX、发版只在此 |
+| `FHD/mobile-android/` | **归档中** | Kotlin 参照；仅 P0 安全/构建修复 |
+| `archive/mobile/mobile-ios/` | **已归档** | 原 SwiftUI；禁止新增产品流程 |
+| `archive/mobile/mobile-harmony/` | **已归档** | 原 ArkTS；禁止新增产品流程 |
+| `FHD/mobile-ios/` · `FHD/mobile-harmony/` | **指针 README** | 仅指向 archive，避免旧链接误导 |
 
 ## 本地开发
 
@@ -32,16 +34,15 @@ flutter run
 ## 迁移规则
 
 1. **新页面 / 路由 / 状态 / 错误文案** → 只改 Flutter。
-2. Android/iOS 原生仅当 Flutter 缺平台能力（推送、相机、Keychain 等）时补 **platform channel**，不在原生层复制业务 UI。
-3. 行为对齐：归档期内可读 `mobile-android` 已验证路径；**以 OpenAPI + FastAPI 为准**，不以原生旧实现为长期 SSOT。
-4. 产品验收：[`guides/PRODUCT_POLISH_CHECKLIST.md`](PRODUCT_POLISH_CHECKLIST.md) 移动端落点以 `mobile-flutter-poc/lib/` 为准。
+2. 行为对齐：可读 `mobile-android` 已验证路径；**以 OpenAPI + FastAPI 为准**。
+3. 产品验收：[`guides/PRODUCT_POLISH_CHECKLIST.md`](PRODUCT_POLISH_CHECKLIST.md) 以 `mobile-flutter-poc/lib/` 为准。
 
 ## 发版
 
-- **Android APK / iOS IPA**：由 Flutter 工程产出（`flutter build apk` / `flutter build ipa`）。
-- 根仓 CI：**主线** `fhd-ci-mobile-flutter.yml` / `fhd-release-android.yml` / `android-build.yml` 已切到 `FHD/mobile-flutter-poc`。
-- 归档：`fhd-ci-mobile-android.yml` 仍监听 `mobile-android/**`，但构建同样走 Flutter（防止旧路径漏测）。
-- 改 workflow 后执行：`python scripts/dev/publish_ci_workflows_to_root.py`。
+- **对外：仅 Android APK**（`flutter build apk`）。
+- 打包脚本：`FHD/scripts/mobile/stage-release-packages.sh`（默认 `--android-only`）。
+- 根仓 CI：`fhd-ci-mobile-flutter.yml` / `fhd-release-android.yml` / `android-build.yml`。
+- 改 workflow 后：`python scripts/dev/publish_ci_workflows_to_root.py`。
 
 ## 相关文档
 

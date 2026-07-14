@@ -2511,12 +2511,16 @@ class TestMarketWalletOverview:
                 return_value={"__proxy_error__": True, "status_code": 503, "payload": {}}
             ),
         ):
-            resp = _client.get("/api/market/wallet/overview")
+            resp = _client.get(
+                "/api/market/wallet/overview", headers={"Authorization": "Bearer test-token"}
+            )
         assert resp.status_code == 503
 
     def test_success(self):
         with patch.object(ma, "_proxy_json", new=AsyncMock(return_value={"balance": 50})):
-            resp = _client.get("/api/market/wallet/overview")
+            resp = _client.get(
+                "/api/market/wallet/overview", headers={"Authorization": "Bearer test-token"}
+            )
         assert resp.status_code == 200
 
 

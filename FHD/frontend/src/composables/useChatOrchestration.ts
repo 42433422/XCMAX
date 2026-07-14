@@ -381,7 +381,9 @@ export function useChatOrchestration(options: UseChatViewOptions) {
             source: task.source,
             status: 'success',
             progress: 100,
+            stage: '分析完成',
             summary,
+            error: '',
             messageRef: getLastAiMessageRef()
           })
         }

@@ -1,10 +1,22 @@
 import { type Ref } from 'vue'
+import { readAiSessionIdFromStorage } from '@/utils/xcagiStorageKeys'
+
 export interface UseChatDbTokenGateDeps {
   sessionId: Ref<string>
   isProMode: Ref<boolean>
   pendingDbWriteChatRetryMessages: Ref<string[] | null>
   plannerWriteUnlockResumeDraft: Ref<string>
   executeRemoteChatRound: (msgs: string[], opts?: { fromWriteUnlock?: boolean }) => Promise<void>
+}
+
+/** 与对话请求 body.user_id 同源：``web_normal_<session>`` / ``web_pro_<session>``。 */
+export function resolveModeScopedChatUserId(proEnabled?: boolean): string {
+  const sid = String(readAiSessionIdFromStorage() || '').trim() || 'default'
+  const pro =
+    typeof proEnabled === 'boolean'
+      ? proEnabled
+      : typeof window !== 'undefined' && window.__XCAGI_IS_PRO_MODE === true
+  return pro ? `web_pro_${sid}` : `web_normal_${sid}`
 }
 
 export function useChatDbTokenGate(deps: UseChatDbTokenGateDeps) {

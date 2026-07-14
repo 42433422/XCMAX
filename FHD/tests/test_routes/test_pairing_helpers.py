@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -18,6 +19,18 @@ def _mock_request(
     if forwarded_host:
         headers["x-forwarded-host"] = forwarded_host
     return SimpleNamespace(headers=headers)
+
+
+def test_runtime_api_port_uses_desktop_data_dir(tmp_path):
+    port_file = tmp_path / ".runtime" / "api.port"
+    port_file.parent.mkdir(parents=True)
+    port_file.write_text("17500", encoding="utf-8")
+
+    with patch.dict(
+        os.environ,
+        {"XCAGI_DATA_DIR": str(tmp_path), "XCAGI_DESKTOP_DATA_DIR": ""},
+    ):
+        assert ph._read_runtime_api_port() == 17500
 
 
 class TestPairingIssuePort:

@@ -3,6 +3,7 @@ productName: XCAGI
 copyright: Copyright © 2026 XCAGI
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 beforePack: build/before-pack.cjs
+afterPack: build/after-pack.cjs
 # 正式产物仅写入 release/xcagi-v{version}/{personal|enterprise}/（build-installer.ps1 -ProductSku 必填）
 directories:
   output: ../release/_electron-staging
@@ -74,6 +75,15 @@ mac:
   icon: resources/icon.icns
   hardenedRuntime: true
   gatekeeperAssess: false
+  # Explicit URL avoids the macOS codesign default resolving to an unavailable
+  # timestamp endpoint on proxied networks. Apple Developer ID signatures need
+  # a trusted timestamp for notarization and long-term validity.
+  timestamp: http://timestamp.apple.com/ts01
+  # @electron/osx-sign otherwise invokes codesign for every resource file.
+  # Data files are sealed by their containing bundle signature and must not
+  # receive standalone code signatures (which also multiplies TSA requests).
+  signIgnore:
+    - "\\.(asar|pak|json|jsonl|gz|zip|tar|dat|bin|wasm|onnx|pt|exe|png|jpe?g|gif|webp|svg|ico|icns|txt|strings|md|html?|css|m?js|cjs|map|py|pyc|pyo|ya?ml|toml|ini|cfg|csv|tsv|xml|plist|nib|car|woff2?|ttf|otf|eot|wav|mp3|m4a|aac|ogg|flac|mp4|mov|webm|pdf|docx?|xlsx?|pptx?|db|sqlite|db-shm|db-wal)$"
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

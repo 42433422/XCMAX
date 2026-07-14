@@ -401,6 +401,30 @@ describe('useChatExcelContext — coverage ramp', () => {
       await ctx.onMultimodalFileChange(ev)
       expect((ev.target as unknown as { value: string }).value).toBe('')
     })
+
+    it('清空 live FileList 前先快照文件', async () => {
+      const ctx = useChatExcelContext(makeDeps())
+      const file = { name: 'live.png' }
+      let liveFiles = [file]
+      let inputValue = '/fake/live.png'
+      const input = {
+        get files() { return liveFiles },
+        get value() { return inputValue },
+        set value(next: string) {
+          inputValue = next
+          if (!next) liveFiles = []
+        },
+      }
+      mockFilesToMultimodalRows.mockImplementationOnce(async (files) => {
+        expect(Array.from(files as ArrayLike<typeof file>)).toEqual([file])
+        return { ok: true, rows: [makeRow(file.name)] }
+      })
+
+      await ctx.onMultimodalFileChange({ target: input } as unknown as Event)
+
+      expect(ctx.multimodalStaging.value[0]?.filename).toBe('live.png')
+      expect(inputValue).toBe('')
+    })
   })
 
   // ── bindExcelSheetToChat ──────────────────────────────────────

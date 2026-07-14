@@ -151,10 +151,17 @@ vi.mock('@/utils/authSessionCache', () => ({
 vi.mock('@/utils/adminConsoleUrl', () => ({
   isAdminConsoleSpa: mockIsAdminConsoleSpa,
   resolveAdminConsoleHomeUrl: mockResolveAdminConsoleHomeUrl,
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE: '桌面端不支持管理员账号登录，请使用网页版管理端',
 }))
 
 vi.mock('@/utils/desktopShell', () => ({
   isDesktopShell: mockIsDesktopShell,
+}))
+
+vi.mock('@/api/auth', () => ({
+  authApi: {
+    logout: vi.fn().mockResolvedValue({ success: true }),
+  },
 }))
 
 vi.mock('@/constants/platformShellMode', () => ({
@@ -715,47 +722,14 @@ describe('router/index 覆盖率补齐', () => {
   // 10. beforeEach 守卫 - customer service 路由
   // ═══════════════════════════════════════════════════════════
   describe('beforeEach 守卫 - customer service', () => {
-    it('enterprise 客服 + admin 账号时重定向到 internal-customer-service', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = true
+    it('旧 enterprise 客服入口统一重定向到信息', async () => {
       await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('internal-customer-service')
-    })
-
-    it('enterprise 客服 + 非 admin 账号时允许', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('enterprise-customer-service')
-    })
-
-    it('admin 客服 + 非 admin 账号时重定向到 im', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/internal-customer-service')
       expect(router.currentRoute.value.name).toBe('im')
     })
 
-    it('admin 客服 + admin 账号时允许', async () => {
-      mockAccountProfileStore.loaded = true
-      mockAccountProfileStore.isAdminAccount = true
+    it('旧 internal 客服入口统一重定向到信息', async () => {
       await router.push('/internal-customer-service')
-      expect(router.currentRoute.value.name).toBe('internal-customer-service')
-    })
-
-    it('profile 未加载时调用 refreshFromServer', async () => {
-      mockAccountProfileStore.loaded = false
-      mockAccountProfileStore.refreshFromServer.mockResolvedValue(undefined)
-      mockAccountProfileStore.isAdminAccount = false
-      await router.push('/enterprise-customer-service')
-      expect(mockAccountProfileStore.refreshFromServer).toHaveBeenCalled()
-    })
-
-    it('profile refresh 异常时重定向到 chat', async () => {
-      mockAccountProfileStore.loaded = false
-      mockAccountProfileStore.refreshFromServer.mockRejectedValue(new Error('network'))
-      await router.push('/enterprise-customer-service')
-      expect(router.currentRoute.value.name).toBe('chat')
+      expect(router.currentRoute.value.name).toBe('im')
     })
   })
 
@@ -818,14 +792,12 @@ describe('router/index 覆盖率补齐', () => {
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockAccountProfileStore.loaded = true
       mockAccountProfileStore.isAdminAccount = true
-      // window.location.href 赋值 + next(false)
-      // 导航被中止
+      mockIsDesktopShell.mockReturnValue(false)
       await router.push('/settings')
-      // 由于 next(false)，当前路由不变（或保持上一个）
       expect(mockResolveAdminConsoleHomeUrl).toHaveBeenCalled()
     })
 
-    it('desktop shell 内 enterprise admin 可正常访问企业页面，不跳外部 admin URL', async () => {
+    it('desktop shell 内 admin 拒入 /admin 并回登录页', async () => {
       mockIsEnterpriseEdition.mockReturnValue(true)
       mockValidateEnterpriseSession.mockResolvedValue(true)
       mockIsDesktopShell.mockReturnValue(true)
@@ -833,7 +805,7 @@ describe('router/index 覆盖率补齐', () => {
       mockAccountProfileStore.isAdminAccount = true
       await router.push('/settings')
       expect(mockResolveAdminConsoleHomeUrl).not.toHaveBeenCalled()
-      expect(router.currentRoute.value.name).toBe('settings')
+      expect(router.currentRoute.value.name).toBe('login')
     })
 
     it('enterprise + 有效 session + profile 未加载时调用 refresh', async () => {
@@ -1084,15 +1056,17 @@ describe('router/index 覆盖率补齐', () => {
       expect(route?.meta?.mod).toBe(true)
     })
 
-    it('enterprise-customer-service 有 customerServiceSide=enterprise', () => {
+    it('enterprise-customer-service 仅保留信息兼容跳转元数据', () => {
       const route = router.getRoutes().find((r) => r.name === 'enterprise-customer-service')
-      expect(route?.meta?.customerServiceSide).toBe('enterprise')
+      expect(route?.meta?.title).toBe('信息')
+      expect(route?.meta?.customerServiceSide).toBeUndefined()
     })
 
-    it('internal-customer-service 有 customerServiceSide=admin 和 requiresAdminAccount', () => {
+    it('internal-customer-service 不再要求客服侧或管理员权限', () => {
       const route = router.getRoutes().find((r) => r.name === 'internal-customer-service')
-      expect(route?.meta?.customerServiceSide).toBe('admin')
-      expect(route?.meta?.requiresAdminAccount).toBe(true)
+      expect(route?.meta?.title).toBe('信息')
+      expect(route?.meta?.customerServiceSide).toBeUndefined()
+      expect(route?.meta?.requiresAdminAccount).toBeUndefined()
     })
 
     it('admin-entitlements 有 requiresAdminAccount', () => {

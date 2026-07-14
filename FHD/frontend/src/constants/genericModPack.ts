@@ -194,7 +194,7 @@ export function keepHostNavKeyVisibleWhenModSidebarFacetSuppressed(
   return false
 }
 
-/** Mod 菜单 id → 宿主 core/trailing 槽位（已占用则不再插入 Mod 项，避免「外部客服」等出现两次） */
+/** Mod 菜单 id → 宿主 core/trailing 槽位（已占用则不再插入重复项） */
 export const MOD_MENU_ID_TO_HOST_NAV_KEY: Readonly<Record<string, string>> = {
   'mod-enterprise-customer-service': 'enterprise-customer-service',
   'mod-internal-customer-service': 'internal-customer-service',

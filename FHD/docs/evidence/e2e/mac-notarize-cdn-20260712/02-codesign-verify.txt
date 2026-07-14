@@ -1,0 +1,20 @@
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/Helpers/chrome_crashpad_handler
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Electron Framework.framework/Versions/Current/.
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Mantle.framework/Versions/Current/.
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Mantle.framework/Versions/Current/.
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/ReactiveObjC.framework/Versions/Current/.
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/Squirrel.framework/Versions/Current/.
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (GPU).app
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (GPU).app
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (Plugin).app
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (Renderer).app
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper (Renderer).app
+--prepared:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper.app
+--validated:/Volumes/XCAGI 10.0.0-arm64/XCAGI.app/Contents/Frameworks/XCAGI Helper.app
+/Volumes/XCAGI 10.0.0-arm64/XCAGI.app: valid on disk
+/Volumes/XCAGI 10.0.0-arm64/XCAGI.app: satisfies its Designated Requirement

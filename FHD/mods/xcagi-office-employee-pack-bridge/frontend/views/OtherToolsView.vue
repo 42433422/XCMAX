@@ -39,7 +39,7 @@
           >流程可视化</router-link>
         </div>
         <p v-if="!ctx.clientModsUiOff && !ctx.modsDisabledByServer" style="margin: 12px 0 0; color: #6b7280;">
-          「微信联系人」侧栏入口与副窗「微信触点管家」工作流员工由可选扩展 Mod<strong> wechat-contacts-ai-employee</strong>（微信触点 AI 员工）提供；源码见公司仓库 <code>mods/wechat-contacts-ai-employee/</code>，可打包上架 MODstore。
+          微信联系人能力已并入「数据来源」，副窗「微信触点管家」工作流员工由可选扩展 Mod<strong> wechat-contacts-ai-employee</strong>提供。
         </p>
       </div>
 

@@ -28,6 +28,9 @@ from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
 
+_MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
+_MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
+
 
 def is_mods_disabled() -> bool:
     """为 true 时不加载任何 Mod（扩展蓝图、行业覆盖、Hooks 等），仅用核心与原始配置/数据库。"""
@@ -127,19 +130,51 @@ def _all_mods_roots(primary: str) -> list[str]:
     return roots
 
 
+def _trusted_child_path(parent: str, child_name: str, *, directory: bool) -> str | None:
+    try:
+        with os.scandir(parent) as entries:
+            for entry in entries:
+                if entry.name != child_name or entry.is_symlink():
+                    continue
+                if directory and entry.is_dir(follow_symlinks=False):
+                    return entry.path
+                if not directory and entry.is_file(follow_symlinks=False):
+                    return entry.path
+    except OSError:
+        return None
+    return None
+
+
 def _backend_path_for_mod(mod_path: str) -> str:
+    """Return the conventional backend path without touching the filesystem."""
     return os.path.join(mod_path, "backend")
+
+
+def _trusted_relative_file(parent: str, relative_path: str) -> str | None:
+    """Resolve a nested regular file using names returned by directory scans."""
+    parts = relative_path.replace("\\", "/").split("/")
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+
+    current = parent
+    for index, part in enumerate(parts):
+        is_last = index == len(parts) - 1
+        resolved = _trusted_child_path(current, part, directory=not is_last)
+        if resolved is None:
+            return None
+        current = resolved
+    return current
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     """
     从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
-    stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
+    stem 不含 .py；允许 ``employees/name`` 这类 backend 内相对模块路径。
     """
-    backend_path = _backend_path_for_mod(mod_path)
-    path = os.path.join(backend_path, f"{stem}.py")
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Mod {mod_id} backend file missing: {path}")
+    backend_path = _trusted_child_path(mod_path, "backend", directory=True)
+    path = _trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
+    if path is None:
+        raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
     # 同一 mod_id 可能来自 mods/ 与 mods-admin-runtime/ 等不同物理路径；须纳入缓存键避免错用旧模块。
     import hashlib
@@ -384,10 +419,8 @@ class ModManager:
             if not cid:
                 return None
             for root in self.all_mods_roots():
-                mod_path = os.path.join(root, cid)
-                if os.path.isdir(mod_path) and os.path.isfile(
-                    os.path.join(mod_path, "manifest.json")
-                ):
+                mod_path = _trusted_child_path(root, cid, directory=True)
+                if mod_path and _trusted_child_path(mod_path, "manifest.json", directory=False):
                     return mod_path
             return None
 
@@ -597,8 +630,8 @@ class ModManager:
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
-        backend_path = os.path.join(mod_path, "backend")
-        if not os.path.isdir(backend_path):
+        backend_path = _trusted_child_path(mod_path, "backend", directory=True)
+        if backend_path is None:
             logger.debug("No backend directory for mod: %s", mod_id)
             return
 
@@ -1210,7 +1243,32 @@ def _register_single_mod_http_routes(
         if hasattr(module, "register_fastapi_routes"):
             register_fastapi_fn = module.register_fastapi_routes
             if callable(register_fastapi_fn):
+                app_router = getattr(app, "router", None)
+                routes_before = list(getattr(app_router, "routes", []) or [])
                 register_fastapi_fn(app, mid)
+                routes_after = list(getattr(app_router, "routes", []) or [])
+                new_routes = [route for route in routes_after if route not in routes_before]
+                for old_route in routes_before:
+                    endpoint_name = str(
+                        getattr(getattr(old_route, "endpoint", None), "__name__", "")
+                    )
+                    if not endpoint_name.endswith("_host_alias"):
+                        continue
+                    old_path = getattr(old_route, "path", None)
+                    old_methods = set(getattr(old_route, "methods", set()) or set())
+                    if any(
+                        getattr(new_route, "path", None) == old_path
+                        and old_methods.intersection(
+                            set(getattr(new_route, "methods", set()) or set())
+                        )
+                        for new_route in new_routes
+                    ):
+                        app_router.routes.remove(old_route)
+                        logger.info(
+                            "Removed superseded host alias after loading Mod %s: %s",
+                            mid,
+                            old_path,
+                        )
                 logger.info("FastAPI routes registered for mod: %s", mid)
                 registered = True
         if hasattr(module, "register_websocket_routes"):
@@ -1299,9 +1357,28 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
+        retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
+        if retry_at > time.monotonic():
+            logger.debug(
+                "[ModManager] ensure_mod_api_ready: load_mod(%s) retry delay active",
+                mid,
+            )
+            return False
         if not mm.load_mod(mid):
+            _MOD_API_FAILURE_RETRY_AT[mid] = time.monotonic() + _MOD_API_FAILURE_BACKOFF_SECONDS
+            from app.runtime_integrity import record_runtime_issue
+
+            record_runtime_issue(
+                f"industry_mod:{mid}",
+                f"Industry MOD failed to load: {mid}",
+                ttl_seconds=max(_MOD_API_FAILURE_BACKOFF_SECONDS * 2, 30.0),
+            )
             logger.warning("[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid)
             return False
+        _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
+        from app.runtime_integrity import clear_runtime_issue
+
+        clear_runtime_issue(f"industry_mod:{mid}")
 
     if mid in mm._http_routes_registered:
         return True
@@ -1356,6 +1433,21 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
                 candidates.add(token)
     except RECOVERABLE_ERRORS:
         pass
+
+    # Open onboarding industries are shipped as a read-only seed pool and only
+    # the industry selected by the user is copied into userData/mods. Market
+    # entitlements may list every open seed, but an unselected seed being
+    # absent from userData is expected state, not a runtime load failure.
+    try:
+        from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
+
+        open_seed_ids = set(open_industry_seed_mod_ids())
+        mods_root = Path(get_mod_manager().mods_root)
+        candidates = {
+            mid for mid in candidates if mid not in open_seed_ids or (mods_root / mid).is_dir()
+        }
+    except RECOVERABLE_ERRORS:
+        logger.debug("filter unselected open industry seeds skipped", exc_info=True)
 
     return sorted(candidates)
 

@@ -272,4 +272,5 @@ class TestRunEmployeeAgentLoop:
             tools=[],
         )
         assert result["ok"] is False
-        assert "network down" in result["error"]
+        assert result["error"] == "员工模型调用失败，请稍后重试"
+        assert "network down" not in result["error"]
