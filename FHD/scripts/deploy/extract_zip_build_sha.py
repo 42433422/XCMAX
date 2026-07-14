@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Print gitSha/buildSha from the first build-info.json inside a ZIP."""
+
 from __future__ import annotations
 
 import json
