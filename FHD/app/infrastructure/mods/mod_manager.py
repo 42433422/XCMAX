@@ -145,19 +145,34 @@ def _trusted_child_path(parent: str, child_name: str, *, directory: bool) -> str
     return None
 
 
-def _backend_path_for_mod(mod_path: str) -> str | None:
-    return _trusted_child_path(mod_path, "backend", directory=True)
+def _backend_path_for_mod(mod_path: str) -> str:
+    """Return the conventional backend path without touching the filesystem."""
+    return os.path.join(mod_path, "backend")
+
+
+def _trusted_relative_file(parent: str, relative_path: str) -> str | None:
+    """Resolve a nested regular file using names returned by directory scans."""
+    parts = relative_path.replace("\\", "/").split("/")
+    if not parts or any(part in {"", ".", ".."} for part in parts):
+        return None
+
+    current = parent
+    for index, part in enumerate(parts):
+        is_last = index == len(parts) - 1
+        resolved = _trusted_child_path(current, part, directory=not is_last)
+        if resolved is None:
+            return None
+        current = resolved
+    return current
 
 
 def import_mod_backend_py(mod_path: str, mod_id: str, stem: str):
     """
     从指定 Mod 的 backend/<stem>.py 按文件路径加载为唯一模块名，避免多个 Mod 都叫 blueprints/services 时 sys.modules 冲突。
-    stem 不含 .py，且仅支持 backend 根目录下单文件（非子包）。
+    stem 不含 .py；允许 ``employees/name`` 这类 backend 内相对模块路径。
     """
-    backend_path = _backend_path_for_mod(mod_path)
-    path = (
-        _trusted_child_path(backend_path, f"{stem}.py", directory=False) if backend_path else None
-    )
+    backend_path = _trusted_child_path(mod_path, "backend", directory=True)
+    path = _trusted_relative_file(backend_path, f"{stem}.py") if backend_path else None
     if path is None:
         raise FileNotFoundError(f"Mod {mod_id} backend file missing")
     safe = "".join(c if c.isalnum() else "_" for c in mod_id)
@@ -615,7 +630,7 @@ class ModManager:
             return False
 
     def _load_mod_backend(self, mod_id: str, mod_path: str, metadata: ModMetadata):
-        backend_path = _backend_path_for_mod(mod_path)
+        backend_path = _trusted_child_path(mod_path, "backend", directory=True)
         if backend_path is None:
             logger.debug("No backend directory for mod: %s", mod_id)
             return
