@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import Any
 
@@ -15,10 +16,17 @@ from app.utils.operational_errors import RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.fastapi_routes.mobile_api_extensions import (
-    _mobile_unauthorized_response,
-    _mobile_market_authorization,
-)
+
+def _parent():
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
+
+
+def _mobile_market_authorization(request: Request, user) -> str:
+    return _parent()._mobile_market_authorization(request, user)
+
+
+def _mobile_unauthorized_response():
+    return _parent()._mobile_unauthorized_response()
 
 # ── 钱包 / 余额 ──
 

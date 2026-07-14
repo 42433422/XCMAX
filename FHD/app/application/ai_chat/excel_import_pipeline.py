@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import math
-import os
 import re
+import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+import httpx
 
 from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
     _EXCEL_IMPORT_QTY_MEASURE_RE,
     _enrich_confirmation_inner,
-    _skip_pro_excel_deterministic_import,
 )
 
 logger = logging.getLogger(__name__)
@@ -80,8 +80,9 @@ class AIChatExcelImportMixin:
             return True
         return bool(_EXCEL_IMPORT_QTY_MEASURE_RE.match(t))
 
-    @staticmethod
+    @classmethod
     def _default_purchase_unit_for_import(
+        cls,
         excel_analysis: dict[str, Any],
         preview_data: dict[str, Any],
         request_context: dict[str, Any] | None = None,
@@ -108,11 +109,11 @@ class AIChatExcelImportMixin:
             logger.debug("[导入调试] preview_data/excel_analysis customer_hint = %s", repr(hint))
             if hint:
                 return hint
-        grid_hint = AIChatExcelImportMixin._customer_hint_from_preview_grid(preview_data)
+        grid_hint = cls._customer_hint_from_preview_grid(preview_data)
         if grid_hint:
             return grid_hint
-        fp = AIChatExcelImportMixin._resolve_excel_path_for_import(excel_analysis, preview_data)
-        sheet = AIChatExcelImportMixin._resolve_sheet_name_for_reimport(
+        fp = cls._resolve_excel_path_for_import(excel_analysis, preview_data)
+        sheet = cls._resolve_sheet_name_for_reimport(
             excel_analysis, preview_data, request_context
         )
         if fp:
@@ -128,7 +129,7 @@ class AIChatExcelImportMixin:
                         return doc_unit
                 except RECOVERABLE_ERRORS as err:
                     logger.debug("从工作簿读取客户提示失败: %s", err)
-        return AIChatExcelImportMixin._guess_default_purchase_unit(excel_analysis)
+        return cls._guess_default_purchase_unit(excel_analysis)
 
     @staticmethod
     def _guess_default_purchase_unit(excel_analysis: dict[str, Any]) -> str:
@@ -899,7 +900,7 @@ class AIChatExcelImportMixin:
 
         records = [
             (
-                {k: AIChatExcelImportMixin._sanitize_import_scalar(v) for k, v in r.items()}
+                {k: self._sanitize_import_scalar(v) for k, v in r.items()}
                 if isinstance(r, dict)
                 else r
             )
@@ -917,7 +918,7 @@ class AIChatExcelImportMixin:
                 if llm_roles.get(role):
                     inferred_roles[role] = llm_roles[role]
 
-        header_roles = AIChatExcelImportMixin._header_hint_column_roles(
+        header_roles = self._header_hint_column_roles(
             [str(k).strip() for k in records[0].keys()] if records else []
         )
         for role in ("unit_name", "product_name", "model_number", "unit_price"):
@@ -926,7 +927,7 @@ class AIChatExcelImportMixin:
                 inferred_roles[role] = hk
 
         keys = [str(k).strip() for k in records[0].keys() if str(k).strip()]
-        merged_intent = AIChatExcelImportMixin._merge_user_intent_for_price_resolution(
+        merged_intent = self._merge_user_intent_for_price_resolution(
             user_message, request_context
         )
         overrides = (
@@ -935,7 +936,7 @@ class AIChatExcelImportMixin:
             else None
         )
         cur_price = str(inferred_roles.get("unit_price") or "").strip()
-        price_col, price_err = AIChatExcelImportMixin._resolve_unit_price_column(
+        price_col, price_err = self._resolve_unit_price_column(
             keys, cur_price, merged_intent, overrides if isinstance(overrides, dict) else {}
         )
         if price_err:
@@ -961,7 +962,7 @@ class AIChatExcelImportMixin:
         )
         if unit_key:
             col_vals = [str((row or {}).get(unit_key) or "").strip() for row in records]
-            if AIChatExcelImportMixin._packaging_or_measure_ratio(col_vals) >= 0.45:
+            if self._packaging_or_measure_ratio(col_vals) >= 0.45:
                 unit_key = ""
         if unit_key and unit_key == product_key:
             unit_key = ""
@@ -989,9 +990,7 @@ class AIChatExcelImportMixin:
                 or (
                     default_unit
                     and unit_name
-                    and AIChatExcelImportMixin._excel_cell_looks_like_product_measure_unit(
-                        unit_name
-                    )
+                    and self._excel_cell_looks_like_product_measure_unit(unit_name)
                 )
             ):
                 unit_name = default_unit.strip()
@@ -1301,4 +1300,3 @@ class AIChatExcelImportMixin:
                 "data": _enrich_confirmation_inner(inner, action="workflow_confirmation_required"),
             },
         }
-

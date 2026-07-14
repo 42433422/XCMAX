@@ -98,7 +98,9 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert 'xattr -cr desktop/node_modules/electron/dist' in installer
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
     assert '"--config.directories.output=${package_stage}"' in installer
-    assert 'ditto --norsrc "${package_stage}" "${out_dir}"' in installer
+    assert 'for staged_file in "${package_stage}"/*' in installer
+    assert 'ditto --norsrc "${staged_file}" "${out_dir}/$(basename "${staged_file}")"' in installer
+    assert 'ditto --norsrc "${package_stage}" "${out_dir}"' not in installer
     assert "electron-builder --mac zip" in installer
     assert "electron-builder --mac dmg" not in installer
     assert "scripts/package/create-mac-dmg.sh" in installer

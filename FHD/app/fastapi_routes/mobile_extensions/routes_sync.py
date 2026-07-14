@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.fastapi_routes.mobile_api import get_mobile_user
@@ -21,10 +22,33 @@ OPERATIONAL_ERRORS = RECOVERABLE_ERRORS
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.fastapi_routes.mobile_api_extensions import (
-    _ai_circle_user,
-    _ai_circle_employee_profiles,
-)
+
+def _parent():
+    return importlib.import_module("app.fastapi_routes.mobile_api_extensions")
+
+
+def _ai_circle_employee_profiles():
+    return _parent()._ai_circle_employee_profiles()
+
+
+def _ai_circle_user(user):
+    return _parent()._ai_circle_user(user)
+
+
+def _ai_conversation_changes(user, *, limit: int):
+    return _parent()._ai_conversation_changes(user, limit=limit)
+
+
+def _approval_items():
+    return _parent()._approval_items()
+
+
+def _safe_mobile_sync_items(label: str, loader):
+    return _parent()._safe_mobile_sync_items(label, loader)
+
+
+def _shipment_items():
+    return _parent()._shipment_items()
 
 # ── 同步 ──
 
@@ -47,6 +71,10 @@ def _mobile_sync_runtime_contract() -> dict[str, Any]:
 
 
 async def _mobile_sync_circle_posts(user: Any, *, limit: int = 50) -> list[dict[str, Any]]:
+    parent = _parent()
+    override = getattr(parent, "_mobile_sync_circle_posts", None)
+    if override is not None and override is not _mobile_sync_circle_posts:
+        return await override(user, limit=limit)
     try:
         import importlib
 
@@ -217,5 +245,3 @@ async def mobile_sync_conflicts(user=Depends(get_mobile_user)):
     except OPERATIONAL_ERRORS as exc:
         return format_mobile_response(data={"items": [], "error": str(exc)})
     return format_mobile_response(data={"items": items})
-
-

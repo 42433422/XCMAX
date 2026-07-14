@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
-from app.application.group_chat.constants import *  # noqa: F403
-
 import asyncio
 import json
-import os
-import re
 import uuid
-from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
-from inspect import isawaitable
-from pathlib import Path
 from typing import Any
+
+from app.application.group_chat.constants import (
+    _DEFAULT_SINGLE_CLI_EMPLOYEE_ID,
+    _SUPER_EMPLOYEE_IDS,
+    _XIAOC_ASSISTANT_ID,
+    CONTEXT_TURNS,
+    MAX_RESPONDERS,
+    SUPER_DISCUSSION_COMPLETION_TIMEOUT_SEC,
+    SUPER_DISCUSSION_DEFAULT_ROUNDS,
+    SUPER_DISCUSSION_MAX_ROUNDS,
+)
+from app.application.group_chat.employee_registry import _is_required_group_member
 
 
 class AiGroupChatDispatchMixin:
@@ -910,4 +914,3 @@ class AiGroupChatDispatchMixin:
                 "raw": task,
             },
         )
-
