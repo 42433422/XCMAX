@@ -38,13 +38,21 @@ def _svc():
 
 
 def _safe_shipment_export_path(result: dict[str, Any]) -> str | None:
+    from pathlib import Path
+
+    from app.infrastructure.workspace import resolve_existing_file_under_root
     from app.utils.path_utils import get_data_dir
 
     filename = os.path.basename(str(result.get("filename") or ""))
     if not re.fullmatch(r"shipment_records_[^/\\]{1,160}_\d{8}_\d{6}\.xlsx", filename):
         return None
-    candidate = os.path.join(get_data_dir(), "exports", filename)
-    return candidate if os.path.isfile(candidate) else None
+    try:
+        candidate = resolve_existing_file_under_root(
+            Path(get_data_dir()).resolve() / "exports", filename
+        )
+    except (OSError, ValueError):
+        return None
+    return str(candidate)
 
 
 def _agent_node_output(run: Any, node_id: str) -> dict[str, Any]:

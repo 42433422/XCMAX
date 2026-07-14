@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import re
 import uuid
 from pathlib import Path
@@ -296,7 +295,7 @@ class AIChatExcelImportMixin:
         from fastapi import HTTPException
 
         from app.infrastructure.workspace import (
-            resolve_safe_workspace_relpath,
+            resolve_existing_file_under_root,
             workspace_root,
         )
         from app.utils.path_utils import get_upload_dir
@@ -305,30 +304,29 @@ class AIChatExcelImportMixin:
         workspace_base = workspace_root()
         workspace_text = workspace_base.as_posix().rstrip("/")
         path: Path | None = None
+        root: Path | None = None
+        relative_path = ""
         if normalized.startswith(f"{workspace_text}/"):
-            rel = normalized[len(workspace_text) + 1 :]
-            try:
-                path = resolve_safe_workspace_relpath(rel)
-            except (ValueError, OSError, HTTPException):
-                return None
+            root = workspace_base
+            relative_path = normalized[len(workspace_text) + 1 :]
         elif not normalized.startswith("/") and not (
             len(normalized) >= 3 and normalized[1:3] == ":/"
         ):
-            try:
-                path = resolve_safe_workspace_relpath(normalized)
-            except (ValueError, OSError, HTTPException):
-                return None
+            root = workspace_base
+            relative_path = normalized
         else:
             upload_base = Path(get_upload_dir()).resolve()
             upload_text = upload_base.as_posix().rstrip("/")
             if normalized.startswith(f"{upload_text}/"):
                 raw_upload_name = normalized[len(upload_text) + 1 :]
-                upload_name = os.path.basename(raw_upload_name)
-                if upload_name == raw_upload_name and upload_name not in {"", ".", ".."}:
-                    path = upload_base / upload_name
-        if path is None:
+                if "/" not in raw_upload_name:
+                    root = upload_base
+                    relative_path = raw_upload_name
+        if root is None:
             return None
-        if not path.is_file():
+        try:
+            path = resolve_existing_file_under_root(root, relative_path)
+        except (ValueError, OSError, HTTPException):
             return None
         sheet = AIChatExcelImportMixin._resolve_sheet_name_for_reimport(
             excel_analysis, preview_data, request_context

@@ -47,9 +47,51 @@ def resolve_safe_workspace_relpath(rel: str) -> Path:
     return target
 
 
+def resolve_existing_file_under_root(base: Path, rel: str) -> Path:
+    """Resolve an existing regular file without passing untrusted text to filesystem APIs.
+
+    Each user-controlled path component is matched against names returned by
+    ``os.scandir``.  The path used for the next filesystem operation therefore
+    always comes from the trusted directory listing, and symlink traversal is
+    rejected at every level.
+    """
+
+    root = base.resolve()
+    raw = unquote(rel or "").strip().replace("\\", "/")
+    if not raw or raw.startswith("/") or (len(raw) >= 3 and raw[1:3] == ":/"):
+        raise ValueError("invalid path")
+    parts = raw.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError("invalid path")
+
+    current = root
+    for index, part in enumerate(parts):
+        try:
+            with os.scandir(current) as entries:
+                entry = next((candidate for candidate in entries if candidate.name == part), None)
+        except OSError as exc:
+            raise FileNotFoundError(raw) from exc
+        if entry is None or entry.is_symlink():
+            raise FileNotFoundError(raw)
+        is_last = index == len(parts) - 1
+        if is_last:
+            if not entry.is_file(follow_symlinks=False):
+                raise FileNotFoundError(raw)
+        elif not entry.is_dir(follow_symlinks=False):
+            raise FileNotFoundError(raw)
+        current = Path(entry.path)
+    return current
+
+
+def resolve_existing_workspace_file(rel: str) -> Path:
+    return resolve_existing_file_under_root(workspace_root(), rel)
+
+
 __all__ = [
     "workspace_root",
     "traditional_workspace_root",
     "traditional_resolve_path",
     "resolve_safe_workspace_relpath",
+    "resolve_existing_file_under_root",
+    "resolve_existing_workspace_file",
 ]

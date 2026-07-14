@@ -120,8 +120,11 @@ def build_private_db_assistant_router() -> APIRouter:
             from app.application.facades.wechat_facade import refresh_wechat_contacts_from_decrypt
 
             payload, code = refresh_wechat_contacts_from_decrypt()
-            if code >= 500:
-                payload = {"success": False, "message": "微信联系人刷新失败"}
+            if code >= 400:
+                payload = {
+                    "success": False,
+                    "message": "微信联系人刷新失败" if code >= 500 else "微信联系人刷新请求无效",
+                }
             return JSONResponse(payload, status_code=code)
 
         if refresh_type == "messages":

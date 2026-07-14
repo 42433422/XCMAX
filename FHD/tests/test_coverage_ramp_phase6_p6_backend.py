@@ -1029,6 +1029,21 @@ def test_private_db_refresh_source_all_delegates_to_facade() -> None:
     assert body["success"] is False
 
 
+def test_private_db_refresh_source_contacts_hides_facade_error_detail() -> None:
+    client = _private_db_client()
+    with patch(
+        "app.application.facades.wechat_facade.refresh_wechat_contacts_from_decrypt"
+    ) as mock_refresh:
+        mock_refresh.return_value = ({"success": False, "message": "stack trace detail"}, 400)
+        resp = client.post(
+            f"/api/mod/{MOD_ID}/sources/refresh",
+            json={"source_id": WECHAT_SOURCE_ID, "refresh_type": "contacts"},
+        )
+    assert resp.status_code == 400
+    body = resp.json()
+    assert body == {"success": False, "message": "微信联系人刷新请求无效"}
+
+
 def test_private_db_refresh_source_messages_success() -> None:
     client = _private_db_client()
     with patch("app.services.wechat_group_customer_bridge.sync_group_messages") as mock_sync:
