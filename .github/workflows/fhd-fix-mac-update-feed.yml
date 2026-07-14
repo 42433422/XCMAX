@@ -64,26 +64,13 @@ jobs:
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
 
-          # Hash the ZIP already on the update server (avoid multi-hundred-MB download).
-          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 - <<'PY'
-import base64, hashlib, pathlib
-p = pathlib.Path('${DEST}/${ZIP_NAME}')
-if not p.is_file():
-    raise SystemExit(f'missing {p}')
-h = hashlib.sha512()
-with p.open('rb') as f:
-    for chunk in iter(lambda: f.read(1024 * 1024), b''):
-        h.update(chunk)
-print(p.stat().st_size)
-print(base64.b64encode(h.digest()).decode())
-PY")"
+          scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
+          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${DEST}/${ZIP_NAME}'")"
           SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
           SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
           echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
 
           WORK="$(mktemp -d)"
-          # Create a stub file of the same name so generate-update-metadata accepts it,
-          # then overwrite the computed sha/size with remote values.
           : > "${WORK}/${ZIP_NAME}"
           TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
           export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
@@ -91,27 +78,7 @@ PY")"
             export XCAGI_BUILD_SHA="${BUILD_SHA}"
           fi
           node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
-          python3 - <<PY
-from pathlib import Path
-p = Path("${WORK}/latest-mac.yml")
-text = p.read_text(encoding="utf-8")
-lines = []
-for line in text.splitlines():
-    if line.startswith("  - url:"):
-        lines.append(line)
-    elif line.strip().startswith("sha512:"):
-        indent = line.split("sha512:")[0]
-        lines.append(f"{indent}sha512: ${SHA512}")
-    elif line.strip().startswith("size:"):
-        indent = line.split("size:")[0]
-        lines.append(f"{indent}size: ${SIZE}")
-    elif line.startswith("sha512:"):
-        lines.append(f"sha512: ${SHA512}")
-    else:
-        lines.append(line)
-p.write_text("\n".join(lines) + "\n", encoding="utf-8")
-print(p.read_text(encoding="utf-8"))
-PY
+          python3 scripts/deploy/patch_latest_mac_yml_hashes.py "${WORK}/latest-mac.yml" "${SHA512}" "${SIZE}"
           python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
           echo "---- signed feed ----"
           cat "${WORK}/latest-mac.yml"
