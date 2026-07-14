@@ -13,6 +13,8 @@ let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
 let downloadInFlight = false
+/** 最近一次可展示给渲染进程的更新事件（刷新页面后可重放）。 */
+let lastUpdateEvent: { type: string; data?: unknown } | null = null
 
 export async function ensureUpdaterNetSession(): Promise<Session> {
   if (updaterNetSession) {
@@ -73,6 +75,11 @@ function appendUpdaterEvent(type: string, data?: unknown): void {
 
 export function isUpdateDownloaded(): boolean {
   return updateDownloaded
+}
+
+/** 渲染进程挂载时拉取，避免 update-available 发生在订阅前或页面刷新后丢失角标。 */
+export function getUpdateStatus(): { type: string; data?: unknown } | null {
+  return lastUpdateEvent
 }
 
 export function readLocalBuildSha(): string {
@@ -163,6 +170,26 @@ export function configureUpdater(mainWindow: BrowserWindow): void {
   }
 
   const send = (type: string, data?: unknown) => {
+    if (
+      type === 'update-available' ||
+      type === 'update-downloaded' ||
+      type === 'download-progress'
+    ) {
+      lastUpdateEvent = { type, data }
+    } else if (type === 'update-not-available') {
+      lastUpdateEvent = null
+    } else if (type === 'error' && lastUpdateEvent?.type === 'update-available') {
+      // 保留 available 快照，刷新后仍能显示角标；错误信息一并附上
+      lastUpdateEvent = {
+        type: 'update-available',
+        data: {
+          ...(typeof lastUpdateEvent.data === 'object' && lastUpdateEvent.data
+            ? lastUpdateEvent.data
+            : {}),
+          lastError: data,
+        },
+      }
+    }
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send('xcagi:update-event', { type, data })
     }
@@ -337,4 +364,6 @@ export async function verifyMetadataSignatureText(content: string, publicKeyPem:
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
 export function __resetUpdateDownloadedForTest(): void {
   updateDownloaded = false
+  lastUpdateEvent = null
+  downloadInFlight = false
 }

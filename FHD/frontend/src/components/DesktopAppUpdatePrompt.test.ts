@@ -5,6 +5,8 @@ import { mount, flushPromises } from '@vue/test-utils'
 const updateListeners: Array<(event: unknown) => void> = []
 
 const desktopApi = {
+  checkForUpdates: vi.fn().mockResolvedValue({}),
+  getUpdateStatus: vi.fn().mockResolvedValue(null),
   downloadUpdate: vi.fn().mockResolvedValue({}),
   installUpdate: vi.fn().mockResolvedValue(undefined),
   onUpdateEvent: vi.fn((cb: (event: unknown) => void) => {
