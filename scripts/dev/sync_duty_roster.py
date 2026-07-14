@@ -9,10 +9,9 @@ SSOT（单一真相源）:
   1. 成都修茈科技有限公司/MODstore_deploy/modstore_server/duty_roster.py (marker 区块)
   2. FHD/frontend/src/domain/yuangonDutyRoster.ts       (整体生成)
   3. FHD/app/infrastructure/mods/catalog_visibility.py  (改为运行时派生)
-  4. FHD/mobile-harmony/entry/src/main/ets/models/MobileModels.ets (marker 区块)
-  5. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
-  6. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
-  7. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
+  4. FHD/mobile-android/app/src/main/java/.../DutyRosterSsot.kt (整体生成)
+  5. FHD/frontend/src/constants/enterpriseWorkflowEstablishment.ts (marker 区块)
+  6. FHD/mobile-flutter-poc/lib/src/data/duty_roster_ssot.dart (整体生成)
 
 用法:
   python scripts/dev/sync_duty_roster.py --generate   # 生成所有派生文件
@@ -42,7 +41,6 @@ TARGETS = {
     "modstore": MODSTORE_DEPLOY / "modstore_server" / "duty_roster.py",
     "frontend": FHD / "frontend" / "src" / "domain" / "yuangonDutyRoster.ts",
     "catalog": FHD / "app" / "infrastructure" / "mods" / "catalog_visibility.py",
-    "mobile": FHD / "mobile-harmony" / "entry" / "src" / "main" / "ets" / "models" / "MobileModels.ets",
     "android": FHD / "mobile-android" / "app" / "src" / "main" / "java" / "com" / "xiuci" / "xcagi" / "mobile" / "core" / "model" / "DutyRosterSsot.kt",
     # 企业端四层 + 员工层归属/上架状态（marker 区块；前端解析器优先查此表）
     "enterprise": FHD / "frontend" / "src" / "constants" / "enterpriseWorkflowEstablishment.ts",
@@ -720,12 +718,6 @@ def generate_target(target: str, doc: dict[str, Any], manifests: dict[str, dict[
         return generate_frontend_yuangon_duty_roster_ts(doc, manifests)
     if target == "catalog":
         return generate_catalog_visibility_py()
-    if target == "mobile":
-        # mobile 用 marker 区块替换
-        path = TARGETS["mobile"]
-        content = path.read_text(encoding="utf-8")
-        new_block = gen_mobile_areas_block(doc)
-        return replace_marker_block(content, MARKER_BEGIN_TS, MARKER_END_TS, new_block)
     if target == "android":
         return gen_android_duty_roster_kt(doc, manifests)
     if target == "enterprise":
