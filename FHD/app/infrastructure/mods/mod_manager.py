@@ -1213,9 +1213,10 @@ def _register_single_mod_http_routes(
         if hasattr(module, "register_fastapi_routes"):
             register_fastapi_fn = module.register_fastapi_routes
             if callable(register_fastapi_fn):
-                routes_before = list(getattr(app.router, "routes", []))
+                app_router = getattr(app, "router", None)
+                routes_before = list(getattr(app_router, "routes", []) or [])
                 register_fastapi_fn(app, mid)
-                routes_after = list(getattr(app.router, "routes", []))
+                routes_after = list(getattr(app_router, "routes", []) or [])
                 new_routes = [route for route in routes_after if route not in routes_before]
                 for old_route in routes_before:
                     endpoint_name = str(
@@ -1232,7 +1233,7 @@ def _register_single_mod_http_routes(
                         )
                         for new_route in new_routes
                     ):
-                        app.router.routes.remove(old_route)
+                        app_router.routes.remove(old_route)
                         logger.info(
                             "Removed superseded host alias after loading Mod %s: %s",
                             mid,
