@@ -46,10 +46,6 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
         return
     try:
 
-        @app.get(
-            "/xcmax-dashboard/.cache/xcmax/xcmax-pytest-coverage.json",
-            include_in_schema=False,
-        )
         def xcmax_dashboard_pytest_coverage_compat():
             for rel in (
                 ".cache/xcmax/xcmax-pytest-coverage.json",
@@ -66,6 +62,17 @@ def mount_xcmax_dashboard_static(app: FastAPI) -> None:
                     "message": "xcmax pytest coverage json not found",
                 },
                 status_code=404,
+            )
+
+        for coverage_path in (
+            "/xcmax-dashboard/.cache/xcmax/xcmax-pytest-coverage.json",
+            "/xcmax-dashboard/xcmax-pytest-coverage.json",
+        ):
+            app.add_api_route(
+                coverage_path,
+                xcmax_dashboard_pytest_coverage_compat,
+                methods=["GET"],
+                include_in_schema=False,
             )
 
         app.mount(
