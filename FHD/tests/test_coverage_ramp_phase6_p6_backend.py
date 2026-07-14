@@ -1067,7 +1067,7 @@ def test_private_db_refresh_source_messages_recoverable_error_returns_500() -> N
     assert resp.status_code == 500
     body = resp.json()
     assert body["success"] is False
-    assert "db broken" in body["message"]
+    assert body["message"] == "同步聊天记录失败"
 
 
 def test_private_db_refresh_source_unsupported_refresh_type_returns_400() -> None:
