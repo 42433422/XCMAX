@@ -60,7 +60,7 @@ const electronMocks = vi.hoisted(() => {
     showOpenDialog: vi.fn(() => Promise.resolve({ canceled: true }))
   }
   const ipcMain = { handle: vi.fn() }
-  const shell = { openPath: vi.fn(), openExternal: vi.fn() }
+  const shell = { openPath: vi.fn() }
   const session = {
     defaultSession: {
       setPermissionRequestHandler: vi.fn(),
@@ -485,6 +485,19 @@ describe('main — isTrustedDesktopOrigin', () => {
   it('returns false for malformed URL', async () => {
     const { isTrustedDesktopOrigin } = await import('./main.js')
     expect(isTrustedDesktopOrigin('not-a-url', 17500)).toBe(false)
+  })
+})
+
+describe('main — desktopWindowOpenAction', () => {
+  it('allows only the trusted local desktop origin', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('http://127.0.0.1:17500/orders', 17500)).toBe('allow')
+  })
+
+  it('denies external and malformed URLs', async () => {
+    const { desktopWindowOpenAction } = await import('./main.js')
+    expect(desktopWindowOpenAction('https://example.com/', 17500)).toBe('deny')
+    expect(desktopWindowOpenAction('not-a-url', 17500)).toBe('deny')
   })
 })
 
