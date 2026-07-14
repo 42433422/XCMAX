@@ -17,6 +17,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException, Request
 from openai import APIConnectionError, APIError, AuthenticationError, RateLimitError
@@ -211,6 +212,14 @@ class XcagiCompatChatBatchBody(BaseModel):
     source: str | None = None
 
 
+def _market_connection_label() -> str:
+    raw = os.environ.get("XCAGI_MARKET_BASE_URL") or os.environ.get("MODSTORE_PLATFORM_URL") or ""
+    try:
+        return urlsplit(raw).hostname or "修茈市场"
+    except ValueError:
+        return "修茈市场"
+
+
 def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
     if isinstance(exc, TimeoutError):
         msg = str(exc).strip() or "大模型响应超时，请稍后重试。"
@@ -219,17 +228,12 @@ def _xcagi_chat_http_exc(exc: BaseException) -> HTTPException:
         import httpx
 
         if isinstance(exc, httpx.ConnectError):
-            market = (
-                os.environ.get("XCAGI_MARKET_BASE_URL")
-                or os.environ.get("MODSTORE_PLATFORM_URL")
-                or "修茈市场"
-            ).rstrip("/")
             return HTTPException(
                 status_code=503,
-                detail=f"无法连接修茈平台 LLM（{market}）：{exc}",
+                detail=f"无法连接修茈平台 LLM（{_market_connection_label()}）",
             )
         if isinstance(exc, httpx.HTTPError):
-            return HTTPException(status_code=502, detail=f"修茈平台 LLM 请求失败: {exc}")
+            return HTTPException(status_code=502, detail="修茈平台 LLM 请求失败")
     except ImportError:
         pass
     if isinstance(exc, AuthenticationError):

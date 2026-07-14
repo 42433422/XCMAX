@@ -122,7 +122,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         except Exception as exc:
             logger.exception("读取考勤策略失败")
             return JSONResponse(
-                {"success": False, "message": str(exc)},
+                {"success": False, "message": "读取考勤策略失败"},
                 status_code=500,
             )
         return {"success": True, "attendance_policy": pol}
@@ -155,7 +155,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         except Exception as exc:
             logger.exception("保存考勤策略失败")
             return JSONResponse(
-                {"success": False, "message": str(exc)},
+                {"success": False, "message": "保存考勤策略失败"},
                 status_code=500,
             )
 
@@ -232,7 +232,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         try:
             out_rel = _normalize_relpath(output_relpath, field_name="output_relpath")
         except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
         try:
             upload_dir = resolve_safe_workspace_relpath("uploads")
@@ -245,21 +245,21 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         except Exception as e:
             logger.exception("Failed to save attendance upload")
             return JSONResponse(
-                {"success": False, "error": f"save upload failed: {e}"},
+                {"success": False, "error": "保存上传文件失败"},
                 status_code=500,
             )
 
         try:
             out_path = resolve_safe_workspace_relpath(out_rel)
         except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"success": False, "error": "输出路径无效"}, status_code=400)
 
         raw_tpl_rel = unquote(template_relpath or "").strip()
         if raw_tpl_rel:
             try:
                 normalized_raw_tpl = _normalize_relpath(raw_tpl_rel, field_name="template_relpath")
             except ValueError as e:
-                return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+                return JSONResponse({"success": False, "error": "模板路径无效"}, status_code=400)
             if normalized_raw_tpl != DEFAULT_TEMPLATE_RELPATH:
                 return JSONResponse(
                     {"success": False, "error": f"请使用固定模板: {DEFAULT_TEMPLATE_RELPATH}"},
@@ -280,7 +280,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
                     status_code=400,
                 )
         except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"success": False, "error": "模板文件无效"}, status_code=400)
 
         out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -318,7 +318,7 @@ def register_fastapi_routes(app, mod_id: str) -> None:
         except Exception as e:
             logger.exception("Attendance conversion crashed")
             return JSONResponse(
-                {"success": False, "error": f"convert failed: {e}"},
+                {"success": False, "error": "考勤转换失败"},
                 status_code=500,
             )
         if not result.get("success"):
@@ -381,9 +381,9 @@ def register_fastapi_routes(app, mod_id: str) -> None:
             rel = _normalize_relpath(relpath, field_name="relpath")
             p = resolve_safe_workspace_relpath(rel)
         except ValueError as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
         except Exception as e:
-            return JSONResponse({"success": False, "error": str(e)}, status_code=400)
+            return JSONResponse({"success": False, "error": "下载路径无效"}, status_code=400)
 
         if not p.exists() or not p.is_file():
             return JSONResponse({"success": False, "error": "file not found"}, status_code=404)
