@@ -30,6 +30,15 @@ jobs:
   windows:
     if: ${{ inputs.verify_only != true }}
     runs-on: windows-latest
+    env:
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+      AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE }}
+      XCAGI_REQUIRE_WINDOWS_SIGNING: "1"
+      XCAGI_WINDOWS_PUBLISHER_NAME: ${{ vars.XCAGI_WINDOWS_PUBLISHER_NAME || '成都修茈科技有限公司' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -162,6 +171,8 @@ jobs:
             --include='*.exe.blockmap' \
             --include='*.dmg' \
             --include='*.dmg.blockmap' \
+            --include='*.zip' \
+            --include='*.zip.blockmap' \
             --include='latest*.yml' \
             --include='manifest.json' \
             --exclude='*' \
@@ -374,6 +385,8 @@ jobs:
             --include='*.exe.blockmap' \
             --include='*.dmg' \
             --include='*.dmg.blockmap' \
+            --include='*.zip' \
+            --include='*.zip.blockmap' \
             --include='latest*.yml' \
             --include='manifest.json' \
             --exclude='*' \
@@ -414,7 +427,7 @@ jobs:
           if [ -z "$src_dir" ]; then src_dir="$BASE"; fi
           if [ -d "$src_dir" ]; then
             mkdir -p "release/xcagi-v${version}/$sku"
-            cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
+            cp -v "$src_dir"/*.exe "$src_dir"/*.exe.blockmap "$src_dir"/*.dmg "$src_dir"/*.dmg.blockmap "$src_dir"/*.zip "$src_dir"/*.zip.blockmap "$src_dir"/latest*.yml "release/xcagi-v${version}/$sku/" 2>/dev/null || true
           fi
           ls -la "release/xcagi-v${version}/enterprise"
       - name: Generate manifest.json + download-release.json
@@ -484,6 +497,8 @@ jobs:
               --include='*.exe.blockmap' \
               --include='*.dmg' \
               --include='*.dmg.blockmap' \
+              --include='*.zip' \
+              --include='*.zip.blockmap' \
               --include='latest*.yml' \
               --exclude='*' \
               -e "ssh ${SSH_OPTS[*]}" "$src_dir/" "root@${HOST}:/var/www/xcagi-v${version}/$sku/"

@@ -20,7 +20,13 @@
           >
             {{ $t('chat.clear') }}
           </button>
-          <span class="close" @click="$emit('close')">×</span>
+          <button
+            type="button"
+            class="close history-modal-close"
+            :aria-label="$t('chat.closeHistory')"
+            :title="$t('chat.closeHistory')"
+            @click="$emit('close')"
+          >×</button>
         </div>
       </div>
       <div class="modal-body history-modal-body">
@@ -56,7 +62,7 @@
             <div class="history-session-meta">
               <span>{{ $t('chat.messageCount', { count: session.message_count || 0 }) }}</span>
               <span v-if="session.last_message_at">
-                {{ formatTaskTime(new Date(session.last_message_at).getTime()) }}
+                {{ formatHistoryTime(session.last_message_at) }}
               </span>
               <span v-if="session.is_local_only">{{ $t('chat.localOnly') }}</span>
             </div>
@@ -69,6 +75,7 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import { formatHistoryTime } from '@/utils/chatTaskLabels'
 
 useI18n()
 
@@ -84,7 +91,6 @@ defineProps<{
   historyLoading: boolean
   historyError: string
   currentSessionId: string
-  formatTaskTime: (ts: number) => string
 }>()
 
 defineEmits<{
@@ -121,6 +127,21 @@ defineEmits<{
   border-color: #fecaca;
   color: #b91c1c;
   background: #fff5f5;
+}
+
+.history-modal-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.history-modal-close:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .history-modal-body {

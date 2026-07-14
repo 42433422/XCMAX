@@ -26,6 +26,9 @@ describe('ordersApi', () => {
   it('covers endpoints', async () => {
     await ordersApi.getOrders({ page: 1 })
     await ordersApi.getOrder('SO 1')
+    await ordersApi.createOrder({ purchase_unit: 'unit', products: [] })
+    await ordersApi.updateOrder('1', { purchase_unit: 'unit' })
+    await ordersApi.exportOrders({ unit: 'unit' })
     await ordersApi.getLatestOrders()
     await ordersApi.searchOrders('q')
     await ordersApi.searchOrders('')

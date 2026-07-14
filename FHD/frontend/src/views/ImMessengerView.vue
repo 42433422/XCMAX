@@ -378,6 +378,7 @@ import {
 } from '@/utils/employeeSsotContacts';
 import { useXcmaxSync } from '@/composables/useXcmaxSync';
 import { isAdminConsoleSpa } from '@/utils/adminConsoleUrl';
+import { isDesktopShell } from '@/utils/desktopShell';
 import {
   YUANGON_AREAS,
   YUANGON_PKG_DESCRIPTIONS,
@@ -1620,7 +1621,8 @@ async function resolveLocalUserId(): Promise<number | null> {
     const me = await authApi.getCurrentUser();
     const data = me?.data as CurrentUserPayload | undefined;
     isAdminCustomerServiceConsole.value = Boolean(
-      data?.account_kind === 'admin'
+      !isDesktopShell()
+      && data?.account_kind === 'admin'
       && data?.market_is_admin,
     );
     const id = Number(data?.user?.id);

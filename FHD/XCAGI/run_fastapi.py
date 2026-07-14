@@ -21,8 +21,6 @@ from pathlib import Path
 _XCAGI_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _XCAGI_DIR.parent
 
-# 运行时端口文件：前端 Vite 读取此文件确定代理目标，实现前后端端口联动
-_RUNTIME_PORT_FILE = _REPO_ROOT / ".runtime" / "api.port"
 # 自动寻找端口的范围（macOS AirPlay 常占用 5000）
 _PORT_PROBE_RANGE = range(5000, 5021)
 
@@ -47,11 +45,27 @@ def _find_free_port(host: str, preferred: int) -> int:
     return preferred
 
 
+def _runtime_port_file() -> Path:
+    """运行时端口文件。
+
+    打包桌面版的程序目录属于已签名、可能只读的应用资源，绝不能在其中创建
+    ``.runtime``。Electron 通过 ``--data-dir`` 设置的用户数据目录是唯一可写
+    位置；源码开发态未配置数据目录时仍保持原有仓库路径。
+    """
+    data_root = (
+        os.environ.get("XCAGI_DATA_DIR") or os.environ.get("XCAGI_DESKTOP_DATA_DIR") or ""
+    ).strip()
+    if data_root:
+        return Path(data_root).expanduser().resolve() / ".runtime" / "api.port"
+    return _REPO_ROOT / ".runtime" / "api.port"
+
+
 def _persist_runtime_port(port: int) -> None:
     """将实际监听端口写入 .runtime/api.port，供前端 Vite 读取联动。"""
     try:
-        _RUNTIME_PORT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _RUNTIME_PORT_FILE.write_text(str(port), encoding="utf-8")
+        port_file = _runtime_port_file()
+        port_file.parent.mkdir(parents=True, exist_ok=True)
+        port_file.write_text(str(port), encoding="utf-8")
     except OSError:
         pass
 
@@ -262,4 +276,11 @@ def main(argv: list[str] | None = None) -> None:
 
 
 if __name__ == "__main__":
+    # PyInstaller replaces freeze_support() so frozen worker/resource-tracker
+    # invocations are dispatched before our argparse sees their private flags.
+    # Without this, faster-whisper can still return text while leaking a dead
+    # multiprocessing resource tracker after every cold model load.
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()

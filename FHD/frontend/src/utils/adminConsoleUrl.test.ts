@@ -4,11 +4,15 @@ import {
   isAdminConsoleSpa,
   resolveAdminConsoleLoginUrl,
   resolveAdminConsoleHomeUrl,
+  resolveAdminConsoleOrigin,
+  canOpenAdminConsole,
+  DESKTOP_ADMIN_FORBIDDEN_MESSAGE,
 } from './adminConsoleUrl'
 
 describe('adminConsoleUrl', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
+    vi.unstubAllGlobals()
   })
 
   it('isAdminConsoleSpa reads VITE_XCMAX_ADMIN_CONSOLE', () => {
@@ -44,5 +48,26 @@ describe('adminConsoleUrl', () => {
   it('uses explicit admin console origin when configured', () => {
     vi.stubEnv('VITE_ADMIN_CONSOLE_ORIGIN', 'http://127.0.0.1:7001/')
     expect(resolveAdminConsoleHomeUrl()).toBe('http://127.0.0.1:7001/admin/xcmax-admin')
+  })
+
+  it('does not loop desktop backend origin back to local /admin', () => {
+    const original = window.location
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: {
+        protocol: 'http:',
+        hostname: '127.0.0.1',
+        port: '17500',
+        origin: 'http://127.0.0.1:17500',
+      },
+    })
+    try {
+      expect(resolveAdminConsoleOrigin()).toBe('')
+      expect(resolveAdminConsoleHomeUrl()).toBe('')
+      expect(canOpenAdminConsole()).toBe(false)
+      expect(DESKTOP_ADMIN_FORBIDDEN_MESSAGE).toContain('网页版管理端')
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: original })
+    }
   })
 })

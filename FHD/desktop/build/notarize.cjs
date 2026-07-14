@@ -4,7 +4,6 @@
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
-const { notarize } = require('@electron/notarize')
 
 function resolveApiKeyPath() {
   const explicit = (process.env.APP_STORE_CONNECT_API_KEY_PATH || '').trim()
@@ -29,6 +28,10 @@ function resolveApiKeyPath() {
 
 exports.default = async function afterSign(context) {
   if (context.electronPlatformName !== 'darwin') return
+
+  // @electron/notarize >= 3 is ESM-only. Keep electron-builder's CommonJS
+  // afterSign entrypoint, but load the notarization client dynamically.
+  const { notarize } = await import('@electron/notarize')
 
   const appName = context.packager.appInfo.productFilename
   const appPath = `${context.appOutDir}/${appName}.app`

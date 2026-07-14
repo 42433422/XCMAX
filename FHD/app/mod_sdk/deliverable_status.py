@@ -19,6 +19,7 @@ from app.mod_sdk.product_skus import (
     bundled_mod_ids_for_sku,
     resolve_product_sku,
 )
+from app.runtime_integrity import runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 
@@ -175,6 +176,16 @@ def build_deliverable_status(
 
     mods_routes = _mods_routes_loaded(app)
 
+    runtime_integrity = runtime_integrity_snapshot(app)
+    for failure in runtime_integrity["blockers"]:
+        blockers.append(
+            {
+                "code": "RUNTIME_COMPONENT_UNAVAILABLE",
+                "message": str(failure.get("detail") or failure.get("component")),
+                "component": failure.get("component"),
+            }
+        )
+
     if mods_routes is False and expected and installed_mod_ids is None:
         blockers.append(
             {
@@ -192,7 +203,7 @@ def build_deliverable_status(
             or (edition == "minimal" and minimal_ready)
         )
     deliverable = edition_ready and not any(
-        b["code"] in ("MOD_ROUTES_NOT_MOUNTED",) for b in blockers
+        b["code"] in ("MOD_ROUTES_NOT_MOUNTED", "RUNTIME_COMPONENT_UNAVAILABLE") for b in blockers
     )
 
     product_flow_step = "daily_use"
@@ -238,6 +249,7 @@ def build_deliverable_status(
         "mods_routes_loaded": bool(mods_routes) if mods_routes is not None else False,
         "platform_shell_mode": shell.get("platform_shell_mode"),
         "blockers": blockers,
+        "runtime_integrity": runtime_integrity,
         "next_actions": _next_actions(edition, blockers, deliverable),
         "desktop_mode": (os.environ.get("XCAGI_DESKTOP_MODE") or "").strip().lower()
         in {"1", "true", "yes"},

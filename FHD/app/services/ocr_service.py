@@ -7,16 +7,49 @@ OCR服务模块
 
 import logging
 import os
-import re
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from app.infrastructure.ocr_analysis import OCRAnalysisMixin
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
+
+_MACOS_VISION_OCR_JXA = r"""
+function run(argv) {
+  ObjC.import('Vision');
+  ObjC.import('CoreImage');
+  const path = String(argv[0] || '');
+  if (!path) return '';
+  const imageUrl = $.NSURL.fileURLWithPath(path);
+  const image = $.CIImage.imageWithContentsOfURL(imageUrl);
+  if (!image) return '';
+  const lines = [];
+  const request = $.VNRecognizeTextRequest.alloc.init;
+  request.recognitionLevel = $.VNRequestTextRecognitionLevelAccurate;
+  request.usesLanguageCorrection = true;
+  const handler = $.VNImageRequestHandler.alloc.initWithCIImageOptions(
+    image, $.NSDictionary.dictionary
+  );
+  const error = Ref();
+  if (!handler.performRequestsError($([request]), error)) return '';
+  const observations = request.results;
+  for (let i = 0; i < observations.count; i += 1) {
+    const candidates = observations.objectAtIndex(i).topCandidates(1);
+    if (candidates.count > 0) {
+      lines.push(ObjC.unwrap(candidates.objectAtIndex(0).string));
+    }
+  }
+  return lines.join('\n');
+}
+"""
 
 
 @dataclass
@@ -29,13 +62,14 @@ class OCRResult:
     block_type: str = "text"
 
 
-class OCRService:
+class OCRService(OCRAnalysisMixin):
     """OCR服务类"""
 
     def __init__(self, use_gpu: bool = False):
         self.use_gpu = use_gpu
         self.reader = None
         self.tesseract_available = False
+        self.macos_vision_available = False
         self._paddle_enabled = False
         self._init_engines()
 
@@ -70,10 +104,18 @@ class OCRService:
         if backend in ("auto", "easyocr") and not self._paddle_enabled:
             self._init_easyocr()
 
+        if backend in ("auto", "macos_vision") and not self._paddle_enabled and self.reader is None:
+            self._init_macos_vision()
+
         if backend in ("auto", "tesseract") and not self._paddle_enabled and self.reader is None:
             self._init_tesseract()
 
-        if not self._paddle_enabled and self.reader is None and not self.tesseract_available:
+        if (
+            not self._paddle_enabled
+            and self.reader is None
+            and not getattr(self, "macos_vision_available", False)
+            and not self.tesseract_available
+        ):
             self._init_tesseract()
 
     def _init_easyocr(self) -> None:
@@ -100,6 +142,49 @@ class OCRService:
         except RECOVERABLE_ERRORS:
             self.tesseract_available = False
 
+    def _init_macos_vision(self) -> None:
+        """Enable the OCR engine built into macOS (no Python package or model download)."""
+        self.macos_vision_available = bool(
+            sys.platform == "darwin" and os.path.isfile("/usr/bin/osascript")
+        )
+        if self.macos_vision_available:
+            logger.info("OCR 回退引擎：macOS Vision")
+
+    def _recognize_macos_vision(self, image_array: np.ndarray) -> str:
+        if not self.macos_vision_available:
+            return ""
+        tmp_path = ""
+        try:
+            from PIL import Image
+
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp_path = tmp.name
+            Image.fromarray(image_array).save(tmp_path, format="PNG")
+            proc = subprocess.run(
+                [
+                    "/usr/bin/osascript",
+                    "-l",
+                    "JavaScript",
+                    "-e",
+                    _MACOS_VISION_OCR_JXA,
+                    tmp_path,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            if proc.returncode != 0:
+                logger.warning("macOS Vision OCR 失败: %s", (proc.stderr or "").strip()[:500])
+                return ""
+            return self._clean_text(proc.stdout or "")
+        except (subprocess.SubprocessError, *RECOVERABLE_ERRORS) as exc:
+            logger.warning("macOS Vision OCR 异常: %s", exc)
+            return ""
+        finally:
+            if tmp_path:
+                Path(tmp_path).unlink(missing_ok=True)
+
     def recognize(self, image) -> str:
         """
         识别图像中的文字
@@ -110,7 +195,12 @@ class OCRService:
         Returns:
             识别出的文字
         """
-        if not self._paddle_enabled and self.reader is None and not self.tesseract_available:
+        if (
+            not self._paddle_enabled
+            and self.reader is None
+            and not getattr(self, "macos_vision_available", False)
+            and not self.tesseract_available
+        ):
             logger.error("OCR引擎未初始化")
             return ""
 
@@ -133,6 +223,9 @@ class OCRService:
                 results = self.reader.readtext(image_array, detail=0)
                 text = "\n".join(results)
                 return self._clean_text(text)
+
+            if getattr(self, "macos_vision_available", False):
+                return self._recognize_macos_vision(image_array)
 
             if self.tesseract_available:
                 from PIL import Image
@@ -303,157 +396,11 @@ class OCRService:
             return "paddleocr"
         if self.reader is not None:
             return "easyocr"
+        if getattr(self, "macos_vision_available", False):
+            return "macos_vision"
         if self.tesseract_available:
             return "tesseract"
         return "none"
-
-    def extract_structured_data(self, text: str) -> dict[str, Any]:
-        """从OCR文本中提取结构化数据"""
-        structured_data: object = {
-            "purchase_unit": None,
-            "contact_person": None,
-            "contact_phone": None,
-            "purchase_date": None,
-            "order_number": None,
-            "total_amount": None,
-            "products": [],
-            "raw_text": text,
-        }
-
-        unit_match = re.search(r"购货单位[：:]\s*(.+?)(?:\n|$)", text)
-        if unit_match:
-            structured_data["purchase_unit"] = unit_match.group(1).strip()
-
-        contact_match = re.search(r"联系人[：:]\s*(.+?)(?:\n|$)", text)
-        if contact_match:
-            structured_data["contact_person"] = contact_match.group(1).strip()
-
-        phone_match = re.search(r"联系电话[：:]\s*([\d\-\+]+)", text)
-        if phone_match:
-            structured_data["contact_phone"] = phone_match.group(1).strip()
-
-        date_match = re.search(r"(\d{4}[-年]\d{1,2}[-月]\d{1,2}[日]?)", text)
-        if date_match:
-            structured_data["purchase_date"] = date_match.group(1)
-
-        order_match = re.search(r"订单编号[：:]\s*(.+?)(?:\n|$)", text)
-        if order_match:
-            structured_data["order_number"] = order_match.group(1).strip()
-
-        amount_match = re.search(r"合计[：:]\s*([\d\.]+)", text)
-        if amount_match:
-            try:
-                structured_data["total_amount"] = float(amount_match.group(1))
-            except ValueError:
-                pass
-
-        product_pattern = r"([A-Za-z0-9\-]+)\s+(.+?)\s+(\d+)\s+([\d\.]+)\s+([\d\.]+)"
-        for match in re.finditer(product_pattern, text):
-            product = {
-                "model": match.group(1),
-                "name": match.group(2),
-                "quantity": int(match.group(3)),
-                "unit_price": float(match.group(4)),
-                "total_price": float(match.group(5)),
-            }
-            structured_data["products"].append(product)
-
-        return structured_data
-
-    def analyze_text(self, text: str) -> dict[str, Any]:
-        """分析文本内容"""
-        analysis = {
-            "text_type": "unknown",
-            "confidence": 0.0,
-            "detected_fields": {},
-            "missing_fields": [],
-            "suggestions": [],
-        }
-
-        if not text:
-            return analysis
-
-        keywords = {
-            "order": ["订单", "订购", "下单"],
-            "shipment": ["发货", "送货"],
-            "payment": ["付款", "支付", "金额", "合计"],
-            "product": ["产品", "型号", "规格"],
-            "customer": ["客户", "购货单位"],
-            "contact": ["联系人", "电话"],
-            "date": ["日期", "时间"],
-        }
-
-        type_scores = {}
-        for type_name, kws in keywords.items():
-            score = sum(1 for kw in kws if kw in text)
-            type_scores[type_name] = score
-
-        if type_scores:
-            max_type = max(type_scores, key=type_scores.get)
-            if type_scores[max_type] > 0:
-                analysis["text_type"] = max_type
-                analysis["confidence"] = min(1.0, type_scores[max_type] / 3)
-
-        field_patterns = {
-            "purchase_unit": r"购货单位[：:]\s*(.+?)(?:\n|$)",
-            "contact_person": r"联系人[：:]\s*(.+?)(?:\n|$)",
-            "phone": r"电话[：:]\s*([\d\-\+]+)",
-            "date": r"(\d{4}[年-]\d{1,2}[月-]\d{1,2}[日]?)",
-            "order_id": r"订单[编号]?[：:]\s*(.+?)(?:\n|$)",
-            "total": r"合计[：:]\s*([\d\.]+)",
-        }
-
-        for field, pattern in field_patterns.items():
-            match = re.search(pattern, text)
-            if match:
-                value = match.group(1) if match.lastindex else match.group(0)
-                analysis["detected_fields"][field] = value.strip()
-
-        essential_fields = ["purchase_unit", "contact_person", "date"]
-        for field in essential_fields:
-            if field not in analysis["detected_fields"]:
-                analysis["missing_fields"].append(field)
-
-        if analysis["text_type"] == "unknown":
-            analysis["suggestions"].append("文本类型不明确，请手动确认")
-
-        return analysis
-
-    def _clean_text(self, text: str) -> str:
-        """清理识别出的文字"""
-        if not text:
-            return ""
-
-        lines = text.split("\n")
-        cleaned_lines = [line.strip() for line in lines if line.strip()]
-
-        return "\n".join(cleaned_lines)
-
-    def _classify_text(self, text: str) -> str:
-        """分类文本类型"""
-        if not text:
-            return "unknown"
-
-        date_patterns = [r"\d{4}[-年]\d{1,2}[-月]\d{1,2}", r"\d{1,2}[-/]\d{1,2}[-/]\d{2,4}"]
-        for pattern in date_patterns:
-            if re.search(pattern, text):
-                return "date"
-
-        amount_patterns = (
-            r"[\d\.]+\s*(元|¥|dollar|\$|€)",
-            r"[$¥€]\s*[\d\.]+",
-        )
-        for pattern in amount_patterns:
-            if re.search(pattern, text):
-                return "amount"
-
-        if re.match(r"^[\d\-\+\(\)]{7,}$", text):
-            return "phone"
-
-        if re.match(r"^[\d\.\,\-\+]+$", text):
-            return "number"
-
-        return "text"
 
 
 ocr_service: OCRService | None = None

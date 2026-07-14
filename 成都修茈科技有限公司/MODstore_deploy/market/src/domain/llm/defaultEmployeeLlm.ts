@@ -19,7 +19,7 @@ const DEFAULT_MODEL_FOR_PROVIDER: Record<string, string> = {
   siliconflow: 'Qwen/Qwen2.5-7B-Instruct',
   dashscope: 'qwen-turbo',
   moonshot: 'moonshot-v1-8k',
-  xiaomi: 'mimo-v2-flash',
+  xiaomi: 'mimo-v2.5-pro',
   minimax: 'abab6.5s-chat',
   doubao: 'doubao-pro-32k',
   groq: 'llama-3.3-70b-versatile',

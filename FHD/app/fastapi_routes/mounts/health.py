@@ -6,6 +6,7 @@ import logging
 
 from fastapi import FastAPI
 
+from app.runtime_integrity import neuro_degraded_reasons, runtime_integrity_snapshot
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
 logger = logging.getLogger(__name__)
@@ -16,10 +17,13 @@ def register_health_routes(app: FastAPI) -> None:
 
     @app.get("/api/health", tags=["health"])
     async def health_check(lite: bool = False):
+        runtime = runtime_integrity_snapshot(app)
         payload: dict = {
-            "status": "healthy",
+            "status": runtime["status"],
             "version": app.version,
             "service": "xcagi-fastapi",
+            "runtime": runtime,
+            "degradedReasons": list(runtime["degraded_reasons"]),
         }
         if lite:
             return payload
@@ -33,6 +37,11 @@ def register_health_routes(app: FastAPI) -> None:
                 payload["neuro"] = {"enabled": False}
         except RECOVERABLE_ERRORS as exc:
             payload["neuro"] = {"enabled": True, "error": str(exc)}
+        neuro_reasons = neuro_degraded_reasons(payload.get("neuro"))
+        if neuro_reasons:
+            payload["degradedReasons"].extend(neuro_reasons)
+            if payload["status"] == "healthy":
+                payload["status"] = "degraded"
         return payload
 
     @app.get("/api/ping", tags=["health"])

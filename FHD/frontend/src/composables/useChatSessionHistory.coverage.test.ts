@@ -372,6 +372,21 @@ describe('useChatSessionHistory — coverage ramp', () => {
       expect(loaded[0].role).toBe('ai')
     })
 
+    it('restores each server message original timestamp', async () => {
+      const timestamp = '2026-07-13T10:25:00-07:00'
+      chatApiMock.getConversation.mockResolvedValue({
+        success: true,
+        messages: [{ role: 'assistant', content: 'reply', timestamp }],
+      })
+      const { deps, mocks } = makeDeps()
+      const { loadSession } = useChatSessionHistory(deps)
+      await loadSession('s1')
+      const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
+      expect(loaded[0].time).toBe(
+        new Date(timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+      )
+    })
+
     it('uses normalizeServerContentToHtml for content', async () => {
       chatApiMock.getConversation.mockResolvedValue({
         success: true,
@@ -398,8 +413,22 @@ describe('useChatSessionHistory — coverage ramp', () => {
       await loadSession('local-sid')
       expect(mocks.loadMessages).toHaveBeenCalled()
       const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
-      expect(loaded[0].content).toBe('<p>local msg</p>')
+      expect(loaded[0].content).toBe('local msg')
       expect(showHistory.value).toBe(false)
+    })
+
+    it('does not double-escape cached HTML entities when restoring local history', async () => {
+      localStorage.setItem(
+        'xcagi_chat_messages_local-entity',
+        JSON.stringify([{ role: 'ai', content: '状态为 &quot;正常&quot;', time: '07:25' }]),
+      )
+      chatApiMock.getConversation.mockResolvedValue({ success: true, messages: [] })
+      const { deps, mocks } = makeDeps()
+      const { loadSession } = useChatSessionHistory(deps)
+      await loadSession('local-entity')
+      const loaded = mocks.loadMessages.mock.calls[0][0] as ChatMessage[]
+      expect(loaded[0].content).toBe('状态为 &quot;正常&quot;')
+      expect(loaded[0].content).not.toContain('&amp;quot;')
     })
 
     it('loads placeholder when server success, no messages, no local', async () => {

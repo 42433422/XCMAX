@@ -81,7 +81,9 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
       source: task.source,
       status: 'success',
       progress: 100,
+      stage: '',
       summary: summary || task.summary,
+      error: '',
     })
   }
 
@@ -94,6 +96,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
       type: task.type,
       source: task.source,
       status: 'failed',
+      stage: '执行失败',
       error,
     })
   }
@@ -107,6 +110,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
       type: task.type,
       source: task.source,
       status: 'cancelled',
+      stage: '已取消',
       summary: '任务已取消',
     })
   }
@@ -121,6 +125,7 @@ export function useChatTaskList(options: UseChatTaskListOptions = {}) {
       source: task.source,
       status: 'running',
       progress: 0,
+      stage: '',
       error: '',
     })
   }

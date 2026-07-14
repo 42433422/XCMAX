@@ -257,7 +257,7 @@ export async function fetchMarketLlmCatalog(
 
 /** 从当前 FHD 会话取出服务端绑定的修茈 JWT（登录时已写入进程内映射），用于写入 localStorage 并拼接 ``xcagi_mt`` 跨域跳转。 */
 export async function fetchSessionMarketHandoff(): Promise<MarketAuthResult | null> {
-  const res = await apiFetch('/api/market/session-handoff');
+  const res = await apiFetch('/api/market/session-handoff', { timeoutMs: 8_000 });
   const j = (await res.json()) as {
     success?: boolean;
     message?: string;

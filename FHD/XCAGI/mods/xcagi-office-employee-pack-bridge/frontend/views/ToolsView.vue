@@ -323,7 +323,7 @@ function resolveConsoleRedirectToRoute(redirect) {
   if (url.startsWith('/print')) return '/print';
   if (url.startsWith('/template-preview')) return '/template-preview';
   if (url.startsWith('/ocr')) return '/chat';
-  if (url.startsWith('/wechat-contacts')) return '/wechat-contacts';
+  if (url.startsWith('/wechat-contacts')) return '/data-sources?source=wechat_local_db';
   if (!url.startsWith('/console')) return url;
 
   const match = url.match(/[?&]view=([^&]+)/);
@@ -335,7 +335,7 @@ function resolveConsoleRedirectToRoute(redirect) {
     print: '/print',
     materials: '/materials',
     ocr: '/chat',
-    'wechat-contacts': '/wechat-contacts',
+    'wechat-contacts': '/data-sources?source=wechat_local_db',
     excel: '/template-preview',
     'template-preview': '/template-preview',
     shipment: '/orders'
@@ -352,7 +352,7 @@ async function openTool(toolId) {
     materials: '/materials',
     shipment_template: '/template-preview',
     excel_decompose: '/template-preview',
-    wechat: '/wechat-contacts'
+    wechat: '/data-sources?source=wechat_local_db'
   };
 
   const directRoute = directRouteMap[String(toolId || '').trim()];

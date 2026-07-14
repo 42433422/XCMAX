@@ -104,14 +104,10 @@
         </template>
 
         <template v-else-if="currentStep === 'host-pack'">
-          <h1>补侧栏基础线（按需）</h1>
-          <p class="lead baseline-scope-note">
-            本步安装的是<strong>侧栏菜单与宿主能力卡片</strong>（桥接 Mod），用于打开对话、生态、业务菜单等入口；
-            <strong>不是</strong>安装 AI 员工实体。AI 员工请在扩展市场或<strong>账号定制 Mod</strong>装齐后自动上岗。
-          </p>
-          <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
-          <p v-else class="lead muted">
-            您选了<strong>{{ pickedIndustryName }}</strong>。下面列出建议补装的侧栏能力项，可一键装齐，也可以先进入对话。
+          <h1>准备侧栏菜单</h1>
+          <p class="lead">
+            已选 <strong>{{ pickedIndustryName }}</strong>。点一下装齐推荐菜单，就可以进对话。
+            AI 员工以后需要再装，不挡这一步。
           </p>
           <div
             class="status-card"
@@ -122,35 +118,19 @@
             </template>
             <template v-else-if="baselineOk">
               <i class="fa fa-check-circle"></i>
-              侧栏宿主桥接已齐，可以进入智能对话。
-              <span v-if="missingAccountCustomCount > 0">
-                （账号定制 Mod / AI 员工另 {{ missingAccountCustomCount }} 项，不阻塞本步）
-              </span>
+              菜单已齐，可以进入智能对话。
             </template>
             <template v-else>
               <i class="fa fa-exclamation-circle"></i>
-              还缺 {{ missingSidebarBaselineCount || missingRequiredCount }} 项侧栏宿主桥接
-              <span v-if="missingAccountCustomCount > 0">
-                （另 {{ missingAccountCustomCount }} 项账号定制 Mod / 员工待安装）
-              </span>
-              <span v-else-if="missingIndustryPackageCount > 0">
-                （另 {{ missingIndustryPackageCount }} 项行业包可选安装）
-              </span>
+              还差 {{ missingSidebarBaselineCount || missingRequiredCount || 1 }} 项推荐菜单
             </template>
           </div>
-          <p
-            v-if="baselineOk && !loading"
-            class="sidebar-shell-note muted"
-          >
-            进入对话后，主导航会<strong>立刻长出本行业业务菜单</strong>，名称随<strong>{{ pickedIndustryName }}</strong>自动适配。
-            部门/人员等业务改名与 AI 员工，仍由<strong>账号定制 Mod</strong>装齐后补充。
-          </p>
           <div
             v-if="industrySidebarPreviewLabels.length"
             class="sidebar-preview"
             aria-label="进入后补齐的侧栏菜单"
           >
-            <p class="sidebar-preview-title">进入后侧栏将补齐</p>
+            <p class="sidebar-preview-title">装好后侧栏会出现</p>
             <div class="sidebar-preview-list">
               <span
                 v-for="label in industrySidebarPreviewLabels"
@@ -161,100 +141,81 @@
               </span>
             </div>
           </div>
-          <p
-            v-if="showNoAccountCustomHint"
-            class="account-custom-empty-hint muted"
-          >
-            当前账号未绑定定制 Mod；定制能力与 AI 员工需在账号开通后从此处或扩展市场安装。
-          </p>
-          <div v-if="sidebarBaselineGroups.length" class="baseline-groups">
-            <p class="baseline-section-title">侧栏宿主桥接（本步重点）</p>
-            <section v-for="group in sidebarBaselineGroups" :key="group.id" class="baseline-group">
-              <h3>{{ group.title }}</h3>
-              <p class="baseline-group-hint">{{ group.hint }}</p>
-              <ul class="baseline-list">
-                <li
-                  v-for="item in group.items"
-                  :key="item.mod_id"
-                  :class="{
-                    ok: item.installed,
-                    warn: !item.installed && item.required,
-                    optional: !item.required && !item.installed,
-                  }"
-                >
-                  <i
-                    class="fa"
-                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
-                    aria-hidden="true"
-                  ></i>
-                  <span>{{ item.label }}</span>
-                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
-                </li>
-              </ul>
-            </section>
-          </div>
-          <div v-if="supplementBaselineGroups.length" class="baseline-groups baseline-groups--supplement">
-            <p class="baseline-section-title">行业包与账号定制（不阻塞进入对话）</p>
-            <section v-for="group in supplementBaselineGroups" :key="group.id" class="baseline-group">
-              <h3>{{ group.title }}</h3>
-              <p class="baseline-group-hint">{{ group.hint }}</p>
-              <ul class="baseline-list">
-                <li
-                  v-for="item in group.items"
-                  :key="item.mod_id"
-                  :class="{
-                    ok: item.installed,
-                    warn: !item.installed && item.required,
-                    optional: !item.required && !item.installed,
-                  }"
-                >
-                  <i
-                    class="fa"
-                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
-                    aria-hidden="true"
-                  ></i>
-                  <span>{{ item.label }}</span>
-                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
-                </li>
-              </ul>
-            </section>
-          </div>
-          <div v-if="!sidebarBaselineGroups.length && baselineGroups.length" class="baseline-groups">
-            <section v-for="group in baselineGroups" :key="group.id" class="baseline-group">
-              <h3>{{ group.title }}</h3>
-              <p class="baseline-group-hint">{{ group.hint }}</p>
-              <ul class="baseline-list">
-                <li
-                  v-for="item in group.items"
-                  :key="item.mod_id"
-                  :class="{
-                    ok: item.installed,
-                    warn: !item.installed && item.required,
-                    optional: !item.required && !item.installed,
-                  }"
-                >
-                  <i
-                    class="fa"
-                    :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
-                    aria-hidden="true"
-                  ></i>
-                  <span>{{ item.label }}</span>
-                  <span v-if="!item.installed && item.show_mod_id !== false" class="mono">{{ item.mod_id }}</span>
-                </li>
-              </ul>
-            </section>
-          </div>
           <div class="actions">
-            <button type="button" class="btn primary" :disabled="bootstrapBusy" @click="runBootstrap">
+            <button
+              v-if="!baselineOk"
+              type="button"
+              class="btn primary"
+              :disabled="bootstrapBusy || loading"
+              @click="runBootstrap"
+            >
               <i class="fa" :class="bootstrapBusy ? 'fa-spinner fa-spin' : 'fa-download'"></i>
-              一键装齐本行业侧栏推荐项
+              {{ bootstrapBusy ? '正在装齐…' : '一键装齐' }}
             </button>
-            <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">重新检测</button>
-            <button v-if="baselineOk" type="button" class="btn primary" @click="goStep('seed-demo')">
-              下一步：写入演示数据
+            <button v-else type="button" class="btn primary" @click="goStep('seed-demo')">
+              下一步
             </button>
-            <button type="button" class="btn link" @click="finishToChat">先进入对话，稍后再补</button>
+            <button type="button" class="btn link" @click="finishToChat">先进入对话</button>
           </div>
+          <details v-if="hostPackDetailGroups.length" class="host-pack-details">
+            <summary>查看明细（可选）</summary>
+            <p v-if="baselinePlan?.summary" class="lead muted">{{ baselinePlan.summary }}</p>
+            <p
+              v-if="showNoAccountCustomHint"
+              class="account-custom-empty-hint muted"
+            >
+              当前账号未绑定定制能力；AI 员工可稍后在扩展市场安装。
+            </p>
+            <p
+              v-else-if="missingAccountCustomCount > 0 || missingIndustryPackageCount > 0"
+              class="muted host-pack-details-note"
+            >
+              <template v-if="missingAccountCustomCount > 0">
+                另有 {{ missingAccountCustomCount }} 项定制/员工可稍后安装
+              </template>
+              <template v-if="missingAccountCustomCount > 0 && missingIndustryPackageCount > 0">；</template>
+              <template v-if="missingIndustryPackageCount > 0">
+                另有 {{ missingIndustryPackageCount }} 项行业包可选
+              </template>
+            </p>
+            <div class="baseline-groups">
+              <section v-for="group in hostPackDetailGroups" :key="group.id" class="baseline-group">
+                <h3>{{ group.title }}</h3>
+                <ul class="baseline-list">
+                  <li
+                    v-for="item in group.items"
+                    :key="item.mod_id"
+                    :class="{
+                      ok: item.installed,
+                      warn: !item.installed && item.required,
+                      optional: !item.required && !item.installed,
+                    }"
+                  >
+                    <i
+                      class="fa"
+                      :class="item.installed ? 'fa-check-circle' : item.required ? 'fa-exclamation-circle' : 'fa-circle-o'"
+                      aria-hidden="true"
+                    ></i>
+                    <span>{{ item.label }}</span>
+                  </li>
+                </ul>
+              </section>
+            </div>
+            <div class="actions host-pack-details-actions">
+              <button type="button" class="btn ghost" :disabled="loading" @click="refreshStatus">
+                重新检测
+              </button>
+              <button
+                v-if="!baselineOk"
+                type="button"
+                class="btn ghost"
+                :disabled="bootstrapBusy || loading"
+                @click="runBootstrap"
+              >
+                再次一键装齐
+              </button>
+            </div>
+          </details>
         </template>
 
         <template v-else-if="currentStep === 'seed-demo'">
@@ -516,6 +477,13 @@ const sidebarBaselineGroups = computed(() =>
 const supplementBaselineGroups = computed(() =>
   baselineGroups.value.filter((g) => !SIDEBAR_BASELINE_GROUP_IDS.has(String(g?.id || ''))),
 )
+/** 明细折叠区：优先侧栏+补充分组，否则回退全部 groups */
+const hostPackDetailGroups = computed(() => {
+  if (sidebarBaselineGroups.value.length) {
+    return [...sidebarBaselineGroups.value, ...supplementBaselineGroups.value]
+  }
+  return baselineGroups.value
+})
 const missingSidebarBaselineCount = computed(() => {
   const ids = new Set()
   for (const g of sidebarBaselineGroups.value) {
@@ -1256,6 +1224,34 @@ onMounted(async () => {
   font-size: 13px;
   line-height: 1.55;
   color: #64748b;
+}
+
+.host-pack-details {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px dashed #e2e8f0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.host-pack-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #475569;
+  user-select: none;
+}
+
+.host-pack-details[open] summary {
+  margin-bottom: 10px;
+}
+
+.host-pack-details-note {
+  margin: 0 0 10px;
+  font-size: 12px;
+}
+
+.host-pack-details-actions {
+  margin-top: 8px;
 }
 
 .sidebar-preview {

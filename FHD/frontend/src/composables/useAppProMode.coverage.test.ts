@@ -648,13 +648,13 @@ describe('useAppProMode - 覆盖率补齐', () => {
       window.removeEventListener('xcagi:pro-mode-changed', handler)
     })
 
-    it('exitModProMode 被调用（当前路由非 chat 时跳转）', async () => {
+    it('初始化普通模式时保留当前深链接', async () => {
       mockIsClientModeTiersUiEnabled.mockReturnValue(false)
       const push = vi.fn(async () => {})
       const pro = useAppProMode(makeModsStore(), makeRouter(push), makeRoute('/other', 'other'))
       pro.enforceClientNormalModeBaseline()
       await vi.runAllTimersAsync()
-      expect(push).toHaveBeenCalledWith({ name: 'chat' })
+      expect(push).not.toHaveBeenCalled()
     })
   })
 })

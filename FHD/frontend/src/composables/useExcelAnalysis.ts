@@ -8,6 +8,9 @@ import type {
   ExcelTableSlice,
 } from '@/types/excel'
 import { asArray, asRecord, asString } from '@/utils/typeGuards'
+import { primeCsrfCookie } from '@/api/core'
+import { apiFetch } from '@/utils/apiBase'
+import { readCsrfTokenFromCookie } from '@/utils/csrfCookie'
 
 export type { ExcelAnalysisResult } from '@/types/excel'
 
@@ -21,6 +24,14 @@ const EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS = 90_000
  * 打开页面时，浏览器会按跨域拦截，后端日志里完全看不到请求。
  */
 const EXTRACT_GRID_PATH = '/api/templates/extract-grid'
+
+async function ensureCsrfReady(): Promise<void> {
+  if (readCsrfTokenFromCookie()) return
+  await primeCsrfCookie()
+  if (!readCsrfTokenFromCookie()) {
+    throw new Error('CSRF 初始化失败，请刷新页面后重试')
+  }
+}
 
 /** 读取响应体（含大 JSON）；若仅对 fetch 设 Abort，部分环境下 body 读取仍可能挂死，导致「分析中…」永不解除 */
 async function readResponseJsonWithTimeout(response: Response, ms: number): Promise<ExcelExtractGridResponse> {
@@ -69,6 +80,7 @@ interface UseExcelAnalysisOptions {
 
 async function extractSingleSheetDetail(file: File, sheetName: string): Promise<ExcelSheetDetail | null> {
   try {
+    await ensureCsrfReady()
     const formData = new FormData()
     formData.append('file', file)
     formData.append('sheet_name', sheetName)
@@ -76,7 +88,7 @@ async function extractSingleSheetDetail(file: File, sheetName: string): Promise<
     const controller = new AbortController()
     const timeoutId = window.setTimeout(() => controller.abort(), EXTRACT_GRID_SINGLE_SHEET_TIMEOUT_MS)
     try {
-      const response = await fetch(EXTRACT_GRID_PATH, {
+      const response = await apiFetch(EXTRACT_GRID_PATH, {
         method: 'POST',
         body: formData,
         signal: controller.signal
@@ -103,7 +115,7 @@ async function extractSingleSheetDetail(file: File, sheetName: string): Promise<
 export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseExcelAnalysisOptions = {}) {
   const excelAnalyzeUploading = ref(false)
   const excelAnalyzeInputRef = ref<HTMLInputElement | null>(null)
-  let onMultimodalFileChangeCallback: ((ev: Event) => void) | null = null
+  let onMultimodalFileChangeCallback: ((ev: Event) => void | Promise<void>) | null = null
 
   function appendChatLine(
     content: string,
@@ -123,7 +135,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
     triggerUpload()
   }
 
-  function setOnMultimodalFileChangeCallback(cb: (ev: Event) => void) {
+  function setOnMultimodalFileChangeCallback(cb: (ev: Event) => void | Promise<void>) {
     onMultimodalFileChangeCallback = cb
   }
 
@@ -236,11 +248,14 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
   }
 
   async function onExcelAnalyzeFileChange(e: Event): Promise<void> {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    ;(e.target as HTMLInputElement).value = ''
+    const input = e.target as HTMLInputElement
+    const file = input.files?.[0]
     if (!file) return
 
     if (/\.(xlsx|xlsm)$/i.test(file.name)) {
+      // Excel is copied into FormData synchronously below, so the picker can be
+      // reset now and selecting the same workbook again will still emit change.
+      input.value = ''
       excelAnalyzeUploading.value = true
       try {
         appendChatLine(`开始分析 Excel：${file.name}`, 'user')
@@ -252,6 +267,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
         })
 
         try {
+          await ensureCsrfReady()
           const formData = new FormData()
           formData.append('file', file)
           formData.append('analyze_all_sheets', 'true')
@@ -271,7 +287,7 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
             )
           }
           try {
-            const response = await fetch(EXTRACT_GRID_PATH, {
+            const response = await apiFetch(EXTRACT_GRID_PATH, {
               method: 'POST',
               body: formData,
               signal: controller.signal
@@ -355,8 +371,11 @@ export function useExcelAnalysis(messages: UseChatMessagesReturn, options: UseEx
       }
     } else {
       if (onMultimodalFileChangeCallback) {
-        onMultimodalFileChangeCallback(e)
+        await onMultimodalFileChangeCallback(e)
       }
+      // The multimodal handler snapshots File objects before clearing. Keep
+      // this fallback for callers that register a custom handler.
+      input.value = ''
     }
   }
 

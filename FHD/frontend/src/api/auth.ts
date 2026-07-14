@@ -1,6 +1,9 @@
 import { api, primeCsrfCookie } from './core';
 import { LS_MARKET_ACCESS_TOKEN, LS_MARKET_USER_JSON } from './marketAccount';
-import { invalidateEnterpriseSessionCache } from '@/utils/authSessionCache';
+import {
+  invalidateEnterpriseSessionCache,
+  markEnterpriseSessionValid,
+} from '@/utils/authSessionCache';
 import { clearAutoLoginPreference } from '@/utils/loginPreferences';
 import type { ApiResponse } from '@/types/api';
 
@@ -75,8 +78,13 @@ export const authApi = {
       username,
       password,
       account_kind: accountKind,
+    }, {
+      timeoutMs: 30_000,
     });
     await invalidateSessionScopedUiCaches();
+    if (res?.success === true || res?.data?.success === true) {
+      markEnterpriseSessionValid();
+    }
     return res;
   },
 
@@ -91,8 +99,13 @@ export const authApi = {
       phone,
       code,
       account_kind: accountKind,
+    }, {
+      timeoutMs: 30_000,
     });
     await invalidateSessionScopedUiCaches();
+    if (res?.success === true || res?.data?.success === true) {
+      markEnterpriseSessionValid();
+    }
     return res;
   },
 
@@ -102,7 +115,7 @@ export const authApi = {
   },
 
   async getOidcStatus(): Promise<ApiResponse<{ enabled?: boolean }>> {
-    return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status');
+    return api.get<ApiResponse<{ enabled?: boolean }>>('/api/auth/oidc/status', {}, { timeoutMs: 5_000 });
   },
 
   async issueAuthQr(clientHint = '', accountKind = 'enterprise'): Promise<
@@ -135,6 +148,9 @@ export const authApi = {
     invalidateEnterpriseSessionCache();
     const res = await api.post<ApiResponse<LoginResponse>>('/api/auth/register', payload);
     await invalidateSessionScopedUiCaches();
+    if (res?.success === true || res?.data?.success === true) {
+      markEnterpriseSessionValid();
+    }
     return res;
   },
 
@@ -154,15 +170,15 @@ export const authApi = {
       /* ignore */
     }
     await primeCsrfCookie();
-    return api.post<ApiResponse<void>>('/api/auth/logout', {});
+    return api.post<ApiResponse<void>>('/api/auth/logout', {}, { timeoutMs: 10_000 });
   },
 
   async getCurrentUser(): Promise<ApiResponse<{ user: User; permissions: string[] }>> {
-    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me');
+    return api.get<ApiResponse<{ user: User; permissions: string[] }>>('/api/auth/me', {}, { timeoutMs: 8_000 });
   },
 
   async getProfile(): Promise<ApiResponse<{ user: User }>> {
-    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile');
+    return api.get<ApiResponse<{ user: User }>>('/api/auth/profile', {}, { timeoutMs: 8_000 });
   },
 
   async updateProfile(payload: UserProfilePayload): Promise<ApiResponse<{ user: User }>> {
@@ -178,7 +194,7 @@ export const authApi = {
   },
 
   async validateSession(): Promise<ApiResponse<unknown>> {
-    return api.get<ApiResponse<unknown>>('/api/auth/session/validate');
+    return api.get<ApiResponse<unknown>>('/api/auth/session/validate', {}, { timeoutMs: 8_000 });
   },
 
   async forgotAccount(email: string): Promise<

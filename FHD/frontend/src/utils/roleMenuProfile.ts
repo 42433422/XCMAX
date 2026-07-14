@@ -35,7 +35,6 @@ const ENTERPRISE_GENERIC_CORE_KEYS = new Set([
 const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
   'products',
   'materials',
-  'materials-list',
   'traditional-mode',
   'orders',
   'orders-create',
@@ -43,7 +42,6 @@ const ENTERPRISE_BUSINESS_CORE_KEYS = new Set([
   'customers',
   'print',
   'approval-hub',
-  'enterprise-customer-service',
 ])
 
 export function buildRoleMenuProfile(

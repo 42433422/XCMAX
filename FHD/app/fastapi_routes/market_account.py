@@ -1959,10 +1959,19 @@ async def market_payment_query(request: Request, out_trade_no: str):
 
 @router.get("/wallet/overview")
 async def market_wallet_overview(request: Request):
+    authorization = await _authorization_from_request_resolved(request, {})
+    if not authorization:
+        # Backward-compatible explicit/header lookup for API clients without a local session.
+        authorization = _market_auth_from_request(request)
+    if not authorization:
+        return JSONResponse(
+            {"success": False, "message": "尚未绑定市场账号；请重新登录软件以自动同步"},
+            status_code=401,
+        )
     payload = await _proxy_json(
         "GET",
         "/api/wallet/overview",
-        authorization=_market_auth_from_request(request),
+        authorization=authorization,
         return_error_payload=True,
     )
     if isinstance(payload, dict) and payload.get("__proxy_error__"):
