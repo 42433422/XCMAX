@@ -53,8 +53,10 @@ xcrun stapler staple "${DMG_PATH}"
 xcrun stapler validate "${DMG_PATH}"
 spctl -a -vv -t open --context context:primary-signature "${DMG_PATH}"
 
-# Stapling changes the DMG bytes. Rebuild the companion blockmap and metadata
-# only after stapling so electron-updater hashes the exact published artifact.
+# Stapling changes the DMG bytes. Rebuild the companion blockmap only.
+# Do NOT regenerate latest-mac.yml from the DMG — electron-updater on macOS
+# requires a ZIP feed (see generate-update-metadata.mjs). ZIP metadata is
+# produced earlier by build-installer.sh and must stay ZIP-based.
 cd "${ROOT}"
 node - "${DMG_PATH}" <<'NODE'
 const { executeAppBuilderAsJson } = require('./desktop/node_modules/app-builder-lib/out/util/appBuilder')
@@ -67,8 +69,5 @@ executeAppBuilderAsJson(['blockmap', '--input', dmg, '--output', `${dmg}.blockma
     process.exit(1)
   })
 NODE
-XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}" \
-  node scripts/package/generate-update-metadata.mjs \
-    "${DMG_PATH}" "${TOOLCHAIN_VERSION}" mac
 
-echo "Finalized notarized DMG and update metadata: ${DMG_PATH}"
+echo "Finalized notarized DMG (ZIP update feed left untouched): ${DMG_PATH}"

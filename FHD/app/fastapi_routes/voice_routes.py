@@ -131,8 +131,7 @@ def _resolve_model_source(model_name: str) -> str:
 
     detail = errors[-1] if errors else "没有可用下载源"
     raise RuntimeError(
-        "语音模型尚未缓存，且官方源与备用源均不可用；请检查网络后重试。"
-        f"最后错误：{detail}"
+        f"语音模型尚未缓存，且官方源与备用源均不可用；请检查网络后重试。最后错误：{detail}"
     )
 
 

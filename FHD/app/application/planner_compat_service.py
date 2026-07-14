@@ -135,8 +135,7 @@ def _summarize_context_for_log(value: Any, *, key: str = "", depth: int = 0) -> 
         return summarized
     if isinstance(value, (list, tuple)):
         summarized_items = [
-            _summarize_context_for_log(item, key=key, depth=depth + 1)
-            for item in value[:12]
+            _summarize_context_for_log(item, key=key, depth=depth + 1) for item in value[:12]
         ]
         if len(value) > 12:
             summarized_items.append(f"<omitted_items={len(value) - 12}>")

@@ -383,4 +383,3 @@ _FALLBACK_ENTERPRISE_DEPARTMENTS: list[tuple[str, str]] = [
     ("service", "服务层"),
     ("management", "管理层"),
 ]
-

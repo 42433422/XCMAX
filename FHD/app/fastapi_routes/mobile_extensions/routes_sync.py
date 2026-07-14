@@ -50,6 +50,7 @@ def _safe_mobile_sync_items(label: str, loader):
 def _shipment_items():
     return _parent()._shipment_items()
 
+
 # ── 同步 ──
 
 

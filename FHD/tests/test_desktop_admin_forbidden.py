@@ -54,9 +54,7 @@ def test_assert_desktop_allows_session_deletes_admin() -> None:
         patch("app.application.desktop_admin_gate.is_desktop_runtime", return_value=True),
         patch("app.infrastructure.session.get_session_manager", return_value=sm),
     ):
-        denied = assert_desktop_allows_session(
-            {"account_kind": "admin"}, session_id="legacy-admin"
-        )
+        denied = assert_desktop_allows_session({"account_kind": "admin"}, session_id="legacy-admin")
     assert denied is not None
     assert denied["error"]["code"] == DESKTOP_ADMIN_FORBIDDEN_CODE
     sm.delete_session.assert_called_once_with("legacy-admin")

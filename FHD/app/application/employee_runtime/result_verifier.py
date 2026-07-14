@@ -29,9 +29,7 @@ def verify_employee_run_result(
     nested = data.get("result")
     payload = nested if isinstance(nested, dict) else data
     if payload.get("ok") is False:
-        return False, str(
-            payload.get("error") or payload.get("summary") or "员工结果返回 ok=false"
-        )
+        return False, str(payload.get("error") or payload.get("summary") or "员工结果返回 ok=false")
     outputs = payload.get("outputs")
     if isinstance(outputs, list):
         for item in outputs:

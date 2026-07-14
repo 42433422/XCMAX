@@ -126,6 +126,10 @@ function installSameVersionRebuildHook(): void {
   }
   const original = updater.isUpdateAvailable?.bind(autoUpdater)
   updater.isUpdateAvailable = (updateInfo: UpdateInfo) => {
+    // macOS auto-update must use a ZIP artifact; DMG-only feeds are not installable.
+    if (process.platform === 'darwin' && !updateInfoHasMacZip(updateInfo)) {
+      return false
+    }
     if (original?.(updateInfo)) {
       return true
     }
@@ -135,6 +139,15 @@ function installSameVersionRebuildHook(): void {
     const localSha = readLocalBuildSha()
     return Boolean(remoteSha && localSha && remoteSha !== localSha)
   }
+}
+
+function updateInfoHasMacZip(updateInfo: UpdateInfo): boolean {
+  const files = Array.isArray(updateInfo.files) ? updateInfo.files : []
+  if (files.some(file => String(file?.url || '').toLowerCase().endsWith('.zip'))) {
+    return true
+  }
+  const pathHint = String(updateInfo.path || '').toLowerCase()
+  return pathHint.endsWith('.zip')
 }
 
 function enrichUpdateInfo(
@@ -253,10 +266,12 @@ export async function downloadUpdate(): Promise<unknown> {
   } catch (error) {
     downloadInFlight = false
     updateDownloaded = false
-    appendUpdaterEvent('download_failed', {
-      message: error instanceof Error ? error.message : String(error),
-    })
-    throw error
+    const raw = error instanceof Error ? error.message : String(error)
+    const message = /ZIP file not provided/i.test(raw)
+      ? '更新服务器提供的是安装包（DMG），无法在应用内自动更新。请改用官网下载 ZIP/安装包，或等待已修复的更新源生效后再试。'
+      : raw
+    appendUpdaterEvent('download_failed', { message: raw })
+    throw new Error(message)
   }
 }
 

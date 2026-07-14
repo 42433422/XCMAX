@@ -41,7 +41,6 @@ from app.utils.path_utils import resolve_fhd_repo_root
 logger = logging.getLogger(__name__)
 
 
-
 from app.application.ai_chat.excel_import_pipeline import AIChatExcelImportMixin
 from app.application.ai_chat.excel_import_policy import (
     _EXCEL_IMPORT_MEASURE_UNIT_TOKENS as _EXCEL_IMPORT_MEASURE_UNIT_TOKENS,
@@ -1802,6 +1801,7 @@ class AIChatApplicationService(
             )
 
         return response_data
+
 
 def get_ai_chat_app_service() -> AIChatApplicationService:
     """获取 AI 聊天应用服务单例"""

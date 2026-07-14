@@ -431,4 +431,3 @@ class AIChatInstantToolsMixin:
             logger.error("即时执行 shipments 失败：%s", tool_err, exc_info=True)
 
         return response_data
-

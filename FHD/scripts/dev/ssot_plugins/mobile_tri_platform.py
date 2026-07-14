@@ -18,6 +18,7 @@ TOKENS = ROOT / "config" / "mobile_design_tokens.json"
 OPENAPI_CONTRACT = ROOT / "contracts" / "openapi.json"
 FASTAPI_MOBILE = ROOT / "app/fastapi_routes/mobile_api.py"
 FASTAPI_MOBILE_EXT = ROOT / "app/fastapi_routes/mobile_api_extensions.py"
+FASTAPI_MOBILE_AI_GROUPS = ROOT / "app/fastapi_routes/mobile_extensions/routes_ai_groups.py"
 
 FLUTTER_README = ROOT / "mobile-flutter-poc/README.md"
 FLUTTER_UNIFICATION = ROOT / "mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md"
@@ -127,6 +128,7 @@ def _check_registry(errors: list[str]) -> None:
         "FHD/contracts/openapi.json",
         "FHD/app/fastapi_routes/mobile_api.py",
         "FHD/app/fastapi_routes/mobile_api_extensions.py",
+        "FHD/app/fastapi_routes/mobile_extensions/routes_ai_groups.py",
         "FHD/mobile-flutter-poc/README.md",
         "FHD/mobile-flutter-poc/ANDROID_FIRST_UNIFICATION.md",
         "FHD/mobile-flutter-poc/lib/src/api/mobile_api.dart",
@@ -190,9 +192,15 @@ def _check_unified_stack(errors: list[str]) -> None:
                 errors.append(f"mobile_api.py 缺少 FastAPI mobile 片段: {snippet}")
     fastapi_ext = _read_text(FASTAPI_MOBILE_EXT, errors)
     if fastapi_ext:
-        for snippet in ('@extension_router.get("/admin/home")', '@extension_router.get("/ai-groups")'):
+        for snippet in (
+            '@extension_router.get("/admin/home")',
+            "extension_router.include_router(_ai_groups_router)",
+        ):
             if snippet not in fastapi_ext:
                 errors.append(f"mobile_api_extensions.py 缺少移动业务路由片段: {snippet}")
+    fastapi_ai_groups = _read_text(FASTAPI_MOBILE_AI_GROUPS, errors)
+    if fastapi_ai_groups and '@router.get("/ai-groups")' not in fastapi_ai_groups:
+        errors.append("routes_ai_groups.py 缺少移动 AI 群组路由片段: " '@router.get("/ai-groups")')
 
 
 def _check_tokens(errors: list[str]) -> None:

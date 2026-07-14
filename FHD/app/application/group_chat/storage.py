@@ -306,4 +306,3 @@ class AiGroupChatStorageMixin:
     @staticmethod
     def _replace(groups: list[dict[str, Any]], updated: dict[str, Any]) -> list[dict[str, Any]]:
         return [updated if str(g.get("id")) == str(updated.get("id")) else g for g in groups]
-

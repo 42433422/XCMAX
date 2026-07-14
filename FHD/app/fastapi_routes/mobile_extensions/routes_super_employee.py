@@ -79,16 +79,22 @@ async def mobile_admin_codex_super_employee_invoke(
     context.setdefault("target_devices", ["all"])
     # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
-        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "")
+        .strip()
+        .lower()
         == "admin"
     ):
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = _parent().factory_context(workspace_id=_wsid, base=context)
     try:
-        result = _parent().CodexSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
+        result = (
+            _parent()
+            .CodexSuperEmployeeService()
+            .invoke(
+                user_id=uid,
+                message=text,
+                context=context,
+            )
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -154,16 +160,22 @@ async def mobile_admin_claude_super_employee_invoke(
     context.setdefault("target_devices", ["all"])
     # 本路由已收口为仅管理端可达；管理账号铸造工厂授权。
     if (
-        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "")
+        .strip()
+        .lower()
         == "admin"
     ):
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = _parent().factory_context(workspace_id=_wsid, base=context)
     try:
-        result = _parent().ClaudeSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
+        result = (
+            _parent()
+            .ClaudeSuperEmployeeService()
+            .invoke(
+                user_id=uid,
+                message=text,
+                context=context,
+            )
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -228,10 +240,14 @@ async def mobile_admin_cursor_super_employee_invoke(
     context.setdefault("device_scope", "all_devices")
     context.setdefault("target_devices", ["all"])
     try:
-        result = _parent().CursorSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
+        result = (
+            _parent()
+            .CursorSuperEmployeeService()
+            .invoke(
+                user_id=uid,
+                message=text,
+                context=context,
+            )
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -297,16 +313,22 @@ async def mobile_admin_trae_super_employee_invoke(
     context.setdefault("device_scope", "all_devices")
     context.setdefault("target_devices", ["all"])
     if (
-        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "")
+        .strip()
+        .lower()
         == "admin"
     ):
         _wsid = str(getattr(body, "workspace_id", "") or context.get("workspace_id") or "xcmax")
         context = _parent().factory_context(workspace_id=_wsid, base=context)
     try:
-        result = _parent().TraeSuperEmployeeService().invoke(
-            user_id=uid,
-            message=text,
-            context=context,
+        result = (
+            _parent()
+            .TraeSuperEmployeeService()
+            .invoke(
+                user_id=uid,
+                message=text,
+                context=context,
+            )
         )
         return format_mobile_response(data=result)
     except ValueError as exc:
@@ -372,7 +394,9 @@ async def _stream_super_employee_invoke(
     context.setdefault("client_surface", "mobile")
     context.setdefault("target_devices", ["all"])
     if (
-        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "").strip().lower()
+        str((_parent()._mobile_session_meta(request) or {}).get("account_kind") or "")
+        .strip()
+        .lower()
         == "admin"
     ):
         _wsid = str((body or {}).get("workspace_id") or context.get("workspace_id") or "xcmax")
@@ -439,4 +463,3 @@ async def mobile_admin_trae_super_employee_stream(
 ):
     """移动端 Trae 超级员工 LAN SSE 流式直答。"""
     return await _stream_super_employee_invoke(request, "trae", body, user)
-

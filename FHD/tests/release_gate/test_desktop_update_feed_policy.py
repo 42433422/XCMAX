@@ -74,7 +74,8 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     uploader = (REPO_ROOT / "scripts" / "deploy" / "upload-desktop-skus.sh").read_text(
         encoding="utf-8"
     )
-    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(
+    scanner = (REPO_ROOT / "desktop" / "scripts" / "security-scan.sh").read_text(encoding="utf-8")
+    finalize = (REPO_ROOT / "scripts" / "package" / "finalize-macos-dmg.sh").read_text(
         encoding="utf-8"
     )
 
@@ -83,7 +84,11 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert '"$src_dir"/*.zip' in workflow
     assert '"XCAGI-*-${VERSION}-mac-*.zip"' in uploader
     assert '"XCAGI-*-${VERSION}-mac-*.zip.blockmap"' in uploader
+    assert "/var/www/update/releases/stable" in uploader
     assert "Node.js 20+ is required" in scanner
     assert "synthetic green report" in scanner
-    assert "electronegativity.csv\" -r -v false || true" not in scanner
-    assert "electronegativity.sarif\" -r -v false || true" not in scanner
+    assert 'electronegativity.csv" -r -v false || true' not in scanner
+    assert 'electronegativity.sarif" -r -v false || true' not in scanner
+    # DMG notarize must not overwrite ZIP-based latest-mac.yml
+    assert "node scripts/package/generate-update-metadata.mjs" not in finalize
+    assert "ZIP update feed left untouched" in finalize
