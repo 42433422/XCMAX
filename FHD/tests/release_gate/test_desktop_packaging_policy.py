@@ -74,6 +74,41 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "console=False" in spec
 
 
+def test_windows_release_requires_azure_signing_and_system_authenticode() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(
+        encoding="utf-8"
+    )
+    post_gate = (
+        REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1"
+    ).read_text(encoding="utf-8")
+    verifier = (
+        REPO_ROOT / "scripts" / "package" / "verify-windows-signature.ps1"
+    ).read_text(encoding="utf-8")
+
+    for name in (
+        "AZURE_TENANT_ID",
+        "AZURE_CLIENT_ID",
+        "AZURE_CLIENT_SECRET",
+        "AZURE_TRUSTED_SIGNING_ENDPOINT",
+        "AZURE_TRUSTED_SIGNING_ACCOUNT",
+        "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE",
+    ):
+        assert name in workflow
+        assert name in build
+
+    assert 'XCAGI_REQUIRE_WINDOWS_SIGNING: "1"' in workflow
+    assert "--config.forceCodeSigning=true" in build
+    assert "--config.win.azureSignOptions.endpoint=" in build
+    assert "--config.win.azureSignOptions.publisherName=" in build
+    assert "Get-AuthenticodeSignature -LiteralPath" in verifier
+    assert "$signature.Status -ne 'Valid'" in verifier
+    assert "$signature.TimeStamperCertificate" in verifier
+    assert post_gate.count("verify-windows-signature.ps1") == 2
+
+
 def test_desktop_package_includes_chat_voice_runtime() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(
         encoding="utf-8"
