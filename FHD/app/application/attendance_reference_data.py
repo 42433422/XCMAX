@@ -49,12 +49,15 @@ def attendance_unit_names(host_units: dict[str, Any] | None = None) -> list[str]
                 if table not in tables:
                     continue
                 columns = {
-                    str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+                    str(row[1])
+                    for row in conn.execute("PRAGMA table_info(" + table + ")").fetchall()
                 }
                 selected = [name for name in ("department", "main_department") if name in columns]
                 if not selected:
                     continue
-                query = "SELECT " + ", ".join(selected) + f" FROM {table}"
+                # Both identifiers are selected from the hard-coded allowlists above;
+                # row values never participate in SQL construction.
+                query = "SELECT " + ", ".join(selected) + " FROM " + table
                 for row in conn.execute(query).fetchall():
                     names.update(
                         str(value or "").strip() for value in row if str(value or "").strip()

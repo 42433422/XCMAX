@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Route } from '@playwright/test';
 import {
   installE2eShellMocks,
   captureEvidence,
@@ -124,7 +124,7 @@ test.describe('P0 critical paths', () => {
         quantity_kg: 10,
         status: 'pending',
       };
-      await page.route('**/api/orders', (route) => {
+      const handleOrderCollection = (route: Route) => {
         if (route.request().method() === 'POST') {
           return route.fulfill({
             status: 201,
@@ -137,7 +137,11 @@ test.describe('P0 critical paths', () => {
           contentType: 'application/json',
           body: JSON.stringify({ success: true, data: [mockOrder], count: 1 }),
         });
-      });
+      };
+      await page.route(
+        /\/api\/(?:mod\/[^/]+\/)?orders(?:\?.*)?$/,
+        handleOrderCollection,
+      );
       await page.route('**/api/orders/1001', async (route) => {
         if (route.request().method() === 'PATCH') {
           Object.assign(mockOrder, JSON.parse(route.request().postData() || '{}'));
@@ -155,6 +159,8 @@ test.describe('P0 critical paths', () => {
           body: 'mock-xlsx',
         })
       );
+      // Browser-side fetches need an HTTP origin; about:blank cannot resolve /api/* URLs.
+      await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 30_000 });
     }
 
     const createResp = await fetchJson('/api/orders', {
