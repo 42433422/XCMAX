@@ -59,28 +59,33 @@ class LLMProviderRegistry:
         header_provider: str | None = None,
         conversation_service: Any | None = None,
     ) -> LLMProvider | None:
+        # Per-request conversation services may carry a session-bound MODstore
+        # token.  Provider overrides must therefore remain local to this
+        # resolution; mutating ``self._providers`` here leaks one request's
+        # credentials into concurrent or later requests.
+        providers = dict(self._providers)
         if header_provider:
-            p = self._providers.get(_normalize_provider_id(header_provider))
+            p = providers.get(_normalize_provider_id(header_provider))
             if p and p.is_configured:
                 return p
 
         if conversation_service is not None:
             mod = getattr(conversation_service, "modstore_adapter", None)
             if mod is not None:
-                self._providers["modstore"] = ModstoreProvider(mod)
+                providers["modstore"] = ModstoreProvider(mod)
             llm = getattr(conversation_service, "llm_adapter", None)
             if llm is not None:
-                self._providers["openai_compatible"] = OpenAICompatibleProvider(llm)
+                providers["openai_compatible"] = OpenAICompatibleProvider(llm)
             legacy_key = getattr(conversation_service, "api_key", None)
             if legacy_key:
-                self._providers["deepseek_legacy"] = DeepSeekLegacyProvider(
+                providers["deepseek_legacy"] = DeepSeekLegacyProvider(
                     api_key=str(legacy_key),
                     api_url=getattr(conversation_service, "api_url", None),
                     model=getattr(conversation_service, "model", None),
                 )
 
         for pid in _routing_order():
-            provider = self._providers.get(pid)
+            provider = providers.get(pid)
             if provider and provider.is_configured:
                 return provider
         return None

@@ -12,6 +12,7 @@ from sqlalchemy import text
 from app.application.ports.template_store import TemplateStorePort
 from app.db.session import get_db
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _infer_template_type_from_filename(self, filename: str) -> str:
         name = (filename or "").lower()
+        if "考勤" in name:
+            return "考勤记录"
         if "客户" in name:
             return "客户"
         if "原材料" in name or "材料" in name:
@@ -69,6 +72,34 @@ class FileSystemTemplateStore(TemplateStorePort):
             return "发货单"
         return "Excel"
 
+    @staticmethod
+    def _business_scope(template_type: str | None) -> str | None:
+        if (template_type or "").strip() in {"考勤记录", "出货记录"}:
+            return "shipmentRecords"
+        return None
+
+    def _discovery_directories(self) -> list[str]:
+        """Return code-bundled and writable desktop template directories."""
+        runtime_root = get_app_data_dir()
+        candidates = [
+            self._base_dir,
+            self._template_dir,
+            os.path.join(self._base_dir, "resources", "templates"),
+            runtime_root,
+            os.path.join(runtime_root, "templates"),
+            os.path.join(runtime_root, "resources", "templates"),
+            os.path.join(runtime_root, "424"),
+            os.path.join(runtime_root, "424", "document_templates"),
+        ]
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for folder in candidates:
+            key = os.path.normcase(os.path.abspath(folder))
+            if key not in seen:
+                seen.add(key)
+                deduped.append(folder)
+        return deduped
+
     def _discover_excel_templates(self) -> list[dict]:
         """
         从固定目录自动发现 Excel 模板文件：
@@ -76,11 +107,7 @@ class FileSystemTemplateStore(TemplateStorePort):
         - templates 目录
         - resources/templates 目录
         """
-        candidates = [
-            self._base_dir,
-            self._template_dir,
-            os.path.join(self._base_dir, "resources", "templates"),
-        ]
+        candidates = self._discovery_directories()
 
         templates: list[dict] = []
         seen_paths = set()
@@ -90,7 +117,9 @@ class FileSystemTemplateStore(TemplateStorePort):
             try:
                 for entry in os.listdir(folder):
                     lower = entry.lower()
-                    if lower.startswith("~$"):
+                    if lower.startswith("~$") or (
+                        lower.startswith("_") and lower.endswith("_output.xlsx")
+                    ):
                         continue
                     if not (lower.endswith(".xlsx") or lower.endswith(".xls")):
                         continue
@@ -115,6 +144,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                             "file_path": file_path,
                             "template_type": template_type,
                             "category": self._map_category(template_type),
+                            "business_scope": self._business_scope(template_type),
                             "preview_capable": True,
                             "is_active": 1,
                             "source": "fs_scan",
@@ -126,12 +156,7 @@ class FileSystemTemplateStore(TemplateStorePort):
 
     def _discover_word_templates(self) -> list[dict]:
         """从与 Excel 相同的目录自动发现 Word 模板（.docx）。"""
-        candidates = [
-            self._base_dir,
-            self._template_dir,
-            os.path.join(self._base_dir, "resources", "templates"),
-            os.path.join(self._base_dir, "424", "document_templates"),
-        ]
+        candidates = self._discovery_directories()
         templates: list[dict] = []
         seen_paths = set()
         for folder in candidates:
@@ -217,6 +242,7 @@ class FileSystemTemplateStore(TemplateStorePort):
                     "path": path,
                     "file_path": path,
                     "category": category,
+                    "business_scope": self._business_scope(getattr(r, "template_type", "")),
                     "preview_capable": exists,
                     "is_active": getattr(r, "is_active", 1),
                     "source": "db",
@@ -299,13 +325,8 @@ class FileSystemTemplateStore(TemplateStorePort):
 
         # 1.5) 支持 "fs:<filename>" 形式（文件扫描来源）
         if template_id.startswith("fs:"):
-            filename = template_id.split(":", 1)[1]
-            for folder in [
-                self._base_dir,
-                self._template_dir,
-                os.path.join(self._base_dir, "resources", "templates"),
-                os.path.join(self._base_dir, "424", "document_templates"),
-            ]:
+            filename = os.path.basename(template_id.split(":", 1)[1])
+            for folder in self._discovery_directories():
                 path = os.path.join(folder, filename)
                 if os.path.exists(path):
                     return path

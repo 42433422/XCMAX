@@ -8,7 +8,8 @@ from typing import Any
 
 import numpy as np
 from sqlalchemy import create_engine, text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.exc import ArgumentError as SQLAlchemyArgumentError
 
 from app.application.ports.vector_store import VectorStorePort
 from app.utils.external_sqlite import connect_sqlite
@@ -387,6 +388,7 @@ class SQLiteUserMemoryVectorStore(VectorStorePort):
 
 
 _user_memory_sqlite_vector_store_instance: SQLiteUserMemoryVectorStore | None = None
+_user_memory_sqlite_bound_path: str | None = None
 _user_memory_pg_vector_store_instance: PgUserMemoryVectorStore | None = None
 _user_memory_pg_bound_url: str | None = None
 _user_memory_vector_store_instance: VectorStorePort | None = None
@@ -415,11 +417,16 @@ def _default_user_memory_vector_db_path() -> str:
 
 
 def get_user_memory_sqlite_vector_store() -> SQLiteUserMemoryVectorStore:
-    global _user_memory_sqlite_vector_store_instance
-    if _user_memory_sqlite_vector_store_instance is None:
-        _user_memory_sqlite_vector_store_instance = SQLiteUserMemoryVectorStore(
-            db_path=_default_user_memory_vector_db_path()
-        )
+    global _user_memory_sqlite_bound_path, _user_memory_sqlite_vector_store_instance
+    want = _default_user_memory_vector_db_path()
+    if (
+        _user_memory_sqlite_vector_store_instance is None
+        or (_user_memory_sqlite_bound_path or "") != want
+    ):
+        if _user_memory_sqlite_vector_store_instance is not None:
+            _clear_user_memory_vector_app_singletons()
+        _user_memory_sqlite_vector_store_instance = SQLiteUserMemoryVectorStore(db_path=want)
+        _user_memory_sqlite_bound_path = want
     return _user_memory_sqlite_vector_store_instance
 
 
@@ -445,14 +452,53 @@ def get_user_memory_pg_vector_store() -> PgUserMemoryVectorStore:
 
 
 def get_user_memory_vector_store() -> VectorStorePort:
-    """获取用户记忆向量存储实例（带 SQLite fallback）。"""
+    """按实际数据库后端获取用户记忆向量存储。
+
+    桌面端以及 SQLite 主库必须使用 Python 计算相似度的 SQLite 实现，不能把
+    SQLite 连接误交给会执行 ``CREATE EXTENSION vector`` 的 pgvector 实现。
+    ``VECTOR_DB_URL`` 仍优先于 ``DATABASE_URL``，并在判型前应用当前 Mod 的
+    选库规则；只有解析为 PostgreSQL 的 URL 才会进入 pgvector。
+    """
 
     global _user_memory_vector_store_instance
     use_sqlite_fallback = (
         os.environ.get("ENABLE_SQLITE_VECTOR_FALLBACK", "0") or "0"
     ).strip() == "1"
-    if use_sqlite_fallback:
-        if _user_memory_vector_store_instance is None:
-            _user_memory_vector_store_instance = get_user_memory_sqlite_vector_store()
-        return _user_memory_vector_store_instance
-    return get_user_memory_pg_vector_store()
+    desktop_mode = (os.environ.get("XCAGI_DESKTOP_MODE", "0") or "0").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    selected_store: VectorStorePort
+    if use_sqlite_fallback or desktop_mode:
+        selected_store = get_user_memory_sqlite_vector_store()
+    else:
+        from app.db import database_url_for_active_extension
+
+        base_url = (os.environ.get("VECTOR_DB_URL") or os.environ.get("DATABASE_URL") or "").strip()
+        if not base_url:
+            # 保留原有的缺配置错误，不静默把服务端部署切到本地文件。
+            selected_store = get_user_memory_pg_vector_store()
+        else:
+            effective_url = database_url_for_active_extension(base_url)
+            try:
+                backend = make_url(effective_url).get_backend_name().lower()
+            except (*RECOVERABLE_ERRORS, SQLAlchemyArgumentError) as exc:
+                raise ValueError("无法识别用户记忆向量数据库 URL") from exc
+
+            if backend == "sqlite":
+                selected_store = get_user_memory_sqlite_vector_store()
+            elif backend in {"postgres", "postgresql"}:
+                selected_store = get_user_memory_pg_vector_store()
+            else:
+                raise ValueError(
+                    f"用户记忆向量存储仅支持 SQLite 或 PostgreSQL，当前后端: {backend}"
+                )
+
+    if _user_memory_vector_store_instance is not selected_store:
+        if _user_memory_vector_store_instance is not None:
+            _clear_user_memory_vector_app_singletons()
+        _user_memory_vector_store_instance = selected_store
+    return selected_store

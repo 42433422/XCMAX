@@ -28,6 +28,9 @@ from .registry import get_mod_registry
 
 logger = logging.getLogger(__name__)
 
+_MOD_API_FAILURE_RETRY_AT: dict[str, float] = {}
+_MOD_API_FAILURE_BACKOFF_SECONDS = 15.0
+
 
 def is_mods_disabled() -> bool:
     """为 true 时不加载任何 Mod（扩展蓝图、行业覆盖、Hooks 等），仅用核心与原始配置/数据库。"""
@@ -1289,6 +1292,8 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
     访问 /api/mod/{mod_id}/... 前确保 Mod 已 load 且 HTTP 路由已挂载。
     修复企业版登录后 reload 未传 app、太阳鸟等客户 Mod 仅出现在列表但未 load 导致 404。
     """
+    from app.runtime_integrity import clear_runtime_issue, record_runtime_issue
+
     mid = (mod_id or "").strip()
     if not mid or is_mods_disabled():
         return False
@@ -1299,9 +1304,24 @@ def ensure_mod_api_ready(mod_id: str, session_id: str | None = None) -> bool:
 
     mm = get_mod_manager()
     if mid not in mm._loaded_mods:
+        retry_at = _MOD_API_FAILURE_RETRY_AT.get(mid, 0.0)
+        if retry_at > time.monotonic():
+            logger.debug(
+                "[ModManager] ensure_mod_api_ready: load_mod(%s) in failure backoff",
+                mid,
+            )
+            return False
         if not mm.load_mod(mid):
+            _MOD_API_FAILURE_RETRY_AT[mid] = time.monotonic() + _MOD_API_FAILURE_BACKOFF_SECONDS
+            record_runtime_issue(
+                f"industry_mod:{mid}",
+                f"Industry MOD failed to load: {mid}",
+                ttl_seconds=max(_MOD_API_FAILURE_BACKOFF_SECONDS * 2, 30.0),
+            )
             logger.warning("[ModManager] ensure_mod_api_ready: load_mod(%s) failed", mid)
             return False
+        _MOD_API_FAILURE_RETRY_AT.pop(mid, None)
+        clear_runtime_issue(f"industry_mod:{mid}")
 
     if mid in mm._http_routes_registered:
         return True
@@ -1356,6 +1376,21 @@ def _entitled_client_mod_ids_for_api_mount(session_id: str | None = None) -> lis
                 candidates.add(token)
     except RECOVERABLE_ERRORS:
         pass
+
+    # Open onboarding industries are shipped as a read-only seed pool and only
+    # the industry selected by the user is copied into userData/mods. Market
+    # entitlements may list every open seed, but an unselected seed being
+    # absent from userData is expected state, not a runtime load failure.
+    try:
+        from app.mod_sdk.industry_seed import open_industry_seed_mod_ids
+
+        open_seed_ids = set(open_industry_seed_mod_ids())
+        mods_root = Path(get_mod_manager().mods_root)
+        candidates = {
+            mid for mid in candidates if mid not in open_seed_ids or (mods_root / mid).is_dir()
+        }
+    except RECOVERABLE_ERRORS:
+        logger.debug("filter unselected open industry seeds skipped", exc_info=True)
 
     return sorted(candidates)
 

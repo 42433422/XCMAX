@@ -216,15 +216,20 @@ def _sqlite_desktop_mode() -> bool:
 
 def _create_engine_for_url(url: str):
     if url.startswith("sqlite"):
-        # 桌面单用户：StaticPool 复用单连接，降低 NullPool 每次请求的开销。
-        # 服务端/多写场景仍用 NullPool，减轻 database is locked。
-        if _sqlite_desktop_mode():
+        # StaticPool 只能用于需要跨 Session 共享同一连接的内存库。桌面虽是
+        # 单用户，HTTP 请求和同步 Depends 仍会并发运行；文件库若复用同一
+        # sqlite3 连接，会让并发 cursor 相互污染并产生随机结果解析错误。
+        sqlite_database = make_url(url).database
+        is_memory_database = not sqlite_database or sqlite_database == ":memory:"
+        if _sqlite_desktop_mode() and is_memory_database:
             return create_engine(
                 url,
                 connect_args={"check_same_thread": False, "timeout": 45},
                 poolclass=pool.StaticPool,
                 echo=False,
             )
+        # 文件型 SQLite 每个 Session 使用独立连接；WAL 与 busy timeout 负责
+        # 文件级并发协调。桌面和服务端统一采用该安全路径。
         return create_engine(
             url,
             connect_args={"check_same_thread": False, "timeout": 45},

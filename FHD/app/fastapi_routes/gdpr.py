@@ -34,6 +34,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
+from app.application.feature_flag_app import FeatureFlagName, is_enabled
 from app.db.models import User
 from app.errors import ErrorCode
 from app.exceptions import (
@@ -43,7 +44,6 @@ from app.exceptions import (
     ValidationError,
 )
 from app.infrastructure.auth.dependencies import get_current_user
-from app.services.feature_flag import FeatureFlagName, is_enabled
 from app.utils.audit_logger import audit_log as log_audit_event
 
 logger = logging.getLogger(__name__)
@@ -228,6 +228,7 @@ async def gdpr_export(
     background: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ) -> GdprExportResponse:
+    """创建当前用户的数据导出任务并返回可轮询的任务标识。"""
     _require_gdpr_enabled()
 
     if not current_user:
@@ -281,6 +282,7 @@ async def gdpr_erase(
     background: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ) -> GdprEraseResponse:
+    """校验不可逆确认短语后创建个人数据擦除任务。"""
     _require_gdpr_enabled()
 
     if not current_user:
@@ -355,6 +357,7 @@ async def gdpr_rectify(
     request: Request,
     current_user: User = Depends(get_current_user),
 ) -> GdprRectifyResponse:
+    """更新允许更正的个人资料字段并记录审计事件。"""
     _require_gdpr_enabled()
 
     if not current_user:
@@ -417,6 +420,7 @@ async def gdpr_status(
     task_id: str,
     current_user: User = Depends(get_current_user),
 ) -> GdprTaskStatusResponse:
+    """返回指定 GDPR 异步任务的当前进度与下载状态。"""
     _require_gdpr_enabled()
 
     if not current_user:

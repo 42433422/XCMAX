@@ -102,8 +102,8 @@ def _run_print_agent(
     route_path: str,
 ) -> dict[str, Any]:
     from app.application.agent_orchestrator import AgentOrchestrator
+    from app.application.facades.tools_facade import get_workflow_tool_registry
     from app.application.workflow.types import PlanGraph, WorkflowNode
-    from app.services.tools_execution.registry import get_workflow_tool_registry
 
     registry = get_workflow_tool_registry()
     action_meta = dict((registry.get("print") or {}).get("actions") or {}).get(action)
@@ -149,10 +149,11 @@ def _run_print_agent(
         plan=plan,
         runtime_context=runtime_context,
     )
-    if run.status == "waiting_user":
+    if run.status in {"waiting_user", "running"}:
         continued = orchestrator.continue_run(
             run.run_id,
             approved_by=user_id or "print-route",
+            approved_step_id=node_id,
             runtime_context=runtime_context,
         )
         if continued is not None:

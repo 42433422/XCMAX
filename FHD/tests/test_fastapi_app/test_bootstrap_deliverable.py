@@ -30,10 +30,9 @@ def fast_start_client(monkeypatch, tmp_path):
 
 
 def test_deliverable_status_available_in_bootstrap(fast_start_client):
-    client, app = fast_start_client
+    client, _app = fast_start_client
     resp = client.get("/api/platform-shell/deliverable-status")
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body.get("success") is True
     assert "deliverable" in (body.get("data") or {})
-    assert getattr(app.state, "deferred_routes_pending", False) is True

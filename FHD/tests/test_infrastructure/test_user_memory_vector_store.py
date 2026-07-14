@@ -201,3 +201,135 @@ class TestModuleFunctions:
         with patch.dict(os.environ, {"USER_MEMORY_VECTOR_DB_PATH": ""}, clear=False):
             path = _default_user_memory_vector_db_path()
             assert "user_memory_vectors.db" in path
+
+
+class TestUserMemoryVectorStoreRouting:
+    @pytest.fixture(autouse=True)
+    def _isolated_singletons(self, monkeypatch, tmp_path):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "0")
+        monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "0")
+        monkeypatch.setenv("USER_MEMORY_VECTOR_DB_PATH", str(tmp_path / "vectors.db"))
+        monkeypatch.delenv("VECTOR_DB_URL", raising=False)
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+
+        mod._user_memory_sqlite_vector_store_instance = None
+        mod._user_memory_sqlite_bound_path = None
+        mod._user_memory_pg_vector_store_instance = None
+        mod._user_memory_pg_bound_url = None
+        mod._user_memory_vector_store_instance = None
+        yield
+        mod._user_memory_sqlite_vector_store_instance = None
+        mod._user_memory_sqlite_bound_path = None
+        mod._user_memory_pg_vector_store_instance = None
+        mod._user_memory_pg_bound_url = None
+        mod._user_memory_vector_store_instance = None
+
+    def test_sqlite_database_url_uses_sqlite_store(self, monkeypatch):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        monkeypatch.setenv("DATABASE_URL", "sqlite:////tmp/xcagi.db")
+        pg_factory = MagicMock(side_effect=AssertionError("SQLite 不应初始化 pgvector"))
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", pg_factory)
+
+        store = mod.get_user_memory_vector_store()
+
+        assert isinstance(store, SQLiteUserMemoryVectorStore)
+        pg_factory.assert_not_called()
+
+    def test_desktop_mode_forces_sqlite_even_with_postgres_url(self, monkeypatch):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        monkeypatch.setenv("XCAGI_DESKTOP_MODE", "1")
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/xcagi")
+        pg_factory = MagicMock(side_effect=AssertionError("桌面端不应初始化 pgvector"))
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", pg_factory)
+
+        store = mod.get_user_memory_vector_store()
+
+        assert isinstance(store, SQLiteUserMemoryVectorStore)
+        pg_factory.assert_not_called()
+
+    def test_postgres_database_url_uses_pg_store(self, monkeypatch):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        pg_store = MagicMock(name="pg_store")
+        pg_factory = MagicMock(return_value=pg_store)
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", pg_factory)
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/xcagi")
+
+        assert mod.get_user_memory_vector_store() is pg_store
+        pg_factory.assert_called_once_with()
+
+    def test_explicit_sqlite_fallback_wins_over_postgres(self, monkeypatch):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "1")
+        monkeypatch.setenv("VECTOR_DB_URL", "postgresql+psycopg://u:p@localhost/vectors")
+        pg_factory = MagicMock(side_effect=AssertionError("显式 fallback 不应初始化 pgvector"))
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", pg_factory)
+
+        store = mod.get_user_memory_vector_store()
+
+        assert isinstance(store, SQLiteUserMemoryVectorStore)
+        pg_factory.assert_not_called()
+
+    def test_backend_switch_does_not_return_stale_singleton(self, monkeypatch):
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        sqlite_store = MagicMock(name="sqlite_store")
+        pg_store = MagicMock(name="pg_store")
+        monkeypatch.setattr(mod, "get_user_memory_sqlite_vector_store", lambda: sqlite_store)
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", lambda: pg_store)
+
+        monkeypatch.setenv("DATABASE_URL", "sqlite:////tmp/xcagi.db")
+        assert mod.get_user_memory_vector_store() is sqlite_store
+
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/xcagi")
+        assert mod.get_user_memory_vector_store() is pg_store
+
+        monkeypatch.setenv("ENABLE_SQLITE_VECTOR_FALLBACK", "1")
+        assert mod.get_user_memory_vector_store() is sqlite_store
+
+    def test_postgres_url_switch_rebinds_pg_singleton(self, monkeypatch):
+        import app.db as db_mod
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        created: list[MagicMock] = []
+
+        def build_pg_store(database_url: str):
+            store = MagicMock(name=f"pg_store_{len(created)}")
+            store._database_url = database_url
+            store._engine = MagicMock()
+            created.append(store)
+            return store
+
+        monkeypatch.setattr(mod, "PgUserMemoryVectorStore", build_pg_store)
+        monkeypatch.setattr(db_mod, "database_url_for_active_extension", lambda url: url)
+
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/one")
+        first = mod.get_user_memory_vector_store()
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/two")
+        second = mod.get_user_memory_vector_store()
+
+        assert first is not second
+        assert first._database_url.endswith("/one")
+        assert second._database_url.endswith("/two")
+        first._engine.dispose.assert_called_once_with()
+
+    def test_mod_selected_database_url_controls_backend(self, monkeypatch):
+        import app.db as db_mod
+        import app.infrastructure.persistence.user_memory_vector_store as mod
+
+        monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost/host")
+        monkeypatch.setattr(
+            db_mod,
+            "database_url_for_active_extension",
+            lambda _url: "sqlite:////tmp/selected-mod.db",
+        )
+        pg_factory = MagicMock(side_effect=AssertionError("Mod 已选 SQLite，不应走 pgvector"))
+        monkeypatch.setattr(mod, "get_user_memory_pg_vector_store", pg_factory)
+
+        assert isinstance(mod.get_user_memory_vector_store(), SQLiteUserMemoryVectorStore)
+        pg_factory.assert_not_called()
