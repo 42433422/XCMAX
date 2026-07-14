@@ -471,22 +471,33 @@ def compat_tool_categories_list() -> dict:
 # ========== Butler Profile（拟人 Persy 系统）==========
 
 
-def _resolve_user_id_int(request: Request, body: dict | None = None) -> int:
-    """从请求头或 body 解析用户 ID（整数）。默认 1。"""
+def _resolve_persona_user_id(
+    request: Request,
+    body: dict | None = None,
+    *,
+    query_user_id: str | None = None,
+) -> str:
+    """解析人格画像 user_id（字符串，与对话流 ``web_normal_<session>`` 对齐）。
+
+    旧实现强制 ``int``，Settings 读 ``1``、对话写 ``web_normal_*``，设置页永远默认空壳。
+    """
     raw = (
         request.headers.get("X-User-Id")
         or request.headers.get("X-User-ID")
         or (body or {}).get("user_id")
         or (body or {}).get("userId")
+        or query_user_id
         or "1"
     )
-    try:
-        return int(str(raw).strip() or "1")
-    except (TypeError, ValueError):
-        return 1
+    text = str(raw).strip()
+    return text or "1"
 
 
-def _persona_backed_profile_view(uid: int) -> dict:
+# 兼容旧测试命名（现返回 str，不再截断为 int）
+_resolve_user_id_int = _resolve_persona_user_id
+
+
+def _persona_backed_profile_view(uid: int | str) -> dict:
     """人格视图的**唯一派生路径**：Persona-A → butler 视图（经 persona_butler_bridge）。
 
     有画像派生其画像；无画像（新用户）派生中性默认——两者走完全相同的桥逻辑。
@@ -495,13 +506,14 @@ def _persona_backed_profile_view(uid: int) -> dict:
     """
     from app.application.persona_butler_bridge import persona_default_view, persona_view_for_user
 
+    key = str(uid).strip() or "1"
     try:
-        view = persona_view_for_user(uid)
+        view = persona_view_for_user(key)
         if view is not None:
             return view
     except Exception as exc:  # noqa: BLE001 - 桥接失败不应阻断 Settings 读取
         logger.warning("persona 画像读取失败，回退 persona 默认视图: %s", exc)
-    return persona_default_view(uid)
+    return persona_default_view(key)
 
 
 @router.get("/butler/profile")

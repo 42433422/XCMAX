@@ -3,8 +3,13 @@ import { createPinia, setActivePinia } from 'pinia';
 import { ref } from 'vue';
 
 const executeRemote = vi.fn();
+const readAiSessionIdFromStorageMock = vi.fn(() => 'stored-sid');
 
-import { useChatDbTokenGate } from './useChatDbTokenGate';
+vi.mock('@/utils/xcagiStorageKeys', () => ({
+  readAiSessionIdFromStorage: () => readAiSessionIdFromStorageMock(),
+}));
+
+import { resolveModeScopedChatUserId, useChatDbTokenGate } from './useChatDbTokenGate';
 
 function makeDeps() {
   return {
@@ -21,9 +26,16 @@ beforeEach(() => {
   document.body.className = '';
   delete (window as Window & { __XCAGI_IS_PRO_MODE?: boolean }).__XCAGI_IS_PRO_MODE;
   executeRemote.mockReset();
+  readAiSessionIdFromStorageMock.mockReset();
+  readAiSessionIdFromStorageMock.mockReturnValue('stored-sid');
 });
 
 describe('useChatDbTokenGate', () => {
+  it('resolveModeScopedChatUserId matches chat web_normal/web_pro keys', () => {
+    expect(resolveModeScopedChatUserId(false)).toBe('web_normal_stored-sid');
+    expect(resolveModeScopedChatUserId(true)).toBe('web_pro_stored-sid');
+  });
+
   it('getModeScopedUserId scopes by pro mode', () => {
     const deps = makeDeps();
     const gate = useChatDbTokenGate(deps);
