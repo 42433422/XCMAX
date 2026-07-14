@@ -24,6 +24,7 @@
     </button>
   </div>
 
+  <!-- 角标仍挂侧栏；弹窗由 Modal 统一 Teleport 到 body，相对整窗居中 -->
   <Modal v-model="modalOpen" title="软件更新" max-width="520px">
     <div class="desktop-update-modal">
       <p class="desktop-update-modal__lead">
