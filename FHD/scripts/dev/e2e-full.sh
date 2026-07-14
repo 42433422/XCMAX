@@ -36,17 +36,30 @@ E2E_LOG_DIR="${E2E_LOG_DIR:-${FRONTEND}/test-results}"
 # beside the isolated database so the test runner cannot delete the evidence
 # while the backend is still writing to it.
 BACKEND_LOG="${E2E_DATA_DIR}/e2e-backend.log"
-mkdir -p "${E2E_LOG_DIR}"
+mkdir -p "${E2E_DATA_DIR}" "${E2E_LOG_DIR}"
+
+stop_process() {
+  local pid="$1"
+  kill "${pid}" 2>/dev/null || true
+  for _ in $(seq 1 50); do
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      wait "${pid}" 2>/dev/null || true
+      return 0
+    fi
+    sleep 0.1
+  done
+  log "进程 ${pid} 未响应 SIGTERM，发送 SIGKILL"
+  kill -KILL "${pid}" 2>/dev/null || true
+  wait "${pid}" 2>/dev/null || true
+}
 
 cleanup() {
   local code=$?
   if [[ -n "${FRONTEND_PID}" ]] && kill -0 "${FRONTEND_PID}" 2>/dev/null; then
-    kill "${FRONTEND_PID}" 2>/dev/null || true
-    wait "${FRONTEND_PID}" 2>/dev/null || true
+    stop_process "${FRONTEND_PID}"
   fi
   if [[ -n "${BACKEND_PID}" ]] && kill -0 "${BACKEND_PID}" 2>/dev/null; then
-    kill "${BACKEND_PID}" 2>/dev/null || true
-    wait "${BACKEND_PID}" 2>/dev/null || true
+    stop_process "${BACKEND_PID}"
   fi
   if [[ "${code}" -ne 0 && -f "${BACKEND_LOG}" ]]; then
     cp "${BACKEND_LOG}" "${E2E_LOG_DIR}/e2e-backend.log" 2>/dev/null || true
@@ -117,7 +130,10 @@ else
   (
     cd "${FRONTEND}"
     npm run build:strict
-    exec npm run preview -- --host 127.0.0.1 --port "${WEB_PORT}"
+    # Keep the tracked PID on the actual Vite process.  `npm run preview`
+    # leaves a child Node process behind on failure and previously made the
+    # EXIT trap wait until the GitHub job hit its 30 minute hard timeout.
+    exec node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port "${WEB_PORT}"
   ) &
   FRONTEND_PID=$!
   wait_http "${WEB_URL}/" "Vite"

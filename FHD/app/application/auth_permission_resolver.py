@@ -59,9 +59,13 @@ def resolve_permissions(
     mid = str(mod_id or "").strip()
     if mid and kind == "enterprise":
         try:
-            from app.enterprise.mod_entitlements import user_has_mod_entitlement
+            from app.enterprise.mod_entitlements import is_mod_visible_for_enterprise
 
-            mod_allowed = user_has_mod_entitlement(user, mid)
+            # Entitlements are restored into the authenticated desktop session
+            # cache before this shared resolver runs.  Use the same visibility
+            # SSOT as Mod discovery instead of calling a non-existent per-user
+            # helper and failing every enterprise Mod closed.
+            mod_allowed = is_mod_visible_for_enterprise(mid)
             if not mod_allowed:
                 mod_reason = "mod_entitlement_required"
         except RECOVERABLE_ERRORS as exc:
