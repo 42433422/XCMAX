@@ -645,6 +645,28 @@ jobs:
           npm ci
           npm run build
 
+  desktop-windows-release-script-smoke:
+    name: desktop-windows-release-script-smoke
+    needs: [guard-temp-scripts]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse Windows release scripts
+        shell: pwsh
+        run: |
+          foreach ($path in @(
+            'scripts/package/build-installer.ps1',
+            'scripts/package/pre-release-security.ps1',
+            'scripts/package/verify-windows-signature.ps1'
+          )) {
+            $content = Get-Content -LiteralPath $path -Raw
+            $null = [scriptblock]::Create($content)
+            Write-Host "PowerShell parse OK: $path"
+          }
+      - name: Parse SSL.com electron-builder signing hook
+        shell: pwsh
+        run: node --check desktop/build/windows-sign.cjs
+
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
   ssot-drift-gate:
