@@ -62,9 +62,9 @@ unset ZIP_URL_B64 BLOCKMAP_URL_B64
 zip_path="${REMOTE_WORK}/${ZIP_NAME}"
 blockmap_path="${zip_path}.blockmap"
 feed_path="${REMOTE_WORK}/latest-mac.yml"
-curl -fL --retry 3 --retry-delay 2 --max-time 5400 \
+curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 5400 \
   "${zip_url}" -o "${zip_path}"
-curl -fL --retry 3 --retry-delay 2 --max-time 300 \
+curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 300 \
   "${blockmap_url}" -o "${blockmap_path}"
 unset zip_url blockmap_url
 test -f "${blockmap_path}"

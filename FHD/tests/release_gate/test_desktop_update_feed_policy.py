@@ -120,12 +120,14 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
     assert 'RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"' in workflow
     assert 'gh release upload "${RELEASE_TAG}"' in workflow
+    assert 'RELEASE_ASSETS="$(gh release view' in workflow
+    assert "GitHub release asset size mismatch" in workflow
     assert 'ZIP_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/' in workflow
     assert "ZIP_URL_B64" in workflow
     assert "BLOCKMAP_URL_B64" in workflow
     assert "restore_mac_feed_from_artifact.sh" in workflow
     assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
-    assert "curl -fL --retry 3 --retry-delay 2 --max-time 5400" in restorer
+    assert "curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 5400" in restorer
     assert "--retry-all-errors" not in restorer
     assert 'zip_path="${REMOTE_WORK}/${ZIP_NAME}"' in restorer
     assert 'unzip -q "${REMOTE_WORK}/source-artifact.zip"' not in restorer
