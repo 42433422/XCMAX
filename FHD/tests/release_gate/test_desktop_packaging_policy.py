@@ -110,6 +110,11 @@ def test_windows_release_requires_azure_signing_and_system_authenticode() -> Non
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
     spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
+    build = (REPO_ROOT / "scripts" / "package" / "build-backend.sh").read_text(encoding="utf-8")
+    normalizer = (
+        REPO_ROOT / "scripts" / "package" / "normalize-macos-python-binaries.sh"
+    ).read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
 
     excludes = spec.split("desktop_excludes = [", 1)[1].split("]", 1)[0]
     assert '"faster_whisper"' not in excludes
@@ -117,6 +122,83 @@ def test_desktop_package_includes_chat_voice_runtime() -> None:
     assert "collect_submodules(module)" in spec
     assert "collect_dynamic_libs(module)" in spec
     assert "binaries=binaries" in spec
+    assert '"av>=17.1,<18"' in pyproject
+    assert "normalize-macos-python-binaries.sh" in build
+    assert "find \"${SITE_PACKAGES}\" -type f -name '*.dylib' -print0" in normalizer
+    assert "find \"${SITE_PACKAGES}\" -type f -name '*.so' -print0" in normalizer
+    assert "codesign --force --sign -" in normalizer
+    assert "import av" in normalizer
+    assert "import ctranslate2" in normalizer
+    assert "import gevent" in normalizer
+
+
+def test_macos_after_pack_uses_unambiguous_developer_id_and_fails_closed() -> None:
+    after_pack = (REPO_ROOT / "desktop" / "build" / "after-pack.cjs").read_text(encoding="utf-8")
+
+    assert "`Developer ID Application: ${fromEnv}`" in after_pack
+    assert "/^[0-9a-f]{40}$/i.test(fromEnv)" in after_pack
+    assert "match[2] === fullName" in after_pack
+    assert "log(`native sign warn" not in after_pack
+
+
+def test_desktop_package_includes_commercial_safe_pdf_runtime() -> None:
+    spec = (REPO_ROOT / "scripts" / "package" / "xcagi_backend.spec").read_text(encoding="utf-8")
+    pyproject = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    entrypoint = (REPO_ROOT / "XCAGI" / "run_fastapi.py").read_text(encoding="utf-8")
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+    employee_root = REPO_ROOT / "mods" / "_employees"
+    employee_runtime = "\n".join(
+        path.read_text(encoding="utf-8")
+        for employee_name in ("pdf-generate-employee", "pdf-full-read-employee")
+        for path in (employee_root / employee_name / "backend").rglob("*.py")
+    )
+
+    assert '"pypdf>=6.14,<7"' in pyproject
+    assert '"reportlab>=5,<6"' in pyproject
+    assert "PyMuPDF" not in pyproject
+    assert "collect_submodules(module)" in spec
+    assert 'for module in ["pypdf", "reportlab"]' in spec
+    assert "import fitz" not in employee_runtime
+    assert "from pypdf import PdfReader" in employee_runtime
+    assert "from reportlab.pdfgen import canvas" in employee_runtime
+    assert "--verify-frozen-critical-runtime" in entrypoint
+    assert "import faster_whisper" in entrypoint
+    assert 'bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"' in entrypoint
+    assert "installed != bundled" in entrypoint
+    assert workflow.count("--verify-frozen-critical-runtime") == 2
+
+
+def test_frozen_excel_temp_files_use_writable_app_data() -> None:
+    modules = [
+        REPO_ROOT / "app" / "application" / "excel_template_http_app_service.py",
+        REPO_ROOT / "app" / "fastapi_routes" / "excel_extract.py",
+    ]
+
+    for path in modules:
+        source = path.read_text(encoding="utf-8")
+        assert "get_app_data_dir" in source
+        assert 'os.path.join(get_app_data_dir(), "temp_excel")' in source
+        assert 'str(_REPO_ROOT / "temp_excel")' not in source
+
+    template_service = modules[0].read_text(encoding="utf-8")
+    assert "os.makedirs(TEMPLATE_DIR" not in template_service
+
+
+def test_server_api_runtime_excludes_unmaintained_python_ecdsa_stack() -> None:
+    """CVE-2024-23342 has no patched python-ecdsa release; PyJWT is the SSOT."""
+    dependency_files = (
+        REPO_ROOT / "pyproject.toml",
+        REPO_ROOT / "requirements.txt",
+        REPO_ROOT / "deploy" / "requirements-server-api.txt",
+        REPO_ROOT / "deploy" / "requirements-server-api.lock.txt",
+        REPO_ROOT / "uv.lock",
+    )
+    for dependency_file in dependency_files:
+        contents = dependency_file.read_text(encoding="utf-8").lower()
+        assert "python-jose" not in contents, dependency_file
+        assert 'name = "ecdsa"' not in contents, dependency_file
 
 
 def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
@@ -126,6 +208,7 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     dmg_builder = (REPO_ROOT / "scripts" / "package" / "create-mac-dmg.sh").read_text(
         encoding="utf-8"
     )
+    notarize = (REPO_ROOT / "desktop" / "build" / "notarize.cjs").read_text(encoding="utf-8")
 
     assert "xattr -cr desktop/node_modules/electron/dist" in installer
     assert '"--config.electronDist=node_modules/electron/dist"' in installer
@@ -139,6 +222,14 @@ def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     assert "hdiutil create" in dmg_builder
     assert "notarytool submit" in dmg_builder
     assert "stapler staple" in dmg_builder
+    assert "Apply signing normalization to both the local dotenv path" in installer
+    assert installer.index('if [ -f "${MAC_SIGNING_ENV}" ]') < installer.index(
+        'if [ -n "${CSC_LINK:-}" ]'
+    )
+    assert "unset CSC_LINK" in installer
+    assert "SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" in installer
+    assert "msg.includes('abortedUpload')" in notarize
+    assert "msg.includes('deadlineExceeded')" in notarize
 
 
 def test_desktop_staging_bundles_visible_office_employee_executors() -> None:

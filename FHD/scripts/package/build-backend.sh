@@ -55,6 +55,10 @@ fi
 "${PYTHON}" -m pip install -e ".[server-api]"
 "${PYTHON}" -m pip install "pyinstaller>=6.0" appdirs
 
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  bash scripts/package/normalize-macos-python-binaries.sh "${PYTHON}"
+fi
+
 export XCAGI_VERSION="${VERSION}"
 if [[ -n "${PRODUCT_SKU}" ]]; then
   export XCAGI_PRODUCT_SKU="${PRODUCT_SKU}"

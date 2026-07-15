@@ -133,6 +133,32 @@ def _resolve_mod_seed_source(mod_id: str, primary: Path) -> Path | None:
     return None
 
 
+def _seed_bundled_employee_packs(bundle: Path, root: Path) -> list[dict[str, str]]:
+    """Seed missing official employee packs from the read-only desktop bundle."""
+    source_root = bundle / "_employees"
+    if not source_root.is_dir():
+        return []
+
+    destination_root = root / "_employees"
+    destination_root.mkdir(parents=True, exist_ok=True)
+    results: list[dict[str, str]] = []
+    for source in sorted(source_root.iterdir(), key=lambda path: path.name):
+        if not source.is_dir() or not (source / "manifest.json").is_file():
+            continue
+        pack_id = source.name
+        result_id = f"_employees/{pack_id}"
+        destination = destination_root / pack_id
+        if destination.is_dir():
+            results.append({"mod_id": result_id, "status": "skipped", "message": "already present"})
+            continue
+        try:
+            shutil.copytree(source, destination)
+            results.append({"mod_id": result_id, "status": "seeded", "message": str(destination)})
+        except OSError as exc:
+            results.append({"mod_id": result_id, "status": "error", "message": str(exc)})
+    return results
+
+
 def bundled_mods_dir() -> Path | None:
     """PyInstaller 或源码树中的只读 Mod 种子目录。"""
     for raw in (
@@ -203,6 +229,7 @@ def seed_edition_mods_from_bundle(
         except OSError as exc:
             results.append({"mod_id": mod_id, "status": "error", "message": str(exc)})
 
+    results.extend(_seed_bundled_employee_packs(bundle, root))
     return results
 
 
