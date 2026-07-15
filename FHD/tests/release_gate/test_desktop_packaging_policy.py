@@ -80,9 +80,7 @@ def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> No
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
-    signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(
-        encoding="utf-8"
-    )
+    signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
     )
@@ -137,9 +135,7 @@ def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -
 
 
 def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> None:
-    workflow = (REPO_ROOT / ".github" / "workflows" / "ci-cd.yml").read_text(
-        encoding="utf-8"
-    )
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci-cd.yml").read_text(encoding="utf-8")
 
     job = workflow.split("  desktop-windows-release-script-smoke:", 1)[1].split(
         "\n  # SSOT drift gate", 1

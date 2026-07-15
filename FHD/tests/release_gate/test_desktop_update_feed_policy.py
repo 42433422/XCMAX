@@ -82,7 +82,7 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     assert workflow.count("--include='*.zip'") == 1
     assert workflow.count("--include='*.zip.blockmap'") == 1
     assert "publish_payload()" in workflow
-    assert workflow.count("publish_payload \"") == 2
+    assert workflow.count('publish_payload "') == 2
     assert "--delay-updates" in workflow
     assert "-o -name '*.zip'" in workflow
     assert '"XCAGI-*-${VERSION}-mac-*.zip"' in uploader
