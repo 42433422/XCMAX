@@ -130,7 +130,128 @@
         }
       },
       "updated_at": "2026-06-17T20:10:13.002821+00:00"
+    },
+    "ORCH": {
+      "last_run": "2026-07-15T00:02:21.932128+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false
+      },
+      "updated_at": "2026-07-15T00:02:21.932128+00:00"
+    },
+    "KIND": {
+      "last_run": "2026-07-15T00:02:21.932604+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false
+      },
+      "updated_at": "2026-07-15T00:02:21.932604+00:00"
+    },
+    "BR": {
+      "last_run": "2026-07-15T00:02:21.932922+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false
+      },
+      "updated_at": "2026-07-15T00:02:21.932922+00:00"
+    },
+    "PW": {
+      "last_run": "2026-07-15T00:02:21.933247+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job.phase_b",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false,
+        "line": "P-W"
+      },
+      "updated_at": "2026-07-15T00:02:21.933247+00:00"
+    },
+    "SR": {
+      "last_run": "2026-07-15T00:02:21.933541+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job.phase_b",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false,
+        "line": "S-R"
+      },
+      "updated_at": "2026-07-15T00:02:21.933541+00:00"
+    },
+    "P3": {
+      "last_run": "2026-07-15T00:02:21.933848+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job.phase_c_pipeline",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false,
+        "step_ids": [
+          "P3",
+          "P7",
+          "P8"
+        ]
+      },
+      "updated_at": "2026-07-15T00:02:21.933848+00:00"
+    },
+    "P7": {
+      "last_run": "2026-07-15T00:02:21.934168+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job.phase_c_pipeline",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false,
+        "step_ids": [
+          "P3",
+          "P7",
+          "P8"
+        ]
+      },
+      "updated_at": "2026-07-15T00:02:21.934168+00:00"
+    },
+    "P8": {
+      "last_run": "2026-07-15T00:02:21.934467+00:00",
+      "ok": true,
+      "source": "daily_release_train_orchestrator_job.phase_c_pipeline",
+      "meta": {
+        "record_id": 32,
+        "release_train": "1.0.0.1",
+        "release_kind": "daily",
+        "digest_mode": "primary",
+        "shadow": false,
+        "step_ids": [
+          "P3",
+          "P7",
+          "P8"
+        ]
+      },
+      "updated_at": "2026-07-15T00:02:21.934467+00:00"
     }
   },
-  "updated_at": "2026-06-17T20:36:53.363742+00:00"
+  "updated_at": "2026-07-15T00:02:21.934467+00:00"
 }

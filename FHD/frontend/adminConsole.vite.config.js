@@ -65,19 +65,35 @@ const adminModuleAliases = [
 })
 
 function buildDevProxy(apiBase) {
+  const modstoreBase = (
+    process.env.VITE_MODSTORE_BASE ||
+    process.env.XCAGI_MARKET_BASE_URL ||
+    'http://127.0.0.1:8788'
+  ).replace(/\/$/, '')
+  const forwardHost = (proxy) => {
+    proxy.on('proxyReq', (proxyReq, req) => {
+      const origHost = req.headers['host'] || ''
+      if (origHost) {
+        proxyReq.setHeader('X-Forwarded-Host', origHost)
+      }
+    })
+  }
   return {
+    // 比 /api 更具体：全景页运营线健康 / 自维护 loop 走本地 MODstore，避免 FHD 未挂路由时 404 再跨域打 :8788
+    '/api/admin/production-line': {
+      target: modstoreBase,
+      changeOrigin: true,
+      configure: forwardHost,
+    },
+    '/api/ops': {
+      target: modstoreBase,
+      changeOrigin: true,
+      configure: forwardHost,
+    },
     '/api': {
       target: apiBase,
       changeOrigin: true,
-      configure: (proxy) => {
-        // changeOrigin 会把 Host 改成后端地址；透传原始 Host 让 pairing 等逻辑拿到手机真实访问端口
-        proxy.on('proxyReq', (proxyReq, req) => {
-          const origHost = req.headers['host'] || ''
-          if (origHost) {
-            proxyReq.setHeader('X-Forwarded-Host', origHost)
-          }
-        })
-      },
+      configure: forwardHost,
     },
     '/ws': { target: apiBase, changeOrigin: true, ws: true },
     '/health': { target: apiBase, changeOrigin: true },
