@@ -99,13 +99,24 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
         encoding="utf-8"
     )
 
-    assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
-    assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
-    assert 'RESOLVED_SHA="${ZIP_BUILD_SHA:-}"' in workflow
+    assert "actions: read" in workflow
+    assert "source_run_id" in workflow
+    assert "--name xcagi-desktop-macos-enterprise" in workflow
+    assert "RUN_CONCLUSION" in workflow
+    assert "RUN_WORKFLOW" in workflow
+    assert "SOURCE_RUN_SHA" in workflow
+    assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    assert "Canonical ZIP identity differs from the source release run" in workflow
     assert "build_sha override differs from the canonical ZIP identity" in workflow
     assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
     assert 'MANIFEST_SHA="$(printf' in workflow
     assert "Canonical ZIP identity does not match the published release manifest" in workflow
-    assert '"root@${HOST}:${STABLE_DEST}/latest-mac.yml.part"' in workflow
+    assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
+    assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
+    assert '"root@${HOST}:${OFFICIAL_DEST}/${ZIP_NAME}.part"' in workflow
     assert '"root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"' in workflow
-    assert "cmp -s '${STABLE_DEST}/latest-mac.yml' '${OFFICIAL_DEST}/latest-mac.yml'" in workflow
+    assert "cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}.part'" in workflow
+    assert "cmp -s '${OFFICIAL_DEST}/latest-mac.yml' '${STABLE_DEST}/latest-mac.yml'" in workflow
+    assert workflow.index("mv -f '${OFFICIAL_DEST}/${ZIP_NAME}.part'") < workflow.index(
+        "mv -f '${OFFICIAL_DEST}/latest-mac.yml.part'"
+    )
