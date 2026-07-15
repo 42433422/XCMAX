@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Run on the update server. Restore a verified macOS ZIP updater artifact from
-# persistent GitHub release assets, then publish metadata last.
+# a GitHub Actions artifact using parallel range requests, then publish metadata last.
 set -euo pipefail
 
 required=(
-  ZIP_URL_B64
-  BLOCKMAP_URL_B64
+  ARTIFACT_URL_B64
+  EXPECTED_ARTIFACT_SIZE
   REMOTE_WORK
   ZIP_NAME
   EXPECTED_BUILD_SHA
@@ -55,18 +55,80 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${REMOTE_WORK}/extracted" "${STABLE_DEST}" "${OFFICIAL_DEST}"
-zip_url="$(printf '%s' "${ZIP_URL_B64}" | base64 --decode)"
-blockmap_url="$(printf '%s' "${BLOCKMAP_URL_B64}" | base64 --decode)"
-unset ZIP_URL_B64 BLOCKMAP_URL_B64
-zip_path="${REMOTE_WORK}/${ZIP_NAME}"
+if [[ ! "${EXPECTED_ARTIFACT_SIZE}" =~ ^[1-9][0-9]+$ ]]; then
+  echo "invalid EXPECTED_ARTIFACT_SIZE" >&2
+  exit 2
+fi
+
+mkdir -p "${REMOTE_WORK}/parts" "${REMOTE_WORK}/extracted" "${STABLE_DEST}" "${OFFICIAL_DEST}"
+artifact_url="$(printf '%s' "${ARTIFACT_URL_B64}" | base64 --decode)"
+unset ARTIFACT_URL_B64
+download_parts="${DOWNLOAD_PARTS:-16}"
+if [[ ! "${download_parts}" =~ ^[1-9][0-9]*$ ]] || [ "${download_parts}" -gt 32 ]; then
+  echo "invalid DOWNLOAD_PARTS" >&2
+  exit 2
+fi
+chunk_size="$(( (EXPECTED_ARTIFACT_SIZE + download_parts - 1) / download_parts ))"
+pids=()
+part_paths=()
+part_sizes=()
+for ((part_index = 0; part_index < download_parts; part_index++)); do
+  range_start="$((part_index * chunk_size))"
+  if [ "${range_start}" -ge "${EXPECTED_ARTIFACT_SIZE}" ]; then
+    break
+  fi
+  range_end="$((range_start + chunk_size - 1))"
+  if [ "${range_end}" -ge "$((EXPECTED_ARTIFACT_SIZE - 1))" ]; then
+    range_end="$((EXPECTED_ARTIFACT_SIZE - 1))"
+  fi
+  part_path="${REMOTE_WORK}/parts/part-$(printf '%02d' "${part_index}")"
+  part_paths+=("${part_path}")
+  part_sizes+=("$((range_end - range_start + 1))")
+  curl -fsSL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 5400 \
+    --range "${range_start}-${range_end}" \
+    "${artifact_url}" -o "${part_path}" &
+  pids+=("$!")
+done
+
+download_failed=0
+for pid in "${pids[@]}"; do
+  if ! wait "${pid}"; then
+    download_failed=1
+  fi
+done
+if [ "${download_failed}" -ne 0 ]; then
+  echo "one or more artifact range downloads failed" >&2
+  exit 3
+fi
+for ((part_index = 0; part_index < ${#part_paths[@]}; part_index++)); do
+  actual_part_size="$(stat -c '%s' "${part_paths[part_index]}")"
+  if [ "${actual_part_size}" != "${part_sizes[part_index]}" ]; then
+    echo "artifact range size mismatch at part ${part_index}" >&2
+    exit 3
+  fi
+done
+
+artifact_path="${REMOTE_WORK}/source-artifact.zip"
+for part_path in "${part_paths[@]}"; do
+  cat "${part_path}" >> "${artifact_path}"
+done
+unset artifact_url
+if [ "$(stat -c '%s' "${artifact_path}")" != "${EXPECTED_ARTIFACT_SIZE}" ]; then
+  echo "reassembled artifact size mismatch" >&2
+  exit 3
+fi
+unzip -q "${artifact_path}" -d "${REMOTE_WORK}/extracted"
+
+mapfile -t zip_matches < <(
+  find "${REMOTE_WORK}/extracted" -type f -name "${ZIP_NAME}" -print
+)
+if [ "${#zip_matches[@]}" -ne 1 ]; then
+  echo "expected exactly one ${ZIP_NAME} in downloaded artifact" >&2
+  exit 3
+fi
+zip_path="${zip_matches[0]}"
 blockmap_path="${zip_path}.blockmap"
 feed_path="${REMOTE_WORK}/latest-mac.yml"
-curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 5400 \
-  "${zip_url}" -o "${zip_path}"
-curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 300 \
-  "${blockmap_url}" -o "${blockmap_path}"
-unset zip_url blockmap_url
 test -f "${blockmap_path}"
 test -f "${feed_path}"
 
