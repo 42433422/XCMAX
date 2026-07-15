@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Run on the update server. Restore a verified macOS ZIP updater artifact from
-# a short-lived GitHub Actions artifact URL, then publish metadata last.
+# persistent GitHub release assets, then publish metadata last.
 set -euo pipefail
 
 required=(
-  ARTIFACT_URL_B64
+  ZIP_URL_B64
+  BLOCKMAP_URL_B64
   REMOTE_WORK
   ZIP_NAME
   EXPECTED_BUILD_SHA
@@ -55,23 +56,17 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "${REMOTE_WORK}/extracted" "${STABLE_DEST}" "${OFFICIAL_DEST}"
-artifact_url="$(printf '%s' "${ARTIFACT_URL_B64}" | base64 --decode)"
-unset ARTIFACT_URL_B64
-curl -fL --retry 3 --retry-delay 2 --max-time 1800 \
-  "${artifact_url}" -o "${REMOTE_WORK}/source-artifact.zip"
-unset artifact_url
-unzip -q "${REMOTE_WORK}/source-artifact.zip" -d "${REMOTE_WORK}/extracted"
-
-mapfile -t zip_matches < <(
-  find "${REMOTE_WORK}/extracted" -type f -name "${ZIP_NAME}" -print
-)
-if [ "${#zip_matches[@]}" -ne 1 ]; then
-  echo "expected exactly one ${ZIP_NAME} in downloaded artifact" >&2
-  exit 3
-fi
-zip_path="${zip_matches[0]}"
+zip_url="$(printf '%s' "${ZIP_URL_B64}" | base64 --decode)"
+blockmap_url="$(printf '%s' "${BLOCKMAP_URL_B64}" | base64 --decode)"
+unset ZIP_URL_B64 BLOCKMAP_URL_B64
+zip_path="${REMOTE_WORK}/${ZIP_NAME}"
 blockmap_path="${zip_path}.blockmap"
 feed_path="${REMOTE_WORK}/latest-mac.yml"
+curl -fL --retry 3 --retry-delay 2 --max-time 5400 \
+  "${zip_url}" -o "${zip_path}"
+curl -fL --retry 3 --retry-delay 2 --max-time 300 \
+  "${blockmap_url}" -o "${blockmap_path}"
+unset zip_url blockmap_url
 test -f "${blockmap_path}"
 test -f "${feed_path}"
 

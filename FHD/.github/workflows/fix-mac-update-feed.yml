@@ -22,7 +22,7 @@ on:
 
 permissions:
   actions: read
-  contents: read
+  contents: write
 
 defaults:
   run:
@@ -78,7 +78,7 @@ jobs:
             --name xcagi-desktop-macos-enterprise \
             --dir "${RUNNER_TEMP}/release-artifact"
       - name: Verify canonical ZIP identity and atomically repair both feed paths
-        timeout-minutes: 30
+        timeout-minutes: 90
         env:
           GH_TOKEN: ${{ github.token }}
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
@@ -159,6 +159,27 @@ jobs:
           python scripts/dev/sign_update_metadata.py "${FEED_PATH}"
           echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${ZIP_BUILD_SHA}"
 
+          RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"
+          RELEASE_META="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json isDraft,isPrerelease,tagName)"
+          if [ "$(printf '%s' "${RELEASE_META}" | jq -er '.tagName')" != "${RELEASE_TAG}" ] \
+            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isDraft')" != "false" ] \
+            || [ "$(printf '%s' "${RELEASE_META}" | jq -er '.isPrerelease')" != "false" ]; then
+            echo "::error::Expected an existing published stable GitHub release: ${RELEASE_TAG}"
+            exit 1
+          fi
+          gh release upload "${RELEASE_TAG}" \
+            "${ZIP_PATH}" \
+            "${BLOCKMAP_PATH}" \
+            "${FEED_PATH}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --clobber
+          ZIP_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ZIP_NAME}"
+          BLOCKMAP_RELEASE_URL="${ZIP_RELEASE_URL}.blockmap"
+          curl -fsIL --retry 3 "${ZIP_RELEASE_URL}" >/dev/null
+          curl -fsIL --retry 3 "${BLOCKMAP_RELEASE_URL}" >/dev/null
+          echo "Published canonical updater as a persistent GitHub stable-release fallback."
+
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
           STABLE_DEST="/var/www/update/releases/stable/enterprise"
           OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
@@ -168,19 +189,8 @@ jobs:
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
-          ARTIFACT_HEADERS="$(curl -sS -D - -o /dev/null \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip")"
-          ARTIFACT_URL="$(printf '%s\n' "${ARTIFACT_HEADERS}" \
-            | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | tail -n 1)"
-          if [ -z "${ARTIFACT_URL}" ]; then
-            echo "::error::GitHub did not return a signed artifact download URL."
-            exit 1
-          fi
-          ARTIFACT_URL_B64="$(printf '%s' "${ARTIFACT_URL}" | base64 | tr -d '\n')"
-          unset ARTIFACT_HEADERS ARTIFACT_URL
+          ZIP_URL_B64="$(printf '%s' "${ZIP_RELEASE_URL}" | base64 | tr -d '\n')"
+          BLOCKMAP_URL_B64="$(printf '%s' "${BLOCKMAP_RELEASE_URL}" | base64 | tr -d '\n')"
 
           REMOTE_WORK="/tmp/xcagi-feed-repair-${GITHUB_RUN_ID}"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${REMOTE_WORK}' && mkdir -p '${REMOTE_WORK}'"
@@ -191,7 +201,8 @@ jobs:
             "root@${HOST}:${REMOTE_WORK}/"
           scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${REMOTE_WORK}/latest-mac.yml"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "ARTIFACT_URL_B64='${ARTIFACT_URL_B64}' \
+            "ZIP_URL_B64='${ZIP_URL_B64}' \
+             BLOCKMAP_URL_B64='${BLOCKMAP_URL_B64}' \
              REMOTE_WORK='${REMOTE_WORK}' \
              ZIP_NAME='${ZIP_NAME}' \
              EXPECTED_BUILD_SHA='${ZIP_BUILD_SHA}' \
