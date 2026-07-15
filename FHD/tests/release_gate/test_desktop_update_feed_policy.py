@@ -103,6 +103,7 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     )
 
     assert "actions: read" in workflow
+    assert "contents: write" in workflow
     assert "source_run_id" in workflow
     assert "--name xcagi-desktop-macos-enterprise" in workflow
     assert "RUN_CONCLUSION" in workflow
@@ -117,13 +118,17 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "Canonical ZIP identity does not match the published release manifest" in workflow
     assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
     assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
-    assert "/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" in workflow
-    assert "ARTIFACT_URL_B64" in workflow
+    assert 'RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"' in workflow
+    assert 'gh release upload "${RELEASE_TAG}"' in workflow
+    assert 'ZIP_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/' in workflow
+    assert "ZIP_URL_B64" in workflow
+    assert "BLOCKMAP_URL_B64" in workflow
     assert "restore_mac_feed_from_artifact.sh" in workflow
     assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
-    assert "curl -fL --retry 3 --retry-delay 2 --max-time 1800" in restorer
+    assert "curl -fL --retry 3 --retry-delay 2 --max-time 5400" in restorer
     assert "--retry-all-errors" not in restorer
-    assert 'unzip -q "${REMOTE_WORK}/source-artifact.zip"' in restorer
+    assert 'zip_path="${REMOTE_WORK}/${ZIP_NAME}"' in restorer
+    assert 'unzip -q "${REMOTE_WORK}/source-artifact.zip"' not in restorer
     assert 'actual_build_sha="$(' in restorer
     assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer
     assert 'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"' in restorer
