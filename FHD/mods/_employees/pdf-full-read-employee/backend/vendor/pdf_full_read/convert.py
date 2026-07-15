@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -22,59 +23,47 @@ def _classify_image(width: int, height: int, area: int) -> str:
     return "figures"
 
 
-def _extract_with_fitz(src_path: Path) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
-    import fitz  # PyMuPDF
-
-    doc = fitz.open(src_path)
-    page_texts: List[str] = []
-    pages_meta: List[Dict[str, Any]] = []
-    images: List[Dict[str, Any]] = []
-    img_seq = 0
-    for page_idx in range(len(doc)):
-        page = doc[page_idx]
-        text = (page.get_text("text") or "").strip()
-        page_texts.append(text)
-        pages_meta.append({"page": page_idx + 1, "char_count": len(text), "has_text": bool(text)})
-        for img_info in page.get_images(full=True):
-            xref = img_info[0]
-            try:
-                pix = fitz.Pixmap(doc, xref)
-                if pix.n - pix.alpha >= 4:
-                    pix = fitz.Pixmap(fitz.csRGB, pix)
-                w, h = pix.width, pix.height
-                ext = "png"
-                data = pix.tobytes(ext)
-                category = _classify_image(w, h, w * h)
-                img_seq += 1
-                images.append({
-                    "id": f"p{page_idx + 1}_img{img_seq}",
-                    "page": page_idx + 1,
-                    "xref": xref,
-                    "width": w,
-                    "height": h,
-                    "category": category,
-                    "bytes": data,
-                    "ext": ext,
-                })
-            except Exception:
-                continue
-    doc.close()
-    plain = "\n\n".join(t for t in page_texts if t)
-    return plain, pages_meta, images
-
-
 def _extract_with_pypdf(src_path: Path) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
     from pypdf import PdfReader
+    from pypdf.errors import PdfReadError
 
     reader = PdfReader(str(src_path))
     page_texts: List[str] = []
     pages_meta: List[Dict[str, Any]] = []
+    images: List[Dict[str, Any]] = []
+    img_seq = 0
     for idx, page in enumerate(reader.pages, start=1):
         text = (page.extract_text() or "").strip()
         page_texts.append(text)
         pages_meta.append({"page": idx, "char_count": len(text), "has_text": bool(text)})
+        try:
+            page_images = list(page.images)
+        except (AttributeError, KeyError, OSError, PdfReadError, TypeError, ValueError):
+            page_images = []
+        for image_file in page_images:
+            try:
+                pil_image = image_file.image
+                if pil_image.mode not in {"RGB", "RGBA"}:
+                    pil_image = pil_image.convert("RGB")
+                output = BytesIO()
+                pil_image.save(output, format="PNG")
+                width, height = pil_image.size
+                img_seq += 1
+                images.append(
+                    {
+                        "id": f"p{idx}_img{img_seq}",
+                        "page": idx,
+                        "width": width,
+                        "height": height,
+                        "category": _classify_image(width, height, width * height),
+                        "bytes": output.getvalue(),
+                        "ext": "png",
+                    }
+                )
+            except (AttributeError, KeyError, OSError, TypeError, ValueError):
+                continue
     plain = "\n\n".join(t for t in page_texts if t)
-    return plain, pages_meta, []
+    return plain, pages_meta, images
 
 
 def _write_image_files(images: List[Dict[str, Any]], images_root: Path) -> List[Dict[str, Any]]:
@@ -88,14 +77,16 @@ def _write_image_files(images: List[Dict[str, Any]], images_root: Path) -> List[
         fname = f"{img.get('id') or 'img'}.{img.get('ext') or 'png'}"
         out_path = sub / fname
         out_path.write_bytes(img.get("bytes") or b"")
-        catalog.append({
-            "id": img.get("id"),
-            "page": img.get("page"),
-            "category": category,
-            "relpath": str(out_path.relative_to(images_root.parent)).replace("\\", "/"),
-            "width": img.get("width"),
-            "height": img.get("height"),
-        })
+        catalog.append(
+            {
+                "id": img.get("id"),
+                "page": img.get("page"),
+                "category": category,
+                "relpath": str(out_path.relative_to(images_root.parent)).replace("\\", "/"),
+                "width": img.get("width"),
+                "height": img.get("height"),
+            }
+        )
     return catalog
 
 
@@ -132,8 +123,10 @@ async def _vlm_describe_image(
         }
     ]
     try:
-        res = await asyncio.wait_for(call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0)
-    except Exception:
+        res = await asyncio.wait_for(
+            call_llm(messages, max_tokens=600, temperature=0.1), timeout=90.0
+        )
+    except Exception:  # noqa: BLE001 - employee LLM adapters expose provider-specific errors
         return None
     if not isinstance(res, dict) or not res.get("ok"):
         return None
@@ -175,13 +168,8 @@ async def convert_file(
         images_root = output_dir / Path(str(rule_spec.get("default_images_dir"))).name
 
     warnings: List[str] = []
-    try:
-        plain, pages_meta, images = _extract_with_fitz(src_path)
-        engine = "pymupdf"
-    except Exception as exc:
-        warnings.append(f"PyMuPDF 解析失败，回退 pypdf：{exc}")
-        plain, pages_meta, images = _extract_with_pypdf(src_path)
-        engine = "pypdf"
+    plain, pages_meta, images = _extract_with_pypdf(src_path)
+    engine = "pypdf"
 
     txt_path.write_text(plain, encoding="utf-8")
     catalog = _write_image_files(images, images_root)
@@ -200,15 +188,25 @@ async def convert_file(
         )
         if sidecar:
             sidecar_path = img_abs.with_suffix(img_abs.suffix + ".vlm.json")
-            sidecar_path.write_text(json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
+            sidecar_path.write_text(
+                json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
             entry["vlm_sidecar"] = str(sidecar_path.relative_to(output_dir)).replace("\\", "/")
             vlm_results.append({"id": entry.get("id"), "vlm": True})
         else:
-            warnings.append(f"图片 {entry.get('id')} 未获得 VLM 描述（ctx.call_llm 不可用或调用失败）")
+            warnings.append(
+                f"图片 {entry.get('id')} 未获得 VLM 描述（ctx.call_llm 不可用或调用失败）"
+            )
 
     images_index_path = output_dir / "images_index.json"
-    images_index = {"images": catalog, "categories": list(_CATEGORY_DIRS), "vlm_count": len(vlm_results)}
-    images_index_path.write_text(json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8")
+    images_index = {
+        "images": catalog,
+        "categories": list(_CATEGORY_DIRS),
+        "vlm_count": len(vlm_results),
+    }
+    images_index_path.write_text(
+        json.dumps(images_index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
     meta = {
         "plain_text": plain,
@@ -218,7 +216,9 @@ async def convert_file(
         "engine": engine,
         "pages": pages_meta,
         "image_count": len(catalog),
-        "image_categories": {c: sum(1 for i in catalog if i.get("category") == c) for c in _CATEGORY_DIRS},
+        "image_categories": {
+            c: sum(1 for i in catalog if i.get("category") == c) for c in _CATEGORY_DIRS
+        },
         "images_index": str(images_index_path.name),
     }
     meta_path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")

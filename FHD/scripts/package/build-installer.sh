@@ -30,21 +30,24 @@ if [ -f "${MAC_SIGNING_ENV}" ]; then
     esac
     export "${key}=${value}"
   done < "${MAC_SIGNING_ENV}"
-  if [ -n "${CSC_NAME:-}" ]; then
-    # electron-builder 26 selects the certificate class itself and rejects this prefix.
-    CSC_NAME="${CSC_NAME#Developer ID Application: }"
-    export CSC_NAME
+fi
+
+# Apply signing normalization to both the local dotenv path and callers that
+# inject the same values through CI or a clean release worktree environment.
+if [ -n "${CSC_NAME:-}" ]; then
+  # electron-builder 26 selects the certificate class itself and rejects this prefix.
+  CSC_NAME="${CSC_NAME#Developer ID Application: }"
+  export CSC_NAME
+fi
+if [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
+  # Prefer an already unlocked keychain identity when the local P12 has no configured password.
+  # CI normally provides CSC_KEY_PASSWORD and continues to use CSC_LINK.
+  if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "${CSC_NAME:-}"; then
+    unset CSC_LINK
   fi
-  if [ -n "${CSC_LINK:-}" ] && [ -z "${CSC_KEY_PASSWORD:-}" ] && command -v security >/dev/null 2>&1; then
-    # Prefer an already unlocked keychain identity when the local P12 has no configured password.
-    # CI normally provides CSC_KEY_PASSWORD and continues to use CSC_LINK.
-    if security find-identity -v -p codesigning 2>/dev/null | grep -Fq "${CSC_NAME:-}"; then
-      unset CSC_LINK
-    fi
-  fi
-  if [ -n "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE:-}" ] && [ -f "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}" ]; then
-    export XCAGI_UPDATE_ED25519_PRIVATE_KEY="$(cat "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}")"
-  fi
+fi
+if [ -n "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE:-}" ] && [ -f "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}" ]; then
+  export XCAGI_UPDATE_ED25519_PRIVATE_KEY="$(cat "${XCAGI_UPDATE_ED25519_PRIVATE_KEY_FILE}")"
 fi
 
 sku_label() {
@@ -108,7 +111,14 @@ build_one_sku() {
     xattr -cr desktop/node_modules/electron/dist
   fi
   (cd desktop && npm version "${TOOLCHAIN_VERSION}" --no-git-tag-version --allow-same-version)
-  (cd desktop && npm run build)
+  if [ "${SKIP_DESKTOP_BUILD:-0}" != "1" ]; then
+    (cd desktop && npm run build)
+  elif [ ! -f desktop/dist/main.js ]; then
+    echo "[err] SKIP_DESKTOP_BUILD=1 but desktop/dist/main.js is missing" >&2
+    exit 1
+  else
+    cp desktop/resources/splash.html desktop/dist/splash.html
+  fi
   local artifact_name="XCAGI-${label}-${VERSION}-mac-\${arch}.\${ext}"
   # electron-builder's DMG target downloads an optional dmg-builder bundle at
   # release time. Produce the updater ZIP here, then use macOS' built-in

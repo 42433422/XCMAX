@@ -17,17 +17,34 @@ function resolveIdentity() {
     process.env.APPLE_IDENTITY ||
     ''
   ).trim()
-  if (fromEnv) return fromEnv
+  if (/^[0-9a-f]{40}$/i.test(fromEnv)) return fromEnv
   try {
     const out = execFileSync(
       'security',
       ['find-identity', '-v', '-p', 'codesigning'],
       { encoding: 'utf8' }
     )
+    if (fromEnv) {
+      // electron-builder 26 expects CSC_NAME without the certificate-class
+      // prefix, while codesign needs an unambiguous identity when the same
+      // owner also has an iPhone Distribution certificate. Resolve the exact
+      // Developer ID entry to its SHA-1 fingerprint for custom nested signing.
+      const fullName = fromEnv.startsWith('Developer ID Application: ')
+        ? fromEnv
+        : `Developer ID Application: ${fromEnv}`
+      for (const line of out.split(/\r?\n/)) {
+        const match = line.match(/\b([0-9A-F]{40})\s+"([^"]+)"/i)
+        if (match && match[2] === fullName) return match[1]
+      }
+      return fullName
+    }
     const m = out.match(/"(Developer ID Application: [^"]+)"/)
     return m ? m[1] : ''
   } catch {
-    return ''
+    if (!fromEnv) return ''
+    return fromEnv.startsWith('Developer ID Application: ')
+      ? fromEnv
+      : `Developer ID Application: ${fromEnv}`
   }
 }
 
@@ -37,7 +54,13 @@ function codesign(target, identity, entitlements) {
     args.push('--entitlements', entitlements)
   }
   args.push(target)
-  execFileSync('codesign', args, { stdio: 'inherit' })
+  try {
+    execFileSync('codesign', args, { encoding: 'utf8', stdio: 'pipe' })
+  } catch (err) {
+    if (err.stdout) process.stdout.write(String(err.stdout))
+    if (err.stderr) process.stderr.write(String(err.stderr))
+    throw err
+  }
 }
 
 exports.default = async function afterPack(context) {
@@ -79,11 +102,7 @@ exports.default = async function afterPack(context) {
   }
   walk(backendDir)
   for (const native of natives) {
-    try {
-      codesign(native, identity, null)
-    } catch (err) {
-      log(`native sign warn ${native}: ${err.message}`)
-    }
+    codesign(native, identity, null)
   }
   codesign(backend, identity, entitlements)
   log(`backend entitlements applied (${natives.length} natives)`)

@@ -88,6 +88,11 @@ jobs:
             }
             Write-Host "OK $sku resource: $p"
           }
+          & "$dir/backend/xcagi-backend.exe" --verify-frozen-critical-runtime
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "::error::Frozen Windows backend critical office/voice runtime probe failed."
+            exit 1
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows-enterprise
@@ -300,6 +305,9 @@ jobs:
           )
           print(f"Verified packaged identity: {expected_version} @ {expected_sha}")
           PY
+          backend="${app}/Contents/Resources/backend/xcagi-backend"
+          test -x "${backend}"
+          "${backend}" --verify-frozen-critical-runtime
           xcrun stapler validate "${app}"
           spctl -a -vv -t exec "${app}"
           cleanup_mount

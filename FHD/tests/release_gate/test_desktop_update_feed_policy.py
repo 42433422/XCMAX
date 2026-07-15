@@ -92,3 +92,20 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     # DMG notarize must not overwrite ZIP-based latest-mac.yml
     assert "node scripts/package/generate-update-metadata.mjs" not in finalize
     assert "ZIP update feed left untouched" in finalize
+
+
+def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
+    assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
+    assert 'RESOLVED_SHA="${ZIP_BUILD_SHA:-}"' in workflow
+    assert "build_sha override differs from the canonical ZIP identity" in workflow
+    assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
+    assert 'MANIFEST_SHA="$(printf' in workflow
+    assert "Canonical ZIP identity does not match the published release manifest" in workflow
+    assert '"root@${HOST}:${STABLE_DEST}/latest-mac.yml.part"' in workflow
+    assert '"root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"' in workflow
+    assert "cmp -s '${STABLE_DEST}/latest-mac.yml' '${OFFICIAL_DEST}/latest-mac.yml'" in workflow
