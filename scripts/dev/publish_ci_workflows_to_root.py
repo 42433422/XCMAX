@@ -41,7 +41,6 @@ WORKFLOW_RENAMES = {
 
 MOD_RENAMES = {
     "ci-backend-python.yml": "modstore-ci-backend-python.yml",
-    "build-desktop.yml": "modstore-build-desktop.yml",
     "market-e2e.yml": "modstore-market-e2e.yml",
 }
 
