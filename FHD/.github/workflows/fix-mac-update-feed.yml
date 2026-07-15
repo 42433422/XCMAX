@@ -174,10 +174,26 @@ jobs:
             "${FEED_PATH}" \
             --repo "${GITHUB_REPOSITORY}" \
             --clobber
+          BLOCKMAP_SIZE="$(wc -c < "${BLOCKMAP_PATH}" | tr -d ' ')"
+          FEED_SIZE="$(wc -c < "${FEED_PATH}" | tr -d ' ')"
+          RELEASE_ASSETS="$(gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" \
+            --json assets --jq '.assets')"
+          for ASSET_SPEC in \
+            "${ZIP_NAME}:${SIZE}" \
+            "${ZIP_NAME}.blockmap:${BLOCKMAP_SIZE}" \
+            "latest-mac.yml:${FEED_SIZE}"; do
+            ASSET_NAME="${ASSET_SPEC%%:*}"
+            EXPECTED_ASSET_SIZE="${ASSET_SPEC##*:}"
+            ACTUAL_ASSET_SIZE="$(printf '%s' "${RELEASE_ASSETS}" | jq -er \
+              --arg name "${ASSET_NAME}" \
+              '[.[] | select(.name == $name)] | if length == 1 then .[0].size else empty end')"
+            if [ "${ACTUAL_ASSET_SIZE}" != "${EXPECTED_ASSET_SIZE}" ]; then
+              echo "::error::GitHub release asset size mismatch: ${ASSET_NAME}"
+              exit 1
+            fi
+          done
           ZIP_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/${RELEASE_TAG}/${ZIP_NAME}"
           BLOCKMAP_RELEASE_URL="${ZIP_RELEASE_URL}.blockmap"
-          curl -fsIL --retry 3 "${ZIP_RELEASE_URL}" >/dev/null
-          curl -fsIL --retry 3 "${BLOCKMAP_RELEASE_URL}" >/dev/null
           echo "Published canonical updater as a persistent GitHub stable-release fallback."
 
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
