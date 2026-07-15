@@ -150,13 +150,22 @@ $electronBuilderArgs = @(
 )
 
 if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
+  $signingProvider = $env:XCAGI_WINDOWS_SIGNING_PROVIDER
+  if (-not $signingProvider) {
+    $signingProvider = 'sslcom'
+  }
+  if ($signingProvider -ne 'sslcom') {
+    throw "Unsupported Windows signing provider '$signingProvider'; stable releases require sslcom"
+  }
+
   $requiredSigningVars = @(
-    'AZURE_TENANT_ID',
-    'AZURE_CLIENT_ID',
-    'AZURE_CLIENT_SECRET',
-    'AZURE_TRUSTED_SIGNING_ENDPOINT',
-    'AZURE_TRUSTED_SIGNING_ACCOUNT',
-    'AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE'
+    'ES_USERNAME',
+    'ES_PASSWORD',
+    'CREDENTIAL_ID',
+    'ES_TOTP_SECRET',
+    'CODE_SIGN_TOOL_PATH',
+    'JAVA_HOME',
+    'XCAGI_WINDOWS_PUBLISHER_NAME'
   )
   $missingSigningVars = @($requiredSigningVars | Where-Object {
     -not (Get-Item "Env:$_" -ErrorAction SilentlyContinue).Value
@@ -166,16 +175,12 @@ if ($env:XCAGI_REQUIRE_WINDOWS_SIGNING -eq '1') {
   }
 
   $publisherName = $env:XCAGI_WINDOWS_PUBLISHER_NAME
-  if (-not $publisherName) {
-    $publisherName = '成都修茈科技有限公司'
-  }
-  Write-Host "Windows Authenticode signing required (Azure Trusted Signing; publisher=$publisherName)"
+  Write-Host "Windows Authenticode signing required (SSL.com eSigner; publisher=$publisherName)"
   $electronBuilderArgs += @(
     '--config.forceCodeSigning=true',
-    "--config.win.azureSignOptions.endpoint=$($env:AZURE_TRUSTED_SIGNING_ENDPOINT)",
-    "--config.win.azureSignOptions.codeSigningAccountName=$($env:AZURE_TRUSTED_SIGNING_ACCOUNT)",
-    "--config.win.azureSignOptions.certificateProfileName=$($env:AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE)",
-    "--config.win.azureSignOptions.publisherName=$publisherName"
+    "--config.win.publisherName=$publisherName",
+    '--config.win.signtoolOptions.sign=build/windows-sign.cjs',
+    '--config.win.signtoolOptions.signingHashAlgorithms=sha256'
   )
 }
 

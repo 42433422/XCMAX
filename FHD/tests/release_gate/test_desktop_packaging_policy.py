@@ -75,11 +75,12 @@ def test_desktop_windows_runtime_matches_mac_shell_policy() -> None:
     assert "console=False" in spec
 
 
-def test_windows_release_requires_azure_signing_and_system_authenticode() -> None:
+def test_windows_release_requires_sslcom_signing_and_system_authenticode() -> None:
     workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
         encoding="utf-8"
     )
     build = (REPO_ROOT / "scripts" / "package" / "build-installer.ps1").read_text(encoding="utf-8")
+    signer = (REPO_ROOT / "desktop" / "build" / "windows-sign.cjs").read_text(encoding="utf-8")
     post_gate = (REPO_ROOT / "scripts" / "package" / "pre-release-security.ps1").read_text(
         encoding="utf-8"
     )
@@ -88,24 +89,63 @@ def test_windows_release_requires_azure_signing_and_system_authenticode() -> Non
     )
 
     for name in (
-        "AZURE_TENANT_ID",
-        "AZURE_CLIENT_ID",
-        "AZURE_CLIENT_SECRET",
-        "AZURE_TRUSTED_SIGNING_ENDPOINT",
-        "AZURE_TRUSTED_SIGNING_ACCOUNT",
-        "AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE",
+        "ES_USERNAME",
+        "ES_PASSWORD",
+        "CREDENTIAL_ID",
+        "ES_TOTP_SECRET",
     ):
         assert name in workflow
         assert name in build
+        assert name in signer
 
     assert 'XCAGI_REQUIRE_WINDOWS_SIGNING: "1"' in workflow
+    assert "XCAGI_WINDOWS_SIGNING_PROVIDER: sslcom" in workflow
+    assert "SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b" in workflow
     assert "--config.forceCodeSigning=true" in build
-    assert "--config.win.azureSignOptions.endpoint=" in build
-    assert "--config.win.azureSignOptions.publisherName=" in build
+    assert "--config.win.signtoolOptions.sign=build/windows-sign.cjs" in build
+    assert "--config.win.signtoolOptions.signingHashAlgorithms=sha256" in build
+    assert "--config.win.publisherName=" in build
+    assert "AZURE_TRUSTED_SIGNING" not in workflow
+    assert "AZURE_TRUSTED_SIGNING" not in build
+    assert "-override=true" in signer
+    assert "spawn(java, args" in signer
     assert "Get-AuthenticodeSignature -LiteralPath" in verifier
     assert "$signature.Status -ne 'Valid'" in verifier
     assert "$signature.TimeStamperCertificate" in verifier
-    assert post_gate.count("verify-windows-signature.ps1") == 2
+    assert post_gate.count("verify-windows-signature.ps1") == 3
+
+
+def test_desktop_release_preflights_both_platforms_and_publishes_as_one_unit() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "release-desktop.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "release-preflight:" in workflow
+    assert workflow.count("needs: [release-preflight]") == 2
+    assert 'missing+=("APPLE_TEAM_ID|IOS_TEAM_ID")' in workflow
+    assert 'missing+=("SERVER_SSH_KEY|FHD_PUSH_SSH_KEY")' in workflow
+    assert "deploy-windows:" not in workflow
+    assert "deploy-macos:" not in workflow
+    assert "needs: [release-preflight, windows, macos]" in workflow
+    assert "Publish unified Windows + macOS release to CVM" in workflow
+    assert "--delay-updates" in workflow
+    assert workflow.index('official_root="/var/www/xcagi-v${version}"') < workflow.index(
+        'stable_root="/var/www/update/releases/stable"'
+    )
+
+
+def test_windows_release_scripts_are_parsed_on_a_real_windows_ci_runner() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "ci-cd.yml").read_text(encoding="utf-8")
+
+    job = workflow.split("  desktop-windows-release-script-smoke:", 1)[1].split(
+        "\n  # SSOT drift gate", 1
+    )[0]
+    assert "runs-on: windows-latest" in job
+    assert "build-installer.ps1" in job
+    assert "pre-release-security.ps1" in job
+    assert "verify-windows-signature.ps1" in job
+    assert "[scriptblock]::Create" in job
+    assert "node --check desktop/build/windows-sign.cjs" in job
 
 
 def test_desktop_package_includes_chat_voice_runtime() -> None:
