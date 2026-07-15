@@ -15,13 +15,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
+from app.utils.path_utils import get_app_data_dir
 
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = str(_REPO_ROOT / "templates")
-TEMP_EXCEL_DIR = str(_REPO_ROOT / "temp_excel")
-os.makedirs(TEMPLATE_DIR, exist_ok=True)
+TEMP_EXCEL_DIR = os.path.join(get_app_data_dir(), "temp_excel")
 os.makedirs(TEMP_EXCEL_DIR, exist_ok=True)
 
 

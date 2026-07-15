@@ -1,4 +1,4 @@
-# 紧急修复：基于 CDN 上已有 ZIP 重签 latest-mac.yml（不重复上传大包）。
+# 紧急修复：以正式下载目录中的既有 ZIP 为准，原子恢复 stable/official 元数据一致性。
 name: Fix macOS update feed
 
 on:
@@ -37,7 +37,7 @@ jobs:
           python-version: "3.11"
       - name: Install cryptography
         run: pip install --quiet cryptography
-      - name: Hash remote ZIP, sign latest-mac.yml, upload yml only
+      - name: Verify canonical ZIP identity and atomically repair both feed paths
         env:
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
@@ -54,8 +54,24 @@ jobs:
             echo "::error::SERVER_SSH_KEY or FHD_PUSH_SSH_KEY missing"
             exit 1
           fi
+          if [[ ! "${PRODUCT_VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid four-part product version: ${PRODUCT_VERSION}"
+            exit 1
+          fi
+          case "${ZIP_NAME}" in
+            "XCAGI-Enterprise-${PRODUCT_VERSION}-mac-arm64.zip"|"XCAGI-Enterprise-${PRODUCT_VERSION}-mac-x64.zip") ;;
+            *)
+              echo "::error::ZIP_NAME must be the canonical enterprise macOS ZIP for ${PRODUCT_VERSION}."
+              exit 1
+              ;;
+          esac
+          if [ -n "${BUILD_SHA:-}" ] && [[ ! "${BUILD_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::build_sha must be a full 40-character Git SHA."
+            exit 1
+          fi
           HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          DEST="/var/www/update/releases/stable/enterprise"
+          STABLE_DEST="/var/www/update/releases/stable/enterprise"
+          OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
           mkdir -p ~/.ssh
           printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
           chmod 600 ~/.ssh/id_ci
@@ -64,21 +80,33 @@ jobs:
 
           scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
           scp "${SSH_OPTS[@]}" scripts/deploy/extract_zip_build_sha.py "root@${HOST}:/tmp/extract_zip_build_sha.py"
-          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${DEST}/${ZIP_NAME}'")"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "test -f '${OFFICIAL_DEST}/${ZIP_NAME}' && mkdir -p '${STABLE_DEST}' '${OFFICIAL_DEST}'"
+          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}'")"
           SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
           SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
-          echo "Remote ZIP size=${SIZE} sha512=${SHA512}"
+          echo "Canonical ZIP size=${SIZE} sha512=${SHA512}"
 
-          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${DEST}/${ZIP_NAME}'")"
-          RESOLVED_SHA="${BUILD_SHA:-}"
+          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${OFFICIAL_DEST}/${ZIP_NAME}'")"
+          RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
           if [ -z "${RESOLVED_SHA}" ]; then
-            RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
-          fi
-          if [ -z "${RESOLVED_SHA}" ]; then
-            echo "::error::buildSha unresolved (input empty and ZIP has no build-info.json)"
+            echo "::error::Canonical ZIP has no build-info.json Git identity."
             exit 1
           fi
-          echo "Resolved buildSha=${RESOLVED_SHA} (input='${BUILD_SHA:-}' zip='${ZIP_BUILD_SHA:-}')"
+          if [ -n "${BUILD_SHA:-}" ] && [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::build_sha override differs from the canonical ZIP identity."
+            exit 1
+          fi
+
+          MANIFEST="$(curl -fsSL --retry 3 --retry-all-errors \
+            "https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json")"
+          MANIFEST_VERSION="$(printf '%s' "${MANIFEST}" | jq -er '.version')"
+          MANIFEST_SHA="$(printf '%s' "${MANIFEST}" | jq -er '.git_sha')"
+          if [ "${MANIFEST_VERSION}" != "${PRODUCT_VERSION}" ] || [ "${MANIFEST_SHA}" != "${RESOLVED_SHA}" ]; then
+            echo "::error::Canonical ZIP identity does not match the published release manifest. Run the full desktop release instead."
+            exit 1
+          fi
+          echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${RESOLVED_SHA}"
 
           WORK="$(mktemp -d)"
           : > "${WORK}/${ZIP_NAME}"
@@ -88,9 +116,27 @@ jobs:
           node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
           python3 scripts/deploy/patch_latest_mac_yml_hashes.py "${WORK}/latest-mac.yml" "${SHA512}" "${SIZE}"
           python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
-          echo "---- signed feed ----"
-          cat "${WORK}/latest-mac.yml"
-          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${DEST}/latest-mac.yml.part"
+
+          # Repair the stable ZIP from the canonical official copy without uploading
+          # the large archive through the runner. Metadata is published last.
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "mv -f '${DEST}/latest-mac.yml.part' '${DEST}/latest-mac.yml' && head -20 '${DEST}/latest-mac.yml'"
-          echo "Uploaded latest-mac.yml to ${DEST}"
+            "cp -f '${OFFICIAL_DEST}/${ZIP_NAME}' '${STABLE_DEST}/${ZIP_NAME}.part' && \
+             if [ -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap' ]; then \
+               cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap' '${STABLE_DEST}/${ZIP_NAME}.blockmap.part'; \
+             fi"
+          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${STABLE_DEST}/latest-mac.yml.part"
+          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
+            "set -eu; \
+             cmp -s '${STABLE_DEST}/latest-mac.yml.part' '${OFFICIAL_DEST}/latest-mac.yml.part'; \
+             mv -f '${STABLE_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}'; \
+             if [ -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' ]; then \
+               mv -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap'; \
+             fi; \
+             mv -f '${OFFICIAL_DEST}/latest-mac.yml.part' '${OFFICIAL_DEST}/latest-mac.yml'; \
+             mv -f '${STABLE_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml'; \
+             cmp -s '${STABLE_DEST}/latest-mac.yml' '${OFFICIAL_DEST}/latest-mac.yml'; \
+             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '1p')\" = '${SIZE}'; \
+             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '2p')\" = '${SHA512}'; \
+             head -20 '${OFFICIAL_DEST}/latest-mac.yml'"
+          echo "Repaired identical latest-mac.yml at stable and official paths."
