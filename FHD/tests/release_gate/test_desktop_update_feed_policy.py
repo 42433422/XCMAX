@@ -130,7 +130,7 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
     assert 'download_parts="${DOWNLOAD_PARTS:-16}"' in restorer
     assert '--range "${range_start}-${range_end}"' in restorer
-    assert 'stat -c \'%s\' "${part_paths[part_index]}"' in restorer
+    assert "stat -c '%s' \"${part_paths[part_index]}\"" in restorer
     assert "--retry-all-errors" not in restorer
     assert 'unzip -q "${artifact_path}"' in restorer
     assert 'actual_build_sha="$(' in restorer
