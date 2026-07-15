@@ -1,6 +1,6 @@
 # CI SSOT: generated from FHD/.github/workflows/fix-mac-update-feed.yml — DO NOT edit here.
 # Edit that source, then run: python scripts/dev/publish_ci_workflows_to_root.py
-# 紧急修复：以正式下载目录中的既有 ZIP 为准，原子恢复 stable/official 元数据一致性。
+# 紧急修复：从成功的 Release Desktop run 恢复可追溯 ZIP，原子修复 stable/official feed。
 name: Fix macOS update feed
 
 on:
@@ -10,16 +10,20 @@ on:
         description: Product version (four-part)
         required: true
         default: "1.0.0.0"
+      source_run_id:
+        description: Successful Release Desktop run containing the canonical macOS artifact
+        required: true
       zip_name:
-        description: ZIP filename on CDN enterprise dir
+        description: Canonical enterprise macOS ZIP filename
         required: true
         default: "XCAGI-Enterprise-1.0.0.0-mac-arm64.zip"
       build_sha:
-        description: Optional buildSha override (40-char git sha); empty = read from ZIP build-info.json
+        description: Optional buildSha override (40-char git sha); empty = use source run SHA
         required: false
         default: ""
 
 permissions:
+  actions: read
   contents: read
 
 defaults:
@@ -39,13 +43,43 @@ jobs:
           python-version: "3.11"
       - name: Install cryptography
         run: pip install --quiet cryptography
+      - name: Download canonical release artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${SOURCE_RUN_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::source_run_id must be numeric."
+            exit 1
+          fi
+          RUN_META="$(gh run view "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --json conclusion,headSha,workflowName)"
+          RUN_CONCLUSION="$(printf '%s' "${RUN_META}" | jq -er '.conclusion')"
+          RUN_WORKFLOW="$(printf '%s' "${RUN_META}" | jq -er '.workflowName')"
+          SOURCE_RUN_SHA="$(printf '%s' "${RUN_META}" | jq -er '.headSha')"
+          if [ "${RUN_CONCLUSION}" != "success" ] || [ "${RUN_WORKFLOW}" != "Release Desktop" ]; then
+            echo "::error::source_run_id must identify a successful Release Desktop run."
+            exit 1
+          fi
+          if [[ ! "${SOURCE_RUN_SHA}" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Source run has no full Git identity."
+            exit 1
+          fi
+          echo "SOURCE_RUN_SHA=${SOURCE_RUN_SHA}" >> "${GITHUB_ENV}"
+          mkdir -p "${RUNNER_TEMP}/release-artifact"
+          gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
+            --name xcagi-desktop-macos-enterprise \
+            --dir "${RUNNER_TEMP}/release-artifact"
       - name: Verify canonical ZIP identity and atomically repair both feed paths
+        timeout-minutes: 30
         env:
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
           ZIP_NAME: ${{ github.event.inputs.zip_name }}
           PRODUCT_VERSION: ${{ github.event.inputs.version }}
           BUILD_SHA: ${{ github.event.inputs.build_sha }}
+          ARTIFACT_DIR: ${{ runner.temp }}/release-artifact
         run: |
           set -euo pipefail
           if [ -z "${XCAGI_UPDATE_ED25519_PRIVATE_KEY:-}" ]; then
@@ -71,28 +105,26 @@ jobs:
             echo "::error::build_sha must be a full 40-character Git SHA."
             exit 1
           fi
-          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
-          STABLE_DEST="/var/www/update/releases/stable/enterprise"
-          OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
-          mkdir -p ~/.ssh
-          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
-          chmod 600 ~/.ssh/id_ci
-          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
-          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20)
 
-          scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
-          scp "${SSH_OPTS[@]}" scripts/deploy/extract_zip_build_sha.py "root@${HOST}:/tmp/extract_zip_build_sha.py"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "test -f '${OFFICIAL_DEST}/${ZIP_NAME}' && mkdir -p '${STABLE_DEST}' '${OFFICIAL_DEST}'"
-          META="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}'")"
-          SIZE="$(printf '%s\n' "$META" | sed -n '1p')"
-          SHA512="$(printf '%s\n' "$META" | sed -n '2p')"
-          echo "Canonical ZIP size=${SIZE} sha512=${SHA512}"
+          mapfile -t ZIP_MATCHES < <(find "${ARTIFACT_DIR}" -type f -name "${ZIP_NAME}" -print)
+          if [ "${#ZIP_MATCHES[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one ${ZIP_NAME} in the source release artifact."
+            exit 1
+          fi
+          ZIP_PATH="${ZIP_MATCHES[0]}"
+          BLOCKMAP_PATH="${ZIP_PATH}.blockmap"
+          if [ ! -f "${BLOCKMAP_PATH}" ]; then
+            echo "::error::Canonical ZIP blockmap is missing from the source release artifact."
+            exit 1
+          fi
 
-          ZIP_BUILD_SHA="$(ssh "${SSH_OPTS[@]}" "root@${HOST}" "python3 /tmp/extract_zip_build_sha.py '${OFFICIAL_DEST}/${ZIP_NAME}'")"
-          RESOLVED_SHA="${ZIP_BUILD_SHA:-}"
-          if [ -z "${RESOLVED_SHA}" ]; then
+          ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py "${ZIP_PATH}")"
+          if [ -z "${ZIP_BUILD_SHA}" ]; then
             echo "::error::Canonical ZIP has no build-info.json Git identity."
+            exit 1
+          fi
+          if [ "${ZIP_BUILD_SHA}" != "${SOURCE_RUN_SHA}" ]; then
+            echo "::error::Canonical ZIP identity differs from the source release run."
             exit 1
           fi
           if [ -n "${BUILD_SHA:-}" ] && [ "${BUILD_SHA}" != "${ZIP_BUILD_SHA}" ]; then
@@ -104,41 +136,53 @@ jobs:
             "https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json")"
           MANIFEST_VERSION="$(printf '%s' "${MANIFEST}" | jq -er '.version')"
           MANIFEST_SHA="$(printf '%s' "${MANIFEST}" | jq -er '.git_sha')"
-          if [ "${MANIFEST_VERSION}" != "${PRODUCT_VERSION}" ] || [ "${MANIFEST_SHA}" != "${RESOLVED_SHA}" ]; then
-            echo "::error::Canonical ZIP identity does not match the published release manifest. Run the full desktop release instead."
+          if [ "${MANIFEST_VERSION}" != "${PRODUCT_VERSION}" ] || [ "${MANIFEST_SHA}" != "${ZIP_BUILD_SHA}" ]; then
+            echo "::error::Canonical ZIP identity does not match the published release manifest."
             exit 1
           fi
-          echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${RESOLVED_SHA}"
 
-          WORK="$(mktemp -d)"
-          : > "${WORK}/${ZIP_NAME}"
+          META="$(python3 scripts/deploy/hash_file_sha512.py "${ZIP_PATH}")"
+          SIZE="$(printf '%s\n' "${META}" | sed -n '1p')"
+          SHA512="$(printf '%s\n' "${META}" | sed -n '2p')"
           TOOLCHAIN="$(printf '%s' "${PRODUCT_VERSION}" | cut -d. -f1-3)"
           export XCAGI_PRODUCT_VERSION="${PRODUCT_VERSION}"
-          export XCAGI_BUILD_SHA="${RESOLVED_SHA}"
-          node scripts/package/generate-update-metadata.mjs "${WORK}/${ZIP_NAME}" "${TOOLCHAIN}" mac
-          python3 scripts/deploy/patch_latest_mac_yml_hashes.py "${WORK}/latest-mac.yml" "${SHA512}" "${SIZE}"
-          python scripts/dev/sign_update_metadata.py "${WORK}/latest-mac.yml"
+          export XCAGI_BUILD_SHA="${ZIP_BUILD_SHA}"
+          node scripts/package/generate-update-metadata.mjs "${ZIP_PATH}" "${TOOLCHAIN}" mac
+          FEED_PATH="$(dirname "${ZIP_PATH}")/latest-mac.yml"
+          python scripts/dev/sign_update_metadata.py "${FEED_PATH}"
+          echo "Verified canonical release identity: ${PRODUCT_VERSION} @ ${ZIP_BUILD_SHA}"
 
-          # Repair the stable ZIP from the canonical official copy without uploading
-          # the large archive through the runner. Metadata is published last.
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "cp -f '${OFFICIAL_DEST}/${ZIP_NAME}' '${STABLE_DEST}/${ZIP_NAME}.part' && \
-             if [ -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap' ]; then \
-               cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap' '${STABLE_DEST}/${ZIP_NAME}.blockmap.part'; \
-             fi"
-          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${STABLE_DEST}/latest-mac.yml.part"
-          scp "${SSH_OPTS[@]}" "${WORK}/latest-mac.yml" "root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"
+          HOST="${{ vars.FHD_PUSH_HOST || '119.27.178.147' }}"
+          STABLE_DEST="/var/www/update/releases/stable/enterprise"
+          OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"
+          mkdir -p ~/.ssh
+          printf '%s\n' "${DESKTOP_SSH_KEY}" > ~/.ssh/id_ci
+          chmod 600 ~/.ssh/id_ci
+          ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
+
+          scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${STABLE_DEST}' '${OFFICIAL_DEST}'"
+          timeout 1800 scp "${SSH_OPTS[@]}" "${ZIP_PATH}" "root@${HOST}:${OFFICIAL_DEST}/${ZIP_NAME}.part"
+          scp "${SSH_OPTS[@]}" "${BLOCKMAP_PATH}" "root@${HOST}:${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part"
+          scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"
+
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
             "set -eu; \
-             cmp -s '${STABLE_DEST}/latest-mac.yml.part' '${OFFICIAL_DEST}/latest-mac.yml.part'; \
+             test \"\$(python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}.part' | sed -n '1p')\" = '${SIZE}'; \
+             test \"\$(python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}.part' | sed -n '2p')\" = '${SHA512}'; \
+             cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}.part'; \
+             cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap.part'; \
+             cp -f '${OFFICIAL_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml.part'; \
+             cmp -s '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}.part'; \
+             cmp -s '${OFFICIAL_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml.part'; \
+             mv -f '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${OFFICIAL_DEST}/${ZIP_NAME}'; \
+             mv -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part' '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap'; \
              mv -f '${STABLE_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}'; \
-             if [ -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' ]; then \
-               mv -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap'; \
-             fi; \
+             mv -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap'; \
              mv -f '${OFFICIAL_DEST}/latest-mac.yml.part' '${OFFICIAL_DEST}/latest-mac.yml'; \
              mv -f '${STABLE_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml'; \
-             cmp -s '${STABLE_DEST}/latest-mac.yml' '${OFFICIAL_DEST}/latest-mac.yml'; \
+             cmp -s '${OFFICIAL_DEST}/latest-mac.yml' '${STABLE_DEST}/latest-mac.yml'; \
              test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '1p')\" = '${SIZE}'; \
-             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '2p')\" = '${SHA512}'; \
-             head -20 '${OFFICIAL_DEST}/latest-mac.yml'"
-          echo "Repaired identical latest-mac.yml at stable and official paths."
+             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '2p')\" = '${SHA512}'"
+          echo "Repaired identical ZIP updater artifacts and latest-mac.yml at stable and official paths."
