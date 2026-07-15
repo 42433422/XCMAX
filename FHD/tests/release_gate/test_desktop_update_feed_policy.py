@@ -121,7 +121,8 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "ARTIFACT_URL_B64" in workflow
     assert "restore_mac_feed_from_artifact.sh" in workflow
     assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
-    assert "curl -fL --retry 3 --retry-all-errors --max-time 1800" in restorer
+    assert "curl -fL --retry 3 --retry-delay 2 --max-time 1800" in restorer
+    assert "--retry-all-errors" not in restorer
     assert 'unzip -q "${REMOTE_WORK}/source-artifact.zip"' in restorer
     assert 'actual_build_sha="$(' in restorer
     assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer

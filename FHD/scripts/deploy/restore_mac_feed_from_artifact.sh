@@ -57,7 +57,7 @@ trap cleanup EXIT
 mkdir -p "${REMOTE_WORK}/extracted" "${STABLE_DEST}" "${OFFICIAL_DEST}"
 artifact_url="$(printf '%s' "${ARTIFACT_URL_B64}" | base64 --decode)"
 unset ARTIFACT_URL_B64
-curl -fL --retry 3 --retry-all-errors --max-time 1800 \
+curl -fL --retry 3 --retry-delay 2 --max-time 1800 \
   "${artifact_url}" -o "${REMOTE_WORK}/source-artifact.zip"
 unset artifact_url
 unzip -q "${REMOTE_WORK}/source-artifact.zip" -d "${REMOTE_WORK}/extracted"
