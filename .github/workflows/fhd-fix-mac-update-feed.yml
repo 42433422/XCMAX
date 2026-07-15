@@ -66,7 +66,15 @@ jobs:
             echo "::error::Source run has no full Git identity."
             exit 1
           fi
+          SOURCE_ARTIFACT_ID="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts" \
+            --jq '[.artifacts[] | select(.name == "xcagi-desktop-macos-enterprise" and .expired == false)] | if length == 1 then .[0].id else empty end')"
+          if [[ ! "${SOURCE_ARTIFACT_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::Source run must contain exactly one unexpired macOS enterprise artifact."
+            exit 1
+          fi
           echo "SOURCE_RUN_SHA=${SOURCE_RUN_SHA}" >> "${GITHUB_ENV}"
+          echo "SOURCE_ARTIFACT_ID=${SOURCE_ARTIFACT_ID}" >> "${GITHUB_ENV}"
           mkdir -p "${RUNNER_TEMP}/release-artifact"
           gh run download "${SOURCE_RUN_ID}" --repo "${GITHUB_REPOSITORY}" \
             --name xcagi-desktop-macos-enterprise \
@@ -74,6 +82,7 @@ jobs:
       - name: Verify canonical ZIP identity and atomically repair both feed paths
         timeout-minutes: 30
         env:
+          GH_TOKEN: ${{ github.token }}
           XCAGI_UPDATE_ED25519_PRIVATE_KEY: ${{ secrets.XCAGI_UPDATE_ED25519_PRIVATE_KEY }}
           DESKTOP_SSH_KEY: ${{ secrets.SERVER_SSH_KEY || secrets.FHD_PUSH_SSH_KEY }}
           ZIP_NAME: ${{ github.event.inputs.zip_name }}
@@ -161,28 +170,36 @@ jobs:
           ssh-keyscan -H "${HOST}" >> ~/.ssh/known_hosts 2>/dev/null || true
           SSH_OPTS=(-i "$HOME/.ssh/id_ci" -o StrictHostKeyChecking=no -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=4)
 
-          scp "${SSH_OPTS[@]}" scripts/deploy/hash_file_sha512.py "root@${HOST}:/tmp/hash_file_sha512.py"
-          ssh "${SSH_OPTS[@]}" "root@${HOST}" "mkdir -p '${STABLE_DEST}' '${OFFICIAL_DEST}'"
-          timeout 1800 scp "${SSH_OPTS[@]}" "${ZIP_PATH}" "root@${HOST}:${OFFICIAL_DEST}/${ZIP_NAME}.part"
-          scp "${SSH_OPTS[@]}" "${BLOCKMAP_PATH}" "root@${HOST}:${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part"
-          scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${OFFICIAL_DEST}/latest-mac.yml.part"
+          ARTIFACT_HEADERS="$(curl -sS -D - -o /dev/null \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip")"
+          ARTIFACT_URL="$(printf '%s\n' "${ARTIFACT_HEADERS}" \
+            | sed -n 's/^[Ll]ocation: //p' | tr -d '\r' | tail -n 1)"
+          if [ -z "${ARTIFACT_URL}" ]; then
+            echo "::error::GitHub did not return a signed artifact download URL."
+            exit 1
+          fi
+          ARTIFACT_URL_B64="$(printf '%s' "${ARTIFACT_URL}" | base64 | tr -d '\n')"
+          unset ARTIFACT_HEADERS ARTIFACT_URL
 
+          REMOTE_WORK="/tmp/xcagi-feed-repair-${GITHUB_RUN_ID}"
+          ssh "${SSH_OPTS[@]}" "root@${HOST}" "rm -rf '${REMOTE_WORK}' && mkdir -p '${REMOTE_WORK}'"
+          scp "${SSH_OPTS[@]}" \
+            scripts/deploy/hash_file_sha512.py \
+            scripts/deploy/extract_zip_build_sha.py \
+            scripts/deploy/restore_mac_feed_from_artifact.sh \
+            "root@${HOST}:${REMOTE_WORK}/"
+          scp "${SSH_OPTS[@]}" "${FEED_PATH}" "root@${HOST}:${REMOTE_WORK}/latest-mac.yml"
           ssh "${SSH_OPTS[@]}" "root@${HOST}" \
-            "set -eu; \
-             test \"\$(python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}.part' | sed -n '1p')\" = '${SIZE}'; \
-             test \"\$(python3 /tmp/hash_file_sha512.py '${OFFICIAL_DEST}/${ZIP_NAME}.part' | sed -n '2p')\" = '${SHA512}'; \
-             cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}.part'; \
-             cp -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap.part'; \
-             cp -f '${OFFICIAL_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml.part'; \
-             cmp -s '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}.part'; \
-             cmp -s '${OFFICIAL_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml.part'; \
-             mv -f '${OFFICIAL_DEST}/${ZIP_NAME}.part' '${OFFICIAL_DEST}/${ZIP_NAME}'; \
-             mv -f '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap.part' '${OFFICIAL_DEST}/${ZIP_NAME}.blockmap'; \
-             mv -f '${STABLE_DEST}/${ZIP_NAME}.part' '${STABLE_DEST}/${ZIP_NAME}'; \
-             mv -f '${STABLE_DEST}/${ZIP_NAME}.blockmap.part' '${STABLE_DEST}/${ZIP_NAME}.blockmap'; \
-             mv -f '${OFFICIAL_DEST}/latest-mac.yml.part' '${OFFICIAL_DEST}/latest-mac.yml'; \
-             mv -f '${STABLE_DEST}/latest-mac.yml.part' '${STABLE_DEST}/latest-mac.yml'; \
-             cmp -s '${OFFICIAL_DEST}/latest-mac.yml' '${STABLE_DEST}/latest-mac.yml'; \
-             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '1p')\" = '${SIZE}'; \
-             test \"\$(python3 /tmp/hash_file_sha512.py '${STABLE_DEST}/${ZIP_NAME}' | sed -n '2p')\" = '${SHA512}'"
+            "ARTIFACT_URL_B64='${ARTIFACT_URL_B64}' \
+             REMOTE_WORK='${REMOTE_WORK}' \
+             ZIP_NAME='${ZIP_NAME}' \
+             EXPECTED_BUILD_SHA='${ZIP_BUILD_SHA}' \
+             EXPECTED_SIZE='${SIZE}' \
+             EXPECTED_SHA512='${SHA512}' \
+             STABLE_DEST='${STABLE_DEST}' \
+             OFFICIAL_DEST='${OFFICIAL_DEST}' \
+             bash '${REMOTE_WORK}/restore_mac_feed_from_artifact.sh'"
           echo "Repaired identical ZIP updater artifacts and latest-mac.yml at stable and official paths."
