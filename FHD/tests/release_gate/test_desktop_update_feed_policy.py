@@ -110,6 +110,7 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert "RUN_WORKFLOW" in workflow
     assert "SOURCE_RUN_SHA" in workflow
     assert "SOURCE_ARTIFACT_ID" in workflow
+    assert "SOURCE_ARTIFACT_SIZE" in workflow
     assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
     assert "Canonical ZIP identity differs from the source release run" in workflow
     assert "build_sha override differs from the canonical ZIP identity" in workflow
@@ -122,15 +123,16 @@ def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() 
     assert 'gh release upload "${RELEASE_TAG}"' in workflow
     assert 'RELEASE_ASSETS="$(gh release view' in workflow
     assert "GitHub release asset size mismatch" in workflow
-    assert 'ZIP_RELEASE_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/' in workflow
-    assert "ZIP_URL_B64" in workflow
-    assert "BLOCKMAP_URL_B64" in workflow
+    assert "/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" in workflow
+    assert "ARTIFACT_URL_B64" in workflow
+    assert "EXPECTED_ARTIFACT_SIZE" in workflow
     assert "restore_mac_feed_from_artifact.sh" in workflow
     assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
-    assert "curl -fL --retry 3 --retry-delay 2 --connect-timeout 30 --max-time 5400" in restorer
+    assert 'download_parts="${DOWNLOAD_PARTS:-16}"' in restorer
+    assert '--range "${range_start}-${range_end}"' in restorer
+    assert 'stat -c \'%s\' "${part_paths[part_index]}"' in restorer
     assert "--retry-all-errors" not in restorer
-    assert 'zip_path="${REMOTE_WORK}/${ZIP_NAME}"' in restorer
-    assert 'unzip -q "${REMOTE_WORK}/source-artifact.zip"' not in restorer
+    assert 'unzip -q "${artifact_path}"' in restorer
     assert 'actual_build_sha="$(' in restorer
     assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer
     assert 'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"' in restorer
