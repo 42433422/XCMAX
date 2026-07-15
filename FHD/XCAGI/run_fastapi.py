@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """FastAPI + Uvicorn 启动入口
 
 由 ``start-lan.ps1``、``python run.py`` 或桌面壳 ``xcagi-backend`` 调用。
@@ -124,7 +123,9 @@ def _apply_desktop_local_market_env() -> None:
     """
     os.environ.setdefault("XCAGI_MARKET_BASE_URL", "https://xiu-ci.com")
     if _env_truthy("XCAGI_USE_REMOTE_MARKET"):
-        _load_dotenv_override(_XCAGI_DIR / ".env.online-market", frozenset({"XCAGI_MARKET_BASE_URL"}))
+        _load_dotenv_override(
+            _XCAGI_DIR / ".env.online-market", frozenset({"XCAGI_MARKET_BASE_URL"})
+        )
         if not os.environ.get("XCAGI_MARKET_BASE_URL"):
             os.environ["XCAGI_MARKET_BASE_URL"] = "https://xiu-ci.com"
         return
@@ -145,15 +146,80 @@ def _is_frozen() -> bool:
     return bool(getattr(sys, "frozen", False)) or hasattr(sys, "_MEIPASS")
 
 
+def _verify_frozen_critical_runtime() -> None:
+    """Exercise critical office and voice dependencies in the frozen executable."""
+    import tempfile
+
+    import av
+    import faster_whisper
+    from pypdf import PdfReader
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.pdfgen import canvas
+
+    with tempfile.TemporaryDirectory(prefix="xcagi-office-probe-") as tmp:
+        output = Path(tmp) / "probe.pdf"
+        font_name = "STSong-Light"
+        try:
+            pdfmetrics.getFont(font_name)
+        except KeyError:
+            pdfmetrics.registerFont(UnicodeCIDFont(font_name))
+        pdf = canvas.Canvas(str(output), pagesize=A4)
+        pdf.setFont(font_name, 11)
+        pdf.drawString(72, 770, "XCAGI PDF runtime probe")
+        pdf.save()
+        reader = PdfReader(str(output))
+        if len(reader.pages) != 1 or output.stat().st_size < 512:
+            raise RuntimeError("frozen PDF runtime probe produced an invalid document")
+
+        if _is_frozen():
+            from app.desktop_runtime.paths import configure_desktop_environment
+
+            data_root = Path(tmp) / "desktop-data"
+            configure_desktop_environment(data_root)
+            bundled_root = Path(sys._MEIPASS) / "mods" / "_employees"  # type: ignore[attr-defined]
+            installed_root = data_root / "mods" / "_employees"
+            bundled = {
+                path.name
+                for path in bundled_root.iterdir()
+                if path.is_dir() and (path / "manifest.json").is_file()
+            }
+            installed = {
+                path.name
+                for path in installed_root.iterdir()
+                if path.is_dir() and (path / "manifest.json").is_file()
+            }
+            required = {"pdf-generate-employee", "pdf-full-read-employee"}
+            if not required.issubset(installed) or installed != bundled:
+                raise RuntimeError(
+                    "frozen Office employee seed mismatch: "
+                    f"bundled={sorted(bundled)!r} installed={sorted(installed)!r}"
+                )
+    print(
+        "[run_fastapi] frozen critical runtime probe OK: "
+        f"pypdf + reportlab + PyAV {av.__version__} + faster-whisper {faster_whisper.__version__}"
+    )
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="XCAGI FastAPI server")
-    parser.add_argument("--desktop", action="store_true", help="桌面模式（本地 SQLite、禁用 reload）")
+    parser.add_argument(
+        "--desktop", action="store_true", help="桌面模式（本地 SQLite、禁用 reload）"
+    )
     parser.add_argument("--headless", action="store_true", help="无控制台窗口（由 Electron 托管）")
     parser.add_argument("--host", default=None, help="监听地址")
     parser.add_argument("--port", type=int, default=None, help="监听端口")
     parser.add_argument("--data-dir", default=None, help="桌面数据目录")
     parser.add_argument("--migrate-only", action="store_true", help="仅执行数据库迁移后退出")
-    parser.add_argument("--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）")
+    parser.add_argument(
+        "--backup", action="store_true", help="迁移前备份（与 --migrate-only 合用）"
+    )
+    parser.add_argument(
+        "--verify-frozen-critical-runtime",
+        action="store_true",
+        help="验证冻结包内办公与语音关键依赖后退出",
+    )
     return parser.parse_args(argv)
 
 
@@ -168,7 +234,7 @@ def _apply_desktop_bootstrap(args: argparse.Namespace) -> None:
 
         if is_desktop_mode():
             configure_desktop_environment(os.environ.get("XCAGI_DATA_DIR"))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - desktop bootstrap must stay best-effort
         print(f"[run_fastapi] desktop bootstrap warning: {exc}", file=sys.stderr)
 
 
@@ -185,6 +251,10 @@ def _resolve_reload(desktop: bool) -> bool:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+
+    if args.verify_frozen_critical_runtime:
+        _verify_frozen_critical_runtime()
+        return
 
     _load_dotenv_if_present(_XCAGI_DIR / ".env")
     _load_dotenv_if_present(_REPO_ROOT / ".env")
@@ -221,16 +291,8 @@ def main(argv: list[str] | None = None) -> None:
 
     _ensure_sys_path()
 
-    host = (
-        os.environ.get("FASTAPI_HOST")
-        or os.environ.get("XCAGI_API_HOST")
-        or "0.0.0.0"
-    )
-    port = int(
-        os.environ.get("XCAGI_API_PORT")
-        or os.environ.get("FASTAPI_PORT")
-        or "5000"
-    )
+    host = os.environ.get("FASTAPI_HOST") or os.environ.get("XCAGI_API_HOST") or "0.0.0.0"
+    port = int(os.environ.get("XCAGI_API_PORT") or os.environ.get("FASTAPI_PORT") or "5000")
     # 桌面模式：端口由 Electron 主进程指定，不做避让——避让会导致 Electron 健康检查
     # 轮询原端口而后端实际监听其他端口，引发白屏超时。端口被占时直接报错退出，
     # 由 Electron 捕获退出码并引导用户。
@@ -246,7 +308,10 @@ def main(argv: list[str] | None = None) -> None:
             port = free_port
     # 持久化实际端口，供前端 Vite 读取联动
     _persist_runtime_port(port)
-    reload = _resolve_reload(args.desktop or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"})
+    reload = _resolve_reload(
+        args.desktop
+        or os.environ.get("XCAGI_DESKTOP_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+    )
 
     import uvicorn
 

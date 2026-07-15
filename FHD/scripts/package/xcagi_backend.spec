@@ -121,6 +121,19 @@ for module in ["ctranslate2", "av"]:
         binaries.extend(collect_dynamic_libs(module))
     except Exception:
         pass
+
+# Official PDF employees must remain usable in the commercial desktop package.
+# pypdf and ReportLab are permissively licensed; do not replace them with the
+# AGPL PyMuPDF/fitz runtime unless a separate commercial license is recorded.
+for module in ["pypdf", "reportlab"]:
+    try:
+        hiddenimports.extend(collect_submodules(module))
+    except Exception:
+        pass
+    try:
+        datas.extend(collect_data_files(module, include_py_files=False))
+    except Exception:
+        pass
 # de-dupe while preserving order
 _seen = set()
 _deduped = []

@@ -92,3 +92,50 @@ def test_release_pipeline_uploads_mac_zip_and_never_synthesizes_scan_success() -
     # DMG notarize must not overwrite ZIP-based latest-mac.yml
     assert "node scripts/package/generate-update-metadata.mjs" not in finalize
     assert "ZIP update feed left untouched" in finalize
+
+
+def test_emergency_mac_feed_repair_preserves_release_identity_and_path_parity() -> None:
+    workflow = (REPO_ROOT / ".github" / "workflows" / "fix-mac-update-feed.yml").read_text(
+        encoding="utf-8"
+    )
+    restorer = (REPO_ROOT / "scripts" / "deploy" / "restore_mac_feed_from_artifact.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert "actions: read" in workflow
+    assert "contents: write" in workflow
+    assert "source_run_id" in workflow
+    assert "--name xcagi-desktop-macos-enterprise" in workflow
+    assert "RUN_CONCLUSION" in workflow
+    assert "RUN_WORKFLOW" in workflow
+    assert "SOURCE_RUN_SHA" in workflow
+    assert "SOURCE_ARTIFACT_ID" in workflow
+    assert "SOURCE_ARTIFACT_SIZE" in workflow
+    assert 'ZIP_BUILD_SHA="$(python3 scripts/deploy/extract_zip_build_sha.py' in workflow
+    assert "Canonical ZIP identity differs from the source release run" in workflow
+    assert "build_sha override differs from the canonical ZIP identity" in workflow
+    assert '"https://xiu-ci.com/xcagi-v${PRODUCT_VERSION}/manifest.json"' in workflow
+    assert 'MANIFEST_SHA="$(printf' in workflow
+    assert "Canonical ZIP identity does not match the published release manifest" in workflow
+    assert 'STABLE_DEST="/var/www/update/releases/stable/enterprise"' in workflow
+    assert 'OFFICIAL_DEST="/var/www/xcagi-v${PRODUCT_VERSION}/enterprise"' in workflow
+    assert 'RELEASE_TAG="xcagi-v${PRODUCT_VERSION}"' in workflow
+    assert 'gh release upload "${RELEASE_TAG}"' in workflow
+    assert 'RELEASE_ASSETS="$(gh release view' in workflow
+    assert "GitHub release asset size mismatch" in workflow
+    assert "/actions/artifacts/${SOURCE_ARTIFACT_ID}/zip" in workflow
+    assert "ARTIFACT_URL_B64" in workflow
+    assert "EXPECTED_ARTIFACT_SIZE" in workflow
+    assert "restore_mac_feed_from_artifact.sh" in workflow
+    assert 'scp "${SSH_OPTS[@]}" "${ZIP_PATH}"' not in workflow
+    assert 'download_parts="${DOWNLOAD_PARTS:-16}"' in restorer
+    assert '--range "${range_start}-${range_end}"' in restorer
+    assert "stat -c '%s' \"${part_paths[part_index]}\"" in restorer
+    assert "--retry-all-errors" not in restorer
+    assert 'unzip -q "${artifact_path}"' in restorer
+    assert 'actual_build_sha="$(' in restorer
+    assert 'cp -f "${OFFICIAL_DEST}/${ZIP_NAME}.part" "${STABLE_DEST}/${ZIP_NAME}.part"' in restorer
+    assert 'cmp -s "${OFFICIAL_DEST}/latest-mac.yml" "${STABLE_DEST}/latest-mac.yml"' in restorer
+    assert restorer.index('mv -f "${OFFICIAL_DEST}/${ZIP_NAME}.part"') < restorer.index(
+        'mv -f "${OFFICIAL_DEST}/latest-mac.yml.part"'
+    )
