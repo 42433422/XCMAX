@@ -186,6 +186,21 @@ def test_frozen_excel_temp_files_use_writable_app_data() -> None:
     assert "os.makedirs(TEMPLATE_DIR" not in template_service
 
 
+def test_server_api_runtime_excludes_unmaintained_python_ecdsa_stack() -> None:
+    """CVE-2024-23342 has no patched python-ecdsa release; PyJWT is the SSOT."""
+    dependency_files = (
+        REPO_ROOT / "pyproject.toml",
+        REPO_ROOT / "requirements.txt",
+        REPO_ROOT / "deploy" / "requirements-server-api.txt",
+        REPO_ROOT / "deploy" / "requirements-server-api.lock.txt",
+        REPO_ROOT / "uv.lock",
+    )
+    for dependency_file in dependency_files:
+        contents = dependency_file.read_text(encoding="utf-8").lower()
+        assert "python-jose" not in contents, dependency_file
+        assert 'name = "ecdsa"' not in contents, dependency_file
+
+
 def test_macos_installer_reuses_clean_local_electron_distribution() -> None:
     installer = (REPO_ROOT / "scripts" / "package" / "build-installer.sh").read_text(
         encoding="utf-8"
