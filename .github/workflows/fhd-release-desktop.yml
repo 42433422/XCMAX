@@ -148,6 +148,19 @@ jobs:
             Write-Error "::error::Frozen Windows backend critical office/voice runtime probe failed."
             exit 1
           }
+      - name: Install, launch, smoke, and uninstall signed Windows package
+        shell: pwsh
+        run: |
+          $raw = "${{ github.event.inputs.version || github.ref_name }}"
+          $raw = $raw -replace '^FHD/', ''
+          $v = $raw.TrimStart('v','V')
+          $installer = "release/xcagi-v$v/enterprise/XCAGI-Enterprise-Setup-$v-x64.exe"
+          scripts/package/verify-windows-installed-runtime.ps1 `
+            -InstallerPath $installer `
+            -ExpectedPublisher $env:XCAGI_WINDOWS_PUBLISHER_NAME `
+            -ExpectedBuildSha "${{ github.sha }}" `
+            -ExpectedProductVersion $v `
+            -ReadyTimeoutSeconds 240
       - uses: actions/upload-artifact@v4
         with:
           name: xcagi-desktop-windows-enterprise
