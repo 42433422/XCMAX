@@ -168,6 +168,7 @@ export function buildWindowsRollbackScript(options: WindowsRollbackLaunchOptions
       : []),
     '} catch {',
     '  Write-RollbackLog ("rollback failed: " + $_.Exception.Message)',
+    '  Write-Error ("rollback failed: " + $_.Exception.Message)',
     '  if (Test-Path -LiteralPath $failedDir) {',
     '    Remove-Item -LiteralPath $installDir -Recurse -Force -ErrorAction SilentlyContinue',
     '    Move-Item -LiteralPath $failedDir -Destination $installDir -Force -ErrorAction SilentlyContinue',

@@ -202,6 +202,9 @@ describe('rollback — triggerRollback', () => {
     fs.mkdirSync(backendDir, { recursive: true })
     const exeName = process.platform === 'win32' ? 'xcagi-backend.exe' : 'xcagi-backend'
     fs.writeFileSync(path.join(backendDir, exeName), 'original-content')
+    const appPath = path.join(tmpResources, 'XCAGI.exe')
+    fs.writeFileSync(appPath, 'app')
+    electronMocks.__state.exePath = appPath
     const saved = (process as { resourcesPath?: string }).resourcesPath
     ;(process as { resourcesPath?: string }).resourcesPath = tmpResources
     try {

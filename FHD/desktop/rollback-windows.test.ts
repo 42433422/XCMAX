@@ -1,15 +1,17 @@
 import { afterEach, describe, expect, it } from 'vitest'
+import { execFile } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 import {
   buildWindowsRollbackScript,
-  launchWindowsFullRollback,
   type WindowsRollbackLaunchOptions,
 } from './rollback-windows.js'
 
 const windowsIt = process.platform === 'win32' ? it : it.skip
 const cleanupRoots: string[] = []
+const execFileAsync = promisify(execFile)
 
 afterEach(() => {
   for (const root of cleanupRoots.splice(0)) {
@@ -67,7 +69,7 @@ describe('Windows full application rollback helper', () => {
     fs.writeFileSync(`${databasePath}-wal`, 'new-wal')
     fs.writeFileSync(databaseBackupPath, 'old-database')
 
-    await launchWindowsFullRollback({
+    const options: WindowsRollbackLaunchOptions = {
       currentPid: 2_000_000_000,
       installDir,
       backupRoot,
@@ -85,17 +87,30 @@ describe('Windows full application rollback helper', () => {
         fromVersion: '1.0.0.0-new',
         toVersion: '1.0.0.0-old',
       },
-    })
-
-    const deadline = Date.now() + 20_000
-    while (
-      Date.now() < deadline &&
-      (!fs.existsSync(appliedPath) || fs.existsSync(`${installDir}.xcagi-failed`))
-    ) {
-      await new Promise(resolve => setTimeout(resolve, 100))
     }
+    const script = buildWindowsRollbackScript(options)
+    const encoded = Buffer.from(script, 'utf16le').toString('base64')
+    let executionError = ''
+    try {
+      await execFileAsync(
+        'powershell.exe',
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-EncodedCommand',
+          encoded,
+        ],
+        { cwd: dataDir, timeout: 20_000 },
+      )
+    } catch (error) {
+      executionError = error instanceof Error ? error.message : String(error)
+    }
+    const helperLog = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : ''
 
-    expect(fs.readFileSync(appPath, 'utf8')).toBe('old-app')
+    expect(fs.readFileSync(appPath, 'utf8'), `${executionError}\n${helperLog}`).toBe('old-app')
     expect(fs.readFileSync(path.join(installDir, 'build.txt'), 'utf8')).toBe('old-build')
     expect(fs.readFileSync(databasePath, 'utf8')).toBe('old-database')
     expect(fs.existsSync(`${databasePath}-wal`)).toBe(false)
