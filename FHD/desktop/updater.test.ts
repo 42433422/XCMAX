@@ -1,6 +1,28 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import crypto from 'node:crypto'
 
+// Mock electron 和 electron-updater 以便测试 downloadUpdate 和事件处理
+const updaterMocks = vi.hoisted(() => ({
+  autoUpdater: {
+    autoDownload: false,
+    autoInstallOnAppQuit: true,
+    setFeedURL: vi.fn(),
+    on: vi.fn(),
+    checkForUpdates: vi.fn(() => Promise.resolve({})),
+    downloadUpdate: vi.fn(() => Promise.resolve()),
+    quitAndInstall: vi.fn(),
+  }
+}))
+
+vi.mock('electron', () => ({
+  app: { isPackaged: false, getVersion: () => '10.0.0', getPath: () => '/tmp' },
+  BrowserWindow: vi.fn(() => ({ isDestroyed: () => true, webContents: { send: vi.fn() } })),
+  session: { defaultSession: { setProxy: vi.fn(() => Promise.resolve()), resolveProxy: vi.fn(() => 'DIRECT') } },
+  net: { request: vi.fn() },
+}))
+
+vi.mock('electron-updater', () => ({ autoUpdater: updaterMocks.autoUpdater }))
+
 // 动态生成 Ed25519 密钥对，避免硬编码私钥（更安全、可移植）
 const keyPair = crypto.generateKeyPairSync('ed25519')
 const TEST_PRIVATE_KEY_PEM = keyPair.privateKey.export({ type: 'pkcs8', format: 'pem' }).toString()
@@ -194,5 +216,61 @@ describe('updater — __resetUpdateDownloadedForTest', () => {
   it('can be called without error', async () => {
     const { __resetUpdateDownloadedForTest } = await import('./updater.js')
     expect(() => __resetUpdateDownloadedForTest()).not.toThrow()
+  })
+})
+
+describe('updater — downloadUpdate reuses in-flight Promise', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    updaterMocks.autoUpdater.downloadUpdate = vi.fn(() => new Promise(resolve => setTimeout(() => resolve({}), 50)))
+  })
+
+  afterEach(() => {
+    updaterMocks.autoUpdater.downloadUpdate = vi.fn(() => Promise.resolve())
+  })
+
+  it('concurrent calls share the same Promise (autoUpdater.downloadUpdate called once)', async () => {
+    const { downloadUpdate, __resetUpdateDownloadedForTest } = await import('./updater.js')
+    __resetUpdateDownloadedForTest()
+
+    const p1 = downloadUpdate()
+    const p2 = downloadUpdate()
+
+    await Promise.all([p1, p2])
+
+    expect(updaterMocks.autoUpdater.downloadUpdate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('updater — error after update-available emits update-available-with-error', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    updaterMocks.autoUpdater.on = vi.fn()
+  })
+
+  it('emits update-available-with-error type when error follows update-available', async () => {
+    const { configureUpdater, getUpdateStatus, __resetUpdateDownloadedForTest } = await import('./updater.js')
+    __resetUpdateDownloadedForTest()
+
+    // configureUpdater 注册事件处理器
+    configureUpdater({} as never)
+
+    // 找到 autoUpdater.on 的调用，模拟事件触发
+    const onCalls = updaterMocks.autoUpdater.on.mock.calls
+    const updateAvailableHandler = onCalls.find(c => c[0] === 'update-available')?.[1]
+    const errorHandler = onCalls.find(c => c[0] === 'error')?.[1]
+
+    expect(updateAvailableHandler).toBeDefined()
+    expect(errorHandler).toBeDefined()
+
+    // 先触发 update-available
+    updateAvailableHandler({ version: '10.0.1' })
+    expect(getUpdateStatus()?.type).toBe('update-available')
+
+    // 再触发 error
+    errorHandler(new Error('network error'))
+    const status = getUpdateStatus()
+    expect(status?.type).toBe('update-available-with-error')
+    expect((status?.data as { lastError?: { message?: string } })?.lastError?.message).toBe('network error')
   })
 })

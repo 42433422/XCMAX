@@ -19,6 +19,7 @@ let rebuildHookInstalled = false
 let updaterNetSession: Session | null = null
 let updaterNetSessionReady: Promise<Session> | null = null
 let downloadInFlight = false
+let downloadPromise: Promise<unknown> | null = null
 /** 最近一次可展示给渲染进程的更新事件（刷新页面后可重放）。 */
 let lastUpdateEvent: { type: string; data?: unknown } | null = null
 
@@ -205,9 +206,9 @@ export function configureUpdater(mainWindow: BrowserWindow): void {
     } else if (type === 'update-not-available') {
       lastUpdateEvent = null
     } else if (type === 'error' && lastUpdateEvent?.type === 'update-available') {
-      // 保留 available 快照，刷新后仍能显示角标；错误信息一并附上
+      // 不再混入 update-available；前端必须显式处理 update-available-with-error
       lastUpdateEvent = {
-        type: 'update-available',
+        type: 'update-available-with-error',
         data: {
           ...(typeof lastUpdateEvent.data === 'object' && lastUpdateEvent.data
             ? lastUpdateEvent.data
@@ -256,23 +257,28 @@ export async function downloadUpdate(): Promise<unknown> {
   if (updateDownloaded) {
     return { alreadyDownloaded: true }
   }
-  if (downloadInFlight) {
-    return { downloading: true }
+  // 复用 in-flight Promise：并发调用拿到同一份结果，而非误判成功
+  if (downloadPromise) {
+    return downloadPromise
   }
   downloadInFlight = true
   appendUpdaterEvent('download_start', {})
-  try {
-    return await autoUpdater.downloadUpdate()
-  } catch (error) {
-    downloadInFlight = false
-    updateDownloaded = false
-    const raw = error instanceof Error ? error.message : String(error)
-    const message = /ZIP file not provided/i.test(raw)
-      ? '更新服务器提供的是安装包（DMG），无法在应用内自动更新。请改用官网下载 ZIP/安装包，或等待已修复的更新源生效后再试。'
-      : raw
-    appendUpdaterEvent('download_failed', { message: raw })
-    throw new Error(message)
-  }
+  downloadPromise = (async () => {
+    try {
+      return await autoUpdater.downloadUpdate()
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error)
+      const message = /ZIP file not provided/i.test(raw)
+        ? '更新服务器提供的是安装包（DMG），无法在应用内自动更新。请改用官网下载 ZIP/安装包，或等待已修复的更新源生效后再试。'
+        : raw
+      appendUpdaterEvent('download_failed', { message: raw })
+      throw new Error(message)
+    } finally {
+      downloadInFlight = false
+      downloadPromise = null
+    }
+  })()
+  return downloadPromise
 }
 
 export async function runUpdateCheckWithDirectNet(): Promise<unknown> {
@@ -395,6 +401,7 @@ export function __resetUpdateDownloadedForTest(): void {
   updateDownloaded = false
   lastUpdateEvent = null
   downloadInFlight = false
+  downloadPromise = null
   remoteReleaseMedia = []
   remoteReleaseNotes = ''
   remoteBuildSha = ''

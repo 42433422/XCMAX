@@ -378,3 +378,76 @@ class TestHasBackupTodayWeekly:
         (dirs["backups"] / f"xcagi-10.0.0-weekly-{today}120000.db").write_bytes(b"x")
 
         assert _has_backup_today(dirs["backups"]) is True
+
+
+# ----------------------------------------------------------------------------
+# 正则解析:版本号含 -beta / -rc 等连字符的场景(Commit 4 修复)
+# ----------------------------------------------------------------------------
+
+
+class TestRegexParsingForVersionWithHyphens:
+    """版本号含连字符(如 10.0.0-beta / 10.0.0-rc.1)时,parts[-1] 拆分会失配。
+    新正则 xcagi-.+-(\d{14})\.db$ 仅提取末尾 14 位时间戳,正确处理。"""
+
+    def test_has_backup_today_recognizes_beta_version(self, tmp_path, monkeypatch):
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        _make_backup_file(dirs["backups"], "10.0.0-beta", f"{today}120000")
+
+        assert _has_backup_today(dirs["backups"]) is True
+
+    def test_has_backup_today_recognizes_rc_version(self, tmp_path, monkeypatch):
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        _make_backup_file(dirs["backups"], "10.0.0-rc.1", f"{today}120000")
+
+        assert _has_backup_today(dirs["backups"]) is True
+
+    def test_has_backup_today_rejects_no_version_segment(self, tmp_path, monkeypatch):
+        """xcagi-20260715120000.db(无版本段)不应被识别为合法定时备份。"""
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        # 仅 xcagi-{14 位时间戳}.db,缺少版本段
+        (dirs["backups"] / f"xcagi-{today}120000.db").write_bytes(b"x")
+
+        assert _has_backup_today(dirs["backups"]) is False
+
+    def test_make_weekly_copy_handles_beta_version(self, tmp_path, monkeypatch):
+        """weekly 副本文件名应正确插入 -weekly- 标记,即使版本号含 -beta。"""
+        _reset_desktop_env(monkeypatch)
+        daily = tmp_path / "xcagi-10.0.0-beta-20260705123000.db"
+        daily.write_bytes(b"backup-content")
+
+        result = _make_weekly_copy(daily)
+
+        assert result is not None
+        assert result.name == "xcagi-10.0.0-beta-weekly-20260705123000.db"
+        assert result.exists()
+        assert result.read_bytes() == b"backup-content"
+
+    def test_make_weekly_copy_handles_rc_version(self, tmp_path, monkeypatch):
+        _reset_desktop_env(monkeypatch)
+        daily = tmp_path / "xcagi-10.0.0-rc.1-20260705123000.db"
+        daily.write_bytes(b"x")
+
+        result = _make_weekly_copy(daily)
+
+        assert result is not None
+        assert result.name == "xcagi-10.0.0-rc.1-weekly-20260705123000.db"
+
+
+# ----------------------------------------------------------------------------
+# _INITIAL_DELAY_SECONDS 应为 10(Commit 4 修复,避开 lifespan 高峰即可)
+# ----------------------------------------------------------------------------
+
+
+class TestInitialDelayReduced:
+    """原 180s 会让短时使用永远不备份,Commit 4 改为 10s。"""
+
+    def test_initial_delay_is_10_seconds(self):
+        from app.desktop_runtime.backup_scheduler import _INITIAL_DELAY_SECONDS
+
+        assert _INITIAL_DELAY_SECONDS == 10

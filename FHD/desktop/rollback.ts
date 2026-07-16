@@ -1,4 +1,5 @@
 import { app } from 'electron'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -106,7 +107,9 @@ export async function prepareRollback(toVersion: string): Promise<void> {
   fs.mkdirSync(backupRoot, { recursive: true })
 
   // 复制整个 backend 目录（含 _internal/、product-sku.json 等）
-  await copyDirRecursive(backendDir, backupRoot)
+  // rollbackDir ≈ 80MB backend + .tmp 临时目录，要求 ≥ 200MB 余量
+  assertDiskFree(dir, 200 * 1024 * 1024)
+  await copyDirAtomic(backendDir, backupRoot)
 
   const marker: RollbackMarker = {
     fromVersion,
@@ -177,7 +180,7 @@ export async function triggerRollback(reason: string): Promise<void> {
   // 先删除当前（失败的）backend 目录
   try { fs.rmSync(backendDir, { recursive: true, force: true }) } catch {}
   fs.mkdirSync(backendDir, { recursive: true })
-  await copyDirRecursive(backupRoot, backendDir)
+  await copyDirAtomic(backupRoot, backendDir)
 
   // 写入 applied 标记
   const applied: RollbackApplied = {
@@ -190,6 +193,38 @@ export async function triggerRollback(reason: string): Promise<void> {
 
   // 删除 marker（已应用回滚）
   try { fs.unlinkSync(markerPath()) } catch {}
+}
+
+/** 磁盘剩余空间预检：不足时抛错阻断；statfs 本身失败时只 warn 不阻断（非致命）。 */
+function assertDiskFree(targetDir: string, minBytes: number): void {
+  try {
+    const info = fs.statfsSync(targetDir)
+    const freeBytes = (info.bavail as number) * (info.bsize as number)
+    if (freeBytes < minBytes) {
+      throw new Error(
+        `磁盘剩余空间不足:需要 ${minBytes} bytes,实际 ${freeBytes} bytes(${targetDir})`
+      )
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith('磁盘剩余空间不足')) {
+      throw err
+    }
+    console.warn(`[rollback] statfs failed for ${targetDir}:`, err)
+  }
+}
+
+/** 原子复制目录：先 copy 到 .tmp-{ts}-{rand},全部成功后 rename 到 dest;失败清理 tmp。 */
+async function copyDirAtomic(src: string, dest: string): Promise<void> {
+  const tmp = `${dest}.tmp-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`
+  try {
+    fs.mkdirSync(tmp, { recursive: true })
+    await copyDirRecursive(src, tmp)
+    fs.rmSync(dest, { recursive: true, force: true })
+    fs.renameSync(tmp, dest)
+  } catch (err) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch { /* best-effort */ }
+    throw err
+  }
 }
 
 async function copyDirRecursive(src: string, dest: string): Promise<void> {
@@ -205,3 +240,5 @@ async function copyDirRecursive(src: string, dest: string): Promise<void> {
     }
   }
 }
+
+export const __test_only = { copyDirAtomic, assertDiskFree }

@@ -8,6 +8,7 @@ import {
 export type DesktopUpdatePhase =
   | 'idle'
   | 'available'
+  | 'available-with-error'
   | 'downloading'
   | 'downloaded'
   | 'error'
@@ -95,6 +96,12 @@ function onUpdateEvent(raw: unknown) {
 
   if (type === 'update-available') {
     applyAvailable(data)
+    return
+  }
+  if (type === 'update-available-with-error') {
+    applyAvailable(data)
+    errorMessage.value = (data as { lastError?: { message?: string } }).lastError?.message
+      || '更新检查出错,请稍后重试'
     return
   }
   if (type === 'download-progress') {

@@ -561,3 +561,31 @@ describe('main — bootstrap not called in test mode', () => {
     expect(electronMocks.ipcMain.handle).not.toHaveBeenCalled()
   })
 })
+
+describe('main — backend spawn error quits app', () => {
+  it('shows error dialog and calls app.quit() on spawn error', async () => {
+    const { __test_only } = await import('./main.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.app.quit.mockClear()
+    electronMocks.app.isQuitting = false
+
+    __test_only.handleBackendSpawnError(new Error('ENOENT spawn error'))
+
+    expect(electronMocks.dialog.showErrorBox).toHaveBeenCalledTimes(1)
+    expect(electronMocks.app.quit).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not call app.quit() when already quitting', async () => {
+    const { __test_only } = await import('./main.js')
+    electronMocks.dialog.showErrorBox.mockClear()
+    electronMocks.app.quit.mockClear()
+    electronMocks.app.isQuitting = true
+
+    __test_only.handleBackendSpawnError(new Error('ENOENT spawn error'))
+
+    // 已经在退出中，不应重复 quit
+    expect(electronMocks.dialog.showErrorBox).not.toHaveBeenCalled()
+    expect(electronMocks.app.quit).not.toHaveBeenCalled()
+    electronMocks.app.isQuitting = false
+  })
+})

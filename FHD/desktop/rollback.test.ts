@@ -208,3 +208,70 @@ describe('rollback — checkRollbackApplied', () => {
     expect(checkRollbackApplied()).toBeNull()
   })
 })
+
+describe('rollback — copyDirAtomic & disk space', () => {
+  it('copyDirAtomic renames tmp to dest on success', async () => {
+    const { __test_only } = await import('./rollback.js')
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-atomic-src-'))
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-atomic-dest-'))
+    fs.writeFileSync(path.join(src, 'file.txt'), 'hello')
+    fs.mkdirSync(path.join(src, 'sub'), { recursive: true })
+    fs.writeFileSync(path.join(src, 'sub', 'nested.txt'), 'world')
+
+    await __test_only.copyDirAtomic(src, dest)
+
+    expect(fs.existsSync(path.join(dest, 'file.txt'))).toBe(true)
+    expect(fs.readFileSync(path.join(dest, 'file.txt'), 'utf8')).toBe('hello')
+    expect(fs.existsSync(path.join(dest, 'sub', 'nested.txt'))).toBe(true)
+    // tmp 目录应已被 rename 走，不存在
+    const tmpEntries = fs.readdirSync(path.dirname(dest)).filter(e => e.startsWith(path.basename(dest) + '.tmp-'))
+    expect(tmpEntries.length).toBe(0)
+  })
+
+  it('copyDirAtomic cleans up tmp on failure', async () => {
+    const { __test_only } = await import('./rollback.js')
+    const src = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-atomic-fail-src-'))
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'xcagi-atomic-fail-dest-'))
+    // src 不存在某个必需文件会导致 copyDirRecursive 失败
+    // 直接用一个不存在的 src 目录
+    const badSrc = path.join(os.tmpdir(), `nonexistent-src-${Date.now()}`)
+
+    await expect(__test_only.copyDirAtomic(badSrc, dest)).rejects.toThrow()
+    // tmp 目录应已被清理
+    const tmpEntries = fs.readdirSync(path.dirname(dest)).filter(e => e.startsWith(path.basename(dest) + '.tmp-'))
+    expect(tmpEntries.length).toBe(0)
+  })
+
+  it('assertDiskFree throws on low disk space', async () => {
+    const { __test_only } = await import('./rollback.js')
+    const statfsSpy = vi.spyOn(fs, 'statfsSync').mockReturnValue({
+      bavail: 100, bsize: 1024, blocks: 1000, bfree: 100, files: 100, ffree: 100,
+      type: 0, bsizeOpt: 1024
+    } as unknown as ReturnType<typeof fs.statfsSync>)
+
+    expect(() => __test_only.assertDiskFree(os.tmpdir(), 1024 * 1024)).toThrow('磁盘剩余空间不足')
+    statfsSpy.mockRestore()
+  })
+
+  it('assertDiskFree passes when disk space is sufficient', async () => {
+    const { __test_only } = await import('./rollback.js')
+    const statfsSpy = vi.spyOn(fs, 'statfsSync').mockReturnValue({
+      bavail: 1000000, bsize: 4096, blocks: 1000000, bfree: 1000000, files: 1000000, ffree: 1000000,
+      type: 0, bsizeOpt: 4096
+    } as unknown as ReturnType<typeof fs.statfsSync>)
+
+    expect(() => __test_only.assertDiskFree(os.tmpdir(), 1024 * 1024)).not.toThrow()
+    statfsSpy.mockRestore()
+  })
+
+  it('assertDiskFree swallows statfs errors (non-fatal)', async () => {
+    const { __test_only } = await import('./rollback.js')
+    const statfsSpy = vi.spyOn(fs, 'statfsSync').mockImplementation(() => {
+      throw new Error('ENODEV')
+    })
+
+    // statfs 本身失败时不应抛错（非致命）
+    expect(() => __test_only.assertDiskFree(os.tmpdir(), 1024 * 1024)).not.toThrow()
+    statfsSpy.mockRestore()
+  })
+})

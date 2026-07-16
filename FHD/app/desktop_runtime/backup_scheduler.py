@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import threading
 from datetime import datetime, timedelta
@@ -29,8 +30,8 @@ from .paths import ensure_desktop_dirs, is_desktop_mode
 
 logger = logging.getLogger(__name__)
 
-# 启动后延迟备份的秒数（避开 lifespan 高峰，让 mod/索引先建完）。
-_INITIAL_DELAY_SECONDS = 180
+# 启动后延迟备份的秒数（避开 lifespan 高峰即可，10s 足够 mod/索引初始化）。
+_INITIAL_DELAY_SECONDS = 10
 # 循环检查间隔。不到 24h 也可，但每次循环会判断"今天是否已备份"，
 # 所以频繁检查不会导致频繁备份。
 _POLL_INTERVAL_SECONDS = 3600
@@ -40,6 +41,8 @@ _RETENTION_DAYS = 7
 _RETENTION_WEEKLY_DAYS = 28
 # 周日额外创建 weekly 备份的文件名标记。
 _WEEKLY_MARKER = "weekly"
+# 定时备份文件名正则：xcagi-{version}-{14位时间戳}.db（version 可含 -beta/-rc 等连字符）。
+_BACKUP_STAMP_RE = re.compile(r"xcagi-.+-(\d{14})\.db$")
 
 _lock = threading.Lock()
 _stop_event: threading.Event | None = None
@@ -132,12 +135,14 @@ def _make_weekly_copy(daily_backup: Path) -> Path | None:
 
     文件名格式：xcagi-{version}-weekly-{stamp}.db
     复制而非重新备份，避免对运行中的库再做一次 sqlite3.backup()。
+    用正则提取 stamp，兼容版本号含连字符（如 10.0.0-beta）的情况。
     """
-    parts = daily_backup.stem.split("-")
-    if len(parts) < 3 or _WEEKLY_MARKER in parts:
+    match = _BACKUP_STAMP_RE.match(daily_backup.name)
+    if not match or _WEEKLY_MARKER in daily_backup.stem:
         return None
-    # parts: ["xcagi", "{version}", "{stamp}"] → 插入 weekly 标记
-    weekly_name = f"{'-'.join(parts[:-1])}-{_WEEKLY_MARKER}-{parts[-1]}.db"
+    stamp = match.group(1)
+    # 在 stamp 前插入 -weekly-：xcagi-{version}-{stamp}.db → xcagi-{version}-weekly-{stamp}.db
+    weekly_name = daily_backup.name.replace(f"-{stamp}.db", f"-{_WEEKLY_MARKER}-{stamp}.db")
     weekly_path = daily_backup.parent / weekly_name
     try:
         shutil.copy2(daily_backup, weekly_path)
@@ -173,16 +178,13 @@ def _has_backup_today(backups_dir: Path) -> bool:
     定时备份文件名格式：xcagi-{version}-{YYYYMMDDHHMMSS}.db
     只看文件名里的日期前缀（YYYYMMDD），不看 mtime（mtime 可能被复制操作改）。
     weekly 备份（含 weekly 标记）也算"今天的备份"，避免周日重复跑 daily。
+    用正则提取 stamp，兼容版本号含连字符的情况。
     """
     today = datetime.now().strftime("%Y%m%d")
     for path in backups_dir.glob("xcagi-*.db"):
-        # 文件名格式 xcagi-{version}-{stamp}.db 或 xcagi-{version}-weekly-{stamp}.db
-        # 取末尾的 stamp 段（14 位数字）
-        parts = path.stem.split("-")
-        if len(parts) >= 3:
-            stamp = parts[-1]
-            if len(stamp) >= 8 and stamp[:8] == today:
-                return True
+        match = _BACKUP_STAMP_RE.match(path.name)
+        if match and match.group(1).startswith(today):
+            return True
     return False
 
 
