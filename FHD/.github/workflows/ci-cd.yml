@@ -489,6 +489,9 @@ jobs:
         (github.event_name == 'workflow_dispatch' && inputs.push_to_cvm == true)
       )
     runs-on: ubuntu-latest
+    concurrency:
+      group: cvm-push-release-${{ github.event_name == 'workflow_dispatch' && inputs.release_channel || (contains(github.ref, '-rc') && 'staging' || 'stable') }}
+      cancel-in-progress: true
     # 正常发布只推必需 tarball + manifest；离线镜像归档仅手动显式启用。
     timeout-minutes: 60
     environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.release_channel == 'staging') || (github.event_name == 'push' && contains(github.ref, '-rc'))) && 'staging' || 'production' }}
