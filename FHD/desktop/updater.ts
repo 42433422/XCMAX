@@ -12,6 +12,8 @@ import {
 } from './release-media.js'
 
 let updateDownloaded = false
+let downloadedVersion = ''
+let downloadedBuildSha = ''
 let remoteBuildSha = ''
 let remoteReleaseNotes = ''
 let remoteReleaseMedia: ReleaseMediaSlide[] = []
@@ -230,6 +232,10 @@ export function configureUpdater(mainWindow: BrowserWindow): void {
   autoUpdater.on('download-progress', progress => send('download-progress', progress))
   autoUpdater.on('update-downloaded', info => {
     updateDownloaded = true
+    downloadedVersion = String(info.version || '').trim()
+    downloadedBuildSha = String(
+      (info as UpdateInfo & { buildSha?: string }).buildSha || remoteBuildSha || '',
+    ).trim()
     downloadInFlight = false
     appendUpdaterEvent('update_downloaded', { version: info.version })
     send('update-downloaded', enrichUpdateInfo(info))
@@ -355,20 +361,39 @@ export async function verifyLatestMetadataSignature(): Promise<void> {
   await fetchLatestMetadataText()
 }
 
-export async function installUpdate(beforeInstall?: (toVersion: string) => Promise<void>): Promise<void> {
+export async function installUpdate(
+  beforeInstall?: (toVersion: string) => Promise<void>,
+  onInstallFailed?: () => Promise<void> | void,
+): Promise<void> {
   if (!updateDownloaded) {
     throw new Error('尚未下载更新包，请先在更新面板确认下载')
   }
   try {
     if (beforeInstall) {
-      await beforeInstall('manual')
+      const version = downloadedVersion || 'unknown'
+      const identity = downloadedBuildSha ? `${version}+${downloadedBuildSha.slice(0, 12)}` : version
+      await beforeInstall(identity)
     }
     appendUpdaterEvent('install_start', {})
     autoUpdater.quitAndInstall(false, true)
   } catch (error) {
+    let cleanupError: unknown
+    try {
+      await onInstallFailed?.()
+    } catch (caught) {
+      cleanupError = caught
+    }
     appendUpdaterEvent('install_failed', {
       message: error instanceof Error ? error.message : String(error),
+      cleanupError: cleanupError instanceof Error ? cleanupError.message : String(cleanupError || ''),
     })
+    if (cleanupError) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}；清理回滚准备失败：${
+          cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        }`,
+      )
+    }
     throw error
   }
 }
@@ -393,6 +418,8 @@ export async function verifyMetadataSignatureText(content: string, publicKeyPem:
 /** 测试辅助：重置 updateDownloaded 状态。仅用于单测。 */
 export function __resetUpdateDownloadedForTest(): void {
   updateDownloaded = false
+  downloadedVersion = ''
+  downloadedBuildSha = ''
   lastUpdateEvent = null
   downloadInFlight = false
   remoteReleaseMedia = []
