@@ -33,6 +33,10 @@ const globalStubs = {
   ElFormItem: true,
   ElDivider: true,
   ElAlert: true,
+  // The pairing card owns async requests and long-lived timers. Its behavior is
+  // covered by MobilePairingQrCard.test.ts; this suite only verifies the
+  // settings shell and must not leak that child across the jsdom lifecycle.
+  MobilePairingQrCard: true,
 }
 
 describe('SettingsView.vue', () => {
@@ -47,6 +51,7 @@ describe('SettingsView.vue', () => {
       },
     })
     expect(wrapper.exists()).toBe(true)
+    wrapper.unmount()
   })
 
   it('renders settings shell text', async () => {
@@ -60,5 +65,6 @@ describe('SettingsView.vue', () => {
       },
     })
     expect(wrapper.text().length).toBeGreaterThan(10)
+    wrapper.unmount()
   })
 })
