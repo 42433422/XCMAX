@@ -217,33 +217,39 @@ def test_init_im_tables_on_sqlite_file(tmp_path) -> None:
 
 def test_printer_utils_unavailable_get_printers() -> None:
     pu = PrinterUtils()
-    assert pu.get_available_printers() == []
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        assert pu.get_available_printers() == []
 
 
 def test_printer_utils_unavailable_default_printer() -> None:
     pu = PrinterUtils()
-    assert pu.get_default_printer() is None
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        assert pu.get_default_printer() is None
 
 
 def test_printer_utils_unavailable_document_printer() -> None:
     pu = PrinterUtils()
-    assert pu.get_document_printer() is None
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        assert pu.get_document_printer() is None
 
 
 def test_printer_utils_unavailable_label_printer() -> None:
     pu = PrinterUtils()
-    assert pu.get_label_printer() is None
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        assert pu.get_label_printer() is None
 
 
 def test_printer_utils_unavailable_test_printer() -> None:
     pu = PrinterUtils()
-    out = pu.test_printer("HP")
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        out = pu.test_printer("HP")
     assert out["success"] is False
 
 
 def test_printer_utils_unavailable_print_file() -> None:
     pu = PrinterUtils()
-    out = pu.print_file("/tmp/x.pdf", printer_name="HP")
+    with patch.object(pu, "_is_print_backend_available", return_value=False):
+        out = pu.print_file("/tmp/x.pdf", printer_name="HP")
     assert out["success"] is False
 
 

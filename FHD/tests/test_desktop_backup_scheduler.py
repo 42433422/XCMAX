@@ -378,3 +378,36 @@ class TestHasBackupTodayWeekly:
         (dirs["backups"] / f"xcagi-10.0.0-weekly-{today}120000.db").write_bytes(b"x")
 
         assert _has_backup_today(dirs["backups"]) is True
+
+
+class TestVersionedBackupNameParsing:
+    def test_has_backup_today_supports_hyphenated_version(self, tmp_path, monkeypatch):
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        _make_backup_file(dirs["backups"], "1.0.0-rc.1", f"{today}120000")
+
+        assert _has_backup_today(dirs["backups"]) is True
+
+    def test_has_backup_today_rejects_missing_version(self, tmp_path, monkeypatch):
+        _reset_desktop_env(monkeypatch)
+        dirs = ensure_desktop_dirs(tmp_path)
+        today = datetime.now().strftime("%Y%m%d")
+        (dirs["backups"] / f"xcagi-{today}120000.db").write_bytes(b"x")
+
+        assert _has_backup_today(dirs["backups"]) is False
+
+    def test_weekly_copy_supports_hyphenated_version(self, tmp_path):
+        daily = tmp_path / "xcagi-1.0.0-beta-20260705123000.db"
+        daily.write_bytes(b"backup")
+
+        weekly = _make_weekly_copy(daily)
+
+        assert weekly is not None
+        assert weekly.name == "xcagi-1.0.0-beta-weekly-20260705123000.db"
+        assert weekly.read_bytes() == b"backup"
+
+    def test_initial_delay_produces_backup_during_short_sessions(self):
+        from app.desktop_runtime.backup_scheduler import _INITIAL_DELAY_SECONDS
+
+        assert _INITIAL_DELAY_SECONDS == 10
