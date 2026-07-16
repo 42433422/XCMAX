@@ -420,6 +420,21 @@ class TestMacosCupsPrinterUtils:
         ):
             assert PrinterUtils._resolve_allowed_print_path(str(link)) is None
 
+    def test_allowed_print_path_accepts_direct_child(self, tmp_path):
+        allowed = tmp_path / "allowed"
+        allowed.mkdir()
+        document = allowed / "document.pdf"
+        document.write_bytes(b"pdf")
+
+        with patch.object(
+            PrinterUtils,
+            "_allowed_print_roots",
+            return_value=(str(allowed.resolve()),),
+        ):
+            assert PrinterUtils._resolve_allowed_print_path(str(document)) == str(
+                document.resolve()
+            )
+
     def test_cups_printer_probe_reports_missing_printer(self):
         pu = PrinterUtils()
         with (
