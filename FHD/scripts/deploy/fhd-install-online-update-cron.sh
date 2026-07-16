@@ -15,9 +15,8 @@
 #   FHD_PYTHON                默认 ${FHD_DEPLOY_ROOT}/.venv/bin/python（回退 python3）
 set -euo pipefail
 
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
-
 if [[ "${FHD_INSTALL_VIA_SSH:-0}" == "1" ]]; then
+  SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
   HOST="${FHD_PUSH_HOST:-119.27.178.147}"
   USER="${FHD_PUSH_USER:-root}"
   SSH_KEY="${FHD_PUSH_SSH_KEY:-}"

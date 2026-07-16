@@ -810,11 +810,7 @@ async function startBackend(): Promise<void> {
     writeBackendLog(`[stderr] ${data}`)
   })
   backendProcess.on('error', error => {
-    backendProcess = null
-    writeBackendLog(`[error] backend spawn failed: ${error.message}\n`)
-    if (!app.isQuitting) {
-      void dialog.showErrorBox(APP_NAME, `后端服务启动失败：${error.message}`)
-    }
+    handleBackendSpawnError(error)
   })
   backendProcess.on('exit', code => {
     const uptimeMs = Date.now() - (startupMarks.backendSpawnMs ?? Date.now())
@@ -1367,10 +1363,6 @@ function menuBarTrayIcon(): Electron.NativeImage | null {
 }
 
 function createTray(): void {
-  // macOS：与 Cursor 等原生应用一致，不占系统菜单栏右侧；仅 Dock + 左上角「XCAGI」文字菜单
-  if (process.platform === 'darwin') {
-    return
-  }
   const image = menuBarTrayIcon()
   if (!image) {
     return
@@ -1387,6 +1379,19 @@ function createTray(): void {
       { label: '退出', click: () => app.quit() }
     ])
   )
+}
+
+function handleBackendSpawnError(error: Error): void {
+  backendProcess = null
+  writeBackendLog(`[error] backend spawn failed: ${error.message}\n`)
+  if (app.isQuitting) {
+    return
+  }
+  void dialog.showErrorBox(
+    APP_NAME,
+    `后端服务启动失败：${error.message}\n\n应用将退出，请重启 XCAGI。`,
+  )
+  app.quit()
 }
 
 function bootstrap(): void {
@@ -1578,6 +1583,11 @@ function bootstrap(): void {
 // 单测环境设置 XCAGI_DESKTOP_TEST=1 跳过启动逻辑，只测纯函数
 if (!process.env.XCAGI_DESKTOP_TEST) {
   bootstrap()
+}
+
+export const __test_only = {
+  createTray,
+  handleBackendSpawnError,
 }
 
 declare global {

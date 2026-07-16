@@ -1,6 +1,11 @@
 import logging
 import os
+import re
+import subprocess
+import sys
+import tempfile
 import time
+from typing import BinaryIO
 
 from app.utils.operational_errors import RECOVERABLE_ERRORS
 
@@ -20,6 +25,10 @@ except ImportError as _print_import_error:
 
 logging.basicConfig(level=logging.INFO, encoding="utf-8")
 logger = logging.getLogger(__name__)
+_CUPS_ERRORS = RECOVERABLE_ERRORS + (subprocess.SubprocessError,)
+_CUPS_LP = "/usr/bin/lp"
+_CUPS_LPSTAT = "/usr/bin/lpstat"
+_CUPS_PRINTER_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}$")
 
 
 class PrinterUtils:
@@ -28,16 +37,246 @@ class PrinterUtils:
 
     @staticmethod
     def _is_print_backend_available() -> bool:
-        return _PRINT_BACKEND_AVAILABLE
+        return _PRINT_BACKEND_AVAILABLE or PrinterUtils._is_cups_backend_available()
+
+    @staticmethod
+    def _is_cups_backend_available() -> bool:
+        return (
+            sys.platform == "darwin"
+            and win32print is None
+            and win32api is None
+            and os.path.isfile(_CUPS_LPSTAT)
+            and os.access(_CUPS_LPSTAT, os.X_OK)
+            and os.path.isfile(_CUPS_LP)
+            and os.access(_CUPS_LP, os.X_OK)
+        )
 
     def _build_unavailable_result(self) -> dict:
-        message = (
-            f"当前环境不支持打印功能（缺少 Windows 打印依赖）：{_PRINT_BACKEND_ERROR or 'unknown'}"
-        )
+        if sys.platform == "darwin":
+            detail = "未找到 macOS CUPS 命令 lpstat/lp"
+        else:
+            detail = f"缺少 Windows 打印依赖：{_PRINT_BACKEND_ERROR or 'unknown'}"
+        message = f"当前环境不支持打印功能（{detail}）"
         return {"success": False, "message": message}
 
+    @staticmethod
+    def _cups_env() -> dict[str, str]:
+        return {
+            **os.environ,
+            "LC_ALL": "C",
+            "LANG": "C",
+        }
+
+    @classmethod
+    def _run_cups(
+        cls,
+        command: str,
+        arguments: tuple[str, ...],
+        *,
+        timeout: float = 15,
+        input_stream: BinaryIO | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        if command == "lp":
+            executable = _CUPS_LP
+        elif command == "lpstat":
+            executable = _CUPS_LPSTAT
+        else:
+            raise ValueError("unsupported CUPS command")
+        return subprocess.run(
+            [executable, *arguments],
+            stdin=input_stream,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env=cls._cups_env(),
+        )
+
+    def _get_cups_default_printer(self) -> str | None:
+        try:
+            result = self._run_cups("lpstat", ("-d",))
+            if result.returncode != 0:
+                return None
+            line = result.stdout.strip()
+            for prefix in (
+                "system default destination:",
+                "系统默认目的位置：",
+                "系统默认目的位置:",
+            ):
+                if line.lower().startswith(prefix.lower()):
+                    return line[len(prefix) :].strip() or None
+        except _CUPS_ERRORS as exc:
+            logger.warning("CUPS default printer query failed: %s", exc)
+        return None
+
+    @staticmethod
+    def _cups_status_text(raw: str) -> str:
+        normalized = raw.lower()
+        if "disabled" in normalized or "paused" in normalized or "已停用" in raw or "暂停" in raw:
+            return "已暂停"
+        if (
+            "printing" in normalized
+            or "processing" in normalized
+            or "正在打印" in raw
+            or "正在处理" in raw
+        ):
+            return "打印中"
+        if "idle" in normalized or "enabled" in normalized or "闲置" in raw:
+            return "就绪"
+        return "未知"
+
+    @classmethod
+    def _parse_cups_printer_line(cls, line: str) -> tuple[str, str] | None:
+        if line.startswith("printer "):
+            parts = line.split(maxsplit=2)
+            if len(parts) >= 2:
+                return parts[1], cls._cups_status_text(parts[2] if len(parts) == 3 else "")
+            return None
+        if line.startswith("打印机"):
+            body = line[len("打印机") :]
+            markers = ("正在打印", "正在处理", "已停用", "暂停", "闲置")
+            positions = [(body.find(marker), marker) for marker in markers if body.find(marker) > 0]
+            if positions:
+                index, marker = min(positions, key=lambda item: item[0])
+                return body[:index].strip(), cls._cups_status_text(marker)
+        return None
+
+    def _get_cups_printers(self) -> list[dict[str, str | bool]]:
+        try:
+            result = self._run_cups("lpstat", ("-p",))
+            if result.returncode != 0:
+                logger.warning("CUPS printer query failed: %s", result.stderr.strip())
+                return []
+            default_printer = self._get_cups_default_printer()
+            printers: list[dict[str, str | bool]] = []
+            for raw_line in result.stdout.splitlines():
+                line = raw_line.strip()
+                parsed = self._parse_cups_printer_line(line)
+                if parsed is None:
+                    continue
+                name, status = parsed
+                printers.append(
+                    {
+                        "name": name,
+                        "status": status,
+                        "is_default": name == default_printer,
+                    }
+                )
+            return printers
+        except _CUPS_ERRORS as exc:
+            logger.error("CUPS printer discovery failed: %s", exc)
+            return []
+
+    def _resolve_cups_printer_name(self, requested: str) -> str | None:
+        if not _CUPS_PRINTER_NAME_RE.fullmatch(requested):
+            return None
+        for printer in self._get_cups_printers():
+            candidate = str(printer.get("name") or "")
+            if candidate == requested and _CUPS_PRINTER_NAME_RE.fullmatch(candidate):
+                return candidate
+        return None
+
+    @staticmethod
+    def _allowed_print_roots() -> tuple[str, ...]:
+        from app.utils.path_utils import get_app_data_dir
+
+        app_data = os.path.realpath(get_app_data_dir())
+        roots = {
+            app_data,
+            os.path.join(app_data, "shipment_outputs"),
+            os.path.realpath(tempfile.gettempdir()),
+        }
+        configured = os.environ.get("XCAGI_PRINT_ALLOWED_ROOTS", "")
+        for value in configured.split(os.pathsep):
+            value = value.strip()
+            if value:
+                roots.add(os.path.realpath(value))
+        return tuple(sorted(roots))
+
+    @classmethod
+    def _resolve_allowed_print_path(cls, file_path: str) -> str | None:
+        requested = os.path.realpath(os.path.abspath(file_path))
+        for root in cls._allowed_print_roots():
+            normalized_root = os.path.realpath(root)
+            try:
+                with os.scandir(normalized_root) as entries:
+                    for entry in entries:
+                        if not entry.is_file(follow_symlinks=False):
+                            continue
+                        candidate = os.path.realpath(entry.path)
+                        if os.path.normcase(candidate) == os.path.normcase(requested):
+                            return candidate
+            except OSError:
+                continue
+        return None
+
+    def _print_cups(self, file_path: str, printer_name: str) -> dict:
+        validated_printer = self._resolve_cups_printer_name(printer_name)
+        if validated_printer is None:
+            return {
+                "success": False,
+                "message": "打印失败：打印机不存在或名称不安全",
+                "printer": printer_name,
+            }
+        validated_file = self._resolve_allowed_print_path(file_path)
+        if validated_file is None:
+            return {
+                "success": False,
+                "message": "打印失败：文件不在允许的打印目录中",
+                "printer": validated_printer,
+            }
+        try:
+            with open(validated_file, "rb") as source:
+                result = self._run_cups(
+                    "lp",
+                    ("-d", validated_printer),
+                    timeout=30,
+                    input_stream=source,
+                )
+            if result.returncode != 0:
+                logger.warning(
+                    "CUPS rejected print job for %s: %s",
+                    validated_printer,
+                    result.stderr.strip() or result.stdout.strip() or "lp command failed",
+                )
+                return {
+                    "success": False,
+                    "message": "打印失败：macOS 打印服务拒绝了任务",
+                    "printer": validated_printer,
+                }
+            return {
+                "success": True,
+                "message": "打印任务已提交到 macOS CUPS",
+                "file": os.path.basename(validated_file),
+                "printer": validated_printer,
+                "method": "cups_lp",
+            }
+        except _CUPS_ERRORS as exc:
+            logger.error("CUPS print failed: %s", exc)
+            return {
+                "success": False,
+                "message": "打印失败：macOS 打印服务暂不可用",
+                "printer": validated_printer,
+            }
+
+    def _monitor_cups_print_job(self, printer_name: str, timeout: int) -> bool:
+        validated_printer = self._resolve_cups_printer_name(printer_name)
+        if validated_printer is None:
+            return False
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                result = self._run_cups("lpstat", ("-o", validated_printer))
+                if result.returncode == 0 and not result.stdout.strip():
+                    return True
+            except _CUPS_ERRORS as exc:
+                logger.warning("CUPS queue query failed: %s", exc)
+                return False
+            time.sleep(1)
+        return False
+
     def _ensure_com_initialized(self):
-        if not self._is_print_backend_available():
+        if pythoncom is None:
             return
         if not self._com_initialized:
             try:
@@ -50,6 +289,8 @@ class PrinterUtils:
         if not self._is_print_backend_available():
             logger.warning(self._build_unavailable_result()["message"])
             return []
+        if win32print is None:
+            return self._get_cups_printers()
         try:
             self._ensure_com_initialized()
             printers = []
@@ -100,7 +341,7 @@ class PrinterUtils:
             return []
 
     def _get_printer_status(self, status_code: int) -> str:
-        if not self._is_print_backend_available():
+        if win32print is None:
             return "不可用"
         status_map = {
             win32print.PRINTER_STATUS_PAUSED: "已暂停",
@@ -132,6 +373,8 @@ class PrinterUtils:
         if not self._is_print_backend_available():
             logger.warning(self._build_unavailable_result()["message"])
             return False
+        if win32print is None:
+            return self._monitor_cups_print_job(printer_name, timeout)
         try:
             logger.info("开始监控打印机 %s 的打印任务...", printer_name)
 
@@ -187,7 +430,7 @@ class PrinterUtils:
 
             original_default_printer = None
 
-            if use_default_printer:
+            if use_default_printer and win32print is not None:
                 try:
                     original_default_printer = win32print.GetDefaultPrinter()
                     logger.info("当前默认打印机: %s", original_default_printer)
@@ -247,7 +490,7 @@ class PrinterUtils:
                 if print_result.get("success", False):
                     logger.info("打印命令已发送，继续执行后续操作")
             finally:
-                if use_default_printer and original_default_printer:
+                if use_default_printer and original_default_printer and win32print is not None:
                     try:
                         if original_default_printer != printer_name:
                             logger.info("恢复默认打印机为: %s", original_default_printer)
@@ -265,6 +508,8 @@ class PrinterUtils:
     def _print_excel(self, file_path: str, printer_name: str) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
+        if win32api is None and not hasattr(os, "startfile"):
+            return self._print_cups(file_path, printer_name)
         try:
             logger.info("开始打印Excel文件: %s", file_path)
             logger.info("使用打印机: %s", printer_name)
@@ -322,6 +567,8 @@ class PrinterUtils:
     def _print_pdf(self, file_path: str, printer_name: str) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
+        if win32print is None:
+            return self._print_cups(file_path, printer_name)
         try:
             logger.info("尝试使用win32print直接打印PDF到 %s", printer_name)
 
@@ -395,6 +642,8 @@ class PrinterUtils:
     def _print_default(self, file_path: str, printer_name: str, show_app: bool = False) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
+        if win32api is None:
+            return self._print_cups(file_path, printer_name)
         try:
             show_cmd = 1 if show_app else 0
 
@@ -418,6 +667,8 @@ class PrinterUtils:
         if not self._is_print_backend_available():
             logger.warning(self._build_unavailable_result()["message"])
             return None
+        if win32print is None:
+            return self._get_cups_default_printer()
         try:
             return win32print.GetDefaultPrinter()
         except RECOVERABLE_ERRORS as e:
@@ -427,6 +678,24 @@ class PrinterUtils:
     def test_printer(self, printer_name: str) -> dict:
         if not self._is_print_backend_available():
             return self._build_unavailable_result()
+        if win32print is None:
+            printer = next(
+                (item for item in self.get_available_printers() if item["name"] == printer_name),
+                None,
+            )
+            if printer is None:
+                return {
+                    "success": False,
+                    "available": False,
+                    "printer": printer_name,
+                    "message": "打印机不存在或当前不可用",
+                }
+            return {
+                "success": True,
+                "available": True,
+                "printer": printer_name,
+                "status": printer.get("status") or "未知",
+            }
         try:
             hprinter = win32print.OpenPrinter(printer_name)
 
@@ -502,7 +771,7 @@ class PrinterUtils:
                 if any(kw in name_lower for kw in keywords):
                     return printer["name"]
 
-            return printers[-1]["name"] if printers else None
+            return None
 
         except RECOVERABLE_ERRORS as e:
             logger.error("获取标签打印机失败: %s", e)
