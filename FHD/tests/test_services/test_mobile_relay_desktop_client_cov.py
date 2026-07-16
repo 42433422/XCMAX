@@ -182,6 +182,51 @@ class TestCachedDesktopRelayPayload:
         result = cached_desktop_relay_payload()
         assert result is not None
 
+    def test_returns_paired_status_with_mobile_username(self, tmp_path, monkeypatch):
+        """已绑定且服务端回过 mobile_username 时，桌面设置页状态查询应能读到它。"""
+        future_exp = int(time.time()) + 9999
+        cfg_file = tmp_path / "relay.json"
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "pairing_code": "p1",
+                    "exp": future_exp,
+                    "paired": True,
+                    "mobile_username": "王五",
+                    "last_relay_sync_at": 1_700_000_000,
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+        result = cached_desktop_relay_payload()
+        assert result is not None
+        assert result["paired"] is True
+        assert result["mobile_username"] == "王五"
+        assert result["last_relay_sync_at"] == 1_700_000_000
+
+    def test_returns_paired_status_without_active_qr(self, tmp_path, monkeypatch):
+        """qr/pairing_code 已过期但历史已绑定时，走第二分支仍应带出 mobile_username。"""
+        cfg_file = tmp_path / "relay.json"
+        cfg_file.write_text(
+            json.dumps(
+                {
+                    "relay_id": "r1",
+                    "paired": True,
+                    "mobile_username": "赵六",
+                    "last_relay_sync_at": 1_700_000_100,
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(_module, "_CONFIG_FILE", cfg_file)
+        result = cached_desktop_relay_payload()
+        assert result is not None
+        assert result["paired"] is True
+        assert result["mobile_username"] == "赵六"
+        assert result["last_relay_sync_at"] == 1_700_000_100
+
 
 # ---------------------------------------------------------------------------
 # start_desktop_relay_poller

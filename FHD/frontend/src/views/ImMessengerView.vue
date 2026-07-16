@@ -65,6 +65,7 @@
         <div v-else class="im-empty im-empty--list">
           <i class="fa fa-comments-o" aria-hidden="true"></i>
           <p>还没有会话</p>
+          <p class="im-empty-hint">这里联系已安装的 AI 同事和专属客服；找小C办事请用侧栏「智能对话」</p>
           <button type="button" class="im-btn im-btn--primary" :disabled="busy" @click="openContactPicker">
             发起会话
           </button>
@@ -127,24 +128,29 @@
               <h3>{{ activeSystemEntry.display_name }}</h3>
               <p>{{ activeSystemEntry.subtitle }}</p>
             </section>
-            <dl class="im-system-status-grid">
+            <dl class="im-system-status-grid im-system-status-grid--identity">
               <div>
                 <dt>身份</dt>
                 <dd>{{ systemEntryIdentity(activeSystemEntry) }}</dd>
               </div>
-              <div>
-                <dt>{{ isSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>
-                <dd>{{ systemEntryDispatch(activeSystemEntry) }}</dd>
-              </div>
-              <div>
-                <dt>状态</dt>
-                <dd>{{ systemEntryRuntimeStatus(activeSystemEntry) }}</dd>
-              </div>
-              <div>
-                <dt>最近任务</dt>
-                <dd>{{ systemEntryLastStatus(activeSystemEntry) }}</dd>
-              </div>
             </dl>
+            <details class="im-system-status-details">
+              <summary>详情（调度/状态/最近任务）</summary>
+              <dl class="im-system-status-grid">
+                <div>
+                  <dt>{{ isSuperEmployeeEntry(activeSystemEntry) ? '调度' : '联系方式' }}</dt>
+                  <dd>{{ systemEntryDispatch(activeSystemEntry) }}</dd>
+                </div>
+                <div>
+                  <dt>状态</dt>
+                  <dd>{{ systemEntryRuntimeStatus(activeSystemEntry) }}</dd>
+                </div>
+                <div>
+                  <dt>最近任务</dt>
+                  <dd>{{ systemEntryLastStatus(activeSystemEntry) }}</dd>
+                </div>
+              </dl>
+            </details>
             <section
               v-if="isSuperEmployeeEntry(activeSystemEntry)"
               class="im-cli-model-switch"
@@ -309,6 +315,7 @@
       <main v-else class="im-chat im-chat--empty">
         <i class="fa fa-comment-o" aria-hidden="true"></i>
         <p>选择左侧会话开始聊天</p>
+        <p class="im-empty-hint">这里是同事和客服的一对一会话；找小C办事请用侧栏「智能对话」</p>
       </main>
     </div>
 
@@ -2266,6 +2273,23 @@ onUnmounted(() => {
   gap: 10px;
   margin: 0;
 }
+.im-system-status-grid--identity {
+  grid-template-columns: 1fr;
+  margin-bottom: 10px;
+}
+.im-system-status-details {
+  margin-bottom: 4px;
+}
+.im-system-status-details summary {
+  cursor: pointer;
+  color: var(--xc-color-muted, #86909c);
+  font-size: 12px;
+  margin-bottom: 10px;
+  user-select: none;
+}
+.im-system-status-details summary:hover {
+  color: var(--xc-color-text, #1f2329);
+}
 .im-system-status-grid div {
   min-width: 0;
   padding: 12px;
@@ -2516,6 +2540,14 @@ onUnmounted(() => {
 .im-empty p {
   margin: 0;
   font-size: 13px;
+}
+
+.im-empty-hint {
+  max-width: 260px;
+  margin-top: 4px !important;
+  font-size: 12px !important;
+  color: var(--xc-color-disabled, #9ca3af);
+  line-height: 1.5;
 }
 
 /* 联系人选择弹窗 */
