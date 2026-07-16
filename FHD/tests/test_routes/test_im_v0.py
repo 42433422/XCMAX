@@ -15,12 +15,13 @@ def _im_sqlite_db(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_file}")
     from app.db import SessionLocal, dispose_and_recreate_engine, engine
     from app.db.base import Base
-    from app.db.init_db import init_im_tables
+    from app.db.init_db import ensure_sqlite_im_bootstrap, init_im_tables
     from app.db.models.user import User
 
     dispose_and_recreate_engine()
     Base.metadata.create_all(engine, tables=[User.__table__], checkfirst=True)
     init_im_tables(engine)
+    ensure_sqlite_im_bootstrap(engine, swallow_errors=False)
     session = SessionLocal()
     try:
         for uid, username in [(1, "im_u1"), (2, "im_u2"), (9, "im_u9")]:
