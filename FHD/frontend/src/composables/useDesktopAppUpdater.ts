@@ -8,6 +8,7 @@ import {
 export type DesktopUpdatePhase =
   | 'idle'
   | 'available'
+  | 'available-with-error'
   | 'downloading'
   | 'downloaded'
   | 'error'
@@ -97,6 +98,15 @@ function onUpdateEvent(raw: unknown) {
     applyAvailable(data)
     return
   }
+  if (type === 'update-available-with-error') {
+    applyAvailable(data)
+    phase.value = 'available-with-error'
+    errorMessage.value = String(
+      (data as DesktopUpdateInfo & { lastError?: { message?: string } }).lastError?.message
+        || '更新检查出错，请稍后重试',
+    )
+    return
+  }
   if (type === 'download-progress') {
     phase.value = 'downloading'
     const percent = Number(data.percent)
@@ -118,7 +128,7 @@ function onUpdateEvent(raw: unknown) {
     return
   }
   if (type === 'error') {
-    phase.value = updateInfo.value ? 'available' : 'error'
+    phase.value = updateInfo.value ? 'available-with-error' : 'error'
     errorMessage.value = String(data.message || '更新失败')
     busy.value = false
   }
@@ -172,6 +182,7 @@ export function useDesktopAppUpdater() {
     () =>
       isDesktopShell() &&
       (phase.value === 'available' ||
+        phase.value === 'available-with-error' ||
         phase.value === 'downloading' ||
         phase.value === 'downloaded') &&
       Boolean(updateInfo.value?.version),
