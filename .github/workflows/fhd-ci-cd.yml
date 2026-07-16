@@ -673,6 +673,32 @@ jobs:
       - name: Parse SSL.com electron-builder signing hook
         shell: pwsh
         run: node --check desktop/build/windows-sign.cjs
+      - name: Install SSL.com CodeSignTool smoke
+        uses: SSLcom/esigner-codesign@cf5f6c1d38ad10f47e3ed9aca873f429b1a8d85b # v1.3.2
+        with:
+          command: --version
+          environment_name: PROD
+          signing_method: v2
+      - name: Verify SSL.com CodeSignTool exports
+        shell: pwsh
+        run: |
+          if (-not $env:CODE_SIGN_TOOL_PATH) {
+            throw 'SSL.com action did not export CODE_SIGN_TOOL_PATH'
+          }
+          if (-not $env:JAVA_HOME) {
+            throw 'SSL.com action did not provide or retain JAVA_HOME'
+          }
+          $jar = Join-Path $env:CODE_SIGN_TOOL_PATH 'jar/code_sign_tool-1.3.0.jar'
+          $java = Join-Path $env:JAVA_HOME 'bin/java.exe'
+          foreach ($path in @($jar, $java)) {
+            if (-not (Test-Path -LiteralPath $path)) {
+              throw "SSL.com CodeSignTool smoke path missing: $path"
+            }
+          }
+          & $java -Xmx1024M -jar $jar --version
+          if ($LASTEXITCODE -ne 0) {
+            throw "SSL.com CodeSignTool version probe failed with exit code $LASTEXITCODE"
+          }
 
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
