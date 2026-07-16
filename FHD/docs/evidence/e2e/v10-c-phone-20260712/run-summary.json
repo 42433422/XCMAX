@@ -1,0 +1,24 @@
+{
+  "device": "25113PN0EC / 6e8d9335 / Android 16",
+  "package": "com.xiuci.xcagi.mobile.enterprise",
+  "versionName": "10.0.0",
+  "versionCode": 1783758395,
+  "ran_at": "2026-07-12T03:36:00+08:00",
+  "matrix": {
+    "C1_launch": "PASS",
+    "C2_login": "PASS",
+    "C3_tabs": "PASS",
+    "C4_scan": "PASS",
+    "C5_approvals": "PASS",
+    "C6_nr_sa": "PASS",
+    "C7_release_sign": "PASS"
+  },
+  "notes": [
+    "登录态：admin · 账号 · 56位AI员工",
+    "四 Tab：消息 / AI员工 / 探索 / 我",
+    "扫码：我 → 扫码绑定 → 扫描绑定页（11-scan）",
+    "审批：探索工具区 → 审批中心（10-approvals）",
+    "网络：MOBILE[NR] + NR_SA + Wi-Fi 大帅B-5G",
+    "签名：CN=XCAGI 非 Android Debug"
+  ]
+}

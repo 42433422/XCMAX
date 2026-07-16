@@ -1812,7 +1812,11 @@ def ensure_user_profile_columns(
 
 
 def init_im_tables(engine: Engine | None = None, *, database_url: str | None = None) -> None:
-    """在主库上创建企业内部 IM V0 表（im_conversations / members / messages）。"""
+    """在主库上创建企业内部 IM V0 表 + AI 员工档案表。
+
+    IM 发消息时会按 peer 反查 ``ai_employee_profiles``；缺表会在 SQLite
+    测试/桌面引导下直接 500，因此与三张 IM 表一并幂等创建。
+    """
     if engine is None:
         if database_url:
             from app.db import _create_engine_for_url
@@ -1824,6 +1828,7 @@ def init_im_tables(engine: Engine | None = None, *, database_url: str | None = N
             engine = _get_engine()
 
     from app.db.base import Base
+    from app.db.models.ai_employee import AiEmployeeProfile  # noqa: F401
     from app.db.models.im import (  # noqa: F401
         ImConversation,
         ImConversationMember,
@@ -1834,6 +1839,7 @@ def init_im_tables(engine: Engine | None = None, *, database_url: str | None = N
         ImConversation.__table__,
         ImConversationMember.__table__,
         ImMessage.__table__,
+        AiEmployeeProfile.__table__,
     ]
     Base.metadata.create_all(engine, tables=target_tables, checkfirst=True)
 

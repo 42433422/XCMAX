@@ -459,10 +459,14 @@ def internal_answer_latest_question(
     request: Request,
     body: Dict[str, Any] = Body(default_factory=dict),
 ) -> Dict[str, Any]:
-    """内部端点：按 (user_id, employee_id) 回答该员工**最新** pending 问题（入站回流）。
+    """内部端点：老板在员工 IM 聊天页发的消息统一入站（回答问题 / 转新指令）。
 
     供 FHD 在「老板于员工 IM 聊天页直接回复」时经 ``X-Internal-Api-Key`` 调用，无需 question_id。
-    打通 phase-D 双向问答入站半边。POST body: ``{user_id, employee_id, answer}``。
+    POST body: ``{user_id, employee_id, answer}``。
+
+    - 员工有 pending phase-D 问题 → 视为答案解阻塞（原有行为）；
+    - 否则 → 视为老板新指令：入队 boss_im 任务 + 员工即时 ACK，执行完 IM 回音
+      （见 ``boss_im_inbound.handle_boss_im_message``，不再静默丢消息）。
     """
     import os
 
@@ -482,11 +486,9 @@ def internal_answer_latest_question(
     answer = str((body or {}).get("answer") or "").strip()
     if user_id <= 0 or not employee_id or not answer:
         raise HTTPException(400, "user_id/employee_id/answer required")
-    from modstore_server.human_uncertainty_queue import answer_latest_pending_for_employee
+    from modstore_server.boss_im_inbound import handle_boss_im_message
 
-    return answer_latest_pending_for_employee(
-        user_id=user_id, employee_id=employee_id, answer=answer
-    )
+    return handle_boss_im_message(user_id=user_id, employee_id=employee_id, text=answer)
 
 
 @router.get("/questions/stats")
