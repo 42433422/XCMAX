@@ -25,11 +25,21 @@ import {
   installUpdate,
   runUpdateCheckWithDirectNet,
 } from './updater'
-import { checkPendingRollback, checkRollbackApplied, commitRollback, prepareRollback, triggerRollback } from './rollback'
+import {
+  attachDatabaseBackupToRollback,
+  cancelPreparedRollback,
+  checkPendingRollback,
+  commitRollback,
+  consumeRollbackApplied,
+  prepareRollback,
+  triggerRollback,
+  type RollbackTriggerResult,
+} from './rollback'
 import { terminateChildProcess, waitForChildExit } from './backend-lifecycle'
 import { clampWindowBounds, readWindowState, writeWindowState } from './window-state'
 
 const APP_NAME = 'XCAGI'
+const POST_UPDATE_STABILITY_MS = 5_000
 
 /** OTA / 更新站直连绕过（setProxy 用逗号；commandLine 用分号）。 */
 export const OTA_PROXY_BYPASS_RULES =
@@ -339,6 +349,8 @@ export function backendEditionEnv(): Record<string, string> {
 }
 
 let mainWindow: BrowserWindow | null = null
+let mainApplicationReady: Promise<void> | null = null
+let rendererFailedDuringStartup = false
 let backendProcess: ChildProcessWithoutNullStreams | null = null
 let backendLogStream: fs.WriteStream | null = null
 let tray: Tray | null = null
@@ -829,28 +841,28 @@ async function startBackend(): Promise<void> {
 }
 
 async function runBackendMigrationWithRollback(toVersion: string): Promise<void> {
-  // 更新前的回滚准备：备份当前 backend，写入 marker
-  // 这样更新后首次启动失败时可以自动还原
   try {
     await prepareRollback(toVersion)
-  } catch (e) {
-    // 备份失败不阻断更新（electron-updater 自身有重试机制）
-    console.warn(`[xcagi-rollback] prepareRollback 失败，继续更新但不支持回滚: ${e instanceof Error ? e.message : e}`)
+    await runBackendMigration()
+  } catch (error) {
+    cancelPreparedRollback()
+    throw error
   }
-  await runBackendMigration()
 }
 
 /** 触发回滚但吞掉自身错误，避免回滚失败导致二次崩溃 */
-async function triggerRollbackSafe(reason: string): Promise<void> {
+async function triggerRollbackSafe(reason: string): Promise<RollbackTriggerResult | null> {
   try {
-    await triggerRollback(reason)
-    writeBackendLog(`[rollback] 已触发回滚：${reason}\n`)
+    const result = await triggerRollback(reason)
+    writeBackendLog(`[rollback] 已触发回滚 mode=${result.mode} scheduled=${result.scheduled}：${reason}\n`)
+    return result
   } catch (e) {
     writeBackendLog(`[rollback] 回滚失败：${e instanceof Error ? e.message : e}\n`)
+    return null
   }
 }
 
-function runBackendMigration(): Promise<void> {
+function runBackendMigration(): Promise<string> {
   const executable = backendExecutable()
   return new Promise((resolve, reject) => {
     const child = spawn(executable.command, [...executable.args, '--migrate-only', '--backup'], {
@@ -867,15 +879,38 @@ function runBackendMigration(): Promise<void> {
       windowsHide: true
     })
     let stderr = ''
+    let stdout = ''
+    let databaseBackupPath = ''
+    let backupAttachError: unknown
     child.stderr.on('data', data => {
       stderr += String(data)
       process.stderr.write(`[xcagi-migrate] ${data}`)
     })
-    child.stdout.on('data', data => process.stdout.write(`[xcagi-migrate] ${data}`))
+    child.stdout.on('data', data => {
+      stdout += String(data)
+      process.stdout.write(`[xcagi-migrate] ${data}`)
+      if (!databaseBackupPath) {
+        const match = stdout.match(/^XCAGI_MIGRATION_BACKUP=(.+)$/m)
+        const candidate = match?.[1]?.trim() || ''
+        if (candidate) {
+          try {
+            attachDatabaseBackupToRollback(candidate)
+            databaseBackupPath = candidate
+          } catch (error) {
+            backupAttachError = error
+            child.kill()
+          }
+        }
+      }
+    })
     child.on('error', reject)
     child.on('exit', code => {
+      if (backupAttachError) {
+        reject(backupAttachError)
+        return
+      }
       if (code === 0) {
-        resolve()
+        resolve(databaseBackupPath)
       } else {
         reject(new Error(`数据库迁移失败（code=${code}）: ${stderr}`))
       }
@@ -1078,6 +1113,7 @@ async function createWindow(): Promise<void> {
   winOpts.show = true
   winOpts.backgroundColor = '#f4f7fb'
   mainWindow = new BrowserWindow(winOpts)
+  rendererFailedDuringStartup = false
   const createdWindow = mainWindow
   let stateWriteTimer: NodeJS.Timeout | null = null
   const persistWindowState = () => {
@@ -1102,6 +1138,7 @@ async function createWindow(): Promise<void> {
   mainWindow.on('closed', () => {
     if (stateWriteTimer) clearTimeout(stateWriteTimer)
     mainWindow = null
+    mainApplicationReady = null
   })
   if (process.platform === 'darwin') {
     mainWindow.on('leave-full-screen', () => {
@@ -1130,6 +1167,10 @@ async function createWindow(): Promise<void> {
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     writeBackendLog(`[crash] renderer gone reason=${details.reason} exitCode=${details.exitCode}\n`)
+    if (checkPendingRollback()) {
+      rendererFailedDuringStartup = true
+      return
+    }
     if (!app.isQuitting && details.reason !== 'clean-exit') {
       void dialog.showMessageBox(createdWindow, {
         type: 'error',
@@ -1159,7 +1200,9 @@ async function createWindow(): Promise<void> {
   }
 
   const loadMainApplication = async (): Promise<void> => {
-    if (!mainWindow) return
+    if (!mainWindow) {
+      throw new Error('主窗口在应用加载前已关闭')
+    }
     try {
       updateSplashProgress(92, '正在打开主界面…')
       await mainWindow.loadURL(desktopInitialUrl(), {
@@ -1172,6 +1215,7 @@ async function createWindow(): Promise<void> {
       mainWindow.focus()
     } catch (error) {
       console.error('[xcagi-desktop] load main application failed', error)
+      throw error
     }
   }
 
@@ -1196,7 +1240,7 @@ async function createWindow(): Promise<void> {
     updateSplashProgress(creep, '正在加载业务模块…')
   }, 400)
 
-  void waitForBackendPing(DEFAULT_PORT)
+  const ready = waitForBackendPing(DEFAULT_PORT)
     .then(() => {
       splashPhase = 'routes'
       phaseStarted = Date.now()
@@ -1208,11 +1252,15 @@ async function createWindow(): Promise<void> {
       updateSplashProgress(88, '正在加载应用…')
       return loadMainApplication()
     })
+  mainApplicationReady = ready
+  void ready
     .catch(error => {
       console.error('[xcagi-desktop] backend readiness wait failed', error)
       splashPhase = 'done'
       updateSplashProgress(100, '启动失败，请查看日志', { error: true })
-      void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
+      if (!checkPendingRollback()) {
+        void dialog.showErrorBox(APP_NAME, error instanceof Error ? error.message : String(error))
+      }
     })
     .finally(() => clearInterval(splashTicker))
 
@@ -1232,6 +1280,32 @@ async function createWindow(): Promise<void> {
   })
 
   configureUpdater(mainWindow)
+}
+
+async function waitForMainApplicationReady(): Promise<void> {
+  if (!mainApplicationReady) {
+    throw new Error('主界面就绪任务未初始化')
+  }
+  await mainApplicationReady
+}
+
+async function waitForPostUpdateStartupStability(
+  durationMs = POST_UPDATE_STABILITY_MS,
+): Promise<void> {
+  const deadline = Date.now() + durationMs
+  while (Date.now() < deadline) {
+    if (!backendProcess) {
+      throw new Error('更新后观察期内 backend 进程退出')
+    }
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      throw new Error('更新后观察期内主窗口退出')
+    }
+    if (rendererFailedDuringStartup) {
+      throw new Error('更新后观察期内 renderer 进程崩溃')
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  await waitForBackendPing(DEFAULT_PORT, 5_000)
 }
 
 function createMenu(): void {
@@ -1397,7 +1471,9 @@ function bootstrap(): void {
       ipcMain.handle('xcagi:check-for-updates', () => runUpdateCheckWithDirectNet())
       ipcMain.handle('xcagi:get-update-status', () => getUpdateStatus())
       ipcMain.handle('xcagi:download-update', () => downloadUpdate())
-      ipcMain.handle('xcagi:install-update', () => installUpdate(runBackendMigrationWithRollback))
+      ipcMain.handle('xcagi:install-update', () =>
+        installUpdate(runBackendMigrationWithRollback, cancelPreparedRollback),
+      )
       ipcMain.handle('xcagi:set-badge', (_event, count: number) => {
         const n = Math.max(0, Math.floor(Number(count) || 0))
         if (process.platform === 'darwin' || process.platform === 'linux') {
@@ -1431,7 +1507,7 @@ function bootstrap(): void {
         writeBackendLog(`[rollback] 观察期：更新后首次启动 from=${pendingRollback.fromVersion} to=${pendingRollback.toVersion}\n`)
       }
       // 如果上次发生过回滚，提示用户
-      const appliedRollback = checkRollbackApplied()
+      const appliedRollback = consumeRollbackApplied()
       if (appliedRollback) {
         void dialog.showMessageBox({
           type: 'info',
@@ -1450,26 +1526,39 @@ function bootstrap(): void {
           // 端口被占或后端可执行文件缺失，startBackend 已弹错误框
           // 如果是更新后首次启动，触发回滚
           if (pendingRollback) {
-            await triggerRollbackSafe('startBackend 失败：端口被占或 backend 可执行文件缺失')
-            void dialog.showErrorBox(APP_NAME, '更新后启动失败，已自动回滚到上一版本。请重启 XCAGI。')
+            const rollback = await triggerRollbackSafe('startBackend 失败：端口被占或 backend 可执行文件缺失')
+            void dialog.showErrorBox(
+              APP_NAME,
+              !rollback
+                ? '更新后启动失败，自动回滚也未能启动。请从官网下载稳定版重新安装。'
+                : rollback.scheduled
+                  ? '更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。'
+                  : '更新后启动失败，已恢复上一版本。请重启 XCAGI。',
+            )
           }
           app.quit()
           return
         }
         if (pendingRollback) {
+          await waitForMainApplicationReady()
+          await waitForPostUpdateStartupStability()
           commitRollback()
-          writeBackendLog(`[rollback] 启动成功，已提交（marker 删除）\n`)
+          writeBackendLog(`[rollback] 后端、业务路由、主界面与观察期就绪，已提交（marker 删除）\n`)
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error)
         writeBackendLog(`[rollback] 桌面启动失败: ${msg}\n`)
         if (pendingRollback) {
-          await triggerRollbackSafe(`桌面启动失败: ${msg}`)
+          const rollback = await triggerRollbackSafe(`桌面启动失败: ${msg}`)
           void dialog.showErrorBox(
             APP_NAME,
-            msg.includes('createWindow') || msg.includes('窗口')
-              ? '更新后窗口创建失败，已自动回滚到上一版本。请重启 XCAGI。'
-              : '更新后后端启动失败，已自动回滚到上一版本。请重启 XCAGI。'
+            !rollback
+              ? '更新后启动失败，自动回滚也未能启动。请从官网下载稳定版重新安装。'
+              : rollback.scheduled
+                ? '更新后启动失败，正在恢复上一版本；XCAGI 将自动重启。'
+                : msg.includes('createWindow') || msg.includes('窗口')
+                  ? '更新后窗口创建失败，已恢复上一版本。请重启 XCAGI。'
+                  : '更新后后端启动失败，已恢复上一版本。请重启 XCAGI。',
           )
         } else {
           void dialog.showErrorBox(APP_NAME, msg)

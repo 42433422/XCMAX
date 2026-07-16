@@ -273,12 +273,21 @@ def main(argv: list[str] | None = None) -> None:
     if args.migrate_only:
         _ensure_sys_path()
         from app.desktop_runtime.migrate import backup_database, run_alembic_upgrade
-        from app.desktop_runtime.paths import configure_desktop_environment
+        from app.desktop_runtime.paths import (
+            configure_desktop_environment,
+            ensure_desktop_dirs,
+        )
 
         configure_desktop_environment(args.data_dir)
         version = os.environ.get("XCAGI_VERSION", "unknown")
         if args.backup:
-            backup_database(args.data_dir, version)
+            dirs = ensure_desktop_dirs(args.data_dir)
+            database_exists = (dirs["data"] / "xcagi.db").exists()
+            backup_path = backup_database(args.data_dir, version)
+            if database_exists and backup_path is None:
+                raise RuntimeError("migration backup failed; refusing to continue")
+            if backup_path is not None:
+                print(f"XCAGI_MIGRATION_BACKUP={backup_path}", flush=True)
         run_alembic_upgrade(args.data_dir)
         return
 

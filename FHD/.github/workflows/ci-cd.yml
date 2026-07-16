@@ -651,6 +651,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
       - name: Parse Windows release scripts
         shell: pwsh
         run: |
@@ -692,6 +697,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) {
             throw "SSL.com CodeSignTool version probe failed with exit code $LASTEXITCODE"
           }
+      - name: Test Windows full rollback helper
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          npm ci
+          $env:XCAGI_DESKTOP_TEST = '1'
+          npx vitest run rollback-windows.test.ts updater-install.test.ts rollback.test.ts
 
   # SSOT drift gate (blocking): drift in any registered SSOT domain fails the pipeline.
   # deps/k8s drift cleared + employee-roster/db-schema registered 2026-06-23 + service-topology 2026-06-24.
